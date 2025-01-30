@@ -15,11 +15,19 @@
 package processorplugins
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"github.com/spf13/pflag"
+	"go.uber.org/mock/gomock"
 )
 
 func TestListCommandFlags(t *testing.T) {
@@ -53,4 +61,130 @@ func TestListCommandFlags(t *testing.T) {
 		is.Equal(f.shortName, cf.Shorthand)
 		is.Equal(cf.Usage, f.usage)
 	}
+}
+
+func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	cmd := &ListCommand{
+		flags: ListFlags{
+			Name: "builtin",
+		},
+	}
+	cmd.Output(out)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	mockService := mock.NewMockProcessorService(ctrl)
+
+	testutils.MockGetProcessorPlugins(
+		mockService,
+		".*builtin.*",
+		[]*apiv1.ProcessorPluginSpecifications{
+			{
+				Name:    "builtin:avro.decode@v0.1.0",
+				Summary: "Decodes a field's raw data in the Avro format.",
+			},
+			{
+				Name:    "builtin:avro.encode@v0.1.0",
+				Summary: "Encodes a record's field into the Avro format.",
+			},
+		})
+
+	client := &api.Client{ProcessorServiceClient: mockService}
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+	is.Equal(output, ""+
+		"+----------------------------+------------------------------------------------+\n"+
+		"|            NAME            |                    SUMMARY                     |\n"+
+		"+----------------------------+------------------------------------------------+\n"+
+		"| builtin:avro.decode@v0.1.0 | Decodes a field's raw data in the Avro format. |\n"+
+		"| builtin:avro.encode@v0.1.0 | Encodes a record's field into the Avro format. |\n"+
+		"+----------------------------+------------------------------------------------+\n")
+}
+
+func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	cmd := &ListCommand{}
+	cmd.Output(out)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	mockService := mock.NewMockProcessorService(ctrl)
+
+	testutils.MockGetProcessorPlugins(
+		mockService,
+		".*.*",
+		[]*apiv1.ProcessorPluginSpecifications{
+			{
+				Name:    "builtin:avro.decode@v0.1.0",
+				Summary: "Decodes a field's raw data in the Avro format.",
+			},
+			{
+				Name:    "builtin:avro.encode@v0.1.0",
+				Summary: "Encodes a record's field into the Avro format.",
+			},
+			{
+				Name:    "standalone:processor-simple",
+				Summary: "Example of a standalone processor.",
+			},
+		})
+
+	client := &api.Client{ProcessorServiceClient: mockService}
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+
+	is.Equal(output, ""+
+		"+-----------------------------+------------------------------------------------+\n"+
+		"|            NAME             |                    SUMMARY                     |\n"+
+		"+-----------------------------+------------------------------------------------+\n"+
+		"| builtin:avro.decode@v0.1.0  | Decodes a field's raw data in the Avro format. |\n"+
+		"| builtin:avro.encode@v0.1.0  | Encodes a record's field into the Avro format. |\n"+
+		"| standalone:processor-simple | Example of a standalone processor.             |\n"+
+		"+-----------------------------+------------------------------------------------+\n")
+}
+
+func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	mockService := mock.NewMockProcessorService(ctrl)
+
+	testutils.MockGetProcessorPlugins(
+		mockService,
+		".*.*",
+		[]*apiv1.ProcessorPluginSpecifications{})
+
+	client := &api.Client{ProcessorServiceClient: mockService}
+	cmd := &ListCommand{}
+	cmd.Output(out)
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := strings.TrimSpace(buf.String())
+	is.True(len(output) == 0)
 }

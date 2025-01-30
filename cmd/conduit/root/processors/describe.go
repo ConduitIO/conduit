@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -31,6 +32,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -38,7 +40,12 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -76,28 +83,30 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to get processor: %w", err)
 	}
 
-	displayProcessor(resp.Processor)
+	displayProcessor(c.output, resp.Processor)
 	return nil
 }
 
-func displayProcessor(p *apiv1.Processor) {
-	fmt.Printf("ID: %s\n", p.Id)
-	fmt.Printf("Plugin: %s\n", p.Plugin)
+func displayProcessor(out ecdysis.Output, p *apiv1.Processor) {
+	out.Stdout(fmt.Sprintf("ID: %s\n", p.Id))
+	out.Stdout(fmt.Sprintf("Plugin: %s\n", p.Plugin))
 
-	fmt.Printf("Parent: %s (%s)\n", internal.ProcessorParentToString(p.Parent.Type), p.Parent.Id)
+	if p.Parent != nil {
+		out.Stdout(fmt.Sprintf("Parent: %s (%s)\n", display.ProcessorParentToString(p.Parent.Type), p.Parent.Id))
+	}
 
-	if !internal.IsEmpty(p.Condition) {
-		fmt.Printf("Condition: %s\n", p.Condition)
+	if !display.IsEmpty(p.Condition) {
+		out.Stdout(fmt.Sprintf("Condition: %s\n", p.Condition))
 	}
 
 	if len(p.Config.Settings) > 0 {
-		fmt.Println("Config:")
+		out.Stdout("Config:\n")
 		for name, value := range p.Config.Settings {
-			fmt.Printf("%s%s: %s\n", internal.Indentation(1), name, value)
+			out.Stdout(fmt.Sprintf("%s%s: %s\n", display.Indentation(1), name, value))
 		}
 	}
-	fmt.Printf("Workers: %d\n", p.Config.Workers)
+	out.Stdout(fmt.Sprintf("Workers: %d\n", p.Config.Workers))
 
-	fmt.Printf("Created At: %s\n", internal.PrintTime(p.CreatedAt))
-	fmt.Printf("Updated At: %s\n", internal.PrintTime(p.UpdatedAt))
+	out.Stdout(fmt.Sprintf("Created At: %s\n", display.PrintTime(p.CreatedAt)))
+	out.Stdout(fmt.Sprintf("Updated At: %s\n", display.PrintTime(p.UpdatedAt)))
 }

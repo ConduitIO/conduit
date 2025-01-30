@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package display
 
 import (
 	"fmt"
@@ -21,6 +21,7 @@ import (
 	"github.com/alexeyco/simpletable"
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/conduitio/ecdysis"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -52,29 +53,35 @@ func IsEmpty(s string) bool {
 }
 
 // DisplayProcessors prints the processors in a human-readable format
-func DisplayProcessors(processors []*apiv1.Processor, indent int) {
+func DisplayProcessors(out ecdysis.Output, processors []*apiv1.Processor, indent int) {
 	if len(processors) == 0 {
 		return
 	}
 
-	fmt.Printf("%sProcessors:\n", Indentation(indent))
+	out.Stdout(fmt.Sprintf("%sProcessors:\n", Indentation(indent)))
 
 	for _, p := range processors {
-		fmt.Printf("%s- ID: %s\n", Indentation(indent+1), p.Id)
-		fmt.Printf("%sPlugin: %s\n", Indentation(indent+2), p.Plugin)
+		out.Stdout(fmt.Sprintf("%s- ID: %s\n", Indentation(indent+1), p.Id))
+
+		if !IsEmpty(p.Plugin) {
+			out.Stdout(fmt.Sprintf("%sPlugin: %s\n", Indentation(indent+2), p.Plugin))
+		}
 
 		if !IsEmpty(p.Condition) {
-			fmt.Printf("%sCondition: %s\n", Indentation(indent+2), p.Condition)
+			out.Stdout(fmt.Sprintf("%sCondition: %s\n", Indentation(indent+2), p.Condition))
 		}
 
-		fmt.Printf("%sConfig:\n", Indentation(indent+2))
-		for name, value := range p.Config.Settings {
-			fmt.Printf("%s%s: %s\n", Indentation(indent+3), name, value)
+		if p.Config != nil {
+			out.Stdout(fmt.Sprintf("%sConfig:\n", Indentation(indent+2)))
+			for name, value := range p.Config.Settings {
+				out.Stdout(fmt.Sprintf("%s%s: %s\n", Indentation(indent+3), name, value))
+			}
 		}
-		fmt.Printf("%sWorkers: %d\n", Indentation(indent+3), p.Config.Workers)
 
-		fmt.Printf("%sCreated At: %s\n", Indentation(indent+2), PrintTime(p.CreatedAt))
-		fmt.Printf("%sUpdated At: %s\n", Indentation(indent+2), PrintTime(p.UpdatedAt))
+		out.Stdout(fmt.Sprintf("%sWorkers: %d\n", Indentation(indent+3), p.Config.Workers))
+
+		out.Stdout(fmt.Sprintf("%sCreated At: %s\n", Indentation(indent+2), PrintTime(p.CreatedAt)))
+		out.Stdout(fmt.Sprintf("%sUpdated At: %s\n", Indentation(indent+2), PrintTime(p.UpdatedAt)))
 	}
 }
 
@@ -107,7 +114,7 @@ func FormatLongString(paragraph string, maxLineLength int) string {
 	return result.String()
 }
 
-func DisplayConfigParams(cfg map[string]*configv1.Parameter) {
+func DisplayConfigParams(out ecdysis.Output, cfg map[string]*configv1.Parameter) {
 	table := simpletable.New()
 
 	table.Header = &simpletable.Header{
@@ -162,8 +169,7 @@ func DisplayConfigParams(cfg map[string]*configv1.Parameter) {
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
 
-	table.SetStyle(simpletable.StyleDefault)
-	fmt.Println(table.String())
+	out.Stdout(table.String() + "\n")
 }
 
 func formatType(input string) string {
@@ -197,10 +203,10 @@ func formatValidations(v []*configv1.Validation) string {
 }
 
 // DisplayConnectorConfig prints the connector config in a human-readable format
-func DisplayConnectorConfig(cfg *apiv1.Connector_Config, indentation int) {
-	fmt.Printf("%sConfig:\n", Indentation(indentation))
+func DisplayConnectorConfig(out ecdysis.Output, cfg *apiv1.Connector_Config, indentation int) {
+	out.Stdout(fmt.Sprintf("%sConfig:\n", Indentation(indentation)))
 	for name, value := range cfg.Settings {
-		fmt.Printf("%s%s: %s\n", Indentation(indentation+1), name, value)
+		out.Stdout(fmt.Sprintf("%s%s: %s\n", Indentation(indentation+1), name, value))
 	}
 }
 

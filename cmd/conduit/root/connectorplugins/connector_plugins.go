@@ -26,7 +26,9 @@ var (
 
 type ConnectorPluginsCommand struct{}
 
-func (c *ConnectorPluginsCommand) Aliases() []string { return []string{"connector-plugin"} }
+func (c *ConnectorPluginsCommand) Aliases() []string {
+	return []string{"connector-plugin", "connectorsplugins", "connectorplugins", "connectorplugin"}
+}
 
 func (c *ConnectorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{

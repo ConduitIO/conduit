@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -31,9 +32,12 @@ var (
 	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
 )
 
-type ListCommand struct{}
+type ListCommand struct {
+	output ecdysis.Output
+}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -43,6 +47,10 @@ by Conduit. This will depend on the configured pipelines directory, which by def
 be configured via --pipelines.path at the time of running Conduit.`,
 		Example: "conduit pipelines list\nconduit pipelines ls",
 	}
+}
+
+func (c *ListCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *ListCommand) Aliases() []string { return []string{"ls"} }
@@ -59,14 +67,14 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Pipelines[i].Id < resp.Pipelines[j].Id
 	})
 
-	displayPipelines(resp.Pipelines)
+	c.output.Stdout(getPipelinesTable(resp.Pipelines) + "\n")
 
 	return nil
 }
 
-func displayPipelines(pipelines []*apiv1.Pipeline) {
+func getPipelinesTable(pipelines []*apiv1.Pipeline) string {
 	if len(pipelines) == 0 {
-		return
+		return ""
 	}
 
 	table := simpletable.New()
@@ -83,13 +91,12 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 	for _, p := range pipelines {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: internal.PrintStatusFromProtoString(p.State.Status.String())},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintStatusFromProtoString(p.State.Status.String())},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	table.SetStyle(simpletable.StyleDefault)
-	fmt.Println(table.String())
+	return table.String()
 }

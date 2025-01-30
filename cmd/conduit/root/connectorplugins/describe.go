@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -31,14 +32,20 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
-	ConnectorPluginID string
+	connectorPluginID string
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -64,13 +71,13 @@ func (c *DescribeCommand) Args(args []string) error {
 		return cerrors.Errorf("too many arguments")
 	}
 
-	c.args.ConnectorPluginID = args[0]
+	c.args.connectorPluginID = args[0]
 	return nil
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
-		Name: c.args.ConnectorPluginID,
+		Name: c.args.connectorPluginID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list connector plguin: %w", err)
@@ -80,33 +87,33 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return nil
 	}
 
-	displayConnectorPluginsDescription(resp.Plugins[0])
+	displayConnectorPluginsDescription(c.output, resp.Plugins[0])
 
 	return nil
 }
 
-func displayConnectorPluginsDescription(c *apiv1.ConnectorPluginSpecifications) {
-	if !internal.IsEmpty(c.Name) {
-		fmt.Printf("Name: %s\n", c.Name)
+func displayConnectorPluginsDescription(out ecdysis.Output, c *apiv1.ConnectorPluginSpecifications) {
+	if !display.IsEmpty(c.Name) {
+		out.Stdout(fmt.Sprintf("Name: %s\n", c.Name))
 	}
-	if !internal.IsEmpty(c.Summary) {
-		fmt.Printf("Summary: %s\n", c.Summary)
+	if !display.IsEmpty(c.Summary) {
+		out.Stdout(fmt.Sprintf("Summary: %s\n", c.Summary))
 	}
-	if !internal.IsEmpty(c.Description) {
-		fmt.Printf("Description: %s\n", c.Description)
+	if !display.IsEmpty(c.Description) {
+		out.Stdout(fmt.Sprintf("Description: %s\n", c.Description))
 	}
-	if !internal.IsEmpty(c.Author) {
-		fmt.Printf("Author: %s\n", c.Author)
+	if !display.IsEmpty(c.Author) {
+		out.Stdout(fmt.Sprintf("Author: %s\n", c.Author))
 	}
-	if !internal.IsEmpty(c.Version) {
-		fmt.Printf("Version: %s\n", c.Version)
+	if !display.IsEmpty(c.Version) {
+		out.Stdout(fmt.Sprintf("Version: %s\n", c.Version))
 	}
 	if len(c.SourceParams) > 0 {
-		fmt.Printf("\nSource Parameters:\n")
-		internal.DisplayConfigParams(c.SourceParams)
+		out.Stdout("\nSource Parameters:\n")
+		display.DisplayConfigParams(out, c.SourceParams)
 	}
 	if len(c.DestinationParams) > 0 {
-		fmt.Printf("\nDestination Parameters:\n")
-		internal.DisplayConfigParams(c.DestinationParams)
+		out.Stdout("\nDestination Parameters:\n")
+		display.DisplayConfigParams(out, c.DestinationParams)
 	}
 }

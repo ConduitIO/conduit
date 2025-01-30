@@ -15,9 +15,18 @@
 package connectorplugins
 
 import (
+	"bytes"
+	"context"
 	"testing"
 
+	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDescribeExecutionNoArgs(t *testing.T) {
@@ -52,5 +61,84 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 	err := c.Args([]string{connectorPluginID})
 
 	is.NoErr(err)
-	is.Equal(c.args.ConnectorPluginID, connectorPluginID)
+	is.Equal(c.args.connectorPluginID, connectorPluginID)
+}
+
+func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	cmd := &DescribeCommand{args: DescribeArgs{connectorPluginID: "builtin:kafka@v0.11.1"}}
+	cmd.Output(out)
+
+	mockConnectorService := mock.NewMockConnectorService(ctrl)
+
+	testutils.MockGetConnectorPlugins(
+		mockConnectorService,
+		cmd.args.connectorPluginID,
+		[]*apiv1.ConnectorPluginSpecifications{
+			{
+				Name:        cmd.args.connectorPluginID,
+				Summary:     "A Kafka source and destination plugin for Conduit.",
+				Description: "A Kafka source and destination plugin for Conduit, written in Go.",
+				Author:      "Meroxa, Inc.",
+				Version:     "v0.11.1",
+				SourceParams: map[string]*configv1.Parameter{
+					"sdk.schema.extract.type": {
+						Type:        configv1.Parameter_Type(apiv1.PluginSpecifications_Parameter_TYPE_STRING),
+						Description: "The type of the payload schema.",
+						Default:     "avro",
+						Validations: []*configv1.Validation{
+							{Type: configv1.Validation_TYPE_INCLUSION},
+						},
+					},
+				},
+				DestinationParams: map[string]*configv1.Parameter{
+					"sdk.record.format": {
+						Type:        configv1.Parameter_Type(apiv1.PluginSpecifications_Parameter_TYPE_UNSPECIFIED),
+						Description: "The format of the output record.",
+						Default:     "opencdc/json",
+						Validations: []*configv1.Validation{
+							{Type: configv1.Validation_TYPE_INCLUSION},
+						},
+					},
+				},
+			},
+		})
+
+	client := &api.Client{
+		ConnectorServiceClient: mockConnectorService,
+	}
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+
+	is.Equal(output, ""+
+		"Name: builtin:kafka@v0.11.1\n"+
+		"Summary: A Kafka source and destination plugin for Conduit.\n"+
+		"Description: A Kafka source and destination plugin for Conduit, written in Go.\n"+
+		"Author: Meroxa, Inc.\n"+
+		"Version: v0.11.1\n"+
+		"\n"+
+		"Source Parameters:\n"+
+		"+-------------------------+--------+---------------------------------+---------+-------------+\n"+
+		"|          NAME           |  TYPE  |           DESCRIPTION           | DEFAULT | VALIDATIONS |\n"+
+		"+-------------------------+--------+---------------------------------+---------+-------------+\n"+
+		"| sdk.schema.extract.type | string | The type of the payload schema. | avro    | [inclusion] |\n"+
+		"+-------------------------+--------+---------------------------------+---------+-------------+\n"+
+		"\n"+
+		"Destination Parameters:\n"+
+		"+-------------------+-------------+----------------------------------+--------------+-------------+\n"+
+		"|       NAME        |    TYPE     |           DESCRIPTION            |   DEFAULT    | VALIDATIONS |\n"+
+		"+-------------------+-------------+----------------------------------+--------------+-------------+\n"+
+		"| sdk.record.format | unspecified | The format of the output record. | opencdc/json | [inclusion] |\n"+
+		"+-------------------+-------------+----------------------------------+--------------+-------------+\n")
 }

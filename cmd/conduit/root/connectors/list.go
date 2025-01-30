@@ -22,7 +22,7 @@ import (
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -32,6 +32,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
 	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
 )
 
 type ListFlags struct {
@@ -39,7 +40,12 @@ type ListFlags struct {
 }
 
 type ListCommand struct {
-	flags ListFlags
+	flags  ListFlags
+	output ecdysis.Output
+}
+
+func (c *ListCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *ListCommand) Flags() []ecdysis.Flag {
@@ -71,14 +77,14 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Connectors[i].Id < resp.Connectors[j].Id
 	})
 
-	displayConnectors(resp.Connectors)
+	c.output.Stdout(getConnectorsTable(resp.Connectors) + "\n")
 
 	return nil
 }
 
-func displayConnectors(connectors []*apiv1.Connector) {
+func getConnectorsTable(connectors []*apiv1.Connector) string {
 	if len(connectors) == 0 {
-		return
+		return ""
 	}
 
 	table := simpletable.New()
@@ -98,14 +104,12 @@ func displayConnectors(connectors []*apiv1.Connector) {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: c.Id},
 			{Align: simpletable.AlignLeft, Text: c.Plugin},
-			{Align: simpletable.AlignLeft, Text: internal.ConnectorTypeToString(c.Type)},
+			{Align: simpletable.AlignLeft, Text: display.ConnectorTypeToString(c.Type)},
 			{Align: simpletable.AlignLeft, Text: c.PipelineId},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(c.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(c.UpdatedAt)},
 		}
-
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	table.SetStyle(simpletable.StyleDefault)
-	fmt.Println(table.String())
+	return table.String()
 }

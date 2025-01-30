@@ -65,7 +65,6 @@ func TestRootCommandExecuteWithVersionFlag(t *testing.T) {
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
-
 	out := &ecdysis.DefaultOutput{}
 	out.Output(buf, nil)
 

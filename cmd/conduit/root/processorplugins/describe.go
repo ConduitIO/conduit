@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -31,14 +32,20 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
-	processorPlugin string
+	processorPluginID string
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -57,20 +64,20 @@ func (c *DescribeCommand) Aliases() []string { return []string{"desc"} }
 
 func (c *DescribeCommand) Args(args []string) error {
 	if len(args) == 0 {
-		return cerrors.Errorf("requires a processor plugin name")
+		return cerrors.Errorf("requires a processor plugin ID")
 	}
 
 	if len(args) > 1 {
 		return cerrors.Errorf("too many arguments")
 	}
 
-	c.args.processorPlugin = args[0]
+	c.args.processorPluginID = args[0]
 	return nil
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.ProcessorServiceClient.ListProcessorPlugins(ctx, &apiv1.ListProcessorPluginsRequest{
-		Name: c.args.processorPlugin,
+		Name: c.args.processorPluginID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to get processor plugin: %w", err)
@@ -80,30 +87,30 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return nil
 	}
 
-	displayConnectorPluginsDescription(resp.Plugins[0])
+	displayConnectorPluginsDescription(c.output, resp.Plugins[0])
 
 	return nil
 }
 
-func displayConnectorPluginsDescription(p *apiv1.ProcessorPluginSpecifications) {
-	if !internal.IsEmpty(p.Name) {
-		fmt.Printf("Name: %s\n", p.Name)
+func displayConnectorPluginsDescription(out ecdysis.Output, p *apiv1.ProcessorPluginSpecifications) {
+	if !display.IsEmpty(p.Name) {
+		out.Stdout(fmt.Sprintf("Name: %s\n", p.Name))
 	}
-	if !internal.IsEmpty(p.Summary) {
-		fmt.Printf("Summary: %s\n", p.Summary)
+	if !display.IsEmpty(p.Summary) {
+		out.Stdout(fmt.Sprintf("Summary: %s\n", p.Summary))
 	}
-	if !internal.IsEmpty(p.Description) {
-		fmt.Printf("Description: %s\n", p.Description)
+	if !display.IsEmpty(p.Description) {
+		out.Stdout(fmt.Sprintf("Description: %s\n", p.Description))
 	}
-	if !internal.IsEmpty(p.Author) {
-		fmt.Printf("Author: %s\n", p.Author)
+	if !display.IsEmpty(p.Author) {
+		out.Stdout(fmt.Sprintf("Author: %s\n", p.Author))
 	}
-	if !internal.IsEmpty(p.Version) {
-		fmt.Printf("Version: %s\n", p.Version)
+	if !display.IsEmpty(p.Version) {
+		out.Stdout(fmt.Sprintf("Version: %s\n", p.Version))
 	}
 
 	if len(p.Parameters) > 0 {
-		fmt.Println("\nParameters:")
-		internal.DisplayConfigParams(p.Parameters)
+		out.Stdout("Parameters:\n")
+		display.DisplayConfigParams(out, p.Parameters)
 	}
 }
