@@ -15,18 +15,10 @@
 package testutils
 
 import (
-	"time"
-
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func GetDateTime() *timestamppb.Timestamp {
-	parsedTime, _ := time.Parse(time.RFC3339, "1970-01-01T00:00:00Z")
-	return timestamppb.New(parsedTime)
-}
 
 // PipelineService --------------------------------------------
 
