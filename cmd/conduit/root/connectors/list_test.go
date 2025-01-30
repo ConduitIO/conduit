@@ -108,15 +108,13 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 	is.NoErr(err)
 
 	output := buf.String()
-	is.True(len(output) > 0)
-
-	strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+-------+---------+-------------+-------------+----------------------+----------------------+\n"+
 		"|  ID   | PLUGIN  |    TYPE     | PIPELINE_ID |       CREATED        |     LAST_UPDATED     |\n"+
 		"+-------+---------+-------------+-------------+----------------------+----------------------+\n"+
 		"| conn1 | plugin1 | source      | pipeline1   | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
 		"| conn2 | plugin2 | destination | pipeline2   | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
-		"+-------+---------+-------------+-------------+----------------------+----------------------+")
+		"+-------+---------+-------------+-------------+----------------------+----------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
@@ -158,14 +156,13 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 	is.NoErr(err)
 
 	output := buf.String()
-	is.True(len(output) > 0)
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+-------+---------+--------+-------------+----------------------+----------------------+\n"+
 		"|  ID   | PLUGIN  |  TYPE  | PIPELINE_ID |       CREATED        |     LAST_UPDATED     |\n"+
 		"+-------+---------+--------+-------------+----------------------+----------------------+\n"+
 		"| conn1 | plugin1 | source | pipeline1   | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
-		"+-------+---------+--------+-------------+----------------------+----------------------+"))
+		"+-------+---------+--------+-------------+----------------------+----------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {

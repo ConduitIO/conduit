@@ -101,16 +101,15 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 	err := cmd.ExecuteWithClient(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
-	is.True(len(output) > 0)
+	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+-----------------------+-------------------------------------------------------------------+\n"+
 		"|         NAME          |                              SUMMARY                              |\n"+
 		"+-----------------------+-------------------------------------------------------------------+\n"+
 		"| builtin:file@v0.9.0   | A file source and destination plugin for Conduit.                 |\n"+
 		"| builtin:kafka@v0.11.1 | A Kafka source and destination plugin for Conduit, written in Go. |\n"+
-		"+-----------------------+-------------------------------------------------------------------+"))
+		"+-----------------------+-------------------------------------------------------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
@@ -153,17 +152,16 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 	err := cmd.ExecuteWithClient(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
-	is.True(len(output) > 0)
+	output := buf.String()
 
-	strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+-------------------------+-------------------------------------------------------------------+\n"+
 		"|          NAME           |                              SUMMARY                              |\n"+
 		"+-------------------------+-------------------------------------------------------------------+\n"+
 		"| builtin:file@v0.9.0     | A file source and destination plugin for Conduit.                 |\n"+
 		"| builtin:kafka@v0.11.1   | A Kafka source and destination plugin for Conduit, written in Go. |\n"+
 		"| standalone:chaos@v0.1.1 | A chaos destination connector                                     |\n"+
-		"+-------------------------+-------------------------------------------------------------------+")
+		"+-------------------------+-------------------------------------------------------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {

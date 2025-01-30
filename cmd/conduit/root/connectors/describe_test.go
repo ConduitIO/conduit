@@ -17,7 +17,6 @@ package connectors
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -102,7 +101,7 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"ID: 1\n"+
 		"Type: source\n"+
 		"Plugin: plugin1\n"+
@@ -117,5 +116,5 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		"    Config:\n"+
 		"      Workers: 0\n"+
 		"    Created At: 1970-01-01T00:00:00Z\n"+
-		"    Updated At: 1970-01-01T00:00:00Z"))
+		"    Updated At: 1970-01-01T00:00:00Z\n")
 }

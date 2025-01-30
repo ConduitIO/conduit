@@ -101,16 +101,14 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 	err := cmd.ExecuteWithClient(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
-	is.True(len(output) > 0)
-
-	is.True(strings.Contains(output, ""+
+	output := buf.String()
+	is.Equal(output, ""+
 		"+----------------------------+------------------------------------------------+\n"+
 		"|            NAME            |                    SUMMARY                     |\n"+
 		"+----------------------------+------------------------------------------------+\n"+
 		"| builtin:avro.decode@v0.1.0 | Decodes a field's raw data in the Avro format. |\n"+
 		"| builtin:avro.encode@v0.1.0 | Encodes a record's field into the Avro format. |\n"+
-		"+----------------------------+------------------------------------------------+"))
+		"+----------------------------+------------------------------------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
@@ -151,17 +149,16 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 	err := cmd.ExecuteWithClient(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
-	is.True(len(output) > 0)
+	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+-----------------------------+------------------------------------------------+\n"+
 		"|            NAME             |                    SUMMARY                     |\n"+
 		"+-----------------------------+------------------------------------------------+\n"+
 		"| builtin:avro.decode@v0.1.0  | Decodes a field's raw data in the Avro format. |\n"+
 		"| builtin:avro.encode@v0.1.0  | Encodes a record's field into the Avro format. |\n"+
 		"| standalone:processor-simple | Example of a standalone processor.             |\n"+
-		"+-----------------------------+------------------------------------------------+"))
+		"+-----------------------------+------------------------------------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {

@@ -17,7 +17,6 @@ package connectorplugins
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
@@ -122,7 +121,7 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"Name: builtin:kafka@v0.11.1\n"+
 		"Summary: A Kafka source and destination plugin for Conduit.\n"+
 		"Description: A Kafka source and destination plugin for Conduit, written in Go.\n"+
@@ -141,5 +140,5 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		"|       NAME        |    TYPE     |           DESCRIPTION            |   DEFAULT    | VALIDATIONS |\n"+
 		"+-------------------+-------------+----------------------------------+--------------+-------------+\n"+
 		"| sdk.record.format | unspecified | The format of the output record. | opencdc/json | [inclusion] |\n"+
-		"+-------------------+-------------+----------------------------------+--------------+-------------+"))
+		"+-------------------+-------------+----------------------------------+--------------+-------------+\n")
 }

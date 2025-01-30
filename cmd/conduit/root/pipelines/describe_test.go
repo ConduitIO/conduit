@@ -17,7 +17,6 @@ package pipelines
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/ecdysis"
@@ -140,7 +139,7 @@ func TestDescribeCommandExecuteWithClient(t *testing.T) {
 
 	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"ID: 1\n"+
 		"Status: running\n"+
 		"Name: Test Pipeline\n"+
@@ -185,5 +184,5 @@ func TestDescribeCommandExecuteWithClient(t *testing.T) {
 		"Dead-letter queue:\n"+
 		"  Plugin: dlq-plugin\n"+
 		"Created At: 1970-01-01T00:00:00Z\n"+
-		"Updated At: 1970-01-01T00:00:00Z"))
+		"Updated At: 1970-01-01T00:00:00Z\n")
 }

@@ -60,9 +60,8 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 	is.NoErr(err)
 
 	output := buf.String()
-	is.True(len(output) > 0)
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+----+------------+----------------------+----------------------+\n"+
 		"| ID |   STATE    |       CREATED        |     LAST_UPDATED     |\n"+
 		"+----+------------+----------------------+----------------------+\n"+
@@ -70,7 +69,7 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 		"| 2  | stopped    | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
 		"| 3  | recovering | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
 		"| 4  | degraded   | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
-		"+----+------------+----------------------+----------------------+"))
+		"+----+------------+----------------------+----------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {

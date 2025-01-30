@@ -17,7 +17,6 @@ package processors
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -96,12 +95,12 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"ID: processor-id\n"+
 		"Plugin: custom.javascript\n"+
 		"Parent: connector (source-connector)\n"+
 		"Condition: {{ eq .Metadata.filter \"true\" }}\n"+
 		"Workers: 0\n"+
 		"Created At: 1970-01-01T00:00:00Z\n"+
-		"Updated At: 1970-01-01T00:00:00Z"))
+		"Updated At: 1970-01-01T00:00:00Z\n")
 }

@@ -84,14 +84,13 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 	is.NoErr(err)
 
 	output := buf.String()
-	is.True(len(output) > 0)
-	strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"+------------+---------+------------------------------+----------------------------------+----------------------+----------------------+\n"+
 		"|     ID     | PLUGIN  |            PARENT            |            CONDITION             |       CREATED        |     LAST_UPDATED     |\n"+
 		"+------------+---------+------------------------------+----------------------------------+----------------------+----------------------+\n"+
 		"| processor1 | plugin1 | connector (source-connector) | {{ eq .Metadata.filter \"true\" }} | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
 		"| processor2 | plugin2 | pipeline (pipeline)          |                                  | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
-		"+------------+---------+------------------------------+----------------------------------+----------------------+----------------------+")
+		"+------------+---------+------------------------------+----------------------------------+----------------------+----------------------+\n")
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {

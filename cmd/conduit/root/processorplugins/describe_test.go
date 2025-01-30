@@ -17,7 +17,6 @@ package processorplugins
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
@@ -117,7 +116,7 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	output := buf.String()
 
-	is.True(strings.Contains(output, ""+
+	is.Equal(output, ""+
 		"Name: builtin:base64.encode@v0.1.0\n"+
 		"Summary: Encode a field to base64\n"+
 		"Description: The processor will encode the value of the target field to base64 and store the\n"+
@@ -131,5 +130,5 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		"| NAME  |  TYPE  |               DESCRIPTION                | DEFAULT |       VALIDATIONS       |\n"+
 		"+-------+--------+------------------------------------------+---------+-------------------------+\n"+
 		"| field | string | Field is a reference to the target field |         | [required], [exclusion] |\n"+
-		"+-------+--------+------------------------------------------+---------+-------------------------+"))
+		"+-------+--------+------------------------------------------+---------+-------------------------+\n")
 }
