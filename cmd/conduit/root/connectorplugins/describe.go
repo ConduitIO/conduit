@@ -36,7 +36,7 @@ var (
 )
 
 type DescribeArgs struct {
-	ConnectorPluginID string
+	connectorPluginID string
 }
 
 type DescribeCommand struct {
@@ -71,13 +71,13 @@ func (c *DescribeCommand) Args(args []string) error {
 		return cerrors.Errorf("too many arguments")
 	}
 
-	c.args.ConnectorPluginID = args[0]
+	c.args.connectorPluginID = args[0]
 	return nil
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
-		Name: c.args.ConnectorPluginID,
+		Name: c.args.connectorPluginID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list connector plguin: %w", err)

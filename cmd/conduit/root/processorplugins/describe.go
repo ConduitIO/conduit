@@ -36,7 +36,7 @@ var (
 )
 
 type DescribeArgs struct {
-	processorPlugin string
+	processorPluginID string
 }
 
 type DescribeCommand struct {
@@ -64,20 +64,20 @@ func (c *DescribeCommand) Aliases() []string { return []string{"desc"} }
 
 func (c *DescribeCommand) Args(args []string) error {
 	if len(args) == 0 {
-		return cerrors.Errorf("requires a processor plugin name")
+		return cerrors.Errorf("requires a processor plugin ID")
 	}
 
 	if len(args) > 1 {
 		return cerrors.Errorf("too many arguments")
 	}
 
-	c.args.processorPlugin = args[0]
+	c.args.processorPluginID = args[0]
 	return nil
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.ProcessorServiceClient.ListProcessorPlugins(ctx, &apiv1.ListProcessorPluginsRequest{
-		Name: c.args.processorPlugin,
+		Name: c.args.processorPluginID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to get processor plugin: %w", err)

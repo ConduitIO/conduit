@@ -34,7 +34,7 @@ func TestDescribeExecutionNoArgs(t *testing.T) {
 	c := DescribeCommand{}
 	err := c.Args([]string{})
 
-	expected := "requires a processor plugin name"
+	expected := "requires a processor plugin ID"
 
 	is.True(err != nil)
 	is.Equal(err.Error(), expected)
@@ -60,7 +60,7 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 	err := c.Args([]string{processorPluginID})
 
 	is.NoErr(err)
-	is.Equal(c.args.processorPlugin, processorPluginID)
+	is.Equal(c.args.processorPluginID, processorPluginID)
 }
 
 func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
@@ -74,12 +74,12 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmd := &DescribeCommand{args: DescribeArgs{processorPlugin: "builtin:base64.encode@v0.1.0"}}
+	cmd := &DescribeCommand{args: DescribeArgs{processorPluginID: "builtin:base64.encode@v0.1.0"}}
 	cmd.Output(out)
 
 	mockProcessorService := mock.NewMockProcessorService(ctrl)
 
-	testutils.MockGetProcessorPlugins(mockProcessorService, cmd.args.processorPlugin)
+	testutils.MockGetProcessorPlugins(mockProcessorService, cmd.args.processorPluginID)
 
 	client := &api.Client{
 		ProcessorServiceClient: mockProcessorService,
