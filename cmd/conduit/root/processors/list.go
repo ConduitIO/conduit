@@ -32,9 +32,16 @@ var (
 	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
 )
 
-type ListCommand struct{}
+type ListCommand struct {
+	output ecdysis.Output
+}
+
+func (c *ListCommand) Output(output ecdysis.Output) {
+	c.output = output
+}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -59,14 +66,14 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Processors[i].Id < resp.Processors[j].Id
 	})
 
-	displayProcessors(resp.Processors)
+	c.output.Stdout(getProcessorsTable(resp.Processors) + "\n")
 
 	return nil
 }
 
-func displayProcessors(processors []*apiv1.Processor) {
+func getProcessorsTable(processors []*apiv1.Processor) string {
 	if len(processors) == 0 {
-		return
+		return ""
 	}
 
 	table := simpletable.New()
@@ -95,5 +102,5 @@ func displayProcessors(processors []*apiv1.Processor) {
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	fmt.Println(table.String())
+	return table.String()
 }

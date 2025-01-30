@@ -96,7 +96,7 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 		},
 	}
 
-	testutils.MockGetListConnectors(mockService, "", connectors)
+	testutils.MockGetConnectors(mockService, "", connectors)
 
 	client := &api.Client{
 		ConnectorServiceClient: mockService,
@@ -145,7 +145,7 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 		},
 	}
 
-	testutils.MockGetListConnectors(mockService, "pipeline1", connectors)
+	testutils.MockGetConnectors(mockService, "pipeline1", connectors)
 
 	client := &api.Client{
 		ConnectorServiceClient: mockService,
@@ -183,7 +183,7 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	mockService := mock.NewMockConnectorService(ctrl)
 
-	testutils.MockGetListConnectors(mockService, "", []*apiv1.Connector{})
+	testutils.MockGetConnectors(mockService, "", []*apiv1.Connector{})
 	client := &api.Client{ConnectorServiceClient: mockService}
 
 	cmd := &ListCommand{}

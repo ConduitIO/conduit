@@ -30,7 +30,7 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
-func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
+func TestListCommandExecuteWithClient(t *testing.T) {
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
@@ -43,7 +43,7 @@ func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	testutils.MockGetListPipelines(mockService, []*apiv1.Pipeline{
+	testutils.MockGetPipelines(mockService, []*apiv1.Pipeline{
 		{Id: "1", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING}},
 		{Id: "2", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_STOPPED}},
 		{Id: "3", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RECOVERING}},
@@ -87,7 +87,7 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	testutils.MockGetListPipelines(mockService, []*apiv1.Pipeline{})
+	testutils.MockGetPipelines(mockService, []*apiv1.Pipeline{})
 	client := &api.Client{
 		PipelineServiceClient: mockService,
 	}

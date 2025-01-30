@@ -65,7 +65,7 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 	is.Equal(c.args.PipelineID, pipelineID)
 }
 
-func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
+func TestDescribeCommandExecuteWithClient(t *testing.T) {
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
@@ -99,7 +99,7 @@ func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
 		nil,
 		map[string]string{})
 
-	testutils.MockGetListConnectors(mockConnectorService, cmd.args.PipelineID, []*apiv1.Connector{
+	testutils.MockGetConnectors(mockConnectorService, cmd.args.PipelineID, []*apiv1.Connector{
 		{Id: "conn1", Type: apiv1.Connector_TYPE_SOURCE, Plugin: "plugin1", ProcessorIds: []string{"proc3"}},
 		{Id: "conn2", Type: apiv1.Connector_TYPE_DESTINATION, Plugin: "plugin2"},
 	})

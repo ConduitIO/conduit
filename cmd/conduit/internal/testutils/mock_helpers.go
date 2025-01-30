@@ -58,7 +58,7 @@ func MockGetDLQ(mockService *mock.MockPipelineService, pipelineID, plugin string
 	}, nil).Times(1)
 }
 
-func MockGetListPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.Pipeline) {
+func MockGetPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.Pipeline) {
 	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{
 		Pipelines: pipelines,
 	}, nil).Times(1)
@@ -84,6 +84,12 @@ func MockGetProcessor(
 			Parent:    parent,
 			Condition: condition,
 		},
+	}, nil).Times(1)
+}
+
+func MockGetProcessors(mockService *mock.MockProcessorService, processors []*apiv1.Processor) {
+	mockService.EXPECT().ListProcessors(gomock.Any(), gomock.Any()).Return(&apiv1.ListProcessorsResponse{
+		Processors: processors,
 	}, nil).Times(1)
 }
 
@@ -120,7 +126,7 @@ func MockGetProcessorPlugins(mockservice *mock.MockProcessorService, name string
 
 // ConnectorService --------------------------------------------
 
-func MockGetListConnectors(mockService *mock.MockConnectorService, pipelineID string, connectors []*apiv1.Connector) {
+func MockGetConnectors(mockService *mock.MockConnectorService, pipelineID string, connectors []*apiv1.Connector) {
 	mockService.EXPECT().ListConnectors(gomock.Any(), &apiv1.ListConnectorsRequest{
 		PipelineId: pipelineID,
 	}).Return(&apiv1.ListConnectorsResponse{
