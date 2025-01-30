@@ -31,6 +31,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
 	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
 )
 
 type ListFlags struct {
@@ -38,7 +39,12 @@ type ListFlags struct {
 }
 
 type ListCommand struct {
-	flags ListFlags
+	flags  ListFlags
+	output ecdysis.Output
+}
+
+func (c *ListCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *ListCommand) Flags() []ecdysis.Flag {
@@ -71,14 +77,14 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Plugins[i].Name < resp.Plugins[j].Name
 	})
 
-	displayConnectorPlugins(resp.Plugins)
+	c.output.Stdout(getConnectorPluginsTable(resp.Plugins) + "\n")
 
 	return nil
 }
 
-func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecifications) {
+func getConnectorPluginsTable(connectorPlugins []*apiv1.ConnectorPluginSpecifications) string {
 	if len(connectorPlugins) == 0 {
-		return
+		return ""
 	}
 
 	table := simpletable.New()
@@ -98,5 +104,5 @@ func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecificat
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	fmt.Println(table.String())
+	return table.String()
 }

@@ -20,9 +20,11 @@ import (
 	"strings"
 	"testing"
 
+	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -79,7 +81,38 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	mockConnectorService := mock.NewMockConnectorService(ctrl)
 
-	testutils.MockGetConnectorPlugins(mockConnectorService, cmd.args.connectorPluginID)
+	testutils.MockGetConnectorPlugins(
+		mockConnectorService,
+		cmd.args.connectorPluginID,
+		[]*apiv1.ConnectorPluginSpecifications{
+			{
+				Name:        cmd.args.connectorPluginID,
+				Summary:     "A Kafka source and destination plugin for Conduit.",
+				Description: "A Kafka source and destination plugin for Conduit, written in Go.",
+				Author:      "Meroxa, Inc.",
+				Version:     "v0.11.1",
+				SourceParams: map[string]*configv1.Parameter{
+					"sdk.schema.extract.type": {
+						Type:        configv1.Parameter_Type(apiv1.PluginSpecifications_Parameter_TYPE_STRING),
+						Description: "The type of the payload schema.",
+						Default:     "avro",
+						Validations: []*configv1.Validation{
+							{Type: configv1.Validation_TYPE_INCLUSION},
+						},
+					},
+				},
+				DestinationParams: map[string]*configv1.Parameter{
+					"sdk.record.format": {
+						Type:        configv1.Parameter_Type(apiv1.PluginSpecifications_Parameter_TYPE_UNSPECIFIED),
+						Description: "The format of the output record.",
+						Default:     "opencdc/json",
+						Validations: []*configv1.Validation{
+							{Type: configv1.Validation_TYPE_INCLUSION},
+						},
+					},
+				},
+			},
+		})
 
 	client := &api.Client{
 		ConnectorServiceClient: mockConnectorService,
