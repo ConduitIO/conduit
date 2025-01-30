@@ -62,18 +62,16 @@ func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
 
 	output := buf.String()
 	is.True(len(output) > 0)
-	is.True(strings.Contains(output, "ID"))
-	is.True(strings.Contains(output, "CREATED"))
-	is.True(strings.Contains(output, "LAST_UPDATED"))
 
-	is.True(strings.Contains(output, "1"))
-	is.True(strings.Contains(output, "running"))
-	is.True(strings.Contains(output, "2"))
-	is.True(strings.Contains(output, "stopped"))
-	is.True(strings.Contains(output, "3"))
-	is.True(strings.Contains(output, "recovering"))
-	is.True(strings.Contains(output, "4"))
-	is.True(strings.Contains(output, "degraded"))
+	is.True(strings.Contains(output, ""+
+		"+----+------------+----------------------+----------------------+\n"+
+		"| ID |   STATE    |       CREATED        |     LAST_UPDATED     |\n"+
+		"+----+------------+----------------------+----------------------+\n"+
+		"| 1  | running    | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
+		"| 2  | stopped    | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
+		"| 3  | recovering | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
+		"| 4  | degraded   | 1970-01-01T00:00:00Z | 1970-01-01T00:00:00Z |\n"+
+		"+----+------------+----------------------+----------------------+"))
 }
 
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
