@@ -85,11 +85,19 @@ func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
 
 	testutils.MockGetPipeline(mockPipelineService, cmd.args.PipelineID, []string{"conn1", "conn2"}, []string{"proc1", "proc2"})
 
-	testutils.MockGetProcessor(mockProcessorService, "proc1", "field.set", map[string]string{
-		".Payload.After.department": "finance",
-	})
+	testutils.MockGetProcessor(
+		mockProcessorService,
+		"proc1", "field.set", "",
+		nil,
+		map[string]string{
+			".Payload.After.department": "finance",
+		})
 
-	testutils.MockGetProcessor(mockProcessorService, "proc2", "custom.javascript", map[string]string{})
+	testutils.MockGetProcessor(
+		mockProcessorService,
+		"proc2", "custom.javascript", "",
+		nil,
+		map[string]string{})
 
 	testutils.MockGetListConnectors(mockConnectorService, cmd.args.PipelineID, []*apiv1.Connector{
 		{Id: "conn1", Type: apiv1.Connector_TYPE_SOURCE, Plugin: "plugin1", ProcessorIds: []string{"proc3"}},
@@ -105,7 +113,11 @@ func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
 			},
 		}, []string{"proc3"})
 
-	testutils.MockGetProcessor(mockProcessorService, "proc3", "custom.javascript", map[string]string{})
+	testutils.MockGetProcessor(
+		mockProcessorService,
+		"proc3", "custom.javascript", "",
+		nil,
+		map[string]string{})
 
 	testutils.MockGetConnector(
 		mockConnectorService, "conn2", "plugin2", cmd.args.PipelineID, apiv1.Connector_TYPE_DESTINATION,

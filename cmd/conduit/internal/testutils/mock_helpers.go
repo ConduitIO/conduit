@@ -65,7 +65,12 @@ func MockGetListPipelines(mockService *mock.MockPipelineService, pipelines []*ap
 
 // ProcessorService --------------------------------------------
 
-func MockGetProcessor(mockService *mock.MockProcessorService, processorID, plugin string, settings map[string]string) {
+func MockGetProcessor(
+	mockService *mock.MockProcessorService,
+	processorID, plugin, condition string,
+	parent *apiv1.Processor_Parent,
+	settings map[string]string,
+) {
 	mockService.EXPECT().GetProcessor(gomock.Any(), &apiv1.GetProcessorRequest{
 		Id: processorID,
 	}).Return(&apiv1.GetProcessorResponse{
@@ -75,6 +80,8 @@ func MockGetProcessor(mockService *mock.MockProcessorService, processorID, plugi
 			Config: &apiv1.Processor_Config{
 				Settings: settings,
 			},
+			Parent:    parent,
+			Condition: condition,
 		},
 	}, nil).Times(1)
 }

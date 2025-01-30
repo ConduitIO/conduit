@@ -15,9 +15,18 @@
 package processors
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDescribeExecutionNoArgs(t *testing.T) {
@@ -53,4 +62,47 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 
 	is.NoErr(err)
 	is.Equal(c.args.ProcessorID, processorID)
+}
+
+func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmd := &DescribeCommand{args: DescribeArgs{ProcessorID: "processor-id"}}
+	cmd.Output(out)
+
+	mockProcessorService := mock.NewMockProcessorService(ctrl)
+	testutils.MockGetProcessor(
+		mockProcessorService,
+		cmd.args.ProcessorID, "custom.javascript", `{{ eq .Metadata.filter "true" }}`,
+		&apiv1.Processor_Parent{
+			Type: apiv1.Processor_Parent_TYPE_CONNECTOR,
+			Id:   "source-connector",
+		},
+		map[string]string{})
+
+	client := &api.Client{
+		ProcessorServiceClient: mockProcessorService,
+	}
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+
+	is.True(strings.Contains(output, ""+
+		"ID: processor-id\n"+
+		"Plugin: custom.javascript\n"+
+		"Parent: connector (source-connector)\n"+
+		"Condition: {{ eq .Metadata.filter \"true\" }}\n"+
+		"Workers: 0\n"+
+		"Created At: 1970-01-01T00:00:00Z\n"+
+		"Updated At: 1970-01-01T00:00:00Z"))
 }

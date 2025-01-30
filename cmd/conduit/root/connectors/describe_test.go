@@ -65,7 +65,6 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 }
 
 func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
-	const pipelineId = "my-pipeline"
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
@@ -81,7 +80,7 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	mockConnectorService := mock.NewMockConnectorService(ctrl)
 	testutils.MockGetConnector(
-		mockConnectorService, cmd.args.ConnectorID, "plugin1", pipelineId, apiv1.Connector_TYPE_SOURCE,
+		mockConnectorService, cmd.args.ConnectorID, "plugin1", "my-pipeline", apiv1.Connector_TYPE_SOURCE,
 		&apiv1.Connector_Config{
 			Name: "Test Pipeline",
 			Settings: map[string]string{
@@ -90,7 +89,9 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		}, []string{"proc3"})
 
 	mockProcessorService := mock.NewMockProcessorService(ctrl)
-	testutils.MockGetProcessor(mockProcessorService, "proc3", "custom.javascript", map[string]string{})
+	testutils.MockGetProcessor(
+		mockProcessorService, "proc3", "custom.javascript", "",
+		nil, map[string]string{})
 
 	client := &api.Client{
 		ProcessorServiceClient: mockProcessorService,

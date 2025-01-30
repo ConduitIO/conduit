@@ -91,7 +91,9 @@ func displayProcessor(out ecdysis.Output, p *apiv1.Processor) {
 	out.Stdout(fmt.Sprintf("ID: %s\n", p.Id))
 	out.Stdout(fmt.Sprintf("Plugin: %s\n", p.Plugin))
 
-	out.Stdout(fmt.Sprintf("Parent: %s (%s)\n", display.ProcessorParentToString(p.Parent.Type), p.Parent.Id))
+	if p.Parent != nil {
+		out.Stdout(fmt.Sprintf("Parent: %s (%s)\n", display.ProcessorParentToString(p.Parent.Type), p.Parent.Id))
+	}
 
 	if !display.IsEmpty(p.Condition) {
 		out.Stdout(fmt.Sprintf("Condition: %s\n", p.Condition))
