@@ -74,7 +74,6 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	cmd := &DescribeCommand{args: DescribeArgs{processorPluginID: "builtin:base64.encode@v0.1.0"}}
 	cmd.Output(out)

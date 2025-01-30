@@ -73,7 +73,6 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	cmd := &DescribeCommand{args: DescribeArgs{ProcessorID: "processor-id"}}
 	cmd.Output(out)

@@ -74,7 +74,6 @@ func TestDescribeCommandExecuteWithClient(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	cmd := &DescribeCommand{args: DescribeArgs{PipelineID: "1"}}
 	cmd.Output(out)

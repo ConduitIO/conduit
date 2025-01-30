@@ -74,7 +74,6 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	cmd := &DescribeCommand{args: DescribeArgs{connectorPluginID: "builtin:kafka@v0.11.1"}}
 	cmd.Output(out)

@@ -39,7 +39,6 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
@@ -83,7 +82,6 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockService := mock.NewMockPipelineService(ctrl)
 

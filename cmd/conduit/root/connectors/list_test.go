@@ -72,7 +72,6 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockService := mock.NewMockConnectorService(ctrl)
 
@@ -129,7 +128,6 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockService := mock.NewMockConnectorService(ctrl)
 
@@ -179,7 +177,6 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockService := mock.NewMockConnectorService(ctrl)
 
