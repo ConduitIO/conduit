@@ -67,7 +67,7 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Pipelines[i].Id < resp.Pipelines[j].Id
 	})
 
-	c.output.Stdout(getPipelinesTable(resp.Pipelines))
+	c.output.Stdout(getPipelinesTable(resp.Pipelines) + "\n")
 
 	return nil
 }

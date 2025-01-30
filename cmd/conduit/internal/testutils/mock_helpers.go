@@ -17,6 +17,7 @@ package testutils
 import (
 	"time"
 
+	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"go.uber.org/mock/gomock"
@@ -82,6 +83,37 @@ func MockGetProcessor(
 			},
 			Parent:    parent,
 			Condition: condition,
+		},
+	}, nil).Times(1)
+}
+
+func MockGetProcessorPlugins(mockservice *mock.MockProcessorService, name string) {
+	mockservice.EXPECT().ListProcessorPlugins(gomock.Any(), &apiv1.ListProcessorPluginsRequest{
+		Name: name,
+	}).Return(&apiv1.ListProcessorPluginsResponse{
+		Plugins: []*apiv1.ProcessorPluginSpecifications{
+			{
+				Name:    name,
+				Summary: "Encode a field to base64",
+				Description: "The processor will encode the value of the target field to base64 and store the\n" +
+					"result in the target field. It is not allowed to encode the `.Position` field.\n" +
+					"If the provided field doesn't exist, the processor will create that field and\n" +
+					"assign its value. Field is a reference to the target field. " +
+					"Note that it is not allowed to base64 encode. `.Position` field. ",
+				Author:  "Meroxa, Inc.",
+				Version: "v0.1.0",
+				Parameters: map[string]*configv1.Parameter{
+					"field": {
+						Type:        configv1.Parameter_Type(apiv1.PluginSpecifications_Parameter_TYPE_STRING),
+						Description: "Field is a reference to the target field",
+						Default:     "",
+						Validations: []*configv1.Validation{
+							{Type: configv1.Validation_TYPE_REQUIRED},
+							{Type: configv1.Validation_TYPE_EXCLUSION},
+						},
+					},
+				},
+			},
 		},
 	}, nil).Times(1)
 }

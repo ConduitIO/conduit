@@ -182,6 +182,6 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	err := cmd.ExecuteWithClient(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := strings.TrimSpace(buf.String())
 	is.True(len(output) == 0)
 }

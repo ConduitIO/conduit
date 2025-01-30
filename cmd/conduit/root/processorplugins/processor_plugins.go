@@ -26,7 +26,9 @@ var (
 
 type ProcessorPluginsCommand struct{}
 
-func (c *ProcessorPluginsCommand) Aliases() []string { return []string{"processor-plugin"} }
+func (c *ProcessorPluginsCommand) Aliases() []string {
+	return []string{"processor-plugin", "processorsplugins", "processorplugins", "processorplugin"}
+}
 
 func (c *ProcessorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{

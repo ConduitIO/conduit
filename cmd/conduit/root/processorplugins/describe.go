@@ -32,6 +32,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -39,7 +40,12 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -81,30 +87,30 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return nil
 	}
 
-	displayConnectorPluginsDescription(resp.Plugins[0])
+	displayConnectorPluginsDescription(c.output, resp.Plugins[0])
 
 	return nil
 }
 
-func displayConnectorPluginsDescription(p *apiv1.ProcessorPluginSpecifications) {
+func displayConnectorPluginsDescription(out ecdysis.Output, p *apiv1.ProcessorPluginSpecifications) {
 	if !display.IsEmpty(p.Name) {
-		fmt.Printf("Name: %s\n", p.Name)
+		out.Stdout(fmt.Sprintf("Name: %s\n", p.Name))
 	}
 	if !display.IsEmpty(p.Summary) {
-		fmt.Printf("Summary: %s\n", p.Summary)
+		out.Stdout(fmt.Sprintf("Summary: %s\n", p.Summary))
 	}
 	if !display.IsEmpty(p.Description) {
-		fmt.Printf("Description: %s\n", p.Description)
+		out.Stdout(fmt.Sprintf("Description: %s\n", p.Description))
 	}
 	if !display.IsEmpty(p.Author) {
-		fmt.Printf("Author: %s\n", p.Author)
+		out.Stdout(fmt.Sprintf("Author: %s\n", p.Author))
 	}
 	if !display.IsEmpty(p.Version) {
-		fmt.Printf("Version: %s\n", p.Version)
+		out.Stdout(fmt.Sprintf("Version: %s\n", p.Version))
 	}
 
 	if len(p.Parameters) > 0 {
-		fmt.Println("\nParameters:")
-		display.DisplayConfigParams(p.Parameters)
+		out.Stdout("Parameters:\n")
+		display.DisplayConfigParams(out, p.Parameters)
 	}
 }

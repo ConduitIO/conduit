@@ -77,7 +77,7 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Connectors[i].Id < resp.Connectors[j].Id
 	})
 
-	c.output.Stdout(getConnectorsTable(resp.Connectors))
+	c.output.Stdout(getConnectorsTable(resp.Connectors) + "\n")
 
 	return nil
 }

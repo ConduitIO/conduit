@@ -32,6 +32,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -39,7 +40,12 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -81,33 +87,33 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return nil
 	}
 
-	displayConnectorPluginsDescription(resp.Plugins[0])
+	displayConnectorPluginsDescription(c.output, resp.Plugins[0])
 
 	return nil
 }
 
-func displayConnectorPluginsDescription(c *apiv1.ConnectorPluginSpecifications) {
+func displayConnectorPluginsDescription(out ecdysis.Output, c *apiv1.ConnectorPluginSpecifications) {
 	if !display.IsEmpty(c.Name) {
-		fmt.Printf("Name: %s\n", c.Name)
+		out.Stdout(fmt.Sprintf("Name: %s\n", c.Name))
 	}
 	if !display.IsEmpty(c.Summary) {
-		fmt.Printf("Summary: %s\n", c.Summary)
+		out.Stdout(fmt.Sprintf("Summary: %s\n", c.Summary))
 	}
 	if !display.IsEmpty(c.Description) {
-		fmt.Printf("Description: %s\n", c.Description)
+		out.Stdout(fmt.Sprintf("Description: %s\n", c.Description))
 	}
 	if !display.IsEmpty(c.Author) {
-		fmt.Printf("Author: %s\n", c.Author)
+		out.Stdout(fmt.Sprintf("Author: %s\n", c.Author))
 	}
 	if !display.IsEmpty(c.Version) {
-		fmt.Printf("Version: %s\n", c.Version)
+		out.Stdout(fmt.Sprintf("Version: %s\n", c.Version))
 	}
 	if len(c.SourceParams) > 0 {
-		fmt.Printf("\nSource Parameters:\n")
-		display.DisplayConfigParams(c.SourceParams)
+		out.Stdout("\nSource Parameters:\n")
+		display.DisplayConfigParams(out, c.SourceParams)
 	}
 	if len(c.DestinationParams) > 0 {
-		fmt.Printf("\nDestination Parameters:\n")
-		display.DisplayConfigParams(c.DestinationParams)
+		out.Stdout("\nDestination Parameters:\n")
+		display.DisplayConfigParams(out, c.DestinationParams)
 	}
 }

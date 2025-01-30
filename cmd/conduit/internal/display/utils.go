@@ -114,7 +114,7 @@ func FormatLongString(paragraph string, maxLineLength int) string {
 	return result.String()
 }
 
-func DisplayConfigParams(cfg map[string]*configv1.Parameter) {
+func DisplayConfigParams(out ecdysis.Output, cfg map[string]*configv1.Parameter) {
 	table := simpletable.New()
 
 	table.Header = &simpletable.Header{
@@ -169,7 +169,7 @@ func DisplayConfigParams(cfg map[string]*configv1.Parameter) {
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
 
-	fmt.Println(table.String())
+	out.Stdout(table.String() + "\n")
 }
 
 func formatType(input string) string {
