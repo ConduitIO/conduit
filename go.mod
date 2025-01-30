@@ -43,7 +43,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.6
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/twmb/franz-go/pkg/sr v1.3.0
