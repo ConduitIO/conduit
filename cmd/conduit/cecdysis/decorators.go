@@ -26,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -66,25 +65,26 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 
 		client, err := api.NewClient(cmd.Context(), grpcAddress)
 		if err != nil {
-			// Not an error we need to escalate to the main CLI execution. We'll print it out and not execute further.
-			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-			return nil
+			return handleError(err)
 		}
 		defer client.Close()
 
 		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
-		return handleExecuteError(v.ExecuteWithClient(ctx, client))
+		return handleError(v.ExecuteWithClient(ctx, client))
 	}
 
 	return nil
 }
 
 // check what type of error is to see if it's worth showing `cmd.Usage()` or not.
-// if error is returned, usage will be shown automatically.
-func handleExecuteError(err error) error {
+// if any error is returned, usage will be shown automatically.
+func handleError(err error) error {
+	errMsg := err.Error()
 	st, ok := status.FromError(err)
-	if ok && st.Code() == codes.NotFound {
-		errMsg := st.Message()
+
+	// an API error, we try to parse `desc`
+	if ok {
+		errMsg = st.Message()
 
 		// st.Message() is already an entire representation of the error
 		// need to grab the desc
@@ -92,10 +92,9 @@ func handleExecuteError(err error) error {
 		if descIndex != -1 {
 			errMsg = errMsg[descIndex+len("desc = "):]
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "%s\n", errMsg)
-		return nil
 	}
-	return err
+	_, _ = fmt.Fprintf(os.Stderr, "%v\n", errMsg)
+	return nil
 }
 
 // getGRPCAddress returns the gRPC address configured by the user. If no address is found, the default address is returned.

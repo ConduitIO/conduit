@@ -15,8 +15,13 @@
 package cecdysis
 
 import (
+	"bytes"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,102 +31,122 @@ func TestHandleError(t *testing.T) {
 	is := is.New(t)
 
 	testCases := []struct {
-		name       string
-		inputError error
-		expected   error
+		name           string
+		inputError     error
+		expected       error
+		expectedStderr string
 	}{
 		{
-			name:       "OK error",
-			inputError: status.Error(codes.OK, "ok error"),
-			expected:   status.Error(codes.OK, "ok error"),
+			name:           "regular error",
+			inputError:     cerrors.New("some error"),
+			expectedStderr: "some error",
 		},
 		{
-			name:       "Canceled error",
-			inputError: status.Error(codes.Canceled, "canceled error"),
-			expected:   status.Error(codes.Canceled, "canceled error"),
+			name:           "Canceled error",
+			inputError:     status.Error(codes.Canceled, "canceled error"),
+			expectedStderr: "canceled error",
 		},
 		{
-			name:       "Unknown error",
-			inputError: status.Error(codes.Unknown, "unknown error"),
-			expected:   status.Error(codes.Unknown, "unknown error"),
+			name:           "Unknown error",
+			inputError:     status.Error(codes.Unknown, "unknown error"),
+			expectedStderr: "unknown error",
 		},
 		{
-			name:       "InvalidArgument error",
-			inputError: status.Error(codes.InvalidArgument, "invalid argument error"),
-			expected:   status.Error(codes.InvalidArgument, "invalid argument error"),
+			name:           "InvalidArgument error",
+			inputError:     status.Error(codes.InvalidArgument, "invalid argument error"),
+			expectedStderr: "invalid argument error",
 		},
 		{
-			name:       "DeadlineExceeded error",
-			inputError: status.Error(codes.DeadlineExceeded, "deadline exceeded error"),
-			expected:   status.Error(codes.DeadlineExceeded, "deadline exceeded error"),
+			name:           "DeadlineExceeded error",
+			inputError:     status.Error(codes.DeadlineExceeded, "deadline exceeded error"),
+			expectedStderr: "deadline exceeded error",
 		},
 		{
-			name:       "NotFound error",
-			inputError: status.Error(codes.NotFound, "not found error"),
-			expected:   nil,
+			name:           "NotFound error",
+			inputError:     status.Error(codes.NotFound, "not found error"),
+			expectedStderr: "not found error",
 		},
 		{
-			name:       "AlreadyExists error",
-			inputError: status.Error(codes.AlreadyExists, "already exists error"),
-			expected:   status.Error(codes.AlreadyExists, "already exists error"),
+			name: "NotFound error with description",
+			inputError: status.Error(codes.NotFound, "failed to get pipeline: rpc error: code = NotFound "+
+				"desc = failed to get pipeline by ID: pipeline instance not found (ID: foo): pipeline instance not found"),
+			expectedStderr: "failed to get pipeline by ID: pipeline instance not found (ID: foo): pipeline instance not found",
 		},
 		{
-			name:       "PermissionDenied error",
-			inputError: status.Error(codes.PermissionDenied, "permission denied error"),
-			expected:   status.Error(codes.PermissionDenied, "permission denied error"),
+			name:           "AlreadyExists error",
+			inputError:     status.Error(codes.AlreadyExists, "already exists error"),
+			expectedStderr: "already exists error",
 		},
 		{
-			name:       "ResourceExhausted error",
-			inputError: status.Error(codes.ResourceExhausted, "resource exhausted error"),
-			expected:   status.Error(codes.ResourceExhausted, "resource exhausted error"),
+			name:           "PermissionDenied error",
+			inputError:     status.Error(codes.PermissionDenied, "permission denied error"),
+			expectedStderr: "permission denied error",
 		},
 		{
-			name:       "FailedPrecondition error",
-			inputError: status.Error(codes.FailedPrecondition, "failed precondition error"),
-			expected:   status.Error(codes.FailedPrecondition, "failed precondition error"),
+			name:           "ResourceExhausted error",
+			inputError:     status.Error(codes.ResourceExhausted, "resource exhausted error"),
+			expectedStderr: "resource exhausted error",
 		},
 		{
-			name:       "Aborted error",
-			inputError: status.Error(codes.Aborted, "aborted error"),
-			expected:   status.Error(codes.Aborted, "aborted error"),
+			name:           "FailedPrecondition error",
+			inputError:     status.Error(codes.FailedPrecondition, "failed precondition error"),
+			expectedStderr: "failed precondition error",
 		},
 		{
-			name:       "OutOfRange error",
-			inputError: status.Error(codes.OutOfRange, "out of range error"),
-			expected:   status.Error(codes.OutOfRange, "out of range error"),
+			name:           "Aborted error",
+			inputError:     status.Error(codes.Aborted, "aborted error"),
+			expectedStderr: "aborted error",
 		},
 		{
-			name:       "Unimplemented error",
-			inputError: status.Error(codes.Unimplemented, "unimplemented error"),
-			expected:   status.Error(codes.Unimplemented, "unimplemented error"),
+			name:           "OutOfRange error",
+			inputError:     status.Error(codes.OutOfRange, "out of range error"),
+			expectedStderr: "out of range error",
 		},
 		{
-			name:       "Internal error",
-			inputError: status.Error(codes.Internal, "internal error"),
-			expected:   status.Error(codes.Internal, "internal error"),
+			name:           "Unimplemented error",
+			inputError:     status.Error(codes.Unimplemented, "unimplemented error"),
+			expectedStderr: "unimplemented error",
 		},
 		{
-			name:       "Unavailable error",
-			inputError: status.Error(codes.Unavailable, "unavailable error"),
-			expected:   status.Error(codes.Unavailable, "unavailable error"),
+			name:           "Internal error",
+			inputError:     status.Error(codes.Internal, "internal error"),
+			expectedStderr: "internal error",
 		},
 		{
-			name:       "DataLoss error",
-			inputError: status.Error(codes.DataLoss, "data loss error"),
-			expected:   status.Error(codes.DataLoss, "data loss error"),
+			name:           "Unavailable error",
+			inputError:     status.Error(codes.Unavailable, "unavailable error"),
+			expectedStderr: "unavailable error",
 		},
 		{
-			name:       "Unauthenticated error",
-			inputError: status.Error(codes.Unauthenticated, "unauthenticated error"),
-			expected:   status.Error(codes.Unauthenticated, "unauthenticated error"),
+			name:           "DataLoss error",
+			inputError:     status.Error(codes.DataLoss, "data loss error"),
+			expectedStderr: "data loss error",
+		},
+		{
+			name:           "Unauthenticated error",
+			inputError:     status.Error(codes.Unauthenticated, "unauthenticated error"),
+			expectedStderr: "unauthenticated error",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			result := handleExecuteError(tc.inputError)
+
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			result := handleError(tc.inputError)
+
+			w.Close()
+			os.Stderr = oldStderr
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+
 			is.Equal(result, tc.expected)
+			is.Equal(strings.TrimSpace(buf.String()), tc.expectedStderr)
 		})
 	}
 }
