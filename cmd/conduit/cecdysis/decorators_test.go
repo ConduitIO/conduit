@@ -31,21 +31,96 @@ func TestHandleError(t *testing.T) {
 		expected   error
 	}{
 		{
+			name:       "OK error",
+			inputError: status.Error(codes.OK, "ok error"),
+			expected:   status.Error(codes.OK, "ok error"),
+		},
+		{
+			name:       "Canceled error",
+			inputError: status.Error(codes.Canceled, "canceled error"),
+			expected:   status.Error(codes.Canceled, "canceled error"),
+		},
+		{
+			name:       "Unknown error",
+			inputError: status.Error(codes.Unknown, "unknown error"),
+			expected:   status.Error(codes.Unknown, "unknown error"),
+		},
+		{
+			name:       "InvalidArgument error",
+			inputError: status.Error(codes.InvalidArgument, "invalid argument error"),
+			expected:   status.Error(codes.InvalidArgument, "invalid argument error"),
+		},
+		{
+			name:       "DeadlineExceeded error",
+			inputError: status.Error(codes.DeadlineExceeded, "deadline exceeded error"),
+			expected:   status.Error(codes.DeadlineExceeded, "deadline exceeded error"),
+		},
+		{
 			name:       "NotFound error",
 			inputError: status.Error(codes.NotFound, "not found error"),
 			expected:   nil,
+		},
+		{
+			name:       "AlreadyExists error",
+			inputError: status.Error(codes.AlreadyExists, "already exists error"),
+			expected:   status.Error(codes.AlreadyExists, "already exists error"),
+		},
+		{
+			name:       "PermissionDenied error",
+			inputError: status.Error(codes.PermissionDenied, "permission denied error"),
+			expected:   status.Error(codes.PermissionDenied, "permission denied error"),
+		},
+		{
+			name:       "ResourceExhausted error",
+			inputError: status.Error(codes.ResourceExhausted, "resource exhausted error"),
+			expected:   status.Error(codes.ResourceExhausted, "resource exhausted error"),
+		},
+		{
+			name:       "FailedPrecondition error",
+			inputError: status.Error(codes.FailedPrecondition, "failed precondition error"),
+			expected:   status.Error(codes.FailedPrecondition, "failed precondition error"),
+		},
+		{
+			name:       "Aborted error",
+			inputError: status.Error(codes.Aborted, "aborted error"),
+			expected:   status.Error(codes.Aborted, "aborted error"),
+		},
+		{
+			name:       "OutOfRange error",
+			inputError: status.Error(codes.OutOfRange, "out of range error"),
+			expected:   status.Error(codes.OutOfRange, "out of range error"),
+		},
+		{
+			name:       "Unimplemented error",
+			inputError: status.Error(codes.Unimplemented, "unimplemented error"),
+			expected:   status.Error(codes.Unimplemented, "unimplemented error"),
 		},
 		{
 			name:       "Internal error",
 			inputError: status.Error(codes.Internal, "internal error"),
 			expected:   status.Error(codes.Internal, "internal error"),
 		},
+		{
+			name:       "Unavailable error",
+			inputError: status.Error(codes.Unavailable, "unavailable error"),
+			expected:   status.Error(codes.Unavailable, "unavailable error"),
+		},
+		{
+			name:       "DataLoss error",
+			inputError: status.Error(codes.DataLoss, "data loss error"),
+			expected:   status.Error(codes.DataLoss, "data loss error"),
+		},
+		{
+			name:       "Unauthenticated error",
+			inputError: status.Error(codes.Unauthenticated, "unauthenticated error"),
+			expected:   status.Error(codes.Unauthenticated, "unauthenticated error"),
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			result := handleError(tc.inputError)
+			result := handleExecuteError(tc.inputError)
 			is.Equal(result, tc.expected)
 		})
 	}
