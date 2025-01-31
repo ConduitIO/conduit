@@ -80,7 +80,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Name: c.args.connectorPluginID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list connector plguin: %w", err)
+		return cerrors.Errorf("failed to list connector plguin: %w", err)
 	}
 
 	if len(resp.Plugins) == 0 {

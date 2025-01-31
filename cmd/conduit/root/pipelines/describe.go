@@ -80,7 +80,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Id: c.args.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get pipeline: %w", err)
+		return cerrors.Errorf("failed to get pipeline: %w", err)
 	}
 
 	// Fetch pipeline processors
@@ -91,7 +91,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: processorID,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get processor: %w", err)
+			return cerrors.Errorf("failed to get processor: %w", err)
 		}
 		pipelineProcessors = append(pipelineProcessors, processor.Processor)
 	}
@@ -101,7 +101,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		PipelineId: c.args.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
+		return cerrors.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	connectors := make([]*apiv1.Connector, 0, len(connectorsResp.Connectors))
@@ -111,7 +111,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: conn.Id,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get connector: %w", err)
+			return cerrors.Errorf("failed to get connector: %w", err)
 		}
 
 		connectors = append(connectors, connDetails.Connector)
@@ -128,7 +128,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 				Id: processorID,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to get processor: %w", err)
+				return cerrors.Errorf("failed to get processor: %w", err)
 			}
 			processors = append(processors, processor.Processor)
 		}
@@ -139,12 +139,12 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Id: c.args.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
+		return cerrors.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	err = displayPipeline(c.output, pipelineResp.Pipeline, pipelineProcessors, connectors, connectorProcessors, dlq.Dlq)
 	if err != nil {
-		return fmt.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
+		return cerrors.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	return nil

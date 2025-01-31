@@ -22,6 +22,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
 )
@@ -57,7 +58,7 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 
 		grpcAddress, err := getGRPCAddress(cmd)
 		if err != nil {
-			return fmt.Errorf("error reading gRPC address: %w", err)
+			return cerrors.Errorf("error reading gRPC address: %w", err)
 		}
 
 		client, err := api.NewClient(cmd.Context(), grpcAddress)

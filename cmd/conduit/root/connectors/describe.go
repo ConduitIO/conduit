@@ -80,7 +80,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Id: c.args.ConnectorID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get connector: %w", err)
+		return cerrors.Errorf("failed to get connector: %w", err)
 	}
 
 	var processors []*apiv1.Processor
@@ -90,7 +90,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: processorID,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get processor: %w", err)
+			return cerrors.Errorf("failed to get processor: %w", err)
 		}
 		processors = append(processors, processor.Processor)
 	}
