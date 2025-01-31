@@ -143,7 +143,8 @@ func TestHandleError(t *testing.T) {
 			os.Stderr = oldStderr
 
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, err := io.Copy(&buf, r)
+			is.NoErr(err)
 
 			is.Equal(result, tc.expected)
 			is.Equal(strings.TrimSpace(buf.String()), tc.expectedStderr)
