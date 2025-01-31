@@ -16,17 +16,13 @@ package cecdysis
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/status"
 )
 
 // ------------------- CommandWithClient
@@ -65,35 +61,14 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 
 		client, err := api.NewClient(cmd.Context(), grpcAddress)
 		if err != nil {
-			return handleError(err)
+			return err
 		}
 		defer client.Close()
 
 		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
-		return handleError(v.ExecuteWithClient(ctx, client))
+		return v.ExecuteWithClient(ctx, client)
 	}
 
-	return nil
-}
-
-// check what type of error is to see if it's worth showing `cmd.Usage()` or not.
-// if any error is returned, usage will be shown automatically.
-func handleError(err error) error {
-	errMsg := err.Error()
-	st, ok := status.FromError(err)
-
-	// an API error, we try to parse `desc`
-	if ok {
-		errMsg = st.Message()
-
-		// st.Message() is already an entire representation of the error
-		// need to grab the desc
-		descIndex := strings.Index(errMsg, "desc =")
-		if descIndex != -1 {
-			errMsg = errMsg[descIndex+len("desc = "):]
-		}
-	}
-	_, _ = fmt.Fprintf(os.Stderr, "%v\n", errMsg)
 	return nil
 }
 
