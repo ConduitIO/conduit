@@ -25,6 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ------------------- CommandWithClient
@@ -70,10 +72,21 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		defer client.Close()
 
 		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
-		return v.ExecuteWithClient(ctx, client)
+		return handleError(v.ExecuteWithClient(ctx, client))
 	}
 
 	return nil
+}
+
+// check what type of error is to see if it's worth showing `cmd.Usage()` or not.
+// if error is returned, usage will be shown automatically.
+func handleError(err error) error {
+	st, ok := status.FromError(err)
+	if ok && st.Code() == codes.NotFound {
+		_, _ = fmt.Fprintf(os.Stderr, "%s\n", st.Message())
+		return nil
+	}
+	return err
 }
 
 func getGRPCAddress(cmd *cobra.Command) (string, error) {
