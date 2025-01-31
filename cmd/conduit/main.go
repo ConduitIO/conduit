@@ -15,7 +15,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
@@ -29,8 +28,12 @@ func main() {
 	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
 	cmd.CompletionOptions.DisableDefaultCmd = true
 
+	// Don't want to show usage when there's some unexpected error executing the command
+	// Help will still be shown via --help
+	cmd.SilenceUsage = true
+
 	if err := cmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
+		// error is already printed out
 		os.Exit(1)
 	}
 	os.Exit(0)

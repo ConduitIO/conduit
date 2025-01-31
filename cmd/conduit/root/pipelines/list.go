@@ -16,10 +16,10 @@ package pipelines
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -60,7 +60,7 @@ func (c *ListCommand) Usage() string { return "list" }
 func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.PipelineServiceClient.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
 	if err != nil {
-		return fmt.Errorf("failed to list pipelines: %w", err)
+		return cerrors.Errorf("failed to list pipelines: %w", err)
 	}
 
 	sort.Slice(resp.Pipelines, func(i, j int) bool {

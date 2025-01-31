@@ -16,12 +16,11 @@ package cecdysis
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
 )
@@ -57,14 +56,12 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 
 		grpcAddress, err := getGRPCAddress(cmd)
 		if err != nil {
-			return fmt.Errorf("error reading gRPC address: %w", err)
+			return cerrors.Errorf("error reading gRPC address: %w", err)
 		}
 
 		client, err := api.NewClient(cmd.Context(), grpcAddress)
 		if err != nil {
-			// Not an error we need to escalate to the main CLI execution. We'll print it out and not execute further.
-			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-			return nil
+			return err
 		}
 		defer client.Close()
 
@@ -75,6 +72,7 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 	return nil
 }
 
+// getGRPCAddress returns the gRPC address configured by the user. If no address is found, the default address is returned.
 func getGRPCAddress(cmd *cobra.Command) (string, error) {
 	var (
 		path string

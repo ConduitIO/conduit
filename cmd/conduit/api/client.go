@@ -16,8 +16,8 @@ package api
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,7 +38,7 @@ func NewClient(ctx context.Context, address string) (*Client, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC client: %w", err)
+		return nil, cerrors.Errorf("failed to create gRPC client: %w", err)
 	}
 
 	client := &Client{
@@ -60,7 +60,7 @@ func NewClient(ctx context.Context, address string) (*Client, error) {
 func (c *Client) CheckHealth(ctx context.Context, address string) error {
 	healthResp, err := c.HealthClient.Check(ctx, &healthgrpc.HealthCheckRequest{})
 	if err != nil || healthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
-		return fmt.Errorf("we couldn't connect to Conduit at the configured address %q\n"+
+		return cerrors.Errorf("we couldn't connect to Conduit at the configured address %q\n"+
 			"Please execute `conduit run` to start it.\nTo check the current configured `api.grpc.address`, run `conduit config`\n\n"+
 			"Error details: %v", address, err)
 	}

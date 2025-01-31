@@ -80,7 +80,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Name: c.args.processorPluginID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get processor plugin: %w", err)
+		return cerrors.Errorf("failed to get processor plugin: %w", err)
 	}
 
 	if len(resp.Plugins) == 0 {

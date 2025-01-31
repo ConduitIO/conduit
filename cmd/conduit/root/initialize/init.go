@@ -72,7 +72,7 @@ func (c *InitCommand) createDirs() error {
 				fmt.Printf("Directory '%s' already exists, skipping...\n", path)
 				continue
 			}
-			return fmt.Errorf("failed to create directory '%s': %w", path, err)
+			return cerrors.Errorf("failed to create directory '%s': %w", path, err)
 		}
 
 		fmt.Printf("Created directory: %s\n", path)
@@ -147,7 +147,7 @@ func (c *InitCommand) Execute(_ context.Context) error {
 
 	err = c.createConfigYAML()
 	if err != nil {
-		return fmt.Errorf("failed to create config YAML: %w", err)
+		return cerrors.Errorf("failed to create config YAML: %w", err)
 	}
 
 	fmt.Println(`

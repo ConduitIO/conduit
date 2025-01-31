@@ -16,13 +16,13 @@ package connectors
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/display"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -70,7 +70,7 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		PipelineId: c.flags.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list connectors: %w", err)
+		return cerrors.Errorf("failed to list connectors: %w", err)
 	}
 
 	sort.Slice(resp.Connectors, func(i, j int) bool {
