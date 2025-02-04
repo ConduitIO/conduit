@@ -12,7 +12,6 @@
 
 ### Built-in connectors
 
-
 > [!IMPORTANT]  
 > The content of this page has been moved to Conduit's documentation website 
 > [here](https://conduit.io/docs/core-concepts#built-in-connector), and [here](/docs/using/connectors/additional-built-in-plugins).
