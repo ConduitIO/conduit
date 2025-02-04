@@ -23,7 +23,7 @@ git checkout -b bump-builtin-connectors
 
 for conn in 'file' 'kafka' 'generator' 's3' 'postgres' 'log'
 do
-  go get github.com/conduitio/conduit-connector-$conn@main
+  go get github.com/conduitio/conduit-connector-$conn@latest
 done
 
 go mod tidy
