@@ -108,7 +108,7 @@ func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
 
 			return connectorSpec{
 				Name:   specs.Name,
-				Params: conn.NewSource().Parameters(),
+				Params: conn.NewSpecification().SourceParams,
 			}, nil
 		}
 	}
@@ -126,7 +126,7 @@ func (c *InitCommand) getDestinationSpec() (connectorSpec, error) {
 
 			return connectorSpec{
 				Name:   specs.Name,
-				Params: conn.NewDestination().Parameters(),
+				Params: conn.NewSpecification().DestinationParams,
 			}, nil
 		}
 	}

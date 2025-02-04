@@ -67,13 +67,13 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 			name,
 			logger,
 			func() pconnector.SpecifierPlugin {
-				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
+				return sdk.NewSpecifierPlugin(conn.NewSpecification())
 			},
 			func() pconnector.SourcePlugin {
-				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
+				return sdk.NewSourcePlugin(conn.NewSource(), cfg, conn.NewSpecification().SourceParams)
 			},
 			func() pconnector.DestinationPlugin {
-				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
+				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg, conn.NewSpecification().DestinationParams)
 			},
 		)
 	}
