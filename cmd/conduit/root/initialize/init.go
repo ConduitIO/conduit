@@ -61,10 +61,9 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 func (c *InitCommand) createDirs() error {
 	// These could be used based on the root flags if those were global
 	dirs := []string{"processors", "connectors", "pipelines"}
-	conduitPath := filepath.Dir(c.flags.Path)
 
 	for _, dir := range dirs {
-		path := filepath.Join(conduitPath, dir)
+		path := filepath.Join(c.flags.Path, dir)
 
 		// Attempt to create the directory, skipping if it already exists
 		if err := os.Mkdir(path, os.ModePerm); err != nil {
@@ -151,10 +150,10 @@ func (c *InitCommand) Execute(_ context.Context) error {
 	}
 
 	fmt.Println(`
-	Conduit has been initialized!
+Conduit has been initialized!
 	
-	To quickly create an example pipeline, run 'conduit pipelines init'.
-	To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
+To quickly create an example pipeline, run 'conduit pipelines init'.
+To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
 
 	return nil
 }

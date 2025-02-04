@@ -93,7 +93,8 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
 a simple and runnable generator-to-log pipeline is configured.`,
-		Example: "conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --pipelines.path pipelines/pg-to-kafka.yaml",
+		Example: "conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
+			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines",
 	}
 }
 
