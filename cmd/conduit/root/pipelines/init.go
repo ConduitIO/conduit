@@ -70,6 +70,8 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
+	flags.SetDefault("source", "generator")
+	flags.SetDefault("destination", "file")
 	return flags
 }
 
@@ -85,7 +87,7 @@ func (c *InitCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *InitCommand) Usage() string { return "init" }
+func (c *InitCommand) Usage() string { return "init <pipeline-name>" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -99,6 +101,8 @@ a simple and runnable generator-to-log pipeline is configured.`,
 }
 
 func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
+	fmt.Println("src: ", c.flags.Source)
+	fmt.Println("dest: ", c.flags.Destination)
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == c.flags.Source || specs.Name == "builtin:"+c.flags.Source {
