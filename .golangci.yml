@@ -17,7 +17,8 @@ linters-settings:
   gofmt:
     simplify: false
   govet:
-    check-shadowing: false # TODO enable
+    disable:
+      - shadow # TODO enable
   nolintlint:
     allow-unused: false # report any unused nolint directives
     require-explanation: true # require an explanation for nolint directives
