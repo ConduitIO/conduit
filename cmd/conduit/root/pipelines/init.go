@@ -101,8 +101,6 @@ a simple and runnable generator-to-log pipeline is configured.`,
 }
 
 func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
-	fmt.Println("src: ", c.flags.Source)
-	fmt.Println("dest: ", c.flags.Destination)
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == c.flags.Source || specs.Name == "builtin:"+c.flags.Source {
