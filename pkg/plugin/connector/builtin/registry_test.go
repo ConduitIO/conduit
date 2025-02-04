@@ -42,7 +42,7 @@ func TestRegistry_InitList(t *testing.T) {
 		is.Equal(
 			"",
 			cmp.Diff(
-				pconnector.Specification(wantSpec),
+				wantSpec,
 				gotSpec,
 				cmpopts.IgnoreFields(pconnector.Specification{}, "SourceParams", "DestinationParams"),
 			),
