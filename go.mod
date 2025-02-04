@@ -9,14 +9,14 @@ require (
 	github.com/alexeyco/simpletable v1.0.0
 	github.com/bufbuild/buf v1.50.0
 	github.com/conduitio/conduit-commons v0.5.1
-	github.com/conduitio/conduit-connector-file v0.9.1-0.20250204130147-181107a7213b
-	github.com/conduitio/conduit-connector-generator v0.9.2-0.20250204131425-46fc58709282
+	github.com/conduitio/conduit-connector-file v0.10.0
+	github.com/conduitio/conduit-connector-generator v0.10.0
 	github.com/conduitio/conduit-connector-kafka v0.12.0
-	github.com/conduitio/conduit-connector-log v0.6.1-0.20250204131443-7d025997027e
-	github.com/conduitio/conduit-connector-postgres v0.11.1-0.20250204112305-6ff59b213445
+	github.com/conduitio/conduit-connector-log v0.7.0
+	github.com/conduitio/conduit-connector-postgres v0.11.0
 	github.com/conduitio/conduit-connector-protocol v0.9.1
-	github.com/conduitio/conduit-connector-s3 v0.8.2-0.20250204133031-ff4a1a3bf11e
-	github.com/conduitio/conduit-connector-sdk v0.13.1-0.20250203152305-371a2b9f2daa
+	github.com/conduitio/conduit-connector-s3 v0.9.0
+	github.com/conduitio/conduit-connector-sdk v0.13.1
 	github.com/conduitio/conduit-processor-sdk v0.4.1
 	github.com/conduitio/conduit-schema-registry v0.2.2
 	github.com/conduitio/ecdysis v0.3.0
