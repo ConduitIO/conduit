@@ -246,8 +246,8 @@ github.com/conduitio/conduit-processor-sdk v0.4.1 h1:u1K2JGC02/EHh9StUQxu0umVUqt
 github.com/conduitio/conduit-processor-sdk v0.4.1/go.mod h1:ul2G08Oo9dD+jrehYa5hY+L4CAB1L/HkBmne24Ql5ec=
 github.com/conduitio/conduit-schema-registry v0.2.3 h1:Rx2FfnslgD+C5ea9CDSV6O2Wkd0oU0qzmxkyH9S1OX8=
 github.com/conduitio/conduit-schema-registry v0.2.3/go.mod h1:u13wohlcp2leaKLBPFJB7PETLRAyYX+e5X7RmeA8B1c=
-github.com/conduitio/ecdysis v0.3.0 h1:vBoh60M1/d2CUnWG964OT6uhr3NSO90SFW9RRPCKt9A=
-github.com/conduitio/ecdysis v0.3.0/go.mod h1:8ztJTkL5AfCm2qFMzaSUO/IItvJ3z7Jj1PWLcgqmT14=
+github.com/conduitio/ecdysis v0.4.0 h1:jmiG7JmMFqLHK1QjoBe5bbBjzIrBPFEIVlBAayUL5UE=
+github.com/conduitio/ecdysis v0.4.0/go.mod h1:kwqIN3frnpng/3v4W7pZXqUwiJUNe9AGTrwi7ndMKys=
 github.com/conduitio/evolviconf v0.1.0 h1:rcG+hs6tlrYlX9qomOQJz+K+OnDhbMbioGx3ci55yo0=
 github.com/conduitio/evolviconf v0.1.0/go.mod h1:RnbnSqDDYarKgG2p+krP71svG6qLms3+/TnKrPKWk+0=
 github.com/conduitio/evolviconf/evolviyaml v0.1.0 h1:nMW7CROIMtHhscm/QLMpMs7uCPp6O2dS4CfU9bhugd4=
