@@ -60,7 +60,7 @@ func (c *DescribeCommand) Output(output ecdysis.Output) {
 
 func (c *DescribeCommand) Aliases() []string { return []string{"desc"} }
 
-func (c *DescribeCommand) Usage() string { return "describe <pipeline-id>" }
+func (c *DescribeCommand) Usage() string { return "describe PIPELINE_ID" }
 
 func (c *DescribeCommand) Args(args []string) error {
 	if len(args) == 0 {

@@ -48,7 +48,7 @@ func (c *DescribeCommand) Output(output ecdysis.Output) {
 	c.output = output
 }
 
-func (c *DescribeCommand) Usage() string { return "describe <connector-plugin-id>" }
+func (c *DescribeCommand) Usage() string { return "describe CONNECTOR_PLUGIN_ID" }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -80,7 +80,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Name: c.args.connectorPluginID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to list connector plguin: %w", err)
+		return cerrors.Errorf("failed to list connector plugin: %w", err)
 	}
 
 	if len(resp.Plugins) == 0 {

@@ -87,7 +87,7 @@ func (c *InitCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *InitCommand) Usage() string { return "init <pipeline-name>" }
+func (c *InitCommand) Usage() string { return "init PIPELINE_NAME" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
