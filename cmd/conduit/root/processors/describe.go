@@ -48,7 +48,7 @@ func (c *DescribeCommand) Output(output ecdysis.Output) {
 	c.output = output
 }
 
-func (c *DescribeCommand) Usage() string { return "describe" }
+func (c *DescribeCommand) Usage() string { return "describe PROCESSOR_ID" }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{

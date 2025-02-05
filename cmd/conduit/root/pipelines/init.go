@@ -70,6 +70,8 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
+	flags.SetDefault("source", "generator")
+	flags.SetDefault("destination", "file")
 	return flags
 }
 
@@ -85,7 +87,7 @@ func (c *InitCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *InitCommand) Usage() string { return "init" }
+func (c *InitCommand) Usage() string { return "init PIPELINE_NAME" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
