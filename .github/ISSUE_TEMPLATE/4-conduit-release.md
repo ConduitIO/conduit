@@ -23,25 +23,25 @@ A Conduit release includes:
 
 Update dependencies in the following order, ensuring all repositories are cloned in the same directory:
 
-- [ ] **[conduit-commons](https://github.com/ConduitIO/conduit-commons)**: Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and `main` branch. If changes are needed, push a new tag.
-- [ ] **[conduit-connector-protocol](https://github.com/ConduitIO/conduit-connector-protocol)**: Update `conduit-commons` if necessary: `go get github.com/conduitio/conduit-commons@vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` and tag if needed.
-- [ ] **[conduit-connector-sdk](https://github.com/ConduitIO/conduit-connector-sdk)**: Update dependencies (`conduit-commons`, `conduit-connector-protocol`) as needed. Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` and tag if needed.
-- [ ] **[conduit-processor-sdk](https://github.com/ConduitIO/conduit-processor-sdk)**: Update `conduit-commons` if necessary. Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` and tag if needed.
-- [ ] **[conduit-schema-registry](https://github.com/ConduitIO/conduit-schema-registry)**: Update `conduit-commons` if necessary. Run `scripts/get-compare-link.sh ../conduit-schema-registry/` and tag if needed.
-- [ ] **[Connector SDK in conduit-connector-template](https://github.com/ConduitIO/conduit-connector-template)**: Bump the Connector SDK dependency.
-- [ ] **[conduit-connector-file](https://github.com/ConduitIO/conduit-connector-file)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-file/` and tag if needed.
-- [ ] **[conduit-connector-kafka](https://github.com/ConduitIO/conduit-connector-kafka)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-kafka/` and tag if needed.
-- [ ] **[conduit-connector-generator](https://github.com/ConduitIO/conduit-connector-generator)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-generator/` and tag if needed.
-- [ ] **[conduit-connector-s3](https://github.com/ConduitIO/conduit-connector-s3)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-s3/` and tag if needed.
-- [ ] **[conduit-connector-postgres](https://github.com/ConduitIO/conduit-connector-postgres)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-postgres/` and tag if needed.
-- [ ] **[conduit-connector-log](https://github.com/ConduitIO/conduit-connector-log)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-log/` and tag if needed.
+- [ ] **[`conduit-commons`](https://github.com/ConduitIO/conduit-commons)**: Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and `main` branch. If changes are needed, push a new tag.
+- [ ] **[`conduit-connector-protocol`](https://github.com/ConduitIO/conduit-connector-protocol)**: Update `conduit-commons` if necessary: `go get github.com/conduitio/conduit-commons@vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` and tag if needed.
+- [ ] **[`conduit-connector-sdk`](https://github.com/ConduitIO/conduit-connector-sdk)**: Update dependencies (`conduit-commons`, `conduit-connector-protocol`) as needed. Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` and tag if needed.
+- [ ] **[`conduit-processor-sdk`](https://github.com/ConduitIO/conduit-processor-sdk)**: Update `conduit-commons` if necessary. Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` and tag if needed.
+- [ ] **[`conduit-schema-registry`](https://github.com/ConduitIO/conduit-schema-registry)**: Update `conduit-commons` if necessary. Run `scripts/get-compare-link.sh ../conduit-schema-registry/` and tag if needed.
+- [ ] **[Connector SDK in `conduit-connector-template`](https://github.com/ConduitIO/conduit-connector-template)**: Bump the Connector SDK dependency.
+- [ ] **[`conduit-connector-file`](https://github.com/ConduitIO/conduit-connector-file)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-file/` and tag if needed.
+- [ ] **[`conduit-connector-kafka`](https://github.com/ConduitIO/conduit-connector-kafka)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-kafka/` and tag if needed.
+- [ ] **[`conduit-connector-generator`](https://github.com/ConduitIO/conduit-connector-generator)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-generator/` and tag if needed.
+- [ ] **[`conduit-connector-s3`](https://github.com/ConduitIO/conduit-connector-s3)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-s3/` and tag if needed.
+- [ ] **[`conduit-connector-postgres`](https://github.com/ConduitIO/conduit-connector-postgres)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-postgres/` and tag if needed.
+- [ ] **[`conduit-connector-log`](https://github.com/ConduitIO/conduit-connector-log)**: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-connector-log/` and tag if needed.
 - [ ] **Bump built-in connectors on Conduit**: Run `scripts/bump-builtin-connectors.sh`
 - [ ] **Release Conduit** (see instructions below).
 
 ## Documentation
 
 - [ ] Write a blog post.
-- [ ] Regenerate processor documentation on [conduit-site](https://github.com/ConduitIO/conduit-site) by running `cd src/processorgen/ && make generate`.
+- [ ] Regenerate processor documentation on [`conduit-site`](https://github.com/ConduitIO/conduit-site) by running `cd src/processorgen/ && make generate`.
 - [ ] Update the banner on the [website](https://github.com/ConduitIO/conduit-site). ⚠️ Remember to bump the `announcementBar.id` in `docusaurus.config.ts`.
 - [ ] Create a changelog on the [website](https://github.com/ConduitIO/conduit-site).
 - [ ] Search and replace the latest version in [`conduit-site`](https://github.com/ConduitIO/conduit-site).
