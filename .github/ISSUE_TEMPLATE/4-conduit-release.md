@@ -6,16 +6,16 @@ labels: release
 assignees: ''
 ---
 
-This issue serves as a checklist for releasing a new version of Conduit. 
+This issue serves as a checklist for releasing a new version of Conduit.
 Follow the steps below to ensure a smooth release process.
 
 ## General Information
 
 A Conduit release includes:
 
--  A GitHub release with packages for different OS and architectures, checksums,
+- A GitHub release with packages for different OS and architectures, checksums,
   a changelog, and source code.
--  A GitHub package for the official Docker image, available on GitHub's Container
+- A GitHub package for the official Docker image, available on GitHub's Container
   Registry, tagged with `latest`.
 
 ## Before a Release
@@ -86,7 +86,8 @@ scripts/tag.sh 1.2.3
 - [ ] Run `brew update conduit` and check latest version.
 - [ ] Check release artifacts are available for `OSX Darwin`, `Linux`, and `Windows`.
 - [ ] Pull Docker images.
-- [ ] Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines) to make sure things are still operational.
+- [ ] Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines) 
+  to make sure things are still operational.
 
 ## Additional information
 
@@ -104,8 +105,8 @@ scripts/tag.sh 1.2.3
 
 - The "Trigger nightly build" GitHub action requires a personal access token, not the GitHub token provided by Actions.
 
-For more information, refer to 
-[Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
+For more information, refer to
+[this](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
 ---
 
