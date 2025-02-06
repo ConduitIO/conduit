@@ -7,7 +7,8 @@ assignees: ''
 ---
 
 
-This issue serves as a checklist for releasing a new version of Conduit. Follow the steps below to ensure a smooth release process.
+This issue serves as a checklist for releasing a new version of Conduit.
+Follow the steps below to ensure a smooth release process.
 
 ## General Information
 
@@ -75,10 +76,13 @@ Update dependencies in the following order, ensuring all repositories are cloned
 
 ## Releasing Conduit
 
-Use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity. Make sure you have the latest changes.
+Use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity. 
+
+> [!IMPORTANT]  
+> Make sure you have the latest changes.
 
 ```sh
-scripts/tag.sh 1.2.3
+scripts/tag.sh MAJOR.MINOR.PATCH
 ```
 
 ## After a Release
@@ -102,8 +106,7 @@ scripts/tag.sh 1.2.3
 - The GitHub release is created with [GoReleaser](https://github.com/goreleaser/goreleaser/).
 - Nightly builds are triggered by a GitHub action, defined in [trigger-nightly.yml](/.github/workflows/trigger-nightly.yml).
 
-
 > [!NOTE]  
 > The "Trigger nightly build" GitHub action requires a personal access token, not the GitHub token provided by Actions.
-> https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow. 
+> [GitHub documentation](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
