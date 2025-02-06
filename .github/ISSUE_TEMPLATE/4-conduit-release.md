@@ -76,7 +76,7 @@ Update dependencies in the following order, ensuring all repositories are cloned
 
 ## Releasing Conduit
 
-Use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity. 
+Use [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity.
 
 > [!IMPORTANT]  
 > Make sure you have the latest changes.
