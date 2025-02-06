@@ -109,4 +109,3 @@ scripts/tag.sh MAJOR.MINOR.PATCH
 > [!NOTE]  
 > The "Trigger nightly build" GitHub action requires a personal access token, not the GitHub token provided by Actions.
 > [GitHub documentation](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
-
