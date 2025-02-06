@@ -83,7 +83,8 @@ scripts/tag.sh 1.2.3
 
 ## After a Release
 
-- [ ] Run `brew update conduit` and check latest version.
+- [ ] Run `brew upgrade conduit` and check latest version.
+  ([Homebrew formula](https://github.com/Homebrew/homebrew-core/blob/master/Formula/c/conduit.rb)).
 - [ ] Check release artifacts are available for `OSX Darwin`, `Linux`, and `Windows`.
 - [ ] Pull Docker images.
 - [ ] Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines)
