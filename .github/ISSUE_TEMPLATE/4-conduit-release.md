@@ -86,7 +86,7 @@ scripts/tag.sh 1.2.3
 - [ ] Run `brew update conduit` and check latest version.
 - [ ] Check release artifacts are available for `OSX Darwin`, `Linux`, and `Windows`.
 - [ ] Pull Docker images.
-- [ ] Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines) 
+- [ ] Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines)
   to make sure things are still operational.
 
 ## Additional information
