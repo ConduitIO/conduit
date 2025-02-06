@@ -6,8 +6,6 @@ labels: release
 assignees: ''
 ---
 
-# Conduit Release Checklist
-
 This issue serves as a checklist for releasing a new version of Conduit. Follow the steps below to ensure a smooth release process.
 
 ## General Information
