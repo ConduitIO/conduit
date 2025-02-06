@@ -74,7 +74,6 @@ body:
 
   - type: checkboxes
     attributes:
-      label: Releasing Conduit
       options:
         - label: 'Use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity.'
 
@@ -85,6 +84,21 @@ body:
         scripts/tag.sh 1.2.3
         ```
 
+  - type: markdown
+    attributes:
+      value: |
+        ## After a Release
+
+  - type: checkboxes
+    attributes:
+      label: Check the released binaries
+      options:
+        - label: Run `brew update conduit` and check latest version.
+        - label: Check release artifacts are available for `OSX Darwin`, `Linux` and `Windows`.
+        - label: Pull Docker images
+        - label: Run a few [testing pipelines](https://github.com/ConduitIO/conduit/tree/main/examples/pipelines) to make sure things are still operational.
+        
+        
   - type: markdown
     attributes:
       value: |
