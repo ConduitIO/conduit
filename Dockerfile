@@ -1,10 +1,6 @@
 # Start with a golang base
 FROM golang:1.23-bullseye AS base
 
-# Install core tools
-RUN apt-get update && \
-    apt-get install -y git
-
 # Build the full app binary
 WORKDIR /app
 COPY . .
