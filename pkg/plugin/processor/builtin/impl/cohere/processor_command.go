@@ -21,6 +21,7 @@ import (
 	"time"
 
 	cohere "github.com/cohere-ai/cohere-go/v2"
+	cohereClient "github.com/cohere-ai/cohere-go/v2/client"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 )
@@ -43,7 +44,7 @@ func (p *Processor) processCommandModel(ctx context.Context, records []opencdc.R
 						},
 					},
 				},
-				// cohereClient.WithToken(p.config.APIKey),
+				cohereClient.WithToken(p.config.APIKey),
 			)
 			attempt := p.backoffCfg.Attempt()
 			duration := p.backoffCfg.Duration()
