@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 )
 
@@ -165,11 +166,18 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 
 			p.backoffCfg.Reset()
 
-			err = p.setField(&record, p.responseBodyRef, resp.String())
+			chatResponse, err := unmarshalChatResponse([]byte(resp.String()))
 			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed setting response body: %w", err)})
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
-			out = append(out, sdk.SingleRecord(record))
+
+			if len(chatResponse.Message.Content) == 1 {
+				err = p.setField(&record, p.responseBodyRef, chatResponse.Message.Content[0].Text)
+				if err != nil {
+					return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed setting response body: %w", err)})
+				}
+				out = append(out, sdk.SingleRecord(record))
+			}
 			break
 		}
 	}
@@ -192,4 +200,25 @@ func (p *commandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceReso
 	}
 
 	return nil
+}
+
+type ChatResponse struct {
+	ID           string `json:"id"`
+	FinishReason string `json:"finish_reason"`
+	Message      struct {
+		Role    string `json:"role"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"message"`
+}
+
+func unmarshalChatResponse(res []byte) (*ChatResponse, error) {
+	response := &ChatResponse{}
+	err := json.Unmarshal(res, response)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
