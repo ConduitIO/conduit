@@ -29,8 +29,13 @@ import (
 func (p *Processor) processCommandModel(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
+		var key []byte
+		if record.Key != nil {
+			key = record.Key.Bytes()
+		}
+		p.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
+
 		for {
-			fmt.Println("request:::", string(record.Payload.After.Bytes()))
 			resp, err := p.client.V2.Chat(
 				ctx,
 				&cohere.V2ChatRequest{
