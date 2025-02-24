@@ -29,20 +29,19 @@ import (
 	"github.com/jpillora/backoff"
 )
 
-//go:generate paramgen -output=paramgen_command_proc.go CommandProcessorConfig
+//go:generate paramgen -output=paramgen_command.go commandProcessorConfig
 
-type CommandProcessor struct {
+type commandProcessor struct {
 	sdk.UnimplementedProcessor
 
 	responseBodyRef *sdk.ReferenceResolver
 	logger          log.CtxLogger
-
-	config     CommandProcessorConfig
-	backoffCfg *backoff.Backoff
-	client     *cohereClient.Client
+	config          commandProcessorConfig
+	backoffCfg      *backoff.Backoff
+	client          *cohereClient.Client
 }
 
-type CommandProcessorConfig struct {
+type commandProcessorConfig struct {
 	// Model is one of the Cohere model (command,embed,rerank).
 	Model string `json:"model" default:"command"`
 	// APIKey is the API key for Cohere api calls.
@@ -60,16 +59,16 @@ type CommandProcessorConfig struct {
 }
 
 func NewCommandProcessor(l log.CtxLogger) sdk.Processor {
-	return &CommandProcessor{logger: l.WithComponent("cohere.Processor")}
+	return &commandProcessor{logger: l.WithComponent("cohere.command")}
 }
 
-func (p *CommandProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	// Configure is the first function to be called in a processor. It provides the processor
 	// with the configuration that needs to be validated and stored to be used in other methods.
 	// This method should not open connections or any other resources. It should solely focus
 	// on parsing and validating the configuration itself.
 
-	err := sdk.ParseConfig(ctx, cfg, &p.config, CommandProcessorConfig{}.Parameters())
+	err := sdk.ParseConfig(ctx, cfg, &p.config, commandProcessorConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -92,7 +91,7 @@ func (p *CommandProcessor) Configure(ctx context.Context, cfg config.Config) err
 	return nil
 }
 
-func (p *CommandProcessor) Specification() (sdk.Specification, error) {
+func (p *commandProcessor) Specification() (sdk.Specification, error) {
 	// Specification contains the metadata for the processor, which can be used to define how
 	// to reference the processor, describe what the processor does and the configuration
 	// parameters it expects.
@@ -107,7 +106,7 @@ func (p *CommandProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		var key []byte
@@ -177,7 +176,7 @@ func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record
 	return out
 }
 
-func (p *CommandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+func (p *commandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
 	if refRes == nil {
 		return nil
 	}

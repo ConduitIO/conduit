@@ -8,18 +8,18 @@ import (
 )
 
 const (
-	CommandProcessorConfigApiKey             = "apiKey"
-	CommandProcessorConfigBackoffRetryCount  = "backoffRetry.count"
-	CommandProcessorConfigBackoffRetryFactor = "backoffRetry.factor"
-	CommandProcessorConfigBackoffRetryMax    = "backoffRetry.max"
-	CommandProcessorConfigBackoffRetryMin    = "backoffRetry.min"
-	CommandProcessorConfigModel              = "model"
-	CommandProcessorConfigResponseBody       = "response.body"
+	commandProcessorConfigApiKey             = "apiKey"
+	commandProcessorConfigBackoffRetryCount  = "backoffRetry.count"
+	commandProcessorConfigBackoffRetryFactor = "backoffRetry.factor"
+	commandProcessorConfigBackoffRetryMax    = "backoffRetry.max"
+	commandProcessorConfigBackoffRetryMin    = "backoffRetry.min"
+	commandProcessorConfigModel              = "model"
+	commandProcessorConfigResponseBody       = "response.body"
 )
 
-func (CommandProcessorConfig) Parameters() map[string]config.Parameter {
+func (commandProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		CommandProcessorConfigApiKey: {
+		commandProcessorConfigApiKey: {
 			Default:     "",
 			Description: "APIKey is the API key for Cohere api calls.",
 			Type:        config.ParameterTypeString,
@@ -27,7 +27,7 @@ func (CommandProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		CommandProcessorConfigBackoffRetryCount: {
+		commandProcessorConfigBackoffRetryCount: {
 			Default:     "0",
 			Description: "Maximum number of retries for an individual record when backing off following an error.",
 			Type:        config.ParameterTypeFloat,
@@ -35,7 +35,7 @@ func (CommandProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: -1},
 			},
 		},
-		CommandProcessorConfigBackoffRetryFactor: {
+		commandProcessorConfigBackoffRetryFactor: {
 			Default:     "2",
 			Description: "The multiplying factor for each increment step.",
 			Type:        config.ParameterTypeFloat,
@@ -43,25 +43,25 @@ func (CommandProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: 0},
 			},
 		},
-		CommandProcessorConfigBackoffRetryMax: {
+		commandProcessorConfigBackoffRetryMax: {
 			Default:     "5s",
 			Description: "The maximum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		CommandProcessorConfigBackoffRetryMin: {
+		commandProcessorConfigBackoffRetryMin: {
 			Default:     "100ms",
 			Description: "The minimum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		CommandProcessorConfigModel: {
+		commandProcessorConfigModel: {
 			Default:     "command",
 			Description: "Model is one of the Cohere model (command,embed,rerank).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		CommandProcessorConfigResponseBody: {
+		commandProcessorConfigResponseBody: {
 			Default:     ".Payload.After",
 			Description: "Specifies in which field should the response body be saved.",
 			Type:        config.ParameterTypeString,
