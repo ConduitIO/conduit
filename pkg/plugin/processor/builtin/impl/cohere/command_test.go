@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestProcessor_Configure(t *testing.T) {
+func TestCommandProcessor_Configure(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  config.Config
@@ -39,7 +39,6 @@ func TestProcessor_Configure(t *testing.T) {
 			config: config.Config{
 				"apiKey":             "api-key",
 				"model":              "command",
-				"modelVersion":       "command",
 				"backoffRetry.count": "not-a-number",
 			},
 			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
@@ -49,7 +48,6 @@ func TestProcessor_Configure(t *testing.T) {
 			config: config.Config{
 				"apiKey":             "api-key",
 				"model":              "command",
-				"modelVersion":       "command",
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
@@ -60,7 +58,6 @@ func TestProcessor_Configure(t *testing.T) {
 			config: config.Config{
 				"apiKey":             "api-key",
 				"model":              "command",
-				"modelVersion":       "command",
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
@@ -71,7 +68,6 @@ func TestProcessor_Configure(t *testing.T) {
 			config: config.Config{
 				"apiKey":              "api-key",
 				"model":               "command",
-				"modelVersion":        "command",
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
@@ -89,7 +85,7 @@ func TestProcessor_Configure(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			p := NewProcessor(log.Test(t))
+			p := NewCommandProcessor(log.Test(t))
 			err := p.Configure(context.Background(), tc.config)
 			if tc.wantErr == "" {
 				is.NoErr(err)

@@ -13,14 +13,3 @@
 // limitations under the License.
 
 package cohere
-
-import (
-	"context"
-
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-)
-
-func (p *Processor) processRerankModel(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	return make([]sdk.ProcessedRecord, len(records))
-}

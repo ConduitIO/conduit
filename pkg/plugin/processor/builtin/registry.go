@@ -56,7 +56,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
-	"cohere":              cohere.NewProcessor,
+	"cohere.command":      cohere.NewCommandProcessor,
 }
 
 type schemaRegistryProcessor interface {
