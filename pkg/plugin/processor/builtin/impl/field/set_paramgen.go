@@ -16,7 +16,7 @@ func (setConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		setConfigField: {
 			Default:     "",
-			Description: "Field is the target field that will be set. Note that it is not allowed\nto set the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Field is the target field that will be set. Note that it is not allowed\nto set the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

@@ -17,10 +17,8 @@
 package pipeline
 
 import (
+	"sync"
 	"time"
-
-	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"gopkg.in/tomb.v2"
 )
 
 const (
@@ -28,6 +26,7 @@ const (
 	StatusSystemStopped
 	StatusUserStopped
 	StatusDegraded
+	StatusRecovering
 )
 
 const (
@@ -48,7 +47,6 @@ type (
 type Instance struct {
 	ID            string
 	Config        Config
-	Status        Status
 	Error         string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -58,8 +56,15 @@ type Instance struct {
 	ConnectorIDs []string
 	ProcessorIDs []string
 
-	n map[string]stream.Node
-	t *tomb.Tomb
+	status     Status
+	statusLock sync.RWMutex
+}
+
+// encodableInstance is an encodable "view" of Instance
+// through which we can also encode an Instance's unexported fields.
+type encodableInstance struct {
+	*Instance
+	Status Status
 }
 
 // Config holds configuration data for building a pipeline.
@@ -86,9 +91,16 @@ var DefaultDLQ = DLQ{
 	WindowNackThreshold: 0,
 }
 
-func (p *Instance) Wait() error {
-	if p.t == nil {
-		return nil
-	}
-	return p.t.Wait()
+func (p *Instance) SetStatus(s Status) {
+	p.statusLock.Lock()
+	defer p.statusLock.Unlock()
+
+	p.status = s
+}
+
+func (p *Instance) GetStatus() Status {
+	p.statusLock.RLock()
+	defer p.statusLock.RUnlock()
+
+	return p.status
 }

@@ -31,7 +31,7 @@ func ExampleKafkaConnectProcesor() {
 		Description: `This example shows how to unwrap a Kafka Connect record.
 
 The Kafka Connect record is serialized as a JSON string in the ` + "`.Payload.After`" + ` field (raw data).
-The Kafka Connect record's payload will replace the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload.
+The Kafka Connect record's payload will replace the [OpenCDC record](https://conduit.io/docs/using/opencdc-record)'s payload.
 
 We also see how the key is unwrapped too. In this case, the key comes in as structured data.`,
 		Config: config.Config{},

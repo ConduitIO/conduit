@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -typed -source=service.go -destination=mock/source_interface_mocks.go -package=mock -mock_names=builtinReg=BuiltinReg,standaloneReg=StandaloneReg,authManager=AuthManager . builtinReg,standaloneReg,authManager
+
 package connector
 
 import (
@@ -21,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -51,25 +52,30 @@ type standaloneReg interface {
 	Init(ctx context.Context, connUtilsAddr string)
 }
 
+type authManager interface {
+	GenerateNew(connectorID string) string
+	Deregister(token string)
+}
+
 type PluginService struct {
 	logger log.CtxLogger
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
-	tokenService  *connutils.AuthManager
+	authManager   authManager
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
-	tokenService *connutils.AuthManager,
+	authManager authManager,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
 		builtinReg:    builtin,
 		standaloneReg: standalone,
-		tokenService:  tokenService,
+		authManager:   authManager,
 	}
 }
 
@@ -86,7 +92,7 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 	logger = logger.WithComponent("plugin")
 
 	cfg := pconnector.PluginConfig{
-		Token:       s.tokenService.GenerateNew(connectorID),
+		Token:       s.authManager.GenerateNew(connectorID),
 		ConnectorID: connectorID,
 		LogLevel:    logger.GetLevel().String(),
 	}
@@ -98,7 +104,7 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 
 	return DispenserWithCleanup(
 		dispenser,
-		func() { s.tokenService.Deregister(cfg.Token) },
+		func() { s.authManager.Deregister(cfg.Token) },
 	), nil
 }
 

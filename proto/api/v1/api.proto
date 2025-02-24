@@ -48,6 +48,11 @@ message Pipeline {
     STATUS_STOPPED = 2;
     // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
+    // Pipeline is recovering. This case on of following:
+    // (1) pipeline is being restarted
+    // (2) Conduit is backing off and pipeline will be restarted later
+    // (3) pipeline was restarted, but Conduit is checking if the pipeline is healthy.
+    STATUS_RECOVERING = 4;
   }
 
   message State {
@@ -770,7 +775,7 @@ message CreateConnectorRequest {
   // PLUGIN-TYPE: One of: builtin, standalone or any (default).
   // PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
   // VERSION: The plugin version as specified in the plugin specifications or latest (default).
-  // For more information, see: https://conduit.io/docs/connectors/referencing/
+  // For more information, see: https://conduit.io/docs/using/connectors/referencing
   string plugin = 2;
   // ID of the pipeline to which the connector will get attached.
   string pipeline_id = 3;
@@ -816,6 +821,7 @@ message GetConnectorResponse {
 message UpdateConnectorRequest {
   string id = 1;
   Connector.Config config = 2;
+  string plugin = 3;
 }
 message UpdateConnectorResponse {
   Connector connector = 1;
@@ -1017,6 +1023,7 @@ message GetProcessorResponse {
 message UpdateProcessorRequest {
   string id = 1;
   Processor.Config config = 2;
+  string plugin = 3;
 }
 message UpdateProcessorResponse {
   Processor processor = 1;

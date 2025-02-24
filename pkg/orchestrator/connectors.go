@@ -61,7 +61,7 @@ func (c *ConnectorOrchestrator) Create(
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("cannot add a connector to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, cerrors.Errorf("cannot create connector: %w", pipeline.ErrPipelineRunning)
 	}
 
@@ -124,7 +124,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
 	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
@@ -151,7 +151,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error) {
+func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error) {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
@@ -171,7 +171,7 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	if err != nil {
 		return nil, err
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 
@@ -181,12 +181,12 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	}
 
 	oldConfig := conn.Config
-	conn, err = c.connectors.Update(ctx, id, config)
+	conn, err = c.connectors.Update(ctx, id, plugin, config)
 	if err != nil {
 		return nil, err
 	}
 	r.Append(func() error {
-		_, err = c.connectors.Update(ctx, id, oldConfig)
+		_, err = c.connectors.Update(ctx, id, conn.Plugin, oldConfig)
 		return err
 	})
 	err = txn.Commit()

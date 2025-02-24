@@ -85,13 +85,13 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		httpConfigResponseBody: {
 			Default:     ".Payload.After",
-			Description: "Specifies in which field should the response body be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Specifies in which field should the response body be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		httpConfigResponseStatus: {
 			Default:     "",
-			Description: "Specifies in which field should the response status be saved. If no value\nis set, then the response status will NOT be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Specifies in which field should the response status be saved. If no value\nis set, then the response status will NOT be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

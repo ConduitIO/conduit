@@ -27,12 +27,12 @@ type PipelineOrchestrator base
 
 func (po *PipelineOrchestrator) Start(ctx context.Context, id string) error {
 	// TODO lock pipeline
-	return po.pipelines.Start(ctx, po.connectors, po.processors, po.connectorPlugins, id)
+	return po.lifecycle.Start(ctx, id)
 }
 
 func (po *PipelineOrchestrator) Stop(ctx context.Context, id string, force bool) error {
 	// TODO lock pipeline
-	return po.pipelines.Stop(ctx, id, force)
+	return po.lifecycle.Stop(ctx, id, force)
 }
 
 func (po *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {
@@ -57,7 +57,7 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 	return po.pipelines.Update(ctx, pl.ID, cfg)
@@ -72,7 +72,7 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return cerrors.Errorf("pipeline %q cannot be deleted: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
 	if len(pl.ConnectorIDs) != 0 {
@@ -94,7 +94,7 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 

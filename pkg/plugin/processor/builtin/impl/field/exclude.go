@@ -41,7 +41,7 @@ func NewExcludeProcessor(log.CtxLogger) sdk.Processor {
 type excludeConfig struct {
 	// Fields is a comma separated list of target fields which should be excluded.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Fields []string `json:"fields" validate:"required"`
 }
 
@@ -54,7 +54,7 @@ If a field is excluded that contains nested data, the whole tree will be removed
 It is not allowed to exclude ` + "`.Position`" + ` or ` + "`.Operation`" + ` fields.
 
 Note that this processor only runs on structured data, if the record contains
-raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
+raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

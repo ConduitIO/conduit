@@ -1,7 +1,4 @@
 version: 2
-before:
-  hooks:
-    - make ui-dist
 builds:
   - main: ./cmd/conduit/main.go
     id: conduit
@@ -35,7 +32,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  name_template: "{{ incpatch .Version }}-snapshot"
+  version_template: "{{ incpatch .Version }}-snapshot"
 changelog:
   sort: asc
   use: github
@@ -82,6 +79,7 @@ release:
     ```
     docker pull conduit.docker.scarf.sh/conduitio/conduit:{{ .Tag }}
     ```
+    ![conduit-release-view](https://static.scarf.sh/a.png?x-pxid=3df89eef-1623-4cd5-9dbc-a6b36588a0eb)
 nfpms:
   - license: Apache-2.0
     maintainer: Conduit Developers <conduit-dev@meroxa.io>

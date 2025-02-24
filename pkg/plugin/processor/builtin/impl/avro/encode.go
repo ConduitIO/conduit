@@ -37,7 +37,7 @@ type encoder interface {
 type encodeConfig struct {
 	// The field that will be encoded.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
 	Schema schemaConfig `json:"schema"`
@@ -108,7 +108,7 @@ It provides two strategies for determining the schema:
   checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running
   this processor, it will automatically set the correct compatibility settings in the schema registry.
 
-This processor is the counterpart to [` + "`avro.decode`" + `](/docs/processors/builtin/avro.decode).`,
+This processor is the counterpart to [` + "`avro.decode`" + `](/docs/using/processors/builtin/avro.decode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: encodeConfig{}.Parameters(),

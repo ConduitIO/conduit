@@ -17,7 +17,7 @@ func (kafkaConnectConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		kafkaConnectConfigField: {
 			Default:     ".Payload.After",
-			Description: "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRegex{Regex: regexp.MustCompile("^.Payload")},

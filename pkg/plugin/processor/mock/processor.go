@@ -24,6 +24,7 @@ type Processor struct {
 	sdk.UnimplementedProcessor
 	ctrl     *gomock.Controller
 	recorder *ProcessorMockRecorder
+	isgomock struct{}
 }
 
 // ProcessorMockRecorder is the mock recorder for Processor.

@@ -41,7 +41,7 @@ type encodeConfig struct {
 	// Field is a reference to the target field. Only fields that are under
 	// `.Key` and `.Payload` can be encoded.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 

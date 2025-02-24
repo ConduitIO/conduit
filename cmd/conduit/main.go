@@ -14,8 +14,27 @@
 
 package main
 
-import "github.com/conduitio/conduit/pkg/conduit"
+import (
+	"os"
+
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/root"
+	"github.com/conduitio/ecdysis"
+)
 
 func main() {
-	conduit.Serve(conduit.DefaultConfig())
+	e := ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithExecuteWithClientDecorator{}))
+
+	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
+	cmd.CompletionOptions.DisableDefaultCmd = true
+
+	// Don't want to show usage when there's some unexpected error executing the command
+	// Help will still be shown via --help
+	cmd.SilenceUsage = true
+
+	if err := cmd.Execute(); err != nil {
+		// error is already printed out
+		os.Exit(1)
+	}
+	os.Exit(0)
 }

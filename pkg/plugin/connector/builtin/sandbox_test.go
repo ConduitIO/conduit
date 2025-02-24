@@ -87,7 +87,7 @@ func TestRunSandbox(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			gotResp, gotErr := runSandbox(td.f, ctx, td.req, logger)
+			gotResp, gotErr := runSandbox(td.f, ctx, td.req, logger, "test")
 			is.Equal(gotResp, td.resp)
 			if td.strict {
 				// strict mode means we expect a very specific error
@@ -98,14 +98,4 @@ func TestRunSandbox(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRunSandboxNoResp(t *testing.T) {
-	ctx := context.Background()
-	is := is.New(t)
-	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
-
-	wantErr := cerrors.New("test error")
-	gotErr := runSandboxNoResp(func(context.Context, any) error { panic(wantErr) }, ctx, nil, logger)
-	is.Equal(gotErr, wantErr)
 }

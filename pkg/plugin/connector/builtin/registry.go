@@ -46,16 +46,6 @@ var DefaultBuiltinConnectors = map[string]sdk.Connector{
 	"github.com/conduitio/conduit-connector-s3":        s3.Connector,
 }
 
-type Registry struct {
-	logger log.CtxLogger
-
-	connectors map[string]sdk.Connector
-	// plugins stores plugin blueprints in a 2D map, first key is the plugin
-	// name, the second key is the plugin version
-	plugins map[string]map[string]blueprint
-	service *connutils.SchemaService
-}
-
 type blueprint struct {
 	fullName         plugin.FullName
 	specification    pconnector.Specification
@@ -77,16 +67,26 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 			name,
 			logger,
 			func() pconnector.SpecifierPlugin {
-				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
+				return sdk.NewSpecifierPlugin(conn.NewSpecification())
 			},
 			func() pconnector.SourcePlugin {
-				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
+				return sdk.NewSourcePlugin(conn.NewSource(), cfg, conn.NewSpecification().SourceParams)
 			},
 			func() pconnector.DestinationPlugin {
-				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
+				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg, conn.NewSpecification().DestinationParams)
 			},
 		)
 	}
+}
+
+type Registry struct {
+	logger log.CtxLogger
+
+	connectors map[string]sdk.Connector
+	// plugins stores plugin blueprints in a 2D map, first key is the plugin
+	// name, the second key is the plugin version
+	plugins map[string]map[string]blueprint
+	service *connutils.SchemaService
 }
 
 func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {

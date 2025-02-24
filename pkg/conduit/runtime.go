@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -44,6 +45,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
+	"github.com/conduitio/conduit/pkg/http/api"
+	"github.com/conduitio/conduit/pkg/http/openapi"
+	"github.com/conduitio/conduit/pkg/lifecycle"
+	lifecycle_v2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -57,9 +62,6 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/conduitio/conduit/pkg/web/api"
-	"github.com/conduitio/conduit/pkg/web/openapi"
-	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/piotrkowalczuk/promgrpc/v4"
@@ -75,7 +77,7 @@ import (
 )
 
 const (
-	exitTimeout = 10 * time.Second
+	exitTimeout = 30 * time.Second
 )
 
 // Runtime sets up all services for serving and monitoring a Conduit instance.
@@ -93,6 +95,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	lifecycleService lifecycleService
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -101,8 +104,15 @@ type Runtime struct {
 	connectorPersister *connector.Persister
 	procSchemaService  *procutils.SchemaService
 
-	logger           log.CtxLogger
-	gRPCStatsHandler *promgrpc.StatsHandler
+	logger log.CtxLogger
+}
+
+// lifecycleService is an interface that we use temporarily to allow for
+// both the old and new lifecycle services to be used interchangeably.
+type lifecycleService interface {
+	Start(ctx context.Context, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
+	Init(ctx context.Context) error
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -111,7 +121,12 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	logger := newLogger(cfg.Log.Level, cfg.Log.Format)
+	logger := cfg.Log.NewLogger(cfg.Log.Level, cfg.Log.Format)
+	logger.Logger = logger.
+		Hook(ctxutil.MessageIDLogCtxHook{}).
+		Hook(ctxutil.RequestIDLogCtxHook{}).
+		Hook(ctxutil.FilepathLogCtxHook{})
+	zerolog.DefaultContextLogger = &logger.Logger
 
 	var db database.DB
 	db = cfg.DB.Driver
@@ -136,7 +151,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		}
 	}
 
-	configurePrometheus()
+	configureMetrics()
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
@@ -152,8 +167,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPersister: connectorPersister,
 
-		gRPCStatsHandler: newGRPCStatsHandler(),
-		logger:           logger,
+		logger: logger,
 	}
 
 	err := createServices(r)
@@ -201,9 +215,25 @@ func createServices(r *Runtime) error {
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
 
-	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
+	var lifecycleService lifecycleService
+	if r.Config.Preview.PipelineArchV2 {
+		r.logger.Info(context.Background()).Msg("using lifecycle service v2")
+		lifecycleService = lifecycle_v2.NewService(r.logger, connService, procService, connPluginService, plService)
+	} else {
+		// Error recovery configuration
+		errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+			MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
+			MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
+			BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
+			MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
+			MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
+		}
 
-	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
+		lifecycleService = lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
+	}
+
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
@@ -216,6 +246,7 @@ func createServices(r *Runtime) error {
 	r.processorPluginService = procPluginService
 	r.connSchemaService = connSchemaService
 	r.procSchemaService = procSchemaService
+	r.lifecycleService = lifecycleService
 
 	return nil
 }
@@ -243,30 +274,31 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 	return schemaRegistry, nil
 }
 
-func newGRPCStatsHandler() *promgrpc.StatsHandler {
-	h := promgrpc.ServerStatsHandler()
-	promclient.MustRegister(h)
-
-	return h
-}
-
 func newLogger(level string, format string) log.CtxLogger {
 	// TODO make logger hooks configurable
 	l, _ := zerolog.ParseLevel(level)
 	f, _ := log.ParseFormat(format)
-	logger := log.InitLogger(l, f)
-	logger.Logger = logger.
-		Hook(ctxutil.MessageIDLogCtxHook{}).
-		Hook(ctxutil.RequestIDLogCtxHook{}).
-		Hook(ctxutil.FilepathLogCtxHook{})
-	zerolog.DefaultContextLogger = &logger.Logger
-	return logger
+	return log.InitLogger(l, f)
 }
 
-func configurePrometheus() {
-	registry := prometheus.NewRegistry(nil)
-	promclient.MustRegister(registry)
-	metrics.Register(registry)
+var (
+	metricsConfigureOnce    sync.Once
+	metricsGrpcStatsHandler *promgrpc.StatsHandler
+)
+
+// configureMetrics
+func configureMetrics() *promgrpc.StatsHandler {
+	metricsConfigureOnce.Do(func() {
+		// conduit metrics
+		reg := prometheus.NewRegistry(nil)
+		metrics.Register(reg)
+		promclient.MustRegister(reg)
+
+		// grpc metrics
+		metricsGrpcStatsHandler = promgrpc.ServerStatsHandler()
+		promclient.MustRegister(metricsGrpcStatsHandler)
+	})
+	return metricsGrpcStatsHandler
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -319,9 +351,10 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 			port = tcpAddr.Port
 		}
 		r.logger.Info(ctx).Send()
-		r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
 		r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
 		r.logger.Info(ctx).Send()
+	} else {
+		r.logger.Info(ctx).Msg("API is disabled")
 	}
 
 	close(r.Ready)
@@ -355,8 +388,8 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 	}()
 
-	if r.Config.dev.cpuprofile != "" {
-		f, err := os.Create(r.Config.dev.cpuprofile)
+	if r.Config.Dev.CPUProfile != "" {
+		f, err := os.Create(r.Config.Dev.CPUProfile)
 		if err != nil {
 			return deferred, cerrors.Errorf("could not create CPU profile: %w", err)
 		}
@@ -366,9 +399,9 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 		deferFunc(pprof.StopCPUProfile)
 	}
-	if r.Config.dev.memprofile != "" {
+	if r.Config.Dev.MemProfile != "" {
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.memprofile)
+			f, err := os.Create(r.Config.Dev.MemProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create memory profile")
 				return
@@ -380,10 +413,10 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 			}
 		})
 	}
-	if r.Config.dev.blockprofile != "" {
+	if r.Config.Dev.BlockProfile != "" {
 		runtime.SetBlockProfileRate(1)
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.blockprofile)
+			f, err := os.Create(r.Config.Dev.BlockProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create block profile")
 				return
@@ -398,6 +431,15 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 }
 
 func (r *Runtime) registerCleanup(t *tomb.Tomb) {
+	if r.Config.Preview.PipelineArchV2 {
+		r.registerCleanupV2(t)
+	} else {
+		r.registerCleanupV1(t)
+	}
+}
+
+func (r *Runtime) registerCleanupV1(t *tomb.Tomb) {
+	ls := r.lifecycleService.(*lifecycle.Service)
 	t.Go(func() error {
 		<-t.Dying()
 		// start cleanup with a fresh context
@@ -406,17 +448,73 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		// t.Err() can be nil, when we had a call: t.Kill(nil)
 		// t.Err() will be context.Canceled, if the tomb's context was canceled
 		if t.Err() == nil || cerrors.Is(t.Err(), context.Canceled) {
-			r.pipelineService.StopAll(ctx, pipeline.ErrGracefulShutdown)
+			ls.StopAll(ctx, pipeline.ErrGracefulShutdown)
 		} else {
 			// tomb died due to a real error
-			r.pipelineService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
+			ls.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
 		}
-		err := r.pipelineService.Wait(exitTimeout)
+		err := ls.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
 			return r.DB.Close()
 		})
 		return err
+	})
+}
+
+func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
+	ls := r.lifecycleService.(*lifecycle_v2.Service)
+	t.Go(func() error {
+		<-t.Dying()
+		// start cleanup with a fresh context
+		ctx := context.Background()
+
+		err := ls.StopAll(ctx, false)
+		if err != nil {
+			r.logger.Err(ctx, err).Msg("some pipelines stopped with an error")
+		}
+
+		// Wait for the pipelines to stop
+		const (
+			count    = 6
+			interval = exitTimeout / count
+		)
+
+		pipelinesStopped := make(chan struct{})
+		go func() {
+			for i := count; i > 0; i-- {
+				if i == 1 {
+					// on last try, stop forcefully
+					_ = ls.StopAll(ctx, true)
+				}
+
+				r.logger.Info(ctx).Msgf("waiting for pipelines to stop running (time left: %s)", time.Duration(i)*interval)
+				select {
+				case <-time.After(interval):
+				case <-pipelinesStopped:
+					return
+				}
+			}
+		}()
+
+		err = ls.Wait(exitTimeout)
+		switch {
+		case err != nil && err != context.DeadlineExceeded:
+			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
+		case err == context.DeadlineExceeded:
+			r.logger.Warn(ctx).Msg("some pipelines did not stop in time")
+		default:
+			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
+		}
+
+		pipelinesStopped <- struct{}{}
+
+		t.Go(func() error {
+			r.connectorPersister.Wait()
+			return r.DB.Close()
+		})
+
+		return nil
 	})
 }
 
@@ -430,7 +528,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.gRPCStatsHandler),
+		grpc.StatsHandler(metricsGrpcStatsHandler),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -482,7 +580,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.gRPCStatsHandler),
+		grpc.StatsHandler(metricsGrpcStatsHandler),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
@@ -576,35 +674,6 @@ func (r *Runtime) serveHTTPAPI(
 	)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register openapi redirect handler: %w", err)
-	}
-
-	uiHandler, err := ui.Handler()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to set up ui handler: %w", err)
-	}
-
-	uiHandler = http.StripPrefix("/ui", uiHandler)
-
-	err = gwmux.HandlePath(
-		"GET",
-		"/ui/**",
-		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-			uiHandler.ServeHTTP(w, req)
-		},
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to register ui handler: %w", err)
-	}
-
-	err = gwmux.HandlePath(
-		"GET",
-		"/",
-		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-			http.Redirect(w, req, "/ui", http.StatusFound)
-		},
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to register redirect handler: %w", err)
 	}
 
 	metricsHandler := r.newHTTPMetricsHandler()
@@ -752,14 +821,26 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
 
-	if r.Config.Pipelines.ExitOnError {
-		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
-			r.logger.Warn(ctx).
-				Err(e.Error).
-				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
-		})
+	if r.Config.Pipelines.ExitOnDegraded {
+		if r.Config.Preview.PipelineArchV2 {
+			ls := r.lifecycleService.(*lifecycle_v2.Service)
+			ls.OnFailure(func(e lifecycle_v2.FailureEvent) {
+				r.logger.Warn(ctx).
+					Err(e.Error).
+					Str(log.PipelineIDField, e.ID).
+					Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+				t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
+			})
+		} else {
+			ls := r.lifecycleService.(*lifecycle.Service)
+			ls.OnFailure(func(e lifecycle.FailureEvent) {
+				r.logger.Warn(ctx).
+					Err(e.Error).
+					Str(log.PipelineIDField, e.ID).
+					Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+				t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
+			})
+		}
 	}
 	err = r.pipelineService.Init(ctx)
 	if err != nil {
@@ -771,7 +852,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
-		if r.Config.Pipelines.ExitOnError {
+		if r.Config.Pipelines.ExitOnDegraded {
 			r.logger.Warn(ctx).
 				Err(err).
 				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
@@ -780,7 +861,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		}
 	}
 
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
+	err = r.lifecycleService.Init(ctx)
 	if err != nil {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")

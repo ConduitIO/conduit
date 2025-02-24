@@ -22,6 +22,7 @@ import (
 type Registry struct {
 	ctrl     *gomock.Controller
 	recorder *RegistryMockRecorder
+	isgomock struct{}
 }
 
 // RegistryMockRecorder is the mock recorder for Registry.
@@ -122,6 +123,7 @@ func (c *RegistryNewProcessorCall) DoAndReturn(f func(context.Context, plugin.Fu
 type StandaloneRegistry struct {
 	ctrl     *gomock.Controller
 	recorder *StandaloneRegistryMockRecorder
+	isgomock struct{}
 }
 
 // StandaloneRegistryMockRecorder is the mock recorder for StandaloneRegistry.

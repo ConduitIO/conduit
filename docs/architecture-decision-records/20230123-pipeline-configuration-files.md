@@ -65,4 +65,4 @@ can be ( only incompatible changes cause the state to be deleted).
 
 ## Related
 
-[Pipeline configuration files documentation](https://conduit.io/docs/pipeline-configuration-files)
+[Pipeline configuration files documentation](https://conduit.io/docs/using/pipelines/configuration-file)

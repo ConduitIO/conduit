@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService
-
+//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService,LifecycleService=LifecycleService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService,LifecycleService
 package orchestrator
 
 import (
@@ -45,6 +44,7 @@ func NewOrchestrator(
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
 	processorPlugins ProcessorPluginService,
+	lifecycle LifecycleService,
 ) *Orchestrator {
 	b := base{
 		db:               db,
@@ -54,6 +54,7 @@ func NewOrchestrator(
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
 		processorPlugins: processorPlugins,
+		lifecycle:        lifecycle,
 	}
 
 	return &Orchestrator{
@@ -74,19 +75,10 @@ type base struct {
 	processors       ProcessorService
 	connectorPlugins ConnectorPluginService
 	processorPlugins ProcessorPluginService
+	lifecycle        LifecycleService
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procService pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
-	// Stop initiates a stop of the given pipeline. The method does not wait for
-	// the pipeline (and its nodes) to actually stop.
-	// When force is false the pipeline will try to stop gracefully and drain
-	// any in-flight messages that have not yet reached the destination. When
-	// force is true the pipeline will stop without draining in-flight messages.
-	// It is allowed to execute a force stop even after a graceful stop was
-	// requested.
-	Stop(ctx context.Context, pipelineID string, force bool) error
-
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
@@ -105,7 +97,7 @@ type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 	Delete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) error
-	Update(ctx context.Context, id string, c connector.Config) (*connector.Instance, error)
+	Update(ctx context.Context, id string, plugin string, c connector.Config) (*connector.Instance, error)
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
@@ -116,7 +108,7 @@ type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	Create(ctx context.Context, id string, plugin string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType, condition string) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
-	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
+	Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -131,4 +123,17 @@ type ProcessorPluginService interface {
 	List(ctx context.Context) (map[string]processorSdk.Specification, error)
 	NewProcessor(ctx context.Context, pluginName string, id string) (processorSdk.Processor, error)
 	RegisterStandalonePlugin(ctx context.Context, path string) (string, error)
+}
+
+type LifecycleService interface {
+	// Start initiates a start of the given pipeline.
+	Start(ctx context.Context, pipelineID string) error
+	// Stop initiates a stop of the given pipeline. The method does not wait for
+	// the pipeline (and its nodes) to actually stop.
+	// When force is false the pipeline will try to stop gracefully and drain
+	// any in-flight messages that have not yet reached the destination. When
+	// force is true the pipeline will stop without draining in-flight messages.
+	// It is allowed to execute a force stop even after a graceful stop was
+	// requested.
+	Stop(ctx context.Context, pipelineID string, force bool) error
 }

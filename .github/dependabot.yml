@@ -18,14 +18,6 @@ updates:
     commit-message:
       prefix: "go.mod:"
 
-  # Maintain dependencies for npm
-  - package-ecosystem: "npm"
-    directory: "/ui"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "npm:"
-
   # Maintain dependencies for Docker
   - package-ecosystem: "docker"
     directory: "/"

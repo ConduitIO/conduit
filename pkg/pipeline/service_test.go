@@ -77,7 +77,6 @@ func TestService_Check(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			db.EXPECT().Ping(gomock.Any()).Return(tc.wantErr)
@@ -114,7 +113,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Description: "pipeline description",
 			},
 			DLQ:    DefaultDLQ,
-			Status: StatusUserStopped,
+			status: StatusUserStopped,
 		},
 	}, {
 		id:   uuid.NewString(),
@@ -129,7 +128,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Description: "",
 			},
 			DLQ:    DefaultDLQ,
-			Status: StatusUserStopped,
+			status: StatusUserStopped,
 		},
 	}}
 
