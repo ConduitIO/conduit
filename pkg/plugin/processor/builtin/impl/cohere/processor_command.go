@@ -16,7 +16,6 @@ package cohere
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	cohereClient "github.com/cohere-ai/cohere-go/v2/client"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func (p *Processor) processCommandModel(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
@@ -51,9 +51,9 @@ func (p *Processor) processCommandModel(ctx context.Context, records []opencdc.R
 
 			if err != nil {
 				switch {
-				case errors.As(err, &cohere.GatewayTimeoutError{}),
-					errors.As(err, &cohere.InternalServerError{}),
-					errors.As(err, &cohere.ServiceUnavailableError{}):
+				case cerrors.As(err, &cohere.GatewayTimeoutError{}),
+					cerrors.As(err, &cohere.InternalServerError{}),
+					cerrors.As(err, &cohere.ServiceUnavailableError{}):
 
 					if attempt < p.config.BackoffRetryCount {
 						sdk.Logger(ctx).Debug().Err(err).Float64("attempt", attempt).
@@ -86,7 +86,6 @@ func (p *Processor) processCommandModel(ctx context.Context, records []opencdc.R
 			}
 			out = append(out, sdk.SingleRecord(record))
 			break
-
 		}
 	}
 	return out
