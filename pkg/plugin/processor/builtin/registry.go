@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/cohere"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
@@ -55,6 +56,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
+	"cohere":              cohere.NewProcessor,
 }
 
 type schemaRegistryProcessor interface {
