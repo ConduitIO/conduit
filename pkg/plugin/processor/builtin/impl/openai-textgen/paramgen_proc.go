@@ -36,7 +36,7 @@ func (ProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		ProcessorConfigApiKey: {
 			Default:     "",
-			Description: "ApiKey is the OpenAI API key. Required.",
+			Description: "APIKey is the OpenAI API key. Required.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
