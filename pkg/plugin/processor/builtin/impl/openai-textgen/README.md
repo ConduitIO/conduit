@@ -4,7 +4,10 @@
 
 ## Functionality
 
-This processor uses the specified OpenAI model to transform records based on a given prompt. It takes the content from a specified field in the record, sends it to OpenAI with a given developer message, and replaces the original content with the generated response.
+This processor uses the specified OpenAI model to transform records based on a
+given prompt. It takes the content from a specified field in the record, sends
+it to OpenAI with a given developer message, and replaces the original content
+with the generated response.
 
 ### Processor Configuration
 
