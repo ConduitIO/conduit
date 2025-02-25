@@ -57,6 +57,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
 	"cohere.command":      cohere.NewCommandProcessor,
+	"cohere.embed":        cohere.NewEmbedProcessor,
 }
 
 type schemaRegistryProcessor interface {
