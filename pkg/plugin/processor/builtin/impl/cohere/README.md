@@ -10,7 +10,7 @@ Provides Cohere processors for command, embed and rerank models.
 
 | name                     | description                              | required | default value |
 |--------------------------|------------------------------------------|----------|---------------|
-| `model` | Model is one of the Cohere model (command,embed,rerank) | false     | "command"            |
+| `model` | Model is one of the name of a compatible command model version. | false     | "command"            |
 | `apiKey` | APIKey is apikey for Cohere api calls. | true     |             |
 | `prompt` | Prompt is the preset prompt. | true     |             |
 | `request.body` | RequestBodyRef specifies the api request field. | false     |     `.Payload.After`        |

@@ -44,7 +44,7 @@ type commandProcessor struct {
 }
 
 type commandProcessorConfig struct {
-	// Model is one of the Cohere model (command,embed,rerank).
+	// Model is one of the name of a compatible command model version.
 	Model string `json:"model" default:"command"`
 	// APIKey is the API key for Cohere api calls.
 	APIKey string `json:"apiKey" validate:"required"`

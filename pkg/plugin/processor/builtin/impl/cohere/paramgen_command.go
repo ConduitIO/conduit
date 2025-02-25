@@ -59,7 +59,7 @@ func (commandProcessorConfig) Parameters() map[string]config.Parameter {
 		},
 		commandProcessorConfigModel: {
 			Default:     "command",
-			Description: "Model is one of the Cohere model (command,embed,rerank).",
+			Description: "Model is one of the name of a compatible command model version.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
