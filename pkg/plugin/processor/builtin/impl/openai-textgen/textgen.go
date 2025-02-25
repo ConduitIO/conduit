@@ -1,3 +1,17 @@
+// Copyright © 2024 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package textgen
 
 import (
@@ -10,21 +24,25 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-//go:generate go tool paramgen -output=paramgen_proc.go ProcessorConfig
+//go:generate paramgen -output=paramgen_proc.go ProcessorConfig
 
 type Processor struct {
 	sdk.UnimplementedProcessor
 
 	config            ProcessorConfig
-	client            *openai.Client
+	call              openaiCall
 	referenceResolver sdk.ReferenceResolver
+}
+
+type openaiCall interface {
+	Call(ctx context.Context, input string) (output string, err error)
 }
 
 type ProcessorConfig struct {
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
-	// ApiKey is the OpenAI API key. Required.
-	ApiKey string `json:"api_key" validate:"required"`
+	// APIKey is the OpenAI API key. Required.
+	APIKey string `json:"api_key" validate:"required"`
 	// DeveloperMessage is the system message that guides the model's behavior. Required.
 	DeveloperMessage string `json:"developer_message" validate:"required"`
 	// StrictOutput enforces strict output format. Defaults to false.
@@ -82,7 +100,10 @@ func (p *Processor) Configure(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("failed to create reference resolver: %w", err)
 	}
 
-	p.client = openai.NewClient(p.config.ApiKey)
+	p.call = &openaiClient{
+		client: openai.NewClient(p.config.APIKey),
+		config: &p.config,
+	}
 
 	return nil
 }
@@ -128,7 +149,7 @@ func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (open
 	case opencdc.Position:
 		payload = string(v)
 
-		res, err := p.createChatCompletion(ctx, payload)
+		res, err := p.call.Call(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -141,7 +162,7 @@ func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (open
 	case opencdc.Data:
 		payload = string(v.Bytes())
 
-		res, err := p.createChatCompletion(ctx, payload)
+		res, err := p.call.Call(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -157,7 +178,7 @@ func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (open
 	case string:
 		payload = v
 
-		res, err := p.createChatCompletion(ctx, payload)
+		res, err := p.call.Call(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -174,31 +195,36 @@ func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (open
 	return rec, nil
 }
 
-func (p *Processor) createChatCompletion(ctx context.Context, payload string) (string, error) {
+type openaiClient struct {
+	client *openai.Client
+	config *ProcessorConfig
+}
+
+func (o *openaiClient) Call(ctx context.Context, payload string) (string, error) {
 	req := openai.ChatCompletionRequest{
-		Model: p.config.Model,
+		Model: o.config.Model,
 		Messages: []openai.ChatCompletionMessage{
-			{Role: "developer", Content: p.config.DeveloperMessage},
+			{Role: "developer", Content: o.config.DeveloperMessage},
 			{Role: "user", Content: payload},
 		},
-		MaxTokens:           p.config.MaxTokens,
-		MaxCompletionTokens: p.config.MaxCompletionTokens,
-		Temperature:         p.config.Temperature,
-		TopP:                p.config.TopP,
-		N:                   p.config.N,
-		Stop:                p.config.Stop,
-		PresencePenalty:     p.config.PresencePenalty,
-		Seed:                p.config.Seed,
-		FrequencyPenalty:    p.config.FrequencyPenalty,
-		LogitBias:           p.config.LogitBias,
-		LogProbs:            p.config.LogProbs,
-		TopLogProbs:         p.config.TopLogProbs,
-		User:                p.config.User,
-		Store:               p.config.Store,
-		ReasoningEffort:     p.config.ReasoningEffort,
+		MaxTokens:           o.config.MaxTokens,
+		MaxCompletionTokens: o.config.MaxCompletionTokens,
+		Temperature:         o.config.Temperature,
+		TopP:                o.config.TopP,
+		N:                   o.config.N,
+		Stop:                o.config.Stop,
+		PresencePenalty:     o.config.PresencePenalty,
+		Seed:                o.config.Seed,
+		FrequencyPenalty:    o.config.FrequencyPenalty,
+		LogitBias:           o.config.LogitBias,
+		LogProbs:            o.config.LogProbs,
+		TopLogProbs:         o.config.TopLogProbs,
+		User:                o.config.User,
+		Store:               o.config.Store,
+		ReasoningEffort:     o.config.ReasoningEffort,
 	}
 
-	res, err := p.client.CreateChatCompletion(ctx, req)
+	res, err := o.client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("chat completion failed: %w", err)
 	}
