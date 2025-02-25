@@ -6,13 +6,14 @@ Conduit processor for Cohere's models.
 
 Provides Cohere processors for command, embed and rerank models.
 
-### Processor Configuration
+### Command Processor Configuration
 
 | name                     | description                              | required | default value |
 |--------------------------|------------------------------------------|----------|---------------|
 | `model` | Model is one of the Cohere model (command,embed,rerank) | false     | "command"            |
-| `modelVersion` | ModelVersion is version of one of the models (command,embed,rerank). | false     |     "command"        |
 | `apiKey` | APIKey is apikey for Cohere api calls. | true     |             |
+| `prompt` | Prompt is the preset prompt. | true     |             |
+| `request.body` | RequestBodyRef specifies the api request field. | false     |     `.Payload.After`        |
 | `response.body` | Specifies in which field should the response body be saved. | false     |     `.Payload.After`        |
 | `backoffRetry.count` |Maximum number of retries for an individual record when backing off following an error. | false     |        `0`     |
 | `backoffRetry.factor` | The multiplying factor for each increment step. | false     |     `2`        |
