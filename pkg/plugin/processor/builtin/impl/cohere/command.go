@@ -35,6 +35,7 @@ import (
 type commandProcessor struct {
 	sdk.UnimplementedProcessor
 
+	requestBodyRef  *sdk.ReferenceResolver
 	responseBodyRef *sdk.ReferenceResolver
 	logger          log.CtxLogger
 	config          commandProcessorConfig
@@ -55,7 +56,11 @@ type commandProcessorConfig struct {
 	BackoffRetryMin time.Duration `json:"backoffRetry.min" default:"100ms"`
 	// The maximum waiting time before retrying.
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
-	// Specifies in which field should the response body be saved.
+	// Prompt is the preset prompt.
+	Prompt string `json:"prompt" validate:"required"`
+	// RequestBodyRef specifies the api request field.
+	RequestBodyRef string `json:"request.body" default:".Payload.After"`
+	// ResponseBodyRef specifies in which field should the response body be saved.
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 }
 
@@ -73,6 +78,12 @@ func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) err
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
+
+	requestBodyRef, err := sdk.NewReferenceResolver(p.config.RequestBodyRef)
+	if err != nil {
+		return fmt.Errorf("failed parsing request.body %v: %w", p.config.RequestBodyRef, err)
+	}
+	p.requestBodyRef = &requestBodyRef
 
 	responseBodyRef, err := sdk.NewReferenceResolver(p.config.ResponseBodyRef)
 	if err != nil {
@@ -116,6 +127,11 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 		}
 		p.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
 
+		requestRef, err := p.requestBodyRef.Resolve(&record)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed to resolve reference %v: %w", p.config.RequestBodyRef, err)})
+		}
+
 		for {
 			resp, err := p.client.V2.Chat(
 				ctx,
@@ -125,7 +141,7 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 						{
 							Role: "user",
 							User: &cohere.UserMessage{Content: &cohere.UserMessageContent{
-								String: string(record.Payload.After.Bytes()),
+								String: fmt.Sprintf(p.config.Prompt, p.getInput(requestRef.Get())),
 							}},
 						},
 					},
@@ -221,4 +237,15 @@ func unmarshalChatResponse(res []byte) (*ChatResponse, error) {
 		return nil, err
 	}
 	return response, nil
+}
+
+func (p *commandProcessor) getInput(val any) string {
+	switch v := val.(type) {
+	case opencdc.RawData:
+		return string(v)
+	case opencdc.StructuredData:
+		return string(v.Bytes())
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

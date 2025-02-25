@@ -30,14 +30,17 @@ func TestCommandProcessor_Configure(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "empty config returns error",
-			config:  config.Config{},
+			name: "empty config returns error",
+			config: config.Config{
+				"prompt": "some preset text",
+			},
 			wantErr: `failed to parse configuration: config invalid: error validating "apiKey": required parameter is not provided`,
 		},
 		{
 			name: "invalid backoffRetry.count returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
+				"prompt":             "some preset text",
 				"model":              "command",
 				"backoffRetry.count": "not-a-number",
 			},
@@ -47,6 +50,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.min returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
+				"prompt":             "some preset text",
 				"model":              "command",
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
@@ -57,6 +61,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.max returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
+				"prompt":             "some preset text",
 				"model":              "command",
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
@@ -67,6 +72,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.factor returns error",
 			config: config.Config{
 				"apiKey":              "api-key",
+				"prompt":              "some preset text",
 				"model":               "command",
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
@@ -77,6 +83,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "success",
 			config: config.Config{
 				"apiKey": "api-key",
+				"prompt": "some preset text",
 			},
 			wantErr: ``,
 		},

@@ -14,6 +14,8 @@ const (
 	commandProcessorConfigBackoffRetryMax    = "backoffRetry.max"
 	commandProcessorConfigBackoffRetryMin    = "backoffRetry.min"
 	commandProcessorConfigModel              = "model"
+	commandProcessorConfigPrompt             = "prompt"
+	commandProcessorConfigRequestBody        = "request.body"
 	commandProcessorConfigResponseBody       = "response.body"
 )
 
@@ -61,9 +63,23 @@ func (commandProcessorConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
+		commandProcessorConfigPrompt: {
+			Default:     "",
+			Description: "Prompt is the preset prompt.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
+		},
+		commandProcessorConfigRequestBody: {
+			Default:     ".Payload.After",
+			Description: "RequestBodyRef specifies the api request field.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
 		commandProcessorConfigResponseBody: {
 			Default:     ".Payload.After",
-			Description: "Specifies in which field should the response body be saved.",
+			Description: "ResponseBodyRef specifies in which field should the response body be saved.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
