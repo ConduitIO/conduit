@@ -119,7 +119,7 @@ type Config struct {
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2 bool `long:"preview.pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
+		PipelineArchV2 bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
 	}
 
 	Dev struct {

@@ -26,7 +26,7 @@ require (
 	github.com/gammazero/deque v1.0.0
 	github.com/goccy/go-json v0.10.5
 	github.com/golangci/golangci-lint v1.64.5
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1
@@ -37,7 +37,7 @@ require (
 	github.com/neilotoole/slogt v1.1.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/prometheus/client_golang v1.20.5
+	github.com/prometheus/client_golang v1.21.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.62.0
 	github.com/rs/zerolog v1.33.0
@@ -45,7 +45,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stealthrocket/wazergo v0.19.1
-	github.com/tetratelabs/wazero v1.8.2
+	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.3.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.5.0
