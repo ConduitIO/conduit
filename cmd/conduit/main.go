@@ -14,8 +14,11 @@
 
 package main
 
-import "github.com/conduitio/conduit/pkg/conduit"
+import (
+	"github.com/conduitio/conduit/cmd/conduit/cli"
+	"github.com/conduitio/conduit/pkg/conduit"
+)
 
 func main() {
-	RunCLI(conduit.DefaultConfig())
+	cli.Run(conduit.DefaultConfig())
 }
