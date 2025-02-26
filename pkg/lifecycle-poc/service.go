@@ -120,7 +120,7 @@ func (s *Service) Init(
 	ctx context.Context,
 ) error {
 	var errs []error
-	s.logger.Debug(ctx).Msg("lifecycle v2 service initializing pipelines statuses")
+	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
 	instances := s.pipelines.List(ctx)
 	for _, instance := range instances {
