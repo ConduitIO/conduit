@@ -19,7 +19,7 @@ jobs:
           make install-tools proto-update
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v7.0.6
+        uses: peter-evans/create-pull-request@v7.0.7
         with:
           title: Update Buf dependencies
           body: Automatic pull request for updating Buf dependencies
