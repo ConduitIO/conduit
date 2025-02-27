@@ -52,6 +52,35 @@ func TestProcessor_Process(t *testing.T) {
 	}
 }
 
+func TestProcessorWithRetry(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	processor := &textgenProcessor{}
+
+	cfg := config.Config{
+		textgenProcessorConfigModel:            openai.GPT4oMini,
+		textgenProcessorConfigApiKey:           "fake api key",
+		textgenProcessorConfigDeveloperMessage: "Test message",
+		textgenProcessorConfigMaxRetries:       "3",
+		textgenProcessorConfigInitialBackoff:   "10",
+		textgenProcessorConfigMaxBackoff:       "100",
+		textgenProcessorConfigBackoffFactor:    "2.0",
+	}
+
+	is.NoErr(processor.Configure(ctx, cfg))
+
+	retryClient := &flakyOpenaiCall{}
+	processor.call = retryClient
+
+	// Use just one record instead of all three, so that it's easier to test.
+	recs := testRecords()[:1]
+	processor.Process(ctx, recs)
+
+	// We expect 2 calls: 1 initial attempt that fails + 1 retry that succeeds
+	is.Equal(retryClient.callCount, 2)
+}
+
 func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processor {
 	processor := &textgenProcessor{}
 
@@ -63,7 +92,7 @@ func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processo
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
-	processor.call = fakeOpenaiCall{}
+	processor.call = &fakeOpenaiCall{}
 
 	return processor
 }
@@ -99,6 +128,20 @@ func testRecords() []opencdc.Record {
 
 type fakeOpenaiCall struct{}
 
-func (f fakeOpenaiCall) Call(ctx context.Context, input string) (string, error) {
+func (f *fakeOpenaiCall) Call(ctx context.Context, input string) (string, error) {
+	return strings.ToUpper(input), nil
+}
+
+type flakyOpenaiCall struct {
+	callCount int
+}
+
+func (f *flakyOpenaiCall) Call(ctx context.Context, input string) (string, error) {
+	f.callCount++
+
+	if f.callCount < 2 {
+		return "", &openai.APIError{HTTPStatusCode: 429, Message: "rate limit exceeded"}
+	}
+
 	return strings.ToUpper(input), nil
 }

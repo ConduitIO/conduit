@@ -9,12 +9,16 @@ import (
 
 const (
 	textgenProcessorConfigApiKey              = "api_key"
+	textgenProcessorConfigBackoffFactor       = "backoff_factor"
 	textgenProcessorConfigDeveloperMessage    = "developer_message"
 	textgenProcessorConfigField               = "field"
 	textgenProcessorConfigFrequencyPenalty    = "frequency_penalty"
+	textgenProcessorConfigInitialBackoff      = "initial_backoff"
 	textgenProcessorConfigLogProbs            = "log_probs"
 	textgenProcessorConfigLogitBias           = "logit_bias.*"
+	textgenProcessorConfigMaxBackoff          = "max_backoff"
 	textgenProcessorConfigMaxCompletionTokens = "max_completion_tokens"
+	textgenProcessorConfigMaxRetries          = "max_retries"
 	textgenProcessorConfigMaxTokens           = "max_tokens"
 	textgenProcessorConfigMetadata            = "metadata.*"
 	textgenProcessorConfigModel               = "model"
@@ -42,6 +46,12 @@ func (textgenProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
+		textgenProcessorConfigBackoffFactor: {
+			Default:     "2.0",
+			Description: "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+			Type:        config.ParameterTypeFloat,
+			Validations: []config.Validation{},
+		},
 		textgenProcessorConfigDeveloperMessage: {
 			Default:     "",
 			Description: "DeveloperMessage is the system message that guides the model's behavior. Required.",
@@ -62,6 +72,12 @@ func (textgenProcessorConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
+		textgenProcessorConfigInitialBackoff: {
+			Default:     "1000",
+			Description: "InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).",
+			Type:        config.ParameterTypeInt,
+			Validations: []config.Validation{},
+		},
 		textgenProcessorConfigLogProbs: {
 			Default:     "",
 			Description: "LogProbs is whether to return log probabilities of output tokens.",
@@ -74,9 +90,21 @@ func (textgenProcessorConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
+		textgenProcessorConfigMaxBackoff: {
+			Default:     "30000",
+			Description: "MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).",
+			Type:        config.ParameterTypeInt,
+			Validations: []config.Validation{},
+		},
 		textgenProcessorConfigMaxCompletionTokens: {
 			Default:     "",
 			Description: "MaxCompletionTokens is the maximum number of tokens for completion.",
+			Type:        config.ParameterTypeInt,
+			Validations: []config.Validation{},
+		},
+		textgenProcessorConfigMaxRetries: {
+			Default:     "3",
+			Description: "MaxRetries is the maximum number of retries for API calls. Defaults to 3.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
