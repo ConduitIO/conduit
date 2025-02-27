@@ -8,33 +8,33 @@ import (
 )
 
 const (
-	ProcessorConfigApiKey              = "api_key"
-	ProcessorConfigDeveloperMessage    = "developer_message"
-	ProcessorConfigField               = "field"
-	ProcessorConfigFrequencyPenalty    = "frequency_penalty"
-	ProcessorConfigLogProbs            = "log_probs"
-	ProcessorConfigLogitBias           = "logit_bias.*"
-	ProcessorConfigMaxCompletionTokens = "max_completion_tokens"
-	ProcessorConfigMaxTokens           = "max_tokens"
-	ProcessorConfigMetadata            = "metadata.*"
-	ProcessorConfigModel               = "model"
-	ProcessorConfigN                   = "n"
-	ProcessorConfigPresencePenalty     = "presence_penalty"
-	ProcessorConfigReasoningEffort     = "reasoning_effort"
-	ProcessorConfigSeed                = "seed"
-	ProcessorConfigStop                = "stop"
-	ProcessorConfigStore               = "store"
-	ProcessorConfigStream              = "stream"
-	ProcessorConfigStrictOutput        = "strict_output"
-	ProcessorConfigTemperature         = "temperature"
-	ProcessorConfigTopLogProbs         = "top_log_probs"
-	ProcessorConfigTopP                = "top_p"
-	ProcessorConfigUser                = "user"
+	textgenProcessorConfigApiKey              = "api_key"
+	textgenProcessorConfigDeveloperMessage    = "developer_message"
+	textgenProcessorConfigField               = "field"
+	textgenProcessorConfigFrequencyPenalty    = "frequency_penalty"
+	textgenProcessorConfigLogProbs            = "log_probs"
+	textgenProcessorConfigLogitBias           = "logit_bias.*"
+	textgenProcessorConfigMaxCompletionTokens = "max_completion_tokens"
+	textgenProcessorConfigMaxTokens           = "max_tokens"
+	textgenProcessorConfigMetadata            = "metadata.*"
+	textgenProcessorConfigModel               = "model"
+	textgenProcessorConfigN                   = "n"
+	textgenProcessorConfigPresencePenalty     = "presence_penalty"
+	textgenProcessorConfigReasoningEffort     = "reasoning_effort"
+	textgenProcessorConfigSeed                = "seed"
+	textgenProcessorConfigStop                = "stop"
+	textgenProcessorConfigStore               = "store"
+	textgenProcessorConfigStream              = "stream"
+	textgenProcessorConfigStrictOutput        = "strict_output"
+	textgenProcessorConfigTemperature         = "temperature"
+	textgenProcessorConfigTopLogProbs         = "top_log_probs"
+	textgenProcessorConfigTopP                = "top_p"
+	textgenProcessorConfigUser                = "user"
 )
 
-func (ProcessorConfig) Parameters() map[string]config.Parameter {
+func (textgenProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		ProcessorConfigApiKey: {
+		textgenProcessorConfigApiKey: {
 			Default:     "",
 			Description: "APIKey is the OpenAI API key. Required.",
 			Type:        config.ParameterTypeString,
@@ -42,7 +42,7 @@ func (ProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		ProcessorConfigDeveloperMessage: {
+		textgenProcessorConfigDeveloperMessage: {
 			Default:     "",
 			Description: "DeveloperMessage is the system message that guides the model's behavior. Required.",
 			Type:        config.ParameterTypeString,
@@ -50,49 +50,49 @@ func (ProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		ProcessorConfigField: {
+		textgenProcessorConfigField: {
 			Default:     ".Payload.After",
 			Description: "Field is the reference to the field to process. Defaults to \".Payload.After\".",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigFrequencyPenalty: {
+		textgenProcessorConfigFrequencyPenalty: {
 			Default:     "",
 			Description: "FrequencyPenalty penalizes new tokens based on frequency in text.",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigLogProbs: {
+		textgenProcessorConfigLogProbs: {
 			Default:     "",
 			Description: "LogProbs is whether to return log probabilities of output tokens.",
 			Type:        config.ParameterTypeBool,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigLogitBias: {
+		textgenProcessorConfigLogitBias: {
 			Default:     "",
 			Description: "LogitBias modifies the likelihood of specified tokens appearing.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigMaxCompletionTokens: {
+		textgenProcessorConfigMaxCompletionTokens: {
 			Default:     "",
 			Description: "MaxCompletionTokens is the maximum number of tokens for completion.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigMaxTokens: {
+		textgenProcessorConfigMaxTokens: {
 			Default:     "",
 			Description: "MaxTokens is the maximum number of tokens to generate.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigMetadata: {
+		textgenProcessorConfigMetadata: {
 			Default:     "",
 			Description: "Metadata is additional metadata to include with the request.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigModel: {
+		textgenProcessorConfigModel: {
 			Default:     "",
 			Description: "Model is the OpenAI model to use (e.g., gpt-4o-mini). Required.",
 			Type:        config.ParameterTypeString,
@@ -100,73 +100,73 @@ func (ProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		ProcessorConfigN: {
+		textgenProcessorConfigN: {
 			Default:     "",
 			Description: "N is the number of completions to generate.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigPresencePenalty: {
+		textgenProcessorConfigPresencePenalty: {
 			Default:     "",
 			Description: "PresencePenalty penalizes new tokens based on presence in text.",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigReasoningEffort: {
+		textgenProcessorConfigReasoningEffort: {
 			Default:     "",
 			Description: "ReasoningEffort controls the amount of reasoning in the response.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigSeed: {
+		textgenProcessorConfigSeed: {
 			Default:     "",
 			Description: "Seed is the seed for deterministic results.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigStop: {
+		textgenProcessorConfigStop: {
 			Default:     "",
 			Description: "Stop are sequences where the API will stop generating.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigStore: {
+		textgenProcessorConfigStore: {
 			Default:     "",
 			Description: "Store is whether to store the conversation in OpenAI.",
 			Type:        config.ParameterTypeBool,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigStream: {
+		textgenProcessorConfigStream: {
 			Default:     "",
 			Description: "Stream is whether to stream the results or not. Not used for now.",
 			Type:        config.ParameterTypeBool,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigStrictOutput: {
+		textgenProcessorConfigStrictOutput: {
 			Default:     "false",
 			Description: "StrictOutput enforces strict output format. Defaults to false.",
 			Type:        config.ParameterTypeBool,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigTemperature: {
+		textgenProcessorConfigTemperature: {
 			Default:     "",
 			Description: "Temperature controls randomness (0-2, lower is more deterministic).",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigTopLogProbs: {
+		textgenProcessorConfigTopLogProbs: {
 			Default:     "",
 			Description: "TopLogProbs is the number of most likely tokens to return probabilities for.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigTopP: {
+		textgenProcessorConfigTopP: {
 			Default:     "",
 			Description: "TopP controls diversity via nucleus sampling.",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
-		ProcessorConfigUser: {
+		textgenProcessorConfigUser: {
 			Default:     "",
 			Description: "User is the user identifier for OpenAI API.",
 			Type:        config.ParameterTypeString,
