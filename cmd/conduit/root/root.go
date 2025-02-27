@@ -50,8 +50,9 @@ type RootFlags struct {
 }
 
 type RootCommand struct {
-	flags  RootFlags
-	output ecdysis.Output
+	DefaultCfg conduit.Config
+	flags      RootFlags
+	output     ecdysis.Output
 }
 
 func (c *RootCommand) Output(output ecdysis.Output) {
@@ -85,7 +86,7 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 }
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
-	runCmd := &run.RunCommand{}
+	runCmd := &run.RunCommand{Cfg: c.DefaultCfg}
 
 	return []ecdysis.Command{
 		&config.ConfigCommand{RunCmd: runCmd},
