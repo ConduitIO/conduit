@@ -120,15 +120,14 @@ func (p *textgenProcessor) Specification() (sdk.Specification, error) {
 }
 
 func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
-	processedRecords := make([]sdk.ProcessedRecord, len(recs))
-	for i, rec := range recs {
+	var processedRecords []sdk.ProcessedRecord
+	for _, rec := range recs {
 		processed, err := p.processRecord(ctx, rec)
 		if err != nil {
-			processedRecords[i] = sdk.ErrorRecord{Error: err}
-			continue
+			return append(processedRecords, sdk.ErrorRecord{Error: err})
 		}
 
-		processedRecords[i] = sdk.SingleRecord(processed)
+		processedRecords = append(processedRecords, sdk.SingleRecord(processed))
 	}
 
 	return processedRecords
