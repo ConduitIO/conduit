@@ -38,7 +38,7 @@ type openaiCall interface {
 	Call(ctx context.Context, input string) (output string, err error)
 }
 
-type ProcessorConfig struct {
+type textgenProcessorConfig struct {
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
 	// APIKey is the OpenAI API key. Required.
