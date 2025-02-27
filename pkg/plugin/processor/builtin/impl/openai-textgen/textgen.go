@@ -17,10 +17,14 @@ package textgen
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/jpillora/backoff"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -83,10 +87,21 @@ type textgenProcessorConfig struct {
 	ReasoningEffort string `json:"reasoning_effort"`
 	// Metadata is additional metadata to include with the request.
 	Metadata map[string]string `json:"metadata"`
+	// MaxRetries is the maximum number of retries for API calls. Defaults to 3.
+	MaxRetries int `json:"max_retries" default:"3"`
+	// InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).
+	InitialBackoff int `json:"initial_backoff" default:"1000"`
+	// MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).
+	MaxBackoff int `json:"max_backoff" default:"30000"`
+	// BackoffFactor is the factor by which the backoff increases. Defaults to 2.
+	BackoffFactor float64 `json:"backoff_factor" default:"2.0"`
 }
 
-func NewProcessor() sdk.Processor {
-	return sdk.ProcessorWithMiddleware(&textgenProcessor{}, sdk.DefaultProcessorMiddleware()...)
+func NewTextgenProcessor(l log.CtxLogger) sdk.Processor {
+	return sdk.ProcessorWithMiddleware(
+		&textgenProcessor{},
+		sdk.DefaultProcessorMiddleware()...,
+	)
 }
 
 func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
@@ -148,7 +163,7 @@ func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record
 	case opencdc.Position:
 		payload = string(v)
 
-		res, err := p.call.Call(ctx, payload)
+		res, err := p.callOpenAI(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -161,7 +176,7 @@ func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record
 	case opencdc.Data:
 		payload = string(v.Bytes())
 
-		res, err := p.call.Call(ctx, payload)
+		res, err := p.callOpenAI(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -177,7 +192,7 @@ func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record
 	case string:
 		payload = v
 
-		res, err := p.call.Call(ctx, payload)
+		res, err := p.callOpenAI(ctx, payload)
 		if err != nil {
 			return rec, fmt.Errorf("failed to create chat completion: %w", err)
 		}
@@ -194,13 +209,69 @@ func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record
 	return rec, nil
 }
 
+func (p *textgenProcessor) callOpenAI(ctx context.Context, payload string) (string, error) {
+	b := &backoff.Backoff{
+		Min:    time.Duration(p.config.InitialBackoff) * time.Millisecond,
+		Max:    time.Duration(p.config.MaxBackoff) * time.Millisecond,
+		Factor: p.config.BackoffFactor,
+		Jitter: true,
+	}
+
+	var res string
+	var err error
+	var attempt int
+
+	logger := sdk.Logger(ctx)
+
+	for {
+		attempt++
+
+		if attempt > p.config.MaxRetries+1 {
+			return "", fmt.Errorf("exceeded maximum retries (%d): %w", p.config.MaxRetries, err)
+		}
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+
+		res, err = p.call.Call(ctx, payload)
+		if err == nil {
+			if attempt > 1 {
+				logger.Debug().Int("attempts", attempt).Msg("OpenAI API call succeeded after retries")
+			}
+			break
+		}
+
+		if !isRetryableError(err) {
+			return "", fmt.Errorf("chat completion failed with non-retryable error: %w", err)
+		}
+
+		backoffDuration := b.Duration()
+		logger.Warn().
+			Int("attempt", attempt).
+			Dur("backoff", backoffDuration).
+			Err(err).
+			Msg("OpenAI API call failed, retrying after backoff")
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(backoffDuration):
+		}
+	}
+
+	return res, nil
+}
+
 type openaiClient struct {
 	client *openai.Client
 	config *textgenProcessorConfig
 }
 
 func (o *openaiClient) Call(ctx context.Context, payload string) (string, error) {
-	req := openai.ChatCompletionRequest{
+	res, err := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: o.config.Model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: "developer", Content: o.config.DeveloperMessage},
@@ -221,12 +292,27 @@ func (o *openaiClient) Call(ctx context.Context, payload string) (string, error)
 		User:                o.config.User,
 		Store:               o.config.Store,
 		ReasoningEffort:     o.config.ReasoningEffort,
-	}
-
-	res, err := o.client.CreateChatCompletion(ctx, req)
+	})
 	if err != nil {
-		return "", fmt.Errorf("chat completion failed: %w", err)
+		return "", err
 	}
 
 	return res.Choices[0].Message.Content, nil
+}
+
+// isRetryableError determines if an error from the OpenAI API is retryable
+func isRetryableError(err error) bool {
+	var apiErr *openai.APIError
+	if !cerrors.As(err, &apiErr) {
+		return true
+	}
+
+	switch apiErr.HTTPStatusCode {
+	case 429:
+		return true
+	case 500, 502, 503, 504:
+		return true
+	default:
+		return false
+	}
 }
