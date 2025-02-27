@@ -53,13 +53,13 @@ func TestProcessor_Process(t *testing.T) {
 }
 
 func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processor {
-	processor := &Processor{}
+	processor := &textgenProcessor{}
 
 	cfg := config.Config{
-		ProcessorConfigModel:            openai.GPT4oMini,
-		ProcessorConfigApiKey:           "fake api key",
-		ProcessorConfigDeveloperMessage: devMessage,
-		ProcessorConfigTemperature:      "0",
+		textgenProcessorConfigModel:            openai.GPT4oMini,
+		textgenProcessorConfigApiKey:           "fake api key",
+		textgenProcessorConfigDeveloperMessage: devMessage,
+		textgenProcessorConfigTemperature:      "0",
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))

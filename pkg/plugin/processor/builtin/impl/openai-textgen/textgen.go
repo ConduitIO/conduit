@@ -24,12 +24,12 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-//go:generate paramgen -output=paramgen_proc.go ProcessorConfig
+//go:generate paramgen -output=paramgen_proc.go textgenProcessorConfig
 
 type textgenProcessor struct {
 	sdk.UnimplementedProcessor
 
-	config            ProcessorConfig
+	config            textgenProcessorConfig
 	call              openaiCall
 	referenceResolver sdk.ReferenceResolver
 }
@@ -86,11 +86,11 @@ type textgenProcessorConfig struct {
 }
 
 func NewProcessor() sdk.Processor {
-	return sdk.ProcessorWithMiddleware(&Processor{}, sdk.DefaultProcessorMiddleware()...)
+	return sdk.ProcessorWithMiddleware(&textgenProcessor{}, sdk.DefaultProcessorMiddleware()...)
 }
 
-func (p *Processor) Configure(ctx context.Context, cfg config.Config) error {
-	err := sdk.ParseConfig(ctx, cfg, &p.config, ProcessorConfig{}.Parameters())
+func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
+	err := sdk.ParseConfig(ctx, cfg, &p.config, textgenProcessorConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -108,18 +108,18 @@ func (p *Processor) Configure(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func (p *Processor) Specification() (sdk.Specification, error) {
+func (p *textgenProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "openai-textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
 		Version:     "devel",
 		Author:      "Meroxa, Inc.",
-		Parameters:  p.config.Parameters(),
+		Parameters:  textgenProcessorConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *Processor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
 	processedRecords := make([]sdk.ProcessedRecord, len(recs))
 	for i, rec := range recs {
 		processed, err := p.processRecord(ctx, rec)
@@ -134,7 +134,7 @@ func (p *Processor) Process(ctx context.Context, recs []opencdc.Record) []sdk.Pr
 	return processedRecords
 }
 
-func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
+func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
 	logger := sdk.Logger(ctx)
 
 	ref, err := p.referenceResolver.Resolve(&rec)
@@ -197,7 +197,7 @@ func (p *Processor) processRecord(ctx context.Context, rec opencdc.Record) (open
 
 type openaiClient struct {
 	client *openai.Client
-	config *ProcessorConfig
+	config *textgenProcessorConfig
 }
 
 func (o *openaiClient) Call(ctx context.Context, payload string) (string, error) {
