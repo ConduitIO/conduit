@@ -26,7 +26,7 @@ import (
 
 //go:generate paramgen -output=paramgen_proc.go ProcessorConfig
 
-type Processor struct {
+type textgenProcessor struct {
 	sdk.UnimplementedProcessor
 
 	config            ProcessorConfig
