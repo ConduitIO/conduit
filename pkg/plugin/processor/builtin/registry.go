@@ -50,13 +50,13 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"field.exclude":       field.NewExcludeProcessor,
 	"field.rename":        field.NewRenameProcessor,
 	"field.set":           field.NewSetProcessor,
+	"openai.textgen":      textgen.NewTextgenProcessor,
 	"json.decode":         json.NewDecodeProcessor,
 	"json.encode":         json.NewEncodeProcessor,
 	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
-	"openai.textgen":      textgen.NewTextgenProcessor,
 }
 
 type schemaRegistryProcessor interface {
