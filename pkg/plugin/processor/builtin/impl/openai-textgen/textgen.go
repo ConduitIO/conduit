@@ -128,7 +128,7 @@ func (p *textgenProcessor) Specification() (sdk.Specification, error) {
 		Name:        "openai-textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
-		Version:     "devel",
+		Version:     "0.1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters:  textgenProcessorConfig{}.Parameters(),
 	}, nil
