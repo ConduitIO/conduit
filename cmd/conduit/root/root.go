@@ -86,7 +86,7 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 }
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
-	runCmd := &run.RunCommand{Cfg: c.DefaultCfg}
+	runCmd := &run.RunCommand{Cfg: c.Cfg}
 
 	return []ecdysis.Command{
 		&config.ConfigCommand{RunCmd: runCmd},
