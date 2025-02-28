@@ -27,7 +27,7 @@ require (
 	github.com/gammazero/deque v1.0.0
 	github.com/goccy/go-json v0.10.5
 	github.com/golangci/golangci-lint v1.64.5
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1

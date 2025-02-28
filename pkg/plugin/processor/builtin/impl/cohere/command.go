@@ -30,6 +30,15 @@ import (
 	"github.com/jpillora/backoff"
 )
 
+type commandModel interface {
+	Command(ctx context.Context, content string) (string, error)
+}
+
+type commandClient struct {
+	client *cohereClient.Client
+	config *commandProcessorConfig
+}
+
 //go:generate paramgen -output=paramgen_command.go commandProcessorConfig
 
 type commandProcessor struct {
@@ -40,11 +49,11 @@ type commandProcessor struct {
 	logger          log.CtxLogger
 	config          commandProcessorConfig
 	backoffCfg      *backoff.Backoff
-	client          *cohereClient.Client
+	client          commandModel
 }
 
 type commandProcessorConfig struct {
-	// Model is one of the Cohere model (command,embed,rerank).
+	// Model is one of the name of a compatible command model version.
 	Model string `json:"model" default:"command"`
 	// APIKey is the API key for Cohere api calls.
 	APIKey string `json:"apiKey" validate:"required"`
@@ -91,8 +100,10 @@ func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) err
 	}
 	p.responseBodyRef = &responseBodyRef
 
-	// new cohere client
-	p.client = cohereClient.NewClient()
+	p.client = &commandClient{
+		client: cohereClient.NewClient(),
+		config: &p.config,
+	}
 
 	p.backoffCfg = &backoff.Backoff{
 		Factor: p.config.BackoffRetryFactor,
@@ -132,22 +143,9 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 			return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed to resolve reference %v: %w", p.config.RequestBodyRef, err)})
 		}
 
+		content := fmt.Sprintf(p.config.Prompt, p.getInput(requestRef.Get()))
 		for {
-			resp, err := p.client.V2.Chat(
-				ctx,
-				&cohere.V2ChatRequest{
-					Model: p.config.Model,
-					Messages: cohere.ChatMessages{
-						{
-							Role: "user",
-							User: &cohere.UserMessage{Content: &cohere.UserMessageContent{
-								String: fmt.Sprintf(p.config.Prompt, p.getInput(requestRef.Get())),
-							}},
-						},
-					},
-				},
-				cohereClient.WithToken(p.config.APIKey),
-			)
+			resp, err := p.client.Command(ctx, content)
 			attempt := p.backoffCfg.Attempt()
 			duration := p.backoffCfg.Duration()
 
@@ -182,40 +180,48 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 
 			p.backoffCfg.Reset()
 
-			chatResponse, err := unmarshalChatResponse([]byte(resp.String()))
+			err = p.setField(&record, p.responseBodyRef, resp)
 			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: err})
+				return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed setting response body: %w", err)})
 			}
+			out = append(out, sdk.SingleRecord(record))
 
-			if len(chatResponse.Message.Content) == 1 {
-				err = p.setField(&record, p.responseBodyRef, chatResponse.Message.Content[0].Text)
-				if err != nil {
-					return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed setting response body: %w", err)})
-				}
-				out = append(out, sdk.SingleRecord(record))
-			}
 			break
 		}
 	}
 	return out
 }
 
-func (p *commandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
-	if refRes == nil {
-		return nil
-	}
-
-	ref, err := refRes.Resolve(r)
+func (cc *commandClient) Command(ctx context.Context, content string) (string, error) {
+	resp, err := cc.client.V2.Chat(
+		ctx,
+		&cohere.V2ChatRequest{
+			Model: cc.config.Model,
+			Messages: cohere.ChatMessages{
+				{
+					Role: "user",
+					User: &cohere.UserMessage{Content: &cohere.UserMessageContent{
+						String: content,
+					}},
+				},
+			},
+		},
+		cohereClient.WithToken(cc.config.APIKey),
+	)
 	if err != nil {
-		return fmt.Errorf("error reference resolver: %w", err)
+		return "", err
 	}
 
-	err = ref.Set(data)
+	chatResponse, err := unmarshalChatResponse([]byte(resp.String()))
 	if err != nil {
-		return fmt.Errorf("error reference set: %w", err)
+		return "", fmt.Errorf("error unmarshalling chat response: %w", err)
 	}
 
-	return nil
+	if len(chatResponse.Message.Content) != 1 {
+		return "", fmt.Errorf("invalid chat content")
+	}
+
+	return chatResponse.Message.Content[0].Text, nil
 }
 
 type ChatResponse struct {
@@ -248,4 +254,22 @@ func (p *commandProcessor) getInput(val any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+func (p *commandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+	if refRes == nil {
+		return nil
+	}
+
+	ref, err := refRes.Resolve(r)
+	if err != nil {
+		return fmt.Errorf("error reference resolver: %w", err)
+	}
+
+	err = ref.Set(data)
+	if err != nil {
+		return fmt.Errorf("error reference set: %w", err)
+	}
+
+	return nil
 }
