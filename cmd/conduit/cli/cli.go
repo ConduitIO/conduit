@@ -26,7 +26,7 @@ import (
 func Run(cfg conduit.Config) {
 	e := ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithExecuteWithClientDecorator{}))
 
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{DefaultCfg: cfg})
+	cmd := e.MustBuildCobraCommand(&root.RootCommand{Cfg: cfg})
 	cmd.CompletionOptions.DisableDefaultCmd = true
 
 	// Don't want to show usage when there's some unexpected error executing the command
