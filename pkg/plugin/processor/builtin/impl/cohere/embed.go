@@ -57,7 +57,7 @@ type embedProcConfig struct {
 	MaxTextsPerRequest int `json:"maxTextsPerRequest" default:"96"`
 }
 
-// embedModel defines the interface for the Cohere embedding client
+// embedModel defines the interface for the Cohere embed client
 type embedModel interface {
 	Embed(ctx context.Context, texts []string) ([][]float64, error)
 }
@@ -98,10 +98,12 @@ func (p *embedProcessor) Open(ctx context.Context) error {
 	}
 	p.inputFieldRefResolver = &inputResolver
 
-	// Initialize embedding client
-	p.client = &embedClient{
-		client: cohereClient.NewClient(),
-		config: &p.config,
+	// Initialize the client only if it hasn't been injected
+	if p.client == nil {
+		p.client = &embedClient{
+			client: cohereClient.NewClient(),
+			config: &p.config,
+		}
 	}
 
 	p.backoffCfg = &backoff.Backoff{
@@ -250,11 +252,10 @@ func compressData(data []byte) ([]byte, error) {
 	return encoder.EncodeAll(data, nil), nil
 }
 
-// cohereEmbeddingClient implements the cohereEmbedding interface
+// embedClient implements the embedModel interface
 type embedClient struct {
 	client *cohereClient.Client
 	config *embedProcConfig
-	// backoffCfg *backoff.Backoff
 }
 
 func (e *embedClient) Embed(ctx context.Context, texts []string) ([][]float64, error) {

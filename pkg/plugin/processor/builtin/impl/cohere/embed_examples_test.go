@@ -15,44 +15,58 @@
 package cohere
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEmbedProcessor() {
-	ctx := context.Background()
+	p := &embedProcessor{}
+	p.client = mockEmbedClient{}
 
-	p := func() sdk.Processor {
-		proc := &embedProcessor{}
-		cfg := config.Config{
-			embedProcConfigApiKey: "apikey",
-		}
-		_ = proc.Configure(ctx, cfg)
-		_ = proc.Open(ctx)
-		proc.client = &mockEmbedClient{}
-		return proc
-	}()
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `Generate embeddings using Cohere's embedding model`,
+		Description: `
+This example demonstrates how to use the Cohere embedding processor to generate embeddings for a record.
+The processor extracts text from the specified input field (default: ".Payload.After"), sends it to the Cohere API,
+and stores the resulting embeddings in the record's ".Payload.After" field as compressed data using the zstd algorithm.
 
-	records := []opencdc.Record{{
-		Operation: opencdc.OperationUpdate,
-		Position:  opencdc.Position("pos-1"),
-		Payload: opencdc.Change{
-			After: opencdc.RawData("test input"),
+In this example, the processor is configured with a mock client and an API key. The input record's metadata is updated
+to include the embedding model used ("embed-english-v2.0"). Note that the compressed embeddings cannot be directly compared
+in this test, so the focus is on verifying the metadata update.`,
+		Config: config.Config{
+			"apiKey": "fake-api-key",
 		},
-		Metadata: map[string]string{},
-	}}
-
-	got := p.Process(context.Background(), records)
-	rec, _ := got[0].(sdk.SingleRecord)
-	fmt.Println("processor transformed record:")
-	fmt.Println(string(opencdc.Record(rec).Bytes()))
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Position:  opencdc.Position("pos-1"),
+			Metadata:  map[string]string{},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Position:  opencdc.Position("pos-1"),
+			Metadata:  opencdc.Metadata{"cohere.embed.model": "embed-english-v2.0"},
+		},
+	})
 
 	// Output:
 	// processor transformed record:
-	// {"position":"cG9zLTE=","operation":"update","metadata":{"cohere.embed.model":"embed-english-v2.0"},"key":null,"payload":{"before":null,"after":"KLUv/QQAaQAAWzAuMSwwLjIsMC4zXYleeEg="}}
+	// --- before
+	// +++ after
+	// @@ -1,10 +1,12 @@
+	//  {
+	//    "position": "cG9zLTE=",
+	//    "operation": "create",
+	// -  "metadata": {},
+	// +  "metadata": {
+	// +    "cohere.embed.model": "embed-english-v2.0"
+	// +  },
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	//      "after": null
+	//    }
+	//  }
 }
