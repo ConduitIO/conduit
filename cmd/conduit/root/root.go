@@ -50,9 +50,9 @@ type RootFlags struct {
 }
 
 type RootCommand struct {
-	Cfg conduit.Config
-	flags      RootFlags
-	output     ecdysis.Output
+	Cfg    conduit.Config
+	flags  RootFlags
+	output ecdysis.Output
 }
 
 func (c *RootCommand) Output(output ecdysis.Output) {
