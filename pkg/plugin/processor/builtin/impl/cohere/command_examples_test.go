@@ -23,14 +23,14 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 )
 
-func ExampleCommandProcessor() {
+func ExamplecommandProcessor() {
 	p := func() sdk.Processor {
 		proc := &commandProcessor{}
 		cfg := config.Config{
 			commandProcessorConfigApiKey: "apikey",
 			commandProcessorConfigPrompt: "hello",
 		}
-		proc.Configure(context.Background(), cfg)
+		_ = proc.Configure(context.Background(), cfg)
 		proc.client = &mockClient{}
 		return proc
 	}()
