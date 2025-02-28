@@ -242,6 +242,8 @@ github.com/conduitio/conduit-connector-s3 v0.9.0 h1:O4EcPEbL6WxfltbpsqufsxQpPW8c
 github.com/conduitio/conduit-connector-s3 v0.9.0/go.mod h1:Z+pioyjF70Q6mPOdY1u63A1gA+cD5KvnCvNdnLpzMjM=
 github.com/conduitio/conduit-connector-sdk v0.13.1 h1:Fw5KHm8Y7LdtLibeLW+dYA9IAHx/1GuWx8VLZcBkvg0=
 github.com/conduitio/conduit-connector-sdk v0.13.1/go.mod h1:rduMJDB541+dolgZdCkPPaJk2CHPaTe1FUnV1YvwTl0=
+github.com/conduitio/conduit-connector-sdk v0.13.2-0.20250228095323-5c8098a7f73c h1:76ybn8GfUfE4wTuCGbt23UQz+bAnOWZBdIDTi4ZZFq8=
+github.com/conduitio/conduit-connector-sdk v0.13.2-0.20250228095323-5c8098a7f73c/go.mod h1:rduMJDB541+dolgZdCkPPaJk2CHPaTe1FUnV1YvwTl0=
 github.com/conduitio/conduit-processor-sdk v0.4.1 h1:u1K2JGC02/EHh9StUQxu0umVUqtTN3JhfMTBKhhB1dA=
 github.com/conduitio/conduit-processor-sdk v0.4.1/go.mod h1:ul2G08Oo9dD+jrehYa5hY+L4CAB1L/HkBmne24Ql5ec=
 github.com/conduitio/conduit-schema-registry v0.2.3 h1:Rx2FfnslgD+C5ea9CDSV6O2Wkd0oU0qzmxkyH9S1OX8=
