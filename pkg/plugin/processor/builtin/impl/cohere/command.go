@@ -100,9 +100,12 @@ func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) err
 	}
 	p.responseBodyRef = &responseBodyRef
 
-	p.client = &commandClient{
-		client: cohereClient.NewClient(),
-		config: &p.config,
+	// Initialize the client only if it hasn't been injected
+	if p.client == nil {
+		p.client = &commandClient{
+			client: cohereClient.NewClient(),
+			config: &p.config,
+		}
 	}
 
 	p.backoffCfg = &backoff.Backoff{

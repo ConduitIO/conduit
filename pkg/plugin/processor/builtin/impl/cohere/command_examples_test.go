@@ -21,36 +21,66 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-func ExamplecommandProcessor() {
-	p := func() sdk.Processor {
-		proc := &commandProcessor{}
-		cfg := config.Config{
+// mockCommandProcessor creates a processor with a mock OpenAI call implementation
+func mockCommandProcessor(l conduit_log.CtxLogger) sdk.Processor {
+	p := NewCommandProcessor(l)
+
+	if tp, ok := p.(*commandProcessor); ok {
+		tp.client = &mockClient{}
+	}
+
+	return p
+}
+
+//nolint:govet // a more descriptive example description
+func ExampleCommandProcessor() {
+	p := mockCommandProcessor(conduit_log.Nop())
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `Generate responses using Cohere's command model`,
+		Description: `
+This example demonstrates how to use the Cohere command processor to generate responses for a record's ` + "`.Payload.After`" + ` field.
+The processor sends the input text to the Cohere API and replaces it with the model's response.`,
+		Config: config.Config{
 			commandProcessorConfigApiKey: "apikey",
 			commandProcessorConfigPrompt: "hello",
-		}
-		_ = proc.Configure(context.Background(), cfg)
-		proc.client = &mockClient{}
-		return proc
-	}()
-
-	records := []opencdc.Record{{
-		Operation: opencdc.OperationUpdate,
-		Position:  opencdc.Position("pos-1"),
-		Payload: opencdc.Change{
-			After: opencdc.RawData("who are you?"),
 		},
-	}}
-
-	got := p.Process(context.Background(), records)
-	rec, _ := got[0].(sdk.SingleRecord)
-	fmt.Println("processor transformed record:")
-	fmt.Println(string(opencdc.Record(rec).Bytes()))
+		Have: opencdc.Record{
+			Operation: opencdc.OperationUpdate,
+			Position:  opencdc.Position("pos-1"),
+			Payload: opencdc.Change{
+				After: opencdc.RawData("who are you?"),
+			},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationUpdate,
+			Position:  opencdc.Position("pos-1"),
+			Payload: opencdc.Change{
+				After: opencdc.RawData("cohere command response content"),
+			},
+		},
+	})
 
 	// Output:
 	// processor transformed record:
-	// {"position":"cG9zLTE=","operation":"update","metadata":null,"key":null,"payload":{"before":null,"after":"Y29oZXJlIGNvbW1hbmQgcmVzcG9uc2UgY29udGVudA=="}}
+	// --- before
+	// +++ after
+	// @@ -1,10 +1,10 @@
+	//  {
+	//    "position": "cG9zLTE=",
+	//    "operation": "update",
+	//    "metadata": null,
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	// -    "after": "who are you?"
+	// +    "after": "cohere command response content"
+	//    }
+	//  }
 }
 
 type mockClient struct{}
