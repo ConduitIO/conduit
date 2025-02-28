@@ -17,6 +17,7 @@ const (
 	embedProcConfigBackoffRetryMin    = "backoffRetry.min"
 	embedProcConfigInputField         = "inputField"
 	embedProcConfigInputType          = "inputType"
+	embedProcConfigMaxTextsPerRequest = "maxTextsPerRequest"
 	embedProcConfigModel              = "model"
 )
 
@@ -70,6 +71,12 @@ func (embedProcConfig) Parameters() map[string]config.Parameter {
 			Default:     "",
 			Description: "Specifies the type of input passed to the model. Required for embed models v3 and higher.\nAllowed values: search_document, search_query, classification, clustering, image.",
 			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
+		embedProcConfigMaxTextsPerRequest: {
+			Default:     "96",
+			Description: "MaxTextsPerRequest controls the number of texts sent in each Cohere embedding API call (max 96)",
+			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{},
 		},
 		embedProcConfigModel: {

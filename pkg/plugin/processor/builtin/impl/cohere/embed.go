@@ -53,6 +53,13 @@ type embedProcConfig struct {
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 	// Specifies the field from which the request body should be created.
 	InputField string `json:"inputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After"`
+	// MaxTextsPerRequest controls the number of texts sent in each Cohere embedding API call (max 96)
+	MaxTextsPerRequest int `json:"maxTextsPerRequest" default:"96"`
+}
+
+// embedModel defines the interface for the Cohere embedding client
+type embedModel interface {
+	Embed(ctx context.Context, texts []string) ([][]float64, error)
 }
 
 type embedProcessor struct {
@@ -63,7 +70,7 @@ type embedProcessor struct {
 
 	config     embedProcConfig
 	backoffCfg *backoff.Backoff
-	client     *cohereClient.Client
+	client     embedModel
 }
 
 func NewEmbedProcessor(l log.CtxLogger) sdk.Processor {
@@ -91,8 +98,11 @@ func (p *embedProcessor) Open(ctx context.Context) error {
 	}
 	p.inputFieldRefResolver = &inputResolver
 
-	// new cohere client
-	p.client = cohereClient.NewClient()
+	// Initialize embedding client
+	p.client = &embedClient{
+		client: cohereClient.NewClient(),
+		config: &p.config,
+	}
 
 	p.backoffCfg = &backoff.Backoff{
 		Factor: p.config.BackoffRetryFactor,
@@ -121,32 +131,40 @@ func (p *embedProcessor) Specification() (sdk.Specification, error) {
 func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 
+	// Process records in batches
+	for i := 0; i < len(records); i += p.config.MaxTextsPerRequest {
+		// Calculate end index for current batch
+		end := min(i+p.config.MaxTextsPerRequest, len(records))
+
+		batchRecords := records[i:end]
+		batchResults, err := p.processBatch(ctx, batchRecords)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
+		}
+		out = append(out, batchResults...)
+	}
+
+	return out
+}
+
+func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Record) ([]sdk.ProcessedRecord, error) {
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+
 	// prepare embeddingInputs for request
 	var embeddingInputs []string
 	for _, record := range records {
 		inRef, err := p.inputFieldRefResolver.Resolve(&record)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to resolve reference %v: %w", p.config.InputField, err)})
+			return out, cerrors.Errorf("failed to resolve reference %v: %w", p.config.InputField, err)
 		}
-
 		embeddingInputs = append(embeddingInputs, p.getEmbeddingInput(inRef.Get()))
 	}
 
-	// prepare request
-	req := &cohere.V2EmbedRequest{
-		Model:          p.config.Model,
-		Texts:          embeddingInputs,
-		EmbeddingTypes: []cohere.EmbeddingType{cohere.EmbeddingTypeFloat},
-	}
-	if p.config.InputType != "" {
-		req.InputType = cohere.EmbedInputType(p.config.InputType)
-	}
-
-	var resp *cohere.EmbedByTypeResponse
+	var embeddings [][]float64
 	for {
 		var err error
 		// execute request to get embeddings
-		resp, err = p.client.V2.Embed(ctx, req, cohereClient.WithToken(p.config.APIKey))
+		embeddings, err = p.client.Embed(ctx, embeddingInputs)
 
 		attempt := p.backoffCfg.Attempt()
 		duration := p.backoffCfg.Duration()
@@ -156,29 +174,24 @@ func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) 
 			case cerrors.As(err, &cohere.GatewayTimeoutError{}),
 				cerrors.As(err, &cohere.InternalServerError{}),
 				cerrors.As(err, &cohere.ServiceUnavailableError{}):
-
 				if attempt < p.config.BackoffRetryCount {
 					sdk.Logger(ctx).Debug().Err(err).Float64("attempt", attempt).
 						Float64("backoffRetry.count", p.config.BackoffRetryCount).
 						Int64("backoffRetry.duration", duration.Milliseconds()).
 						Msg("retrying Cohere HTTP request")
-
 					select {
 					case <-ctx.Done():
-						return append(out, sdk.ErrorRecord{Error: ctx.Err()})
+						return out, ctx.Err()
 					case <-time.After(duration):
 						continue
 					}
-					// If the request failed, declare processing for all records as failed
 				} else {
-					return p.handleErrorForAllRecords(records, err)
+					return out, cerrors.Errorf("failed to get embeddings: %w", err)
 				}
-
-			// If the request failed, declare processing for all records as failed
 			default:
 				// BadRequestError, ClientClosedRequestError, ForbiddenError, InvalidTokenError,
 				// NotFoundError, NotImplementedError, TooManyRequestsError, UnauthorizedError, UnprocessableEntityError
-				return p.handleErrorForAllRecords(records, err)
+				return out, cerrors.Errorf("failed to get embeddings: %w", err)
 			}
 		}
 
@@ -190,15 +203,15 @@ func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) 
 		// Add model name to metadata
 		record.Metadata[EmbedModelMetadata] = p.config.Model
 
-		embeddingJSON, err := json.Marshal(resp.Embeddings.Float[i])
+		embeddingJSON, err := json.Marshal(embeddings[i])
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to marshal embeddings: %w", err)})
+			return out, cerrors.Errorf("failed to marshal embeddings: %w", err)
 		}
 
 		// Compress the embedding using zstd
 		compressedEmbedding, err := compressData(embeddingJSON)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to compress embeddings: %w", err)})
+			return out, cerrors.Errorf("failed to compress embeddings: %w", err)
 		}
 
 		// Store the embedding in .Payload.After
@@ -206,21 +219,13 @@ func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) 
 		case opencdc.RawData:
 			record.Payload.After = opencdc.RawData(compressedEmbedding)
 		case opencdc.StructuredData:
-			record.Payload.After = opencdc.StructuredData{"embedding": string(compressedEmbedding)}
+			record.Payload.After = opencdc.StructuredData{"embedding": compressedEmbedding}
 		}
 
 		out = append(out, sdk.SingleRecord(record))
 	}
 
-	return out
-}
-
-func (p *embedProcessor) handleErrorForAllRecords(records []opencdc.Record, err error) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, 0, len(records))
-	for range records {
-		out = append(out, sdk.ErrorRecord{Error: err})
-	}
-	return out
+	return out, nil
 }
 
 func (p *embedProcessor) getEmbeddingInput(val any) string {
@@ -243,4 +248,30 @@ func compressData(data []byte) ([]byte, error) {
 	defer encoder.Close()
 
 	return encoder.EncodeAll(data, nil), nil
+}
+
+// cohereEmbeddingClient implements the cohereEmbedding interface
+type embedClient struct {
+	client *cohereClient.Client
+	config *embedProcConfig
+	// backoffCfg *backoff.Backoff
+}
+
+func (e *embedClient) Embed(ctx context.Context, texts []string) ([][]float64, error) {
+	// prepare request
+	req := &cohere.V2EmbedRequest{
+		Model:          e.config.Model,
+		Texts:          texts,
+		EmbeddingTypes: []cohere.EmbeddingType{cohere.EmbeddingTypeFloat},
+	}
+	if e.config.InputType != "" {
+		req.InputType = cohere.EmbedInputType(e.config.InputType)
+	}
+
+	resp, err := e.client.V2.Embed(ctx, req, cohereClient.WithToken(e.config.APIKey))
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.GetEmbeddings().GetFloat(), nil
 }
