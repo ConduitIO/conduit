@@ -50,7 +50,7 @@ type RootFlags struct {
 }
 
 type RootCommand struct {
-	DefaultCfg conduit.Config
+	Cfg conduit.Config
 	flags      RootFlags
 	output     ecdysis.Output
 }
