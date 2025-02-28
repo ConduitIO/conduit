@@ -43,6 +43,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"avro.encode":         avro.NewEncodeProcessor,
 	"base64.decode":       base64.NewDecodeProcessor,
 	"base64.encode":       base64.NewEncodeProcessor,
+	"cohere.command":      cohere.NewCommandProcessor,
 	"custom.javascript":   custom.NewJavascriptProcessor,
 	"error":               impl.NewErrorProcessor,
 	"filter":              impl.NewFilterProcessor,
@@ -56,7 +57,6 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
-	"cohere.command":      cohere.NewCommandProcessor,
 }
 
 type schemaRegistryProcessor interface {
