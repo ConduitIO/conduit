@@ -21,24 +21,13 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-// mockCommandProcessor creates a processor with a mock OpenAI call implementation
-func mockCommandProcessor(l conduit_log.CtxLogger) sdk.Processor {
-	p := NewCommandProcessor(l)
-
-	if tp, ok := p.(*commandProcessor); ok {
-		tp.client = &mockClient{}
-	}
-
-	return p
-}
-
 //nolint:govet // a more descriptive example description
 func ExampleCommandProcessor() {
-	p := mockCommandProcessor(conduit_log.Nop())
+	p := &commandProcessor{}
+	p.client = &mockClient{}
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Generate responses using Cohere's command model`,
