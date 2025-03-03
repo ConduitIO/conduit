@@ -100,10 +100,11 @@ func (p *rerankProcessor) Configure(ctx context.Context, cfg config.Config) erro
 	}
 	p.responseBodyRef = &responseBodyRef
 
-	// new cohere client
-	p.client = &rerankClient{
-		client: cohereClient.NewClient(),
-		config: &p.config,
+	if p.client == nil {
+		p.client = &rerankClient{
+			client: cohereClient.NewClient(),
+			config: &p.config,
+		}
 	}
 
 	p.backoffCfg = &backoff.Backoff{

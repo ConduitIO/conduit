@@ -1,0 +1,146 @@
+{
+  "specification": {
+    "name": "cohere.rerank",
+    "summary": "Conduit processor for Cohere's rerank model.",
+    "description": "Conduit processor for Cohere's rerank model.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "apiKey": {
+        "default": "",
+        "description": "APIKey is the API key for Cohere api calls.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "backoffRetry.count": {
+        "default": "0",
+        "description": "Maximum number of retries for an individual record when backing off following an error.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "-1"
+          }
+        ]
+      },
+      "backoffRetry.factor": {
+        "default": "2",
+        "description": "The multiplying factor for each increment step.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "0"
+          }
+        ]
+      },
+      "backoffRetry.max": {
+        "default": "5s",
+        "description": "The maximum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "backoffRetry.min": {
+        "default": "100ms",
+        "description": "The minimum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "model": {
+        "default": "rerank-v3.5",
+        "description": "Model is one of the name of a compatible rerank model version.",
+        "type": "string",
+        "validations": []
+      },
+      "query": {
+        "default": "",
+        "description": "Query is the search query.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "request.body": {
+        "default": ".Payload.After",
+        "description": "RequestBodyRef specifies the api request field.",
+        "type": "string",
+        "validations": []
+      },
+      "response.body": {
+        "default": ".Payload.After",
+        "description": "ResponseBodyRef specifies in which field should the response body be saved.",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Generate responses using Cohere's rerank model",
+      "description": "\nThis example demonstrates how to use the Cohere rerank processor.This takes in a query and a list of texts and produces an ordered \narray with each text assigned a relevance score. The processor extracts text from the specified input field (default: \".Payload.After\"), \nsends it to the Cohere API, and stores the response in the record's \".Payload.After\" field.\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the rerank model used (\"rerank-v3.5\").",
+      "config": {
+        "apiKey": "fakeapiKey",
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "model": "rerank-v3.5",
+        "query": "What is the capital of the United States?",
+        "request.body": ".Payload.After",
+        "response.body": ".Payload.After"
+      },
+      "have": {
+        "position": "cG9zLTE=",
+        "operation": "update",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "Carson City is the capital city of the American state of Nevada."
+        }
+      },
+      "want": {
+        "position": "cG9zLTE=",
+        "operation": "update",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "{\"document\":{\"text\":\"Carson City is the capital city of the American state of Nevada.\"},\"index\":0,\"relevance_score\":0.9}"
+        }
+      }
+    }
+  ]
+}
