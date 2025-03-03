@@ -115,9 +115,13 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 		return fmt.Errorf("failed to create reference resolver: %w", err)
 	}
 
-	p.call = &openaiClient{
-		client: openai.NewClient(p.config.APIKey),
-		config: &p.config,
+	if p.call == nil {
+		p.call = &openaiCaller{
+			client: openai.NewClient(p.config.APIKey),
+			config: &p.config,
+		}
+	} else {
+		sdk.Logger(ctx).Warn().Msg("openai API call was overriden with a custom implementation")
 	}
 
 	return nil
@@ -128,7 +132,7 @@ func (p *textgenProcessor) Specification() (sdk.Specification, error) {
 		Name:        "openai-textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
-		Version:     "0.1.0",
+		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters:  textgenProcessorConfig{}.Parameters(),
 	}, nil
@@ -265,12 +269,12 @@ func (p *textgenProcessor) callOpenAI(ctx context.Context, payload string) (stri
 	return res, nil
 }
 
-type openaiClient struct {
+type openaiCaller struct {
 	client *openai.Client
 	config *textgenProcessorConfig
 }
 
-func (o *openaiClient) Call(ctx context.Context, payload string) (string, error) {
+func (o *openaiCaller) Call(ctx context.Context, payload string) (string, error) {
 	res, err := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: o.config.Model,
 		Messages: []openai.ChatCompletionMessage{
