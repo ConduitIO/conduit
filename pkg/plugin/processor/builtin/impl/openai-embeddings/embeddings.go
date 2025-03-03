@@ -139,7 +139,6 @@ func (p *embeddingsProcessor) processRecord(ctx context.Context, rec opencdc.Rec
 
 		logger.Trace().Msgf("processed record position with embeddings of length %d", len(embeddings))
 
-		// Convert embeddings to JSON
 		embeddingsJSON, err := json.Marshal(embeddings)
 		if err != nil {
 			return rec, fmt.Errorf("failed to marshal embeddings: %w", err)
@@ -179,7 +178,6 @@ func (p *embeddingsProcessor) processRecord(ctx context.Context, rec opencdc.Rec
 
 		logger.Trace().Msgf("processed record string with embeddings of length %d", len(embeddings))
 
-		// Convert embeddings to JSON
 		embeddingsJSON, err := json.Marshal(embeddings)
 		if err != nil {
 			return rec, fmt.Errorf("failed to marshal embeddings: %w", err)
