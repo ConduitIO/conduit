@@ -84,9 +84,13 @@ func (p *embeddingsProcessor) Configure(ctx context.Context, cfg config.Config) 
 		return fmt.Errorf("failed to create reference resolver: %w", err)
 	}
 
-	p.call = &openaiClient{
-		client: openai.NewClient(p.config.APIKey),
-		config: &p.config,
+	if p.call == nil {
+		p.call = &openaiClient{
+			client: openai.NewClient(p.config.APIKey),
+			config: &p.config,
+		}
+	} else {
+		sdk.Logger(ctx).Warn().Msg("openai API call was overriden with a custom implementation")
 	}
 
 	return nil

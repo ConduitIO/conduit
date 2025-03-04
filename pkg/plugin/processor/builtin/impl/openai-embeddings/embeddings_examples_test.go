@@ -20,30 +20,24 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
-	"github.com/goccy/go-json"
 )
 
-// mockOpenAICallForExamples is a mock implementation of openaiCall for examples
 type mockOpenAICallForExamples struct{}
 
+var testVector = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
+var testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
+
 func (m *mockOpenAICallForExamples) Call(ctx context.Context, input string) ([]float32, error) {
-	// Return a fixed set of embeddings for examples
-	return []float32{0.1, 0.2, 0.3, 0.4, 0.5}, nil
+	return testVector, nil
 }
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleEmbeddingsProcessor() {
-	p := NewEmbeddingsProcessor(log.Nop())
-
-	processor := p.(*embeddingsProcessor)
+	processor := &embeddingsProcessor{}
 	processor.call = &mockOpenAICallForExamples{}
 
-	embeddings := []float32{0.1, 0.2, 0.3, 0.4, 0.5}
-	embeddingsJSON, _ := json.Marshal(embeddings)
-
-	exampleutil.RunExample(p, exampleutil.Example{
+	exampleutil.RunExample(processor, exampleutil.Example{
 		Summary: "Generate embeddings for text",
 		Description: `This example generates embeddings for the text stored in
 ` + "`.Payload.After`" + `. The embeddings are returned as a JSON array of floating point numbers.
@@ -68,7 +62,7 @@ These embeddings can be used for semantic search, clustering, or other machine l
 			Metadata:  map[string]string{"key1": "val1"},
 			Key:       opencdc.RawData("test-key"),
 			Payload: opencdc.Change{
-				After: opencdc.RawData(embeddingsJSON),
+				After: opencdc.RawData(testVectorS),
 			},
 		},
 	})
@@ -77,7 +71,7 @@ These embeddings can be used for semantic search, clustering, or other machine l
 	// processor transformed record:
 	// --- before
 	// +++ after
-	// @@ -1,14 +1,14 @@
+	// @@ -1,12 +1,12 @@
 	//  {
 	//    "position": "dGVzdC1wb3NpdGlvbg==",
 	//    "operation": "create",
@@ -88,7 +82,7 @@ These embeddings can be used for semantic search, clustering, or other machine l
 	//    "payload": {
 	//      "before": null,
 	// -    "after": "This is a sample text to generate embeddings for."
-	// +    "after": [0.1,0.2,0.3,0.4,0.5]
+	// +    "after": "[0.1,0.2,0.3,0.4,0.5]"
 	//    }
 	//  }
 }
