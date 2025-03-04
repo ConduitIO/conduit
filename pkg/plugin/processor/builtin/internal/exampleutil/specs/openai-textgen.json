@@ -1,0 +1,244 @@
+{
+  "specification": {
+    "name": "openai-textgen",
+    "summary": "modify records using openai models",
+    "description": "textgen is a conduit processor that will transform a record based on a given prompt",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "api_key": {
+        "default": "",
+        "description": "APIKey is the OpenAI API key. Required.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "backoff_factor": {
+        "default": "2.0",
+        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+        "type": "float",
+        "validations": []
+      },
+      "developer_message": {
+        "default": "",
+        "description": "DeveloperMessage is the system message that guides the model's behavior. Required.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is the reference to the field to process. Defaults to \".Payload.After\".",
+        "type": "string",
+        "validations": []
+      },
+      "frequency_penalty": {
+        "default": "",
+        "description": "FrequencyPenalty penalizes new tokens based on frequency in text.",
+        "type": "float",
+        "validations": []
+      },
+      "initial_backoff": {
+        "default": "1000",
+        "description": "InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).",
+        "type": "int",
+        "validations": []
+      },
+      "log_probs": {
+        "default": "",
+        "description": "LogProbs is whether to return log probabilities of output tokens.",
+        "type": "bool",
+        "validations": []
+      },
+      "logit_bias.*": {
+        "default": "",
+        "description": "LogitBias modifies the likelihood of specified tokens appearing.",
+        "type": "int",
+        "validations": []
+      },
+      "max_backoff": {
+        "default": "30000",
+        "description": "MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).",
+        "type": "int",
+        "validations": []
+      },
+      "max_completion_tokens": {
+        "default": "",
+        "description": "MaxCompletionTokens is the maximum number of tokens for completion.",
+        "type": "int",
+        "validations": []
+      },
+      "max_retries": {
+        "default": "3",
+        "description": "MaxRetries is the maximum number of retries for API calls. Defaults to 3.",
+        "type": "int",
+        "validations": []
+      },
+      "max_tokens": {
+        "default": "",
+        "description": "MaxTokens is the maximum number of tokens to generate.",
+        "type": "int",
+        "validations": []
+      },
+      "metadata.*": {
+        "default": "",
+        "description": "Metadata is additional metadata to include with the request.",
+        "type": "string",
+        "validations": []
+      },
+      "model": {
+        "default": "",
+        "description": "Model is the OpenAI model to use (e.g., gpt-4o-mini). Required.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "n": {
+        "default": "",
+        "description": "N is the number of completions to generate.",
+        "type": "int",
+        "validations": []
+      },
+      "presence_penalty": {
+        "default": "",
+        "description": "PresencePenalty penalizes new tokens based on presence in text.",
+        "type": "float",
+        "validations": []
+      },
+      "reasoning_effort": {
+        "default": "",
+        "description": "ReasoningEffort controls the amount of reasoning in the response.",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "seed": {
+        "default": "",
+        "description": "Seed is the seed for deterministic results.",
+        "type": "int",
+        "validations": []
+      },
+      "stop": {
+        "default": "",
+        "description": "Stop are sequences where the API will stop generating.",
+        "type": "string",
+        "validations": []
+      },
+      "store": {
+        "default": "",
+        "description": "Store is whether to store the conversation in OpenAI.",
+        "type": "bool",
+        "validations": []
+      },
+      "stream": {
+        "default": "",
+        "description": "Stream is whether to stream the results or not. Not used for now.",
+        "type": "bool",
+        "validations": []
+      },
+      "strict_output": {
+        "default": "false",
+        "description": "StrictOutput enforces strict output format. Defaults to false.",
+        "type": "bool",
+        "validations": []
+      },
+      "temperature": {
+        "default": "",
+        "description": "Temperature controls randomness (0-2, lower is more deterministic).",
+        "type": "float",
+        "validations": []
+      },
+      "top_log_probs": {
+        "default": "",
+        "description": "TopLogProbs is the number of most likely tokens to return probabilities for.",
+        "type": "int",
+        "validations": []
+      },
+      "top_p": {
+        "default": "",
+        "description": "TopP controls diversity via nucleus sampling.",
+        "type": "float",
+        "validations": []
+      },
+      "user": {
+        "default": "",
+        "description": "User is the user identifier for OpenAI API.",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Transform text using OpenAI models",
+      "description": "\nThis example shows how to use the OpenAI text generation processor to transform a record's `.Payload.After` field\nusing an OpenAI model. The processor will send the content of the field to OpenAI and replace it with the response.\n\nIn this example, we're using a system message that instructs the model to convert the input text to uppercase.",
+      "config": {
+        "api_key": "fake-api-key",
+        "backoff_factor": "2.0",
+        "developer_message": "You will receive a payload. Your task is to output back the payload in uppercase.",
+        "field": ".Payload.After",
+        "initial_backoff": "1000",
+        "max_backoff": "30000",
+        "max_retries": "3",
+        "model": "gpt-4o-mini",
+        "strict_output": "false",
+        "temperature": "0"
+      },
+      "have": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "hello world"
+        }
+      },
+      "want": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "HELLO WORLD"
+        }
+      }
+    }
+  ]
+}
