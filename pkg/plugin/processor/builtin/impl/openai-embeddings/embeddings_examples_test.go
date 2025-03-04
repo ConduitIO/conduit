@@ -16,13 +16,13 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"github.com/goccy/go-json"
 )
 
 // mockOpenAICallForExamples is a mock implementation of openaiCall for examples
@@ -33,8 +33,8 @@ func (m *mockOpenAICallForExamples) Call(ctx context.Context, input string) ([]f
 	return []float32{0.1, 0.2, 0.3, 0.4, 0.5}, nil
 }
 
-//nolint:govet // a more descriptive example description
-func ExampleembeddingsProcessor() {
+//nolint:govet // we're using a more descriptive name of example
+func ExampleEmbeddingsProcessor() {
 	p := NewEmbeddingsProcessor(log.Nop())
 
 	processor := p.(*embeddingsProcessor)

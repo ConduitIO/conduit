@@ -16,12 +16,12 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 

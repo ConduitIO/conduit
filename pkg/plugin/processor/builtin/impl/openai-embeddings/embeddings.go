@@ -16,7 +16,6 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 	"github.com/sashabaranov/go-openai"
 )
