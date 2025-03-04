@@ -25,8 +25,10 @@ import (
 
 type mockOpenAICallForExamples struct{}
 
-var testVector = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
-var testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
+var (
+	testVector  = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
+	testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
+)
 
 func (m *mockOpenAICallForExamples) Call(ctx context.Context, input string) ([]float32, error) {
 	return testVector, nil
