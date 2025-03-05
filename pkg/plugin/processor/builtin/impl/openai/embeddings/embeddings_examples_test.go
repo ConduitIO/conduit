@@ -23,21 +23,21 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-type mockOpenAICallForExamples struct{}
+type mockCall struct{}
 
 var (
 	testVector  = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
 	testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
 )
 
-func (m *mockOpenAICallForExamples) Call(ctx context.Context, input string) ([]float32, error) {
+func (m *mockCall) Call(ctx context.Context, input string) ([]float32, error) {
 	return testVector, nil
 }
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleEmbeddingsProcessor() {
 	processor := &embeddingsProcessor{}
-	processor.call = &mockOpenAICallForExamples{}
+	processor.call = &mockCall{}
 
 	exampleutil.RunExample(processor, exampleutil.Example{
 		Summary: "Generate embeddings for text",

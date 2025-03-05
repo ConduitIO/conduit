@@ -42,7 +42,8 @@ type OpenaiCaller[T any] interface {
 	Call(ctx context.Context, input string) (T, error)
 }
 
-// CallWithRetry handles retrying API calls with exponential backoff
+// CallWithRetry handles retrying API calls with exponential backoff. This is
+// meant to be used with openai api calls.
 func CallWithRetry[T any](ctx context.Context, config Config, caller OpenaiCaller[T], payload string) (T, error) {
 	b := &backoff.Backoff{
 		Min:    time.Duration(config.InitialBackoff) * time.Millisecond,
@@ -78,7 +79,7 @@ func CallWithRetry[T any](ctx context.Context, config Config, caller OpenaiCalle
 			break
 		}
 
-		if !IsRetryableError(err) {
+		if !isRetryableError(err) {
 			return result, fmt.Errorf("OpenAI API call failed with non-retryable error: %w", err)
 		}
 
@@ -176,8 +177,8 @@ func ProcessRecordField[T any](
 	return rec, nil
 }
 
-// IsRetryableError determines if an error from the OpenAI API is retryable
-func IsRetryableError(err error) bool {
+// isRetryableError determines if an error from the OpenAI API is retryable
+func isRetryableError(err error) bool {
 	var apiErr *openai.APIError
 	if !cerrors.As(err, &apiErr) {
 		return true

@@ -17,6 +17,7 @@ package textgen
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -72,7 +73,7 @@ func TestProcessorWithRetry(t *testing.T) {
 	retryClient := &openaiwrap.FlakyOpenAICaller{}
 	processor.call = retryClient
 
-	// Use just one record instead of all three, so that it's easier to test.
+	// Use just one record instead of all three, so that it's easier to understand the test.
 	recs := openaiwrap.TestRecords()[:1]
 	processor.Process(ctx, recs)
 
@@ -91,7 +92,13 @@ func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processo
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
-	processor.call = &openaiwrap.MockOpenAICaller{}
+	processor.call = &MockOpenAICaller{}
 
 	return processor
+}
+
+type MockOpenAICaller struct{}
+
+func (f *MockOpenAICaller) Call(ctx context.Context, input string) (string, error) {
+	return strings.ToUpper(input), nil
 }

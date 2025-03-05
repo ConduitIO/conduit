@@ -32,9 +32,9 @@ func TestEmbeddingsProcessor_Configure(t *testing.T) {
 	p := &embeddingsProcessor{}
 
 	cfg := config.Config{
-		"api_key": "test-api-key",
-		"model":   "text-embedding-3-small",
-		"field":   ".Payload.After",
+		embeddingsProcessorConfigApiKey: "test-api-key",
+		embeddingsProcessorConfigModel:  "text-embedding-3-small",
+		embeddingsProcessorConfigField:  ".Payload.After",
 	}
 
 	ctx := context.Background()
@@ -50,11 +50,16 @@ func TestEmbeddingsProcessor_Process(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	processor := newProcessor(ctx, is)
+	processor := &embeddingsProcessor{}
+	cfg := config.Config{
+		embeddingsProcessorConfigApiKey: "fake api key",
+		embeddingsProcessorConfigModel:  string(openai.SmallEmbedding3),
+	}
+
+	is.NoErr(processor.Configure(ctx, cfg))
 
 	mockEmbeddings := []float32{0.1, 0.2, 0.3, 0.4, 0.5}
-	mockCaller := &openaiwrap.MockEmbeddingsCaller{Embeddings: mockEmbeddings}
-	processor.(*embeddingsProcessor).call = mockCaller
+	processor.call = &openaiwrap.MockEmbeddingsCaller{Embeddings: mockEmbeddings}
 
 	rec := opencdc.Record{
 		Payload: opencdc.Change{
@@ -85,12 +90,12 @@ func TestEmbeddingsProcessorWithRetry(t *testing.T) {
 	processor := &embeddingsProcessor{}
 
 	cfg := config.Config{
-		"api_key":         "fake api key",
-		"model":           "text-embedding-3-small",
-		"max_retries":     "3",
-		"initial_backoff": "10",
-		"max_backoff":     "100",
-		"backoff_factor":  "2.0",
+		embeddingsProcessorConfigApiKey:         "fake api key",
+		embeddingsProcessorConfigModel:          "text-embedding-3-small",
+		embeddingsProcessorConfigMaxRetries:     "3",
+		embeddingsProcessorConfigInitialBackoff: "10",
+		embeddingsProcessorConfigMaxBackoff:     "100",
+		embeddingsProcessorConfigBackoffFactor:  "2.0",
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
@@ -108,17 +113,4 @@ func TestEmbeddingsProcessorWithRetry(t *testing.T) {
 
 	// We expect 2 calls: 1 initial attempt that fails + 1 retry that succeeds
 	is.Equal(retryClient.CallCount, 2)
-}
-
-func newProcessor(ctx context.Context, is *is.I) sdk.Processor {
-	processor := &embeddingsProcessor{}
-
-	cfg := config.Config{
-		"api_key": "fake api key",
-		"model":   string(openai.SmallEmbedding3),
-	}
-
-	is.NoErr(processor.Configure(ctx, cfg))
-
-	return processor
 }

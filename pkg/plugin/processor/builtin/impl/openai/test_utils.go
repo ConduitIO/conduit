@@ -22,7 +22,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// TestRecords returns a standard set of test records that can be used across processor tests
 func TestRecords() []opencdc.Record {
 	return []opencdc.Record{
 		{
@@ -52,14 +51,6 @@ func TestRecords() []opencdc.Record {
 	}
 }
 
-// MockOpenAICaller is a simple implementation of OpenaiCaller that returns uppercase input
-type MockOpenAICaller struct{}
-
-func (f *MockOpenAICaller) Call(ctx context.Context, input string) (string, error) {
-	return strings.ToUpper(input), nil
-}
-
-// FlakyOpenAICaller is an implementation of OpenaiCaller that fails on first call but succeeds on retry
 type FlakyOpenAICaller struct {
 	CallCount int
 }
@@ -74,7 +65,6 @@ func (f *FlakyOpenAICaller) Call(ctx context.Context, input string) (string, err
 	return strings.ToUpper(input), nil
 }
 
-// MockEmbeddingsCaller is a simple implementation of OpenaiCaller for embeddings
 type MockEmbeddingsCaller struct {
 	Embeddings []float32
 }
@@ -87,7 +77,6 @@ func (m *MockEmbeddingsCaller) Call(ctx context.Context, input string) ([]float3
 	return m.Embeddings, nil
 }
 
-// FlakyEmbeddingsCaller is an implementation of OpenaiCaller for embeddings that fails on first call
 type FlakyEmbeddingsCaller struct {
 	CallCount  int
 	Embeddings []float32
