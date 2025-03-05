@@ -17,12 +17,11 @@ package textgen
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
-	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	openaiwrap "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/matryer/is"
 	"github.com/sashabaranov/go-openai"
 )
@@ -34,7 +33,7 @@ func TestProcessor_Process(t *testing.T) {
 	processor := newProcessor(ctx, is,
 		"You will receive a payload. Your task is to output back the payload in uppercase.")
 
-	recs := testRecords()
+	recs := openaiwrap.TestRecords()
 
 	processed := processor.Process(ctx, recs)
 	is.Equal(len(processed), 3)
@@ -70,15 +69,15 @@ func TestProcessorWithRetry(t *testing.T) {
 
 	is.NoErr(processor.Configure(ctx, cfg))
 
-	retryClient := &flakyOpenaiCall{}
+	retryClient := &openaiwrap.FlakyOpenAICaller{}
 	processor.call = retryClient
 
 	// Use just one record instead of all three, so that it's easier to test.
-	recs := testRecords()[:1]
+	recs := openaiwrap.TestRecords()[:1]
 	processor.Process(ctx, recs)
 
 	// We expect 2 calls: 1 initial attempt that fails + 1 retry that succeeds
-	is.Equal(retryClient.callCount, 2)
+	is.Equal(retryClient.CallCount, 2)
 }
 
 func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processor {
@@ -92,56 +91,7 @@ func newProcessor(ctx context.Context, is *is.I, devMessage string) sdk.Processo
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
-	processor.call = &fakeOpenaiCall{}
+	processor.call = &openaiwrap.MockOpenAICaller{}
 
 	return processor
-}
-
-func testRecords() []opencdc.Record {
-	return []opencdc.Record{
-		{
-			Operation: opencdc.OperationCreate,
-			Key:       opencdc.RawData("key1"),
-			Payload: opencdc.Change{
-				Before: opencdc.RawData("bef-rec-1"),
-				After:  opencdc.RawData("aft-rec-1"),
-			},
-		},
-		{
-			Operation: opencdc.OperationUpdate,
-			Key:       opencdc.RawData("key2"),
-			Payload: opencdc.Change{
-				Before: opencdc.RawData("bef-rec-2"),
-				After:  opencdc.RawData("aft-rec-2"),
-			},
-		},
-		{
-			Operation: opencdc.OperationDelete,
-			Key:       opencdc.RawData("key3"),
-			Payload: opencdc.Change{
-				Before: opencdc.RawData("bef-rec-3"),
-				After:  opencdc.RawData("aft-rec-3"),
-			},
-		},
-	}
-}
-
-type fakeOpenaiCall struct{}
-
-func (f *fakeOpenaiCall) Call(ctx context.Context, input string) (string, error) {
-	return strings.ToUpper(input), nil
-}
-
-type flakyOpenaiCall struct {
-	callCount int
-}
-
-func (f *flakyOpenaiCall) Call(ctx context.Context, input string) (string, error) {
-	f.callCount++
-
-	if f.callCount < 2 {
-		return "", &openai.APIError{HTTPStatusCode: 429, Message: "rate limit exceeded"}
-	}
-
-	return strings.ToUpper(input), nil
 }
