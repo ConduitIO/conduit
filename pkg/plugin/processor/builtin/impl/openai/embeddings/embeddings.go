@@ -17,15 +17,13 @@ package embeddings
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	openaiwrap "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/goccy/go-json"
-	"github.com/jpillora/backoff"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -44,6 +42,8 @@ type openaiCall interface {
 }
 
 type embeddingsProcessorConfig struct {
+	openaiwrap.Config
+
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
 	// APIKey is the OpenAI API key. Required.
@@ -56,14 +56,6 @@ type embeddingsProcessorConfig struct {
 	EncodingFormat string `json:"encoding_format"`
 	// User is the user identifier for OpenAI API.
 	User string `json:"user"`
-	// MaxRetries is the maximum number of retries for API calls. Defaults to 3.
-	MaxRetries int `json:"max_retries" default:"3"`
-	// InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).
-	InitialBackoff int `json:"initial_backoff" default:"1000"`
-	// MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).
-	MaxBackoff int `json:"max_backoff" default:"30000"`
-	// BackoffFactor is the factor by which the backoff increases. Defaults to 2.
-	BackoffFactor float64 `json:"backoff_factor" default:"2.0"`
 }
 
 func NewEmbeddingsProcessor(l log.CtxLogger) sdk.Processor {
@@ -123,135 +115,24 @@ func (p *embeddingsProcessor) Process(ctx context.Context, recs []opencdc.Record
 
 func (p *embeddingsProcessor) processRecord(
 	ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
-	logger := sdk.Logger(ctx)
-
-	ref, err := p.referenceResolver.Resolve(&rec)
-	if err != nil {
-		return rec, fmt.Errorf("failed to resolve reference: %w", err)
+	processor := func(ctx context.Context, input string) ([]float32, error) {
+		return p.callOpenAI(ctx, input)
 	}
 
-	val := ref.Get()
-
-	var payload string
-	switch v := val.(type) {
-	case opencdc.Position:
-		payload = string(v)
-
-		embeddings, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create embeddings: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record position with embeddings of length %d", len(embeddings))
-
+	formatter := func(embeddings []float32) ([]byte, error) {
 		embeddingsJSON, err := json.Marshal(embeddings)
 		if err != nil {
-			return rec, fmt.Errorf("failed to marshal embeddings: %w", err)
+			return nil, fmt.Errorf("failed to marshal embeddings: %w", err)
 		}
-
-		if err := ref.Set(opencdc.Position(embeddingsJSON)); err != nil {
-			return rec, fmt.Errorf("failed to set position: %w", err)
-		}
-	case opencdc.Data:
-		payload = string(v.Bytes())
-
-		embeddings, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create embeddings: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record data with embeddings of length %d", len(embeddings))
-
-		embeddingsJSON, err := json.Marshal(embeddings)
-		if err != nil {
-			return rec, fmt.Errorf("failed to marshal embeddings: %w", err)
-		}
-
-		var data opencdc.Data = opencdc.RawData(embeddingsJSON)
-
-		if err := ref.Set(data); err != nil {
-			return rec, fmt.Errorf("failed to set data: %w", err)
-		}
-
-	case string:
-		payload = v
-
-		embeddings, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create embeddings: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record string with embeddings of length %d", len(embeddings))
-
-		embeddingsJSON, err := json.Marshal(embeddings)
-		if err != nil {
-			return rec, fmt.Errorf("failed to marshal embeddings: %w", err)
-		}
-
-		if err := ref.Set(string(embeddingsJSON)); err != nil {
-			return rec, fmt.Errorf("failed to set data: %w", err)
-		}
-	default:
-		return rec, fmt.Errorf("unsupported type %T", v)
+		return embeddingsJSON, nil
 	}
 
-	return rec, nil
+	return openaiwrap.ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
 }
 
 func (p *embeddingsProcessor) callOpenAI(ctx context.Context, payload string) ([]float32, error) {
-	b := &backoff.Backoff{
-		Min:    time.Duration(p.config.InitialBackoff) * time.Millisecond,
-		Max:    time.Duration(p.config.MaxBackoff) * time.Millisecond,
-		Factor: p.config.BackoffFactor,
-		Jitter: true,
-	}
-
-	var embeddings []float32
-	var err error
-	var attempt int
-
-	logger := sdk.Logger(ctx)
-
-	for {
-		attempt++
-
-		if attempt > p.config.MaxRetries+1 {
-			return nil, fmt.Errorf("exceeded maximum retries (%d): %w", p.config.MaxRetries, err)
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		embeddings, err = p.call.Call(ctx, payload)
-		if err == nil {
-			if attempt > 1 {
-				logger.Debug().Int("attempts", attempt).Msg("OpenAI API call succeeded after retries")
-			}
-			break
-		}
-
-		if !isRetryableError(err) {
-			return nil, fmt.Errorf("embeddings creation failed with non-retryable error: %w", err)
-		}
-
-		backoffDuration := b.Duration()
-		logger.Warn().
-			Int("attempt", attempt).
-			Dur("backoff", backoffDuration).
-			Err(err).
-			Msg("OpenAI API call failed, retrying after backoff")
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(backoffDuration):
-		}
-	}
-
-	return embeddings, nil
+	call := openaiwrap.OpenaiCaller[[]float32](p.call)
+	return openaiwrap.CallWithRetry(ctx, p.config.Config, call, payload)
 }
 
 type openaiClient struct {
@@ -279,21 +160,4 @@ func (o *openaiClient) Call(ctx context.Context, payload string) ([]float32, err
 	}
 
 	return embeddings, nil
-}
-
-// isRetryableError determines if an error from the OpenAI API is retryable
-func isRetryableError(err error) bool {
-	var apiErr *openai.APIError
-	if !cerrors.As(err, &apiErr) {
-		return true
-	}
-
-	switch apiErr.HTTPStatusCode {
-	case 429:
-		return true
-	case 500, 502, 503, 504:
-		return true
-	default:
-		return false
-	}
 }
