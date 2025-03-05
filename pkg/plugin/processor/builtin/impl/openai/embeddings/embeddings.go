@@ -114,7 +114,8 @@ func (p *embeddingsProcessor) Process(ctx context.Context, recs []opencdc.Record
 }
 
 func (p *embeddingsProcessor) processRecord(
-	ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
+	ctx context.Context, rec opencdc.Record,
+) (opencdc.Record, error) {
 	processor := func(ctx context.Context, input string) ([]float32, error) {
 		return p.callOpenAI(ctx, input)
 	}

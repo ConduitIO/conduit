@@ -145,8 +145,8 @@ func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) [
 }
 
 func (p *textgenProcessor) processRecord(
-	ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
-
+	ctx context.Context, rec opencdc.Record,
+) (opencdc.Record, error) {
 	processor := func(ctx context.Context, input string) (string, error) {
 		return p.callOpenAI(ctx, input)
 	}
@@ -161,7 +161,6 @@ func (p *textgenProcessor) processRecord(
 func (p *textgenProcessor) callOpenAI(ctx context.Context, payload string) (string, error) {
 	call := openaiwrap.OpenaiCaller[string](p.call)
 	return openaiwrap.CallWithRetry(ctx, p.config.Config, call, payload)
-
 }
 
 type openaiCaller struct {
