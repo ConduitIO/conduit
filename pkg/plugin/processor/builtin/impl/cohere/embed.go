@@ -17,6 +17,7 @@ package cohere
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	cohere "github.com/cohere-ai/cohere-go/v2"
@@ -57,9 +58,18 @@ type embedProcConfig struct {
 	MaxTextsPerRequest int `json:"maxTextsPerRequest" default:"96"`
 }
 
+func (c *embedProcConfig) validate() error {
+	// validate `inputType` for v3 or higher models.
+	if !strings.Contains(c.Model, "v2") && c.InputType == "" {
+		return cerrors.Errorf("inputType is required for model %q (v3 or higher)", c.Model)
+	}
+
+	return nil
+}
+
 // embedModel defines the interface for the Cohere embed client
 type embedModel interface {
-	Embed(ctx context.Context, texts []string) ([][]float64, error)
+	embed(ctx context.Context, texts []string) ([][]float64, error)
 }
 
 type embedProcessor struct {
@@ -86,6 +96,11 @@ func (p *embedProcessor) Configure(ctx context.Context, cfg config.Config) error
 	err := sdk.ParseConfig(ctx, cfg, &p.config, embedProcConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
+	}
+
+	err = p.config.validate()
+	if err != nil {
+		return cerrors.Errorf("error validating configuration: %w", err)
 	}
 
 	return nil
@@ -166,7 +181,7 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 	for {
 		var err error
 		// execute request to get embeddings
-		embeddings, err = p.client.Embed(ctx, embeddingInputs)
+		embeddings, err = p.client.embed(ctx, embeddingInputs)
 
 		attempt := p.backoffCfg.Attempt()
 		duration := p.backoffCfg.Duration()
@@ -258,7 +273,7 @@ type embedClient struct {
 	config *embedProcConfig
 }
 
-func (e *embedClient) Embed(ctx context.Context, texts []string) ([][]float64, error) {
+func (e *embedClient) embed(ctx context.Context, texts []string) ([][]float64, error) {
 	// prepare request
 	req := &cohere.V2EmbedRequest{
 		Model:          e.config.Model,

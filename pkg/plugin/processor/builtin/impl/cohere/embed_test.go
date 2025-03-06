@@ -79,6 +79,14 @@ func TestEmbedProcessor_Configure(t *testing.T) {
 			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.factor": "not-a-number" value is not a float: invalid parameter type`,
 		},
 		{
+			name: "missing inputType for v3 model returns error",
+			config: config.Config{
+				"apiKey": "api-key",
+				"model":  "embed-english-light-v3.0",
+			},
+			wantErr: `error validating configuration: inputType is required for model "embed-english-light-v3.0" (v3 or higher)`,
+		},
+		{
 			name: "success",
 			config: config.Config{
 				"apiKey":    "api-key",
@@ -337,7 +345,7 @@ func TestEmbedProcessor_Process(t *testing.T) {
 
 type mockEmbedClient struct{}
 
-func (m mockEmbedClient) Embed(ctx context.Context, texts []string) ([][]float64, error) {
+func (m mockEmbedClient) embed(ctx context.Context, texts []string) ([][]float64, error) {
 	embedding := []float64{0.1, 0.2, 0.3}
 	output := make([][]float64, len(texts))
 
