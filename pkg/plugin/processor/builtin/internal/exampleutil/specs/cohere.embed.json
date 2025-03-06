@@ -1,0 +1,147 @@
+{
+  "specification": {
+    "name": "cohere.embed",
+    "summary": "Conduit processor for Cohere's embed model.",
+    "description": "Conduit processor for Cohere's embed model.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "apiKey": {
+        "default": "",
+        "description": "APIKey is the API key for Cohere api calls.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "backoffRetry.count": {
+        "default": "0",
+        "description": "Maximum number of retries for an individual record when backing off following an error.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "-1"
+          }
+        ]
+      },
+      "backoffRetry.factor": {
+        "default": "2",
+        "description": "The multiplying factor for each increment step.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "0"
+          }
+        ]
+      },
+      "backoffRetry.max": {
+        "default": "5s",
+        "description": "The maximum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "backoffRetry.min": {
+        "default": "100ms",
+        "description": "The minimum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "inputField": {
+        "default": ".Payload.After",
+        "description": "Specifies the field from which the request body should be created.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          }
+        ]
+      },
+      "inputType": {
+        "default": "",
+        "description": "Specifies the type of input passed to the model. Required for embed models v3 and higher.\nAllowed values: search_document, search_query, classification, clustering, image.",
+        "type": "string",
+        "validations": []
+      },
+      "maxTextsPerRequest": {
+        "default": "96",
+        "description": "MaxTextsPerRequest controls the number of texts sent in each Cohere embedding API call (max 96)",
+        "type": "int",
+        "validations": []
+      },
+      "model": {
+        "default": "embed-english-v2.0",
+        "description": "Model is one of the Cohere embed models.",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Generate embeddings using Cohere's embedding model",
+      "description": "\nThis example demonstrates how to use the Cohere embedding processor to generate embeddings for a record.\nThe processor extracts text from the specified input field (default: \".Payload.After\"), sends it to the Cohere API,\nand stores the resulting embeddings in the record's \".Payload.After\" field as compressed data using the zstd algorithm.\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the embedding model used (\"embed-english-v2.0\"). Note that the compressed embeddings cannot be directly compared\nin this test, so the focus is on verifying the metadata update.",
+      "config": {
+        "apiKey": "fake-api-key",
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "inputField": ".Payload.After",
+        "maxTextsPerRequest": "96",
+        "model": "embed-english-v2.0"
+      },
+      "have": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": {},
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": {
+          "cohere.embed.model": "embed-english-v2.0"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    }
+  ]
+}

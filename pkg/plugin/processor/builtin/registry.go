@@ -44,6 +44,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"base64.decode":       base64.NewDecodeProcessor,
 	"base64.encode":       base64.NewEncodeProcessor,
 	"cohere.command":      cohere.NewCommandProcessor,
+	"cohere.embed":        cohere.NewEmbedProcessor,
 	"custom.javascript":   custom.NewJavascriptProcessor,
 	"error":               impl.NewErrorProcessor,
 	"filter":              impl.NewFilterProcessor,
