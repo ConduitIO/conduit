@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	textgen "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai-textgen"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
@@ -44,6 +45,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"base64.decode":       base64.NewDecodeProcessor,
 	"base64.encode":       base64.NewEncodeProcessor,
 	"cohere.command":      cohere.NewCommandProcessor,
+	"cohere.embed":        cohere.NewEmbedProcessor,
 	"cohere.rerank":       cohere.NewRerankProcessor,
 	"custom.javascript":   custom.NewJavascriptProcessor,
 	"error":               impl.NewErrorProcessor,
@@ -54,6 +56,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"field.set":           field.NewSetProcessor,
 	"json.decode":         json.NewDecodeProcessor,
 	"json.encode":         json.NewEncodeProcessor,
+	"openai.textgen":      textgen.NewTextgenProcessor,
 	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
