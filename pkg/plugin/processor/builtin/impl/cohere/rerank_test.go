@@ -25,7 +25,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestCommandProcessor_Configure(t *testing.T) {
+func TestRerankProcessor_Configure(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  config.Config
@@ -34,7 +34,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 		{
 			name: "empty config returns error",
 			config: config.Config{
-				"prompt": "some preset text",
+				"query": "some query text",
 			},
 			wantErr: `failed to parse configuration: config invalid: error validating "apiKey": required parameter is not provided`,
 		},
@@ -42,8 +42,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.count returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
-				"prompt":             "some preset text",
-				"model":              "command",
+				"query":              "some query text",
 				"backoffRetry.count": "not-a-number",
 			},
 			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
@@ -52,8 +51,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.min returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
-				"prompt":             "some preset text",
-				"model":              "command",
+				"query":              "some query text",
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
@@ -63,8 +61,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.max returns error",
 			config: config.Config{
 				"apiKey":             "api-key",
-				"prompt":             "some preset text",
-				"model":              "command",
+				"query":              "some query text",
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
@@ -74,8 +71,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "invalid backoffRetry.factor returns error",
 			config: config.Config{
 				"apiKey":              "api-key",
-				"prompt":              "some preset text",
-				"model":               "command",
+				"query":               "some query text",
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
@@ -85,7 +81,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 			name: "success",
 			config: config.Config{
 				"apiKey": "api-key",
-				"prompt": "some preset text",
+				"query":  "some query text",
 			},
 			wantErr: ``,
 		},
@@ -94,7 +90,7 @@ func TestCommandProcessor_Configure(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			p := NewCommandProcessor(log.Test(t))
+			p := NewRerankProcessor(log.Test(t))
 			err := p.Configure(context.Background(), tc.config)
 			if tc.wantErr == "" {
 				is.NoErr(err)
@@ -106,33 +102,64 @@ func TestCommandProcessor_Configure(t *testing.T) {
 	}
 }
 
-func TestCommandProcessor_Process(t *testing.T) {
+func TestRerankProcessor_Process(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
 	t.Run("successful processing", func(t *testing.T) {
 		p := func() sdk.Processor {
-			proc := &commandProcessor{}
+			proc := &rerankProcessor{}
 			cfg := config.Config{
-				commandProcessorConfigApiKey: "apikey",
-				commandProcessorConfigPrompt: "test-prompt",
+				rerankProcessorConfigApiKey: "apikey",
+				rerankProcessorConfigQuery:  "What is the capital of the United States?",
 			}
 			is.NoErr(proc.Configure(ctx, cfg))
-			proc.client = &mockCommandClient{}
+			proc.client = &mockRerankClient{}
 			return proc
 		}()
 
-		records := []opencdc.Record{{
-			Operation: opencdc.OperationUpdate,
-			Position:  opencdc.Position("pos-1"),
-			Payload: opencdc.Change{
-				After: opencdc.RawData("who are you?"),
+		records := []opencdc.Record{
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData("Washington, D.C. is the capital of the United States."),
+				},
 			},
-		}}
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData("Carson City is the capital city of the American state of Nevada."),
+				},
+			},
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData("The Commonwealth of the Northern Mariana Islands is a group of islands in the Pacific Ocean. Its capital is Saipan."),
+				},
+			},
+		}
 		got := p.Process(ctx, records)
 		is.Equal(len(got), len(records))
-		rec, ok := got[0].(sdk.SingleRecord)
-		is.Equal(ok, true)
-		is.Equal(string(rec.Payload.After.Bytes()), "cohere command response content")
+
+		want := []opencdc.Record{
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData(`{"document":{"text":"Washington, D.C. is the capital of the United States."},"index":0,"relevance_score":0.9}`),
+				},
+			},
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData(`{"document":{"text":"Carson City is the capital city of the American state of Nevada."},"index":1,"relevance_score":0.8}`),
+				},
+			},
+			{
+				Payload: opencdc.Change{
+					After: opencdc.RawData(`{"document":{"text":"The Commonwealth of the Northern Mariana Islands is a group of islands in the Pacific Ocean. Its capital is Saipan."},"index":2,"relevance_score":0.7}`),
+				},
+			},
+		}
+
+		for i, v := range got {
+			val, ok := v.(sdk.SingleRecord)
+			is.Equal(ok, true)
+			is.Equal(val.Payload.After.Bytes(), want[i].Payload.After.Bytes())
+		}
 	})
 }

@@ -27,7 +27,7 @@ import (
 //nolint:govet // a more descriptive example description
 func ExampleCommandProcessor() {
 	p := &commandProcessor{}
-	p.client = &mockClient{}
+	p.client = &mockCommandClient{}
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Generate responses using Cohere's command model`,
@@ -72,9 +72,9 @@ The processor sends the input text to the Cohere API and replaces it with the mo
 	//  }
 }
 
-type mockClient struct{}
+type mockCommandClient struct{}
 
-func (m mockClient) Command(ctx context.Context, content string) (string, error) {
+func (m mockCommandClient) command(ctx context.Context, content string) (string, error) {
 	if content == "" {
 		return "", fmt.Errorf("mocked api error")
 	}
