@@ -1,0 +1,146 @@
+{
+  "specification": {
+    "name": "cohere.command",
+    "summary": "Conduit processor for Cohere's command model.",
+    "description": "Conduit processor for Cohere's command model.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "apiKey": {
+        "default": "",
+        "description": "APIKey is the API key for Cohere api calls.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "backoffRetry.count": {
+        "default": "0",
+        "description": "Maximum number of retries for an individual record when backing off following an error.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "-1"
+          }
+        ]
+      },
+      "backoffRetry.factor": {
+        "default": "2",
+        "description": "The multiplying factor for each increment step.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "0"
+          }
+        ]
+      },
+      "backoffRetry.max": {
+        "default": "5s",
+        "description": "The maximum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "backoffRetry.min": {
+        "default": "100ms",
+        "description": "The minimum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "model": {
+        "default": "command",
+        "description": "Model is one of the name of a compatible command model version.",
+        "type": "string",
+        "validations": []
+      },
+      "prompt": {
+        "default": "",
+        "description": "Prompt is the preset prompt.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "request.body": {
+        "default": ".Payload.After",
+        "description": "RequestBodyRef specifies the api request field.",
+        "type": "string",
+        "validations": []
+      },
+      "response.body": {
+        "default": ".Payload.After",
+        "description": "ResponseBodyRef specifies in which field should the response body be saved.",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Generate responses using Cohere's command model",
+      "description": "\nThis example demonstrates how to use the Cohere command processor to generate responses for a record's `.Payload.After` field.\nThe processor sends the input text to the Cohere API and replaces it with the model's response.",
+      "config": {
+        "apiKey": "apikey",
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "model": "command",
+        "prompt": "hello",
+        "request.body": ".Payload.After",
+        "response.body": ".Payload.After"
+      },
+      "have": {
+        "position": "cG9zLTE=",
+        "operation": "update",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "who are you?"
+        }
+      },
+      "want": {
+        "position": "cG9zLTE=",
+        "operation": "update",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "cohere command response content"
+        }
+      }
+    }
+  ]
+}

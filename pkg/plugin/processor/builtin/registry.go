@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/cohere"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
@@ -43,6 +44,8 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"avro.encode":         avro.NewEncodeProcessor,
 	"base64.decode":       base64.NewDecodeProcessor,
 	"base64.encode":       base64.NewEncodeProcessor,
+	"cohere.command":      cohere.NewCommandProcessor,
+	"cohere.embed":        cohere.NewEmbedProcessor,
 	"custom.javascript":   custom.NewJavascriptProcessor,
 	"error":               impl.NewErrorProcessor,
 	"filter":              impl.NewFilterProcessor,
