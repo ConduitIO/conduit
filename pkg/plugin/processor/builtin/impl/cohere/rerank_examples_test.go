@@ -17,6 +17,7 @@ package cohere
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -78,7 +79,7 @@ to include the rerank model used ("rerank-v3.5").`,
 
 type mockRerankClient struct{}
 
-func (m mockRerankClient) Rerank(ctx context.Context, docs []string) ([]RerankResult, error) {
+func (m mockRerankClient) rerank(ctx context.Context, docs []string) ([]RerankResult, error) {
 	if len(docs) == 0 {
 		return nil, fmt.Errorf("mocked api error")
 	}
@@ -87,6 +88,7 @@ func (m mockRerankClient) Rerank(ctx context.Context, docs []string) ([]RerankRe
 	mockedScore := 1.0
 	for i, d := range docs {
 		mockedScore -= 0.1
+		mockedScore = math.Round(mockedScore*10) / 10
 		res := RerankResult{
 			Index:          i,
 			RelevanceScore: mockedScore,

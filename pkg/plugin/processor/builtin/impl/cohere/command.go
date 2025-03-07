@@ -31,7 +31,7 @@ import (
 )
 
 type commandModel interface {
-	Command(ctx context.Context, content string) (string, error)
+	command(ctx context.Context, content string) (string, error)
 }
 
 type commandClient struct {
@@ -148,7 +148,7 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 
 		content := fmt.Sprintf(p.config.Prompt, p.getInput(requestRef.Get()))
 		for {
-			resp, err := p.client.Command(ctx, content)
+			resp, err := p.client.command(ctx, content)
 			attempt := p.backoffCfg.Attempt()
 			duration := p.backoffCfg.Duration()
 
@@ -195,7 +195,7 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 	return out
 }
 
-func (cc *commandClient) Command(ctx context.Context, content string) (string, error) {
+func (cc *commandClient) command(ctx context.Context, content string) (string, error) {
 	resp, err := cc.client.V2.Chat(
 		ctx,
 		&cohere.V2ChatRequest{

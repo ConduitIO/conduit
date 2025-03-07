@@ -31,7 +31,7 @@ import (
 )
 
 type rerankModel interface {
-	Rerank(ctx context.Context, docs []string) ([]RerankResult, error)
+	rerank(ctx context.Context, docs []string) ([]RerankResult, error)
 }
 
 type rerankClient struct {
@@ -154,7 +154,7 @@ func (p *rerankProcessor) Process(ctx context.Context, records []opencdc.Record)
 	var err error
 
 	for {
-		resp, err = p.client.Rerank(ctx, documents)
+		resp, err = p.client.rerank(ctx, documents)
 		attempt := p.backoffCfg.Attempt()
 		duration := p.backoffCfg.Duration()
 
@@ -211,7 +211,7 @@ func (p *rerankProcessor) Process(ctx context.Context, records []opencdc.Record)
 	return out
 }
 
-func (rc *rerankClient) Rerank(ctx context.Context, docs []string) ([]RerankResult, error) {
+func (rc *rerankClient) rerank(ctx context.Context, docs []string) ([]RerankResult, error) {
 	returnDocuments := true
 	resp, err := rc.client.V2.Rerank(
 		ctx,
