@@ -92,7 +92,7 @@ func (p *embeddingsProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "openai-embeddings",
 		Summary:     "Generate embeddings for records using OpenAI models.",
-		Description: "embeddings is a conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API",
+		Description: "Embeddings is a Conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API.",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters:  embeddingsProcessorConfig{}.Parameters(),
