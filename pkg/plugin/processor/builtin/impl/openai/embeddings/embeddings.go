@@ -48,7 +48,7 @@ type embeddingsProcessorConfig struct {
 	Field string `json:"field" default:".Payload.After"`
 	// APIKey is the OpenAI API key.
 	APIKey string `json:"api_key" validate:"required"`
-	// Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small). Required.
+	// Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small).
 	Model string `json:"model" validate:"required"`
 	// Dimensions is the number of dimensions the resulting output embeddings should have.
 	Dimensions int `json:"dimensions"`
