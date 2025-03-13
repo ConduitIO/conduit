@@ -46,7 +46,7 @@ type embeddingsProcessorConfig struct {
 
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
-	// APIKey is the OpenAI API key. Required.
+	// APIKey is the OpenAI API key.
 	APIKey string `json:"api_key" validate:"required"`
 	// Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small). Required.
 	Model string `json:"model" validate:"required"`
