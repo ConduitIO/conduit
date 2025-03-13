@@ -1,14 +1,14 @@
 {
   "specification": {
     "name": "openai-embeddings",
-    "summary": "generate embeddings for records using openai models",
-    "description": "embeddings is a conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API",
+    "summary": "Generate embeddings for records using OpenAI models.",
+    "description": "Embeddings is a Conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
       "api_key": {
         "default": "",
-        "description": "APIKey is the OpenAI API key. Required.",
+        "description": "APIKey is the OpenAI API key.",
         "type": "string",
         "validations": [
           {
@@ -19,7 +19,7 @@
       },
       "backoff_factor": {
         "default": "2.0",
-        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.0",
         "type": "float",
         "validations": []
       },
@@ -61,7 +61,7 @@
       },
       "model": {
         "default": "",
-        "description": "Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small). Required.",
+        "description": "Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small).",
         "type": "string",
         "validations": [
           {

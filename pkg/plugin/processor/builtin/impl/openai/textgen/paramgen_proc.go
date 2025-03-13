@@ -48,7 +48,7 @@ func (textgenProcessorConfig) Parameters() map[string]config.Parameter {
 		},
 		textgenProcessorConfigBackoffFactor: {
 			Default:     "2.0",
-			Description: "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+			Description: "BackoffFactor is the factor by which the backoff increases. Defaults to 2.0",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},

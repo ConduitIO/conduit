@@ -24,7 +24,7 @@ func (embeddingsProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		embeddingsProcessorConfigApiKey: {
 			Default:     "",
-			Description: "APIKey is the OpenAI API key. Required.",
+			Description: "APIKey is the OpenAI API key.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
@@ -32,7 +32,7 @@ func (embeddingsProcessorConfig) Parameters() map[string]config.Parameter {
 		},
 		embeddingsProcessorConfigBackoffFactor: {
 			Default:     "2.0",
-			Description: "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+			Description: "BackoffFactor is the factor by which the backoff increases. Defaults to 2.0",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{},
 		},
@@ -74,7 +74,7 @@ func (embeddingsProcessorConfig) Parameters() map[string]config.Parameter {
 		},
 		embeddingsProcessorConfigModel: {
 			Default:     "",
-			Description: "Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small). Required.",
+			Description: "Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
