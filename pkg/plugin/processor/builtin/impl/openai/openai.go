@@ -34,7 +34,7 @@ type Config struct {
 	InitialBackoff int `json:"initial_backoff" default:"1000"`
 	// MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).
 	MaxBackoff int `json:"max_backoff" default:"30000"`
-	// BackoffFactor is the factor by which the backoff increases. Defaults to 2.
+	// BackoffFactor is the factor by which the backoff increases. Defaults to 2.0
 	BackoffFactor float64 `json:"backoff_factor" default:"2.0"`
 }
 
