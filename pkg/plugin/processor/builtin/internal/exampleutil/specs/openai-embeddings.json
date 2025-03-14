@@ -1,0 +1,144 @@
+{
+  "specification": {
+    "name": "openai-embeddings",
+    "summary": "Generate embeddings for records using OpenAI models.",
+    "description": "Embeddings is a Conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "api_key": {
+        "default": "",
+        "description": "APIKey is the OpenAI API key.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "backoff_factor": {
+        "default": "2.0",
+        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.0",
+        "type": "float",
+        "validations": []
+      },
+      "dimensions": {
+        "default": "",
+        "description": "Dimensions is the number of dimensions the resulting output embeddings should have.",
+        "type": "int",
+        "validations": []
+      },
+      "encoding_format": {
+        "default": "",
+        "description": "EncodingFormat is the format to return the embeddings in. Can be \"float\" or \"base64\".",
+        "type": "string",
+        "validations": []
+      },
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is the reference to the field to process. Defaults to \".Payload.After\".",
+        "type": "string",
+        "validations": []
+      },
+      "initial_backoff": {
+        "default": "1000",
+        "description": "InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).",
+        "type": "int",
+        "validations": []
+      },
+      "max_backoff": {
+        "default": "30000",
+        "description": "MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).",
+        "type": "int",
+        "validations": []
+      },
+      "max_retries": {
+        "default": "3",
+        "description": "MaxRetries is the maximum number of retries for API calls. Defaults to 3.",
+        "type": "int",
+        "validations": []
+      },
+      "model": {
+        "default": "",
+        "description": "Model is the OpenAI embeddings model to use (e.g., text-embedding-3-small).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "user": {
+        "default": "",
+        "description": "User is the user identifier for OpenAI API.",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Generate embeddings for text",
+      "description": "This example generates embeddings for the text stored in\n`.Payload.After`. The embeddings are returned as a JSON array of floating point numbers.\nThese embeddings can be used for semantic search, clustering, or other machine learning tasks.",
+      "config": {
+        "api_key": "your-openai-api-key",
+        "backoff_factor": "2.0",
+        "field": ".Payload.After",
+        "initial_backoff": "1000",
+        "max_backoff": "30000",
+        "max_retries": "3",
+        "model": "text-embedding-3-small"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": "This is a sample text to generate embeddings for."
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": "[0.1,0.2,0.3,0.4,0.5]"
+        }
+      }
+    }
+  ]
+}
