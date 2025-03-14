@@ -19,7 +19,7 @@
       },
       "backoff_factor": {
         "default": "2.0",
-        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.",
+        "description": "BackoffFactor is the factor by which the backoff increases. Defaults to 2.0",
         "type": "float",
         "validations": []
       },

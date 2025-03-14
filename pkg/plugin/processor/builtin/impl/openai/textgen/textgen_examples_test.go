@@ -25,10 +25,16 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+type mockCall struct{}
+
+func (m *mockCall) Call(_ context.Context, input string) (string, error) {
+	return strings.ToUpper(input), nil
+}
+
 //nolint:govet // we're using a more descriptive name of example
 func ExampleTextgenProcessor() {
 	p := &textgenProcessor{}
-	p.call = &mockOpenAICall{}
+	p.call = &mockCall{}
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Transform text using OpenAI models`,
@@ -75,10 +81,4 @@ In this example, we're using a system message that instructs the model to conver
 	// +    "after": "HELLO WORLD"
 	//    }
 	//  }
-}
-
-type mockOpenAICall struct{}
-
-func (m *mockOpenAICall) Call(_ context.Context, input string) (string, error) {
-	return strings.ToUpper(input), nil
 }
