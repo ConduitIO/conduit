@@ -121,7 +121,7 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 
 func (p *textgenProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "openai-textgen",
+		Name:        "openai.textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
 		Version:     "v0.1.0",
