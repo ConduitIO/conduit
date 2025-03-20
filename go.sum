@@ -234,8 +234,8 @@ github.com/conduitio/conduit-connector-kafka v0.12.0 h1:cFCHeuQucjnes8ozJl06eoen
 github.com/conduitio/conduit-connector-kafka v0.12.0/go.mod h1:3kiP15bQDMRroXjhbv/zY1uwmRdgdbc9dpEx3EonZbo=
 github.com/conduitio/conduit-connector-log v0.7.0 h1:kuWYa+diEjlEAXiuEv5U1pxkUbv1lB+RoAH8vZG9Ua0=
 github.com/conduitio/conduit-connector-log v0.7.0/go.mod h1:LeUrB0k2o13sXTlJ4PP685ZpPyeINzEL5Nz9Hfnb5o8=
-github.com/conduitio/conduit-connector-postgres v0.11.0 h1:YZqqFab4AgnsV6bKd5ruW3kZwFCprlFXGtsCtmInFbc=
-github.com/conduitio/conduit-connector-postgres v0.11.0/go.mod h1:AyrXRSgBBEvPQb02a5Ypg0bp+CdXlWsKlQwGgUCShKc=
+github.com/conduitio/conduit-connector-postgres v0.11.1 h1:E1hPjDxbtuCTtBpWP74ndh2dT5gHuTSI5RUepfw7mvs=
+github.com/conduitio/conduit-connector-postgres v0.11.1/go.mod h1:FpwE8bcZa0QkQM/AaJbwpOQKWXiytx/avpcHhZqs5x4=
 github.com/conduitio/conduit-connector-protocol v0.9.1 h1:NhazVIoJOOuX+9xAiL3WZ0r3T6UAMwLkPD8h6lWMND4=
 github.com/conduitio/conduit-connector-protocol v0.9.1/go.mod h1:S3Rar9si3GJUolwtFhO2CL3DpuWmJxzce4W+Psi/8zQ=
 github.com/conduitio/conduit-connector-s3 v0.9.0 h1:O4EcPEbL6WxfltbpsqufsxQpPW8cW2QVEBquPlLlKWU=
@@ -492,8 +492,8 @@ github.com/gostaticanalysis/testutil v0.5.0 h1:Dq4wT1DdTwTGCQQv3rl3IvD5Ld0E6HiY+
 github.com/gostaticanalysis/testutil v0.5.0/go.mod h1:OLQSbuM6zw2EvCcXTz1lVq5unyoNft372msDY0nY5Hs=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 h1:5ZPtiqj0JL5oKWmcsq4VMaAW5ukBEgSGXEN89zeH1Jo=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3/go.mod h1:ndYquD05frm2vACXE1nsccT4oJzjhw2arTS2cpUD1PI=
-github.com/hamba/avro/v2 v2.27.0 h1:IAM4lQ0VzUIKBuo4qlAiLKfqALSrFC+zi1iseTtbBKU=
-github.com/hamba/avro/v2 v2.27.0/go.mod h1:jN209lopfllfrz7IGoZErlDz+AyUJ3vrBePQFZwYf5I=
+github.com/hamba/avro/v2 v2.28.0 h1:E8J5D27biyAulWKNiEBhV85QPc9xRMCUCGJewS0KYCE=
+github.com/hamba/avro/v2 v2.28.0/go.mod h1:9TVrlt1cG1kkTUtm9u2eO5Qb7rZXlYzoKqPt8TSH+TA=
 github.com/hashicorp/go-hclog v1.6.3 h1:Qr2kF+eVWjTiYmU7Y31tYlP1h0q/X3Nl3tPGdaB11/k=
 github.com/hashicorp/go-hclog v1.6.3/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
 github.com/hashicorp/go-immutable-radix/v2 v2.1.0 h1:CUW5RYIcysz+D3B+l1mDeXrQ7fUvGGCwJfdASSzbrfo=
