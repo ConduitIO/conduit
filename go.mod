@@ -10,11 +10,11 @@ require (
 	github.com/bufbuild/buf v1.50.1
 	github.com/cohere-ai/cohere-go/v2 v2.13.0
 	github.com/conduitio/conduit-commons v0.5.2
-	github.com/conduitio/conduit-connector-file v0.10.0
-	github.com/conduitio/conduit-connector-generator v0.10.1
+	github.com/conduitio/conduit-connector-file v0.10.1
+	github.com/conduitio/conduit-connector-generator v0.10.2
 	github.com/conduitio/conduit-connector-kafka v0.12.1
-	github.com/conduitio/conduit-connector-log v0.7.0
-	github.com/conduitio/conduit-connector-postgres v0.11.1
+	github.com/conduitio/conduit-connector-log v0.7.1
+	github.com/conduitio/conduit-connector-postgres v0.11.2
 	github.com/conduitio/conduit-connector-protocol v0.9.2
 	github.com/conduitio/conduit-connector-s3 v0.9.1
 	github.com/conduitio/conduit-connector-sdk v0.13.3
