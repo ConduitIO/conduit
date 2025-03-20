@@ -14,7 +14,7 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.10.1
 	github.com/conduitio/conduit-connector-kafka v0.12.0
 	github.com/conduitio/conduit-connector-log v0.7.0
-	github.com/conduitio/conduit-connector-postgres v0.11.0
+	github.com/conduitio/conduit-connector-postgres v0.11.1
 	github.com/conduitio/conduit-connector-protocol v0.9.1
 	github.com/conduitio/conduit-connector-s3 v0.9.0
 	github.com/conduitio/conduit-connector-sdk v0.13.2
@@ -202,7 +202,7 @@ require (
 	github.com/gostaticanalysis/comment v1.5.0 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.2.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
-	github.com/hamba/avro/v2 v2.27.0 // indirect
+	github.com/hamba/avro/v2 v2.28.0 // indirect
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
