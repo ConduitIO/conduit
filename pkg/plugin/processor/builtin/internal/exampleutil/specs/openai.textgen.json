@@ -1,6 +1,6 @@
 {
   "specification": {
-    "name": "openai-textgen",
+    "name": "openai.textgen",
     "summary": "modify records using openai models",
     "description": "textgen is a conduit processor that will transform a record based on a given prompt",
     "version": "v0.1.0",

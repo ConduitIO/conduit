@@ -1,6 +1,6 @@
 {
   "specification": {
-    "name": "openai-embeddings",
+    "name": "openai.embeddings",
     "summary": "Generate embeddings for records using OpenAI models.",
     "description": "Embeddings is a Conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API.",
     "version": "v0.1.0",
