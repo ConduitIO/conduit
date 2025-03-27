@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
@@ -56,6 +57,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"field.set":           constructor(field.NewSetProcessor),
 	"json.decode":         constructor(json.NewDecodeProcessor),
 	"json.encode":         constructor(json.NewEncodeProcessor),
+	"ollama.request":      constructor(ollama.NewRequestProcessor),
 	"openai.embed":        constructor(openai.NewEmbeddingsProcessor),
 	"openai.textgen":      constructor(openai.NewTextgenProcessor),
 	"unwrap.debezium":     constructor(unwrap.NewDebeziumProcessor),
@@ -186,7 +188,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, plugin.ErrPluginNotFound
+		return nil, plugin.ErrPluginNotFound //here
 	}
 	b, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
