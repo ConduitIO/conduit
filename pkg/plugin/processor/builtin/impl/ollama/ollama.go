@@ -101,7 +101,8 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 			logger.Error().Err(err).Msg("cannot process response")
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("cannot process response %w", err)})
 		}
-		rec.Payload.After = opencdc.StructuredData{respJson}
+		rec.Payload.After = respJson
+		logger.Info().Msg(fmt.Sprintf("Payload.After: %v", rec.Payload.After))
 
 		result = append(result, sdk.SingleRecord(rec))
 	}
@@ -153,7 +154,6 @@ func generatePrompt(userPrompt string, record opencdc.Change, logger *zerolog.Lo
 	conduitPrefix := "For the following records, return a json list of records following the instructions provided. Only send back records in the json format with no explanation."
 
 	logger.Info().Msg(fmt.Sprintf("incoming record: %v", record))
-	logger.Info().Msg(fmt.Sprintf("incoming record payload only: %v", record.Payload))
 
 	prompt := fmt.Sprintf(
 		"%s \n Instructions: {%s}\n Record: {%s}",
@@ -171,7 +171,7 @@ type StreamResponse struct {
 }
 
 // construct response into a json - comes back as a list of json for each character
-func processOllamaResponse(body []byte, logger *zerolog.Logger) ([]byte, error) {
+func processOllamaResponse(body []byte, logger *zerolog.Logger) (opencdc.StructuredData, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(body))
 
 	var fullResp string
@@ -202,13 +202,13 @@ func processOllamaResponse(body []byte, logger *zerolog.Logger) ([]byte, error) 
 		return nil, fmt.Errorf("incomplete response stream")
 	}
 
-	// logger.Info().Msg(fmt.Sprintf("response after stream: %s", fullResp))
-	var parsedJSON interface{}
-	err := json.Unmarshal([]byte(fullResp), &parsedJSON)
+	logger.Info().Msg(fmt.Sprintf("response after stream: %s", fullResp))
+	var returnData opencdc.StructuredData
+	err := json.Unmarshal([]byte(fullResp), &returnData)
 	if err != nil {
-		logger.Error().Msg(fmt.Sprintf("invalid json in response: %w", err))
+		logger.Error().Msg(fmt.Sprintf("invalid json in response: %s", err))
 		return nil, fmt.Errorf("invalid JSON in response: %w", err)
 	}
 
-	return json.Marshal(parsedJSON)
+	return returnData, nil
 }
