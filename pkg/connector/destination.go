@@ -202,6 +202,7 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) error {
 	}
 
 	d.Instance.inspector.Send(ctx, recs)
+	// error starting here
 	err = d.stream.Send(pconnector.DestinationRunRequest{Records: recs})
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
