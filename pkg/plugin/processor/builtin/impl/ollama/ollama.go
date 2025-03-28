@@ -88,7 +88,7 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 		if err != nil {
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("creating the ollama request %w", err)})
 		}
-		logger.Info().Msg(fmt.Sprintf("Ollama Request: %v", reqBody))
+		logger.Info().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
 
 		resp, err := p.sendOllamaRequest(reqBody)
 		if err != nil {
