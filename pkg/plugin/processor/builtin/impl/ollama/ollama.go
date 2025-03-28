@@ -16,7 +16,6 @@
 package ollama
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -79,7 +78,6 @@ func (p *requestProcessor) Specification() (sdk.Specification, error) {
 
 func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	logger := sdk.Logger(ctx)
-	logger.Info().Msg("Processing ollama records")
 
 	if !slices.Contains(allowedModels, p.config.Model) {
 		logger.Error().Msg("Model not allowed")
@@ -93,16 +91,12 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("error sending the ollama request %w", err)})
 		}
 
-		// logger.Info().Msg(fmt.Sprintf("Raw response from ollama call: %s", string(body)))
-
 		respJson, err := processOllamaResponse(body, logger)
-		logger.Info().Msg(fmt.Sprintf("processed response from ollama call: %s", respJson))
 		if err != nil {
 			logger.Error().Err(err).Msg("cannot process response")
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("cannot process response %w", err)})
 		}
 		rec.Payload.After = respJson
-		logger.Info().Msg(fmt.Sprintf("Payload.After: %v", rec.Payload.After))
 
 		result = append(result, sdk.SingleRecord(rec))
 	}
@@ -112,12 +106,14 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 }
 
 func (p *requestProcessor) sendOllamaRequest(rec opencdc.Record, logger *zerolog.Logger) ([]byte, error) {
-	prompt := generatePrompt(p.config.Prompt, rec.Payload, logger)
+	prompt := generatePrompt(p.config.Prompt, rec.Payload)
 
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
-	data := map[string]string{
+	data := map[string]interface{}{
 		"model":  p.config.Model,
 		"prompt": prompt,
+		"format": "json",
+		"stream": false,
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -125,7 +121,6 @@ func (p *requestProcessor) sendOllamaRequest(rec opencdc.Record, logger *zerolog
 		return nil, err
 	}
 
-	// logger.Info().Msg(baseURL)
 	logger.Info().Msg(string(jsonData))
 	req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -148,65 +143,51 @@ func (p *requestProcessor) sendOllamaRequest(rec opencdc.Record, logger *zerolog
 	return body, nil
 }
 
-func generatePrompt(userPrompt string, record opencdc.Change, logger *zerolog.Logger) string {
+func generatePrompt(userPrompt string, record opencdc.Change) string {
 	// TODO securing against malicious prompts
 	// TODO limit size of the input
-	conduitPrefix := "For the following records, return a json list of records following the instructions provided. Only send back records in the json format with no explanation."
-
-	logger.Info().Msg(fmt.Sprintf("incoming record: %v", record))
-
+	conduitInstructions := "For the prompt, return a valid json following the instructions provided. Only send back records in the json format with no explanation."
 	prompt := fmt.Sprintf(
-		"%s \n Instructions: {%s}\n Record: {%s}",
-		conduitPrefix,
+		"Instructions: {%s}\n Record: {%s} \n Suffix {%s}",
 		userPrompt,
-		record)
-	logger.Info().Msg(fmt.Sprintf("Sending message to ollama with the following prompt: %s", prompt))
+		record,
+		conduitInstructions)
 
 	return prompt
 }
 
-type StreamResponse struct {
-	Response string `json:"response"`
-	Done     bool   `json:"done"`
+type OllamaResponse struct {
+	Model     string `json:"model"`
+	CreatedAt string `json:"created_at"`
+	Response  string `json:"response"`
+	Done      bool   `json:"done"`
 }
 
 // construct response into a json - comes back as a list of json for each character
 func processOllamaResponse(body []byte, logger *zerolog.Logger) (opencdc.StructuredData, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(body))
+	logger.Info().Msg(fmt.Sprintf("raw json: %s", body))
 
-	var fullResp string
-	var finalRespReceived bool
-
-	for scanner.Scan() {
-		var streamResp StreamResponse
-		lineData := scanner.Bytes()
-
-		if len(lineData) == 0 {
-			continue
-		}
-
-		err := json.Unmarshal(lineData, &streamResp)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing stream response: %w", err)
-		}
-
-		fullResp += streamResp.Response
-
-		if streamResp.Done {
-			finalRespReceived = true
-			break
-		}
+	if !json.Valid(body) {
+		fmt.Println("Invalid JSON")
 	}
 
-	if !finalRespReceived {
-		return nil, fmt.Errorf("incomplete response stream")
-	}
-
-	logger.Info().Msg(fmt.Sprintf("response after stream: %s", fullResp))
-	var returnData opencdc.StructuredData
-	err := json.Unmarshal([]byte(fullResp), &returnData)
+	// get the response from ollama
+	var response OllamaResponse
+	err := json.Unmarshal(body, &response)
 	if err != nil {
-		logger.Error().Msg(fmt.Sprintf("invalid json in response: %s", err))
+		fmt.Println("Parsing error:", err)
+		fmt.Println("Raw input:", body)
+		return nil, fmt.Errorf("invalid JSON in ollama response: %w", err)
+	}
+
+	if !response.Done {
+		return nil, fmt.Errorf("error response from ollama %w", err)
+	}
+
+	// parse out the response
+	var returnData opencdc.StructuredData
+	err = json.Unmarshal([]byte(response.Response), &returnData)
+	if err != nil {
 		return nil, fmt.Errorf("invalid JSON in response: %w", err)
 	}
 
