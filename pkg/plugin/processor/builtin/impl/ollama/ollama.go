@@ -28,7 +28,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/rs/zerolog"
 )
 
 // limiting to llama3.2 for MVP
@@ -80,23 +79,28 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 	logger := sdk.Logger(ctx)
 
 	if !slices.Contains(allowedModels, p.config.Model) {
-		logger.Error().Msg("Model not allowed")
+		logger.Error().Msg("Model not allowed by processor")
 	}
 
-	// need to loop through record by record in order to put an errors in the appropriate index for record
 	result := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		body, err := p.sendOllamaRequest(rec, logger)
+		reqBody, err := p.constructOllamaRequest(rec)
+		if err != nil {
+			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("creating the ollama request %w", err)})
+		}
+		logger.Info().Msg(fmt.Sprintf("Ollama Request: %v", reqBody))
+
+		resp, err := p.sendOllamaRequest(reqBody)
 		if err != nil {
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("error sending the ollama request %w", err)})
 		}
 
-		respJson, err := processOllamaResponse(body, logger)
+		respData, err := processOllamaResponse(resp)
 		if err != nil {
 			logger.Error().Err(err).Msg("cannot process response")
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("cannot process response %w", err)})
 		}
-		rec.Payload.After = respJson
+		rec.Payload.After = respData
 
 		result = append(result, sdk.SingleRecord(rec))
 	}
@@ -105,39 +109,38 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 	return result
 }
 
-func (p *requestProcessor) sendOllamaRequest(rec opencdc.Record, logger *zerolog.Logger) ([]byte, error) {
+func (p *requestProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, error) {
 	prompt := generatePrompt(p.config.Prompt, rec.Payload)
 
-	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
 	data := map[string]interface{}{
 		"model":  p.config.Model,
 		"prompt": prompt,
 		"format": "json",
 		"stream": false,
 	}
-	jsonData, err := json.Marshal(data)
+	reqBody, err := json.Marshal(data)
 	if err != nil {
-		logger.Error().Err(err).Msg("error marshalling json")
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling json %w", err)
 	}
+	return reqBody, nil
+}
 
-	logger.Info().Msg(string(jsonData))
-	req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
+func (p *requestProcessor) sendOllamaRequest(reqBody []byte) ([]byte, error) {
+	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
+	req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
-		logger.Error().Err(err).Msg("unable to create request")
-		return nil, err
+		return nil, fmt.Errorf("unable to create ollama request %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		logger.Error().Err(err).Msg("sending the request failed")
+		return nil, fmt.Errorf("request to ollama failed %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error().Err(err).Msg("reading body of call")
-		return nil, err
+		return nil, fmt.Errorf("reading body of call %w", err)
 	}
 
 	return body, nil
@@ -157,26 +160,16 @@ func generatePrompt(userPrompt string, record opencdc.Change) string {
 }
 
 type OllamaResponse struct {
-	Model     string `json:"model"`
-	CreatedAt string `json:"created_at"`
-	Response  string `json:"response"`
-	Done      bool   `json:"done"`
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
 }
 
-// construct response into a json - comes back as a list of json for each character
-func processOllamaResponse(body []byte, logger *zerolog.Logger) (opencdc.StructuredData, error) {
-	logger.Info().Msg(fmt.Sprintf("raw json: %s", body))
-
-	if !json.Valid(body) {
-		fmt.Println("Invalid JSON")
-	}
-
-	// get the response from ollama
+// processOllamaResponse parses the response from the ollama call and returns only the desired response
+// as opencdc.StructuredData
+func processOllamaResponse(body []byte) (opencdc.StructuredData, error) {
 	var response OllamaResponse
 	err := json.Unmarshal(body, &response)
 	if err != nil {
-		fmt.Println("Parsing error:", err)
-		fmt.Println("Raw input:", body)
 		return nil, fmt.Errorf("invalid JSON in ollama response: %w", err)
 	}
 
@@ -184,7 +177,6 @@ func processOllamaResponse(body []byte, logger *zerolog.Logger) (opencdc.Structu
 		return nil, fmt.Errorf("error response from ollama %w", err)
 	}
 
-	// parse out the response
 	var returnData opencdc.StructuredData
 	err = json.Unmarshal([]byte(response.Response), &returnData)
 	if err != nil {
