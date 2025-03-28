@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -77,18 +78,18 @@ func (p *requestProcessor) Specification() (sdk.Specification, error) {
 
 func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	logger := sdk.Logger(ctx)
+	result := make([]sdk.ProcessedRecord, 0, len(records))
 
 	if !slices.Contains(allowedModels, p.config.Model) {
-		logger.Error().Msg("Model not allowed by processor")
+		return append(result, sdk.ErrorRecord{Error: fmt.Errorf("model not allowed by processor")})
 	}
 
-	result := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		reqBody, err := p.constructOllamaRequest(rec)
 		if err != nil {
 			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("creating the ollama request %w", err)})
 		}
-		logger.Info().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
+		logger.Debug().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
 
 		resp, err := p.sendOllamaRequest(reqBody)
 		if err != nil {
@@ -105,12 +106,15 @@ func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record
 		result = append(result, sdk.SingleRecord(rec))
 	}
 
-	logger.Info().Msg(fmt.Sprintf("Result of processed records: %s", result))
+	logger.Debug().Msg(fmt.Sprintf("Processed Records: %s", result))
 	return result
 }
 
 func (p *requestProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, error) {
-	prompt := generatePrompt(p.config.Prompt, rec.Payload)
+	prompt, err := generatePrompt(p.config.Prompt, rec.Payload)
+	if err != nil {
+		return nil, err
+	}
 
 	data := map[string]interface{}{
 		"model":  p.config.Model,
@@ -146,9 +150,7 @@ func (p *requestProcessor) sendOllamaRequest(reqBody []byte) ([]byte, error) {
 	return body, nil
 }
 
-func generatePrompt(userPrompt string, record opencdc.Change) string {
-	// TODO securing against malicious prompts
-	// TODO limit size of the input
+func generatePrompt(userPrompt string, record opencdc.Change) (string, error) {
 	conduitInstructions := "For the prompt, return a valid json following the instructions provided. Only send back records in the json format with no explanation."
 	prompt := fmt.Sprintf(
 		"Instructions: {%s}\n Record: {%s} \n Suffix {%s}",
@@ -156,7 +158,12 @@ func generatePrompt(userPrompt string, record opencdc.Change) string {
 		record,
 		conduitInstructions)
 
-	return prompt
+	err := validatePrompt(prompt)
+	if err != nil {
+		return "", fmt.Errorf("prompt validation failed %w", err)
+	}
+
+	return prompt, nil
 }
 
 type OllamaResponse struct {
@@ -184,4 +191,41 @@ func processOllamaResponse(body []byte) (opencdc.StructuredData, error) {
 	}
 
 	return returnData, nil
+}
+
+type PromptValidationConfig struct {
+	MaxLength       int
+	MinLength       int
+	BlockedPatterns []string
+}
+
+// validatePrompt will perform some security checks against the user input
+func validatePrompt(input string) error {
+	config := PromptValidationConfig{
+		MaxLength: 4096,
+		MinLength: 3,
+		BlockedPatterns: []string{
+			"rm -rf",
+			"DROP TABLE",
+			"<script>",
+			"javascript:",
+			"data:text/html",
+		},
+	}
+
+	if len(input) < config.MinLength {
+		return fmt.Errorf("prompt is too short, must be %d characters", config.MinLength)
+	}
+
+	if len(input) > config.MaxLength {
+		return fmt.Errorf("prompt exceeds context window allowance, must be %d characters", config.MaxLength)
+	}
+
+	for _, pattern := range config.BlockedPatterns {
+		if strings.Contains(strings.ToLower(input), strings.ToLower(pattern)) {
+			return fmt.Errorf("potentially malicious pattern: %s", pattern)
+		}
+	}
+
+	return nil
 }
