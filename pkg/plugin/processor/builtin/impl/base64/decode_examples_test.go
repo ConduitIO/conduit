@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor() {
 	p := NewDecodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{

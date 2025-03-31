@@ -12,32 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package embeddings
+package openai
 
 import (
-	"context"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-type mockCall struct{}
-
-var (
-	testVector  = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
-	testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
-)
-
-func (m *mockCall) Call(ctx context.Context, input string) ([]float32, error) {
-	return testVector, nil
-}
-
-//nolint:govet // we're using a more descriptive name of example
 func ExampleEmbeddingsProcessor() {
-	processor := &embeddingsProcessor{}
-	processor.call = &mockCall{}
+	var (
+		testVector  = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
+		testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
+	)
+
+	processor := NewEmbeddingsProcessor(log.Nop())
+	processor.call = &mockEmbeddingsCaller{Embeddings: testVector}
 
 	exampleutil.RunExample(processor, exampleutil.Example{
 		Summary: "Generate embeddings for text",

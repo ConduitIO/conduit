@@ -21,12 +21,12 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleCommandProcessor() {
-	p := &commandProcessor{}
+	p := NewCommandProcessor(log.Nop())
 	p.client = &mockCommandClient{}
 
 	exampleutil.RunExample(p, exampleutil.Example{

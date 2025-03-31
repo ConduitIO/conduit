@@ -59,7 +59,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	mockEncoder.EXPECT().
 		Encode(ctx, input.Payload.After).
 		Return(want.Payload.After.(opencdc.RawData), nil)
-	underTest.(*encodeProcessor).encoder = mockEncoder
+	underTest.encoder = mockEncoder
 
 	got := underTest.Process(ctx, []opencdc.Record{input})
 	is.Equal(1, len(got))
@@ -95,7 +95,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	mockEncoder.EXPECT().
 		Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}).
 		Return(want.Payload.After.(opencdc.RawData), nil)
-	underTest.(*encodeProcessor).encoder = mockEncoder
+	underTest.encoder = mockEncoder
 
 	got := underTest.Process(ctx, []opencdc.Record{input})
 	is.Equal(1, len(got))
@@ -153,7 +153,7 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			mockEncoder.EXPECT().
 				Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}).
 				Return(encodedValue, nil)
-			underTest.(*encodeProcessor).encoder = mockEncoder
+			underTest.encoder = mockEncoder
 
 			got := underTest.Process(ctx, []opencdc.Record{input})
 			is.Equal(1, len(got))
@@ -239,7 +239,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 
 			// skipping Open(), so we can inject a mock encoder
 			mockEncoder := tc.mockEncoder(ctx)
-			underTest.(*encodeProcessor).encoder = mockEncoder
+			underTest.encoder = mockEncoder
 
 			got := underTest.Process(ctx, []opencdc.Record{tc.input})
 			is.Equal(1, len(got))

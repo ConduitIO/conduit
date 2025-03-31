@@ -41,7 +41,7 @@ type commandClient struct {
 
 //go:generate paramgen -output=paramgen_command.go commandProcessorConfig
 
-type commandProcessor struct {
+type CommandProcessor struct {
 	sdk.UnimplementedProcessor
 
 	requestBodyRef  *sdk.ReferenceResolver
@@ -73,11 +73,11 @@ type commandProcessorConfig struct {
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 }
 
-func NewCommandProcessor(l log.CtxLogger) sdk.Processor {
-	return &commandProcessor{logger: l.WithComponent("cohere.command")}
+func NewCommandProcessor(l log.CtxLogger) *CommandProcessor {
+	return &CommandProcessor{logger: l}
 }
 
-func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *CommandProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	// Configure is the first function to be called in a processor. It provides the processor
 	// with the configuration that needs to be validated and stored to be used in other methods.
 	// This method should not open connections or any other resources. It should solely focus
@@ -117,7 +117,7 @@ func (p *commandProcessor) Configure(ctx context.Context, cfg config.Config) err
 	return nil
 }
 
-func (p *commandProcessor) Specification() (sdk.Specification, error) {
+func (p *CommandProcessor) Specification() (sdk.Specification, error) {
 	// Specification contains the metadata for the processor, which can be used to define how
 	// to reference the processor, describe what the processor does and the configuration
 	// parameters it expects.
@@ -132,7 +132,7 @@ func (p *commandProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		var key []byte
@@ -159,7 +159,7 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 					cerrors.As(err, &cohere.ServiceUnavailableError{}):
 
 					if attempt < p.config.BackoffRetryCount {
-						sdk.Logger(ctx).Debug().Err(err).Float64("attempt", attempt).
+						p.logger.Debug(ctx).Err(err).Float64("attempt", attempt).
 							Float64("backoffRetry.count", p.config.BackoffRetryCount).
 							Int64("backoffRetry.duration", duration.Milliseconds()).
 							Msg("retrying Cohere HTTP request")
@@ -248,7 +248,7 @@ func unmarshalChatResponse(res []byte) (*ChatResponse, error) {
 	return response, nil
 }
 
-func (p *commandProcessor) getInput(val any) string {
+func (p *CommandProcessor) getInput(val any) string {
 	switch v := val.(type) {
 	case opencdc.RawData:
 		return string(v)
@@ -259,7 +259,7 @@ func (p *commandProcessor) getInput(val any) string {
 	}
 }
 
-func (p *commandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+func (p *CommandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
 	if refRes == nil {
 		return nil
 	}

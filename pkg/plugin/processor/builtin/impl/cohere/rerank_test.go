@@ -105,13 +105,14 @@ func TestRerankProcessor_Configure(t *testing.T) {
 func TestRerankProcessor_Process(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
+	logger := log.Nop()
 
 	t.Run("successful processing", func(t *testing.T) {
 		p := func() sdk.Processor {
-			proc := &rerankProcessor{}
+			proc := NewRerankProcessor(logger)
 			cfg := config.Config{
-				rerankProcessorConfigApiKey: "apikey",
-				rerankProcessorConfigQuery:  "What is the capital of the United States?",
+				rerankConfigApiKey: "apikey",
+				rerankConfigQuery:  "What is the capital of the United States?",
 			}
 			is.NoErr(proc.Configure(ctx, cfg))
 			proc.client = &mockRerankClient{}

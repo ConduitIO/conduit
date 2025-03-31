@@ -29,15 +29,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type setProcessor struct {
+type SetProcessor struct {
 	referenceResolver sdk.ReferenceResolver
 	tmpl              *template.Template
 
 	sdk.UnimplementedProcessor
 }
 
-func NewSetProcessor(log.CtxLogger) sdk.Processor {
-	return &setProcessor{}
+func NewSetProcessor(log.CtxLogger) *SetProcessor {
+	return &SetProcessor{}
 }
 
 type setConfig struct {
@@ -50,7 +50,7 @@ type setConfig struct {
 	Value string `json:"value" validate:"required"`
 }
 
-func (p *setProcessor) Specification() (sdk.Specification, error) {
+func (p *SetProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.set",
 		Summary: "Set the value of a certain field.",
@@ -66,7 +66,7 @@ Note that this processor only runs on structured data, if the record contains ra
 	}, nil
 }
 
-func (p *setProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *SetProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := setConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, setConfig{}.Parameters())
 	if err != nil {
@@ -86,7 +86,7 @@ func (p *setProcessor) Configure(ctx context.Context, c config.Config) error {
 	return nil
 }
 
-func (p *setProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *SetProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record

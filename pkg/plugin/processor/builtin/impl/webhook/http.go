@@ -104,7 +104,7 @@ func (c *httpConfig) parseHeaders() error {
 	return nil
 }
 
-type httpProcessor struct {
+type HTTPProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger log.CtxLogger
@@ -119,11 +119,11 @@ type httpProcessor struct {
 	responseStatusRef *sdk.ReferenceResolver
 }
 
-func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
-	return &httpProcessor{logger: l.WithComponent("webhook.httpProcessor")}
+func NewHTTPProcessor(l log.CtxLogger) *HTTPProcessor {
+	return &HTTPProcessor{logger: l}
 }
 
-func (p *httpProcessor) Specification() (sdk.Specification, error) {
+func (p *HTTPProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "webhook.http",
 		Summary: "Trigger an HTTP request for every record.",
@@ -138,7 +138,7 @@ The processor will retry the request according to the backoff configuration.`,
 	}, nil
 }
 
-func (p *httpProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *HTTPProcessor) Configure(ctx context.Context, c config.Config) error {
 	err := sdk.ParseConfig(ctx, c, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
@@ -200,7 +200,7 @@ func (p *httpProcessor) Configure(ctx context.Context, c config.Config) error {
 	return nil
 }
 
-func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *HTTPProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc, err := p.processRecordWithBackOff(ctx, rec)
@@ -213,7 +213,7 @@ func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (p *httpProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *HTTPProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
 	for {
 		processed, err := p.processRecord(ctx, r)
 		attempt := p.backoffCfg.Attempt()
@@ -244,7 +244,7 @@ func (p *httpProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.
 }
 
 // processRecord processes a single record (without retries)
-func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *HTTPProcessor) processRecord(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
 	var key []byte
 	if r.Key != nil {
 		key = r.Key.Bytes()
@@ -292,7 +292,7 @@ func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 	return sdk.SingleRecord(r), nil
 }
 
-func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
+func (p *HTTPProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
 	reqBody, err := p.requestBody(r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed getting request body: %w", err)
@@ -320,7 +320,7 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 	return req, nil
 }
 
-func (p *httpProcessor) evaluateURL(rec opencdc.Record) (string, error) {
+func (p *HTTPProcessor) evaluateURL(rec opencdc.Record) (string, error) {
 	if p.urlTmpl == nil {
 		return p.config.URL, nil
 	}
@@ -343,7 +343,7 @@ func (p *httpProcessor) evaluateURL(rec opencdc.Record) (string, error) {
 
 // requestBody returns the request body for the given record,
 // using the configured field reference (see: request.body configuration parameter).
-func (p *httpProcessor) requestBody(r opencdc.Record) ([]byte, error) {
+func (p *HTTPProcessor) requestBody(r opencdc.Record) ([]byte, error) {
 	if p.requestBodyTmpl == nil {
 		if p.config.RequestBodyTmpl != "" {
 			return []byte(p.config.RequestBodyTmpl), nil
@@ -360,7 +360,7 @@ func (p *httpProcessor) requestBody(r opencdc.Record) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+func (p *HTTPProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
 	if refRes == nil {
 		return nil
 	}

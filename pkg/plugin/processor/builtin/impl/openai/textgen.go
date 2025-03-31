@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package textgen
+package openai
 
 import (
 	"context"
@@ -22,26 +22,21 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	openaiwrap "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/sashabaranov/go-openai"
 )
 
-//go:generate paramgen -output=paramgen_proc.go textgenProcessorConfig
+//go:generate paramgen -output=textgen_paramgen.go textgenConfig
 
-type textgenProcessor struct {
+type TextgenProcessor struct {
 	sdk.UnimplementedProcessor
 
-	config            textgenProcessorConfig
-	call              openaiCall
+	config            textgenConfig
+	call              openaiCaller[string]
 	referenceResolver sdk.ReferenceResolver
 }
 
-type openaiCall interface {
-	Call(ctx context.Context, input string) (output string, err error)
-}
-
-type textgenProcessorConfig struct {
-	openaiwrap.Config
+type textgenConfig struct {
+	globalConfig
 
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
@@ -89,15 +84,12 @@ type textgenProcessorConfig struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
-func NewTextgenProcessor(l log.CtxLogger) sdk.Processor {
-	return sdk.ProcessorWithMiddleware(
-		&textgenProcessor{},
-		sdk.DefaultProcessorMiddleware()...,
-	)
+func NewTextgenProcessor(log.CtxLogger) *TextgenProcessor {
+	return &TextgenProcessor{}
 }
 
-func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
-	err := sdk.ParseConfig(ctx, cfg, &p.config, textgenProcessorConfig{}.Parameters())
+func (p *TextgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
+	err := sdk.ParseConfig(ctx, cfg, &p.config, textgenConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -108,7 +100,7 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 	}
 
 	if p.call == nil {
-		p.call = &openaiCaller{
+		p.call = &textgenCaller{
 			client: openai.NewClient(p.config.APIKey),
 			config: &p.config,
 		}
@@ -119,18 +111,18 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 	return nil
 }
 
-func (p *textgenProcessor) Specification() (sdk.Specification, error) {
+func (p *TextgenProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "openai.textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters:  textgenProcessorConfig{}.Parameters(),
+		Parameters:  textgenConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+func (p *TextgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
 	var processedRecords []sdk.ProcessedRecord
 	for _, rec := range recs {
 		processed, err := p.processRecord(ctx, rec)
@@ -144,31 +136,26 @@ func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) [
 	return processedRecords
 }
 
-func (p *textgenProcessor) processRecord(
+func (p *TextgenProcessor) processRecord(
 	ctx context.Context, rec opencdc.Record,
 ) (opencdc.Record, error) {
 	processor := func(ctx context.Context, input string) (string, error) {
-		return p.callOpenAI(ctx, input)
+		return callWithRetry(ctx, p.config.globalConfig, p.call, input)
 	}
 
 	formatter := func(result string) ([]byte, error) {
 		return []byte(result), nil
 	}
 
-	return openaiwrap.ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
+	return ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
 }
 
-func (p *textgenProcessor) callOpenAI(ctx context.Context, payload string) (string, error) {
-	call := openaiwrap.OpenaiCaller[string](p.call)
-	return openaiwrap.CallWithRetry(ctx, p.config.Config, call, payload)
-}
-
-type openaiCaller struct {
+type textgenCaller struct {
 	client *openai.Client
-	config *textgenProcessorConfig
+	config *textgenConfig
 }
 
-func (o *openaiCaller) Call(ctx context.Context, payload string) (string, error) {
+func (o *textgenCaller) Call(ctx context.Context, payload string) (string, error) {
 	res, err := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: o.config.Model,
 		Messages: []openai.ChatCompletionMessage{

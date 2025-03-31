@@ -109,10 +109,11 @@ func TestCommandProcessor_Configure(t *testing.T) {
 func TestCommandProcessor_Process(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
+	logger := log.Nop()
 
 	t.Run("successful processing", func(t *testing.T) {
 		p := func() sdk.Processor {
-			proc := &commandProcessor{}
+			proc := NewCommandProcessor(logger)
 			cfg := config.Config{
 				commandProcessorConfigApiKey: "apikey",
 				commandProcessorConfigPrompt: "test-prompt",

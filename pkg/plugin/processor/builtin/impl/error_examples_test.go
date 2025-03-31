@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // we're using a more descriptive name of example
 func ExampleErrorProcessor() {
 	p := NewErrorProcessor(log.Nop())
 

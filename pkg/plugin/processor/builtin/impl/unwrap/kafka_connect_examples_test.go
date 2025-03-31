@@ -22,8 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // we're using a more descriptive name of example
-func ExampleKafkaConnectProcesor() {
+func ExampleKafkaConnectProcessor() {
 	p := NewKafkaConnectProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{

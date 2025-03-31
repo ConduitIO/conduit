@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openaiwrap
+package openai
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-func TestRecords() []opencdc.Record {
+func testRecords() []opencdc.Record {
 	return []opencdc.Record{
 		{
 			Operation: opencdc.OperationCreate,
@@ -51,11 +51,17 @@ func TestRecords() []opencdc.Record {
 	}
 }
 
-type FlakyOpenAICaller struct {
+type mockOpenAICaller struct{}
+
+func (*mockOpenAICaller) Call(_ context.Context, input string) (string, error) {
+	return strings.ToUpper(input), nil
+}
+
+type flakyOpenAICaller struct {
 	CallCount int
 }
 
-func (f *FlakyOpenAICaller) Call(ctx context.Context, input string) (string, error) {
+func (f *flakyOpenAICaller) Call(_ context.Context, input string) (string, error) {
 	f.CallCount++
 
 	if f.CallCount < 2 {
@@ -65,11 +71,11 @@ func (f *FlakyOpenAICaller) Call(ctx context.Context, input string) (string, err
 	return strings.ToUpper(input), nil
 }
 
-type MockEmbeddingsCaller struct {
+type mockEmbeddingsCaller struct {
 	Embeddings []float32
 }
 
-func (m *MockEmbeddingsCaller) Call(ctx context.Context, input string) ([]float32, error) {
+func (m *mockEmbeddingsCaller) Call(_ context.Context, _ string) ([]float32, error) {
 	if m.Embeddings == nil {
 		// Default mock embeddings if none provided
 		return []float32{0.1, 0.2, 0.3, 0.4, 0.5}, nil
@@ -77,12 +83,12 @@ func (m *MockEmbeddingsCaller) Call(ctx context.Context, input string) ([]float3
 	return m.Embeddings, nil
 }
 
-type FlakyEmbeddingsCaller struct {
+type flakyEmbeddingsCaller struct {
 	CallCount  int
 	Embeddings []float32
 }
 
-func (f *FlakyEmbeddingsCaller) Call(ctx context.Context, input string) ([]float32, error) {
+func (f *flakyEmbeddingsCaller) Call(_ context.Context, _ string) ([]float32, error) {
 	f.CallCount++
 
 	if f.CallCount < 2 {

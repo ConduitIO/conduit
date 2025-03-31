@@ -29,7 +29,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // we're using a more descriptive name of example
 func ExampleHTTPProcessor() {
 	p := NewHTTPProcessor(conduit_log.Nop())
 
@@ -91,8 +90,7 @@ header and how to store the value of the HTTP response's code in the metadata fi
 	//  }
 }
 
-//nolint:govet // we're using a more descriptive name of example
-func ExampleHTTPProcessor_DynamicURL() {
+func ExampleHTTPProcessor_dynamicURL() {
 	p := NewHTTPProcessor(conduit_log.Nop())
 
 	srv := newTestServer()

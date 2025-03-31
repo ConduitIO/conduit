@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openaiwrap
+package openai
 
 import (
 	"context"
@@ -26,8 +26,8 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// Config contains common configuration options for OpenAI processors
-type Config struct {
+// globalConfig contains common configuration options for OpenAI processors
+type globalConfig struct {
 	// MaxRetries is the maximum number of retries for API calls. Defaults to 3.
 	MaxRetries int `json:"max_retries" default:"3"`
 	// InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).
@@ -38,13 +38,13 @@ type Config struct {
 	BackoffFactor float64 `json:"backoff_factor" default:"2.0"`
 }
 
-type OpenaiCaller[T any] interface {
+type openaiCaller[T any] interface {
 	Call(ctx context.Context, input string) (T, error)
 }
 
-// CallWithRetry handles retrying API calls with exponential backoff. This is
+// callWithRetry handles retrying API calls with exponential backoff. This is
 // meant to be used with openai api calls.
-func CallWithRetry[T any](ctx context.Context, config Config, caller OpenaiCaller[T], payload string) (T, error) {
+func callWithRetry[T any](ctx context.Context, config globalConfig, caller openaiCaller[T], payload string) (T, error) {
 	b := &backoff.Backoff{
 		Min:    time.Duration(config.InitialBackoff) * time.Millisecond,
 		Max:    time.Duration(config.MaxBackoff) * time.Millisecond,

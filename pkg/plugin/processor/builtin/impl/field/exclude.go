@@ -27,15 +27,15 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 )
 
-type excludeProcessor struct {
+type ExcludeProcessor struct {
 	config             excludeConfig
 	referenceResolvers []sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
 
-func NewExcludeProcessor(log.CtxLogger) sdk.Processor {
-	return &excludeProcessor{}
+func NewExcludeProcessor(log.CtxLogger) *ExcludeProcessor {
+	return &ExcludeProcessor{}
 }
 
 type excludeConfig struct {
@@ -45,7 +45,7 @@ type excludeConfig struct {
 	Fields []string `json:"fields" validate:"required"`
 }
 
-func (p *excludeProcessor) Specification() (sdk.Specification, error) {
+func (p *ExcludeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.exclude",
 		Summary: "Remove a subset of fields from the record.",
@@ -62,7 +62,7 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *excludeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *ExcludeProcessor) Configure(ctx context.Context, c config.Config) error {
 	err := sdk.ParseConfig(ctx, c, &p.config, excludeConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
@@ -80,7 +80,7 @@ func (p *excludeProcessor) Configure(ctx context.Context, c config.Config) error
 	return nil
 }
 
-func (p *excludeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *ExcludeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record

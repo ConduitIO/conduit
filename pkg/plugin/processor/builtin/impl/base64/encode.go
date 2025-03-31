@@ -28,7 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type encodeProcessor struct {
+type EncodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	config            encodeConfig
@@ -43,11 +43,11 @@ type encodeConfig struct {
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }
 
-func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
-	return &encodeProcessor{}
+func NewEncodeProcessor(log.CtxLogger) *EncodeProcessor {
+	return &EncodeProcessor{}
 }
 
-func (p *encodeProcessor) Specification() (sdk.Specification, error) {
+func (p *EncodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "base64.encode",
 		Summary: "Encode a field to base64.",
@@ -61,7 +61,7 @@ assign its value.`,
 	}, nil
 }
 
-func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *EncodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	err := sdk.ParseConfig(ctx, c, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
@@ -76,7 +76,7 @@ func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *EncodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		rec, err := p.base64Encode(rec)
@@ -88,7 +88,7 @@ func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record)
 	return out
 }
 
-func (p *encodeProcessor) base64Encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *EncodeProcessor) base64Encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := p.referenceResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to resolve the field: %w", err)
