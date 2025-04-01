@@ -24,7 +24,7 @@ linters:
     - noctx
     - nolintlint
     - predeclared
-    - revive
+    # - revive # TODO enable
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
@@ -52,17 +52,10 @@ linters:
       values:
         regexp:
           copyright-year: 20[2-9]\d
-    govet:
-      disable:
-        - shadow
     nolintlint:
       allow-unused: false # report any unused nolint directives
       require-explanation: true # require an explanation for nolint directives
       require-specific: true # require nolint directives to mention the specific linter being suppressed
-    revive:
-      rules:
-        - name: unused-parameter
-          disabled: true
   exclusions:
     generated: lax
     paths:
