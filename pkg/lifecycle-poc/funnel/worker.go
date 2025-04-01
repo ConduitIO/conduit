@@ -403,9 +403,10 @@ func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
 	flags := make([]RecordFlag, 0, 2)
 	flags = append(flags, b.recordStatuses[firstIndex].Flag)
 	// Collect Filters and Acks together in the same batch.
-	if flags[0] == RecordFlagFilter {
+	switch flags[0] { //nolint:exhaustive // We only care about two flags.
+	case RecordFlagFilter:
 		flags = append(flags, RecordFlagAck)
-	} else if flags[0] == RecordFlagAck {
+	case RecordFlagAck:
 		flags = append(flags, RecordFlagFilter)
 	}
 

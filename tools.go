@@ -19,7 +19,7 @@ package main
 import (
 	_ "github.com/bufbuild/buf/cmd/buf"
 	_ "github.com/conduitio/conduit-commons/paramgen"
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	_ "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	_ "go.uber.org/mock/mockgen"
 	_ "golang.org/x/tools/cmd/stringer"
 	_ "mvdan.cc/gofumpt"
