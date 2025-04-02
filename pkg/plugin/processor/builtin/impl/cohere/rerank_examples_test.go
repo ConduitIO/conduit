@@ -34,8 +34,8 @@ func ExampleRerankProcessor() {
 		Summary: `Generate responses using Cohere's rerank model`,
 		Description: `
 This example demonstrates how to use the Cohere rerank processor.This takes in a query and a list of texts and produces an ordered 
-array with each text assigned a relevance score. The processor extracts text from the specified input field (default: ".Payload.After"), 
-sends it to the Cohere API, and stores the response in the record's ".Payload.After" field.
+array with each text assigned a relevance score. The processor extracts text from the configured "request.body" (default: ".Payload.After"), 
+sends it to the Cohere API, and stores the response in the configured "response.body".
 
 In this example, the processor is configured with a mock client and an API key. The input record's metadata is updated
 to include the rerank model used ("rerank-v3.5").`,

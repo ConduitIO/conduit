@@ -162,9 +162,10 @@ func TestEmbedProcessor_Process(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "successful process with single record",
+			name: "successful process single record to replace .Payload.After with result of the request",
 			config: config.Config{
-				embedProcConfigApiKey: "api-key",
+				embedProcConfigApiKey:      "api-key",
+				embedProcConfigOutputField: ".Payload.After",
 			},
 			records: []opencdc.Record{
 				{
@@ -201,9 +202,26 @@ func TestEmbedProcessor_Process(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "successful process with single record having structured data in payload",
+			name: "failed to process single record to set new field 'response' in .Payload.After having raw data",
 			config: config.Config{
-				embedProcConfigApiKey: "api-key",
+				embedProcConfigApiKey:      "api-key",
+				embedProcConfigOutputField: ".Payload.After.response",
+			},
+			records: []opencdc.Record{
+				{
+					Payload: opencdc.Change{
+						After: opencdc.RawData("test input"),
+					},
+					Metadata: map[string]string{},
+				},
+			},
+			wantErr: `failed to set output: error reference resolver: could not resolve field "response": .Payload.After does not contain structured data: cannot resolve reference`,
+		},
+		{
+			name: "successful process single record to set new field 'response' in .Payload.After having structured data",
+			config: config.Config{
+				embedProcConfigApiKey:      "api-key",
+				embedProcConfigOutputField: ".Payload.After.response",
 			},
 			records: []opencdc.Record{
 				{
@@ -228,7 +246,7 @@ func TestEmbedProcessor_Process(t *testing.T) {
 				result := []sdk.ProcessedRecord{
 					sdk.SingleRecord(opencdc.Record{
 						Payload: opencdc.Change{
-							After: opencdc.StructuredData{"embedding": compressedEmbedding},
+							After: opencdc.StructuredData{"test": "testInput", "response": compressedEmbedding},
 						},
 						Metadata: map[string]string{
 							EmbedModelMetadata: "embed-english-v2.0",

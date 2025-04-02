@@ -146,7 +146,11 @@ func (p *commandProcessor) Process(ctx context.Context, records []opencdc.Record
 			return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed to resolve reference %v: %w", p.config.RequestBodyRef, err)})
 		}
 
-		content := fmt.Sprintf(p.config.Prompt, p.getInput(requestRef.Get()))
+		input, err := p.getInput(requestRef.Get())
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: fmt.Errorf("failed to get input: %w", err)})
+		}
+		content := fmt.Sprintf(p.config.Prompt, input)
 		for {
 			resp, err := p.client.command(ctx, content)
 			attempt := p.backoffCfg.Attempt()
@@ -248,14 +252,16 @@ func unmarshalChatResponse(res []byte) (*ChatResponse, error) {
 	return response, nil
 }
 
-func (p *commandProcessor) getInput(val any) string {
+func (p *commandProcessor) getInput(val any) (string, error) {
 	switch v := val.(type) {
-	case opencdc.RawData:
-		return string(v)
-	case opencdc.StructuredData:
-		return string(v.Bytes())
+	case opencdc.Position:
+		return string(v), nil
+	case opencdc.Data:
+		return string(v.Bytes()), nil
+	case string:
+		return v, nil
 	default:
-		return fmt.Sprintf("%v", v)
+		return "", fmt.Errorf("unsupported type %T", v)
 	}
 }
 

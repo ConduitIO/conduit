@@ -33,7 +33,7 @@ func ExampleCommandProcessor() {
 		Summary: `Generate responses using Cohere's command model`,
 		Description: `
 This example demonstrates how to use the Cohere command processor to generate responses for a record's ` + "`.Payload.After`" + ` field.
-The processor sends the input text to the Cohere API and replaces it with the model's response.`,
+The processor sends the input text from the configured "request.body" to the Cohere API and stores the model's response into the configured "response.body"`,
 		Config: config.Config{
 			commandProcessorConfigApiKey: "apikey",
 			commandProcessorConfigPrompt: "hello",
