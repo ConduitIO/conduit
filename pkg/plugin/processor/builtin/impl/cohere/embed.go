@@ -53,7 +53,9 @@ type embedProcConfig struct {
 	// The maximum waiting time before retrying.
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 	// Specifies the field from which the request body should be created.
-	InputField string `json:"inputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After"`
+	InputField string `json:"inputField" default:".Payload.After"`
+	// OutputField specifies in which field should the response body be saved.
+	OutputField string `json:"outputField" default:".Payload.After"`
 	// MaxTextsPerRequest controls the number of texts sent in each Cohere embedding API call (max 96)
 	MaxTextsPerRequest int `json:"maxTextsPerRequest" default:"96"`
 }
@@ -75,8 +77,9 @@ type embedModel interface {
 type embedProcessor struct {
 	sdk.UnimplementedProcessor
 
-	inputFieldRefResolver *sdk.ReferenceResolver
-	logger                log.CtxLogger
+	inputFieldRefResolver  *sdk.ReferenceResolver
+	outputFieldRefResolver *sdk.ReferenceResolver
+	logger                 log.CtxLogger
 
 	config     embedProcConfig
 	backoffCfg *backoff.Backoff
@@ -113,6 +116,12 @@ func (p *embedProcessor) Open(ctx context.Context) error {
 	}
 	p.inputFieldRefResolver = &inputResolver
 
+	outputResolver, err := sdk.NewReferenceResolver(p.config.OutputField)
+	if err != nil {
+		return cerrors.Errorf(`failed to create a field resolver for %v parameter: %w`, p.config.OutputField, err)
+	}
+	p.outputFieldRefResolver = &outputResolver
+
 	// Initialize the client only if it hasn't been injected
 	if p.client == nil {
 		p.client = &embedClient{
@@ -136,12 +145,14 @@ func (p *embedProcessor) Specification() (sdk.Specification, error) {
 	// parameters it expects.
 
 	return sdk.Specification{
-		Name:        "cohere.embed",
-		Summary:     "Conduit processor for Cohere's embed model.",
-		Description: "Conduit processor for Cohere's embed model.",
-		Version:     "v0.1.0",
-		Author:      "Meroxa, Inc.",
-		Parameters:  embedProcConfig{}.Parameters(),
+		Name:    "cohere.embed",
+		Summary: "Conduit processor for Cohere's embed model.",
+		Description: "The Cohere embed processor extracts text from the configured inputField, generates embeddings " +
+			"using Cohere's embedding model, and stores the result in the configured outputField. " +
+			"The embeddings are compressed using the zstd algorithm for efficient storage and transmission.",
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: embedProcConfig{}.Parameters(),
 	}, nil
 }
 
@@ -174,7 +185,12 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 		if err != nil {
 			return out, cerrors.Errorf("failed to resolve reference %v: %w", p.config.InputField, err)
 		}
-		embeddingInputs = append(embeddingInputs, p.getEmbeddingInput(inRef.Get()))
+
+		input, err := p.getInput(inRef.Get())
+		if err != nil {
+			return out, cerrors.Errorf("failed to get input: %w", err)
+		}
+		embeddingInputs = append(embeddingInputs, input)
 	}
 
 	var embeddings [][]float64
@@ -231,12 +247,8 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 			return out, cerrors.Errorf("failed to compress embeddings: %w", err)
 		}
 
-		// Store the embedding in .Payload.After
-		switch record.Payload.After.(type) {
-		case opencdc.RawData:
-			record.Payload.After = opencdc.RawData(compressedEmbedding)
-		case opencdc.StructuredData:
-			record.Payload.After = opencdc.StructuredData{"embedding": compressedEmbedding}
+		if err := p.setField(&record, p.outputFieldRefResolver, compressedEmbedding); err != nil {
+			return out, cerrors.Errorf("failed to set output: %w", err)
 		}
 
 		out = append(out, sdk.SingleRecord(record))
@@ -245,14 +257,34 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 	return out, nil
 }
 
-func (p *embedProcessor) getEmbeddingInput(val any) string {
+func (p *embedProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+	if refRes == nil {
+		return nil
+	}
+
+	ref, err := refRes.Resolve(r)
+	if err != nil {
+		return cerrors.Errorf("error reference resolver: %w", err)
+	}
+
+	err = ref.Set(data)
+	if err != nil {
+		return cerrors.Errorf("error reference set: %w", err)
+	}
+
+	return nil
+}
+
+func (p *embedProcessor) getInput(val any) (string, error) {
 	switch v := val.(type) {
-	case opencdc.RawData:
-		return string(v)
-	case opencdc.StructuredData:
-		return string(v.Bytes())
+	case opencdc.Position:
+		return string(v), nil
+	case opencdc.Data:
+		return string(v.Bytes()), nil
+	case string:
+		return v, nil
 	default:
-		return fmt.Sprintf("%v", v)
+		return "", fmt.Errorf("unsupported type %T", v)
 	}
 }
 
