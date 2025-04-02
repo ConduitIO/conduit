@@ -30,7 +30,6 @@ import (
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
 	defer cleanup()
@@ -56,7 +55,7 @@ func ExampleDecodeProcessor() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewDecodeProcessor(log.Nop()).(*decodeProcessor)
+	p := NewDecodeProcessor(log.Nop())
 	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{

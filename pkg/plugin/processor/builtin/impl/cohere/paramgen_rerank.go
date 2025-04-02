@@ -8,20 +8,20 @@ import (
 )
 
 const (
-	rerankProcessorConfigApiKey             = "apiKey"
-	rerankProcessorConfigBackoffRetryCount  = "backoffRetry.count"
-	rerankProcessorConfigBackoffRetryFactor = "backoffRetry.factor"
-	rerankProcessorConfigBackoffRetryMax    = "backoffRetry.max"
-	rerankProcessorConfigBackoffRetryMin    = "backoffRetry.min"
-	rerankProcessorConfigModel              = "model"
-	rerankProcessorConfigQuery              = "query"
-	rerankProcessorConfigRequestBody        = "request.body"
-	rerankProcessorConfigResponseBody       = "response.body"
+	rerankConfigApiKey             = "apiKey"
+	rerankConfigBackoffRetryCount  = "backoffRetry.count"
+	rerankConfigBackoffRetryFactor = "backoffRetry.factor"
+	rerankConfigBackoffRetryMax    = "backoffRetry.max"
+	rerankConfigBackoffRetryMin    = "backoffRetry.min"
+	rerankConfigModel              = "model"
+	rerankConfigQuery              = "query"
+	rerankConfigRequestBody        = "request.body"
+	rerankConfigResponseBody       = "response.body"
 )
 
-func (rerankProcessorConfig) Parameters() map[string]config.Parameter {
+func (rerankConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		rerankProcessorConfigApiKey: {
+		rerankConfigApiKey: {
 			Default:     "",
 			Description: "APIKey is the API key for Cohere api calls.",
 			Type:        config.ParameterTypeString,
@@ -29,7 +29,7 @@ func (rerankProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		rerankProcessorConfigBackoffRetryCount: {
+		rerankConfigBackoffRetryCount: {
 			Default:     "0",
 			Description: "Maximum number of retries for an individual record when backing off following an error.",
 			Type:        config.ParameterTypeFloat,
@@ -37,7 +37,7 @@ func (rerankProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: -1},
 			},
 		},
-		rerankProcessorConfigBackoffRetryFactor: {
+		rerankConfigBackoffRetryFactor: {
 			Default:     "2",
 			Description: "The multiplying factor for each increment step.",
 			Type:        config.ParameterTypeFloat,
@@ -45,25 +45,25 @@ func (rerankProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: 0},
 			},
 		},
-		rerankProcessorConfigBackoffRetryMax: {
+		rerankConfigBackoffRetryMax: {
 			Default:     "5s",
 			Description: "The maximum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		rerankProcessorConfigBackoffRetryMin: {
+		rerankConfigBackoffRetryMin: {
 			Default:     "100ms",
 			Description: "The minimum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		rerankProcessorConfigModel: {
+		rerankConfigModel: {
 			Default:     "rerank-v3.5",
 			Description: "Model is one of the name of a compatible rerank model version.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		rerankProcessorConfigQuery: {
+		rerankConfigQuery: {
 			Default:     "",
 			Description: "Query is the search query.",
 			Type:        config.ParameterTypeString,
@@ -71,13 +71,13 @@ func (rerankProcessorConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		rerankProcessorConfigRequestBody: {
+		rerankConfigRequestBody: {
 			Default:     ".Payload.After",
 			Description: "RequestBodyRef specifies the api request field.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		rerankProcessorConfigResponseBody: {
+		rerankConfigResponseBody: {
 			Default:     ".Payload.After",
 			Description: "ResponseBodyRef specifies in which field should the response body be saved.",
 			Type:        config.ParameterTypeString,

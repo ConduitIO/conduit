@@ -29,15 +29,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type convertProcessor struct {
+type ConvertProcessor struct {
 	referenceResolver sdk.ReferenceResolver
 	config            convertConfig
 
 	sdk.UnimplementedProcessor
 }
 
-func NewConvertProcessor(log.CtxLogger) sdk.Processor {
-	return &convertProcessor{}
+func NewConvertProcessor(log.CtxLogger) *ConvertProcessor {
+	return &ConvertProcessor{}
 }
 
 type convertConfig struct {
@@ -51,7 +51,7 @@ type convertConfig struct {
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool|time"`
 }
 
-func (p *convertProcessor) Specification() (sdk.Specification, error) {
+func (p *ConvertProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.convert",
 		Summary: "Convert the type of a field.",
@@ -67,7 +67,7 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *convertProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *ConvertProcessor) Configure(ctx context.Context, c config.Config) error {
 	err := sdk.ParseConfig(ctx, c, &p.config, convertConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
@@ -81,7 +81,7 @@ func (p *convertProcessor) Configure(ctx context.Context, c config.Config) error
 	return nil
 }
 
-func (p *convertProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *ConvertProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record
@@ -102,7 +102,7 @@ func (p *convertProcessor) Process(_ context.Context, records []opencdc.Record) 
 	return out
 }
 
-func (p *convertProcessor) stringToType(value, typ string) (any, error) {
+func (p *ConvertProcessor) stringToType(value, typ string) (any, error) {
 	switch typ {
 	case "string":
 		return value, nil
@@ -126,7 +126,7 @@ func (p *convertProcessor) stringToType(value, typ string) (any, error) {
 	}
 }
 
-func (p *convertProcessor) toString(value any) string {
+func (p *ConvertProcessor) toString(value any) string {
 	switch v := value.(type) {
 	case []byte:
 		return string(v)
@@ -146,7 +146,7 @@ func (p *convertProcessor) toString(value any) string {
 	}
 }
 
-func (p *convertProcessor) boolToStringNumber(b bool) string {
+func (p *ConvertProcessor) boolToStringNumber(b bool) string {
 	if b {
 		return "1"
 	}
