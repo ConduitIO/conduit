@@ -1,7 +1,6 @@
 module github.com/conduitio/conduit
 
 go 1.24.1
-
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.6-20241220201140-4c5ba75caaf8.1
 	github.com/Masterminds/semver/v3 v3.3.1
@@ -19,7 +18,7 @@ require (
 	github.com/conduitio/conduit-connector-s3 v0.9.1
 	github.com/conduitio/conduit-connector-sdk v0.13.3
 	github.com/conduitio/conduit-processor-sdk v0.4.2
-	github.com/conduitio/conduit-schema-registry v0.2.4
+	github.com/conduitio/conduit-schema-registry v0.2.5
 	github.com/conduitio/ecdysis v0.4.0
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
