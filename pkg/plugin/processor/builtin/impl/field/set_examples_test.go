@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleSetProcessor_setOperation() {
 	p := NewSetProcessor(log.Nop())
 
@@ -52,7 +51,6 @@ func ExampleSetProcessor_setOperation() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleSetProcessor_addField() {
 	p := NewSetProcessor(log.Nop())
 
@@ -94,7 +92,6 @@ added to ` + "`.Payload.After`" + ` and is set to ` + "`bar`" + `.`,
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleSetProcessor_template() {
 	p := NewSetProcessor(log.Nop())
 

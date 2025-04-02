@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package base64
+package openai
 
 import (
 	"github.com/conduitio/conduit-commons/config"
@@ -22,16 +22,24 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-func ExampleDecodeProcessor() {
-	p := NewDecodeProcessor(log.Nop())
-	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: "Decode a base64 encoded string",
-		Description: `This example decodes the base64 encoded string stored in
-` + "`.Payload.After`" + `. Note that the result is a string, so if you want to
-further process the result (e.g. parse the string as JSON), you need to chain
-other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)).`,
+func ExampleEmbeddingsProcessor() {
+	var (
+		testVector  = []float32{0.1, 0.2, 0.3, 0.4, 0.5}
+		testVectorS = "[0.1,0.2,0.3,0.4,0.5]"
+	)
+
+	processor := NewEmbeddingsProcessor(log.Nop())
+	processor.call = &mockEmbeddingsCaller{Embeddings: testVector}
+
+	exampleutil.RunExample(processor, exampleutil.Example{
+		Summary: "Generate embeddings for text",
+		Description: `This example generates embeddings for the text stored in
+` + "`.Payload.After`" + `. The embeddings are returned as a JSON array of floating point numbers.
+These embeddings can be used for semantic search, clustering, or other machine learning tasks.`,
 		Config: config.Config{
-			"field": ".Payload.After.foo",
+			"api_key": "your-openai-api-key",
+			"model":   "text-embedding-3-small",
+			"field":   ".Payload.After",
 		},
 		Have: opencdc.Record{
 			Position:  opencdc.Position("test-position"),
@@ -39,9 +47,7 @@ other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/
 			Metadata:  map[string]string{"key1": "val1"},
 			Key:       opencdc.RawData("test-key"),
 			Payload: opencdc.Change{
-				After: opencdc.StructuredData{
-					"foo": "YmFy",
-				},
+				After: opencdc.RawData("This is a sample text to generate embeddings for."),
 			},
 		},
 		Want: sdk.SingleRecord{
@@ -50,9 +56,7 @@ other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/
 			Metadata:  map[string]string{"key1": "val1"},
 			Key:       opencdc.RawData("test-key"),
 			Payload: opencdc.Change{
-				After: opencdc.StructuredData{
-					"foo": "bar",
-				},
+				After: opencdc.RawData(testVectorS),
 			},
 		},
 	})
@@ -61,7 +65,7 @@ other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/
 	// processor transformed record:
 	// --- before
 	// +++ after
-	// @@ -1,14 +1,14 @@
+	// @@ -1,12 +1,12 @@
 	//  {
 	//    "position": "dGVzdC1wb3NpdGlvbg==",
 	//    "operation": "create",
@@ -71,10 +75,8 @@ other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/
 	//    "key": "test-key",
 	//    "payload": {
 	//      "before": null,
-	//      "after": {
-	// -      "foo": "YmFy"
-	// +      "foo": "bar"
-	//      }
+	// -    "after": "This is a sample text to generate embeddings for."
+	// +    "after": "[0.1,0.2,0.3,0.4,0.5]"
 	//    }
 	//  }
 }

@@ -36,23 +36,23 @@ type rerankModel interface {
 
 type rerankClient struct {
 	client *cohereClient.Client
-	config *rerankProcessorConfig
+	config *rerankConfig
 }
 
-//go:generate paramgen -output=paramgen_rerank.go rerankProcessorConfig
+//go:generate paramgen -output=paramgen_rerank.go rerankConfig
 
-type rerankProcessor struct {
+type RerankProcessor struct {
 	sdk.UnimplementedProcessor
 
 	requestBodyRef  *sdk.ReferenceResolver
 	responseBodyRef *sdk.ReferenceResolver
 	logger          log.CtxLogger
-	config          rerankProcessorConfig
+	config          rerankConfig
 	backoffCfg      *backoff.Backoff
 	client          rerankModel
 }
 
-type rerankProcessorConfig struct {
+type rerankConfig struct {
 	// Model is one of the name of a compatible rerank model version.
 	Model string `json:"model" default:"rerank-v3.5"`
 	// APIKey is the API key for Cohere api calls.
@@ -73,17 +73,17 @@ type rerankProcessorConfig struct {
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 }
 
-func NewRerankProcessor(l log.CtxLogger) sdk.Processor {
-	return &rerankProcessor{logger: l.WithComponent("cohere.rerank")}
+func NewRerankProcessor(l log.CtxLogger) *RerankProcessor {
+	return &RerankProcessor{logger: l}
 }
 
-func (p *rerankProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *RerankProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	// Configure is the first function to be called in a processor. It provides the processor
 	// with the configuration that needs to be validated and stored to be used in other methods.
 	// This method should not open connections or any other resources. It should solely focus
 	// on parsing and validating the configuration itself.
 
-	err := sdk.ParseConfig(ctx, cfg, &p.config, rerankProcessorConfig{}.Parameters())
+	err := sdk.ParseConfig(ctx, cfg, &p.config, rerankConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -116,7 +116,7 @@ func (p *rerankProcessor) Configure(ctx context.Context, cfg config.Config) erro
 	return nil
 }
 
-func (p *rerankProcessor) Specification() (sdk.Specification, error) {
+func (p *RerankProcessor) Specification() (sdk.Specification, error) {
 	// Specification contains the metadata for the processor, which can be used to define how
 	// to reference the processor, describe what the processor does and the configuration
 	// parameters it expects.
@@ -131,7 +131,7 @@ func (p *rerankProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *rerankProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *RerankProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 
 	documents := make([]string, 0, len(records))
@@ -165,7 +165,7 @@ func (p *rerankProcessor) Process(ctx context.Context, records []opencdc.Record)
 				cerrors.As(err, &cohere.ServiceUnavailableError{}):
 
 				if attempt < p.config.BackoffRetryCount {
-					sdk.Logger(ctx).Debug().Err(err).Float64("attempt", attempt).
+					p.logger.Debug(ctx).Err(err).Float64("attempt", attempt).
 						Float64("backoffRetry.count", p.config.BackoffRetryCount).
 						Int64("backoffRetry.duration", duration.Milliseconds()).
 						Msg("retrying Cohere HTTP request")
@@ -265,7 +265,7 @@ func unmarshalRerankResponse(res []byte) (*RerankResponse, error) {
 	return response, nil
 }
 
-func (p *rerankProcessor) getInput(val any) string {
+func (p *RerankProcessor) getInput(val any) string {
 	switch v := val.(type) {
 	case opencdc.RawData:
 		return string(v)
@@ -276,7 +276,7 @@ func (p *rerankProcessor) getInput(val any) string {
 	}
 }
 
-func (p *rerankProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+func (p *RerankProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
 	if refRes == nil {
 		return nil
 	}

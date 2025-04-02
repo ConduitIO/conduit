@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,37 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package textgen
+package openai
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/jpillora/backoff"
 	"github.com/sashabaranov/go-openai"
 )
 
-//go:generate paramgen -output=paramgen_proc.go textgenProcessorConfig
+//go:generate paramgen -output=textgen_paramgen.go textgenConfig
 
-type textgenProcessor struct {
+type TextgenProcessor struct {
 	sdk.UnimplementedProcessor
 
-	config            textgenProcessorConfig
-	call              openaiCall
+	config            textgenConfig
+	call              openaiCaller[string]
 	referenceResolver sdk.ReferenceResolver
 }
 
-type openaiCall interface {
-	Call(ctx context.Context, input string) (output string, err error)
-}
+type textgenConfig struct {
+	globalConfig
 
-type textgenProcessorConfig struct {
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
 	// APIKey is the OpenAI API key. Required.
@@ -87,25 +82,14 @@ type textgenProcessorConfig struct {
 	ReasoningEffort string `json:"reasoning_effort"`
 	// Metadata is additional metadata to include with the request.
 	Metadata map[string]string `json:"metadata"`
-	// MaxRetries is the maximum number of retries for API calls. Defaults to 3.
-	MaxRetries int `json:"max_retries" default:"3"`
-	// InitialBackoff is the initial backoff duration in milliseconds. Defaults to 1000ms (1s).
-	InitialBackoff int `json:"initial_backoff" default:"1000"`
-	// MaxBackoff is the maximum backoff duration in milliseconds. Defaults to 30000ms (30s).
-	MaxBackoff int `json:"max_backoff" default:"30000"`
-	// BackoffFactor is the factor by which the backoff increases. Defaults to 2.
-	BackoffFactor float64 `json:"backoff_factor" default:"2.0"`
 }
 
-func NewTextgenProcessor(l log.CtxLogger) sdk.Processor {
-	return sdk.ProcessorWithMiddleware(
-		&textgenProcessor{},
-		sdk.DefaultProcessorMiddleware()...,
-	)
+func NewTextgenProcessor(log.CtxLogger) *TextgenProcessor {
+	return &TextgenProcessor{}
 }
 
-func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
-	err := sdk.ParseConfig(ctx, cfg, &p.config, textgenProcessorConfig{}.Parameters())
+func (p *TextgenProcessor) Configure(ctx context.Context, cfg config.Config) error {
+	err := sdk.ParseConfig(ctx, cfg, &p.config, textgenConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -116,7 +100,7 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 	}
 
 	if p.call == nil {
-		p.call = &openaiCaller{
+		p.call = &textgenCaller{
 			client: openai.NewClient(p.config.APIKey),
 			config: &p.config,
 		}
@@ -127,18 +111,18 @@ func (p *textgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 	return nil
 }
 
-func (p *textgenProcessor) Specification() (sdk.Specification, error) {
+func (p *TextgenProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "openai-textgen",
+		Name:        "openai.textgen",
 		Summary:     "modify records using openai models",
 		Description: "textgen is a conduit processor that will transform a record based on a given prompt",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters:  textgenProcessorConfig{}.Parameters(),
+		Parameters:  textgenConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+func (p *TextgenProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
 	var processedRecords []sdk.ProcessedRecord
 	for _, rec := range recs {
 		processed, err := p.processRecord(ctx, rec)
@@ -152,129 +136,26 @@ func (p *textgenProcessor) Process(ctx context.Context, recs []opencdc.Record) [
 	return processedRecords
 }
 
-func (p *textgenProcessor) processRecord(ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
-	logger := sdk.Logger(ctx)
-
-	ref, err := p.referenceResolver.Resolve(&rec)
-	if err != nil {
-		return rec, fmt.Errorf("failed to resolve reference: %w", err)
+func (p *TextgenProcessor) processRecord(
+	ctx context.Context, rec opencdc.Record,
+) (opencdc.Record, error) {
+	processor := func(ctx context.Context, input string) (string, error) {
+		return callWithRetry(ctx, p.config.globalConfig, p.call, input)
 	}
 
-	val := ref.Get()
-
-	var payload string
-	switch v := val.(type) {
-	case opencdc.Position:
-		payload = string(v)
-
-		res, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create chat completion: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record position %s", res)
-
-		if err := ref.Set(opencdc.Position(res)); err != nil {
-			return rec, fmt.Errorf("failed to set position: %w", err)
-		}
-	case opencdc.Data:
-		payload = string(v.Bytes())
-
-		res, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create chat completion: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record data %s", res)
-
-		var data opencdc.Data = opencdc.RawData(res)
-
-		if err := ref.Set(data); err != nil {
-			return rec, fmt.Errorf("failed to set data: %w", err)
-		}
-
-	case string:
-		payload = v
-
-		res, err := p.callOpenAI(ctx, payload)
-		if err != nil {
-			return rec, fmt.Errorf("failed to create chat completion: %w", err)
-		}
-
-		logger.Trace().Msgf("processed record string %s", res)
-
-		if err := ref.Set(res); err != nil {
-			return rec, fmt.Errorf("failed to set data: %w", err)
-		}
-	default:
-		return rec, fmt.Errorf("unsupported type %T", v)
+	formatter := func(result string) ([]byte, error) {
+		return []byte(result), nil
 	}
 
-	return rec, nil
+	return ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
 }
 
-func (p *textgenProcessor) callOpenAI(ctx context.Context, payload string) (string, error) {
-	b := &backoff.Backoff{
-		Min:    time.Duration(p.config.InitialBackoff) * time.Millisecond,
-		Max:    time.Duration(p.config.MaxBackoff) * time.Millisecond,
-		Factor: p.config.BackoffFactor,
-		Jitter: true,
-	}
-
-	var res string
-	var err error
-	var attempt int
-
-	logger := sdk.Logger(ctx)
-
-	for {
-		attempt++
-
-		if attempt > p.config.MaxRetries+1 {
-			return "", fmt.Errorf("exceeded maximum retries (%d): %w", p.config.MaxRetries, err)
-		}
-
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		default:
-		}
-
-		res, err = p.call.Call(ctx, payload)
-		if err == nil {
-			if attempt > 1 {
-				logger.Debug().Int("attempts", attempt).Msg("OpenAI API call succeeded after retries")
-			}
-			break
-		}
-
-		if !isRetryableError(err) {
-			return "", fmt.Errorf("chat completion failed with non-retryable error: %w", err)
-		}
-
-		backoffDuration := b.Duration()
-		logger.Warn().
-			Int("attempt", attempt).
-			Dur("backoff", backoffDuration).
-			Err(err).
-			Msg("OpenAI API call failed, retrying after backoff")
-
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(backoffDuration):
-		}
-	}
-
-	return res, nil
-}
-
-type openaiCaller struct {
+type textgenCaller struct {
 	client *openai.Client
-	config *textgenProcessorConfig
+	config *textgenConfig
 }
 
-func (o *openaiCaller) Call(ctx context.Context, payload string) (string, error) {
+func (o *textgenCaller) Call(ctx context.Context, payload string) (string, error) {
 	res, err := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: o.config.Model,
 		Messages: []openai.ChatCompletionMessage{
@@ -302,21 +183,4 @@ func (o *openaiCaller) Call(ctx context.Context, payload string) (string, error)
 	}
 
 	return res.Choices[0].Message.Content, nil
-}
-
-// isRetryableError determines if an error from the OpenAI API is retryable
-func isRetryableError(err error) bool {
-	var apiErr *openai.APIError
-	if !cerrors.As(err, &apiErr) {
-		return true
-	}
-
-	switch apiErr.HTTPStatusCode {
-	case 429:
-		return true
-	case 500, 502, 503, 504:
-		return true
-	default:
-		return false
-	}
 }

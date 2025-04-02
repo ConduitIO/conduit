@@ -67,7 +67,7 @@ func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, erro
 	return cfg, nil
 }
 
-type encodeProcessor struct {
+type EncodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger   log.CtxLogger
@@ -76,15 +76,15 @@ type encodeProcessor struct {
 	registry schemaregistry.Registry
 }
 
-func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
-	return &encodeProcessor{logger: logger}
+func NewEncodeProcessor(logger log.CtxLogger) *EncodeProcessor {
+	return &EncodeProcessor{logger: logger}
 }
 
-func (p *encodeProcessor) SetSchemaRegistry(registry schemaregistry.Registry) {
+func (p *EncodeProcessor) SetSchemaRegistry(registry schemaregistry.Registry) {
 	p.registry = registry
 }
 
-func (p *encodeProcessor) Specification() (sdk.Specification, error) {
+func (p *EncodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "avro.encode",
 		Summary: "Encodes a record's field into the Avro format.",
@@ -115,7 +115,7 @@ This processor is the counterpart to [` + "`avro.decode`" + `](/docs/using/proce
 	}, nil
 }
 
-func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *EncodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg, err := parseEncodeConfig(ctx, c)
 	if err != nil {
 		return cerrors.Errorf("invalid config: %w", err)
@@ -126,13 +126,13 @@ func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *encodeProcessor) Open(context.Context) error {
+func (p *EncodeProcessor) Open(context.Context) error {
 	p.encoder = internal.NewEncoder(p.registry, p.logger, p.cfg.Schema.strategy)
 
 	return nil
 }
 
-func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *EncodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc, err := p.processRecord(ctx, rec)
@@ -146,7 +146,7 @@ func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record)
 	return out
 }
 
-func (p *encodeProcessor) processRecord(ctx context.Context, rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	field, err := p.cfg.fieldResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving field: %w", err)
@@ -169,11 +169,11 @@ func (p *encodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	return sdk.SingleRecord(rec), nil
 }
 
-func (p *encodeProcessor) Teardown(context.Context) error {
+func (p *EncodeProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (p *encodeProcessor) structuredData(data any) (opencdc.StructuredData, error) {
+func (p *EncodeProcessor) structuredData(data any) (opencdc.StructuredData, error) {
 	var sd opencdc.StructuredData
 	switch v := data.(type) {
 	case opencdc.RawData:

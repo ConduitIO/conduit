@@ -37,7 +37,7 @@ type errorConfig struct {
 	Message string `json:"message" default:"error processor triggered"`
 }
 
-type errorProcessor struct {
+type ErrorProcessor struct {
 	sdk.UnimplementedProcessor
 
 	config           errorConfig
@@ -45,10 +45,10 @@ type errorProcessor struct {
 }
 
 func NewErrorProcessor(log.CtxLogger) sdk.Processor {
-	return &errorProcessor{}
+	return &ErrorProcessor{}
 }
 
-func (p *errorProcessor) Specification() (sdk.Specification, error) {
+func (p *ErrorProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "error",
 		Summary: "Returns an error for all records that get passed to the processor.",
@@ -63,7 +63,7 @@ to this processor, otherwise all records will trigger an error.`,
 	}, nil
 }
 
-func (p *errorProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *ErrorProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	err := sdk.ParseConfig(ctx, cfg, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
@@ -80,7 +80,7 @@ func (p *errorProcessor) Configure(ctx context.Context, cfg config.Config) error
 	return nil
 }
 
-func (p *errorProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *ErrorProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i := range records {
 		out[i] = sdk.ErrorRecord{
@@ -90,7 +90,7 @@ func (p *errorProcessor) Process(_ context.Context, records []opencdc.Record) []
 	return out
 }
 
-func (p *errorProcessor) errorMessage(record opencdc.Record) string {
+func (p *ErrorProcessor) errorMessage(record opencdc.Record) string {
 	if p.errorMessageTmpl == nil {
 		return p.config.Message
 	}
@@ -102,7 +102,7 @@ func (p *errorProcessor) errorMessage(record opencdc.Record) string {
 	return buf.String()
 }
 
-func (*errorProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+func (*ErrorProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
 	// disable schema middleware by default
 	return []sdk.ProcessorMiddlewareOption{
 		sdk.ProcessorWithSchemaEncodeConfig{

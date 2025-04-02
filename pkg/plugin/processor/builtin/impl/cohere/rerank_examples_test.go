@@ -22,12 +22,12 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleRerankProcessor() {
-	p := &rerankProcessor{}
+	p := NewRerankProcessor(log.Nop())
 	p.client = &mockRerankClient{}
 
 	exampleutil.RunExample(p, exampleutil.Example{

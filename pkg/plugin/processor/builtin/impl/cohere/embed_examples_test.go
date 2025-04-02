@@ -18,12 +18,12 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleEmbedProcessor() {
-	p := &embedProcessor{}
+	p := NewEmbedProcessor(log.Nop())
 	p.client = mockEmbedClient{}
 
 	exampleutil.RunExample(p, exampleutil.Example{

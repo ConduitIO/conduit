@@ -35,17 +35,17 @@ type kafkaConnectConfig struct {
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
-type kafkaConnectProcessor struct {
+type KafkaConnectProcessor struct {
 	sdk.UnimplementedProcessor
 
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewKafkaConnectProcessor(log.CtxLogger) sdk.Processor {
-	return &kafkaConnectProcessor{}
+func NewKafkaConnectProcessor(log.CtxLogger) *KafkaConnectProcessor {
+	return &KafkaConnectProcessor{}
 }
 
-func (u *kafkaConnectProcessor) Specification() (sdk.Specification, error) {
+func (u *KafkaConnectProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.kafkaconnect",
 		Summary: "Unwraps a Kafka Connect record from an [OpenCDC record](https://conduit.io/docs/using/opencdc-record).",
@@ -61,7 +61,7 @@ In such cases, the Debezium record is set as the [OpenCDC record](https://condui
 	}, nil
 }
 
-func (u *kafkaConnectProcessor) Configure(ctx context.Context, c config.Config) error {
+func (u *KafkaConnectProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := kafkaConnectConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
@@ -77,7 +77,7 @@ func (u *kafkaConnectProcessor) Configure(ctx context.Context, c config.Config) 
 	return nil
 }
 
-func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (u *KafkaConnectProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc, err := u.processRecord(rec)
@@ -90,7 +90,7 @@ func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Rec
 	return out
 }
 
-func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (u *KafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving reference: %w", err)
@@ -134,7 +134,7 @@ func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.Processed
 }
 
 // todo same as in debezium
-func (u *kafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
+func (u *KafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 	// convert the key to structured data
 	var structKey opencdc.StructuredData
 	switch d := key.(type) {

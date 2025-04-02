@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package textgen
+package openai
 
 import (
-	"context"
-	"strings"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 	"github.com/sashabaranov/go-openai"
 )
 
-//nolint:govet // we're using a more descriptive name of example
 func ExampleTextgenProcessor() {
-	p := &textgenProcessor{}
-	p.call = &mockOpenAICall{}
+	p := NewTextgenProcessor(log.Nop())
+	p.call = &mockOpenAICaller{}
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Transform text using OpenAI models`,
@@ -75,10 +72,4 @@ In this example, we're using a system message that instructs the model to conver
 	// +    "after": "HELLO WORLD"
 	//    }
 	//  }
-}
-
-type mockOpenAICall struct{}
-
-func (m *mockOpenAICall) Call(_ context.Context, input string) (string, error) {
-	return strings.ToUpper(input), nil
 }

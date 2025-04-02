@@ -72,7 +72,7 @@ type embedModel interface {
 	embed(ctx context.Context, texts []string) ([][]float64, error)
 }
 
-type embedProcessor struct {
+type EmbedProcessor struct {
 	sdk.UnimplementedProcessor
 
 	inputFieldRefResolver *sdk.ReferenceResolver
@@ -83,11 +83,11 @@ type embedProcessor struct {
 	client     embedModel
 }
 
-func NewEmbedProcessor(l log.CtxLogger) sdk.Processor {
-	return &embedProcessor{logger: l.WithComponent("cohere.embed")}
+func NewEmbedProcessor(l log.CtxLogger) *EmbedProcessor {
+	return &EmbedProcessor{logger: l}
 }
 
-func (p *embedProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *EmbedProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	// Configure is the first function to be called in a processor. It provides the processor
 	// with the configuration that needs to be validated and stored to be used in other methods.
 	// This method should not open connections or any other resources. It should solely focus
@@ -106,7 +106,7 @@ func (p *embedProcessor) Configure(ctx context.Context, cfg config.Config) error
 	return nil
 }
 
-func (p *embedProcessor) Open(ctx context.Context) error {
+func (p *EmbedProcessor) Open(ctx context.Context) error {
 	inputResolver, err := sdk.NewReferenceResolver(p.config.InputField)
 	if err != nil {
 		return cerrors.Errorf(`failed to create a field resolver for %v parameter: %w`, p.config.InputField, err)
@@ -130,7 +130,7 @@ func (p *embedProcessor) Open(ctx context.Context) error {
 	return nil
 }
 
-func (p *embedProcessor) Specification() (sdk.Specification, error) {
+func (p *EmbedProcessor) Specification() (sdk.Specification, error) {
 	// Specification contains the metadata for the processor, which can be used to define how
 	// to reference the processor, describe what the processor does and the configuration
 	// parameters it expects.
@@ -145,7 +145,7 @@ func (p *embedProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *EmbedProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 
 	// Process records in batches
@@ -164,7 +164,7 @@ func (p *embedProcessor) Process(ctx context.Context, records []opencdc.Record) 
 	return out
 }
 
-func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Record) ([]sdk.ProcessedRecord, error) {
+func (p *EmbedProcessor) processBatch(ctx context.Context, records []opencdc.Record) ([]sdk.ProcessedRecord, error) {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 
 	// prepare embeddingInputs for request
@@ -192,7 +192,7 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 				cerrors.As(err, &cohere.InternalServerError{}),
 				cerrors.As(err, &cohere.ServiceUnavailableError{}):
 				if attempt < p.config.BackoffRetryCount {
-					sdk.Logger(ctx).Debug().Err(err).Float64("attempt", attempt).
+					p.logger.Debug(ctx).Err(err).Float64("attempt", attempt).
 						Float64("backoffRetry.count", p.config.BackoffRetryCount).
 						Int64("backoffRetry.duration", duration.Milliseconds()).
 						Msg("retrying Cohere HTTP request")
@@ -245,7 +245,7 @@ func (p *embedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 	return out, nil
 }
 
-func (p *embedProcessor) getEmbeddingInput(val any) string {
+func (p *EmbedProcessor) getEmbeddingInput(val any) string {
 	switch v := val.(type) {
 	case opencdc.RawData:
 		return string(v)

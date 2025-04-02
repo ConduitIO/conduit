@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_stringToInt() {
 	p := NewConvertProcessor(log.Nop())
 
@@ -66,7 +65,6 @@ func ExampleConvertProcessor_stringToInt() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_intToBool() {
 	p := NewConvertProcessor(log.Nop())
 
@@ -108,7 +106,6 @@ func ExampleConvertProcessor_intToBool() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_floatToString() {
 	p := NewConvertProcessor(log.Nop())
 
@@ -150,7 +147,6 @@ func ExampleConvertProcessor_floatToString() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_intTotime() {
 	p := NewConvertProcessor(log.Nop())
 
