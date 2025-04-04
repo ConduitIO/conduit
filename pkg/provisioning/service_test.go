@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -477,6 +478,173 @@ func TestService_Delete(t *testing.T) {
 
 	err := service.Delete(context.Background(), oldPipelineInstance.ID)
 	is.NoErr(err)
+}
+
+func TestService_ReloadYaml(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Add cleanup for output files that will be created during the test
+	t.Cleanup(func() {
+		for _, path := range []string{"./output-v1.txt", "./output-v2.txt", "./output-v3.txt", "./input.txt"} {
+			_ = os.Remove(path)
+		}
+	})
+
+	// Set up a real service with non-mock components for actual runtime verification
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
+	logger.Logger = logger.Hook(ctxutil.MessageIDLogCtxHook{})
+
+	// Create a temporary database
+	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
+	is.NoErr(err)
+	t.Cleanup(func() {
+		err := db.Close()
+		is.NoErr(err)
+	})
+
+	// Set up the necessary services
+	tokenService := connutils.NewAuthManager()
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
+	is.NoErr(err)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
+
+	// Set up plugin services
+	connPluginService := conn_plugin.NewPluginService(
+		logger,
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, connSchemaService),
+		standalone.NewRegistry(logger, ""),
+		tokenService,
+	)
+	connPluginService.Init(ctx, "conn-utils-token:12345")
+
+	procPluginService := proc_plugin.NewPluginService(
+		logger,
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
+		nil,
+	)
+
+	// Set up core services
+	plService := pipeline.NewService(logger, db)
+	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
+	procService := processor.NewService(logger, db, procPluginService)
+
+	// Set up lifecycle service
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       0,
+		MaxRetriesWindow: 5 * time.Minute,
+	}
+	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connService, procService, connPluginService, plService)
+
+	// Create the provisioning service
+	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "")
+
+	// Define the base YAML template
+	yamlTemplate := `version: 2.0
+pipelines:
+  - id: test-pipeline
+    status: running
+    name: Test Pipeline
+    description: %s
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s`
+
+	// Define test cases
+	type testCase struct {
+		name        string
+		source      string
+		sourceType  string
+		description string
+		outputPath  string
+	}
+
+	testCases := []testCase{
+		{
+			name:        "Initial configuration",
+			sourceType:  "string",
+			description: "Initial configuration",
+			outputPath:  "./output-v1.txt",
+		},
+		{
+			name:        "Update via YAML string",
+			sourceType:  "string",
+			description: "Updated configuration via string",
+			outputPath:  "./output-v2.txt",
+		},
+		{
+			name:        "Update via YAML file",
+			sourceType:  "file",
+			description: "Updated configuration via file",
+			outputPath:  "./output-v3.txt",
+		},
+	}
+
+	// Create a temporary file for the file-based test case
+	tmpfile, err := os.CreateTemp("", "test-pipeline-*.yaml")
+	is.NoErr(err)
+	defer os.Remove(tmpfile.Name())
+
+	// Run each test case
+	for i, tc := range testCases {
+		// Add a small delay between test cases to ensure the pipeline has time to stabilize
+		if i > 0 {
+			time.Sleep(1 * time.Second)
+		}
+		t.Logf("Running test case %d: %s", i+1, tc.name)
+
+		// Generate the YAML content
+		yamlContent := fmt.Sprintf(yamlTemplate, tc.description, tc.outputPath)
+
+		// Set up the source based on the source type
+		var source string
+		if tc.sourceType == "file" {
+			// Write the YAML content to the file
+			err = os.WriteFile(tmpfile.Name(), []byte(yamlContent), 0o644)
+			is.NoErr(err)
+			source = tmpfile.Name()
+		} else {
+			source = yamlContent
+		}
+
+		// Reload the pipeline with the current configuration
+		pipelineID, err := service.ReloadYaml(ctx, source)
+		is.NoErr(err)
+		is.Equal(pipelineID, "test-pipeline")
+
+		// Give the pipeline time to update
+		time.Sleep(500 * time.Millisecond)
+
+		// Verify the configuration was applied correctly
+		pipeline, err := plService.Get(ctx, "test-pipeline")
+		is.NoErr(err)
+		is.Equal(pipeline.Config.Name, "Test Pipeline")
+		is.Equal(pipeline.Config.Description, tc.description)
+
+		// Get the destination connector and verify its path setting
+		destConnID := ""
+		for _, connID := range pipeline.ConnectorIDs {
+			conn, err := connService.Get(ctx, connID)
+			is.NoErr(err)
+			if conn.ID == "test-pipeline:destination" {
+				destConnID = conn.ID
+				is.Equal(conn.Config.Settings["path"], tc.outputPath)
+			}
+		}
+		is.True(destConnID != "")
+	}
 }
 
 func TestService_IntegrationTestServices(t *testing.T) {

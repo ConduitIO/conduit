@@ -67,6 +67,133 @@ func NewService(
 	}
 }
 
+// ReloadYaml parses a YAML input (either a file path or a YAML string) and reloads a pipeline configuration.
+// This can be used to reload a pipeline configuration without restarting Conduit.
+func (s *Service) ReloadYaml(ctx context.Context, yamlInput string) (string, error) {
+	// First, determine if the input is a file path or a YAML string
+	isFilePath := false
+	if !strings.Contains(yamlInput, "\n") && len(yamlInput) < 1024 {
+		if _, err := os.Stat(yamlInput); err == nil {
+			isFilePath = true
+		}
+	}
+
+	var configs []config.Pipeline
+	var err error
+	var source string
+
+	if isFilePath {
+		s.logger.Debug(ctx).
+			Str("file_path", yamlInput).
+			Msg("reloading pipeline configuration from file")
+
+		configs, err = s.parsePipelineConfigFile(ctx, yamlInput)
+		if err != nil {
+			return "", cerrors.Errorf("failed to parse file %q: %w", yamlInput, err)
+		}
+		source = yamlInput
+	} else {
+		s.logger.Debug(ctx).
+			Msg("reloading pipeline configuration from YAML string")
+
+		reader := strings.NewReader(yamlInput)
+		configs, err = s.parser.Parse(ctx, reader)
+		if err != nil {
+			return "", cerrors.Errorf("failed to parse YAML string: %w", err)
+		}
+		source = "<yaml-string>"
+	}
+
+	if len(configs) == 0 {
+		return "", cerrors.New("no pipelines found in the YAML input")
+	}
+
+	pipelineID := configs[0].ID
+	s.logger.Debug(ctx).
+		Str("pipeline_id", pipelineID).
+		Msg("using first pipeline from YAML")
+
+	return s.reloadPipeline(ctx, configs, pipelineID, source)
+}
+
+// reloadPipeline is a helper function that handles the common logic for reloading a pipeline
+// from either a file or a YAML string.
+func (s *Service) reloadPipeline(ctx context.Context, configs []config.Pipeline, pipelineID string, source string) (string, error) {
+	// Find the pipeline with the specified ID
+	var targetConfig config.Pipeline
+	found := false
+	for _, cfg := range configs {
+		if cfg.ID == pipelineID {
+			targetConfig = cfg
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return "", cerrors.Errorf("pipeline with ID %q not found in source %q", pipelineID, source)
+	}
+
+	// Check if pipeline already exists
+	pipelineInstance, err := s.pipelineService.Get(ctx, pipelineID)
+	if err != nil {
+		if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+			// Pipeline doesn't exist, create it
+			s.logger.Info(ctx).
+				Str("pipeline_id", pipelineID).
+				Msg("pipeline doesn't exist, creating new pipeline")
+		} else {
+			return "", cerrors.Errorf("error getting pipeline instance with ID %q: %w", pipelineID, err)
+		}
+	} else {
+		// Pipeline exists, check if it was provisioned by config
+		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
+			return "", cerrors.Errorf("pipeline with ID %q was not provisioned by config: %w", pipelineID, ErrNotProvisionedByConfig)
+		}
+
+		// Check if pipeline is running and stop it if needed
+		pipelineWasRunning := pipelineInstance.GetStatus() == pipeline.StatusRunning
+		if pipelineWasRunning {
+			s.logger.Debug(ctx).
+				Str("pipeline_id", pipelineID).
+				Msg("stopping pipeline before updating configuration")
+
+			err = s.lifecycleService.Stop(ctx, pipelineID, false)
+			if err != nil {
+				return "", cerrors.Errorf("could not stop pipeline %q before updating: %w", pipelineID, err)
+			}
+		}
+
+		// Delete the existing pipeline
+		s.logger.Debug(ctx).
+			Str("pipeline_id", pipelineID).
+			Msg("deleting existing pipeline before recreating")
+
+		// Use s.Delete to properly clean up the pipeline
+		err = s.Delete(ctx, pipelineID)
+		if err != nil {
+			return "", cerrors.Errorf("could not delete existing pipeline %q: %w", pipelineID, err)
+		}
+	}
+
+	// Provision the pipeline with the new configuration
+	s.logger.Debug(ctx).
+		Str("pipeline_id", pipelineID).
+		Msg("provisioning pipeline with updated configuration")
+
+	err = s.provisionPipeline(ctx, targetConfig)
+	if err != nil {
+		return "", cerrors.Errorf("pipeline %q, error while provisioning: %w", pipelineID, err)
+	}
+
+	s.logger.Info(ctx).
+		Str("pipeline_id", pipelineID).
+		Str("source", source).
+		Msg("pipeline configuration reloaded successfully")
+
+	return pipelineID, nil
+}
+
 // Init provision pipelines defined in pipelinePath directory. should initialize pipeline service
 // before calling this function, and all pipelines should be stopped.
 func (s *Service) Init(ctx context.Context) error {
