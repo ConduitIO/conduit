@@ -480,7 +480,7 @@ func TestService_Delete(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestService_ReloadYaml(t *testing.T) {
+func TestService_UpsertYaml(t *testing.T) {
 	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -633,17 +633,10 @@ pipelines:
 		is.Equal(pipeline.Config.Name, "Test Pipeline")
 		is.Equal(pipeline.Config.Description, tc.description)
 
-		// Get the destination connector and verify its path setting
-		destConnID := ""
-		for _, connID := range pipeline.ConnectorIDs {
-			conn, err := connService.Get(ctx, connID)
-			is.NoErr(err)
-			if conn.ID == "test-pipeline:destination" {
-				destConnID = conn.ID
-				is.Equal(conn.Config.Settings["path"], tc.outputPath)
-			}
-		}
-		is.True(destConnID != "")
+		// Get the destination connector directly and verify its path setting
+		destConn, err := connService.Get(ctx, "test-pipeline:destination")
+		is.NoErr(err)
+		is.Equal(destConn.Config.Settings["path"], tc.outputPath)
 	}
 }
 
