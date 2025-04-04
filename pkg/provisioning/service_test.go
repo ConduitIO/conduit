@@ -620,7 +620,7 @@ pipelines:
 		}
 
 		// Reload the pipeline with the current configuration
-		pipelineID, err := service.ReloadYaml(ctx, source)
+		pipelineID, err := service.UpsertYaml(ctx, source)
 		is.NoErr(err)
 		is.Equal(pipelineID, "test-pipeline")
 
