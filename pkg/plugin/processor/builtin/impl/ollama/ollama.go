@@ -11,14 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//go:generate paramgen -output=paramgen_command.go requestProcessorConfig
+//go:generate paramgen -output=paramgen_command.go ollamaProcessorConfig
 
 package ollama
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +28,8 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
+	"github.com/rs/zerolog"
 )
 
 // limiting to llama3.2 for MVP
@@ -36,7 +37,7 @@ var allowedModels = []string{
 	"llama3.2",
 }
 
-type requestProcessorConfig struct {
+type ollamaProcessorConfig struct {
 	// OllamaURL is the url to the ollama instance
 	OllamaURL string `json:"url" validate:"required"`
 	// Model is the name of the model used with ollama
@@ -45,72 +46,83 @@ type requestProcessorConfig struct {
 	Prompt string `json:"prompt" default:""`
 }
 
-type requestProcessor struct {
+type ollamaProcessor struct {
 	sdk.UnimplementedProcessor
 
+	config ollamaProcessorConfig
 	logger log.CtxLogger
-	config requestProcessorConfig
 }
 
 func NewRequestProcessor(l log.CtxLogger) sdk.Processor {
-	return &requestProcessor{logger: l.WithComponent("ollama.request")}
+	return &ollamaProcessor{logger: l.WithComponent("ollama")}
 }
 
-func (p *requestProcessor) Configure(ctx context.Context, cfg config.Config) error {
-	err := sdk.ParseConfig(ctx, cfg, &p.config, requestProcessorConfig{}.Parameters())
+func (p *ollamaProcessor) Configure(ctx context.Context, cfg config.Config) error {
+	err := sdk.ParseConfig(ctx, cfg, &p.config, ollamaProcessorConfig{}.Parameters())
 	if err != nil {
-		return fmt.Errorf("failed to parse configuration: %w", err)
+		return err
 	}
 
 	return nil
 }
 
-func (p *requestProcessor) Specification() (sdk.Specification, error) {
+func (p *ollamaProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "ollama.request",
+		Name:        "ollama",
 		Summary:     "Processes data through an ollama instance",
 		Description: "This processor transforms data by asking the provided model on the provided ollama instance.",
 		Version:     "v0.0.1",
-		Author:      "Sarah Sicard",
+		Author:      "Meroxa, Inc.",
 		Parameters:  p.config.Parameters(),
 	}, nil
 }
 
-func (p *requestProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	logger := sdk.Logger(ctx)
 	result := make([]sdk.ProcessedRecord, 0, len(records))
 
 	if !slices.Contains(allowedModels, p.config.Model) {
-		return append(result, sdk.ErrorRecord{Error: fmt.Errorf("model not allowed by processor")})
+		return append(result, sdk.ErrorRecord{Error: fmt.Errorf("model {%s} not allowed by processor", p.config.Model)})
 	}
 
 	for _, rec := range records {
-		reqBody, err := p.constructOllamaRequest(rec)
+		processedRecord, err := p.processRecord(ctx, rec, logger)
 		if err != nil {
-			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("creating the ollama request %w", err)})
-		}
-		logger.Debug().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
-
-		resp, err := p.sendOllamaRequest(reqBody)
-		if err != nil {
-			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("error sending the ollama request %w", err)})
+			return append(result, sdk.ErrorRecord{Error: err})
 		}
 
-		respData, err := processOllamaResponse(resp)
-		if err != nil {
-			logger.Error().Err(err).Msg("cannot process response")
-			return append(result, sdk.ErrorRecord{Error: fmt.Errorf("cannot process response %w", err)})
-		}
-		rec.Payload.After = respData
-
-		result = append(result, sdk.SingleRecord(rec))
+		result = append(result, processedRecord)
 	}
 
 	logger.Debug().Msg(fmt.Sprintf("Processed Records: %s", result))
 	return result
 }
 
-func (p *requestProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, error) {
+func (p *ollamaProcessor) processRecord(ctx context.Context, rec opencdc.Record, logger *zerolog.Logger) (sdk.ProcessedRecord, error) {
+	reqBody, err := p.constructOllamaRequest(rec)
+	if err != nil {
+		return nil, fmt.Errorf("creating the ollama request %w", err)
+	}
+	logger.Debug().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
+
+	resp, err := p.sendOllamaRequest(ctx, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("error sending the ollama request %w", err)
+	}
+
+	respData, err := processOllamaResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("cannot process response %w", err)
+	}
+
+	// configurable response destination
+	rec.Payload.After = respData
+
+	// figure out field
+	return sdk.SingleRecord(rec), nil
+}
+
+func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, error) {
 	prompt, err := generatePrompt(p.config.Prompt, rec.Payload)
 	if err != nil {
 		return nil, err
@@ -129,9 +141,9 @@ func (p *requestProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, e
 	return reqBody, nil
 }
 
-func (p *requestProcessor) sendOllamaRequest(reqBody []byte) ([]byte, error) {
+func (p *ollamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte) ([]byte, error) {
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
-	req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ollama request %w", err)
 	}

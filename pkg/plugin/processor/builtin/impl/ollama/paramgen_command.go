@@ -4,30 +4,41 @@
 package ollama
 
 import (
+	"regexp"
+
 	"github.com/conduitio/conduit-commons/config"
 )
 
 const (
-	requestProcessorConfigModel  = "model"
-	requestProcessorConfigPrompt = "prompt"
-	requestProcessorConfigUrl    = "url"
+	ollamaProcessorConfigField  = "field"
+	ollamaProcessorConfigModel  = "model"
+	ollamaProcessorConfigPrompt = "prompt"
+	ollamaProcessorConfigUrl    = "url"
 )
 
-func (requestProcessorConfig) Parameters() map[string]config.Parameter {
+func (ollamaProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		requestProcessorConfigModel: {
+		ollamaProcessorConfigField: {
+			Default:     ".Payload.After",
+			Description: "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRegex{Regex: regexp.MustCompile("^.Payload")},
+			},
+		},
+		ollamaProcessorConfigModel: {
 			Default:     "llama3.2",
 			Description: "Model is the name of the model used with ollama",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		requestProcessorConfigPrompt: {
+		ollamaProcessorConfigPrompt: {
 			Default:     "",
 			Description: "Prompt is the prompt to pass into ollama to tranform the data",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		requestProcessorConfigUrl: {
+		ollamaProcessorConfigUrl: {
 			Default:     "",
 			Description: "OllamaURL is the url to the ollama instance",
 			Type:        config.ParameterTypeString,
