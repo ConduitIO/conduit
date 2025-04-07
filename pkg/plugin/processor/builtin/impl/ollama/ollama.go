@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
@@ -38,6 +39,8 @@ var allowedModels = []string{
 }
 
 type ollamaProcessorConfig struct {
+	// Field is the reference to the field to process. Defaults to ".Payload.After".
+	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 	// OllamaURL is the url to the ollama instance
 	OllamaURL string `json:"url" validate:"required"`
 	// Model is the name of the model used with ollama
@@ -49,8 +52,9 @@ type ollamaProcessorConfig struct {
 type ollamaProcessor struct {
 	sdk.UnimplementedProcessor
 
-	config ollamaProcessorConfig
-	logger log.CtxLogger
+	config      ollamaProcessorConfig
+	logger      log.CtxLogger
+	fieldRefRes sdk.ReferenceResolver
 }
 
 func NewRequestProcessor(l log.CtxLogger) sdk.Processor {
@@ -60,8 +64,15 @@ func NewRequestProcessor(l log.CtxLogger) sdk.Processor {
 func (p *ollamaProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	err := sdk.ParseConfig(ctx, cfg, &p.config, ollamaProcessorConfig{}.Parameters())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
+
+	p.fieldRefRes, err = sdk.NewReferenceResolver(p.config.Field)
+	if err != nil {
+		return cerrors.Errorf("failed to create reference resolver: %w", err)
+	}
+
+	// TODO make a specific ollama client like openai?
 
 	return nil
 }
@@ -79,51 +90,63 @@ func (p *ollamaProcessor) Specification() (sdk.Specification, error) {
 
 func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	logger := sdk.Logger(ctx)
-	result := make([]sdk.ProcessedRecord, 0, len(records))
+	processedRecords := make([]sdk.ProcessedRecord, 0, len(records))
 
 	if !slices.Contains(allowedModels, p.config.Model) {
-		return append(result, sdk.ErrorRecord{Error: fmt.Errorf("model {%s} not allowed by processor", p.config.Model)})
+		return append(processedRecords, sdk.ErrorRecord{Error: fmt.Errorf("model {%s} not allowed by processor", p.config.Model)})
 	}
 
 	for _, rec := range records {
 		processedRecord, err := p.processRecord(ctx, rec, logger)
 		if err != nil {
-			return append(result, sdk.ErrorRecord{Error: err})
+			return append(processedRecords, sdk.ErrorRecord{Error: err})
 		}
 
-		result = append(result, processedRecord)
+		processedRecords = append(processedRecords, processedRecord)
 	}
 
-	logger.Debug().Msg(fmt.Sprintf("Processed Records: %s", result))
-	return result
+	logger.Debug().Msg(fmt.Sprintf("Processed Records: %s", processedRecords))
+	return processedRecords
 }
 
 func (p *ollamaProcessor) processRecord(ctx context.Context, rec opencdc.Record, logger *zerolog.Logger) (sdk.ProcessedRecord, error) {
-	reqBody, err := p.constructOllamaRequest(rec)
+	ref, err := p.fieldRefRes.Resolve(&rec)
 	if err != nil {
-		return nil, fmt.Errorf("creating the ollama request %w", err)
+		return nil, cerrors.Errorf("failed resolving reference: %w", err)
+	}
+
+	field := ref.Get()
+	data, err := p.structuredData(field)
+	if err != nil {
+		return nil, cerrors.Errorf("cannot process field: %w", err)
+	}
+
+	reqBody, err := p.constructOllamaRequest(data)
+	if err != nil {
+		return nil, cerrors.Errorf("creating the ollama request %w", err)
 	}
 	logger.Debug().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("error sending the ollama request %w", err)
+		return nil, cerrors.Errorf("error sending the ollama request %w", err)
 	}
 
 	respData, err := processOllamaResponse(resp)
 	if err != nil {
-		return nil, fmt.Errorf("cannot process response %w", err)
+		return nil, cerrors.Errorf("cannot process response %w", err)
 	}
 
-	// configurable response destination
-	rec.Payload.After = respData
+	err = ref.Set(respData)
+	if err != nil {
+		return nil, cerrors.Errorf("error setting the designated field %w", err)
+	}
 
-	// figure out field
 	return sdk.SingleRecord(rec), nil
 }
 
-func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.Record) ([]byte, error) {
-	prompt, err := generatePrompt(p.config.Prompt, rec.Payload)
+func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.StructuredData) ([]byte, error) {
+	prompt, err := generatePrompt(p.config.Prompt, rec)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +185,7 @@ func (p *ollamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte)
 	return body, nil
 }
 
-func generatePrompt(userPrompt string, record opencdc.Change) (string, error) {
+func generatePrompt(userPrompt string, record opencdc.StructuredData) (string, error) {
 	conduitInstructions := "For the prompt, return a valid json following the instructions provided. Only send back records in the json format with no explanation."
 	prompt := fmt.Sprintf(
 		"Instructions: {%s}\n Record: {%s} \n Suffix {%s}",
@@ -240,4 +263,38 @@ func validatePrompt(input string) error {
 	}
 
 	return nil
+}
+
+func (p *ollamaProcessor) structuredData(data any) (opencdc.StructuredData, error) {
+	var sd opencdc.StructuredData
+	switch v := data.(type) {
+	case opencdc.RawData:
+		b := v.Bytes()
+		// if data is empty, then return empty structured data
+		if len(b) == 0 {
+			return sd, nil
+		}
+		err := json.Unmarshal(b, &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case string:
+		err := json.Unmarshal([]byte(v), &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case []byte:
+		err := json.Unmarshal(v, &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case opencdc.StructuredData:
+		sd = v
+	case nil:
+		return nil, cerrors.Errorf("field to unmarshal is nil")
+	default:
+		return nil, cerrors.Errorf("unexpected data type %T", v)
+	}
+
+	return sd, nil
 }
