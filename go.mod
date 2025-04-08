@@ -51,7 +51,7 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.3.0
 	github.com/twmb/go-cache v1.2.1
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.5.1
 	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
 	golang.org/x/tools v0.31.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
