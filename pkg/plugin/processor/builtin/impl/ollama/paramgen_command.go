@@ -20,7 +20,7 @@ func (ollamaProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		ollamaProcessorConfigField: {
 			Default:     ".Payload.After",
-			Description: "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
+			Description: "Field is the reference to the field to process. Defaults to \".Payload.After\".",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRegex{Regex: regexp.MustCompile("^.Payload")},

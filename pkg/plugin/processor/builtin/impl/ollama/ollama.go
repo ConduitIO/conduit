@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //go:generate paramgen -output=paramgen_command.go ollamaProcessorConfig
+//go:generate mockgen --build_flags=--mod=mod -source=./ollama.go -destination=mock/http_client_mock.go -package=mock
 
 package ollama
 
@@ -32,6 +33,12 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
 )
+
+var HTTPClient httpClient = http.DefaultClient
+
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 // limiting to llama3.2 for MVP
 var allowedModels = []string{
@@ -57,7 +64,12 @@ type ollamaProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewRequestProcessor(l log.CtxLogger) sdk.Processor {
+type OllamaResponse struct {
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
+}
+
+func NewOllamaProcessor(l log.CtxLogger) sdk.Processor {
 	return &ollamaProcessor{logger: l.WithComponent("ollama")}
 }
 
@@ -71,8 +83,6 @@ func (p *ollamaProcessor) Configure(ctx context.Context, cfg config.Config) erro
 	if err != nil {
 		return cerrors.Errorf("failed to create reference resolver: %w", err)
 	}
-
-	// TODO make a specific ollama client like openai?
 
 	return nil
 }
@@ -105,7 +115,6 @@ func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record)
 		processedRecords = append(processedRecords, processedRecord)
 	}
 
-	logger.Debug().Msg(fmt.Sprintf("Processed Records: %s", processedRecords))
 	return processedRecords
 }
 
@@ -129,12 +138,12 @@ func (p *ollamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
-		return nil, cerrors.Errorf("error sending the ollama request %w", err)
+		return nil, cerrors.Errorf("error sending the ollama request %s", err)
 	}
 
 	respData, err := processOllamaResponse(resp)
 	if err != nil {
-		return nil, cerrors.Errorf("cannot process response %w", err)
+		return nil, cerrors.Errorf("cannot process response: %w", err)
 	}
 
 	err = ref.Set(respData)
@@ -171,9 +180,12 @@ func (p *ollamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte)
 		return nil, fmt.Errorf("unable to create ollama request %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request to ollama failed %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama request returned status code %d", resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
@@ -199,11 +211,6 @@ func generatePrompt(userPrompt string, record opencdc.StructuredData) (string, e
 	}
 
 	return prompt, nil
-}
-
-type OllamaResponse struct {
-	Response string `json:"response"`
-	Done     bool   `json:"done"`
 }
 
 // processOllamaResponse parses the response from the ollama call and returns only the desired response
@@ -281,12 +288,12 @@ func (p *ollamaProcessor) structuredData(data any) (opencdc.StructuredData, erro
 	case string:
 		err := json.Unmarshal([]byte(v), &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", err)
 		}
 	case []byte:
 		err := json.Unmarshal(v, &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from []byte: %w", err)
 		}
 	case opencdc.StructuredData:
 		sd = v
