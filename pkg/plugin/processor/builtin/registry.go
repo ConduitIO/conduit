@@ -188,7 +188,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, plugin.ErrPluginNotFound //here
+		return nil, plugin.ErrPluginNotFound
 	}
 	b, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
