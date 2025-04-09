@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
-	github.com/bufbuild/buf v1.52.0
+	github.com/bufbuild/buf v1.52.1
 	github.com/cohere-ai/cohere-go/v2 v2.13.0
 	github.com/conduitio/conduit-commons v0.5.2
 	github.com/conduitio/conduit-connector-file v0.10.1
