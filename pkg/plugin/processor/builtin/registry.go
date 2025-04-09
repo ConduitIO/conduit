@@ -202,7 +202,10 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 		sr.SetSchemaRegistry(r.schemaRegistry)
 	}
 
-	// apply default middleware
+	// Apply default middleware since built-in processors are created
+	// without the middleware applied.
+	// This is done by Conduit only for the built-in processors.
+	// In the standalone processors, the Run() method adds the middleware.
 	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
 	// attach processor ID for logs
 	p = newProcessorWithID(p, id)
