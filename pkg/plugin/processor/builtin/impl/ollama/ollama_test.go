@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,10 +29,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama/mock"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/magiconair/properties/assert"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 //go:embed test/ollama-response.json
@@ -41,45 +41,76 @@ var ollamaResp string
 func TestOllamaProcessor_Configure(t *testing.T) {
 	is := is.New(t)
 	p := &ollamaProcessor{}
+	ollamaURL := "http://localhost:11434"
 
-	cfg := config.Config{
-		ollamaProcessorConfigModel:  "llama3.2",
-		ollamaProcessorConfigPrompt: "hello world",
-		ollamaProcessorConfigUrl:    "http://localhost:11434",
-		ollamaProcessorConfigField:  ".Payload.After",
+	testCases := []struct {
+		name    string
+		config  config.Config
+		wantErr error
+	}{
+		{
+			name: "applies set params",
+			config: config.Config{
+				ollamaProcessorConfigModel:  "llama3.2",
+				ollamaProcessorConfigPrompt: "hello world",
+				ollamaProcessorConfigUrl:    ollamaURL,
+				ollamaProcessorConfigField:  ".Payload.After",
+			},
+		},
+		{
+			name:    "errors with no required param",
+			config:  config.Config{},
+			wantErr: cerrors.New("failed to parse configuration: config invalid: error validating \"url\": required parameter is not provided"),
+		},
+		{
+			name: "invalid field pass through",
+			config: config.Config{
+				ollamaProcessorConfigUrl:   ollamaURL,
+				ollamaProcessorConfigField: ".Payload.Atfer",
+			},
+			wantErr: cerrors.New("failed to create reference resolver: invalid reference \".Payload.Atfer\": unexpected field \"Atfer\": cannot resolve reference"),
+		},
 	}
-	ctx := context.Background()
 
-	err := p.Configure(ctx, cfg)
-	is.NoErr(err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			cfg := tc.config
 
-	err = p.Configure(ctx, config.Config{})
-	is.True(err != nil)
+			err := p.Configure(ctx, cfg)
+
+			if tc.wantErr == nil {
+				is.NoErr(err)
+			} else {
+				is.True(err != nil)
+				is.Equal(tc.wantErr.Error(), err.Error())
+			}
+		})
+	}
+
 }
 
+//nolint:bodyclose
 func TestOllamaProcessor_Success(t *testing.T) {
 	ctx := context.Background()
 	ollamaURL := "http://localhost:11434"
 
 	testCases := []struct {
 		name    string
-		setup   func() sdk.Processor
+		setup   func() config.Config
 		records []opencdc.Record
 		want    []sdk.ProcessedRecord
 	}{
 		{
 			name: "successfully processes record",
-			setup: func() sdk.Processor {
+			setup: func() config.Config {
 				client := setupHTTPMockClient(t)
 				resp := getOllamaResp(t)
 				client.EXPECT().Do(gomock.Any()).DoAndReturn(resp)
 
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
+				return config.Config{
 					ollamaProcessorConfigUrl: ollamaURL,
-				})
-
-				return p
+				}
 			},
 			records: []opencdc.Record{
 				{
@@ -102,20 +133,17 @@ func TestOllamaProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "uses custom field",
-			setup: func() sdk.Processor {
+			setup: func() config.Config {
 				client := setupHTTPMockClient(t)
 				resp := getOllamaResp(t)
 				client.EXPECT().Do(gomock.Any()).DoAndReturn(resp)
 
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
+				return config.Config{
 					ollamaProcessorConfigModel:  "llama3.2",
 					ollamaProcessorConfigField:  ".Payload.Before",
 					ollamaProcessorConfigPrompt: "hello world",
 					ollamaProcessorConfigUrl:    "http://localhost:11434",
-				})
-
-				return p
+				}
 			},
 			records: []opencdc.Record{
 				{
@@ -147,9 +175,12 @@ func TestOllamaProcessor_Success(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := tc.setup()
+			config := tc.setup()
+			p := NewOllamaProcessor(log.Nop())
+			err := p.Configure(ctx, config)
+			is.NoErr(err)
 
-			got := proc.Process(ctx, tc.records)
+			got := p.Process(ctx, tc.records)
 			is.Equal(len(tc.records), len(got))
 
 			for i, rec := range got {
@@ -171,13 +202,13 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 
 	testcases := []struct {
 		name    string
-		setup   func() sdk.Processor
+		setup   func() config.Config
 		records []opencdc.Record
 		wantErr error
 	}{
 		{
 			name: "error occurs from ollama connection",
-			setup: func() sdk.Processor {
+			setup: func() config.Config {
 				client := setupHTTPMockClient(t)
 				respFn := func(_ *http.Request) (*http.Response, error) {
 					resp := &http.Response{
@@ -186,15 +217,11 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 					}
 					return resp, nil
 				}
-
 				client.EXPECT().Do(gomock.Any()).DoAndReturn(respFn)
 
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
+				return config.Config{
 					ollamaProcessorConfigUrl: ollamaURL,
-				})
-
-				return p
+				}
 			},
 			records: []opencdc.Record{
 				{
@@ -208,37 +235,12 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 			wantErr: cerrors.New("error sending the ollama request ollama request returned status code 500"),
 		},
 		{
-			name: "invalid field passed",
-			setup: func() sdk.Processor {
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
-					ollamaProcessorConfigUrl:   ollamaURL,
-					ollamaProcessorConfigField: ".Payload.Atfer",
-				})
-
-				return p
-			},
-			records: []opencdc.Record{
-				{
-					Payload: opencdc.Change{
-						After: opencdc.StructuredData{
-							"foo": "bar",
-						},
-					},
-				},
-			},
-			wantErr: cerrors.New("cannot process field: unexpected data type opencdc.Record"),
-		},
-		{
 			name: "invalid model pass through",
-			setup: func() sdk.Processor {
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
+			setup: func() config.Config {
+				return config.Config{
 					ollamaProcessorConfigUrl:   ollamaURL,
 					ollamaProcessorConfigModel: "chatgpt",
-				})
-
-				return p
+				}
 			},
 			records: []opencdc.Record{
 				{
@@ -253,7 +255,7 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 		},
 		{
 			name: "bad format returned from ollama",
-			setup: func() sdk.Processor {
+			setup: func() config.Config {
 				client := setupHTTPMockClient(t)
 				respFn := func(_ *http.Request) (*http.Response, error) {
 					resp := &http.Response{
@@ -262,15 +264,11 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 					}
 					return resp, nil
 				}
-
 				client.EXPECT().Do(gomock.Any()).DoAndReturn(respFn)
 
-				p := NewOllamaProcessor(log.Nop())
-				p.Configure(ctx, config.Config{
+				return config.Config{
 					ollamaProcessorConfigUrl: ollamaURL,
-				})
-
-				return p
+				}
 			},
 			records: []opencdc.Record{
 				{
@@ -288,9 +286,12 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := tc.setup()
+			config := tc.setup()
+			p := NewOllamaProcessor(log.Nop())
+			err := p.Configure(ctx, config)
+			is.NoErr(err)
 
-			result := proc.Process(ctx, tc.records)
+			result := p.Process(ctx, tc.records)
 
 			for _, rec := range result {
 				is.Equal("", cmp.Diff(sdk.ErrorRecord{Error: tc.wantErr}, rec, internal.CmpProcessedRecordOpts...))

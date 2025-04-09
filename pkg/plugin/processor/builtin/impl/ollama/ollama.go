@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //go:generate paramgen -output=paramgen_command.go ollamaProcessorConfig
-//go:generate mockgen --build_flags=--mod=mod -source=./ollama.go -destination=mock/http_client_mock.go -package=mock
+//go:generate go run go.uber.org/mock/mockgen  --build_flags=--mod=mod -source=./ollama.go -destination=mock/http_client_mock.go -package=mock
 
 package ollama
 
