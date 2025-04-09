@@ -38,11 +38,9 @@ import (
 //go:embed test/ollama-response.json
 var ollamaResp string
 
-func TestOllamaProcessor_Configure(t *testing.T) {
-	is := is.New(t)
-	p := &ollamaProcessor{}
-	ollamaURL := "http://localhost:11434"
+const ollamaURL = "http://localhost:11434"
 
+func TestOllamaProcessor_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
 		config  config.Config
@@ -74,6 +72,8 @@ func TestOllamaProcessor_Configure(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			p := &ollamaProcessor{}
 			ctx := context.Background()
 			cfg := tc.config
 
@@ -87,10 +87,9 @@ func TestOllamaProcessor_Configure(t *testing.T) {
 			}
 		})
 	}
-
 }
 
-//nolint:bodyclose
+//nolint:bodyclose // This is a false positive, the close occurs in the ollama file
 func TestOllamaProcessor_Success(t *testing.T) {
 	ctx := context.Background()
 	ollamaURL := "http://localhost:11434"
