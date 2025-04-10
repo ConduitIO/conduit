@@ -55,7 +55,7 @@ type Config struct {
 			Path string `long:"db.badger.path" usage:"path to badger DB"`
 		}
 		Postgres struct {
-			ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
+			ConnectionString string `long:"db.postgres.connection-string" mapstructure:"connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
 			Table            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
 		}
 		SQLite struct {
