@@ -40,7 +40,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prometheus/client_model v0.6.1
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.63.0
 	github.com/rs/zerolog v1.34.0
 	github.com/sashabaranov/go-openai v1.38.1
