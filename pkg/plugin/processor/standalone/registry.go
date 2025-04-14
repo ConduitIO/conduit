@@ -258,7 +258,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, "init-processor", log.Nop())
+	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, "init-processor", r.logger)
 	if err != nil {
 		return blueprint{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
 	}

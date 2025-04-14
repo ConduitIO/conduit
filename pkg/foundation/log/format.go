@@ -32,10 +32,10 @@ const (
 // ParseFormat converts a format string into a log Format value.
 // returns an error if the input string does not match known values.
 func ParseFormat(format string) (Format, error) {
-	switch {
-	case format == "cli":
+	switch format {
+	case "cli":
 		return FormatCLI, nil
-	case format == "json":
+	case "json":
 		return FormatJSON, nil
 	default:
 		return -1, cerrors.Errorf("unsupported log format: %s", format)

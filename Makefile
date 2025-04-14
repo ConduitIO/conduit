@@ -38,7 +38,7 @@ fmt:
 
 .PHONY: lint
 lint:
-	golangci-lint run -v
+	golangci-lint run
 
 .PHONY: run
 run:
@@ -67,9 +67,8 @@ download:
 
 .PHONY: install-tools
 install-tools: download
-	@echo Installing tools from tools.go
-	@go list -e -f '{{ join .Imports "\n" }}' tools.go | xargs -I % go list -f "%@{{.Module.Version}}" % | xargs -tI % go install %
-	@go mod tidy
+	@echo Installing tools from tools/go.mod
+	@go list -modfile=tools/go.mod tool | xargs -I % go list -modfile=tools/go.mod -f "%@{{.Module.Version}}" % | xargs -tI % go install %
 
 .PHONY: generate
 generate:
