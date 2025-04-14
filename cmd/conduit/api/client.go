@@ -29,7 +29,7 @@ type Client struct {
 	PipelineServiceClient  PipelineService
 	ConnectorServiceClient ConnectorService
 	ProcessorServiceClient ProcessorService
-	healthgrpc.HealthClient
+	HealthClient           healthgrpc.HealthClient
 }
 
 func NewClient(ctx context.Context, address string) (*Client, error) {
