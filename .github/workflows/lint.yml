@@ -20,10 +20,10 @@ jobs:
       - name: Golangci-lint version
         id: golangci-lint-version
         run: |
-          GOLANGCI_LINT_VERSION=$( go list -m -f '{{.Version}}' github.com/golangci/golangci-lint )
+          GOLANGCI_LINT_VERSION=$( go list -modfile=tools/go.mod -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2 )
           echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ steps.golangci-lint-version.outputs.v }}
