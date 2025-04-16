@@ -543,8 +543,8 @@ func TestService_UpsertYaml(t *testing.T) {
 	// Create the provisioning service
 	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "")
 
-	// Define the base YAML template
-	yamlTemplate := `version: 2.0
+	// Define the base YAML template for single pipeline
+	singlePipelineTemplate := `version: 2.2
 pipelines:
   - id: test-pipeline
     status: running
@@ -562,33 +562,87 @@ pipelines:
         settings:
           path: %s`
 
+	// Define the base YAML template for multiple pipelines
+	// Note: Each pipeline needs its own YAML document with version number
+	multiPipelineTemplate := `---
+version: 2.2
+pipelines:
+  - id: test-pipeline-1
+    status: running
+    name: Test Pipeline 1
+    description: %s
+    connectors:
+      - id: source-1
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s
+---
+version: 2.2
+pipelines:
+  - id: test-pipeline-2
+    status: running
+    name: Test Pipeline 2
+    description: %s
+    connectors:
+      - id: source-2
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s`
+
 	// Define test cases
 	type testCase struct {
-		name        string
-		source      string
-		sourceType  string
-		description string
-		outputPath  string
+		name         string
+		source       string
+		sourceType   string
+		description  string
+		outputPath   string
+		multiple     bool   // Whether to use multiple pipelines
+		description2 string // Description for second pipeline (if multiple)
+		outputPath2  string // Output path for second pipeline (if multiple)
 	}
 
 	testCases := []testCase{
 		{
-			name:        "Initial configuration",
+			name:        "Initial configuration (single pipeline)",
 			sourceType:  "string",
 			description: "Initial configuration",
 			outputPath:  "./output-v1.txt",
+			multiple:    false,
 		},
 		{
-			name:        "Update via YAML string",
+			name:        "Update via YAML string (single pipeline)",
 			sourceType:  "string",
 			description: "Updated configuration via string",
 			outputPath:  "./output-v2.txt",
+			multiple:    false,
 		},
 		{
-			name:        "Update via YAML file",
+			name:        "Update via YAML file (single pipeline)",
 			sourceType:  "file",
 			description: "Updated configuration via file",
 			outputPath:  "./output-v3.txt",
+			multiple:    false,
+		},
+		{
+			name:         "Multiple pipelines via YAML string",
+			sourceType:   "string",
+			description:  "First pipeline in multi-config",
+			outputPath:   "./output-multi-1.txt",
+			multiple:     true,
+			description2: "Second pipeline in multi-config",
+			outputPath2:  "./output-multi-2.txt",
 		},
 	}
 
@@ -596,6 +650,13 @@ pipelines:
 	tmpfile, err := os.CreateTemp("", "test-pipeline-*.yaml")
 	is.NoErr(err)
 	defer os.Remove(tmpfile.Name())
+
+	// Add cleanup for additional output files that will be created during the test
+	t.Cleanup(func() {
+		for _, path := range []string{"./output-multi-1.txt", "./output-multi-2.txt"} {
+			_ = os.Remove(path)
+		}
+	})
 
 	// Run each test case
 	for i, tc := range testCases {
@@ -605,8 +666,13 @@ pipelines:
 		}
 		t.Logf("Running test case %d: %s", i+1, tc.name)
 
-		// Generate the YAML content
-		yamlContent := fmt.Sprintf(yamlTemplate, tc.description, tc.outputPath)
+		// Generate the YAML content based on whether we're testing single or multiple pipelines
+		var yamlContent string
+		if tc.multiple {
+			yamlContent = fmt.Sprintf(multiPipelineTemplate, tc.description, tc.outputPath, tc.description2, tc.outputPath2)
+		} else {
+			yamlContent = fmt.Sprintf(singlePipelineTemplate, tc.description, tc.outputPath)
+		}
 
 		// Set up the source based on the source type
 		var source string
@@ -620,23 +686,66 @@ pipelines:
 		}
 
 		// Reload the pipeline with the current configuration
-		pipelineID, err := service.UpsertYaml(ctx, source)
+		var expectedPipelineIDs []string
+		if tc.multiple {
+			expectedPipelineIDs = []string{"test-pipeline-1", "test-pipeline-2"} // Both pipeline IDs in multi-pipeline case
+		} else {
+			expectedPipelineIDs = []string{"test-pipeline"} // Single pipeline case
+		}
+
+		result, err := service.UpsertYaml(ctx, source)
 		is.NoErr(err)
-		is.Equal(pipelineID, "test-pipeline")
+		is.Equal(len(result.PipelineIDs), len(expectedPipelineIDs))
+
+		// Check that all expected pipeline IDs are in the result
+		for _, expectedID := range expectedPipelineIDs {
+			found := false
+			for _, actualID := range result.PipelineIDs {
+				if actualID == expectedID {
+					found = true
+					break
+				}
+			}
+			is.True(found)
+		}
 
 		// Give the pipeline time to update
 		time.Sleep(500 * time.Millisecond)
 
-		// Verify the configuration was applied correctly
-		pipeline, err := plService.Get(ctx, "test-pipeline")
-		is.NoErr(err)
-		is.Equal(pipeline.Config.Name, "Test Pipeline")
-		is.Equal(pipeline.Config.Description, tc.description)
+		if tc.multiple {
+			// Verify the first pipeline was created/updated correctly
+			pipeline1, err := plService.Get(ctx, "test-pipeline-1")
+			is.NoErr(err)
+			is.Equal(pipeline1.Config.Name, "Test Pipeline 1")
+			is.Equal(pipeline1.Config.Description, tc.description)
 
-		// Get the destination connector directly and verify its path setting
-		destConn, err := connService.Get(ctx, "test-pipeline:destination")
-		is.NoErr(err)
-		is.Equal(destConn.Config.Settings["path"], tc.outputPath)
+			// Get the destination connector directly and verify its path setting
+			destConn1, err := connService.Get(ctx, "test-pipeline-1:destination-1")
+			is.NoErr(err)
+			is.Equal(destConn1.Config.Settings["path"], tc.outputPath)
+
+			// Verify the second pipeline was created/updated correctly
+			pipeline2, err := plService.Get(ctx, "test-pipeline-2")
+			is.NoErr(err)
+			is.Equal(pipeline2.Config.Name, "Test Pipeline 2")
+			is.Equal(pipeline2.Config.Description, tc.description2)
+
+			// Get the destination connector directly and verify its path setting
+			destConn2, err := connService.Get(ctx, "test-pipeline-2:destination-2")
+			is.NoErr(err)
+			is.Equal(destConn2.Config.Settings["path"], tc.outputPath2)
+		} else {
+			// Verify the configuration was applied correctly for single pipeline
+			pipeline, err := plService.Get(ctx, "test-pipeline")
+			is.NoErr(err)
+			is.Equal(pipeline.Config.Name, "Test Pipeline")
+			is.Equal(pipeline.Config.Description, tc.description)
+
+			// Get the destination connector directly and verify its path setting
+			destConn, err := connService.Get(ctx, "test-pipeline:destination")
+			is.NoErr(err)
+			is.Equal(destConn.Config.Settings["path"], tc.outputPath)
+		}
 	}
 }
 

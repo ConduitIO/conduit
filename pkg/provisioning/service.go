@@ -67,8 +67,8 @@ func NewService(
 	}
 }
 
-// parseYamlInput parses a YAML input (either a file path or a YAML string) and returns the first pipeline configuration.
-func (s *Service) parseYamlInput(ctx context.Context, yamlInput string) (config.Pipeline, string, error) {
+// parseYamlInput parses a YAML input (either a file path or a YAML string) and returns all pipeline configurations.
+func (s *Service) parseYamlInput(ctx context.Context, yamlInput string) ([]config.Pipeline, string, error) {
 	// First, determine if the input is a file path or a YAML string
 	isFilePath := false
 	if !strings.Contains(yamlInput, "\n") && len(yamlInput) < 1024 {
@@ -78,67 +78,100 @@ func (s *Service) parseYamlInput(ctx context.Context, yamlInput string) (config.
 	}
 
 	var source string
-	var pipelineConfig config.Pipeline
+	var pipelineConfigs []config.Pipeline
 
 	// Parse the YAML input
 	if isFilePath {
 		s.logger.Debug(ctx).
 			Str("file_path", yamlInput).
-			Msg("parsing pipeline configuration from file")
+			Msg("parsing pipeline configurations from file")
 
-		// Parse the file and get the first pipeline configuration
-		pipelineConfigs, err := s.parsePipelineConfigFile(ctx, yamlInput)
+		// Parse the file and get all pipeline configurations
+		configs, err := s.parsePipelineConfigFile(ctx, yamlInput)
 		if err != nil {
-			return config.Pipeline{}, "", cerrors.Errorf("failed to parse file %q: %w", yamlInput, err)
+			return nil, "", cerrors.Errorf("failed to parse file %q: %w", yamlInput, err)
 		}
 
-		if len(pipelineConfigs) == 0 {
-			return config.Pipeline{}, "", cerrors.New("no pipelines found in the YAML file")
+		if len(configs) == 0 {
+			return nil, "", cerrors.New("no pipelines found in the YAML file")
 		}
 
-		// Use the first pipeline from the file
-		pipelineConfig = pipelineConfigs[0]
+		// Use all pipelines from the file
+		pipelineConfigs = configs
 		source = yamlInput
 	} else {
 		s.logger.Debug(ctx).
-			Msg("parsing pipeline configuration from YAML string")
+			Msg("parsing pipeline configurations from YAML string")
 
 		reader := strings.NewReader(yamlInput)
-		pipelineConfigs, err := s.parser.Parse(ctx, reader)
+		configs, err := s.parser.Parse(ctx, reader)
 		if err != nil {
-			return config.Pipeline{}, "", cerrors.Errorf("failed to parse YAML string: %w", err)
+			return nil, "", cerrors.Errorf("failed to parse YAML string: %w", err)
 		}
 
-		if len(pipelineConfigs) == 0 {
-			return config.Pipeline{}, "", cerrors.New("no pipelines found in the YAML string")
+		if len(configs) == 0 {
+			return nil, "", cerrors.New("no pipelines found in the YAML string")
 		}
 
-		// Use the first pipeline from the string
-		pipelineConfig = pipelineConfigs[0]
+		// Use all pipelines from the string
+		pipelineConfigs = configs
 		source = "<yaml-string>"
 	}
 
-	// Extract the pipeline ID
-	pipelineID := pipelineConfig.ID
+	// Log the number of pipelines found
 	s.logger.Debug(ctx).
-		Str("pipeline_id", pipelineID).
-		Msg("using pipeline from YAML")
+		Int("pipeline_count", len(pipelineConfigs)).
+		Msg("found pipelines in YAML")
 
-	return pipelineConfig, source, nil
+	return pipelineConfigs, source, nil
 }
 
-// UpsertYaml parses a YAML input (either a file path or a YAML string) and creates or updates a pipeline.
-// If the pipeline doesn't exist, it will be created. If it does exist, it will be updated.
-// This can be used to reload a pipeline configuration without restarting Conduit.
-// If the YAML contains multiple pipeline definitions, only the first one will be used.
-func (s *Service) UpsertYaml(ctx context.Context, yamlInput string) (string, error) {
+// UpsertYamlResult represents the result of processing a YAML input with multiple pipelines
+type UpsertYamlResult struct {
+	PipelineIDs []string `json:"pipelineIDs"` // IDs of all successfully processed pipelines
+}
+
+// UpsertYaml parses a YAML input (either a file path or a YAML string) and creates or updates pipelines.
+// If a pipeline doesn't exist, it will be created. If it does exist, it will be updated.
+// This can be used to reload pipeline configurations without restarting Conduit.
+// The function processes all pipeline definitions found in the YAML input.
+// Returns a list of all successfully processed pipeline IDs, or an error if parsing failed.
+func (s *Service) UpsertYaml(ctx context.Context, yamlInput string) (*UpsertYamlResult, error) {
 	// Parse the YAML input
-	pipelineConfig, source, err := s.parseYamlInput(ctx, yamlInput)
+	pipelineConfigs, source, err := s.parseYamlInput(ctx, yamlInput)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return s.reloadPipeline(ctx, pipelineConfig, source)
+	// Initialize the result
+	result := &UpsertYamlResult{
+		PipelineIDs: make([]string, 0, len(pipelineConfigs)),
+	}
+
+	// Process all pipelines
+	var errs []error
+
+	s.logger.Info(ctx).
+		Int("pipeline_count", len(pipelineConfigs)).
+		Msg("processing pipelines from YAML")
+
+	for i, pipelineConfig := range pipelineConfigs {
+		// Process the pipeline
+		pipelineID, err := s.reloadPipeline(ctx, pipelineConfig, source)
+		if err != nil {
+			errs = append(errs, cerrors.Errorf("failed to process pipeline %d (%s): %w", i, pipelineConfig.ID, err))
+		} else {
+			// Add successfully processed pipeline ID to the result
+			result.PipelineIDs = append(result.PipelineIDs, pipelineID)
+		}
+	}
+
+	// If there were any errors, return them along with the partial result
+	if len(errs) > 0 {
+		return result, cerrors.Join(errs...)
+	}
+
+	return result, nil
 }
 
 // reloadPipeline is a helper function that handles the common logic for reloading a pipeline
