@@ -4,8 +4,6 @@
 package cohere
 
 import (
-	"regexp"
-
 	"github.com/conduitio/conduit-commons/config"
 )
 
@@ -19,6 +17,7 @@ const (
 	embedProcConfigInputType          = "inputType"
 	embedProcConfigMaxTextsPerRequest = "maxTextsPerRequest"
 	embedProcConfigModel              = "model"
+	embedProcConfigOutputField        = "outputField"
 )
 
 func (embedProcConfig) Parameters() map[string]config.Parameter {
@@ -63,9 +62,7 @@ func (embedProcConfig) Parameters() map[string]config.Parameter {
 			Default:     ".Payload.After",
 			Description: "Specifies the field from which the request body should be created.",
 			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{
-				config.ValidationRegex{Regex: regexp.MustCompile("^\\.(Payload|Key).*")},
-			},
+			Validations: []config.Validation{},
 		},
 		embedProcConfigInputType: {
 			Default:     "",
@@ -82,6 +79,12 @@ func (embedProcConfig) Parameters() map[string]config.Parameter {
 		embedProcConfigModel: {
 			Default:     "embed-english-v2.0",
 			Description: "Model is one of the Cohere embed models.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
+		embedProcConfigOutputField: {
+			Default:     ".Payload.After",
+			Description: "OutputField specifies in which field should the response body be saved.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
