@@ -51,7 +51,6 @@ type gojaContext struct {
 	runtime  *goja.Runtime
 	function goja.Callable
 }
-
 type javascriptConfig struct {
 	// JavaScript code for this processor.
 	// It needs to have a function `process()` that accept
@@ -64,8 +63,7 @@ type javascriptConfig struct {
 	// The path to a .js file containing the processor code.
 	ScriptPath string `json:"script.path"`
 }
-
-type javascriptProcessor struct {
+type JavascriptProcessor struct {
 	sdk.UnimplementedProcessor
 
 	// src is the JavaScript code that will be executed
@@ -75,11 +73,11 @@ type javascriptProcessor struct {
 	logger   log.CtxLogger
 }
 
-func NewJavascriptProcessor(logger log.CtxLogger) sdk.Processor {
-	return &javascriptProcessor{logger: logger}
+func NewJavascriptProcessor(logger log.CtxLogger) *JavascriptProcessor {
+	return &JavascriptProcessor{logger: logger}
 }
 
-func (p *javascriptProcessor) Specification() (sdk.Specification, error) {
+func (p *JavascriptProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "custom.javascript",
 		Summary: "Run custom JavaScript code.",
@@ -101,7 +99,7 @@ To find out what's possible with the JS processor, also refer to the documentati
 	}, nil
 }
 
-func (p *javascriptProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *JavascriptProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := javascriptConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
@@ -126,7 +124,7 @@ func (p *javascriptProcessor) Configure(ctx context.Context, c config.Config) er
 	return nil
 }
 
-func (p *javascriptProcessor) Open(context.Context) error {
+func (p *JavascriptProcessor) Open(context.Context) error {
 	runtime, err := p.newRuntime(p.logger)
 	if err != nil {
 		return cerrors.Errorf("failed initializing JS runtime: %w", err)
@@ -150,7 +148,7 @@ func (p *javascriptProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (p *javascriptProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *JavascriptProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	g := p.gojaPool.Get().(*gojaContext)
 	defer p.gojaPool.Put(g)
 
@@ -173,11 +171,11 @@ func (p *javascriptProcessor) Process(_ context.Context, records []opencdc.Recor
 	return out
 }
 
-func (p *javascriptProcessor) Teardown(context.Context) error {
+func (p *JavascriptProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (p *javascriptProcessor) newRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
+func (p *JavascriptProcessor) newRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
 	rt := goja.New()
 	require.NewRegistry().Enable(rt)
 
@@ -197,7 +195,7 @@ func (p *javascriptProcessor) newRuntime(logger log.CtxLogger) (*goja.Runtime, e
 	return rt, nil
 }
 
-func (p *javascriptProcessor) newFunction(runtime *goja.Runtime, src string) (goja.Callable, error) {
+func (p *JavascriptProcessor) newFunction(runtime *goja.Runtime, src string) (goja.Callable, error) {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to compile script: %w", err)
@@ -217,7 +215,7 @@ func (p *javascriptProcessor) newFunction(runtime *goja.Runtime, src string) (go
 	return entrypointFunc, nil
 }
 
-func (p *javascriptProcessor) newSingleRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *JavascriptProcessor) newSingleRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		// We return a singleRecord struct, however because we are
 		// not changing call.This instanceof will not work as expected.
@@ -233,7 +231,7 @@ func (p *javascriptProcessor) newSingleRecord(runtime *goja.Runtime) func(goja.C
 	}
 }
 
-func (p *javascriptProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *JavascriptProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		var r opencdc.RawData
 		if len(call.Arguments) > 0 {
@@ -244,7 +242,7 @@ func (p *javascriptProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.Cons
 	}
 }
 
-func (p *javascriptProcessor) jsContentStructured(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *JavascriptProcessor) jsContentStructured(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		// TODO accept arguments
 		// We return a map[string]interface{} struct, however because we are
@@ -255,7 +253,7 @@ func (p *javascriptProcessor) jsContentStructured(runtime *goja.Runtime) func(go
 	}
 }
 
-func (p *javascriptProcessor) toJSRecord(runtime *goja.Runtime, r opencdc.Record) goja.Value {
+func (p *JavascriptProcessor) toJSRecord(runtime *goja.Runtime, r opencdc.Record) goja.Value {
 	convertData := func(d opencdc.Data) interface{} {
 		switch v := d.(type) {
 		case opencdc.RawData:
@@ -284,7 +282,7 @@ func (p *javascriptProcessor) toJSRecord(runtime *goja.Runtime, r opencdc.Record
 	return runtime.ToValue(jsRec)
 }
 
-func (p *javascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, error) {
+func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, error) {
 	raw := v.Export()
 	if raw == nil {
 		return sdk.FilterRecord{}, nil

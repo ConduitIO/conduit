@@ -332,7 +332,7 @@ func TestEmbedProcessor_Process(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			p := &embedProcessor{}
+			p := NewEmbedProcessor(log.Nop())
 
 			err := p.Configure(ctx, tc.config)
 			is.NoErr(err)

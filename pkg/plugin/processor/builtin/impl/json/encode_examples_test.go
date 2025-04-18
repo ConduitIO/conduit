@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_structuredKey() {
 	p := NewEncodeProcessor(log.Nop())
 
@@ -65,7 +64,6 @@ func ExampleEncodeProcessor_structuredKey() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_mapToJSON() {
 	p := NewEncodeProcessor(log.Nop())
 

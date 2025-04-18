@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package embeddings
+package openai
 
 import (
 	"context"
@@ -22,27 +22,22 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	openaiwrap "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/goccy/go-json"
 	"github.com/sashabaranov/go-openai"
 )
 
-//go:generate paramgen -output=paramgen_proc.go embeddingsProcessorConfig
+//go:generate paramgen -output=embeddings_paramgen.go embeddingsConfig
 
-type embeddingsProcessor struct {
+type EmbeddingsProcessor struct {
 	sdk.UnimplementedProcessor
 
-	config            embeddingsProcessorConfig
-	call              openaiCall
+	config            embeddingsConfig
+	call              openaiCaller[[]float32]
 	referenceResolver sdk.ReferenceResolver
 }
 
-type openaiCall interface {
-	Call(ctx context.Context, input string) ([]float32, error)
-}
-
-type embeddingsProcessorConfig struct {
-	openaiwrap.Config
+type embeddingsConfig struct {
+	globalConfig
 
 	// Field is the reference to the field to process. Defaults to ".Payload.After".
 	Field string `json:"field" default:".Payload.After"`
@@ -58,15 +53,12 @@ type embeddingsProcessorConfig struct {
 	User string `json:"user"`
 }
 
-func NewEmbeddingsProcessor(l log.CtxLogger) sdk.Processor {
-	return sdk.ProcessorWithMiddleware(
-		&embeddingsProcessor{},
-		sdk.DefaultProcessorMiddleware()...,
-	)
+func NewEmbeddingsProcessor(log.CtxLogger) *EmbeddingsProcessor {
+	return &EmbeddingsProcessor{}
 }
 
-func (p *embeddingsProcessor) Configure(ctx context.Context, cfg config.Config) error {
-	err := sdk.ParseConfig(ctx, cfg, &p.config, embeddingsProcessorConfig{}.Parameters())
+func (p *EmbeddingsProcessor) Configure(ctx context.Context, cfg config.Config) error {
+	err := sdk.ParseConfig(ctx, cfg, &p.config, embeddingsConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
@@ -77,7 +69,7 @@ func (p *embeddingsProcessor) Configure(ctx context.Context, cfg config.Config) 
 	}
 
 	if p.call == nil {
-		p.call = &openaiClient{
+		p.call = &embeddingsCaller{
 			client: openai.NewClient(p.config.APIKey),
 			config: &p.config,
 		}
@@ -88,18 +80,18 @@ func (p *embeddingsProcessor) Configure(ctx context.Context, cfg config.Config) 
 	return nil
 }
 
-func (p *embeddingsProcessor) Specification() (sdk.Specification, error) {
+func (p *EmbeddingsProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "openai.embeddings",
 		Summary:     "Generate embeddings for records using OpenAI models.",
 		Description: "Embeddings is a Conduit processor that will generate vector embeddings for a record using OpenAI's embeddings API.",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters:  embeddingsProcessorConfig{}.Parameters(),
+		Parameters:  embeddingsConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *embeddingsProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+func (p *EmbeddingsProcessor) Process(ctx context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
 	var processedRecords []sdk.ProcessedRecord
 	for _, rec := range recs {
 		processed, err := p.processRecord(ctx, rec)
@@ -113,11 +105,11 @@ func (p *embeddingsProcessor) Process(ctx context.Context, recs []opencdc.Record
 	return processedRecords
 }
 
-func (p *embeddingsProcessor) processRecord(
+func (p *EmbeddingsProcessor) processRecord(
 	ctx context.Context, rec opencdc.Record,
 ) (opencdc.Record, error) {
 	processor := func(ctx context.Context, input string) ([]float32, error) {
-		return p.callOpenAI(ctx, input)
+		return callWithRetry(ctx, p.config.globalConfig, p.call, input)
 	}
 
 	formatter := func(embeddings []float32) ([]byte, error) {
@@ -128,20 +120,15 @@ func (p *embeddingsProcessor) processRecord(
 		return embeddingsJSON, nil
 	}
 
-	return openaiwrap.ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
+	return ProcessRecordField(ctx, rec, p.referenceResolver, processor, formatter)
 }
 
-func (p *embeddingsProcessor) callOpenAI(ctx context.Context, payload string) ([]float32, error) {
-	call := openaiwrap.OpenaiCaller[[]float32](p.call)
-	return openaiwrap.CallWithRetry(ctx, p.config.Config, call, payload)
-}
-
-type openaiClient struct {
+type embeddingsCaller struct {
 	client *openai.Client
-	config *embeddingsProcessorConfig
+	config *embeddingsConfig
 }
 
-func (o *openaiClient) Call(ctx context.Context, payload string) ([]float32, error) {
+func (o *embeddingsCaller) Call(ctx context.Context, payload string) ([]float32, error) {
 	var embeddings []float32
 	var err error
 

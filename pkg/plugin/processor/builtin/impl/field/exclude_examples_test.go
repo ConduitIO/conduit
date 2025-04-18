@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_oneField() {
 	p := NewExcludeProcessor(log.Nop())
 
@@ -66,7 +65,6 @@ func ExampleExcludeProcessor_oneField() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_multipleFields() {
 	p := NewExcludeProcessor(log.Nop())
 

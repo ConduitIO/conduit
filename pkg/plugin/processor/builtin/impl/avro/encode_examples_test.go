@@ -30,7 +30,6 @@ import (
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
@@ -40,7 +39,7 @@ func ExampleEncodeProcessor_autoRegister() {
 		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p := NewEncodeProcessor(log.Nop())
 	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
@@ -115,7 +114,6 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
@@ -141,7 +139,7 @@ func ExampleEncodeProcessor_preRegistered() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p := NewEncodeProcessor(log.Nop())
 	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{

@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawKey() {
 	p := NewDecodeProcessor(log.Nop())
 
@@ -66,7 +65,6 @@ func ExampleDecodeProcessor_rawKey() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawPayloadField() {
 	p := NewDecodeProcessor(log.Nop())
 

@@ -27,14 +27,14 @@ import (
 	"github.com/goccy/go-json"
 )
 
-type encodeProcessor struct {
+type EncodeProcessor struct {
 	referenceResolver sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
 
-func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
-	return &encodeProcessor{}
+func NewEncodeProcessor(log.CtxLogger) *EncodeProcessor {
+	return &EncodeProcessor{}
 }
 
 type encodeConfig struct {
@@ -45,7 +45,7 @@ type encodeConfig struct {
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 
-func (p *encodeProcessor) Specification() (sdk.Specification, error) {
+func (p *EncodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.encode",
 		Summary: "Encodes a specific field from structured data to JSON raw data (string).",
@@ -60,7 +60,7 @@ This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Paylo
 	}, nil
 }
 
-func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *EncodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := encodeConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, encodeConfig{}.Parameters())
 	if err != nil {
@@ -74,7 +74,7 @@ func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *encodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *EncodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec, err := p.encode(record)
@@ -86,7 +86,7 @@ func (p *encodeProcessor) Process(_ context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (p *encodeProcessor) encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *EncodeProcessor) encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := p.referenceResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to resolve the field: %w", err)

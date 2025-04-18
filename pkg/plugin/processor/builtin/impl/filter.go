@@ -24,15 +24,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type filterProcessor struct {
+type FilterProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewFilterProcessor(log.CtxLogger) sdk.Processor {
-	return &filterProcessor{}
-}
+func NewFilterProcessor(log.CtxLogger) *FilterProcessor { return &FilterProcessor{} }
 
-func (p *filterProcessor) Specification() (sdk.Specification, error) {
+func (p *FilterProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "filter",
 		Summary: "Acknowledges all records that get passed to the filter.",
@@ -48,7 +46,7 @@ to this processor, otherwise all records will be filtered out.`,
 	}, nil
 }
 
-func (p *filterProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *FilterProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i := range records {
 		out[i] = sdk.FilterRecord{}
@@ -56,7 +54,7 @@ func (p *filterProcessor) Process(_ context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (*filterProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+func (*FilterProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
 	// disable schema middleware by default
 	return []sdk.ProcessorMiddlewareOption{
 		sdk.ProcessorWithSchemaEncodeConfig{

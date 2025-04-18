@@ -32,8 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
-	openaiembed "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai/embeddings"
-	openaitextgen "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai/textgen"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
@@ -41,28 +40,32 @@ import (
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"avro.decode":         avro.NewDecodeProcessor,
-	"avro.encode":         avro.NewEncodeProcessor,
-	"base64.decode":       base64.NewDecodeProcessor,
-	"base64.encode":       base64.NewEncodeProcessor,
-	"cohere.command":      cohere.NewCommandProcessor,
-	"cohere.embed":        cohere.NewEmbedProcessor,
-	"cohere.rerank":       cohere.NewRerankProcessor,
-	"custom.javascript":   custom.NewJavascriptProcessor,
-	"error":               impl.NewErrorProcessor,
-	"filter":              impl.NewFilterProcessor,
-	"field.convert":       field.NewConvertProcessor,
-	"field.exclude":       field.NewExcludeProcessor,
-	"field.rename":        field.NewRenameProcessor,
-	"field.set":           field.NewSetProcessor,
-	"json.decode":         json.NewDecodeProcessor,
-	"json.encode":         json.NewEncodeProcessor,
-	"openai.embed":        openaiembed.NewEmbeddingsProcessor,
-	"openai.textgen":      openaitextgen.NewTextgenProcessor,
-	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
-	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
-	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
-	"webhook.http":        webhook.NewHTTPProcessor,
+	"avro.decode":         constructor(avro.NewDecodeProcessor),
+	"avro.encode":         constructor(avro.NewEncodeProcessor),
+	"base64.decode":       constructor(base64.NewDecodeProcessor),
+	"base64.encode":       constructor(base64.NewEncodeProcessor),
+	"cohere.command":      constructor(cohere.NewCommandProcessor),
+	"cohere.embed":        constructor(cohere.NewEmbedProcessor),
+	"cohere.rerank":       constructor(cohere.NewRerankProcessor),
+	"custom.javascript":   constructor(custom.NewJavascriptProcessor),
+	"error":               constructor(impl.NewErrorProcessor),
+	"filter":              constructor(impl.NewFilterProcessor),
+	"field.convert":       constructor(field.NewConvertProcessor),
+	"field.exclude":       constructor(field.NewExcludeProcessor),
+	"field.rename":        constructor(field.NewRenameProcessor),
+	"field.set":           constructor(field.NewSetProcessor),
+	"json.decode":         constructor(json.NewDecodeProcessor),
+	"json.encode":         constructor(json.NewEncodeProcessor),
+	"openai.embed":        constructor(openai.NewEmbeddingsProcessor),
+	"openai.textgen":      constructor(openai.NewTextgenProcessor),
+	"unwrap.debezium":     constructor(unwrap.NewDebeziumProcessor),
+	"unwrap.kafkaconnect": constructor(unwrap.NewKafkaConnectProcessor),
+	"unwrap.opencdc":      constructor(unwrap.NewOpenCDCProcessor),
+	"webhook.http":        constructor(webhook.NewHTTPProcessor),
+}
+
+func constructor[T sdk.Processor](p func(log.CtxLogger) T) ProcessorPluginConstructor {
+	return func(logger log.CtxLogger) sdk.Processor { return p(logger) }
 }
 
 type schemaRegistryProcessor interface {
@@ -199,7 +202,10 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 		sr.SetSchemaRegistry(r.schemaRegistry)
 	}
 
-	// apply default middleware
+	// Apply default middleware since built-in processors are created
+	// without the middleware applied.
+	// This is done by Conduit only for the built-in processors.
+	// In the standalone processors, the Run() method adds the middleware.
 	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
 	// attach processor ID for logs
 	p = newProcessorWithID(p, id)

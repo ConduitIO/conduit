@@ -37,7 +37,7 @@ func TestVersionCommandExecute(t *testing.T) {
 	cmd := &VersionCommand{}
 	cmd.Output(out)
 
-	expectedOutput := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+	expectedOutput := fmt.Sprintf("(devel) %s/%s", runtime.GOOS, runtime.GOARCH)
 
 	err := cmd.Execute(context.Background())
 	is.NoErr(err)

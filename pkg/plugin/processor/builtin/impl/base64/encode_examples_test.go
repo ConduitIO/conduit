@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_rawData() {
 	p := NewEncodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
@@ -78,8 +77,7 @@ func ExampleEncodeProcessor_rawData() {
 	//  }
 }
 
-//nolint:govet // a more descriptive example description
-func ExampleBase64EncodeProcessor_stringField() {
+func ExampleEncodeProcessor_stringField() {
 	p := NewEncodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode nested value to base64",

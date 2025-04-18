@@ -78,7 +78,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			mockDecoder.EXPECT().
 				Decode(ctx, opencdc.RawData(data)).
 				Return(decodedVal, nil)
-			underTest.(*decodeProcessor).decoder = mockDecoder
+			underTest.decoder = mockDecoder
 
 			got := underTest.Process(ctx, []opencdc.Record{input})
 			is.Equal(1, len(got))

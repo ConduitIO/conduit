@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 //go:generate env EXPORT_PROCESSORS=true go test -count=1 -tags export_processors .
 
-package embeddings
+package openai
 
 import (
 	"os"

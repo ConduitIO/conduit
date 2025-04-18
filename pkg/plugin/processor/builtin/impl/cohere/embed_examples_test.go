@@ -16,37 +16,37 @@ package cohere
 
 import (
 	"context"
-	"log"
+	"fmt"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 	"github.com/goccy/go-json"
 )
 
-//nolint:govet // a more descriptive example description
 func ExampleEmbedProcessor() {
-	p := &embedProcessor{}
+	p := NewEmbedProcessor(log.Nop())
 	p.client = mockEmbedClient{}
 
 	embedding, err := p.client.embed(context.Background(), []string{"test input"})
 	if err != nil {
-		log.Fatal("failed to get embedding")
+		panic(fmt.Sprintf("failed to get embedding: %v", err))
 	}
 	if len(embedding) == 0 {
-		log.Fatal("no embeddings found")
+		panic("no embeddings found")
 	}
 
 	embeddingJSON, err := json.Marshal(embedding[0])
 	if err != nil {
-		log.Fatalf("failed to marshal embeddings: %v", err)
+		panic(fmt.Sprintf("failed to marshal embeddings: %v", err))
 	}
 
 	// Compress the embedding using zstd
 	compressedEmbedding, err := compressData(embeddingJSON)
 	if err != nil {
-		log.Fatalf("failed to compress embeddings: %v", err)
+		panic(fmt.Sprintf("failed to compress embeddings: %v", err))
 	}
 
 	exampleutil.RunExample(p, exampleutil.Example{

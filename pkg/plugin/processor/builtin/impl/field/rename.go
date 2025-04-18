@@ -29,15 +29,15 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 )
 
-type renameProcessor struct {
+type RenameProcessor struct {
 	newNames           []string
 	referenceResolvers []sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
 
-func NewRenameProcessor(log.CtxLogger) sdk.Processor {
-	return &renameProcessor{}
+func NewRenameProcessor(log.CtxLogger) *RenameProcessor {
+	return &RenameProcessor{}
 }
 
 type renameConfig struct {
@@ -50,7 +50,7 @@ type renameConfig struct {
 	Mapping []string `json:"mapping" validate:"required"`
 }
 
-func (p *renameProcessor) Specification() (sdk.Specification, error) {
+func (p *RenameProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.rename",
 		Summary: "Rename a group of fields.",
@@ -67,7 +67,7 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *renameProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *RenameProcessor) Configure(ctx context.Context, c config.Config) error {
 	forbiddenFields := []string{
 		internal.MetadataReference,
 		internal.PayloadReference,
@@ -111,7 +111,7 @@ func (p *renameProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *renameProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *RenameProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record

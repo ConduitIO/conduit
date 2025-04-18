@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type decodeProcessor struct {
+type DecodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	config            decodeConfig
@@ -42,11 +42,11 @@ type decodeConfig struct {
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }
 
-func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
-	return &decodeProcessor{}
+func NewDecodeProcessor(log.CtxLogger) *DecodeProcessor {
+	return &DecodeProcessor{}
 }
 
-func (p *decodeProcessor) Specification() (sdk.Specification, error) {
+func (p *DecodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "base64.decode",
 		Summary: "Decode a field to base64.",
@@ -58,7 +58,7 @@ result in the target field. It is not allowed to decode the ` + "`.Position`" + 
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *DecodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	err := sdk.ParseConfig(ctx, c, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
@@ -73,7 +73,7 @@ func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *decodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *DecodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		rec, err := p.base64Decode(rec)
@@ -85,7 +85,7 @@ func (p *decodeProcessor) Process(ctx context.Context, records []opencdc.Record)
 	return out
 }
 
-func (p *decodeProcessor) base64Decode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *DecodeProcessor) base64Decode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := p.referenceResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to resolve the field: %w", err)

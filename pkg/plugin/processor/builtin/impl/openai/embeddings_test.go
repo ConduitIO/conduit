@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package embeddings
+package openai
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	openaiwrap "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/sashabaranov/go-openai"
@@ -29,12 +29,12 @@ import (
 
 func TestEmbeddingsProcessor_Configure(t *testing.T) {
 	is := is.New(t)
-	p := &embeddingsProcessor{}
+	p := NewEmbeddingsProcessor(log.Nop())
 
 	cfg := config.Config{
-		embeddingsProcessorConfigApiKey: "test-api-key",
-		embeddingsProcessorConfigModel:  "text-embedding-3-small",
-		embeddingsProcessorConfigField:  ".Payload.After",
+		embeddingsConfigApiKey: "test-api-key",
+		embeddingsConfigModel:  "text-embedding-3-small",
+		embeddingsConfigField:  ".Payload.After",
 	}
 
 	ctx := context.Background()
@@ -50,16 +50,16 @@ func TestEmbeddingsProcessor_Process(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	processor := &embeddingsProcessor{}
+	processor := NewEmbeddingsProcessor(log.Nop())
 	cfg := config.Config{
-		embeddingsProcessorConfigApiKey: "fake api key",
-		embeddingsProcessorConfigModel:  string(openai.SmallEmbedding3),
+		embeddingsConfigApiKey: "fake api key",
+		embeddingsConfigModel:  string(openai.SmallEmbedding3),
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
 
 	mockEmbeddings := []float32{0.1, 0.2, 0.3, 0.4, 0.5}
-	processor.call = &openaiwrap.MockEmbeddingsCaller{Embeddings: mockEmbeddings}
+	processor.call = &mockEmbeddingsCaller{Embeddings: mockEmbeddings}
 
 	rec := opencdc.Record{
 		Payload: opencdc.Change{
@@ -87,20 +87,20 @@ func TestEmbeddingsProcessorWithRetry(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	processor := &embeddingsProcessor{}
+	processor := NewEmbeddingsProcessor(log.Nop())
 
 	cfg := config.Config{
-		embeddingsProcessorConfigApiKey:         "fake api key",
-		embeddingsProcessorConfigModel:          "text-embedding-3-small",
-		embeddingsProcessorConfigMaxRetries:     "3",
-		embeddingsProcessorConfigInitialBackoff: "10",
-		embeddingsProcessorConfigMaxBackoff:     "100",
-		embeddingsProcessorConfigBackoffFactor:  "2.0",
+		embeddingsConfigApiKey:         "fake api key",
+		embeddingsConfigModel:          "text-embedding-3-small",
+		embeddingsConfigMaxRetries:     "3",
+		embeddingsConfigInitialBackoff: "10",
+		embeddingsConfigMaxBackoff:     "100",
+		embeddingsConfigBackoffFactor:  "2.0",
 	}
 
 	is.NoErr(processor.Configure(ctx, cfg))
 
-	retryClient := &openaiwrap.FlakyEmbeddingsCaller{}
+	retryClient := &flakyEmbeddingsCaller{}
 	processor.call = retryClient
 
 	rec := opencdc.Record{

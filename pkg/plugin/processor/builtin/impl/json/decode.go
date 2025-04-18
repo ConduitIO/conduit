@@ -27,14 +27,14 @@ import (
 	"github.com/goccy/go-json"
 )
 
-type decodeProcessor struct {
+type DecodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	referenceResolver sdk.ReferenceResolver
 }
 
-func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
-	return &decodeProcessor{}
+func NewDecodeProcessor(log.CtxLogger) *DecodeProcessor {
+	return &DecodeProcessor{}
 }
 
 type decodeConfig struct {
@@ -45,7 +45,7 @@ type decodeConfig struct {
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 
-func (p *decodeProcessor) Specification() (sdk.Specification, error) {
+func (p *DecodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.decode",
 		Summary: "Decodes a specific field from JSON raw data (string) to structured data.",
@@ -61,7 +61,7 @@ This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Paylo
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error {
+func (p *DecodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := decodeConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, decodeConfig{}.Parameters())
 	if err != nil {
@@ -75,7 +75,7 @@ func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error 
 	return nil
 }
 
-func (p *decodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *DecodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record
@@ -115,7 +115,7 @@ func (p *decodeProcessor) Process(_ context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (p *decodeProcessor) setJSONData(bytes []byte, ref sdk.Reference) error {
+func (p *DecodeProcessor) setJSONData(bytes []byte, ref sdk.Reference) error {
 	if len(bytes) == 0 {
 		// value is an empty json
 		return ref.Set(nil)
