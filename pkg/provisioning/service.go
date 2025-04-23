@@ -16,7 +16,6 @@ package provisioning
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -168,19 +167,51 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// getYamlFiles recursively reads folders in the path and collects paths to all
-// files that end with .yml or .yaml.
+// getYamlFiles reads files in the path and collects paths to all
+// files that end with .yml or .yaml. It only reads files in the top-level
+// directory and skips hidden files and symlinks.
 func (s *Service) getYamlFiles(path string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(path, func(path string, fileInfo fs.DirEntry, err error) error {
-		if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	if path == "" {
+		return nil, nil
+	}
+
+	s.logger.Debug(context.Background()).
+		Str("pipelines_path", path).
+		Msg("loading pipeline configuration files")
+
+	dirEntries, err := os.ReadDir(path)
 	if err != nil {
+		s.logger.Warn(context.Background()).
+			Err(err).
+			Msg("could not read pipelines directory")
 		return nil, err
 	}
+
+	var files []string
+	for _, dirEntry := range dirEntries {
+		// Skip directories and hidden files
+		if dirEntry.IsDir() || strings.HasPrefix(dirEntry.Name(), ".") {
+			continue
+		}
+
+		// Skip symlinks
+		if dirEntry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		// Only include .yml and .yaml files
+		if !strings.HasSuffix(dirEntry.Name(), ".yml") && !strings.HasSuffix(dirEntry.Name(), ".yaml") {
+			continue
+		}
+
+		filePath := filepath.Join(path, dirEntry.Name())
+		files = append(files, filePath)
+
+		s.logger.Debug(context.Background()).
+			Str("file_path", filePath).
+			Msg("found pipeline configuration file")
+	}
+
 	return files, nil
 }
 
