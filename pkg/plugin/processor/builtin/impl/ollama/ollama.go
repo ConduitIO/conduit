@@ -91,7 +91,7 @@ func (p *ollamaProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "ollama",
 		Summary:     "Processes data through an ollama instance",
-		Description: "This processor transforms data by asking the provided model on the provided ollama instance.",
+		Description: "This processor runs provided records through a specified model on a provided ollama instance. It uses the provided prompt to transform the incoming records.",
 		Version:     "v0.0.1",
 		Author:      "Meroxa, Inc.",
 		Parameters:  p.config.Parameters(),

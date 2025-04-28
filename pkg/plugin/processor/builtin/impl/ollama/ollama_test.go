@@ -30,7 +30,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama/mock"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/google/go-cmp/cmp"
-	"github.com/magiconair/properties/assert"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -41,6 +40,8 @@ var ollamaResp string
 const ollamaURL = "http://localhost:11434"
 
 func TestOllamaProcessor_Configure(t *testing.T) {
+	ctx := context.Background()
+
 	testCases := []struct {
 		name    string
 		config  config.Config
@@ -74,7 +75,6 @@ func TestOllamaProcessor_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			p := &ollamaProcessor{}
-			ctx := context.Background()
 			cfg := tc.config
 
 			err := p.Configure(ctx, cfg)
@@ -189,7 +189,7 @@ func TestOllamaProcessor_Success(t *testing.T) {
 				processed, ok := rec.(sdk.SingleRecord)
 				is.True(ok)
 
-				assert.Equal(t, processed, tc.want[i])
+				is.Equal(processed, tc.want[i])
 			}
 		})
 	}
