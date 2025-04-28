@@ -256,7 +256,7 @@ func validatePrompt(input string) error {
 	}
 
 	if len(input) < config.MinLength {
-		return fmt.Errorf("prompt is too short, must be %d characters", config.MinLength)
+		return fmt.Errorf("prompt with length %d is too short, must be %d characters", len(input), config.MinLength)
 	}
 
 	if len(input) > config.MaxLength {
