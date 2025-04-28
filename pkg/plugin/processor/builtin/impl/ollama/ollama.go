@@ -175,7 +175,7 @@ func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.StructuredData) ([]
 
 func (p *ollamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte) ([]byte, error) {
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewBuffer(reqBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ollama request %w", err)
 	}
