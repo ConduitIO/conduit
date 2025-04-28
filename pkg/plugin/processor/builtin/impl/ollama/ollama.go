@@ -103,7 +103,7 @@ func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record)
 	processedRecords := make([]sdk.ProcessedRecord, 0, len(records))
 
 	if !slices.Contains(allowedModels, p.config.Model) {
-		return append(processedRecords, sdk.ErrorRecord{Error: fmt.Errorf("model {%s} not allowed by processor", p.config.Model)})
+		return append(processedRecords, sdk.ErrorRecord{Error: fmt.Errorf("model {%s} not allowed by processor. Allowed models: %v", p.config.Model, allowedModels)})
 	}
 
 	for _, rec := range records {
