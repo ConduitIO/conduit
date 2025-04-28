@@ -260,7 +260,7 @@ func validatePrompt(input string) error {
 	}
 
 	if len(input) > config.MaxLength {
-		return fmt.Errorf("prompt exceeds context window allowance, must be %d characters", config.MaxLength)
+		return fmt.Errorf("prompt with length %d exceeds context window allowance, must be less than %d characters", len(input), config.MaxLength)
 	}
 
 	for _, pattern := range config.BlockedPatterns {
