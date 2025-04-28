@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.10.2
 	github.com/conduitio/conduit-connector-kafka v0.12.1
 	github.com/conduitio/conduit-connector-log v0.7.1
-	github.com/conduitio/conduit-connector-postgres v0.11.3-0.20250416164008-ab22ca81bb27
+	github.com/conduitio/conduit-connector-postgres v0.11.3-0.20250425215010-3331840fb4fd
 	github.com/conduitio/conduit-connector-protocol v0.9.2
 	github.com/conduitio/conduit-connector-s3 v0.9.1
 	github.com/conduitio/conduit-connector-sdk v0.13.3
@@ -118,7 +118,7 @@ require (
 	github.com/conduitio/evolviconf v0.1.0 // indirect
 	github.com/conduitio/evolviconf/evolviyaml v0.1.0 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
-	github.com/daixiang0/gci v0.13.5 // indirect
+	github.com/daixiang0/gci v0.13.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.6.0 // indirect
@@ -177,7 +177,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.2 // indirect
+	github.com/jackc/pgx/v5 v5.7.4 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jgautheron/goconst v1.7.1 // indirect
 	github.com/jingyugao/rowserrcheck v1.1.1 // indirect
