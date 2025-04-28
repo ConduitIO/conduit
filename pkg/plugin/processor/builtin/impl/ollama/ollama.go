@@ -298,7 +298,7 @@ func (p *ollamaProcessor) structuredData(data any) (opencdc.StructuredData, erro
 	case opencdc.StructuredData:
 		sd = v
 	case nil:
-		return nil, cerrors.Errorf("field to unmarshal is nil")
+		return nil, cerrors.Errorf("field to unmarshal nil")
 	default:
 		return nil, cerrors.Errorf("unexpected data type %T", v)
 	}
