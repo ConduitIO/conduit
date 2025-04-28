@@ -250,7 +250,7 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 					},
 				},
 			},
-			wantErr: cerrors.New("model {chatgpt} not allowed by processor"),
+			wantErr: cerrors.New("model {chatgpt} not allowed by processor. Allowed models: [llama3.2]"),
 		},
 		{
 			name: "bad format returned from ollama",
