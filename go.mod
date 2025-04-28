@@ -33,7 +33,6 @@ require (
 	github.com/hashicorp/go-plugin v1.6.3
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.18.0
-	github.com/magiconair/properties v1.8.7
 	github.com/matryer/is v1.4.1
 	github.com/neilotoole/slogt v1.1.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
