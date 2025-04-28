@@ -17,6 +17,7 @@ package provisioning
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,7 +209,8 @@ func TestService_Init_Delete(t *testing.T) {
 	procService.EXPECT().Delete(anyCtx, oldPipelineProcessorInstance.ID).Return(nil)
 
 	err := service.Init(context.Background())
-	is.NoErr(err)
+	is.True(cerrors.Is(err, cerrors.New("pipeline path cannot be empty")))
+	is.True(strings.Contains(err.Error(), "failed to read pipelines folder"))
 }
 
 func TestService_Init_NoRollbackOnFailedStart(t *testing.T) {
