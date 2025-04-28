@@ -53,7 +53,7 @@ type ollamaProcessorConfig struct {
 	// Model is the name of the model used with ollama
 	Model string `json:"model" default:"llama3.2"`
 	// Prompt is the prompt to pass into ollama to tranform the data
-	Prompt string `json:"prompt" default:""`
+	Prompt string `json:"prompt"`
 }
 
 type ollamaProcessor struct {
