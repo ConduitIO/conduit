@@ -49,7 +49,7 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.3.0
 	github.com/twmb/go-cache v1.2.1
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250404141209-ee84b53bf3d0
