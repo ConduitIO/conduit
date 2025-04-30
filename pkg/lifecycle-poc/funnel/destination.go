@@ -121,7 +121,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
 		}
 		if ack.Error != nil {
-			batch.Nack(i, ack.Error)
+			batch.Nack(i, ack.Error) // TODO: adjust i according to filtered records
 		}
 	}
 

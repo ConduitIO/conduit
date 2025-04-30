@@ -330,8 +330,9 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 			Msg("task returned clean batch")
 
 		// Shortcut.
-		if !w.hasNextTask(currentIndex) {
-			// This is the last task, the batch has made it end-to-end, let's ack!
+		if !w.hasNextTask(currentIndex) || !b.HasActiveRecords() {
+			// Either this is the last task (the batch has made it end-to-end),
+			// or the batch has only filtered records. Let's ack!
 			return acker.Ack(ctx, b)
 		}
 		// There is at least one task after this one, let's continue.
@@ -360,8 +361,9 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 
 		switch subBatch.recordStatuses[0].Flag {
 		case RecordFlagAck, RecordFlagFilter:
-			if !w.hasNextTask(currentIndex) {
-				// This is the last task, the batch has made it end-to-end, let's ack!
+			if !w.hasNextTask(currentIndex) || !subBatch.HasActiveRecords() {
+				// Either this is the last task (the batch has made it end-to-end),
+				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
 				err := acker.Ack(ctx, subBatch)
