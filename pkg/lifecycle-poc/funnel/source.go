@@ -86,14 +86,14 @@ func (t *SourceTask) Close(context.Context) error {
 }
 
 func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
-	start := time.Now()
+	// start := time.Now()
 
 	recs, err := t.source.Read(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to read from source: %w", err)
 	}
 
-	t.observeMetrics(recs, start)
+	// t.observeMetrics(recs, start)
 
 	// Overwrite the batch with the new records.
 	*b = *NewBatch(recs)
