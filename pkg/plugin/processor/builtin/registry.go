@@ -57,6 +57,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"field.set":           Constructor(field.NewSetProcessor),
 	"json.decode":         Constructor(json.NewDecodeProcessor),
 	"json.encode":         Constructor(json.NewEncodeProcessor),
+	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
 	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
 	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
 	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),
