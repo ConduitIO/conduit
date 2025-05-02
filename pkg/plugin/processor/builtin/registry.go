@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
