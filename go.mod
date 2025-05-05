@@ -16,7 +16,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.11.3-0.20250501143815-6ddf342c560d
 	github.com/conduitio/conduit-connector-protocol v0.9.2
 	github.com/conduitio/conduit-connector-s3 v0.9.1
-	github.com/conduitio/conduit-connector-sdk v0.13.3
+	github.com/conduitio/conduit-connector-sdk v0.13.4-0.20250505120140-616bbe099bb4
 	github.com/conduitio/conduit-processor-sdk v0.4.3
 	github.com/conduitio/conduit-schema-registry v0.2.5
 	github.com/conduitio/ecdysis v0.4.1
@@ -49,11 +49,11 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.3.0
 	github.com/twmb/go-cache v1.2.1
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250404141209-ee84b53bf3d0
-	google.golang.org/grpc v1.71.1
+	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
