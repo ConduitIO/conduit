@@ -40,7 +40,6 @@ func (m *ProcessorMetricsImpl) Observe(recordsNum int, start time.Time) {
 			m.timer.Update(tookPerRecord)
 		}
 	}()
-
 }
 
 func NewProcessorMetrics(pipelineName, plugin string) *ProcessorMetricsImpl {

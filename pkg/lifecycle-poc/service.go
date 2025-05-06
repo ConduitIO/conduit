@@ -676,5 +676,4 @@ func (s *Service) newDLQMetrics(pipelineName string, plugin string) funnel.Conne
 	}
 
 	return &funnel.NoOpConnectorMetrics{}
-
 }
