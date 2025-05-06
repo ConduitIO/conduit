@@ -19,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.13.3
 	github.com/conduitio/conduit-processor-sdk v0.4.3
 	github.com/conduitio/conduit-schema-registry v0.2.5
-	github.com/conduitio/ecdysis v0.4.1
+	github.com/conduitio/ecdysis v0.4.2
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
@@ -41,7 +41,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.63.0
 	github.com/rs/zerolog v1.34.0
-	github.com/sashabaranov/go-openai v1.38.2
+	github.com/sashabaranov/go-openai v1.39.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
@@ -49,11 +49,11 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.3.0
 	github.com/twmb/go-cache v1.2.1
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250404141209-ee84b53bf3d0
-	google.golang.org/grpc v1.71.1
+	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
