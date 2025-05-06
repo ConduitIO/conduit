@@ -218,7 +218,14 @@ func createServices(r *Runtime) error {
 	var lifecycleService lifecycleService
 	if r.Config.Preview.PipelineArchV2 {
 		r.logger.Info(context.Background()).Msg("using lifecycle service v2")
-		lifecycleService = lifecycle_v2.NewService(r.logger, connService, procService, connPluginService, plService)
+		lifecycleService = lifecycle_v2.NewService(
+			r.logger,
+			connService,
+			procService,
+			connPluginService,
+			plService,
+			r.Config.Preview.PipelineArchV2EnableMetrics,
+		)
 	} else {
 		// Error recovery configuration
 		errRecoveryCfg := &lifecycle.ErrRecoveryCfg{

@@ -67,6 +67,7 @@ func NewService(
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
 	pipelines PipelineService,
+	metricsEnabled bool,
 ) *Service {
 	return &Service{
 		logger:           logger.WithComponent("lifecycle.Service"),
@@ -75,6 +76,7 @@ func NewService(
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
+		metricsEnabled:   metricsEnabled,
 	}
 }
 
