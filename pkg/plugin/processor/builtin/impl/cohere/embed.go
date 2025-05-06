@@ -54,7 +54,7 @@ type embedProcConfig struct {
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 	// Specifies the field from which the request body should be created.
 	InputField string `json:"inputField" default:".Payload.After"`
-	// OutputField specifies in which field should the response body be saved.
+	// OutputField specifies which field will the response body be saved at.
 	OutputField string `json:"outputField" default:".Payload.After"`
 	// MaxTextsPerRequest controls the number of texts sent in each Cohere embedding API call (max 96)
 	MaxTextsPerRequest int `json:"maxTextsPerRequest" default:"96"`
@@ -112,13 +112,13 @@ func (p *EmbedProcessor) Configure(ctx context.Context, cfg config.Config) error
 func (p *EmbedProcessor) Open(ctx context.Context) error {
 	inputResolver, err := sdk.NewReferenceResolver(p.config.InputField)
 	if err != nil {
-		return cerrors.Errorf(`failed to create a field resolver for %v parameter: %w`, p.config.InputField, err)
+		return cerrors.Errorf("failed to create a field resolver for %v parameter: %w", p.config.InputField, err)
 	}
 	p.inputFieldRefResolver = &inputResolver
 
 	outputResolver, err := sdk.NewReferenceResolver(p.config.OutputField)
 	if err != nil {
-		return cerrors.Errorf(`failed to create a field resolver for %v parameter: %w`, p.config.OutputField, err)
+		return cerrors.Errorf("failed to create a field resolver for %v parameter: %w", p.config.OutputField, err)
 	}
 	p.outputFieldRefResolver = &outputResolver
 
@@ -264,12 +264,12 @@ func (p *EmbedProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolv
 
 	ref, err := refRes.Resolve(r)
 	if err != nil {
-		return cerrors.Errorf("error reference resolver: %w", err)
+		return cerrors.Errorf("error resolving reference: %w", err)
 	}
 
 	err = ref.Set(data)
 	if err != nil {
-		return cerrors.Errorf("error reference set: %w", err)
+		return cerrors.Errorf("error setting reference: %w", err)
 	}
 
 	return nil

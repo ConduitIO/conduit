@@ -272,12 +272,12 @@ func (p *CommandProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceReso
 
 	ref, err := refRes.Resolve(r)
 	if err != nil {
-		return fmt.Errorf("error reference resolver: %w", err)
+		return fmt.Errorf("error resolving reference: %w", err)
 	}
 
 	err = ref.Set(data)
 	if err != nil {
-		return fmt.Errorf("error reference set: %w", err)
+		return fmt.Errorf("error setting reference: %w", err)
 	}
 
 	return nil
