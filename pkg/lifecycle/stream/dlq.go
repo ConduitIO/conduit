@@ -180,7 +180,7 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) error {
 		return err
 	}
 	n.Timer.Update(time.Since(writeTime))
-	n.Histogram.Observe(dlqRecord)
+	// n.Histogram.Observe(dlqRecord)
 	return nil
 }
 

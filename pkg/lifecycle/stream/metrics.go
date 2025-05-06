@@ -57,7 +57,7 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 		}
 
 		msg.RegisterAckHandler(func(msg *Message) error {
-			n.Histogram.Observe(msg.Record)
+			// n.Histogram.Observe(msg.Record)
 			return nil
 		})
 
