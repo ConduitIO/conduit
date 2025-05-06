@@ -77,7 +77,7 @@
       },
       "outputField": {
         "default": ".Payload.After",
-        "description": "OutputField specifies in which field should the response body be saved.",
+        "description": "OutputField specifies which field will the response body be saved at.",
         "type": "string",
         "validations": []
       },

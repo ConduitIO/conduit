@@ -215,7 +215,7 @@ func TestEmbedProcessor_Process(t *testing.T) {
 					Metadata: map[string]string{},
 				},
 			},
-			wantErr: `failed to set output: error reference resolver: could not resolve field "response": .Payload.After does not contain structured data: cannot resolve reference`,
+			wantErr: `failed to set output: error resolving reference: could not resolve field "response": .Payload.After does not contain structured data: cannot resolve reference`,
 		},
 		{
 			name: "successful process single record to set new field 'response' in .Payload.After having structured data",

@@ -84,7 +84,7 @@ func (embedProcConfig) Parameters() map[string]config.Parameter {
 		},
 		embedProcConfigOutputField: {
 			Default:     ".Payload.After",
-			Description: "OutputField specifies in which field should the response body be saved.",
+			Description: "OutputField specifies which field will the response body be saved at.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
