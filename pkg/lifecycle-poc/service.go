@@ -19,7 +19,6 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -58,6 +57,7 @@ type Service struct {
 	runningPipelines *csync.Map[string, *runnablePipeline]
 
 	isGracefulShutdown atomic.Bool
+	metricsEnabled     bool
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -393,16 +393,7 @@ func (s *Service) buildSourceTasks(
 			instance.ID,
 			src.(*connector.Source),
 			logger,
-			measure.ConnectorExecutionDurationTimer.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
+			s.newConnectorMetrics(pl.Config.Name, instance),
 		)
 
 		// Add processor tasks
@@ -454,16 +445,7 @@ func (s *Service) buildDestinationTasks(
 			instance.ID,
 			dest.(*connector.Destination),
 			logger,
-			measure.ConnectorExecutionDurationTimer.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
+			s.newConnectorMetrics(pl.Config.Name, instance),
 		)
 
 		// Add processor tasks
@@ -509,7 +491,7 @@ func (s *Service) buildProcessorTasks(
 				instance.ID,
 				runnableProc,
 				logger,
-				measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, instance.Plugin),
+				s.newProcessorMetrics(pl.Config.Name, instance.Plugin),
 			),
 		)
 		order = order.AppendSingle(nil)
@@ -548,8 +530,7 @@ func (s *Service) buildDLQ(
 		"dlq",
 		dest.(*connector.Destination),
 		logger,
-		measure.DLQExecutionDurationTimer.WithValues(pl.Config.Name, conn.Plugin),
-		measure.DLQBytesHistogram.WithValues(pl.Config.Name, conn.Plugin),
+		s.newDLQMetrics(pl.Config.Name, conn.Plugin),
 		pl.DLQ.WindowSize,
 		pl.DLQ.WindowNackThreshold,
 	), nil
@@ -665,4 +646,33 @@ func (s *Service) notify(pipelineID string, err error) {
 	for _, handler := range s.handlers {
 		handler(e)
 	}
+}
+
+func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.Instance) funnel.ConnectorMetrics {
+	if s.metricsEnabled {
+		return funnel.NewConnectorMetrics(
+			pipelineName,
+			instance.Plugin,
+			instance.Type,
+		)
+	}
+
+	return &funnel.NoOpConnectorMetrics{}
+}
+
+func (s *Service) newProcessorMetrics(pipelineName, plugin string) funnel.ProcessorMetrics {
+	if s.metricsEnabled {
+		return funnel.NewProcessorMetrics(pipelineName, plugin)
+	}
+
+	return &funnel.NoOpProcessorMetrics{}
+}
+
+func (s *Service) newDLQMetrics(pipelineName string, plugin string) funnel.ConnectorMetrics {
+	if s.metricsEnabled {
+		return funnel.NewDLQMetrics(pipelineName, plugin)
+	}
+
+	return &funnel.NoOpConnectorMetrics{}
+
 }
