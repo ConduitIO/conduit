@@ -176,8 +176,8 @@ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMn
 github.com/ckaznocha/intrange v0.3.0 h1:VqnxtK32pxgkhJgYQEeOArVidIPg+ahLP7WBOXZd5ZY=
 github.com/ckaznocha/intrange v0.3.0/go.mod h1:+I/o2d2A1FBHgGELbGxzIcyd3/9l9DuwjM8FsbSS3Lo=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cohere-ai/cohere-go/v2 v2.13.0 h1:LBVBOBNCrQnp/CCNpRhkOBOFK6uXcE9m/FmO4SLjh4M=
-github.com/cohere-ai/cohere-go/v2 v2.13.0/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVphT1y6nD2zYaKeR0=
+github.com/cohere-ai/cohere-go/v2 v2.14.1 h1:fXNrV02rfrP9ieI+S6mHV6Nt2Z0uEDPkK3rnc5bJWCM=
+github.com/cohere-ai/cohere-go/v2 v2.14.1/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVphT1y6nD2zYaKeR0=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
 github.com/conduitio/conduit-commons v0.5.2 h1:Y56zXj1StoLVpwL5HELUhSmrHfFgSwJuGf+AQrdgVK8=
 github.com/conduitio/conduit-commons v0.5.2/go.mod h1:hwVOkrOGbmI9DR4ZXail2f02lculzq1XRAUcC04tkmE=
@@ -201,8 +201,8 @@ github.com/conduitio/conduit-processor-sdk v0.4.3 h1:ig1GF5SRwSZb4ej9E3ZcvbLh3rD
 github.com/conduitio/conduit-processor-sdk v0.4.3/go.mod h1:2EkF3uF30ChbDqiWlEWFYHJ7cq0qsA+nWScVE0vfwKg=
 github.com/conduitio/conduit-schema-registry v0.2.5 h1:HFnt8bnLrLxQ8HU74CNjqhl5FibkAyUtr0lEXhXubcA=
 github.com/conduitio/conduit-schema-registry v0.2.5/go.mod h1:moeYlyks3wXiF77shMrTt8tKWwiLudqfD9fz1gs57w8=
-github.com/conduitio/ecdysis v0.4.1 h1:88h5+Ucy52qWlNrNO+BdvtM+0BCWCfm1EdqwuyElgCY=
-github.com/conduitio/ecdysis v0.4.1/go.mod h1:2TH5nmwUxbuOfmxKs/3m0xeMeudtDmFw5f4D9V5MJaU=
+github.com/conduitio/ecdysis v0.4.2 h1:SBFADSn9UiwKnsXaWafuzm3UnAbcOh0H6SyusivDh5E=
+github.com/conduitio/ecdysis v0.4.2/go.mod h1:2TH5nmwUxbuOfmxKs/3m0xeMeudtDmFw5f4D9V5MJaU=
 github.com/conduitio/evolviconf v0.1.0 h1:rcG+hs6tlrYlX9qomOQJz+K+OnDhbMbioGx3ci55yo0=
 github.com/conduitio/evolviconf v0.1.0/go.mod h1:RnbnSqDDYarKgG2p+krP71svG6qLms3+/TnKrPKWk+0=
 github.com/conduitio/evolviconf/evolviyaml v0.1.0 h1:nMW7CROIMtHhscm/QLMpMs7uCPp6O2dS4CfU9bhugd4=
@@ -639,8 +639,8 @@ github.com/sanposhiho/wastedassign/v2 v2.1.0 h1:crurBF7fJKIORrV85u9UUpePDYGWnwvv
 github.com/sanposhiho/wastedassign/v2 v2.1.0/go.mod h1:+oSmSC+9bQ+VUAxA66nBb0Z7N8CK7mscKTDYC6aIek4=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 h1:PKK9DyHxif4LZo+uQSgXNqs0jj5+xZwwfKHgph2lxBw=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.1/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
-github.com/sashabaranov/go-openai v1.38.1 h1:TtZabbFQZa1nEni/IhVtDF/WQjVqDgd+cWR5OeddzF8=
-github.com/sashabaranov/go-openai v1.38.1/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
+github.com/sashabaranov/go-openai v1.39.1 h1:TMD4w77Iy9WTFlgnjNaxbAASdsCJ9R/rMdzL+SN14oU=
+github.com/sashabaranov/go-openai v1.39.1/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
 github.com/sashamelentyev/interfacebloat v1.1.0 h1:xdRdJp0irL086OyW1H/RTZTr1h/tMEOsumirXcOJqAw=
 github.com/sashamelentyev/interfacebloat v1.1.0/go.mod h1:+Y9yU5YdTkrNvoX0xHc84dxiN1iBi9+G8zZIhPVoNjQ=
 github.com/sashamelentyev/usestdlibvars v1.28.0 h1:jZnudE2zKCtYlGzLVreNp5pmCdOxXUzwsMDBkR21cyQ=

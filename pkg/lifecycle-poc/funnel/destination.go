@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type DestinationTask struct {
@@ -33,8 +32,7 @@ type DestinationTask struct {
 	destination Destination
 	logger      log.CtxLogger
 
-	timer     metrics.Timer
-	histogram metrics.RecordBytesHistogram
+	metrics ConnectorMetrics
 }
 
 type Destination interface {
@@ -54,8 +52,7 @@ func NewDestinationTask(
 	id string,
 	destination Destination,
 	logger log.CtxLogger,
-	timer metrics.Timer,
-	histogram metrics.Histogram,
+	metrics ConnectorMetrics,
 ) *DestinationTask {
 	logger = logger.WithComponent("task:destination")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
@@ -63,8 +60,7 @@ func NewDestinationTask(
 		id:          id,
 		destination: destination,
 		logger:      logger,
-		timer:       timer,
-		histogram:   metrics.NewRecordBytesHistogram(histogram),
+		metrics:     metrics,
 	}
 }
 
@@ -93,7 +89,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		positions[i] = rec.Position
 	}
 
-	// start := time.Now()
+	start := time.Now()
 	err := t.destination.Write(ctx, records)
 	if err != nil {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
@@ -105,7 +101,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		if err != nil {
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
-		// t.observeMetrics(records[len(acks):len(acks)+len(acksResp)], start)
+		t.metrics.Observe(records[len(acks):len(acks)+len(acksResp)], start)
 		acks = append(acks, acksResp...)
 		if len(acks) >= len(positions) {
 			break
@@ -126,20 +122,4 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	}
 
 	return nil
-}
-
-func (t *DestinationTask) observeMetrics(records []opencdc.Record, start time.Time) {
-	// Precalculate sizes so that we don't need to hold a reference to records
-	// and observations can happen in a goroutine.
-	sizes := make([]float64, len(records))
-	for i, rec := range records {
-		sizes[i] = t.histogram.SizeOf(rec)
-	}
-	tookPerRecord := time.Since(start) / time.Duration(len(sizes))
-	go func() {
-		for i := range len(sizes) {
-			t.timer.Update(tookPerRecord)
-			t.histogram.H.Observe(sizes[i])
-		}
-	}()
 }

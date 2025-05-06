@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
-	github.com/cohere-ai/cohere-go/v2 v2.13.0
+	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.5.2
 	github.com/conduitio/conduit-connector-file v0.10.1
 	github.com/conduitio/conduit-connector-generator v0.10.3-0.20250502151243-4c187c0f791b
@@ -19,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.13.4-0.20250505120140-616bbe099bb4
 	github.com/conduitio/conduit-processor-sdk v0.4.3
 	github.com/conduitio/conduit-schema-registry v0.2.5
-	github.com/conduitio/ecdysis v0.4.1
+	github.com/conduitio/ecdysis v0.4.2
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
@@ -41,7 +41,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.63.0
 	github.com/rs/zerolog v1.34.0
-	github.com/sashabaranov/go-openai v1.38.1
+	github.com/sashabaranov/go-openai v1.39.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6

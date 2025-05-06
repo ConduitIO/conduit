@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
 )
@@ -108,6 +109,7 @@ type Config struct {
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
+	ProcessorPlugins map[string]proc_builtin.ProcessorPluginConstructor
 
 	SchemaRegistry struct {
 		Type string `long:"schema-registry.type" usage:"schema registry type; accepts builtin,confluent"`
@@ -119,7 +121,8 @@ type Config struct {
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2 bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
+		PipelineArchV2              bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
+		PipelineArchV2EnableMetrics bool `long:"preview.pipeline-arch-v2-enable-metrics" mapstructure:"pipeline-arch-v2-enable-metrics" usage:"enables metrics about amount of data (in bytes) moved through in pipeline architecture v2 (at the cost of reduced performance)"`
 	}
 
 	Dev struct {
@@ -171,6 +174,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
+	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
 	return cfg
 }
 
