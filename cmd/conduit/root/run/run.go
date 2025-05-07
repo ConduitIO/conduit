@@ -99,6 +99,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("schema-registry.type", c.Cfg.SchemaRegistry.Type)
 	flags.SetDefault("schema-registry.confluent.connection-string", c.Cfg.SchemaRegistry.Confluent.ConnectionString)
 	flags.SetDefault("preview.pipeline-arch-v2", c.Cfg.Preview.PipelineArchV2)
+	flags.SetDefault("preview.pipeline-arch-v2-disable-metrics", c.Cfg.Preview.PipelineArchV2DisableMetrics)
 	return flags
 }
 
