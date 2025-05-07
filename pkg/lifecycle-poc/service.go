@@ -57,7 +57,7 @@ type Service struct {
 	runningPipelines *csync.Map[string, *runnablePipeline]
 
 	isGracefulShutdown atomic.Bool
-	metricsEnabled     bool
+	metricsDisabled    bool
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -76,7 +76,7 @@ func NewService(
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
-		metricsEnabled:   metricsEnabled,
+		metricsDisabled:  metricsEnabled,
 	}
 }
 
@@ -651,7 +651,7 @@ func (s *Service) notify(pipelineID string, err error) {
 }
 
 func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.Instance) funnel.ConnectorMetrics {
-	if s.metricsEnabled {
+	if s.metricsDisabled {
 		return funnel.NewConnectorMetrics(
 			pipelineName,
 			instance.Plugin,
@@ -663,7 +663,7 @@ func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.I
 }
 
 func (s *Service) newProcessorMetrics(pipelineName, plugin string) funnel.ProcessorMetrics {
-	if s.metricsEnabled {
+	if s.metricsDisabled {
 		return funnel.NewProcessorMetrics(pipelineName, plugin)
 	}
 
@@ -671,9 +671,9 @@ func (s *Service) newProcessorMetrics(pipelineName, plugin string) funnel.Proces
 }
 
 func (s *Service) newDLQMetrics(pipelineName string, plugin string) funnel.ConnectorMetrics {
-	if s.metricsEnabled {
-		return funnel.NewDLQMetrics(pipelineName, plugin)
+	if s.metricsDisabled {
+		return &funnel.NoOpConnectorMetrics{}
 	}
-
-	return &funnel.NoOpConnectorMetrics{}
+	
+	return funnel.NewDLQMetrics(pipelineName, plugin)
 }
