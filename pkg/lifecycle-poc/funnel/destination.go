@@ -93,7 +93,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		positions[i] = rec.Position
 	}
 
-	start := time.Now()
+	// start := time.Now()
 	err := t.destination.Write(ctx, records)
 	if err != nil {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
@@ -105,7 +105,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		if err != nil {
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
-		t.observeMetrics(records[len(acks):len(acks)+len(acksResp)], start)
+		// t.observeMetrics(records[len(acks):len(acks)+len(acksResp)], start)
 		acks = append(acks, acksResp...)
 		if len(acks) >= len(positions) {
 			break
