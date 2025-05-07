@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
@@ -40,31 +41,32 @@ import (
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"avro.decode":         constructor(avro.NewDecodeProcessor),
-	"avro.encode":         constructor(avro.NewEncodeProcessor),
-	"base64.decode":       constructor(base64.NewDecodeProcessor),
-	"base64.encode":       constructor(base64.NewEncodeProcessor),
-	"cohere.command":      constructor(cohere.NewCommandProcessor),
-	"cohere.embed":        constructor(cohere.NewEmbedProcessor),
-	"cohere.rerank":       constructor(cohere.NewRerankProcessor),
-	"custom.javascript":   constructor(custom.NewJavascriptProcessor),
-	"error":               constructor(impl.NewErrorProcessor),
-	"filter":              constructor(impl.NewFilterProcessor),
-	"field.convert":       constructor(field.NewConvertProcessor),
-	"field.exclude":       constructor(field.NewExcludeProcessor),
-	"field.rename":        constructor(field.NewRenameProcessor),
-	"field.set":           constructor(field.NewSetProcessor),
-	"json.decode":         constructor(json.NewDecodeProcessor),
-	"json.encode":         constructor(json.NewEncodeProcessor),
-	"openai.embed":        constructor(openai.NewEmbeddingsProcessor),
-	"openai.textgen":      constructor(openai.NewTextgenProcessor),
-	"unwrap.debezium":     constructor(unwrap.NewDebeziumProcessor),
-	"unwrap.kafkaconnect": constructor(unwrap.NewKafkaConnectProcessor),
-	"unwrap.opencdc":      constructor(unwrap.NewOpenCDCProcessor),
-	"webhook.http":        constructor(webhook.NewHTTPProcessor),
+	"avro.decode":         Constructor(avro.NewDecodeProcessor),
+	"avro.encode":         Constructor(avro.NewEncodeProcessor),
+	"base64.decode":       Constructor(base64.NewDecodeProcessor),
+	"base64.encode":       Constructor(base64.NewEncodeProcessor),
+	"cohere.command":      Constructor(cohere.NewCommandProcessor),
+	"cohere.embed":        Constructor(cohere.NewEmbedProcessor),
+	"cohere.rerank":       Constructor(cohere.NewRerankProcessor),
+	"custom.javascript":   Constructor(custom.NewJavascriptProcessor),
+	"error":               Constructor(impl.NewErrorProcessor),
+	"filter":              Constructor(impl.NewFilterProcessor),
+	"field.convert":       Constructor(field.NewConvertProcessor),
+	"field.exclude":       Constructor(field.NewExcludeProcessor),
+	"field.rename":        Constructor(field.NewRenameProcessor),
+	"field.set":           Constructor(field.NewSetProcessor),
+	"json.decode":         Constructor(json.NewDecodeProcessor),
+	"json.encode":         Constructor(json.NewEncodeProcessor),
+	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
+	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
+	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
+	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),
+	"unwrap.kafkaconnect": Constructor(unwrap.NewKafkaConnectProcessor),
+	"unwrap.opencdc":      Constructor(unwrap.NewOpenCDCProcessor),
+	"webhook.http":        Constructor(webhook.NewHTTPProcessor),
 }
 
-func constructor[T sdk.Processor](p func(log.CtxLogger) T) ProcessorPluginConstructor {
+func Constructor[T sdk.Processor](p func(log.CtxLogger) T) ProcessorPluginConstructor {
 	return func(logger log.CtxLogger) sdk.Processor { return p(logger) }
 }
 
@@ -202,7 +204,10 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 		sr.SetSchemaRegistry(r.schemaRegistry)
 	}
 
-	// apply default middleware
+	// Apply default middleware since built-in processors are created
+	// without the middleware applied.
+	// This is done by Conduit only for the built-in processors.
+	// In the standalone processors, the Run() method adds the middleware.
 	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
 	// attach processor ID for logs
 	p = newProcessorWithID(p, id)

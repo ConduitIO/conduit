@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
 )
@@ -55,7 +56,7 @@ type Config struct {
 			Path string `long:"db.badger.path" usage:"path to badger DB"`
 		}
 		Postgres struct {
-			ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
+			ConnectionString string `long:"db.postgres.connection-string" mapstructure:"connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
 			Table            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
 		}
 		SQLite struct {
@@ -108,6 +109,7 @@ type Config struct {
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
+	ProcessorPlugins map[string]proc_builtin.ProcessorPluginConstructor
 
 	SchemaRegistry struct {
 		Type string `long:"schema-registry.type" usage:"schema registry type; accepts builtin,confluent"`
@@ -171,6 +173,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
+	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
 	return cfg
 }
 

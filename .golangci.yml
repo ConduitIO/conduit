@@ -1,140 +1,93 @@
-run:
-  timeout: 3m
-
-linters-settings:
-  depguard:
-    rules:
-      Main:
-        deny:
-          - pkg: errors
-            desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
-          - pkg: golang.org/x/xerrors
-            desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
-          - pkg: github.com/golang/mock
-            desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead.
-          - pkg: encoding/json
-            desc: github.com/goccy/go-json is preferred for performance reasons.
-  gofmt:
-    simplify: false
-  govet:
-    disable:
-      - shadow # TODO enable
-  nolintlint:
-    allow-unused: false # report any unused nolint directives
-    require-explanation: true # require an explanation for nolint directives
-    require-specific: true # require nolint directives to mention the specific linter being suppressed
-  gocyclo:
-    min-complexity: 20
-  goconst:
-    ignore-tests: true
-  goheader:
-    template-path: '.golangci.goheader.template'
-    values:
-      regexp:
-        copyright-year: 20[2-9]\d
-  revive:
-    rules:
-      - name: unused-parameter
-        disabled: true
-
-issues:
-  exclude-dirs-use-default: false
-  exclude-dirs:
-    - ^examples/
-    - ^pkg/plugin/processor/builtin/internal/diff # external code
-
-  exclude-rules:
-    - path: 'pkg/plugin/processor/builtin/impl'
-      linters:
-        - goconst
-    - path: '(.+)acceptance_testing\.go'
-      linters:
-        - stylecheck
-      text: "ST1003: should not use underscores in Go names"
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - dogsled
-        - gosec
-
+version: "2"
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
-  disable-all: true
+  default: none
   enable:
-    # We plan to enable all linters that are commented out.
-    # However, we want to enable them one by one (so we don't have to fix many issues at once).
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
     - durationcheck
     - errcheck
     - errname
-    # - errorlint
     - exhaustive
-    # - exhaustivestruct
-    - copyloopvar
-    # - forbidigo
-    # - forcetypeassert
-    # - funlen
-    # - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
-    # - cyclop # not interested in package complexities at the moment
-    # - godot
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
-    - revive
-    # - gomnd
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
-    # - ifshort
     - ineffassign
-    # - importas
-    # - lll
-    # - misspell
     - makezero
-    # - nakedret
-    # - nilerr
-    # - nilnil
-    # - nlreturn
     - noctx
     - nolintlint
-    # - paralleltest
     - predeclared
+    # - revive # TODO enable
     - rowserrcheck
-    - staticcheck
-    - stylecheck
     - sqlclosecheck
-    # - tagliatelle
-    # - tenv
-    # - thelper
-    # - tparallel
-    - typecheck
+    - staticcheck
     - unconvert
-    # - unparam
     - unused
     - wastedassign
     - whitespace
-  # - wrapcheck
-  # - wsl
-
-  # don't enable:
-  # - asciicheck
-  # - dupl
-  # - gochecknoglobals
-  # - gocognit
-  # - godox
-  # - goerr113
-  # - maligned
-  # - nestif
-  # - prealloc
-  # - testpackage
-  # - wsl
+  settings:
+    depguard:
+      rules:
+        Main:
+          deny:
+            - pkg: errors
+              desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
+            - pkg: golang.org/x/xerrors
+              desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
+            - pkg: github.com/golang/mock
+              desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead.
+            - pkg: encoding/json
+              desc: github.com/goccy/go-json is preferred for performance reasons.
+    gocyclo:
+      min-complexity: 20
+    goheader:
+      values:
+        regexp:
+          copyright-year: 20[2-9]\d
+      template-path: .golangci.goheader.template
+    nolintlint:
+      allow-unused: false # report any unused nolint directives
+      require-explanation: true # require an explanation for nolint directives
+      require-specific: true # require nolint directives to mention the specific linter being suppressed
+  exclusions:
+    generated: lax
+    paths:
+      - ^examples/
+      - ^pkg/plugin/processor/builtin/internal/diff # external code
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - goconst
+        path: pkg/plugin/processor/builtin/impl
+      - linters:
+          - staticcheck
+        text: "QF1008:" # could remove embedded field from selector
+      - linters:
+          - dogsled
+          - gosec
+          - goconst
+        path: (.+)_test\.go
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofmt:
+      simplify: false
+  exclusions:
+    generated: lax
+    paths:
+      - ^examples/
+      - ^pkg/plugin/processor/builtin/internal/diff

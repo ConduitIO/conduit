@@ -193,7 +193,7 @@ func createServices(r *Runtime) error {
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
+		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry),
 		standaloneReg,
 	)
 
