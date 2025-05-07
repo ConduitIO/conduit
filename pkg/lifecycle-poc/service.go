@@ -652,28 +652,28 @@ func (s *Service) notify(pipelineID string, err error) {
 
 func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.Instance) funnel.ConnectorMetrics {
 	if s.metricsDisabled {
-		return funnel.NewConnectorMetrics(
-			pipelineName,
-			instance.Plugin,
-			instance.Type,
-		)
+		return &funnel.NoOpConnectorMetrics{}
 	}
 
-	return &funnel.NoOpConnectorMetrics{}
+	return funnel.NewConnectorMetrics(
+		pipelineName,
+		instance.Plugin,
+		instance.Type,
+	)
 }
 
 func (s *Service) newProcessorMetrics(pipelineName, plugin string) funnel.ProcessorMetrics {
 	if s.metricsDisabled {
-		return funnel.NewProcessorMetrics(pipelineName, plugin)
+		return &funnel.NoOpProcessorMetrics{}
 	}
 
-	return &funnel.NoOpProcessorMetrics{}
+	return funnel.NewProcessorMetrics(pipelineName, plugin)
 }
 
 func (s *Service) newDLQMetrics(pipelineName string, plugin string) funnel.ConnectorMetrics {
 	if s.metricsDisabled {
 		return &funnel.NoOpConnectorMetrics{}
 	}
-	
+
 	return funnel.NewDLQMetrics(pipelineName, plugin)
 }

@@ -15,6 +15,7 @@
 package funnel
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -30,7 +31,9 @@ type ConnectorMetrics interface {
 
 type NoOpConnectorMetrics struct{}
 
-func (m *NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {}
+func (m *NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {
+	fmt.Println("hi there")
+}
 
 type ConnectorMetricsImpl struct {
 	timer     metrics.Timer
@@ -57,6 +60,7 @@ func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Typ
 }
 
 func (m *ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
+	fmt.Println("hi there")
 	// Precalculate sizes so that we don't need to hold a reference to records
 	// and observations can happen in a goroutine.
 	sizes := make([]float64, len(records))
