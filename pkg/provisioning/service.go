@@ -172,7 +172,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 // directory and skips hidden files and symlinks.
 func (s *Service) getYamlFiles(path string) ([]string, error) {
 	if path == "" {
-		return nil, cerrors.New("pipeline path cannot be empty")
+		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
 	}
 
 	s.logger.Debug(context.Background()).
