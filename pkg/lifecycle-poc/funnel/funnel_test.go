@@ -46,8 +46,7 @@ func Example_simpleStream() {
 		"dlq",
 		noopDLQDestination(ctrl),
 		logger,
-		noop.Timer{},
-		noop.Histogram{},
+		&NoOpConnectorMetrics{},
 		1,
 		0,
 	)
@@ -55,15 +54,13 @@ func Example_simpleStream() {
 		"generator",
 		generatorSource(ctrl, logger, "generator", batchSize, batchCount),
 		logger,
-		noop.Timer{},
-		noop.Histogram{},
+		&NoOpConnectorMetrics{},
 	)
 	destTask := NewDestinationTask(
 		"printer",
 		printerDestination(ctrl, logger, "printer", batchSize),
 		logger,
-		noop.Timer{},
-		noop.Histogram{},
+		&NoOpConnectorMetrics{},
 	)
 
 	w, err := NewWorker(
@@ -153,8 +150,7 @@ func BenchmarkStreamNew(b *testing.B) {
 			"dlq",
 			noopDLQDestination(ctrl),
 			logger,
-			noop.Timer{},
-			noop.Histogram{},
+			&NoOpConnectorMetrics{},
 			1,
 			0,
 		)
@@ -162,15 +158,13 @@ func BenchmarkStreamNew(b *testing.B) {
 			"generator",
 			generatorSource(ctrl, logger, "generator", batchSize, batchCount),
 			logger,
-			noop.Timer{},
-			noop.Histogram{},
+			&NoOpConnectorMetrics{},
 		)
 		destTask := NewDestinationTask(
 			"printer",
 			printerDestination(ctrl, logger, "printer", batchSize),
 			logger,
-			noop.Timer{},
-			noop.Histogram{},
+			&NoOpConnectorMetrics{},
 		)
 
 		w, err := NewWorker(
