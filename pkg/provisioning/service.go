@@ -168,7 +168,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 // getYamlFiles reads files in the path and collects paths to all
 // files that end with .yml or .yaml. It only reads files in the top-level
-// directory and skips hidden files and symlinks.
+// directory and skips non-regular files.
 func (s *Service) getYamlFiles(path string) ([]string, error) {
 	if path == "" {
 		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
@@ -188,13 +188,12 @@ func (s *Service) getYamlFiles(path string) ([]string, error) {
 
 	var files []string
 	for _, dirEntry := range dirEntries {
-		// Skip directories and non-regular files
-		if dirEntry.IsDir() || dirEntry.Type()&os.ModeType != 0 {
+		if !dirEntry.Type().IsRegular() {
 			continue
 		}
 
-		// Only include .yml and .yaml files
-		if ext := filepath.Ext(dirEntry.Name()); ext != ".yml" && ext != ".yaml" {
+		ext := filepath.Ext(dirEntry.Name())
+		if ext != ".yml" && ext != ".yaml" {
 			continue
 		}
 
