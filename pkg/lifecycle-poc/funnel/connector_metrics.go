@@ -31,9 +31,7 @@ type ConnectorMetrics interface {
 
 type NoOpConnectorMetrics struct{}
 
-func (m *NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {
-	fmt.Println("hi there")
-}
+func (m *NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {}
 
 type ConnectorMetricsImpl struct {
 	timer     metrics.Timer
