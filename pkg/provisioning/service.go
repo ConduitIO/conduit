@@ -16,12 +16,10 @@ package provisioning
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -168,19 +166,40 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// getYamlFiles recursively reads folders in the path and collects paths to all
-// files that end with .yml or .yaml.
+// getYamlFiles reads files in the path and collects paths to all
+// files that end with .yml or .yaml. It only reads files in the top-level
+// directory and skips non-regular files.
 func (s *Service) getYamlFiles(path string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(path, func(path string, fileInfo fs.DirEntry, err error) error {
-		if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	if path == "" {
+		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
+	}
+
+	s.logger.Debug(context.Background()).
+		Str("pipelines_path", path).
+		Msg("loading pipeline configuration files")
+
+	dirEntries, err := os.ReadDir(path)
 	if err != nil {
+		s.logger.Warn(context.Background()).
+			Err(err).
+			Msg("could not read pipelines directory")
 		return nil, err
 	}
+
+	var files []string
+	for _, dirEntry := range dirEntries {
+		if !dirEntry.Type().IsRegular() {
+			continue
+		}
+
+		ext := filepath.Ext(dirEntry.Name())
+		if ext != ".yml" && ext != ".yaml" {
+			continue
+		}
+
+		files = append(files, filepath.Join(path, dirEntry.Name()))
+	}
+
 	return files, nil
 }
 
