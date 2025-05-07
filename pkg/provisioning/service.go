@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -189,27 +188,17 @@ func (s *Service) getYamlFiles(path string) ([]string, error) {
 
 	var files []string
 	for _, dirEntry := range dirEntries {
-		// Skip directories and hidden files
-		if dirEntry.IsDir() || strings.HasPrefix(dirEntry.Name(), ".") {
-			continue
-		}
-
-		// Skip symlinks
-		if dirEntry.Type()&os.ModeSymlink != 0 {
+		// Skip directories and non-regular files
+		if dirEntry.IsDir() || dirEntry.Type()&os.ModeType != 0 {
 			continue
 		}
 
 		// Only include .yml and .yaml files
-		if !strings.HasSuffix(dirEntry.Name(), ".yml") && !strings.HasSuffix(dirEntry.Name(), ".yaml") {
+		if ext := filepath.Ext(dirEntry.Name()); ext != ".yml" && ext != ".yaml" {
 			continue
 		}
 
-		filePath := filepath.Join(path, dirEntry.Name())
-		files = append(files, filePath)
-
-		s.logger.Debug(context.Background()).
-			Str("file_path", filePath).
-			Msg("found pipeline configuration file")
+		files = append(files, filepath.Join(path, dirEntry.Name()))
 	}
 
 	return files, nil
