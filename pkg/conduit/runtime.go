@@ -224,7 +224,7 @@ func createServices(r *Runtime) error {
 			procService,
 			connPluginService,
 			plService,
-			r.Config.Preview.PipelineArchV2EnableMetrics,
+			r.Config.Preview.PipelineArchV2DisableMetrics,
 		)
 	} else {
 		// Error recovery configuration
