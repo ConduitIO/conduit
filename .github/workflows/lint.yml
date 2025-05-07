@@ -24,6 +24,6 @@ jobs:
           echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ steps.golangci-lint-version.outputs.v }}
