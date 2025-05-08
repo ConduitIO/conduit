@@ -66,16 +66,16 @@ func (b *Batch) Nack(i int, errs ...error) {
 }
 
 // Retry marks the record at index i to be retried. If a second index is
-// provided, all records between i and j are marked as acked. If multiple
-// indices are provided, the method panics.
+// provided, all records between i (included) and j (excluded) are marked as
+// acked. If multiple indices are provided, the method panics.
 func (b *Batch) Retry(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagRetry, i, j...)
 	b.tainted = true
 }
 
 // Filter marks the record at index i as filtered out. If a second index is
-// provided, all records between i and j are marked as filtered. If multiple
-// indices are provided, the method panics.
+// provided, all records between i (included) and j (excluded) are marked as
+// filtered. If multiple indices are provided, the method panics.
 func (b *Batch) Filter(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagFilter, i, j...)
 	end := i + 1
@@ -147,10 +147,19 @@ func (b *Batch) sub(from, to int) *Batch {
 	}
 }
 
+// HasActiveRecords returns true if the batch has any records that are not
+// filtered out.
+func (b *Batch) HasActiveRecords() bool {
+	return b.filterCount < len(b.records)
+}
+
 // ActiveRecords returns the records that are not filtered.
 func (b *Batch) ActiveRecords() []opencdc.Record {
 	if b.filterCount == 0 {
 		return b.records
+	}
+	if b.filterCount == len(b.records) {
+		return nil
 	}
 	active := make([]opencdc.Record, 0, len(b.records)-b.filterCount)
 	for i, r := range b.records {
