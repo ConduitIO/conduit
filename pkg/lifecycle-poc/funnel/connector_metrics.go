@@ -15,7 +15,6 @@
 package funnel
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -58,7 +57,6 @@ func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Typ
 }
 
 func (m *ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
-	fmt.Println("hi there")
 	// Precalculate sizes so that we don't need to hold a reference to records
 	// and observations can happen in a goroutine.
 	sizes := make([]float64, len(records))
