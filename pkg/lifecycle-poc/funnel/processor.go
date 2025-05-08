@@ -24,14 +24,14 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type ProcessorTask struct {
 	id        string
 	processor Processor
 	logger    log.CtxLogger
-	timer     metrics.Timer
+
+	metrics ProcessorMetrics
 }
 
 type Processor interface {
@@ -47,7 +47,7 @@ func NewProcessorTask(
 	id string,
 	processor Processor,
 	logger log.CtxLogger,
-	timer metrics.Timer,
+	metrics ProcessorMetrics,
 ) *ProcessorTask {
 	logger = logger.WithComponent("task:processor")
 	logger.Logger = logger.With().Str(log.ProcessorIDField, id).Logger()
@@ -55,7 +55,7 @@ func NewProcessorTask(
 		id:        id,
 		processor: processor,
 		logger:    logger,
-		timer:     timer,
+		metrics:   metrics,
 	}
 }
 
@@ -86,7 +86,7 @@ func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
 	if len(recsOut) == 0 {
 		return cerrors.Errorf("processor didn't return any records")
 	}
-	t.observeMetrics(len(recsOut), start)
+	t.metrics.Observe(len(recsOut), start)
 
 	// Map active records back to their original indices in the batch, but only
 	// if we have filtered records. Otherwise, we can just use the original indices.
@@ -182,13 +182,4 @@ func (t *ProcessorTask) isConsecutive(indices []int, i, j int) bool {
 		return true // No filtering, so all records are consecutive.
 	}
 	return indices[i]+1 == indices[j]
-}
-
-func (t *ProcessorTask) observeMetrics(n int, start time.Time) {
-	tookPerRecord := time.Since(start) / time.Duration(n)
-	go func() {
-		for range n {
-			t.timer.Update(tookPerRecord)
-		}
-	}()
 }

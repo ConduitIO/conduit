@@ -23,7 +23,6 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -41,7 +40,7 @@ func TestProcessorTask_Do_Passthrough(t *testing.T) {
 	batch := NewBatch(records)
 	processorMock.EXPECT().Process(ctx, records).Return(toProcessedRecords(records))
 
-	task := NewProcessorTask("test", processorMock, logger, noop.Timer{})
+	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
 	err := task.Do(ctx, batch)
 	is.NoErr(err)
 
@@ -80,7 +79,7 @@ func TestProcessorTask_Do_BatchWithFilteredRecords(t *testing.T) {
 		),
 	)
 
-	task := NewProcessorTask("test", processorMock, logger, noop.Timer{})
+	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
 	err := task.Do(ctx, batch)
 	is.NoErr(err)
 
