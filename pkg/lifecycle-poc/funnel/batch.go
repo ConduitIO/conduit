@@ -170,6 +170,23 @@ func (b *Batch) ActiveRecords() []opencdc.Record {
 	return active
 }
 
+// ActiveRecordIndices returns the indices of the records that are not filtered.
+// If no records are filtered, it returns nil, in which case the caller should
+// use the original indices of the records. This prevents the need to
+// reallocate the slice if no records are filtered.
+func (b *Batch) ActiveRecordIndices() []int {
+	if b.filterCount == 0 {
+		return nil
+	}
+	active := make([]int, 0, len(b.records)-b.filterCount)
+	for i, status := range b.recordStatuses {
+		if status.Flag != RecordFlagFilter {
+			active = append(active, i)
+		}
+	}
+	return active
+}
+
 // RecordStatus holds the status of a record in a batch. The flag indicates the
 // status of the record, and the error is set if the record was nacked.
 type RecordStatus struct {

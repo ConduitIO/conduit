@@ -72,10 +72,10 @@ func TestProcessorTask_Do_BatchWithFilteredRecords(t *testing.T) {
 	wantErr := cerrors.New("error")
 	processorMock.EXPECT().Process(ctx, activeRecords).Return(
 		toProcessedRecords(
-			activeRecords,
+			activeRecords[:5],       // last record (index 8) is not processed and should be retried
 			markFiltered(0),         // index 1 is filtered
 			markFiltered(2),         // index 5 is filtered
-			markErrored(5, wantErr), // index 8 is errored
+			markErrored(4, wantErr), // index 7 is errored
 		),
 	)
 
@@ -88,8 +88,10 @@ func TestProcessorTask_Do_BatchWithFilteredRecords(t *testing.T) {
 		switch i {
 		case 0, 1, 2, 3, 5, 9:
 			is.Equal(status, RecordStatus{Flag: RecordFlagFilter})
-		case 8:
+		case 7:
 			is.Equal(status, RecordStatus{Flag: RecordFlagNack, Error: wantErr})
+		case 8:
+			is.Equal(status, RecordStatus{Flag: RecordFlagRetry})
 		default:
 			is.Equal(status, RecordStatus{Flag: RecordFlagAck})
 		}
