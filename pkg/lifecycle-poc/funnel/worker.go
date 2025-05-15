@@ -336,7 +336,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 			return acker.Ack(ctx, b)
 		}
 		// There is at least one task after this one, let's continue.
-		return w.nextTask(ctx, currentIndex, b, acker)
+		return w.doNextTask(ctx, currentIndex, b, acker)
 	}
 
 	w.logger.Trace(ctx).
@@ -373,7 +373,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 				break // break switch
 			}
 			// There is at least one task after this one, let's continue.
-			err := w.nextTask(ctx, currentIndex, subBatch, acker)
+			err := w.doNextTask(ctx, currentIndex, subBatch, acker)
 			if err != nil {
 				return err
 			}
@@ -433,7 +433,7 @@ func (w *Worker) hasNextTask(currentIndex int) bool {
 	return len(w.Order[currentIndex]) > 0
 }
 
-func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
+func (w *Worker) doNextTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
 	nextIndices := w.Order[currentIndex]
 	switch len(nextIndices) {
 	case 0:

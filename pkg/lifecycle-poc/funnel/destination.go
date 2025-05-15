@@ -99,17 +99,17 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	}
 
 	activeIndices := batch.ActiveRecordIndices()
-	var ackCount = 0
+	ackCount := 0
 	for range len(positions) {
 		acks, err := t.destination.Ack(ctx)
 		if err != nil {
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
-		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
 
 		if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
 			return cerrors.Errorf("failed to validate acks: %w", err)
 		}
+		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
 		t.markBatchRecords(batch, activeIndices, ackCount, acks)
 
 		ackCount += len(acks)
@@ -142,7 +142,7 @@ func (t *DestinationTask) markBatchRecords(b *Batch, activeIndices []int, from i
 			if activeIndices != nil {
 				idx = activeIndices[idx]
 			}
-			b.Nack(from+i, ack.Error)
+			b.Nack(idx, ack.Error)
 		}
 	}
 }
