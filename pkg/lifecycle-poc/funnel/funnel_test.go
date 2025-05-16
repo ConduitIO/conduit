@@ -63,9 +63,11 @@ func Example_simpleStream() {
 		&NoOpConnectorMetrics{},
 	)
 
+	destTaskNode := &TaskNode{Task: destTask}
+	srcTaskNode := &TaskNode{Task: srcTask, Next: []*TaskNode{destTaskNode}}
+
 	w, err := NewWorker(
-		[]Task{srcTask, destTask},
-		[][]int{{1}, {}},
+		srcTaskNode,
 		dlq,
 		logger,
 		noop.Timer{},
@@ -167,9 +169,11 @@ func BenchmarkStreamNew(b *testing.B) {
 			&NoOpConnectorMetrics{},
 		)
 
+		destTaskNode := &TaskNode{Task: destTask}
+		srcTaskNode := &TaskNode{Task: srcTask, Next: []*TaskNode{destTaskNode}}
+
 		w, err := NewWorker(
-			[]Task{srcTask, destTask},
-			[][]int{{1}, {}},
+			srcTaskNode,
 			dlq,
 			logger,
 			noop.Timer{},
