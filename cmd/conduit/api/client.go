@@ -36,6 +36,9 @@ func NewClient(ctx context.Context, address string) (*Client, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(1024*1024*1024), // 10MB
+		),
 	)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create gRPC client: %w", err)

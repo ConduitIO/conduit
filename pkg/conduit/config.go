@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -85,6 +86,9 @@ type Config struct {
 
 	Connectors struct {
 		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
+
+		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
+		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors."`
 	}
 
 	Processors struct {
@@ -161,6 +165,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Log.Format = "cli"
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
+	cfg.Connectors.MaxReceiveRecordSize = pconnector.DefaultMaxReceiveRecordSize
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
 

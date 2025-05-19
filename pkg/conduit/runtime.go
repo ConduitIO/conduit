@@ -536,6 +536,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
 		grpc.StatsHandler(metricsGrpcStatsHandler),
+		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -588,6 +589,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
 		grpc.StatsHandler(metricsGrpcStatsHandler),
+		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
@@ -622,7 +624,12 @@ func (r *Runtime) serveHTTPAPI(
 	t *tomb.Tomb,
 	grpcAddr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.NewClient(grpcAddr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		grpcAddr.String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(1024*1024*1024), // 10MB
+		))
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
