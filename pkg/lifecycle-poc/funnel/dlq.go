@@ -66,42 +66,48 @@ func (d *DLQ) Close(ctx context.Context) error {
 }
 
 func (d *DLQ) Ack(_ context.Context, batch *Batch) {
-	if len(batch.records) == 0 {
+	if batch.originalRecordCount == 0 {
 		return
 	}
 
 	d.m.Lock()
 	defer d.m.Unlock()
 
-	d.window.Ack(len(batch.records))
+	d.window.Ack(batch.originalRecordCount)
 }
 
 func (d *DLQ) Nack(ctx context.Context, batch *Batch, taskID string) (int, error) {
-	if len(batch.records) == 0 {
+	if batch.originalRecordCount == 0 {
 		return 0, nil
 	}
 
 	d.m.Lock()
 	defer d.m.Unlock()
 
-	nacked := d.window.Nack(len(batch.records))
+	nacked := d.window.Nack(batch.originalRecordCount)
 
 	if nacked > 0 {
 		b := batch
-		if nacked < len(batch.records) {
+		if nacked < batch.originalRecordCount {
+			// TODO make sure to send all split records to the DLQ, we don't have
+			//  the original anymore. This means that if [0:nacked] includes
+			//  split records, we need to increase it to [0:nacked+splitRecordCount]
 			b = batch.sub(0, nacked)
 		}
 
 		// The window successfully accepted nacks (at least some of them), send
 		// them to the DLQ.
 		successCount, err := d.sendToDLQ(ctx, b, taskID)
+		// TODO successCount might be _more_ than nacked, if the batch contained
+		//  split records. Make sure that sendToDLQ returns the correct number,
+		//  counting only original records.
 		if err != nil {
 			// The DLQ write failed, we need to stop the pipeline, as recovering
 			// could lead to an endless loop of restarts.
 			return successCount, cerrors.FatalError(err)
 		}
 	}
-	if nacked < len(batch.records) {
+	if nacked < batch.originalRecordCount {
 		// Not all records were nacked, we need to return an error.
 		if d.windowNackThreshold > 0 {
 			// If the threshold is greater than 0 the DLQ is enabled and we
@@ -202,6 +208,9 @@ func newDLQWindow(size, threshold int) *dlqWindow {
 
 // Ack stores an ack in the window.
 func (w *dlqWindow) Ack(count int) {
+	if w.nackCount == 0 {
+		return // Shortcut for the common case where no nacks are present
+	}
 	_ = w.store(count, false)
 }
 

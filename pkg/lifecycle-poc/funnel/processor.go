@@ -167,6 +167,10 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 			errs[i] = rec.(sdk.ErrorRecord).Error
 		}
 		b.Nack(from, errs...)
+	case sdk.MultiRecord:
+		for i, rec := range records {
+			b.SplitRecord(from+i, rec.(sdk.MultiRecord))
+		}
 	case nil:
 		// Empty records are not processed, we mark them to be retried.
 		// This can happen if the processor returns fewer records than it
