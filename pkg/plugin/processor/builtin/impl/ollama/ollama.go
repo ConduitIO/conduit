@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 //go:generate paramgen -output=paramgen_command.go ollamaProcessorConfig
 //go:generate go run go.uber.org/mock/mockgen  --build_flags=--mod=mod -source=./ollama.go -destination=mock/http_client_mock.go -package=mock
 
@@ -89,12 +90,13 @@ func (p *OllamaProcessor) Configure(ctx context.Context, cfg config.Config) erro
 
 func (p *OllamaProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "ollama",
-		Summary:     "Processes data through an ollama instance",
-		Description: "This processor runs provided records through a specified model on a provided ollama instance. It uses the provided prompt to transform the incoming records.",
-		Version:     "v0.0.1",
-		Author:      "Meroxa, Inc.",
-		Parameters:  p.config.Parameters(),
+		Name:    "ollama",
+		Summary: "Processes data through an Ollama instance",
+		Description: "This processor runs provided records through a specified model on a provided Ollama instance. " +
+			"It uses the provided prompt to transform the incoming records.",
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: p.config.Parameters(),
 	}, nil
 }
 
