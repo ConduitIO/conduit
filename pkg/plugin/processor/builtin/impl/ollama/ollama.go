@@ -90,13 +90,12 @@ func (p *OllamaProcessor) Configure(ctx context.Context, cfg config.Config) erro
 
 func (p *OllamaProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:    "ollama",
-		Summary: "Processes data through an Ollama instance",
-		Description: "This processor runs provided records through a specified model on a provided Ollama instance. " +
-			"It uses the provided prompt to transform the incoming records.",
-		Version:    "v0.1.0",
-		Author:     "Meroxa, Inc.",
-		Parameters: p.config.Parameters(),
+		Name:        "ollama",
+		Summary:     "Processes data through an Ollama instance",
+		Description: "This processor runs provided records through a specified model on a provided Ollama instance. It uses the provided prompt to transform the incoming records.",
+		Version:     "v0.1.0",
+		Author:      "Meroxa, Inc.",
+		Parameters:  p.config.Parameters(),
 	}, nil
 }
 
