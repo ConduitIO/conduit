@@ -100,13 +100,12 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 		&funnel.SourceTask{},
 		&funnel.DestinationTask{},
 	}
-	is.Equal(len(got.w.Tasks), len(wantTasks))
-	for i := range got.w.Tasks {
+	i := 0
+	for got := range got.w.FirstTask.Tasks() {
 		want := wantTasks[i]
-		got := got.w.Tasks[i]
 		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected task type
+		i++
 	}
-	is.Equal(got.w.Order, funnel.Order{{1}, nil})
 	is.Equal(got.w.Source.(*connector.Source).Instance, source)
 }
 

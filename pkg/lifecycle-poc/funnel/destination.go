@@ -84,6 +84,9 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	records := batch.ActiveRecords()
+
+	// Store the positions of the records in the batch to be used for
+	// validation of acks.
 	positions := make([]opencdc.Position, len(records))
 	for i, rec := range records {
 		positions[i] = rec.Position
@@ -95,31 +98,51 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
-	acks := make([]connector.DestinationAck, 0, len(positions))
+	activeIndices := batch.ActiveRecordIndices()
+	ackCount := 0
 	for range len(positions) {
-		acksResp, err := t.destination.Ack(ctx)
+		acks, err := t.destination.Ack(ctx)
 		if err != nil {
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
-		t.metrics.Observe(records[len(acks):len(acks)+len(acksResp)], start)
-		acks = append(acks, acksResp...)
-		if len(acks) >= len(positions) {
-			break
-		}
-	}
-	if len(acks) != len(positions) {
-		return cerrors.Errorf("received %d acks, but expected %d", len(acks), len(positions))
-	}
 
-	for i, ack := range acks {
-		if !bytes.Equal(positions[i], ack.Position) {
-			// TODO is this a fatal error? Looks like a bug in the connector
-			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
+		if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
+			return cerrors.Errorf("failed to validate acks: %w", err)
 		}
-		if ack.Error != nil {
-			batch.Nack(i, ack.Error) // TODO: adjust i according to filtered records
+		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
+		t.markBatchRecords(batch, activeIndices, ackCount, acks)
+
+		ackCount += len(acks)
+		if ackCount >= len(positions) {
+			break
 		}
 	}
 
 	return nil
+}
+
+func (t *DestinationTask) validateAcks(acks []connector.DestinationAck, positions []opencdc.Position) error {
+	if len(acks) > len(positions) {
+		return cerrors.Errorf("received %d acks, but expected at most %d", len(acks), len(positions))
+	}
+
+	for i, ack := range acks {
+		if !bytes.Equal(positions[i], ack.Position) {
+			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
+		}
+	}
+
+	return nil
+}
+
+func (t *DestinationTask) markBatchRecords(b *Batch, activeIndices []int, from int, acks []connector.DestinationAck) {
+	for i, ack := range acks {
+		if ack.Error != nil {
+			idx := from + i
+			if activeIndices != nil {
+				idx = activeIndices[idx]
+			}
+			b.Nack(idx, ack.Error)
+		}
+	}
 }

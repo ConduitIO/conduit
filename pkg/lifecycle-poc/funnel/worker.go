@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"iter"
 	"sync/atomic"
 	"time"
 
@@ -73,19 +74,9 @@ type Task interface {
 // The rest of the records are processed as a sub-batch, and the same rules
 // apply to them.
 type Worker struct {
-	Source Source
-	Tasks  []Task
-	// Order defines the next task to be executed. Multiple indices are used to
-	// show parallel execution of tasks.
-	//
-	// Example:
-	// [[1], [2], [3,5], [4], [], []]
-	//
-	//            /-> 3 -> 4
-	// 0 -> 1 -> 2
-	//            \-> 5
-	Order Order
-	DLQ   *DLQ
+	Source    Source
+	FirstTask *TaskNode
+	DLQ       *DLQ
 
 	lastReadAt time.Time
 	timer      metrics.Timer
@@ -100,70 +91,45 @@ type Worker struct {
 }
 
 func NewWorker(
-	tasks []Task,
-	order Order,
+	firstTask *TaskNode,
 	dlq *DLQ,
 	logger log.CtxLogger,
 	timer metrics.Timer,
 ) (*Worker, error) {
-	err := validateTaskOrder(tasks, order)
+	firstTask.first = true // mark the first task as the first task in the pipeline
+	err := validateTasks(firstTask)
 	if err != nil {
 		return nil, cerrors.Errorf("invalid task order: %w", err)
 	}
 
-	st, ok := tasks[0].(interface{ GetSource() Source })
+	st, ok := firstTask.Task.(interface{ GetSource() Source })
 	if !ok {
-		return nil, cerrors.Errorf("first task must be a source task, got %T", tasks[0])
+		return nil, cerrors.Errorf("first task must be a source task, got %T", firstTask.Task)
 	}
 
 	return &Worker{
-		Source: st.GetSource(),
-		Tasks:  tasks,
-		Order:  order,
-		DLQ:    dlq,
-		logger: logger.WithComponent("funnel.Worker"),
-		timer:  timer,
+		Source:    st.GetSource(),
+		FirstTask: firstTask,
+		DLQ:       dlq,
+		logger:    logger.WithComponent("funnel.Worker"),
+		timer:     timer,
 
 		processingLock: make(chan struct{}, 1),
 	}, nil
 }
 
-func validateTaskOrder(tasks []Task, order Order) error {
+func validateTasks(task *TaskNode) error {
 	// Traverse the tasks according to the order and validate that each task
 	// is included exactly once.
-	if len(order) != len(tasks) {
-		return cerrors.Errorf("order length (%d) does not match tasks length (%d)", len(order), len(tasks))
-	}
-	seenCount := make([]int, len(tasks))
-	var traverse func(i int) error
-	traverse = func(i int) error {
-		if i < 0 || i >= len(tasks) {
-			return cerrors.Errorf("invalid index (%d), expected a number between 0 and %d", i, len(tasks)-1)
+	seen := make(map[string]bool)
+
+	for t := range task.Tasks() {
+		if seen[t.ID()] {
+			return cerrors.Errorf("task %s included multiple times in order", task.Task.ID())
 		}
-		seenCount[i]++
-		if seenCount[i] > 1 {
-			return cerrors.Errorf("task %d included multiple times in order", i)
-		}
-		for _, nextIdx := range order[i] {
-			if nextIdx == i {
-				return cerrors.Errorf("task %d cannot call itself as next task", i)
-			}
-			err := traverse(nextIdx)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+		seen[t.ID()] = true
 	}
-	err := traverse(0)
-	if err != nil {
-		return err
-	}
-	for i, count := range seenCount {
-		if count == 0 {
-			return cerrors.Errorf("task %d not included in order", i)
-		}
-	}
+
 	return nil
 }
 
@@ -180,7 +146,7 @@ func (w *Worker) Open(ctx context.Context) (err error) {
 		})
 	}()
 
-	for _, task := range w.Tasks {
+	for task := range w.FirstTask.Tasks() {
 		err = task.Open(ctx)
 		if err != nil {
 			return cerrors.Errorf("task %s failed to open: %w", task.ID(), err)
@@ -239,7 +205,7 @@ func (w *Worker) acquireProcessingLock(ctx context.Context) (release func(), err
 func (w *Worker) Close(ctx context.Context) error {
 	var errs []error
 
-	for _, task := range w.Tasks {
+	for task := range w.FirstTask.Tasks() {
 		err := task.Close(ctx)
 		if err != nil {
 			errs = append(errs, cerrors.Errorf("task %s failed to close: %w", task.ID(), err))
@@ -259,7 +225,7 @@ func (w *Worker) Close(ctx context.Context) error {
 func (w *Worker) Do(ctx context.Context) error {
 	for !w.stop.Load() {
 		w.logger.Trace(ctx).Msg("starting next batch")
-		if err := w.doTask(ctx, 0, &Batch{}, w); err != nil {
+		if err := w.doTask(ctx, w.FirstTask, &Batch{}, w); err != nil {
 			return err
 		}
 		w.logger.Trace(ctx).Msg("batch done")
@@ -268,8 +234,13 @@ func (w *Worker) Do(ctx context.Context) error {
 }
 
 //nolint:gocyclo // TODO: refactor
-func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
-	t := w.Tasks[currentIndex]
+func (w *Worker) doTask(
+	ctx context.Context,
+	taskNode *TaskNode,
+	b *Batch,
+	acker ackNacker,
+) error {
+	t := taskNode.Task
 
 	w.logger.Trace(ctx).
 		Str("task_id", t.ID()).
@@ -290,14 +261,14 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 		// ErrPluginNotRunning can be returned if the plugin is stopped before
 		// trying to read the next batch.
 		// Both are considered as graceful stop, just return the context error, if any.
-		if currentIndex == 0 && (cerrors.Is(err, context.Canceled) ||
+		if w.isFirstTask(t) && (cerrors.Is(err, context.Canceled) ||
 			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
 			return ctx.Err()
 		}
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
 
-	if currentIndex == 0 {
+	if w.isFirstTask(t) {
 		// The first task has some specifics:
 		// - Store last time we read a batch from the source for metrics.
 		// - It locks the stop lock, so that no stop signal can be received while
@@ -330,13 +301,13 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 			Msg("task returned clean batch")
 
 		// Shortcut.
-		if !w.hasNextTask(currentIndex) || !b.HasActiveRecords() {
+		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
 			return acker.Ack(ctx, b)
 		}
 		// There is at least one task after this one, let's continue.
-		return w.nextTask(ctx, currentIndex, b, acker)
+		return w.doNextTask(ctx, taskNode, b, acker)
 	}
 
 	w.logger.Trace(ctx).
@@ -361,7 +332,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 
 		switch subBatch.recordStatuses[0].Flag {
 		case RecordFlagAck, RecordFlagFilter:
-			if !w.hasNextTask(currentIndex) || !subBatch.HasActiveRecords() {
+			if !taskNode.HasNext() || !subBatch.HasActiveRecords() {
 				// Either this is the last task (the batch has made it end-to-end),
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
@@ -373,7 +344,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 				break // break switch
 			}
 			// There is at least one task after this one, let's continue.
-			err := w.nextTask(ctx, currentIndex, subBatch, acker)
+			err := w.doNextTask(ctx, taskNode, subBatch, acker)
 			if err != nil {
 				return err
 			}
@@ -383,7 +354,10 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 				return err
 			}
 		case RecordFlagRetry:
-			err := w.doTask(ctx, currentIndex, subBatch, acker)
+			// Retry the sub-batch by passing it to the same task. We need to
+			// mark the records as acked, as that's the default record status.
+			subBatch.Ack(0, len(subBatch.records))
+			err := w.doTask(ctx, taskNode, subBatch, acker)
 			if err != nil {
 				return err
 			}
@@ -429,19 +403,18 @@ OUTER:
 	return b.sub(firstIndex, lastIndex)
 }
 
-func (w *Worker) hasNextTask(currentIndex int) bool {
-	return len(w.Order[currentIndex]) > 0
+func (w *Worker) isFirstTask(t Task) bool {
+	return w.FirstTask.Task.ID() == t.ID()
 }
 
-func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
-	nextIndices := w.Order[currentIndex]
-	switch len(nextIndices) {
+func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, acker ackNacker) error {
+	switch len(taskNode.Next) {
 	case 0:
 		// no next task, we're done
 		return nil
 	case 1:
 		// single next task, let's pass the batch to it
-		return w.doTask(ctx, nextIndices[0], b, acker)
+		return w.doTask(ctx, taskNode.Next[0], b, acker)
 	default:
 		// TODO(multi-connector): remove error
 		return cerrors.Errorf("multiple next tasks not supported yet")
@@ -449,12 +422,12 @@ func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker
 		// multiple next tasks, let's clone the batch and pass it to them
 		// concurrently
 		//nolint:govet // TODO implement multi ack nacker
-		multiAcker := newMultiAckNacker(acker, len(nextIndices))
+		multiAcker := newMultiAckNacker(acker, len(taskNode.Next))
 		p := pool.New().WithErrors() // TODO WithContext?
-		for _, i := range nextIndices {
+		for _, nextTask := range taskNode.Next {
 			b := b.clone()
 			p.Go(func() error {
-				return w.doTask(ctx, i, b, multiAcker)
+				return w.doTask(ctx, nextTask, b, multiAcker)
 			})
 		}
 		err := p.Wait()
@@ -509,43 +482,85 @@ func (w *Worker) updateTimer(records []opencdc.Record) {
 	}
 }
 
-// Order represents the order of tasks in a pipeline. Each index in the slice
-// represents a task, and the value at that index is a slice of indices of the
-// next tasks to be executed. If the slice is empty, the task is the last one in
-// the pipeline.
-type Order [][]int
+// TaskNode represents a task in the pipeline. It contains the task itself and
+// the next tasks to be executed after it.
+type TaskNode struct {
+	Task Task
+	Next []*TaskNode
 
-// AppendSingle appends a single element to the current order.
-func (o Order) AppendSingle(next []int) Order {
-	if len(o) == 0 {
-		return Order{next}
-	}
-	o[len(o)-1] = append(o[len(o)-1], len(o))
-	return append(o, next)
+	first bool
 }
 
-// AppendOrder appends the next order to the current order. The next order indices
-// are adjusted to match the new order length.
-func (o Order) AppendOrder(next Order) Order {
-	if len(o) == 0 {
-		return next
-	} else if len(next) == 0 {
-		return o
-	}
-
-	next.Increase(len(o))
-	o[len(o)-1] = append(o[len(o)-1], len(o))
-	return append(o, next...)
+// IsFirst returns true if this task is the first task in the pipeline.
+func (t *TaskNode) IsFirst() bool {
+	return t.first
 }
 
-// Increase increases all indices in the order by the given increment.
-func (o Order) Increase(incr int) Order {
-	for _, v := range o {
-		for i := range v {
-			v[i] += incr
+// HasNext returns true if the task has at least one next task.
+func (t *TaskNode) HasNext() bool {
+	return len(t.Next) > 0
+}
+
+// AppendToEnd adds a new task to the end of the pipeline. Note that this doesn't
+// mean that the supplied task will be executed directly after this task. Rather,
+// it means that it will be executed after all tasks in the linked list are executed.
+//
+// If any task node in the list has more than 1 next task, the function will
+// return an error, as it would be ambiguous where to append the task.
+//
+// If the task was appended successfully, it returns the created TaskNode.
+func (t *TaskNode) AppendToEnd(next ...*TaskNode) error {
+	switch len(t.Next) {
+	case 0:
+		// No next task, let's append the new task.
+		t.Next = next
+		return nil
+	case 1:
+		// Single next task, let's append the new task to it.
+		return t.Next[0].AppendToEnd(next...)
+	default:
+		// Multiple next tasks, we can't append the new task to them.
+		// If we hit this line it's an internal bug.
+		return cerrors.Errorf("(bug) multiple next tasks, please append the task to the branch where you want it")
+	}
+}
+
+// TaskNodes returns an iterator over the task nodes in the pipeline. It iterates
+// the task nodes in the order they are defined in the pipeline, depth-first.
+func (t *TaskNode) TaskNodes() iter.Seq[*TaskNode] {
+	return func(yield func(*TaskNode) bool) {
+		t.iterator()(yield)
+	}
+}
+
+// Tasks returns an iterator over the tasks in the pipeline. It iterates
+// the tasks in the order they are defined in the pipeline, depth-first.
+func (t *TaskNode) Tasks() iter.Seq[Task] {
+	return func(yield func(Task) bool) {
+		t.iterator()(func(node *TaskNode) bool {
+			return yield(node.Task)
+		})
+	}
+}
+
+// iterator is a private method that returns an iterator which also tells the
+// caller if it should stop iterating. This is needed to break the loop in parent
+// iterators, but doesn't match the Go interface for iter.Seq, so it's just a helper.
+func (t *TaskNode) iterator() func(yield func(*TaskNode) bool) bool {
+	return func(yield func(*TaskNode) bool) bool {
+		// First yield the current task.
+		if !yield(t) {
+			return false
 		}
+
+		// Then process all children in order.
+		for _, next := range t.Next {
+			if !next.iterator()(yield) {
+				return false
+			}
+		}
+		return true
 	}
-	return o
 }
 
 type ackNacker interface {
