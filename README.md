@@ -10,7 +10,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
-[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://www.conduit.io/docs/introduction/getting-started)
+[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduit.io/docs/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
 
 ## Overview
@@ -83,7 +83,7 @@ Download the right `.deb` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-dpkg -i conduit_0.13.4_Linux_x86_64.deb
+dpkg -i conduit_0.13.5_Linux_x86_64.deb
 ```
 
 ### RPM
@@ -92,7 +92,7 @@ Download the right `.rpm` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-rpm -i conduit_0.13.4_Linux_x86_64.rpm
+rpm -i conduit_0.13.5_Linux_x86_64.rpm
 ```
 
 ### Build from source
