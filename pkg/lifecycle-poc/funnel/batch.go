@@ -58,6 +58,15 @@ func NewBatch(records []opencdc.Record) *Batch {
 	}
 }
 
+// Ack marks the record at index i as acked. If a second index is provided, all
+// records between i (included) and j (excluded) are marked as acked. If multiple
+// indices are provided, the method panics.
+// Records are marked as acked by default, so this method is only useful when
+// reprocessing records marked to be retried.
+func (b *Batch) Ack(i int, j ...int) {
+	b.setFlagNoErr(RecordFlagAck, i, j...)
+}
+
 // Nack marks the record at index i as nacked. If multiple errors are provided,
 // they are assigned to the records starting at index i.
 func (b *Batch) Nack(i int, errs ...error) {
@@ -66,8 +75,8 @@ func (b *Batch) Nack(i int, errs ...error) {
 }
 
 // Retry marks the record at index i to be retried. If a second index is
-// provided, all records between i (included) and j (excluded) are marked as
-// acked. If multiple indices are provided, the method panics.
+// provided, all records between i (included) and j (excluded) are marked to be
+// retried. If multiple indices are provided, the method panics.
 func (b *Batch) Retry(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagRetry, i, j...)
 	b.tainted = true
