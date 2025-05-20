@@ -78,6 +78,26 @@ func (t *ProcessorTask) Close(ctx context.Context) error {
 	return t.processor.Teardown(ctx)
 }
 
+// Do processes a batch of records using the processor plugin. It returns
+// an error if the processor fails to process the records, or if the
+// processor returns an invalid number of records.
+//
+// If the batch contains filtered records, the processor will only process
+// the active records.
+// For instance:
+//   - Consider a batch with 5 records, 2 of which are filtered. A represents
+//     the active records, and F represents the filtered records:
+//     [A, A, F, A, F]
+//   - The processor will only process the active records, so it will receive
+//     [A, A, A].
+//   - The processor will return the processed records, which will be
+//     [X, X, X], where X represents the processed records. The records are
+//     either processed, filtered or errored.
+//   - When marking the records in the batch as processed, filtered or
+//     errored, the ProcessorTask takes into account the indices of the filtered
+//     records, so it marks the correct records in the batch. In the example that
+//     we used, the processor will mark the batch as [X, X, F, X, F], leaving the
+//     filtered records as is.
 func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
 	start := time.Now()
 	recsIn := b.ActiveRecords()
@@ -88,41 +108,38 @@ func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
 	}
 	t.metrics.Observe(len(recsOut), start)
 
+	if len(recsIn) > len(recsOut) {
+		// Processor skipped some records, append empty records, so that we can
+		// mark them to be retried.
+		recsOut = append(recsOut, make([]sdk.ProcessedRecord, len(recsIn)-len(recsOut))...)
+	}
+
 	// Mark records in the batch as processed, filtered or errored.
 	// We do this a bit smarter, by collecting ranges of records that are
 	// processed, filtered or errored, and then marking them in one go.
+	// We need to account for the fact that the batch might have filtered
+	// records, so we need to map the indices of the records in the returned
+	// slice back to the indices of the active records in the original batch.
 
-	from := 0      // Start of the current range of records with the same type
-	rangeType := 0 // 0 = SingleRecord, 1 = FilterRecord, 2 = ErrorRecord
+	activeIndices := b.ActiveRecordIndices()
+	from := 0
+	for i := 1; i <= len(recsOut); i++ {
+		if i == len(recsOut) ||
+			!t.isSameType(recsOut[i-1], recsOut[i]) ||
+			!t.isConsecutive(activeIndices, i-1, i) {
+			// We have a range of records that are the same type, and
+			// consecutive in the original batch.
+			// Mark them in one go.
 
-	for i, rec := range recsOut {
-		var currentType int
-		switch rec.(type) {
-		case sdk.SingleRecord:
-			currentType = 0
-		case sdk.FilterRecord:
-			currentType = 1
-		case sdk.ErrorRecord:
-			currentType = 2
-		default:
-			err := cerrors.Errorf("processor returned unknown record type: %T", rec)
-			return cerrors.FatalError(err)
+			idx := from
+			if activeIndices != nil {
+				// If we have filtered records, we need to map the from index
+				// back to the original batch index.
+				idx = activeIndices[from]
+			}
+			t.markBatchRecords(b, idx, recsOut[from:i])
+			from = i
 		}
-
-		if currentType == rangeType {
-			continue
-		}
-
-		t.markBatchRecords(b, from, recsOut[from:i])
-		from, rangeType = i, currentType
-	}
-
-	// Mark the last range of records.
-	t.markBatchRecords(b, from, recsOut[from:])
-
-	if len(recsIn) > len(recsOut) {
-		// Processor skipped some records, mark them to be retried.
-		b.Retry(len(recsOut), len(recsIn))
 	}
 
 	return nil
@@ -143,12 +160,46 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 		}
 		b.SetRecords(from, recs)
 	case sdk.FilterRecord:
-		b.Filter(from, len(records))
+		b.Filter(from, from+len(records))
 	case sdk.ErrorRecord:
 		errs := make([]error, len(records))
 		for i, rec := range records {
 			errs[i] = rec.(sdk.ErrorRecord).Error
 		}
 		b.Nack(from, errs...)
+	case nil:
+		// Empty records are not processed, we mark them to be retried.
+		// This can happen if the processor returns fewer records than it
+		// received.
+		b.Retry(from, from+len(records))
 	}
+}
+
+// isSameType checks if two records are of the same type. This is used to
+// determine if we can mark a range of records in the batch as processed,
+// filtered or errored.
+func (t *ProcessorTask) isSameType(a, b sdk.ProcessedRecord) bool {
+	switch a.(type) {
+	case sdk.SingleRecord:
+		_, ok := b.(sdk.SingleRecord)
+		return ok
+	case sdk.FilterRecord:
+		_, ok := b.(sdk.FilterRecord)
+		return ok
+	case sdk.ErrorRecord:
+		_, ok := b.(sdk.ErrorRecord)
+		return ok
+	case nil:
+		return b == nil
+	default:
+		return false
+	}
+}
+
+// isConsecutive checks if two indices are consecutive in the original batch.
+func (t *ProcessorTask) isConsecutive(indices []int, i, j int) bool {
+	if indices == nil {
+		return true // No filtering, so all records are consecutive.
+	}
+	return indices[i]+1 == indices[j]
 }
