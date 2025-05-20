@@ -15,6 +15,7 @@
 package internal
 
 import (
+	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -24,6 +25,7 @@ import (
 // records.
 var CmpProcessedRecordOpts = []cmp.Option{
 	cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
+	cmpopts.IgnoreUnexported(opencdc.Record{}),
 	cmp.Comparer(func(e1, e2 error) bool {
 		switch {
 		case e1 == nil && e2 == nil:

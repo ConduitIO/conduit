@@ -91,11 +91,11 @@ func RunExample(p sdk.Processor, e Example) {
 	switch rec := got[0].(type) {
 	case sdk.SingleRecord:
 		// Serialize records to pretty JSON for comparison.
-		havePrettyJSON, err := recordToPrettyJSON(e.Have)
+		havePrettyJSON, err := recordToPrettyJSON(e.Have, "")
 		if err != nil {
 			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
 		}
-		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(rec))
+		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(rec), "")
 		if err != nil {
 			log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)
 		}
@@ -111,13 +111,42 @@ func RunExample(p sdk.Processor, e Example) {
 		fmt.Println("processor filtered record out")
 	case sdk.ErrorRecord:
 		fmt.Printf("processor returned error: %s\n", rec.Error)
+	case sdk.MultiRecord:
+		// Serialize records to pretty JSON for comparison.
+		havePrettyJSON, err := recordToPrettyJSON(e.Have, "")
+		if err != nil {
+			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
+		}
+
+		var buf bytes.Buffer
+		buf.WriteString("[\n")
+		for i, subRec := range rec {
+			prettyJSON, err := recordToPrettyJSON(subRec, "  ")
+			if err != nil {
+				log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)
+			}
+			buf.WriteString("  " + string(prettyJSON))
+			if i < len(rec)-1 {
+				buf.WriteString(",\n")
+			}
+		}
+		buf.WriteString("\n]")
+		gotPrettyJSON := buf.Bytes()
+
+		edits := diff.Strings(string(havePrettyJSON), string(gotPrettyJSON))
+		unified, err := diff.ToUnified("before", "after", string(havePrettyJSON)+"\n", edits, 100)
+		if err != nil {
+			log.Fatalf("failed to produce unified diff: %v", err)
+		}
+
+		fmt.Printf("processor transformed record:\n%s\n", unified)
 	}
 
 	// append example to processor
 	pi.Examples = append(pi.Examples, e)
 }
 
-func recordToPrettyJSON(r opencdc.Record) ([]byte, error) {
+func recordToPrettyJSON(r opencdc.Record, prefix string) ([]byte, error) {
 	serializer := opencdc.JSONSerializer{RawDataAsString: true}
 
 	// Serialize records to pretty JSON for comparison.
@@ -126,7 +155,7 @@ func recordToPrettyJSON(r opencdc.Record) ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal test record to JSON: %w", err)
 	}
 	var buf bytes.Buffer
-	err = json.Indent(&buf, haveJSON, "", "  ")
+	err = json.Indent(&buf, haveJSON, prefix, "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to indent test record JSON: %w", err)
 	}

@@ -17,7 +17,7 @@ func (splitConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		splitConfigField: {
 			Default:     "",
-			Description: "Field is the target field that should be split. Note that the target\nfield has to contain an array so it can be split. This also means you can\nonly split on fields in structured data under `.Key` and `.Payload`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
+			Description: "Field is the target field that should be split. Note that the target\nfield has to contain an array so it can be split, otherwise the processor\nreturns an error. This also means you can only split on fields in\nstructured data under `.Key` and `.Payload`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
