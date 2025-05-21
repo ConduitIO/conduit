@@ -112,7 +112,6 @@ func (b *Batch) Nack(i int, errs ...error) {
 			b.setFlagWithErr(RecordFlagNack, from, splitErrs)
 		}
 	}
-
 }
 
 // Retry marks the record at index i to be retried. If a second index is

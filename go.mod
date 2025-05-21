@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.9.3
 	github.com/conduitio/conduit-connector-s3 v0.9.2
 	github.com/conduitio/conduit-connector-sdk v0.13.4
-	github.com/conduitio/conduit-processor-sdk v0.4.4
+	github.com/conduitio/conduit-processor-sdk v0.4.5-0.20250519135306-105cf0cc0974
 	github.com/conduitio/conduit-schema-registry v0.2.6
 	github.com/conduitio/ecdysis v0.4.2
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -314,5 +314,3 @@ require (
 	mvdan.cc/gofumpt v0.8.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
-
-replace github.com/conduitio/conduit-processor-sdk => ../conduit-processor-sdk
