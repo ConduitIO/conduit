@@ -441,28 +441,29 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 }
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
-	positions := batch.originalPositions()
-	err := w.Source.Ack(ctx, positions)
+	originalBatch := batch.originalBatch()
+	err := w.Source.Ack(ctx, originalBatch.positions)
 	if err != nil {
-		return cerrors.Errorf("failed to ack %d records in source: %w", len(positions), err)
+		return cerrors.Errorf("failed to ack %d records in source: %w", len(originalBatch.positions), err)
 	}
 
 	w.DLQ.Ack(ctx, batch)
-	w.updateTimer(batch.originalRecords())
+	w.updateTimer(batch.records)
 	return nil
 }
 
 func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
-	n, err := w.DLQ.Nack(ctx, batch, taskID)
+	originalBatch := batch.originalBatch()
+	n, err := w.DLQ.Nack(ctx, originalBatch, taskID)
 	if n > 0 {
 		// Successfully nacked n records, let's ack them, as they reached
 		// the end of the pipeline (in this case the DLQ).
-		err := w.Source.Ack(ctx, batch.originalPositions(n))
+		err := w.Source.Ack(ctx, originalBatch.positions[:n])
 		if err != nil {
 			return cerrors.Errorf("task %s failed to ack %d records in source: %w", n, err)
 		}
 
-		w.updateTimer(batch.originalRecords(n))
+		w.updateTimer(batch.records[:n])
 	}
 
 	if err != nil {

@@ -169,7 +169,13 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 		b.Nack(from, errs...)
 	case sdk.MultiRecord:
 		for i, rec := range records {
-			b.SplitRecord(from+i, rec.(sdk.MultiRecord))
+			rec := rec.(sdk.MultiRecord)
+			if len(rec) == 0 {
+				// TODO what now? filter?
+			} else if len(rec) == 1 {
+				// TODO what now? single record?
+			}
+			b.SplitRecord(from+i, rec)
 		}
 	case nil:
 		// Empty records are not processed, we mark them to be retried.
@@ -192,6 +198,9 @@ func (t *ProcessorTask) isSameType(a, b sdk.ProcessedRecord) bool {
 		return ok
 	case sdk.ErrorRecord:
 		_, ok := b.(sdk.ErrorRecord)
+		return ok
+	case sdk.MultiRecord:
+		_, ok := b.(sdk.MultiRecord)
 		return ok
 	case nil:
 		return b == nil
