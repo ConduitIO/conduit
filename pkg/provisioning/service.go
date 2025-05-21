@@ -200,12 +200,47 @@ func (s *Service) getYamlFiles(path string) ([]string, error) {
 			filePath = resolvedPath
 		}
 
-		if s.isYAMLFile(filePath) {
+		if s.isYamlFile(filePath) {
 			files = append(files, filePath)
 		}
 	}
 
 	return files, nil
+}
+
+func (s *Service) resolveSymLink(basePath, symlink string) (string, error) {
+	fullPath := filepath.Join(basePath, symlink)
+	resolvedPath, err := os.Readlink(fullPath)
+	if err != nil {
+		return "", cerrors.Errorf("could not read symlink: %w", err)
+	}
+
+	// If symlink path is relative, make it absolute
+	if !filepath.IsAbs(resolvedPath) {
+		resolvedPath = filepath.Join(basePath, resolvedPath)
+	}
+
+	// Check if the resolved path exists and is a regular file
+	_, err = os.Stat(resolvedPath)
+	if err != nil {
+		return "", cerrors.Errorf("could not stat symlink: %w", err)
+	}
+
+	return resolvedPath, nil
+}
+
+func (s *Service) isYamlFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !info.Mode().IsRegular() {
+		return false
+	}
+
+	// Check if it's a YAML file
+	ext := filepath.Ext(path)
+	return ext == ".yml" || ext == ".yaml"
 }
 
 func (s *Service) parsePipelineConfigFile(ctx context.Context, path string) ([]config.Pipeline, error) {
@@ -306,39 +341,4 @@ func (s *Service) deleteOldPipelines(ctx context.Context, keepIDs []string) []st
 		deletedIDs = append(deletedIDs, id)
 	}
 	return deletedIDs
-}
-
-func (s *Service) resolveSymLink(basePath, symlink string) (string, error) {
-	fullPath := filepath.Join(basePath, symlink)
-	resolvedPath, err := os.Readlink(fullPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not read symlink: %w", err)
-	}
-
-	// If symlink path is relative, make it absolute
-	if !filepath.IsAbs(resolvedPath) {
-		resolvedPath = filepath.Join(basePath, resolvedPath)
-	}
-
-	// Check if the resolved path exists and is a regular file
-	_, err = os.Stat(resolvedPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not stat symlink: %w", err)
-	}
-
-	return resolvedPath, nil
-}
-
-func (s *Service) isYAMLFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	if !info.Mode().IsRegular() {
-		return false
-	}
-
-	// Check if it's a YAML file
-	ext := filepath.Ext(path)
-	return ext == ".yml" || ext == ".yaml"
 }

@@ -582,7 +582,8 @@ func TestService_getYamlFiles(t *testing.T) {
 
 	// 	├── another-pipeline.yaml
 	// 	└── pipelines (the configured path)
-	// 		├── conduit-rocks.yaml (picked up because it's a YAML a file)
+	// 		├── conduit-rocks.yaml (picked up because it's a YAML file)
+	// 		├── conduit-rocks.yml (picked up because it's a YAML file)
 	// 		├── nested
 	// 		│         └── p.yaml (ignored because it's nested)
 	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it links to a YAML file)
@@ -591,6 +592,7 @@ func TestService_getYamlFiles(t *testing.T) {
 	want := []string{
 		"test/different_pipeline_file_types/another-pipeline.yaml",
 		"test/different_pipeline_file_types/pipelines/conduit-rocks.yaml",
+		"test/different_pipeline_file_types/pipelines/conduit-rocks.yml",
 	}
 	slices.Sort(want)
 
@@ -598,5 +600,5 @@ func TestService_getYamlFiles(t *testing.T) {
 	is.NoErr(err)
 
 	slices.Sort(got)
-	is.Equal(want, got)
+	is.Equal("", cmp.Diff(want, got)) // -want +got
 }
