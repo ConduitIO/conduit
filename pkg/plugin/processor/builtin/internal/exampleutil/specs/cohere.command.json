@@ -109,7 +109,7 @@
   "examples": [
     {
       "summary": "Generate responses using Cohere's command model",
-      "description": "\nThis example demonstrates how to use the Cohere command processor to generate responses for a record's `.Payload.After` field.\nThe processor sends the input text to the Cohere API and replaces it with the model's response.",
+      "description": "\nThis example demonstrates how to use the Cohere command processor to generate responses for a record's `.Payload.After` field.\nThe processor sends the input text from the configured \"request.body\" to the Cohere API and stores the model's response into the configured \"response.body\"",
       "config": {
         "apiKey": "apikey",
         "backoffRetry.count": "0",
