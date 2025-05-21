@@ -4,8 +4,8 @@ deps:
   - remote: buf.build
     owner: conduitio
     repository: conduit-commons
-    commit: 11464f8c698f416da0641fdaff2cd45c
-    digest: shake256:9dd5ce71529da7ae268ef521b0252aad49712d6214e383c0d8da039ad2103b0e44c6ac597f5b83d93808a32c65926317999f9c4be39765688737ce3fe804eb21
+    commit: 16091c724e07496a97473a9f635ddb96
+    digest: shake256:1f8459d914f9e6600ec6d5259b8429744d66a970cbf64f613ab8a66329f33a4d3d232250dfde5f0314fefa89aedc463784ee7530dc536a0a0b9b9e2fad508fbb
   - remote: buf.build
     owner: googleapis
     repository: googleapis

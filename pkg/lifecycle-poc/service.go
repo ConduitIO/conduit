@@ -298,7 +298,7 @@ func (s *Service) buildRunnablePipeline(
 	pipelineLogger := s.logger
 	pipelineLogger.Logger = pipelineLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 
-	srcTasks, srcOrder, err := s.buildSourceTasks(ctx, pl, pipelineLogger)
+	srcTasks, err := s.buildSourceTasks(ctx, pl, pipelineLogger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to build source tasks: %w", err)
 	}
@@ -306,7 +306,7 @@ func (s *Service) buildRunnablePipeline(
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
 
-	destTasks, destOrder, err := s.buildDestinationTasks(ctx, pl, pipelineLogger)
+	destTasks, err := s.buildDestinationTasks(ctx, pl, pipelineLogger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to build destination tasks: %w", err)
 	}
@@ -314,7 +314,7 @@ func (s *Service) buildRunnablePipeline(
 		return nil, cerrors.New("can't build pipeline without any destination connectors")
 	}
 
-	procTasks, procOrder, err := s.buildProcessorTasks(ctx, pl, pl.ProcessorIDs, pipelineLogger)
+	procTasks, err := s.buildProcessorTasks(ctx, pl, pl.ProcessorIDs, pipelineLogger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to build pipeline processor tasks: %w", err)
 	}
@@ -324,18 +324,23 @@ func (s *Service) buildRunnablePipeline(
 		return nil, cerrors.Errorf("failed to build DLQ: %w", err)
 	}
 
-	tasks, order := s.combineTasksAndOrders(srcTasks, destTasks, procTasks, srcOrder, destOrder, procOrder)
+	taskNodes, err := s.buildTaskNodes(srcTasks, procTasks, destTasks)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to build task nodes: %w", err)
+	}
+
+	// TODO(multi-connector): when we have multiple connectors we will have more than one task node
+	taskNode := taskNodes[0]
 
 	// log the tasks and order for debugging purposes
-	taskTypes := make([]string, len(tasks))
-	for i, task := range tasks {
-		taskTypes[i] = fmt.Sprintf("%s(%T)", task.ID(), task)
+	taskTypes := make([]string, 0)
+	for task := range taskNode.Tasks() {
+		taskTypes = append(taskTypes, fmt.Sprintf("%s(%T)", task.ID(), task))
 	}
-	pipelineLogger.Info(ctx).Any("tasks", taskTypes).Any("order", order).Msg("pipeline tasks and order")
+	pipelineLogger.Info(ctx).Any("tasks", taskTypes).Msg("pipeline tasks")
 
 	worker, err := funnel.NewWorker(
-		tasks,
-		order,
+		taskNode,
 		dlq,
 		pipelineLogger,
 		measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
@@ -349,46 +354,67 @@ func (s *Service) buildRunnablePipeline(
 	}, nil
 }
 
-func (s *Service) combineTasksAndOrders(
-	srcTasks, destTasks, procTasks []funnel.Task,
-	srcOrder, destOrder, procOrder funnel.Order,
-) ([]funnel.Task, funnel.Order) {
-	tasks := make([]funnel.Task, 0, len(srcTasks)+len(procTasks)+len(destTasks))
-	tasks = append(tasks, srcTasks...)
-	tasks = append(tasks, procTasks...)
-	tasks = append(tasks, destTasks...)
-
+// buildTaskNodes takes the source, processor and destination tasks and builds
+// a task node graph. The returned slice contains the first task nodes in every
+// branch of the graph. The other task nodes are connected to the first task node
+// in their branch.
+func (s *Service) buildTaskNodes(
+	srcTasks [][]funnel.Task,
+	procTasks []funnel.Task,
+	destTasks [][]funnel.Task,
+) ([]*funnel.TaskNode, error) {
 	// TODO(multi-connector): when we have multiple connectors this will not be as straight forward
-	order := srcOrder.AppendOrder(procOrder).AppendOrder(destOrder)
-	return tasks, order
+	srcTasksBranch := srcTasks[0]   // we only support one source connector for now
+	destTasksBranch := destTasks[0] // we only support one destination connector for now
+
+	taskNode := &funnel.TaskNode{Task: srcTasksBranch[0]}
+	for _, task := range srcTasksBranch[1:] {
+		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
+		if err != nil {
+			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+		}
+	}
+	for _, task := range procTasks {
+		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
+		if err != nil {
+			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+		}
+	}
+	for _, task := range destTasksBranch {
+		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
+		if err != nil {
+			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+		}
+	}
+
+	return []*funnel.TaskNode{taskNode}, nil
 }
 
 func (s *Service) buildSourceTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
 	logger log.CtxLogger,
-) ([]funnel.Task, funnel.Order, error) {
-	var tasks []funnel.Task
-	var order funnel.Order
+) ([][]funnel.Task, error) {
+	var tasks [][]funnel.Task
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := s.connectors.Get(ctx, connID)
 		if err != nil {
-			return nil, nil, cerrors.Errorf("could not fetch connector: %w", err)
+			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
 
 		if instance.Type != connector.TypeSource {
 			continue // skip any connector that's not a source
 		}
 
-		if len(tasks) > 1 {
+		if len(tasks) > 0 {
 			// TODO(multi-connector): remove check
-			return nil, nil, cerrors.New("pipelines with multiple source connectors currently not supported, please disable the experimental feature flag")
+			return nil, cerrors.New("pipelines with multiple source connectors currently not supported, please disable the experimental feature flag")
 		}
 
 		src, err := instance.Connector(ctx, s.connectorPlugins)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		srcTask := funnel.NewSourceTask(
@@ -399,48 +425,46 @@ func (s *Service) buildSourceTasks(
 		)
 
 		// Add processor tasks
-		processorTasks, processorOrder, err := s.buildProcessorTasks(ctx, pl, instance.ProcessorIDs, logger)
+		procTasks, err := s.buildProcessorTasks(ctx, pl, instance.ProcessorIDs, logger)
 		if err != nil {
-			return nil, nil, cerrors.Errorf("failed to build source processor tasks: %w", err)
+			return nil, cerrors.Errorf("failed to build source processor tasks: %w", err)
 		}
 
-		// Adjust order to include new task and the processor order
-		tasks = append(tasks, srcTask)
-		tasks = append(tasks, processorTasks...)
-
-		order = append(order, nil) // Add new task to order without attaching to previous tasks
-		order = order.AppendOrder(processorOrder)
+		// Build the slice of tasks for this source
+		srcTasks := make([]funnel.Task, 0)
+		srcTasks = append(srcTasks, srcTask)
+		srcTasks = append(srcTasks, procTasks...)
+		tasks = append(tasks, srcTasks)
 	}
 
-	return tasks, order, nil
+	return tasks, nil
 }
 
 func (s *Service) buildDestinationTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
 	logger log.CtxLogger,
-) ([]funnel.Task, funnel.Order, error) {
-	var tasks []funnel.Task
-	var order funnel.Order
+) ([][]funnel.Task, error) {
+	var tasks [][]funnel.Task
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := s.connectors.Get(ctx, connID)
 		if err != nil {
-			return nil, nil, cerrors.Errorf("could not fetch connector: %w", err)
+			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
 
 		if instance.Type != connector.TypeDestination {
 			continue // skip any connector that's not a destination
 		}
 
-		if len(tasks) > 1 {
+		if len(tasks) > 0 {
 			// TODO(multi-connector): remove check
-			return nil, nil, cerrors.New("pipelines with multiple destination connectors currently not supported, please disable the experimental feature flag")
+			return nil, cerrors.New("pipelines with multiple destination connectors currently not supported, please disable the experimental feature flag")
 		}
 
 		dest, err := instance.Connector(ctx, s.connectorPlugins)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		destTask := funnel.NewDestinationTask(
@@ -451,20 +475,19 @@ func (s *Service) buildDestinationTasks(
 		)
 
 		// Add processor tasks
-		processorTasks, processorOrder, err := s.buildProcessorTasks(ctx, pl, instance.ProcessorIDs, logger)
+		procTasks, err := s.buildProcessorTasks(ctx, pl, instance.ProcessorIDs, logger)
 		if err != nil {
-			return nil, nil, cerrors.Errorf("failed to build destination processor tasks: %w", err)
+			return nil, cerrors.Errorf("failed to build destination processor tasks: %w", err)
 		}
 
-		// Adjust order to include new task and the processor order
-		tasks = append(tasks, processorTasks...)
-		tasks = append(tasks, destTask)
-
-		order = append(order, processorOrder.Increase(len(order))...) // Add processor task order without attaching to previous tasks
-		order = order.AppendSingle(nil)
+		// Build the slice of tasks for this destination
+		destTasks := make([]funnel.Task, 0)
+		destTasks = append(destTasks, destTask)
+		destTasks = append(destTasks, procTasks...)
+		tasks = append(tasks, destTasks)
 	}
 
-	return tasks, order, nil
+	return tasks, nil
 }
 
 func (s *Service) buildProcessorTasks(
@@ -472,19 +495,18 @@ func (s *Service) buildProcessorTasks(
 	pl *pipeline.Instance,
 	processorIDs []string,
 	logger log.CtxLogger,
-) ([]funnel.Task, funnel.Order, error) {
+) ([]funnel.Task, error) {
 	var tasks []funnel.Task
-	var order funnel.Order
 
 	for _, procID := range processorIDs {
 		instance, err := s.processors.Get(ctx, procID)
 		if err != nil {
-			return nil, nil, cerrors.Errorf("could not fetch processor: %w", err)
+			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
 		runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		tasks = append(
@@ -496,10 +518,9 @@ func (s *Service) buildProcessorTasks(
 				s.newProcessorMetrics(pl.Config.Name, instance.Plugin),
 			),
 		)
-		order = order.AppendSingle(nil)
 	}
 
-	return tasks, order, nil
+	return tasks, nil
 }
 
 func (s *Service) buildDLQ(

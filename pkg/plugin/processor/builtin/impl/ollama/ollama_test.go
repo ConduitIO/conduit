@@ -74,7 +74,7 @@ func TestOllamaProcessor_Configure(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			p := &ollamaProcessor{}
+			p := &OllamaProcessor{}
 			cfg := tc.config
 
 			err := p.Configure(ctx, cfg)

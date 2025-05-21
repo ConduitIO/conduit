@@ -30,14 +30,14 @@ type ConnectorMetrics interface {
 
 type NoOpConnectorMetrics struct{}
 
-func (m *NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {}
+func (m NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {}
 
 type ConnectorMetricsImpl struct {
 	timer     metrics.Timer
 	histogram metrics.RecordBytesHistogram
 }
 
-func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Type) *ConnectorMetricsImpl {
+func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Type) ConnectorMetricsImpl {
 	timer := measure.ConnectorExecutionDurationTimer.WithValues(
 		pipelineName,
 		pluginName,
@@ -50,13 +50,13 @@ func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Typ
 		strings.ToLower(connType.String()),
 	)
 
-	return &ConnectorMetricsImpl{
+	return ConnectorMetricsImpl{
 		timer:     timer,
 		histogram: metrics.NewRecordBytesHistogram(histogram),
 	}
 }
 
-func (m *ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
+func (m ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
 	// Precalculate sizes so that we don't need to hold a reference to records
 	// and observations can happen in a goroutine.
 	sizes := make([]float64, len(records))

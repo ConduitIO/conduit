@@ -27,13 +27,13 @@ type ProcessorMetrics interface {
 
 type NoOpProcessorMetrics struct{}
 
-func (m *NoOpProcessorMetrics) Observe(int, time.Time) {}
+func (m NoOpProcessorMetrics) Observe(int, time.Time) {}
 
 type ProcessorMetricsImpl struct {
 	timer metrics.Timer
 }
 
-func (m *ProcessorMetricsImpl) Observe(recordsNum int, start time.Time) {
+func (m ProcessorMetricsImpl) Observe(recordsNum int, start time.Time) {
 	tookPerRecord := time.Since(start) / time.Duration(recordsNum)
 	go func() {
 		for range recordsNum {
@@ -42,8 +42,8 @@ func (m *ProcessorMetricsImpl) Observe(recordsNum int, start time.Time) {
 	}()
 }
 
-func NewProcessorMetrics(pipelineName, plugin string) *ProcessorMetricsImpl {
-	return &ProcessorMetricsImpl{
+func NewProcessorMetrics(pipelineName, plugin string) ProcessorMetricsImpl {
+	return ProcessorMetricsImpl{
 		timer: measure.ProcessorExecutionDurationTimer.WithValues(pipelineName, plugin),
 	}
 }
