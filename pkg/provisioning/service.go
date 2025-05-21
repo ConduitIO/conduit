@@ -170,17 +170,18 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 // files that end with .yml or .yaml. It only reads files in the top-level
 // directory and skips non-regular files.
 func (s *Service) getYamlFiles(path string) ([]string, error) {
+	ctx := context.Background()
 	if path == "" {
 		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
 	}
 
-	s.logger.Debug(context.Background()).
+	s.logger.Debug(ctx).
 		Str("pipelines_path", path).
 		Msg("loading pipeline configuration files")
 
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
-		s.logger.Warn(context.Background()).
+		s.logger.Warn(ctx).
 			Err(err).
 			Msg("could not read pipelines directory")
 		return nil, err
@@ -188,16 +189,20 @@ func (s *Service) getYamlFiles(path string) ([]string, error) {
 
 	var files []string
 	for _, dirEntry := range dirEntries {
-		if !dirEntry.Type().IsRegular() {
-			continue
+		filePath := filepath.Join(path, dirEntry.Name())
+		// If it's a symlink, resolve it
+		if dirEntry.Type()&os.ModeSymlink != 0 {
+			resolvedPath, err := s.resolveSymLink(path, dirEntry.Name())
+			if err != nil {
+				return nil, cerrors.Errorf("could not resolve symlink %q: %w", filePath, err)
+			}
+
+			filePath = resolvedPath
 		}
 
-		ext := filepath.Ext(dirEntry.Name())
-		if ext != ".yml" && ext != ".yaml" {
-			continue
+		if s.isYAMLFile(filePath) {
+			files = append(files, filePath)
 		}
-
-		files = append(files, filepath.Join(path, dirEntry.Name()))
 	}
 
 	return files, nil
@@ -301,4 +306,39 @@ func (s *Service) deleteOldPipelines(ctx context.Context, keepIDs []string) []st
 		deletedIDs = append(deletedIDs, id)
 	}
 	return deletedIDs
+}
+
+func (s *Service) resolveSymLink(basePath, symlink string) (string, error) {
+	fullPath := filepath.Join(basePath, symlink)
+	resolvedPath, err := os.Readlink(fullPath)
+	if err != nil {
+		return "", cerrors.Errorf("could not read symlink: %w", err)
+	}
+
+	// If symlink path is relative, make it absolute
+	if !filepath.IsAbs(resolvedPath) {
+		resolvedPath = filepath.Join(basePath, resolvedPath)
+	}
+
+	// Check if the resolved path exists and is a regular file
+	_, err = os.Stat(resolvedPath)
+	if err != nil {
+		return "", cerrors.Errorf("could not stat symlink: %w", err)
+	}
+
+	return resolvedPath, nil
+}
+
+func (s *Service) isYAMLFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !info.Mode().IsRegular() {
+		return false
+	}
+
+	// Check if it's a YAML file
+	ext := filepath.Ext(path)
+	return ext == ".yml" || ext == ".yaml"
 }
