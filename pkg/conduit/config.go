@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
-	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -165,7 +165,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Log.Format = "cli"
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
-	cfg.Connectors.MaxReceiveRecordSize = pconnector.DefaultMaxReceiveRecordSize
+	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
 

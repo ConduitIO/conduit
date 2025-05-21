@@ -42,9 +42,10 @@ var newRuntime = wazero.NewRuntime
 // Every file in the specified directory is considered a plugin
 // (directories are skipped).
 type Registry struct {
-	logger    log.CtxLogger
-	pluginDir string
-	runtime   wazero.Runtime
+	logger               log.CtxLogger
+	pluginDir            string
+	runtime              wazero.Runtime
+	maxReceiveRecordSize int
 
 	// hostModule is the conduit host module that exposes Conduit host functions
 	// to the WASM module. The host module is compiled once and instantiated

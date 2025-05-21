@@ -49,7 +49,9 @@ type builtinReg interface {
 type standaloneReg interface {
 	registry
 
-	Init(ctx context.Context, connUtilsAddr string)
+	GetMaxReceiveRecordSize() int
+
+	Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int)
 }
 
 type authManager interface {
@@ -79,9 +81,9 @@ func NewPluginService(
 	}
 }
 
-func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	s.builtinReg.Init(ctx)
-	s.standaloneReg.Init(ctx, connUtilsAddr)
+	s.standaloneReg.Init(ctx, connUtilsAddr, maxReceiveRecordSize)
 }
 
 func (s *PluginService) Check(context.Context) error {
@@ -95,6 +97,9 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		Token:       s.authManager.GenerateNew(connectorID),
 		ConnectorID: connectorID,
 		LogLevel:    logger.GetLevel().String(),
+		Grpc: pconnector.GRPCConfig{
+			MaxReceiveRecordSize: s.standaloneReg.GetMaxReceiveRecordSize(),
+		},
 	}
 
 	dispenser, err := s.newDispenser(logger, name, cfg)

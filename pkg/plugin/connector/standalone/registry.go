@@ -19,6 +19,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -32,9 +33,11 @@ import (
 )
 
 type Registry struct {
-	logger        log.CtxLogger
-	pluginDir     string
-	connUtilsAddr string
+	logger    log.CtxLogger
+	pluginDir string
+
+	connUtilsAddr        string
+	maxReceiveRecordSize int
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -69,8 +72,9 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	return r
 }
 
-func (r *Registry) Init(ctx context.Context, connUtilsAddr string) {
+func (r *Registry) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	r.connUtilsAddr = connUtilsAddr
+	r.maxReceiveRecordSize = maxReceiveRecordSize
 
 	plugins := r.loadPlugins(ctx)
 	r.m.Lock()
@@ -210,6 +214,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
 		client.WithEnvVar(pconnector.EnvConduitConnectorID, cfg.ConnectorID),
 		client.WithEnvVar(pconnector.EnvConduitConnectorLogLevel, cfg.LogLevel),
+		client.WithEnvVar(pconnector.EnvConduitConnectorMaxReceiveRecordSize, strconv.Itoa(cfg.Grpc.MaxReceiveRecordSize)),
 	)
 }
 
@@ -227,4 +232,8 @@ func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
 		}
 	}
 	return specs
+}
+
+func (r *Registry) GetMaxReceiveRecordSize() int {
+	return r.maxReceiveRecordSize
 }

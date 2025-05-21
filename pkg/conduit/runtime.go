@@ -589,7 +589,6 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
 		grpc.StatsHandler(metricsGrpcStatsHandler),
-		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
@@ -828,7 +827,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 	r.logger.Info(ctx).Msgf("connector utilities started on %v", connUtilsAddr)
 
-	r.connectorPluginService.Init(ctx, connUtilsAddr.String())
+	r.connectorPluginService.Init(ctx, connUtilsAddr.String(), r.Config.Connectors.MaxReceiveRecordSize)
 
 	err = r.connectorService.Init(ctx)
 	if err != nil {
