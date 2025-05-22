@@ -239,7 +239,7 @@ func (s *Service) isYamlFile(path string) bool {
 	}
 
 	// Check if it's a YAML file
-	ext := filepath.Ext(path)
+	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".yml" || ext == ".yaml"
 }
 
