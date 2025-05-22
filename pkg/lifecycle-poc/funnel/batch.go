@@ -294,7 +294,6 @@ func (b *Batch) originalBatch() *Batch {
 		return b
 	}
 
-	j := 0
 	records := make([]opencdc.Record, 0, len(b.records))
 	recordStatuses := make([]RecordStatus, 0, len(b.records))
 	positions := make([]opencdc.Position, 0, len(b.records))
@@ -303,15 +302,14 @@ func (b *Batch) originalBatch() *Batch {
 			continue
 		}
 
-		records[j] = b.records[i]
-		recordStatuses[j] = b.recordStatuses[i]
-		positions[j] = pos
+		records = append(records, b.records[i])
+		recordStatuses = append(recordStatuses, b.recordStatuses[i])
+		positions = append(positions, pos)
 		if rec, ok := b.splitRecords[pos.String()]; ok {
 			// If the record was split, we need to replace it with the
 			// original record.
-			records[j] = rec
+			records[len(records)-1] = rec
 		}
-		j++
 	}
 
 	filterCount := 0
