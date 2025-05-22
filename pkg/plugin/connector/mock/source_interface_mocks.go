@@ -283,15 +283,15 @@ func (m *StandaloneReg) EXPECT() *StandaloneRegMockRecorder {
 }
 
 // Init mocks base method.
-func (m *StandaloneReg) Init(ctx context.Context, connUtilsAddr string) {
+func (m *StandaloneReg) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Init", ctx, connUtilsAddr)
+	m.ctrl.Call(m, "Init", ctx, connUtilsAddr, maxReceiveRecordSize)
 }
 
 // Init indicates an expected call of Init.
-func (mr *StandaloneRegMockRecorder) Init(ctx, connUtilsAddr any) *StandaloneRegInitCall {
+func (mr *StandaloneRegMockRecorder) Init(ctx, connUtilsAddr, maxReceiveRecordSize any) *StandaloneRegInitCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*StandaloneReg)(nil).Init), ctx, connUtilsAddr)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*StandaloneReg)(nil).Init), ctx, connUtilsAddr, maxReceiveRecordSize)
 	return &StandaloneRegInitCall{Call: call}
 }
 
@@ -307,13 +307,13 @@ func (c *StandaloneRegInitCall) Return() *StandaloneRegInitCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StandaloneRegInitCall) Do(f func(context.Context, string)) *StandaloneRegInitCall {
+func (c *StandaloneRegInitCall) Do(f func(context.Context, string, int)) *StandaloneRegInitCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StandaloneRegInitCall) DoAndReturn(f func(context.Context, string)) *StandaloneRegInitCall {
+func (c *StandaloneRegInitCall) DoAndReturn(f func(context.Context, string, int)) *StandaloneRegInitCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -88,6 +88,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("log.level", c.Cfg.Log.Level)
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)
+	flags.SetDefault("connectors.max-receive-record-size", c.Cfg.Connectors.MaxReceiveRecordSize)
 	flags.SetDefault("processors.path", c.Cfg.Processors.Path)
 	flags.SetDefault("pipelines.path", c.Cfg.Pipelines.Path)
 	flags.SetDefault("pipelines.exit-on-degraded", c.Cfg.Pipelines.ExitOnDegraded)
