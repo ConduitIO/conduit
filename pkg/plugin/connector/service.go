@@ -49,7 +49,7 @@ type builtinReg interface {
 type standaloneReg interface {
 	registry
 
-	Init(ctx context.Context, connUtilsAddr string)
+	Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int)
 }
 
 type authManager interface {
@@ -79,9 +79,9 @@ func NewPluginService(
 	}
 }
 
-func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	s.builtinReg.Init(ctx)
-	s.standaloneReg.Init(ctx, connUtilsAddr)
+	s.standaloneReg.Init(ctx, connUtilsAddr, maxReceiveRecordSize)
 }
 
 func (s *PluginService) Check(context.Context) error {
