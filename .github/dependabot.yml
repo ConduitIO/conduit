@@ -33,3 +33,10 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "Go tools:"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/test"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "docker-compose:"
