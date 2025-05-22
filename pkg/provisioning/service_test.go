@@ -17,6 +17,7 @@ package provisioning
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -573,4 +574,32 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	data, err := os.ReadFile(destFile)
 	is.NoErr(err)
 	is.True(len(data) != 0) // destination file is empty
+}
+
+func TestService_getYamlFiles(t *testing.T) {
+	is := is.New(t)
+	pipelinesPath := "./test/different_pipeline_file_types/pipelines"
+	service := NewService(nil, log.Nop(), nil, nil, nil, nil, nil, pipelinesPath)
+
+	// 	├── another-pipeline.yaml
+	// 	└── pipelines (the configured path)
+	// 		├── conduit-rocks.yaml (picked up because it's a YAML file)
+	// 		├── conduit-rocks.yml (picked up because it's a YAML file)
+	// 		├── nested
+	// 		│         └── p.yaml (ignored because it's nested)
+	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it links to a YAML file)
+	// 		└── p.txt (ignored because it's not a YAML file)
+
+	want := []string{
+		"test/different_pipeline_file_types/another-pipeline.yaml",
+		"test/different_pipeline_file_types/pipelines/conduit-rocks.yaml",
+		"test/different_pipeline_file_types/pipelines/conduit-rocks.yml",
+	}
+	slices.Sort(want)
+
+	got, err := service.getYamlFiles(context.Background(), pipelinesPath)
+	is.NoErr(err)
+
+	slices.Sort(got)
+	is.Equal("", cmp.Diff(want, got)) // -want +got
 }
