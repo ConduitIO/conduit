@@ -74,12 +74,20 @@ func NewBatch(records []opencdc.Record) *Batch {
 // indices are provided, the method panics.
 // Records are marked as acked by default, so this method is only useful when
 // reprocessing records marked to be retried.
+//
+// Note that the indices i and j point to the slice returned by ActiveRecords.
+// If the slice contains filtered records, the filtered records are skipped and
+// not marked as acked.
 func (b *Batch) Ack(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagAck, i, j...)
 }
 
 // Nack marks the record at index i as nacked. If multiple errors are provided,
 // they are assigned to the records starting at index i.
+//
+// Note that the indices i and j point to the slice returned by ActiveRecords.
+// If the slice contains filtered records, the filtered records are skipped and
+// not marked as nacked.
 func (b *Batch) Nack(i int, errs ...error) {
 	b.setFlagWithErr(RecordFlagNack, i, errs)
 	b.tainted = true
@@ -117,6 +125,10 @@ func (b *Batch) Nack(i int, errs ...error) {
 // Retry marks the record at index i to be retried. If a second index is
 // provided, all records between i (included) and j (excluded) are marked to be
 // retried. If multiple indices are provided, the method panics.
+//
+// Note that the indices i and j point to the slice returned by ActiveRecords.
+// If the slice contains filtered records, the filtered records are skipped and
+// not marked to be retried.
 func (b *Batch) Retry(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagRetry, i, j...)
 	b.tainted = true
@@ -125,6 +137,13 @@ func (b *Batch) Retry(i int, j ...int) {
 // Filter marks the record at index i as filtered out. If a second index is
 // provided, all records between i (included) and j (excluded) are marked as
 // filtered. If multiple indices are provided, the method panics.
+// Once a record is filtered, it is kept in the batch as to not split the batch
+// into multiple batches. It's not returned in the active records and its status
+// can't be changed anymore, however, it is included when acking the batch.
+//
+// Note that the indices i and j point to the slice returned by ActiveRecords.
+// If the slice contains filtered records, the filtered records are skipped and
+// not marked to be retried.
 func (b *Batch) Filter(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagFilter, i, j...)
 	end := i + 1
@@ -137,13 +156,66 @@ func (b *Batch) Filter(i int, j ...int) {
 // SetRecords replaces the records in the batch starting at index i with the
 // provided records. If recs contains n records, indices i to i+n-1 are replaced.
 func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
-	copy(b.records[i:], recs)
+	// TODO: we should not have to recalculate the active record indices every time.
+	active := b.activeRecordIndices()
+	if active == nil {
+		// No records are filtered, we can use the original indices.
+		copy(b.records[i:], recs)
+		return
+	}
+
+	// We have filtered records, so we need to use the active indices.
+	from := i
+	for len(recs) > 0 {
+		activeFrom := active[from]
+		to := b.findTo(from, from+len(recs), func(idx int) bool {
+			return active[idx]-activeFrom == idx-from
+		})
+		activeTo := active[to]
+		copy(b.records[activeFrom:activeTo+1], recs[:to-from+1])
+		recs = recs[to-from+1:]
+		from = to + 1
+	}
+}
+
+// findTo implements a dichotomic search function. It finds the highest index t
+// in the range [l, r) such that check(t) is true. The check function is called
+// with the index t, and if it returns true, the index is returned. If check(t)
+// returns false, the search continues in the range [l, t). The search stops
+// when the range is empty or when check(t) returns true.
+func (b *Batch) findTo(l, r int, check func(int) bool) int {
+	// Precondition
+	if !check(l) {
+		panic("precondition failed: check(l) must be true")
+	}
+
+	maxIdxTrue := l  // highest known integer which satisfies check(idx) == true
+	minIdxFalse := r // lowest known integer which satisfies check(idx) == false
+
+	for maxIdxTrue+1 < minIdxFalse {
+		midIdx := (maxIdxTrue + minIdxFalse) / 2
+
+		if check(midIdx) {
+			maxIdxTrue = midIdx
+		} else {
+			minIdxFalse = midIdx
+		}
+	}
+
+	return maxIdxTrue
 }
 
 // SplitRecord splits the record at index i into the provided records. The
 // records replace the record at the index i, and the rest of the records are
 // shifted to the right.
 func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
+	// TODO: we should not have to recalculate the active record indices every time.
+	active := b.activeRecordIndices()
+	if active != nil {
+		// We have filtered records, use the active index instead.
+		i = active[i]
+	}
+
 	if b.splitRecords == nil {
 		b.splitRecords = make(map[string]opencdc.Record)
 	}
@@ -174,27 +246,56 @@ func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
 }
 
 func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
-	switch len(j) {
-	case 0:
-		b.recordStatuses[i].Flag = f
-		b.recordStatuses[i].Error = nil
-	case 1:
-		if i >= j[0] {
-			panic(fmt.Sprintf("invalid range (%d >= %d)", i, j[0]))
+	// TODO: we should not have to recalculate the active record indices every time.
+	active := b.activeRecordIndices()
+	if active == nil {
+		// No records are filtered, we can use the original indices.
+		switch len(j) {
+		case 0:
+			b.recordStatuses[i].Flag = f
+		case 1:
+			if i >= j[0] {
+				panic(fmt.Sprintf("invalid range (%d >= %d)", i, j[0]))
+			}
+			for k := i; k < j[0]; k++ {
+				b.recordStatuses[k].Flag = f
+			}
+		default:
+			panic(fmt.Sprintf("too many arguments (%d)", len(j)))
 		}
-		for k := i; k < j[0]; k++ {
-			b.recordStatuses[k].Flag = f
-			b.recordStatuses[k].Error = nil
+	} else {
+		// We have filtered records, so we need to use the active indices.
+		switch len(j) {
+		case 0:
+			b.recordStatuses[active[i]].Flag = f
+		case 1:
+			if i >= j[0] {
+				panic(fmt.Sprintf("invalid range (%d >= %d)", i, j[0]))
+			}
+			for k := i; k < j[0]; k++ {
+				b.recordStatuses[active[k]].Flag = f
+			}
+		default:
+			panic(fmt.Sprintf("too many arguments (%d)", len(j)))
 		}
-	default:
-		panic(fmt.Sprintf("too many arguments (%d)", len(j)))
 	}
 }
 
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
-	for k, err := range errs {
-		b.recordStatuses[i+k].Flag = f
-		b.recordStatuses[i+k].Error = err
+	// TODO: we should not have to recalculate the active record indices every time.
+	active := b.activeRecordIndices()
+	if active == nil {
+		// No records are filtered, we can use the original indices.
+		for k, err := range errs {
+			b.recordStatuses[i+k].Flag = f
+			b.recordStatuses[i+k].Error = err
+		}
+	} else {
+		// We have filtered records, so we need to use the active indices.
+		for k, err := range errs {
+			b.recordStatuses[active[i+k]].Flag = f
+			b.recordStatuses[active[i+k]].Error = err
+		}
 	}
 }
 
@@ -235,10 +336,12 @@ func (b *Batch) sub(from, to int) *Batch {
 		}
 	}
 
+	// Note that we also adjust the capacity of the slices to avoid writing
+	// over the original batch when splitting records.
 	return &Batch{
-		records:        b.records[from:to],
-		recordStatuses: b.recordStatuses[from:to],
-		positions:      b.positions[from:to],
+		records:        b.records[from : to : to-from],
+		recordStatuses: b.recordStatuses[from : to : to-from],
+		positions:      b.positions[from : to : to-from],
 		filterCount:    filterCount,
 		tainted:        false,
 		splitRecords:   splitRecords,
@@ -268,11 +371,11 @@ func (b *Batch) ActiveRecords() []opencdc.Record {
 	return active
 }
 
-// ActiveRecordIndices returns the indices of the records that are not filtered.
+// activeRecordIndices returns the indices of the records that are not filtered.
 // If no records are filtered, it returns nil, in which case the caller should
 // use the original indices of the records. This prevents the need to
 // reallocate the slice if no records are filtered.
-func (b *Batch) ActiveRecordIndices() []int {
+func (b *Batch) activeRecordIndices() []int {
 	if b.filterCount == 0 {
 		return nil
 	}

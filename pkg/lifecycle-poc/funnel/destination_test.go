@@ -92,9 +92,9 @@ func TestDestinationTask_Do_FilteredAndNacks(t *testing.T) {
 	batch := NewBatch(records)
 
 	// Records with index 0, 2, 3 and 9 are filtered out
-	batch.Filter(0)    // 0
-	batch.Filter(2, 4) // 2, 3
 	batch.Filter(9)    // 9
+	batch.Filter(2, 4) // 2, 3
+	batch.Filter(0)    // 0
 
 	activeRecords := batch.ActiveRecords()
 	is.Equal(activeRecords, []opencdc.Record{records[1], records[4], records[5], records[6], records[7], records[8]})

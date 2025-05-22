@@ -118,27 +118,18 @@ func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
 	// We do this a bit smarter, by collecting ranges of records that are
 	// processed, filtered or errored, and then marking them in one go.
 	// We need to account for the fact that the batch might have filtered
-	// records, so we need to map the indices of the records in the returned
-	// slice back to the indices of the active records in the original batch.
+	// records, so we mark them from the end towards the start. This way we
+	// don't have to worry about filtered records messing with the indices of
+	// active records.
 
-	activeIndices := b.ActiveRecordIndices()
-	from := 0
-	for i := 1; i <= len(recsOut); i++ {
-		if i == len(recsOut) ||
-			!t.isSameType(recsOut[i-1], recsOut[i]) ||
-			!t.isConsecutive(activeIndices, i-1, i) {
-			// We have a range of records that are the same type, and
-			// consecutive in the original batch.
+	to := len(recsOut)
+	for i := len(recsOut) - 1; i >= 0; i-- {
+		if i == 0 ||
+			!t.isSameType(recsOut[i-1], recsOut[i]) {
+			// We have a range of records that are the same type.
 			// Mark them in one go.
-
-			idx := from
-			if activeIndices != nil {
-				// If we have filtered records, we need to map the from index
-				// back to the original batch index.
-				idx = activeIndices[from]
-			}
-			t.markBatchRecords(b, idx, recsOut[from:i])
-			from = i
+			t.markBatchRecords(b, i, recsOut[i:to])
+			to = i
 		}
 	}
 
@@ -169,13 +160,23 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 		b.Nack(from, errs...)
 	case sdk.MultiRecord:
 		for i, rec := range records {
-			rec := rec.(sdk.MultiRecord)
-			if len(rec) == 0 {
-				// TODO what now? filter?
-			} else if len(rec) == 1 {
-				// TODO what now? single record?
+			multiRec := rec.(sdk.MultiRecord)
+
+			switch len(multiRec) {
+			case 0:
+				// MultiRecord with no records, we mark it to be filtered.
+				// TODO: document this behavior
+				// TODO: add a test for this behavior
+				b.Filter(from + i)
+			case 1:
+				// MultiRecord with a single record, we don't split it.
+				// TODO: document this behavior
+				// TODO: add a test for this behavior
+				b.SetRecords(from+i, multiRec)
+			default:
+				// MultiRecord with multiple records, we split it.
+				b.SplitRecord(from+i, multiRec)
 			}
-			b.SplitRecord(from+i, rec)
 		}
 	case nil:
 		// Empty records are not processed, we mark them to be retried.
@@ -207,12 +208,4 @@ func (t *ProcessorTask) isSameType(a, b sdk.ProcessedRecord) bool {
 	default:
 		return false
 	}
-}
-
-// isConsecutive checks if two indices are consecutive in the original batch.
-func (t *ProcessorTask) isConsecutive(indices []int, i, j int) bool {
-	if indices == nil {
-		return true // No filtering, so all records are consecutive.
-	}
-	return indices[i]+1 == indices[j]
 }
