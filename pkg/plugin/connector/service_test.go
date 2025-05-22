@@ -196,6 +196,7 @@ func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {
 	builtinReg.EXPECT().Init(ctx)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
+	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	underTest := connector.NewPluginService(
@@ -236,12 +237,16 @@ func TestService_NewDispenser_Source_TokenHandling(t *testing.T) {
 				Token:       token,
 				ConnectorID: connID,
 				LogLevel:    logger.GetLevel().String(),
+				Grpc: pconnector.GRPCConfig{
+					MaxReceiveRecordSize: server.DefaultMaxReceiveRecordSize,
+				},
 			},
 		).
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
+	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 
 	authManager := mock.NewAuthManager(ctrl)
 	authManager.EXPECT().GenerateNew(connID).Return(token)
@@ -284,11 +289,15 @@ func TestService_NewDispenser_Destination_TokenHandling(t *testing.T) {
 				Token:       token,
 				ConnectorID: connID,
 				LogLevel:    logger.GetLevel().String(),
+				Grpc: pconnector.GRPCConfig{
+					MaxReceiveRecordSize: server.DefaultMaxReceiveRecordSize,
+				},
 			},
 		).
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
+	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	authManager := mock.NewAuthManager(ctrl)
