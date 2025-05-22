@@ -214,7 +214,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
 		client.WithEnvVar(pconnector.EnvConduitConnectorID, cfg.ConnectorID),
 		client.WithEnvVar(pconnector.EnvConduitConnectorLogLevel, cfg.LogLevel),
-		client.WithEnvVar(pconnector.EnvConduitConnectorMaxReceiveRecordSize, strconv.Itoa(cfg.Grpc.MaxReceiveRecordSize)),
+		client.WithEnvVar(pconnector.EnvConduitConnectorMaxReceiveRecordSize, strconv.Itoa(r.maxReceiveRecordSize)),
 	)
 }
 
@@ -232,8 +232,4 @@ func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
 		}
 	}
 	return specs
-}
-
-func (r *Registry) GetMaxReceiveRecordSize() int {
-	return r.maxReceiveRecordSize
 }

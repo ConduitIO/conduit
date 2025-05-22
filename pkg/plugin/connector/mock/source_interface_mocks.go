@@ -282,44 +282,6 @@ func (m *StandaloneReg) EXPECT() *StandaloneRegMockRecorder {
 	return m.recorder
 }
 
-// GetMaxReceiveRecordSize mocks base method.
-func (m *StandaloneReg) GetMaxReceiveRecordSize() int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMaxReceiveRecordSize")
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// GetMaxReceiveRecordSize indicates an expected call of GetMaxReceiveRecordSize.
-func (mr *StandaloneRegMockRecorder) GetMaxReceiveRecordSize() *StandaloneRegGetMaxReceiveRecordSizeCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxReceiveRecordSize", reflect.TypeOf((*StandaloneReg)(nil).GetMaxReceiveRecordSize))
-	return &StandaloneRegGetMaxReceiveRecordSizeCall{Call: call}
-}
-
-// StandaloneRegGetMaxReceiveRecordSizeCall wrap *gomock.Call
-type StandaloneRegGetMaxReceiveRecordSizeCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *StandaloneRegGetMaxReceiveRecordSizeCall) Return(arg0 int) *StandaloneRegGetMaxReceiveRecordSizeCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *StandaloneRegGetMaxReceiveRecordSizeCall) Do(f func() int) *StandaloneRegGetMaxReceiveRecordSizeCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StandaloneRegGetMaxReceiveRecordSizeCall) DoAndReturn(f func() int) *StandaloneRegGetMaxReceiveRecordSizeCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // Init mocks base method.
 func (m *StandaloneReg) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	m.ctrl.T.Helper()

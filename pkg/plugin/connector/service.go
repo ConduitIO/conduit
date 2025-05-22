@@ -49,8 +49,6 @@ type builtinReg interface {
 type standaloneReg interface {
 	registry
 
-	GetMaxReceiveRecordSize() int
-
 	Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int)
 }
 
@@ -97,9 +95,6 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		Token:       s.authManager.GenerateNew(connectorID),
 		ConnectorID: connectorID,
 		LogLevel:    logger.GetLevel().String(),
-		Grpc: pconnector.GRPCConfig{
-			MaxReceiveRecordSize: s.standaloneReg.GetMaxReceiveRecordSize(),
-		},
 	}
 
 	dispenser, err := s.newDispenser(logger, name, cfg)

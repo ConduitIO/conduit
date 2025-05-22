@@ -62,7 +62,6 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "standalone plugin found",
 			plugin: "standalone:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -76,7 +75,6 @@ func TestService_NewDispenser(t *testing.T) {
 			wantErr: true,
 			plugin:  "standalone:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -89,7 +87,6 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "builtin plugin found",
 			plugin: "builtin:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				builtinReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -103,7 +100,6 @@ func TestService_NewDispenser(t *testing.T) {
 			plugin:  "builtin:foobar-connector",
 			wantErr: true,
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				builtinReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -116,7 +112,6 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "no plugin type, standalone is assumed",
 			plugin: "foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -129,7 +124,6 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "plugin without type not found, fall back to built-in",
 			plugin: "foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
-				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -196,7 +190,6 @@ func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {
 	builtinReg.EXPECT().Init(ctx)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	underTest := connector.NewPluginService(
@@ -237,16 +230,12 @@ func TestService_NewDispenser_Source_TokenHandling(t *testing.T) {
 				Token:       token,
 				ConnectorID: connID,
 				LogLevel:    logger.GetLevel().String(),
-				Grpc: pconnector.GRPCConfig{
-					MaxReceiveRecordSize: server.DefaultMaxReceiveRecordSize,
-				},
 			},
 		).
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
-	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 
 	authManager := mock.NewAuthManager(ctrl)
 	authManager.EXPECT().GenerateNew(connID).Return(token)
@@ -289,15 +278,11 @@ func TestService_NewDispenser_Destination_TokenHandling(t *testing.T) {
 				Token:       token,
 				ConnectorID: connID,
 				LogLevel:    logger.GetLevel().String(),
-				Grpc: pconnector.GRPCConfig{
-					MaxReceiveRecordSize: server.DefaultMaxReceiveRecordSize,
-				},
 			},
 		).
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	authManager := mock.NewAuthManager(ctrl)
