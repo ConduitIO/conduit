@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -37,7 +38,7 @@ func TestService_Init(t *testing.T) {
 	builtinReg.EXPECT().Init(ctx)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address")
+	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	underTest := connector.NewPluginService(
 		log.Nop(),
@@ -46,7 +47,7 @@ func TestService_Init(t *testing.T) {
 		mock.NewAuthManager(ctrl),
 	)
 
-	underTest.Init(ctx, "test-conn-utils-address")
+	underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 	is.NoErr(underTest.Check(ctx))
 }
 
@@ -61,6 +62,7 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "standalone plugin found",
 			plugin: "standalone:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -74,6 +76,7 @@ func TestService_NewDispenser(t *testing.T) {
 			wantErr: true,
 			plugin:  "standalone:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -86,6 +89,7 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "builtin plugin found",
 			plugin: "builtin:foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				builtinReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -99,6 +103,7 @@ func TestService_NewDispenser(t *testing.T) {
 			plugin:  "builtin:foobar-connector",
 			wantErr: true,
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				builtinReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -111,6 +116,7 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "no plugin type, standalone is assumed",
 			plugin: "foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -123,6 +129,7 @@ func TestService_NewDispenser(t *testing.T) {
 			name:   "plugin without type not found, fall back to built-in",
 			plugin: "foobar-connector",
 			setup: func(builtinReg *mock.BuiltinReg, standaloneReg *mock.StandaloneReg) {
+				standaloneReg.EXPECT().GetMaxReceiveRecordSize().Return(server.DefaultMaxReceiveRecordSize).Times(1)
 				standaloneReg.EXPECT().
 					NewDispenser(
 						gomock.Any(),
@@ -153,7 +160,7 @@ func TestService_NewDispenser(t *testing.T) {
 			builtinReg.EXPECT().Init(ctx)
 
 			standaloneReg := mock.NewStandaloneReg(ctrl)
-			standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address")
+			standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 			if tc.setup != nil {
 				tc.setup(builtinReg, standaloneReg)
@@ -166,7 +173,7 @@ func TestService_NewDispenser(t *testing.T) {
 				authManager,
 			)
 
-			underTest.Init(ctx, "test-conn-utils-address")
+			underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 			_, err := underTest.NewDispenser(log.Nop(), tc.plugin, "foobar-connector-id")
 			if tc.wantErr {
 				is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
@@ -189,7 +196,7 @@ func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {
 	builtinReg.EXPECT().Init(ctx)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address")
+	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	underTest := connector.NewPluginService(
 		log.Nop(),
@@ -198,7 +205,7 @@ func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {
 		authManager,
 	)
 
-	underTest.Init(ctx, "test-conn-utils-address")
+	underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 	_, err := underTest.NewDispenser(log.Nop(), "mistake:plugin-name", "foobar-connector-id")
 	is.True(err != nil)
 	is.Equal(`invalid plugin name prefix "mistake"`, err.Error())
@@ -234,14 +241,14 @@ func TestService_NewDispenser_Source_TokenHandling(t *testing.T) {
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address")
+	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	authManager := mock.NewAuthManager(ctrl)
 	authManager.EXPECT().GenerateNew(connID).Return(token)
 	authManager.EXPECT().Deregister(token)
 
 	underTest := connector.NewPluginService(logger, builtinReg, standaloneReg, authManager)
-	underTest.Init(ctx, "test-conn-utils-address")
+	underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	dispenser, err := underTest.NewDispenser(logger, conn, connID)
 	is.NoErr(err)
@@ -282,14 +289,14 @@ func TestService_NewDispenser_Destination_TokenHandling(t *testing.T) {
 		Return(mockDispenser, nil)
 
 	standaloneReg := mock.NewStandaloneReg(ctrl)
-	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address")
+	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	authManager := mock.NewAuthManager(ctrl)
 	authManager.EXPECT().GenerateNew(connID).Return(token)
 	authManager.EXPECT().Deregister(token)
 
 	underTest := connector.NewPluginService(logger, builtinReg, standaloneReg, authManager)
-	underTest.Init(ctx, "test-conn-utils-address")
+	underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
 
 	dispenser, err := underTest.NewDispenser(logger, conn, connID)
 	is.NoErr(err)
