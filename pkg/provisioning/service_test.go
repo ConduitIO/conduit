@@ -596,7 +596,7 @@ func TestService_getYamlFiles(t *testing.T) {
 	}
 	slices.Sort(want)
 
-	got, err := service.getYamlFiles(pipelinesPath)
+	got, err := service.getYamlFiles(context.Background(), pipelinesPath)
 	is.NoErr(err)
 
 	slices.Sort(got)

@@ -72,7 +72,7 @@ func (s *Service) Init(ctx context.Context) error {
 		Str("pipelines_path", s.pipelinesPath).
 		Msg("initializing the provisioning service")
 
-	files, err := s.getYamlFiles(s.pipelinesPath)
+	files, err := s.getYamlFiles(ctx, s.pipelinesPath)
 	if err != nil {
 		return cerrors.Errorf("failed to read pipelines folder %q: %w", s.pipelinesPath, err)
 	}
@@ -169,8 +169,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 // getYamlFiles reads files in the path and collects paths to all
 // files that end with .yml or .yaml. It only reads files in the top-level
 // directory and skips non-regular files.
-func (s *Service) getYamlFiles(path string) ([]string, error) {
-	ctx := context.Background()
+func (s *Service) getYamlFiles(ctx context.Context, path string) ([]string, error) {
 	if path == "" {
 		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
 	}
