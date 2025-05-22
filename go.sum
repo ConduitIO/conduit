@@ -194,10 +194,16 @@ github.com/conduitio/conduit-connector-postgres v0.12.2 h1:lXiUxZO7uUIG1X1UnO226
 github.com/conduitio/conduit-connector-postgres v0.12.2/go.mod h1:EvPbr4No1GLXtFO1eaO0h+ctlVX9EUUMYEzT9aJ4gmQ=
 github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522135232-c9039692496f h1:BZ2Mb//TVxciSl0k3sri7lBO7Sqpa69XgkZpuWI48JM=
 github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522135232-c9039692496f/go.mod h1:vssplKMGbYx7JvRcRpqiRzQIysn7GCj1J5kW/g/1GfE=
+github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522154900-3708d4f3a481 h1:kP/uM0ZdDeC8pdBp3q8y2tJD/h+EDbwyuHPU/+rwSeo=
+github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522154900-3708d4f3a481/go.mod h1:vssplKMGbYx7JvRcRpqiRzQIysn7GCj1J5kW/g/1GfE=
 github.com/conduitio/conduit-connector-s3 v0.9.2 h1:flNBMHZ+XMSvJ3GaOMUn7AgL6k/pS2b9+1ucvEoecvs=
 github.com/conduitio/conduit-connector-s3 v0.9.2/go.mod h1:npyubfzOaPvwPR4HHtsjL55dxLUfbandjY53OTeVbaQ=
+github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250519231859-3635d4bc48eb h1:lOs8C7DXw/SFNo1mH4Tx3rN+F+1Guzi0um6z05QmCTI=
+github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250519231859-3635d4bc48eb/go.mod h1:SMB3fICLc/Rg2Gm+fhGdxQLcorwIEV9pvBmqu7doK3o=
 github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522135406-42e17a56db92 h1:irQh/oXLLXdSgJH8dezzHcHAWq6Ejsnbv3GPth+D2Rs=
 github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522135406-42e17a56db92/go.mod h1:8AlaXyYXxkb0A981zjiUQWrdV8F25VniJLUmUbc7QXw=
+github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522155326-e7f71d4ed767 h1:rW3HmFwsnIQqzgYy9kq6FpWByv30ZX877+BWo9A5fCw=
+github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522155326-e7f71d4ed767/go.mod h1:MfXK9bwnKZdMrrEPOWylCTkxIGQyeERu1WN92u5MjKQ=
 github.com/conduitio/conduit-processor-sdk v0.4.4 h1:FJrWYSHvlGfTDO6pxQE0aiTkqqID+zQ1PjnLimVJyHk=
 github.com/conduitio/conduit-processor-sdk v0.4.4/go.mod h1:i0E3ZJgu2SzkBh7IINU2YdBh/qhaSkLeKYBusJfnQ5I=
 github.com/conduitio/conduit-schema-registry v0.2.6 h1:39a7AUp3ZM6Hq1vKKpVTmwSTvKbwKC2kxsnkP6H9qrQ=

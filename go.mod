@@ -14,9 +14,9 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.12.2
 	github.com/conduitio/conduit-connector-log v0.7.2
 	github.com/conduitio/conduit-connector-postgres v0.12.2
-	github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522135232-c9039692496f
+	github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522154900-3708d4f3a481
 	github.com/conduitio/conduit-connector-s3 v0.9.2
-	github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522135406-42e17a56db92
+	github.com/conduitio/conduit-connector-sdk v0.13.5-0.20250522155326-e7f71d4ed767
 	github.com/conduitio/conduit-processor-sdk v0.4.4
 	github.com/conduitio/conduit-schema-registry v0.2.6
 	github.com/conduitio/ecdysis v0.4.2
