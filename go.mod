@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.10.3
 	github.com/conduitio/conduit-connector-kafka v0.12.2
 	github.com/conduitio/conduit-connector-log v0.7.2
-	github.com/conduitio/conduit-connector-postgres v0.12.2
+	github.com/conduitio/conduit-connector-postgres v0.12.3-0.20250522143256-23f9054ddf78
 	github.com/conduitio/conduit-connector-protocol v0.9.3
 	github.com/conduitio/conduit-connector-s3 v0.9.2
 	github.com/conduitio/conduit-connector-sdk v0.13.4
