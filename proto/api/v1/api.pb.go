@@ -3750,8 +3750,6 @@ func (x *Info) GetArch() string {
 	return ""
 }
 
-// Deprecated: use ConnectorService.ListConnectorPlugins instead.
-//
 // Deprecated: Marked as deprecated in api/v1/api.proto.
 type ListPluginsRequest struct {
 	state         protoimpl.MessageState
@@ -3801,8 +3799,6 @@ func (x *ListPluginsRequest) GetName() string {
 	return ""
 }
 
-// Deprecated: use ConnectorService.ListConnectorPlugins instead.
-//
 // Deprecated: Marked as deprecated in api/v1/api.proto.
 type ListPluginsResponse struct {
 	state         protoimpl.MessageState

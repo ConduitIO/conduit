@@ -910,9 +910,7 @@ const (
 // ProcessorService exposes CRUD functionality for managing processors.
 type ProcessorServiceClient interface {
 	ListProcessors(ctx context.Context, in *ListProcessorsRequest, opts ...grpc.CallOption) (*ListProcessorsResponse, error)
-	// InspectProcessorIn streams records coming into the specified processor
 	InspectProcessorIn(ctx context.Context, in *InspectProcessorInRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorInClient, error)
-	// InspectProcessorOut streams the output records from the specified processor
 	InspectProcessorOut(ctx context.Context, in *InspectProcessorOutRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorOutClient, error)
 	GetProcessor(ctx context.Context, in *GetProcessorRequest, opts ...grpc.CallOption) (*GetProcessorResponse, error)
 	CreateProcessor(ctx context.Context, in *CreateProcessorRequest, opts ...grpc.CallOption) (*CreateProcessorResponse, error)
@@ -1062,9 +1060,7 @@ func (c *processorServiceClient) ListProcessorPlugins(ctx context.Context, in *L
 // ProcessorService exposes CRUD functionality for managing processors.
 type ProcessorServiceServer interface {
 	ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error)
-	// InspectProcessorIn streams records coming into the specified processor
 	InspectProcessorIn(*InspectProcessorInRequest, ProcessorService_InspectProcessorInServer) error
-	// InspectProcessorOut streams the output records from the specified processor
 	InspectProcessorOut(*InspectProcessorOutRequest, ProcessorService_InspectProcessorOutServer) error
 	GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error)
 	CreateProcessor(context.Context, *CreateProcessorRequest) (*CreateProcessorResponse, error)
@@ -1414,7 +1410,6 @@ const (
 // Deprecated: use ConnectorService and ProcessorService instead.
 type PluginServiceClient interface {
 	// Deprecated: Do not use.
-	// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
 }
 
@@ -1444,7 +1439,6 @@ func (c *pluginServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRe
 // Deprecated: use ConnectorService and ProcessorService instead.
 type PluginServiceServer interface {
 	// Deprecated: Do not use.
-	// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
