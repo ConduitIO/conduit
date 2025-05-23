@@ -27,7 +27,12 @@ import (
 // track of the status of each record in the batch, and provides methods to
 // update the status of records.
 type Batch struct {
-	records        []opencdc.Record
+	// records holds all records in the batch, including filtered ones. Use
+	// ActiveRecords to get the records that are not filtered.
+	records []opencdc.Record
+	// recordStatuses holds the status of each record in the batch. The status
+	// is used to determine if the record was acked, nacked, filtered or marked
+	// for retrial.
 	recordStatuses []RecordStatus
 	// positions is a slice of positions for the records in the batch. The
 	// positions are used to ack or nack records in the source. If a record

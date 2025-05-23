@@ -165,13 +165,9 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 			switch len(multiRec) {
 			case 0:
 				// MultiRecord with no records, we mark it to be filtered.
-				// TODO: document this behavior
-				// TODO: add a test for this behavior
 				b.Filter(from + i)
 			case 1:
 				// MultiRecord with a single record, we don't split it.
-				// TODO: document this behavior
-				// TODO: add a test for this behavior
 				b.SetRecords(from+i, multiRec)
 			default:
 				// MultiRecord with multiple records, we split it.

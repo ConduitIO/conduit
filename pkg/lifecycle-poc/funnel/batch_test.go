@@ -184,15 +184,15 @@ func TestBatch_ActiveRecords(t *testing.T) {
 	is.Equal(batch.ActiveRecords(), records[1:])
 }
 
-// func TestBatch_ActiveRecordIndices(t *testing.T) {
-// 	is := is.New(t)
-// 	records := []opencdc.Record{{}, {}}
-// 	batch := NewBatch(slices.Clone(records))
-//
-// 	is.Equal(batch.ActiveRecordIndices(), nil)
-// 	batch.Filter(0)
-// 	is.Equal(batch.ActiveRecordIndices(), []int{1})
-// }
+func TestBatch_ActiveRecordIndices(t *testing.T) {
+	is := is.New(t)
+	records := []opencdc.Record{{}, {}}
+	batch := NewBatch(slices.Clone(records))
+
+	is.Equal(batch.activeRecordIndices(), nil)
+	batch.Filter(0)
+	is.Equal(batch.activeRecordIndices(), []int{1})
+}
 
 func TestBatch_OriginalBatch(t *testing.T) {
 	is := is.New(t)

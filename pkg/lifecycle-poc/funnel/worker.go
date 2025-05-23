@@ -245,6 +245,9 @@ func (w *Worker) doTask(
 	w.logger.Trace(ctx).
 		Str("task_id", t.ID()).
 		Int("batch_size", len(b.records)).
+		Int("filtered_count", b.filterCount).
+		Int("split_count", len(b.splitRecords)).
+		Bool("tainted", b.tainted).
 		Msg("executing task")
 
 	err := t.Do(ctx, b)
@@ -253,6 +256,9 @@ func (w *Worker) doTask(
 		Err(err).
 		Str("task_id", t.ID()).
 		Int("batch_size", len(b.records)).
+		Int("filtered_count", b.filterCount).
+		Int("split_count", len(b.splitRecords)).
+		Bool("tainted", b.tainted).
 		Msg("task done")
 
 	if err != nil {
