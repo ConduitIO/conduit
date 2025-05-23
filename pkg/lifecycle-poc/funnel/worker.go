@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -typed -destination=worker_mock_test.go -package=funnel . Task
+
 package funnel
 
 import (
@@ -267,14 +269,14 @@ func (w *Worker) doTask(
 		// ErrPluginNotRunning can be returned if the plugin is stopped before
 		// trying to read the next batch.
 		// Both are considered as graceful stop, just return the context error, if any.
-		if w.isFirstTask(t) && (cerrors.Is(err, context.Canceled) ||
+		if taskNode.IsFirst() && (cerrors.Is(err, context.Canceled) ||
 			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
 			return ctx.Err()
 		}
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
 
-	if w.isFirstTask(t) {
+	if taskNode.IsFirst() {
 		// The first task has some specifics:
 		// - Store last time we read a batch from the source for metrics.
 		// - It locks the stop lock, so that no stop signal can be received while
@@ -407,10 +409,6 @@ OUTER:
 	}
 
 	return b.sub(firstIndex, lastIndex)
-}
-
-func (w *Worker) isFirstTask(t Task) bool {
-	return w.FirstTask.Task.ID() == t.ID()
 }
 
 func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, acker ackNacker) error {

@@ -96,35 +96,6 @@ func (b *Batch) Ack(i int, j ...int) {
 func (b *Batch) Nack(i int, errs ...error) {
 	b.setFlagWithErr(RecordFlagNack, i, errs)
 	b.tainted = true
-
-	if len(b.splitRecords) > 0 {
-		// If the batch contains split records, we need to set the flag for all
-		// records in the split record, so they are all marked as nacked.
-		for j, pos := range b.positions[i : i+len(errs)] {
-			if _, ok := b.splitRecords[pos.String()]; pos != nil && !ok {
-				continue // This is not a split record.
-			}
-			from, to := i, i
-			for from > 0 && b.positions[from] == nil {
-				// Find the first record that has a position. This is the first
-				// record that was split from the original record.
-				from--
-			}
-			for to < len(b.positions) && b.positions[to] == nil {
-				// Find the last record that has a position. This is the last
-				// record that was split from the original record.
-				to++
-			}
-
-			// We found a range of split records, we need to mark them all as
-			// nacked. Copy the error so it's set for all records in the range.
-			splitErrs := make([]error, to-from)
-			for k := range splitErrs {
-				splitErrs[k] = errs[j]
-			}
-			b.setFlagWithErr(RecordFlagNack, from, splitErrs)
-		}
-	}
 }
 
 // Retry marks the record at index i to be retried. If a second index is
@@ -292,16 +263,60 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	if active == nil {
 		// No records are filtered, we can use the original indices.
 		for k, err := range errs {
-			b.recordStatuses[i+k].Flag = f
-			b.recordStatuses[i+k].Error = err
+			idx := i + k
+			b.recordStatuses[idx].Flag = f
+			b.recordStatuses[idx].Error = err
+			if len(b.splitRecords) > 0 && f == RecordFlagNack {
+				// If the record was split, we need to set the error for all
+				// records in the split record, so they are all marked as nacked.
+				if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
+					// This is a split record, we need to set the error for all
+					// records in the split record.
+					from, to := b.findSplitRecord(idx)
+					for j := from; j <= to; j++ {
+						b.recordStatuses[j].Flag = f
+						b.recordStatuses[j].Error = err
+					}
+				}
+			}
 		}
 	} else {
 		// We have filtered records, so we need to use the active indices.
 		for k, err := range errs {
-			b.recordStatuses[active[i+k]].Flag = f
-			b.recordStatuses[active[i+k]].Error = err
+			idx := active[i+k]
+			b.recordStatuses[idx].Flag = f
+			b.recordStatuses[idx].Error = err
+			if len(b.splitRecords) > 0 && f == RecordFlagNack {
+				// If the record was split, we need to set the error for all
+				// records in the split record, so they are all marked as nacked.
+				if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
+					// This is a split record, we need to set the error for all
+					// records in the split record.
+					from, to := b.findSplitRecord(idx)
+					for j := from; j <= to; j++ {
+						b.recordStatuses[j].Flag = f
+						b.recordStatuses[j].Error = err
+					}
+				}
+			}
 		}
 	}
+}
+
+func (b *Batch) findSplitRecord(i int) (int, int) {
+	// Find the first record that has a position (i.e. first split record).
+	from := i
+	for from > 0 && b.positions[from] == nil {
+		from--
+	}
+	// Find the last record that has a position. (i.e. last split record).
+	to := i + 1
+	for to < len(b.positions) && b.positions[to] == nil {
+		to++
+	}
+	to-- // Adjust index to point to the last record that was split.
+
+	return from, to
 }
 
 func (b *Batch) clone() *Batch {
@@ -344,9 +359,9 @@ func (b *Batch) sub(from, to int) *Batch {
 	// Note that we also adjust the capacity of the slices to avoid writing
 	// over the original batch when splitting records.
 	return &Batch{
-		records:        b.records[from : to : to-from],
-		recordStatuses: b.recordStatuses[from : to : to-from],
-		positions:      b.positions[from : to : to-from],
+		records:        b.records[from:to:to],
+		recordStatuses: b.recordStatuses[from:to:to],
+		positions:      b.positions[from:to:to],
 		filterCount:    filterCount,
 		tainted:        false,
 		splitRecords:   splitRecords,

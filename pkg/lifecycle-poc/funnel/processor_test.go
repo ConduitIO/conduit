@@ -17,14 +17,11 @@ package funnel
 import (
 	"context"
 	"slices"
-	"strconv"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -35,7 +32,7 @@ func TestProcessorTask_Do_Passthrough(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	processorMock := mock.NewProcessor(ctrl)
+	processorMock := NewMockProcessor(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -57,7 +54,7 @@ func TestProcessorTask_Do_BatchWithFilteredRecords(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	processorMock := mock.NewProcessor(ctrl)
+	processorMock := NewMockProcessor(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(slices.Clone(records))
@@ -113,7 +110,7 @@ func TestProcessorTask_Do_MultiRecord(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	processorMock := mock.NewProcessor(ctrl)
+	processorMock := NewMockProcessor(ctrl)
 	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
 
 	records := randomRecords(5)
@@ -193,48 +190,4 @@ func TestProcessorTask_Do_MultiRecord(t *testing.T) {
 			{Flag: RecordFlagAck}, // 4
 		})
 	})
-}
-
-func randomRecords(count int) []opencdc.Record {
-	records := make([]opencdc.Record, count)
-	for i := 0; i < count; i++ {
-		records[i] = opencdc.Record{
-			Position:  opencdc.Position(strconv.Itoa(i)),
-			Operation: opencdc.OperationCreate,
-			Metadata:  map[string]string{"key": "value"},
-			Payload:   opencdc.Change{After: opencdc.RawData("value")},
-		}
-	}
-	return records
-}
-
-func toProcessedRecords(records []opencdc.Record, modifiers ...func([]sdk.ProcessedRecord)) []sdk.ProcessedRecord {
-	processed := make([]sdk.ProcessedRecord, len(records))
-	for i, record := range records {
-		processed[i] = sdk.SingleRecord(record)
-	}
-	for _, modifier := range modifiers {
-		modifier(processed)
-	}
-	return processed
-}
-
-func markFiltered(i int) func([]sdk.ProcessedRecord) {
-	return func(records []sdk.ProcessedRecord) {
-		records[i] = sdk.FilterRecord{}
-	}
-}
-
-func markErrored(i int, err error) func([]sdk.ProcessedRecord) {
-	return func(records []sdk.ProcessedRecord) {
-		records[i] = sdk.ErrorRecord{
-			Error: err,
-		}
-	}
-}
-
-func markMultiRecord(i int, records []opencdc.Record) func([]sdk.ProcessedRecord) {
-	return func(processed []sdk.ProcessedRecord) {
-		processed[i] = sdk.MultiRecord(records)
-	}
 }

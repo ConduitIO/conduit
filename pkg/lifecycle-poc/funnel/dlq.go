@@ -216,8 +216,11 @@ func (w *dlqWindow) Nack(count int) int {
 }
 
 func (w *dlqWindow) store(count int, nacked bool) int {
-	if len(w.window) == 0 || w.nackThreshold < w.nackCount {
-		return 0 // window disabled or threshold already reached
+	if len(w.window) == 0 {
+		return count // window disabled
+	}
+	if w.nackThreshold < w.nackCount {
+		return 0 // threshold already reached
 	}
 
 	for i := range count {

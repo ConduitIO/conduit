@@ -25,15 +25,12 @@ import (
 
 func TestNewBatch(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{
-		{Position: opencdc.Position("pos1")},
-		{Position: opencdc.Position("pos2")},
-	}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
 	is.Equal(batch.records, records)
 	is.Equal(batch.recordStatuses, []RecordStatus{{Flag: RecordFlagAck}, {Flag: RecordFlagAck}})
-	is.Equal(batch.positions, []opencdc.Position{opencdc.Position("pos1"), opencdc.Position("pos2")})
+	is.Equal(batch.positions, []opencdc.Position{opencdc.Position("0"), opencdc.Position("1")})
 	is.Equal(batch.splitRecords, nil)
 	is.True(!batch.tainted)
 	is.Equal(0, batch.filterCount)
@@ -41,7 +38,7 @@ func TestNewBatch(t *testing.T) {
 
 func TestBatch_Ack(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{{}, {}}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
 	batch.Retry(0)
@@ -53,7 +50,7 @@ func TestBatch_Ack(t *testing.T) {
 
 func TestBatch_Nack(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{{}, {}}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
 	is.Equal(batch.recordStatuses[0].Flag, RecordFlagAck)
@@ -69,7 +66,7 @@ func TestBatch_Nack(t *testing.T) {
 
 func TestBatch_Retry(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{{}, {}}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
 	is.Equal(batch.recordStatuses[0].Flag, RecordFlagAck)
@@ -83,7 +80,7 @@ func TestBatch_Retry(t *testing.T) {
 
 func TestBatch_Filter(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{{}, {}}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
 	is.Equal(batch.recordStatuses[0].Flag, RecordFlagAck)
@@ -95,16 +92,10 @@ func TestBatch_Filter(t *testing.T) {
 
 func TestBatch_SetRecords_Simple(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{
-		{Position: opencdc.Position("pos1")},
-		{Position: opencdc.Position("pos2")},
-	}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
-	newRecords := []opencdc.Record{
-		{Position: opencdc.Position("foo")},
-		{Position: opencdc.Position("bar")},
-	}
+	newRecords := randomRecords(2)
 
 	is.Equal(batch.records, records)
 	// Overwrite all
@@ -117,18 +108,11 @@ func TestBatch_SetRecords_Simple(t *testing.T) {
 
 func TestBatch_SetRecords_Filtered(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{
-		{Position: opencdc.Position("pos1")},
-		{Position: opencdc.Position("filtered")},
-		{Position: opencdc.Position("pos2")},
-	}
+	records := randomRecords(3)
 	batch := NewBatch(slices.Clone(records))
 	batch.Filter(1)
 
-	newRecords := []opencdc.Record{
-		{Position: opencdc.Position("foo")},
-		{Position: opencdc.Position("bar")},
-	}
+	newRecords := randomRecords(2)
 
 	is.Equal(batch.records, records)
 	// Overwrite all
@@ -141,22 +125,34 @@ func TestBatch_SetRecords_Filtered(t *testing.T) {
 
 func TestBatch_SplitRecord(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{
-		{Position: opencdc.Position("pos1")},
-		{Position: opencdc.Position("pos2")},
-	}
+	records := randomRecords(2)
 	batch := NewBatch(slices.Clone(records))
 
-	splitRecords := []opencdc.Record{
-		{Position: opencdc.Position("foo")},
-		{Position: opencdc.Position("bar")},
-	}
+	splitRecords := randomRecords(2)
 	batch.SplitRecord(1, splitRecords)
 
 	is.Equal(len(batch.records), 3)
 	is.Equal(batch.records[1:], splitRecords)
 	is.True(batch.positions[2] == nil)
-	is.Equal(batch.splitRecords["pos2"], records[1])
+	pos := records[1].Position.String()
+	is.Equal(batch.splitRecords[pos], records[1])
+}
+
+func TestBatch_Nack_SplitRecord(t *testing.T) {
+	is := is.New(t)
+	records := randomRecords(2)
+	batch := NewBatch(slices.Clone(records))
+
+	splitRecords := randomRecords(2)
+	batch.SplitRecord(1, splitRecords)
+
+	wantErr := cerrors.New("test error")
+	batch.Nack(1, wantErr) // Nack a split record
+
+	is.Equal(batch.recordStatuses[1].Flag, RecordFlagNack)
+	is.Equal(batch.recordStatuses[1].Error, wantErr)
+	is.Equal(batch.recordStatuses[2].Flag, RecordFlagNack)
+	is.Equal(batch.recordStatuses[2].Error, wantErr)
 }
 
 func TestBatch_HasActiveRecords(t *testing.T) {
@@ -196,7 +192,7 @@ func TestBatch_ActiveRecordIndices(t *testing.T) {
 
 func TestBatch_OriginalBatch(t *testing.T) {
 	is := is.New(t)
-	records := []opencdc.Record{{Position: opencdc.Position("pos1")}}
+	records := randomRecords(1)
 	batch := NewBatch(slices.Clone(records))
 	wantOriginal := batch.clone()
 

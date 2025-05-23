@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -35,7 +34,7 @@ func TestDestinationTask_Do_Simple(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -67,7 +66,7 @@ func TestDestinationTask_Do_WriteFailure(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -86,7 +85,7 @@ func TestDestinationTask_Do_FilteredAndNacks(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -140,7 +139,7 @@ func TestDestinationTask_Do_MultipleAcks(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -175,7 +174,7 @@ func TestDestinationTask_Do_UnexpectedPosition(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -204,7 +203,7 @@ func TestDestinationTask_Do_TooManyAcks(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)
@@ -226,7 +225,7 @@ func TestDestinationTask_Do_FailedToReceiveAcks(t *testing.T) {
 	logger := log.Test(t)
 
 	ctrl := gomock.NewController(t)
-	destinationMock := mock.NewDestination(ctrl)
+	destinationMock := NewMockDestination(ctrl)
 
 	records := randomRecords(10)
 	batch := NewBatch(records)

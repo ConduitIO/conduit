@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
+//go:generate mockgen -typed -destination=processor_mock_test.go -package=funnel . Processor
 
 package funnel
 
