@@ -1063,7 +1063,6 @@
     },
     "/v1/plugins": {
       "get": {
-        "summary": "Deprecated: use ConnectorService.ListConnectorPlugins instead.",
         "operationId": "PluginService_ListPlugins",
         "responses": {
           "200": {
@@ -1423,7 +1422,6 @@
     },
     "/v1/processors/{id}/inspect-in": {
       "get": {
-        "summary": "InspectProcessorIn streams records coming into the specified processor",
         "operationId": "ProcessorService_InspectProcessorIn",
         "responses": {
           "200": {
@@ -1467,7 +1465,6 @@
     },
     "/v1/processors/{id}/inspect-out": {
       "get": {
-        "summary": "InspectProcessorOut streams the output records from the specified processor",
         "operationId": "ProcessorService_InspectProcessorOut",
         "responses": {
           "200": {
@@ -2126,8 +2123,7 @@
             "$ref": "#/definitions/v1PluginSpecifications"
           }
         }
-      },
-      "description": "Deprecated: use ConnectorService.ListConnectorPlugins instead."
+      }
     },
     "v1ListProcessorPluginsResponse": {
       "type": "object",

@@ -536,6 +536,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
 		grpc.StatsHandler(metricsGrpcStatsHandler),
+		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -821,7 +822,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 	r.logger.Info(ctx).Msgf("connector utilities started on %v", connUtilsAddr)
 
-	r.connectorPluginService.Init(ctx, connUtilsAddr.String())
+	r.connectorPluginService.Init(ctx, connUtilsAddr.String(), r.Config.Connectors.MaxReceiveRecordSize)
 
 	err = r.connectorService.Init(ctx)
 	if err != nil {

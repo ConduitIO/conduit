@@ -27,9 +27,9 @@ escape-analysis:
 .PHONY: test-integration
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
-	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml up --quiet-pull -d --wait
+	docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml up --quiet-pull -d --wait
 	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
-		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml down; \
+		docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml down; \
 		exit $$ret
 
 .PHONY: fmt

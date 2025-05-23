@@ -14,7 +14,7 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.12.2
 	github.com/conduitio/conduit-connector-log v0.7.2
 	github.com/conduitio/conduit-connector-postgres v0.12.2
-	github.com/conduitio/conduit-connector-protocol v0.9.3
+	github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522154900-3708d4f3a481
 	github.com/conduitio/conduit-connector-s3 v0.9.2
 	github.com/conduitio/conduit-connector-sdk v0.13.4
 	github.com/conduitio/conduit-processor-sdk v0.4.5-0.20250519135306-105cf0cc0974
@@ -80,7 +80,7 @@ require (
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/alingse/nilnesserr v0.1.2 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20200730104253-651201b0f516 // indirect
-	github.com/apache/thrift v0.14.2 // indirect
+	github.com/apache/thrift v0.16.0 // indirect
 	github.com/ashanbrown/forbidigo v1.6.0 // indirect
 	github.com/ashanbrown/makezero v1.2.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.36.3 // indirect
@@ -287,7 +287,6 @@ require (
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
