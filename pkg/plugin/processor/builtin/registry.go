@@ -60,6 +60,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
 	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
 	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
+	"split":               Constructor(impl.NewSplitProcessor),
 	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),
 	"unwrap.kafkaconnect": Constructor(unwrap.NewKafkaConnectProcessor),
 	"unwrap.opencdc":      Constructor(unwrap.NewOpenCDCProcessor),

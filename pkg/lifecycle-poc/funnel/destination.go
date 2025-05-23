@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/destination.go -package=mock -mock_names=Destination=Destination . Destination
+//go:generate mockgen -typed -destination=destination_mock_test.go -package=funnel . Destination
 
 package funnel
 
@@ -98,7 +98,6 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
-	activeIndices := batch.ActiveRecordIndices()
 	ackCount := 0
 	for range len(positions) {
 		acks, err := t.destination.Ack(ctx)
@@ -110,7 +109,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 			return cerrors.Errorf("failed to validate acks: %w", err)
 		}
 		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
-		t.markBatchRecords(batch, activeIndices, ackCount, acks)
+		t.markBatchRecords(batch, ackCount, acks)
 
 		ackCount += len(acks)
 		if ackCount >= len(positions) {
@@ -135,14 +134,10 @@ func (t *DestinationTask) validateAcks(acks []connector.DestinationAck, position
 	return nil
 }
 
-func (t *DestinationTask) markBatchRecords(b *Batch, activeIndices []int, from int, acks []connector.DestinationAck) {
+func (t *DestinationTask) markBatchRecords(b *Batch, from int, acks []connector.DestinationAck) {
 	for i, ack := range acks {
 		if ack.Error != nil {
-			idx := from + i
-			if activeIndices != nil {
-				idx = activeIndices[idx]
-			}
-			b.Nack(idx, ack.Error)
+			b.Nack(from+i, ack.Error)
 		}
 	}
 }

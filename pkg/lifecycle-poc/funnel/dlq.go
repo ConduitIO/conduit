@@ -202,6 +202,9 @@ func newDLQWindow(size, threshold int) *dlqWindow {
 
 // Ack stores an ack in the window.
 func (w *dlqWindow) Ack(count int) {
+	if w.nackCount == 0 {
+		return // Shortcut for the common case where no nacks are present
+	}
 	_ = w.store(count, false)
 }
 
@@ -213,8 +216,11 @@ func (w *dlqWindow) Nack(count int) int {
 }
 
 func (w *dlqWindow) store(count int, nacked bool) int {
-	if len(w.window) == 0 || w.nackThreshold < w.nackCount {
-		return 0 // window disabled or threshold already reached
+	if len(w.window) == 0 {
+		return count // window disabled
+	}
+	if w.nackThreshold < w.nackCount {
+		return 0 // threshold already reached
 	}
 
 	for i := range count {

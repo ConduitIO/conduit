@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -typed -destination=worker_mock_test.go -package=funnel . Task
+
 package funnel
 
 import (
@@ -245,6 +247,9 @@ func (w *Worker) doTask(
 	w.logger.Trace(ctx).
 		Str("task_id", t.ID()).
 		Int("batch_size", len(b.records)).
+		Int("filtered_count", b.filterCount).
+		Int("split_count", len(b.splitRecords)).
+		Bool("tainted", b.tainted).
 		Msg("executing task")
 
 	err := t.Do(ctx, b)
@@ -253,6 +258,9 @@ func (w *Worker) doTask(
 		Err(err).
 		Str("task_id", t.ID()).
 		Int("batch_size", len(b.records)).
+		Int("filtered_count", b.filterCount).
+		Int("split_count", len(b.splitRecords)).
+		Bool("tainted", b.tainted).
 		Msg("task done")
 
 	if err != nil {
@@ -261,14 +269,14 @@ func (w *Worker) doTask(
 		// ErrPluginNotRunning can be returned if the plugin is stopped before
 		// trying to read the next batch.
 		// Both are considered as graceful stop, just return the context error, if any.
-		if w.isFirstTask(t) && (cerrors.Is(err, context.Canceled) ||
+		if taskNode.IsFirst() && (cerrors.Is(err, context.Canceled) ||
 			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
 			return ctx.Err()
 		}
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
 
-	if w.isFirstTask(t) {
+	if taskNode.IsFirst() {
 		// The first task has some specifics:
 		// - Store last time we read a batch from the source for metrics.
 		// - It locks the stop lock, so that no stop signal can be received while
@@ -403,10 +411,6 @@ OUTER:
 	return b.sub(firstIndex, lastIndex)
 }
 
-func (w *Worker) isFirstTask(t Task) bool {
-	return w.FirstTask.Task.ID() == t.ID()
-}
-
 func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, acker ackNacker) error {
 	switch len(taskNode.Next) {
 	case 0:
@@ -441,9 +445,10 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 }
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
-	err := w.Source.Ack(ctx, batch.positions)
+	originalBatch := batch.originalBatch()
+	err := w.Source.Ack(ctx, originalBatch.positions)
 	if err != nil {
-		return cerrors.Errorf("failed to ack %d records in source: %w", len(batch.records), err)
+		return cerrors.Errorf("failed to ack %d records in source: %w", len(originalBatch.positions), err)
 	}
 
 	w.DLQ.Ack(ctx, batch)
@@ -452,11 +457,12 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 }
 
 func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
-	n, err := w.DLQ.Nack(ctx, batch, taskID)
+	originalBatch := batch.originalBatch()
+	n, err := w.DLQ.Nack(ctx, originalBatch, taskID)
 	if n > 0 {
 		// Successfully nacked n records, let's ack them, as they reached
 		// the end of the pipeline (in this case the DLQ).
-		err := w.Source.Ack(ctx, batch.positions[:n])
+		err := w.Source.Ack(ctx, originalBatch.positions[:n])
 		if err != nil {
 			return cerrors.Errorf("task %s failed to ack %d records in source: %w", n, err)
 		}
