@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/database/badger"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -84,7 +85,7 @@ func TestPipelineSimple(t *testing.T) {
 		conn_standalone.NewRegistry(logger, ""),
 		authManager,
 	)
-	connPluginService.Init(ctx, "conn-utils-token:12345")
+	connPluginService.Init(ctx, "conn-utils-token:12345", server.DefaultMaxReceiveRecordSize)
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

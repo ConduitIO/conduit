@@ -24,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/matryer/is"
@@ -132,7 +133,7 @@ func TestRegistry_List(t *testing.T) {
 	ctx := context.Background()
 
 	r := NewRegistry(log.Nop(), testPluginDir)
-	r.Init(ctx, ":12345")
+	r.Init(ctx, ":12345", server.DefaultMaxReceiveRecordSize)
 
 	got := r.List()
 	bp := testPluginBlueprint()

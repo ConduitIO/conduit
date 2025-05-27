@@ -1,0 +1,109 @@
+{
+  "specification": {
+    "name": "ollama",
+    "summary": "Processes data through an Ollama instance",
+    "description": "This processor runs provided records through a specified model on a provided Ollama instance. It uses the provided prompt to transform the incoming records.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is the reference to the field to process. Defaults to \".Payload.After\".",
+        "type": "string",
+        "validations": [
+          {
+            "type": "regex",
+            "value": "^.Payload"
+          }
+        ]
+      },
+      "model": {
+        "default": "llama3.2",
+        "description": "Model is the name of the model used with ollama",
+        "type": "string",
+        "validations": []
+      },
+      "prompt": {
+        "default": "",
+        "description": "Prompt is the prompt to pass into ollama to tranform the data",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "url": {
+        "default": "",
+        "description": "OllamaURL is the url to the ollama instance",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Ollama Prompt Example",
+      "description": "This example will process the record stored in\n`.Payload.After`. The model is prompted to return the records unchanged. \nThe records are returned as a JSON with the same format as the data. ",
+      "config": {
+        "field": ".Payload.After",
+        "model": "llama3.2",
+        "prompt": "Take the incoming record in JSON format, with a structure of {'test-field': integer}. Add one to the value of the integer and return that field.",
+        "url": "http://localhost:11434"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "test-field": 123
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "test-field": 124
+          }
+        }
+      }
+    }
+  ]
+}

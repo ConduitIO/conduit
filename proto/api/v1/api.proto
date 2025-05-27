@@ -850,7 +850,6 @@ service ProcessorService {
     };
   }
 
-  // InspectProcessorIn streams records coming into the specified processor
   rpc InspectProcessorIn(InspectProcessorInRequest) returns (stream InspectProcessorInResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect-in"
@@ -858,7 +857,6 @@ service ProcessorService {
     };
   }
 
-  // InspectProcessorOut streams the output records from the specified processor
   rpc InspectProcessorOut(InspectProcessorOutRequest) returns (stream InspectProcessorOutResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect-out"
@@ -1066,7 +1064,6 @@ message Info {
 
 // Deprecated: use ConnectorService and ProcessorService instead.
 service PluginService {
-  // Deprecated: use ConnectorService.ListConnectorPlugins instead.
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
     option deprecated = true;
     option (google.api.http) = {
@@ -1076,14 +1073,12 @@ service PluginService {
   }
 }
 
-// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsRequest {
   option deprecated = true;
   // Regex to filter plugins by name.
   string name = 1;
 }
 
-// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsResponse {
   option deprecated = true;
   repeated PluginSpecifications plugins = 1;

@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type SourceTask struct {
@@ -31,8 +30,7 @@ type SourceTask struct {
 	source Source
 	logger log.CtxLogger
 
-	timer     metrics.Timer
-	histogram metrics.RecordBytesHistogram
+	metrics ConnectorMetrics
 }
 
 type Source interface {
@@ -52,17 +50,15 @@ func NewSourceTask(
 	id string,
 	source Source,
 	logger log.CtxLogger,
-	timer metrics.Timer,
-	histogram metrics.Histogram,
+	metrics ConnectorMetrics,
 ) *SourceTask {
 	logger = logger.WithComponent("task:source")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &SourceTask{
-		id:        id,
-		source:    source,
-		logger:    logger,
-		timer:     timer,
-		histogram: metrics.NewRecordBytesHistogram(histogram),
+		id:      id,
+		source:  source,
+		logger:  logger,
+		metrics: metrics,
 	}
 }
 
@@ -93,27 +89,11 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 		return cerrors.Errorf("failed to read from source: %w", err)
 	}
 
-	t.observeMetrics(recs, start)
+	t.metrics.Observe(recs, start)
 
 	// Overwrite the batch with the new records.
 	*b = *NewBatch(recs)
 	return nil
-}
-
-func (t *SourceTask) observeMetrics(records []opencdc.Record, start time.Time) {
-	// Precalculate sizes so that we don't need to hold a reference to records
-	// and observations can happen in a goroutine.
-	sizes := make([]float64, len(records))
-	for i, rec := range records {
-		sizes[i] = t.histogram.SizeOf(rec)
-	}
-	tookPerRecord := time.Since(start) / time.Duration(len(sizes))
-	go func() {
-		for i := range len(sizes) {
-			t.timer.Update(tookPerRecord)
-			t.histogram.H.Observe(sizes[i])
-		}
-	}()
 }
 
 func (t *SourceTask) GetSource() Source {

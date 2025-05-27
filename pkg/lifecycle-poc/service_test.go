@@ -84,6 +84,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 			dlq.Plugin:         pmock.NewDispenser(ctrl),
 		},
 		testPipelineService{},
+		false,
 	)
 
 	got, err := ls.buildRunnablePipeline(
@@ -99,13 +100,12 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 		&funnel.SourceTask{},
 		&funnel.DestinationTask{},
 	}
-	is.Equal(len(got.w.Tasks), len(wantTasks))
-	for i := range got.w.Tasks {
+	i := 0
+	for got := range got.w.FirstTask.Tasks() {
 		want := wantTasks[i]
-		got := got.w.Tasks[i]
 		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected task type
+		i++
 	}
-	is.Equal(got.w.Order, funnel.Order{{1}, nil})
 	is.Equal(got.w.Source.(*connector.Source).Instance, source)
 }
 
@@ -133,7 +133,8 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	ls := NewService(logger,
+	ls := NewService(
+		logger,
 		testConnectorService{
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -144,6 +145,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 			dlq.Plugin:         pmock.NewDispenser(ctrl),
 		},
 		testPipelineService{},
+		false,
 	)
 
 	wantErr := "can't build pipeline without any source connectors"
@@ -170,7 +172,8 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	source := dummySource(persister)
 	dlq := dummyDestination(persister)
 
-	ls := NewService(logger,
+	ls := NewService(
+		logger,
 		testConnectorService{
 			source.ID: source,
 			testDLQID: dlq,
@@ -181,6 +184,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 			dlq.Plugin:    pmock.NewDispenser(ctrl),
 		},
 		testPipelineService{},
+		false,
 	)
 
 	wantErr := "can't build pipeline without any destination connectors"
@@ -236,7 +240,8 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger,
+	ls := NewService(
+		logger,
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -249,6 +254,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 			dlq.Plugin:         dlqDispenser,
 		},
 		ps,
+		false,
 	)
 
 	// start the pipeline now that everything is set up
@@ -301,7 +307,8 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger,
+	ls := NewService(
+		logger,
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -314,6 +321,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 			dlq.Plugin:         dlqDispenser,
 		},
 		ps,
+		false,
 	)
 
 	events := make(chan FailureEvent, 1)
@@ -380,7 +388,8 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger,
+	ls := NewService(
+		logger,
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -393,6 +402,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 			dlq.Plugin:         dlqDispenser,
 		},
 		ps,
+		false,
 	)
 
 	// start the pipeline now that everything is set up

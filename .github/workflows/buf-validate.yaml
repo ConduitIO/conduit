@@ -20,7 +20,7 @@ jobs:
       - name: Get Buf version
         id: buf-version
         run: |
-          BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          BUF_VERSION=$( go list -modfile=tools/go.mod -m -f '{{.Version}}' github.com/bufbuild/buf )
           # remove the leading 'v' in front of the version
           BUF_VERSION=${BUF_VERSION#v}
           echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
