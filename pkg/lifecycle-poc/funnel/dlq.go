@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type DLQ struct {
@@ -40,14 +39,13 @@ func NewDLQ(
 	id string,
 	destination Destination,
 	logger log.CtxLogger,
-	timer metrics.Timer,
-	histogram metrics.Histogram,
+	metrics ConnectorMetrics,
 
 	windowSize int,
 	windowNackThreshold int,
 ) *DLQ {
 	return &DLQ{
-		task:                NewDestinationTask(id, destination, logger, timer, histogram),
+		task:                NewDestinationTask(id, destination, logger, metrics),
 		windowSize:          windowSize,
 		windowNackThreshold: windowNackThreshold,
 

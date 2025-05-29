@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 //go:generate paramgen -output=paramgen_command.go ollamaProcessorConfig
 //go:generate go run go.uber.org/mock/mockgen  --build_flags=--mod=mod -source=./ollama.go -destination=mock/http_client_mock.go -package=mock
 
@@ -56,7 +57,7 @@ type ollamaProcessorConfig struct {
 	Prompt string `json:"prompt"`
 }
 
-type ollamaProcessor struct {
+type OllamaProcessor struct {
 	sdk.UnimplementedProcessor
 
 	config      ollamaProcessorConfig
@@ -70,10 +71,10 @@ type OllamaResponse struct {
 }
 
 func NewOllamaProcessor(l log.CtxLogger) sdk.Processor {
-	return &ollamaProcessor{logger: l.WithComponent("ollama")}
+	return &OllamaProcessor{logger: l.WithComponent("ollama")}
 }
 
-func (p *ollamaProcessor) Configure(ctx context.Context, cfg config.Config) error {
+func (p *OllamaProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	err := sdk.ParseConfig(ctx, cfg, &p.config, ollamaProcessorConfig{}.Parameters())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
@@ -87,18 +88,18 @@ func (p *ollamaProcessor) Configure(ctx context.Context, cfg config.Config) erro
 	return nil
 }
 
-func (p *ollamaProcessor) Specification() (sdk.Specification, error) {
+func (p *OllamaProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "ollama",
-		Summary:     "Processes data through an ollama instance",
-		Description: "This processor runs provided records through a specified model on a provided ollama instance. It uses the provided prompt to transform the incoming records.",
-		Version:     "v0.0.1",
+		Summary:     "Processes data through an Ollama instance",
+		Description: "This processor runs provided records through a specified model on a provided Ollama instance. It uses the provided prompt to transform the incoming records.",
+		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters:  p.config.Parameters(),
 	}, nil
 }
 
-func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *OllamaProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	logger := sdk.Logger(ctx)
 	processedRecords := make([]sdk.ProcessedRecord, 0, len(records))
 
@@ -118,7 +119,7 @@ func (p *ollamaProcessor) Process(ctx context.Context, records []opencdc.Record)
 	return processedRecords
 }
 
-func (p *ollamaProcessor) processRecord(ctx context.Context, rec opencdc.Record, logger *zerolog.Logger) (sdk.ProcessedRecord, error) {
+func (p *OllamaProcessor) processRecord(ctx context.Context, rec opencdc.Record, logger *zerolog.Logger) (sdk.ProcessedRecord, error) {
 	ref, err := p.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving reference: %w", err)
@@ -154,7 +155,7 @@ func (p *ollamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 	return sdk.SingleRecord(rec), nil
 }
 
-func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.StructuredData) ([]byte, error) {
+func (p *OllamaProcessor) constructOllamaRequest(rec opencdc.StructuredData) ([]byte, error) {
 	prompt, err := generatePrompt(p.config.Prompt, rec)
 	if err != nil {
 		return nil, err
@@ -173,7 +174,7 @@ func (p *ollamaProcessor) constructOllamaRequest(rec opencdc.StructuredData) ([]
 	return reqBody, nil
 }
 
-func (p *ollamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte) ([]byte, error) {
+func (p *OllamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte) ([]byte, error) {
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
@@ -272,7 +273,7 @@ func validatePrompt(input string) error {
 	return nil
 }
 
-func (p *ollamaProcessor) structuredData(data any) (opencdc.StructuredData, error) {
+func (p *OllamaProcessor) structuredData(data any) (opencdc.StructuredData, error) {
 	var sd opencdc.StructuredData
 	switch v := data.(type) {
 	case opencdc.RawData:

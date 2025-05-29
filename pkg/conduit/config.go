@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -85,6 +86,9 @@ type Config struct {
 
 	Connectors struct {
 		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
+
+		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
+		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
 	}
 
 	Processors struct {
@@ -121,7 +125,8 @@ type Config struct {
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2 bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
+		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
+		PipelineArchV2DisableMetrics bool `long:"preview.pipeline-arch-v2-disable-metrics" mapstructure:"pipeline-arch-v2-disable-metrics" usage:"disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"`
 	}
 
 	Dev struct {
@@ -160,6 +165,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Log.Format = "cli"
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
+	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
 

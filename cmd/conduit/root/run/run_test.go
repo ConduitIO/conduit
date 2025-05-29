@@ -55,6 +55,7 @@ func TestRunCommandFlags(t *testing.T) {
 		{longName: "schema-registry.type", usage: "schema registry type; accepts builtin,confluent"},
 		{longName: "schema-registry.confluent.connection-string", usage: "confluent schema registry connection string"},
 		{longName: "preview.pipeline-arch-v2", usage: "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"},
+		{longName: "preview.pipeline-arch-v2-disable-metrics", usage: "disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"},
 		{longName: "dev.cpuprofile", usage: "write CPU profile to file"},
 		{longName: "dev.memprofile", usage: "write memory profile to file"},
 		{longName: "dev.blockprofile", usage: "write block profile to file"},
