@@ -238,7 +238,7 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 	// update connector IDs
 	if !a.isEqualConnectors(p.ConnectorIDs, cfg.Connectors) {
 		// recreate all connector IDs
-		for _, procID := range p.ConnectorIDs {
+		for _, procID := range p.Connectors() {
 			_, err = a.pipelineService.RemoveConnector(ctx, cfg.ID, procID)
 			if err != nil {
 				return cerrors.Errorf("failed to remove connector %v: %w", procID, err)
@@ -255,7 +255,7 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 	// update processor IDs
 	if !a.isEqualProcessors(p.ProcessorIDs, cfg.Processors) {
 		// recreate all processor IDs
-		for _, procID := range p.ProcessorIDs {
+		for _, procID := range p.Processors() {
 			_, err = a.pipelineService.RemoveProcessor(ctx, cfg.ID, procID)
 			if err != nil {
 				return cerrors.Errorf("failed to remove processor %v: %w", procID, err)
