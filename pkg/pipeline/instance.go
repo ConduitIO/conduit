@@ -91,20 +91,6 @@ var DefaultDLQ = DLQ{
 	WindowNackThreshold: 0,
 }
 
-func (p *Instance) Connectors() []string {
-	v := make([]string, len(p.ConnectorIDs))
-	_ = copy(v, p.ConnectorIDs)
-
-	return v
-}
-
-func (p *Instance) Processors() []string {
-	v := make([]string, len(p.ProcessorIDs))
-	_ = copy(v, p.ProcessorIDs)
-
-	return v
-}
-
 func (p *Instance) SetStatus(s Status) {
 	p.statusLock.Lock()
 	defer p.statusLock.Unlock()
