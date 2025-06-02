@@ -237,25 +237,35 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 
 	// update connector IDs
 	if !a.isEqualConnectors(p.ConnectorIDs, cfg.Connectors) {
-		// recreate all connector IDs
-		for _, procID := range p.ConnectorIDs {
-			_, err = a.pipelineService.RemoveConnector(ctx, cfg.ID, procID)
+		// Make a copy of the pipeline connectors, the instance value
+		// will be modified during removal and can cause side effects.
+		connectorIDs := make([]string, len(p.ConnectorIDs))
+		_ = copy(connectorIDs, p.ConnectorIDs)
+
+		// truncate pipeline connectors and add connectors from the pipeline config.
+		for _, connID := range connectorIDs {
+			_, err = a.pipelineService.RemoveConnector(ctx, cfg.ID, connID)
 			if err != nil {
-				return cerrors.Errorf("failed to remove connector %v: %w", procID, err)
+				return cerrors.Errorf("failed to remove connector %v: %w", connID, err)
 			}
 		}
-		for _, proc := range cfg.Connectors {
-			_, err = a.pipelineService.AddConnector(ctx, cfg.ID, proc.ID)
+		for _, conn := range cfg.Connectors {
+			_, err = a.pipelineService.AddConnector(ctx, cfg.ID, conn.ID)
 			if err != nil {
-				return cerrors.Errorf("failed to add connector %v: %w", proc.ID, err)
+				return cerrors.Errorf("failed to add connector %v: %w", conn.ID, err)
 			}
 		}
 	}
 
 	// update processor IDs
 	if !a.isEqualProcessors(p.ProcessorIDs, cfg.Processors) {
-		// recreate all processor IDs
-		for _, procID := range p.ProcessorIDs {
+		// Make a copy of the pipeline processors, the instance value
+		// will be modified during removal and can cause side effects.
+		processorIDs := make([]string, len(p.ProcessorIDs))
+		_ = copy(processorIDs, p.ProcessorIDs)
+
+		// truncate pipeline processors and add processors from the pipeline config.
+		for _, procID := range processorIDs {
 			_, err = a.pipelineService.RemoveProcessor(ctx, cfg.ID, procID)
 			if err != nil {
 				return cerrors.Errorf("failed to remove processor %v: %w", procID, err)
