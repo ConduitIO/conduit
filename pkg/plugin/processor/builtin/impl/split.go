@@ -63,7 +63,11 @@ This processor is only applicable to ` + "`.Key`" + `, ` + "`.Payload.Before`" +
 and ` + "`.Payload.After`" + ` prefixes, and only applicable if said fields
 contain structured data. If the record contains raw JSON data, then use the
 processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
-to parse it into structured data first.`,
+to parse it into structured data first.
+
+**Important:** This processor currently only works using the pipeline architecture
+v2, which can be enabled using the flag ` + "`--preview.pipeline-arch-v2`" + `.
+Using it without the flag will result in an error.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: splitConfig{}.Parameters(),
