@@ -133,8 +133,8 @@ func (b *Batch) Filter(i int, j ...int) {
 // provided records. If recs contains n records, indices i to i+n-1 are replaced.
 func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
 	// TODO: we should not have to recalculate the active record indices every time.
-	active := b.activeRecordIndices()
-	if active == nil {
+	activeIndices := b.activeRecordIndices()
+	if activeIndices == nil {
 		// No records are filtered, we can use the original indices.
 		copy(b.records[i:], recs)
 		return
@@ -143,11 +143,11 @@ func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
 	// We have filtered records, so we need to use the active indices.
 	from := i
 	for len(recs) > 0 {
-		activeFrom := active[from]
+		activeFrom := activeIndices[from]
 		to := b.findTo(from, from+len(recs), func(idx int) bool {
-			return active[idx]-activeFrom == idx-from
+			return activeIndices[idx]-activeFrom == idx-from
 		})
-		activeTo := active[to]
+		activeTo := activeIndices[to]
 		copy(b.records[activeFrom:activeTo+1], recs[:to-from+1])
 		recs = recs[to-from+1:]
 		from = to + 1
@@ -186,10 +186,10 @@ func (b *Batch) findTo(l, r int, check func(int) bool) int {
 // shifted to the right.
 func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
 	// TODO: we should not have to recalculate the active record indices every time.
-	active := b.activeRecordIndices()
-	if active != nil {
+	activeIndices := b.activeRecordIndices()
+	if activeIndices != nil {
 		// We have filtered records, use the active index instead.
-		i = active[i]
+		i = activeIndices[i]
 	}
 
 	if b.splitRecords == nil {
@@ -223,8 +223,8 @@ func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
 
 func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 	// TODO: we should not have to recalculate the active record indices every time.
-	active := b.activeRecordIndices()
-	if active == nil {
+	activeIndices := b.activeRecordIndices()
+	if activeIndices == nil {
 		// No records are filtered, we can use the original indices.
 		switch len(j) {
 		case 0:
@@ -243,13 +243,13 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 		// We have filtered records, so we need to use the active indices.
 		switch len(j) {
 		case 0:
-			b.recordStatuses[active[i]].Flag = f
+			b.recordStatuses[activeIndices[i]].Flag = f
 		case 1:
 			if i >= j[0] {
 				panic(fmt.Sprintf("invalid range (%d >= %d)", i, j[0]))
 			}
 			for k := i; k < j[0]; k++ {
-				b.recordStatuses[active[k]].Flag = f
+				b.recordStatuses[activeIndices[k]].Flag = f
 			}
 		default:
 			panic(fmt.Sprintf("too many arguments (%d)", len(j)))
@@ -264,12 +264,12 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 // and error.
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	// TODO: we should not have to recalculate the active record indices every time.
-	active := b.activeRecordIndices()
+	activeIndices := b.activeRecordIndices()
 	for k, err := range errs {
 		idx := i + k
-		if active != nil {
+		if activeIndices != nil {
 			// We have filtered records, so we need to use the active index.
-			idx = active[idx]
+			idx = activeIndices[idx]
 		}
 
 		// Set the flag and error for this record.
