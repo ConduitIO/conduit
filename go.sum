@@ -186,8 +186,8 @@ github.com/conduitio/conduit-connector-file v0.10.3 h1:AHOCOjVJs9C9GeuQBw85dm3Wf
 github.com/conduitio/conduit-connector-file v0.10.3/go.mod h1:uT0WPeOS1K5X4LdLTxK+74mxa+9+2WnubliLHuN1nlY=
 github.com/conduitio/conduit-connector-generator v0.10.3 h1:VhrwbHiQBoGm6xdN3nC+NKR5bEOX+KipojdY92RJmJQ=
 github.com/conduitio/conduit-connector-generator v0.10.3/go.mod h1:aRAszBUAdA50rmJSDysW6kJ4oVShMfOIpcUBY3FM+lo=
-github.com/conduitio/conduit-connector-kafka v0.12.2 h1:OODqcqzNenmlqiZcXvcuyRD+P6uQpqYZGit//DtWZrs=
-github.com/conduitio/conduit-connector-kafka v0.12.2/go.mod h1:fhQfD8mr8kJGNesvdcZBjEOMlWdzrWw1ovuxOfUKhKQ=
+github.com/conduitio/conduit-connector-kafka v0.12.3 h1:2fGBqeBADmm9IsR2T/sUB5QHRpklaet3B7kYnXcaQEs=
+github.com/conduitio/conduit-connector-kafka v0.12.3/go.mod h1:hxkwS0XaL1RDV1INnDElf/th+uOu2MNy12p4rkWrkBk=
 github.com/conduitio/conduit-connector-log v0.7.3 h1:AjsamT8ou4MLnObjyOS3/967PeplyvpWyxS/R2/0APE=
 github.com/conduitio/conduit-connector-log v0.7.3/go.mod h1:FpJD9BJyE9+zetRuL8pbGFOp4BNWyzmRhnbEe/8jcqg=
 github.com/conduitio/conduit-connector-postgres v0.12.2 h1:lXiUxZO7uUIG1X1UnO226Goh91BMqDxXuNaK05rqYUI=
@@ -719,8 +719,8 @@ github.com/tomarrell/wrapcheck/v2 v2.10.0 h1:SzRCryzy4IrAH7bVGG4cK40tNUhmVmMDuJu
 github.com/tomarrell/wrapcheck/v2 v2.10.0/go.mod h1:g9vNIyhb5/9TQgumxQyOEqDHsmGYcGsVMOx/xGkqdMo=
 github.com/tommy-muehle/go-mnd/v2 v2.5.1 h1:NowYhSdyE/1zwK9QCLeRb6USWdoif80Ie+v+yU8u1Zw=
 github.com/tommy-muehle/go-mnd/v2 v2.5.1/go.mod h1:WsUAkMJMYww6l/ufffCD3m+P7LEvr8TnZn9lwVDlgzw=
-github.com/twmb/franz-go v1.19.3 h1:zkjxBHjPJVIesUs+TEUU3T1C2gMOnqAfpoKV8x4ZW7M=
-github.com/twmb/franz-go v1.19.3/go.mod h1:4kFJ5tmbbl7asgwAGVuyG1ZMx0NNpYk7EqflvWfPCpM=
+github.com/twmb/franz-go v1.19.5 h1:W7+o8D0RsQsedqib71OVlLeZ0zI6CbFra7yTYhZTs5Y=
+github.com/twmb/franz-go v1.19.5/go.mod h1:4kFJ5tmbbl7asgwAGVuyG1ZMx0NNpYk7EqflvWfPCpM=
 github.com/twmb/franz-go/pkg/kadm v1.16.0 h1:STMs1t5lYR5mR974PSiwNzE5TvsosByTp+rKXLOhAjE=
 github.com/twmb/franz-go/pkg/kadm v1.16.0/go.mod h1:MUdcUtnf9ph4SFBLLA/XxE29rvLhWYLM9Ygb8dfSCvw=
 github.com/twmb/franz-go/pkg/kmsg v1.11.2 h1:hIw75FpwcAjgeyfIGFqivAvwC5uNIOWRGvQgZhH4mhg=
