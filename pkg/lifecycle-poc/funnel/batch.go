@@ -257,46 +257,36 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 	}
 }
 
+// setFlagWithErr sets the flag for the record at index i to f, and sets the
+// error for the record to err. If multiple errors are provided, they are
+// assigned to the records starting at index i. If an error is assigned to a
+// split record, all records in the split record are marked with the same flag
+// and error.
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	// TODO: we should not have to recalculate the active record indices every time.
 	active := b.activeRecordIndices()
-	if active == nil {
-		// No records are filtered, we can use the original indices.
-		for k, err := range errs {
-			idx := i + k
-			b.recordStatuses[idx].Flag = f
-			b.recordStatuses[idx].Error = err
-			if len(b.splitRecords) > 0 && f == RecordFlagNack {
-				// If the record was split, we need to set the error for all
-				// records in the split record, so they are all marked as nacked.
-				if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
-					// This is a split record, we need to set the error for all
-					// records in the split record.
-					from, to := b.findSplitRecord(idx)
-					for j := from; j <= to; j++ {
-						b.recordStatuses[j].Flag = f
-						b.recordStatuses[j].Error = err
-					}
-				}
-			}
+	for k, err := range errs {
+		idx := i + k
+		if active != nil {
+			// We have filtered records, so we need to use the active index.
+			idx = active[idx]
 		}
-	} else {
-		// We have filtered records, so we need to use the active indices.
-		for k, err := range errs {
-			idx := active[i+k]
-			b.recordStatuses[idx].Flag = f
-			b.recordStatuses[idx].Error = err
-			if len(b.splitRecords) > 0 && f == RecordFlagNack {
-				// If the record was split, we need to set the error for all
-				// records in the split record, so they are all marked as nacked.
-				if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
-					// This is a split record, we need to set the error for all
-					// records in the split record.
-					from, to := b.findSplitRecord(idx)
-					for j := from; j <= to; j++ {
-						b.recordStatuses[j].Flag = f
-						b.recordStatuses[j].Error = err
-					}
+
+		// Set the flag and error for this record.
+		b.recordStatuses[idx].Flag = f
+		b.recordStatuses[idx].Error = err
+
+		// Handle split records when nacking.
+		if len(b.splitRecords) > 0 && f == RecordFlagNack {
+			// If the record was split, we need to set the error for all
+			// records in the split record, so they are all marked as nacked.
+			if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
+				// This is a split record, we need to set the error for all
+				// records in the split record.
+				from, to := b.findSplitRecord(idx)
+				for j := from; j <= to; j++ {
+					b.recordStatuses[j].Flag = f
+					b.recordStatuses[j].Error = err
 				}
 			}
 		}
