@@ -2,7 +2,7 @@
   "specification": {
     "name": "cohere.embed",
     "summary": "Conduit processor for Cohere's embed model.",
-    "description": "Conduit processor for Cohere's embed model.",
+    "description": "The Cohere embed processor extracts text from the configured inputField, generates embeddings using Cohere's embedding model, and stores the result in the configured outputField. The embeddings are compressed using the zstd algorithm for efficient storage and transmission.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -55,12 +55,7 @@
         "default": ".Payload.After",
         "description": "Specifies the field from which the request body should be created.",
         "type": "string",
-        "validations": [
-          {
-            "type": "regex",
-            "value": "^\\.(Payload|Key).*"
-          }
-        ]
+        "validations": []
       },
       "inputType": {
         "default": "",
@@ -77,6 +72,12 @@
       "model": {
         "default": "embed-english-v2.0",
         "description": "Model is one of the Cohere embed models.",
+        "type": "string",
+        "validations": []
+      },
+      "outputField": {
+        "default": ".Payload.After",
+        "description": "OutputField specifies which field will the response body be saved at.",
         "type": "string",
         "validations": []
       },
@@ -109,7 +110,7 @@
   "examples": [
     {
       "summary": "Generate embeddings using Cohere's embedding model",
-      "description": "\nThis example demonstrates how to use the Cohere embedding processor to generate embeddings for a record.\nThe processor extracts text from the specified input field (default: \".Payload.After\"), sends it to the Cohere API,\nand stores the resulting embeddings in the record's \".Payload.After\" field as compressed data using the zstd algorithm.\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the embedding model used (\"embed-english-v2.0\"). Note that the compressed embeddings cannot be directly compared\nin this test, so the focus is on verifying the metadata update.",
+      "description": "\nThis example demonstrates how to use the Cohere embedding processor to generate embeddings for a record.\nThe processor extracts text from the configured \"inputField\" (default: \".Payload.After\"), sends it to the Cohere API,\nand stores the resulting embeddings in the configured \"outputField\" as compressed data using the zstd algorithm.\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the embedding model used (\"embed-english-v2.0\").",
       "config": {
         "apiKey": "fake-api-key",
         "backoffRetry.count": "0",
@@ -118,7 +119,8 @@
         "backoffRetry.min": "100ms",
         "inputField": ".Payload.After",
         "maxTextsPerRequest": "96",
-        "model": "embed-english-v2.0"
+        "model": "embed-english-v2.0",
+        "outputField": ".Payload.After"
       },
       "have": {
         "position": "cG9zLTE=",
@@ -127,7 +129,7 @@
         "key": null,
         "payload": {
           "before": null,
-          "after": null
+          "after": "test input"
         }
       },
       "want": {
@@ -139,7 +141,7 @@
         "key": null,
         "payload": {
           "before": null,
-          "after": null
+          "after": "(\ufffd/\ufffd\u0004\u0000i\u0000\u0000[0.1,0.2,0.3]\ufffd^xH"
         }
       }
     }
