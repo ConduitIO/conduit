@@ -109,7 +109,7 @@
   "examples": [
     {
       "summary": "Generate responses using Cohere's rerank model",
-      "description": "\nThis example demonstrates how to use the Cohere rerank processor.This takes in a query and a list of texts and produces an ordered \narray with each text assigned a relevance score. The processor extracts text from the specified input field (default: \".Payload.After\"), \nsends it to the Cohere API, and stores the response in the record's \".Payload.After\" field.\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the rerank model used (\"rerank-v3.5\").",
+      "description": "\nThis example demonstrates how to use the Cohere rerank processor.This takes in a query and a list of texts and produces an ordered \narray with each text assigned a relevance score. The processor extracts text from the configured \"request.body\" (default: \".Payload.After\"), \nsends it to the Cohere API, and stores the response in the configured \"response.body\".\n\nIn this example, the processor is configured with a mock client and an API key. The input record's metadata is updated\nto include the rerank model used (\"rerank-v3.5\").",
       "config": {
         "apiKey": "fakeapiKey",
         "backoffRetry.count": "0",
