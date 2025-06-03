@@ -9,7 +9,7 @@ require (
 	github.com/alexeyco/simpletable v1.0.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.5.4
-	github.com/conduitio/conduit-connector-file v0.10.2
+	github.com/conduitio/conduit-connector-file v0.10.3
 	github.com/conduitio/conduit-connector-generator v0.10.3
 	github.com/conduitio/conduit-connector-kafka v0.12.2
 	github.com/conduitio/conduit-connector-log v0.7.3
