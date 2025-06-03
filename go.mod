@@ -11,7 +11,7 @@ require (
 	github.com/conduitio/conduit-commons v0.5.4
 	github.com/conduitio/conduit-connector-file v0.10.3
 	github.com/conduitio/conduit-connector-generator v0.10.3
-	github.com/conduitio/conduit-connector-kafka v0.12.2
+	github.com/conduitio/conduit-connector-kafka v0.12.3
 	github.com/conduitio/conduit-connector-log v0.7.3
 	github.com/conduitio/conduit-connector-postgres v0.12.2
 	github.com/conduitio/conduit-connector-protocol v0.9.4
@@ -269,7 +269,7 @@ require (
 	github.com/timonwong/loggercheck v0.10.1 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.10.0 // indirect
 	github.com/tommy-muehle/go-mnd/v2 v2.5.1 // indirect
-	github.com/twmb/franz-go v1.19.3 // indirect
+	github.com/twmb/franz-go v1.19.5 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect
