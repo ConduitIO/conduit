@@ -9,13 +9,13 @@ require (
 	github.com/alexeyco/simpletable v1.0.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.5.4
-	github.com/conduitio/conduit-connector-file v0.10.2
-	github.com/conduitio/conduit-connector-generator v0.10.3
-	github.com/conduitio/conduit-connector-kafka v0.12.2
-	github.com/conduitio/conduit-connector-log v0.7.2
+	github.com/conduitio/conduit-connector-file v0.10.3
+	github.com/conduitio/conduit-connector-generator v0.10.4
+	github.com/conduitio/conduit-connector-kafka v0.12.3
+	github.com/conduitio/conduit-connector-log v0.7.3
 	github.com/conduitio/conduit-connector-postgres v0.12.2
 	github.com/conduitio/conduit-connector-protocol v0.9.4
-	github.com/conduitio/conduit-connector-s3 v0.9.2
+	github.com/conduitio/conduit-connector-s3 v0.9.3
 	github.com/conduitio/conduit-connector-sdk v0.14.0
 	github.com/conduitio/conduit-processor-sdk v0.4.4
 	github.com/conduitio/conduit-schema-registry v0.2.6
@@ -93,10 +93,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.34 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.15 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.80.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.25.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.19 // indirect
@@ -269,7 +269,7 @@ require (
 	github.com/timonwong/loggercheck v0.10.1 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.10.0 // indirect
 	github.com/tommy-muehle/go-mnd/v2 v2.5.1 // indirect
-	github.com/twmb/franz-go v1.19.3 // indirect
+	github.com/twmb/franz-go v1.19.5 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect
