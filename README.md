@@ -9,6 +9,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Test](https://github.com/ConduitIO/conduit/actions/workflows/test.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
+[![Twitter](https://img.shields.io/static/v1?label=X/Twitter&message=Follow&color=1DA1F2&logo=twitter&logoColor=white)](https://x.com/ConduitIO)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduit.io/docs/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
