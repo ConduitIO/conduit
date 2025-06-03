@@ -88,48 +88,58 @@ func RunExample(p sdk.Processor, e Example) {
 		log.Fatalf("processed record did not match expectation:\n%v", d)
 	}
 
-	switch rec := got[0].(type) {
-	case sdk.SingleRecord:
-		// Serialize records to pretty JSON for comparison.
-		havePrettyJSON, err := recordToPrettyJSON(e.Have, "")
-		if err != nil {
-			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
-		}
-		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(rec), "")
-		if err != nil {
-			log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)
-		}
-
-		unified, err := generateUnifiedDiff(havePrettyJSON, gotPrettyJSON)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("processor transformed record:\n%s\n", unified)
-	case sdk.FilterRecord:
-		fmt.Println("processor filtered record out")
-	case sdk.ErrorRecord:
-		fmt.Printf("processor returned error: %s\n", rec.Error)
-	case sdk.MultiRecord:
-		// Serialize records to pretty JSON for comparison.
-		havePrettyJSON, err := recordToPrettyJSON(e.Have, "")
-		if err != nil {
-			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
-		}
-
-		gotPrettyJSON, err := multiRecordToPrettyJSON(rec)
-		if err != nil {
-			log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)
-		}
-
-		unified, err := generateUnifiedDiff(havePrettyJSON, gotPrettyJSON)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("processor transformed record:\n%s\n", unified)
+	msg, err := formatProcessedRecord(e.Have, got[0])
+	if err != nil {
+		log.Fatalf("failed to format processed record: %v", err)
 	}
+	fmt.Println(msg)
 
 	// append example to processor
 	pi.Examples = append(pi.Examples, e)
+}
+
+func formatProcessedRecord(have opencdc.Record, got sdk.ProcessedRecord) (string, error) {
+	switch got := got.(type) {
+	case sdk.FilterRecord:
+		return "processor filtered record out", nil
+	case sdk.ErrorRecord:
+		return fmt.Sprintf("processor returned error: %s\n", got.Error), nil
+	case sdk.SingleRecord:
+		// Serialize records to pretty JSON for comparison.
+		havePrettyJSON, err := recordToPrettyJSON(have, "")
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal test record to pretty JSON: %v", err)
+		}
+		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(got), "")
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal processed record to pretty JSON: %v", err)
+		}
+
+		unified, err := generateUnifiedDiff(havePrettyJSON, gotPrettyJSON)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("processor transformed record:\n%s\n", unified), nil
+	case sdk.MultiRecord:
+		// Serialize records to pretty JSON for comparison.
+		havePrettyJSON, err := recordToPrettyJSON(have, "")
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal test record to pretty JSON: %v", err)
+		}
+
+		gotPrettyJSON, err := multiRecordToPrettyJSON(got)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal processed record to pretty JSON: %v", err)
+		}
+
+		unified, err := generateUnifiedDiff(havePrettyJSON, gotPrettyJSON)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("processor transformed record:\n%s\n", unified), nil
+	default:
+		return "", fmt.Errorf("unknown processed record type: %T", got)
+	}
 }
 
 func recordToPrettyJSON(r opencdc.Record, prefix string) ([]byte, error) {
