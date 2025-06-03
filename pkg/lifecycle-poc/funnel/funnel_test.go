@@ -27,7 +27,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	funnelmock "github.com/conduitio/conduit/pkg/lifecycle-poc/funnel/mock"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
@@ -227,7 +226,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 	position := 0
 
 	teardown := make(chan struct{})
-	source := funnelmock.NewSource(ctrl)
+	source := NewMockSource(ctrl)
 	source.EXPECT().ID().Return(nodeID).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil)
 	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(context.Context) error {
@@ -267,7 +266,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 	var lastPosition opencdc.Position
 	_ = lastPosition
 	rchan := make(chan opencdc.Record, batchSize)
-	destination := funnelmock.NewDestination(ctrl)
+	destination := NewMockDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, recs []opencdc.Record) error {
 		for _, r := range recs {
@@ -307,7 +306,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 }
 
 func noopDLQDestination(ctrl *gomock.Controller) Destination {
-	destination := funnelmock.NewDestination(ctrl)
+	destination := NewMockDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil)
 	destination.EXPECT().Teardown(gomock.Any()).Return(nil)
 	return destination

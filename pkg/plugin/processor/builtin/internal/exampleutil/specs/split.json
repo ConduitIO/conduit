@@ -1,0 +1,145 @@
+{
+  "specification": {
+    "name": "split",
+    "summary": "Split records.",
+    "description": "Split the records into multiple records based on the field\nprovided in the configuration. If the field is an array, each element of the\narray will be converted into a separate record. The new record will contain the\nsame data as the original record, but the field specified in the configuration\nwill be replaced with the element of the array. The index of the element in the\narray will be stored in the metadata of the new record under the key\n`split.index`.\n\nThis processor is only applicable to `.Key`, `.Payload.Before`\nand `.Payload.After` prefixes, and only applicable if said fields\ncontain structured data. If the record contains raw JSON data, then use the\nprocessor [`json.decode`](/docs/using/processors/builtin/json.decode)\nto parse it into structured data first.\n\n**Important:** This processor currently only works using the pipeline architecture\nv2, which can be enabled using the flag `--preview.pipeline-arch-v2`.\nUsing it without the flag will result in an error.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field that should be split. Note that the target\nfield has to contain an array so it can be split, otherwise the processor\nreturns an error. This also means you can only split on fields in\nstructured data under `.Key` and `.Payload`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          }
+        ]
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Split array into multiple records",
+      "description": "This example takes the array in field `.Payload.After.users` and splits it into separate records, each containing one element.",
+      "config": {
+        "field": ".Payload.After.users"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": 123
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "users": [
+              {
+                "age": 30,
+                "name": "Alice"
+              },
+              {
+                "age": 25,
+                "name": "Bob"
+              },
+              {
+                "age": 35,
+                "name": "Charlie"
+              }
+            ]
+          }
+        }
+      },
+      "want": [
+        {
+          "position": null,
+          "operation": "update",
+          "metadata": {
+            "split.index": "0"
+          },
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "users": {
+                "age": 30,
+                "name": "Alice"
+              }
+            }
+          }
+        },
+        {
+          "position": null,
+          "operation": "update",
+          "metadata": {
+            "split.index": "1"
+          },
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "users": {
+                "age": 25,
+                "name": "Bob"
+              }
+            }
+          }
+        },
+        {
+          "position": null,
+          "operation": "update",
+          "metadata": {
+            "split.index": "2"
+          },
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "users": {
+                "age": 35,
+                "name": "Charlie"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
