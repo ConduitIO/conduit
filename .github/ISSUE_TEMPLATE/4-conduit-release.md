@@ -30,13 +30,13 @@ in the same directory:
   - [ ] Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the
     latest tag and `main` branch. If changes are needed, push a new tag.
 - [ ] **[`conduit-connector-protocol`](https://github.com/ConduitIO/conduit-connector-protocol)**:
-    - [ ] Update `conduit-commons` if necessary: `go get github.com/conduitio/conduit-commons@vX.Y.Z`.
-    - [ ] Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` and tag if needed.
+  - [ ] Update `conduit-commons` if necessary: `go get github.com/conduitio/conduit-commons@vX.Y.Z`.
+  - [ ] Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` and tag if needed.
 - [ ] **[`conduit-connector-sdk`](https://github.com/ConduitIO/conduit-connector-sdk)**:
   - [ ] Update dependencies (`conduit-commons`, `conduit-connector-protocol`) as needed.
   - [ ] Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` and tag if needed.
 - [ ] **[`conduit-processor-sdk`](https://github.com/ConduitIO/conduit-processor-sdk)**:
-  - [ ] Update `conduit-commons` if necessary. 
+  - [ ] Update `conduit-commons` if necessary.
   - [ ] Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` and tag if needed.
 - [ ] **[`conduit-schema-registry`](https://github.com/ConduitIO/conduit-schema-registry)**:
   - [ ] Update `conduit-commons` if necessary.
