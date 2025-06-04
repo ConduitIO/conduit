@@ -190,8 +190,8 @@ github.com/conduitio/conduit-connector-kafka v0.12.3 h1:2fGBqeBADmm9IsR2T/sUB5QH
 github.com/conduitio/conduit-connector-kafka v0.12.3/go.mod h1:hxkwS0XaL1RDV1INnDElf/th+uOu2MNy12p4rkWrkBk=
 github.com/conduitio/conduit-connector-log v0.7.3 h1:AjsamT8ou4MLnObjyOS3/967PeplyvpWyxS/R2/0APE=
 github.com/conduitio/conduit-connector-log v0.7.3/go.mod h1:FpJD9BJyE9+zetRuL8pbGFOp4BNWyzmRhnbEe/8jcqg=
-github.com/conduitio/conduit-connector-postgres v0.12.2 h1:lXiUxZO7uUIG1X1UnO226Goh91BMqDxXuNaK05rqYUI=
-github.com/conduitio/conduit-connector-postgres v0.12.2/go.mod h1:EvPbr4No1GLXtFO1eaO0h+ctlVX9EUUMYEzT9aJ4gmQ=
+github.com/conduitio/conduit-connector-postgres v0.13.0 h1:W+CU/+PMLSDaar8KXatRtmQxSiyM1WLQ4RJbXdZZGH8=
+github.com/conduitio/conduit-connector-postgres v0.13.0/go.mod h1:dySXkv5GMcGT4g0v13t0TAHAlb9twyh29+r2qEUN+UA=
 github.com/conduitio/conduit-connector-protocol v0.9.4 h1:ZsnabJIBmLHDuIIs0XWYyMzhaJqHt+T/p1tuldrHqec=
 github.com/conduitio/conduit-connector-protocol v0.9.4/go.mod h1:ULC4jP3k6V68u/qakxmDKpwxIAC/zNL+1TghZTIZC7w=
 github.com/conduitio/conduit-connector-s3 v0.9.3 h1:mBLW9WAFzNr0uFTF3PGeMEP6oacYNlOl5hk1jH/rlJY=
