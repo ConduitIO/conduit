@@ -120,6 +120,12 @@ type Config struct {
 
 		Confluent struct {
 			ConnectionString string `long:"schema-registry.confluent.connection-string" mapstructure:"connection-string" usage:"confluent schema registry connection string"`
+			Authentication   struct {
+				Type     string `long:"schema-registry.confluent.auth.type" usage:"schema registry authentication type; accepts none,basic,bearer"`
+				Username string `long:"schema-registry.confluent.auth.username" usage:"schema registry basic authentication username"`
+				Password string `long:"schema-registry.confluent.auth.password" usage:"schema registry basic authentication password"`
+				Token    string `long:"schema-registry.confluent.auth.token" usage:"schema registry authentication bearer token"`
+			}
 		}
 	} `mapstructure:"schema-registry"`
 
@@ -177,6 +183,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
+	cfg.SchemaRegistry.Confluent.Authentication.Type = "none"
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
@@ -218,6 +225,19 @@ func (c Config) validateSchemaRegistryConfig() error {
 	case SchemaRegistryTypeConfluent:
 		if c.SchemaRegistry.Confluent.ConnectionString == "" {
 			return requiredConfigFieldErr("schema-registry.confluent.connection-string")
+		}
+		if c.SchemaRegistry.Confluent.Authentication.Type == "basic" {
+			if c.SchemaRegistry.Confluent.Authentication.Username == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.username")
+			}
+			if c.SchemaRegistry.Confluent.Authentication.Password == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.password")
+			}
+		}
+		if c.SchemaRegistry.Confluent.Authentication.Type == "bearer" {
+			if c.SchemaRegistry.Confluent.Authentication.Token == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.token")
+			}
 		}
 	case SchemaRegistryTypeBuiltin:
 		// all good
