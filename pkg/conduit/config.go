@@ -122,9 +122,9 @@ type Config struct {
 			ConnectionString string `long:"schema-registry.confluent.connection-string" mapstructure:"connection-string" usage:"confluent schema registry connection string"`
 			Authentication   struct {
 				Type     string `long:"schema-registry.confluent.auth.type" usage:"schema registry authentication type; accepts none,basic,bearer"`
-				Username string `long:"schema-registry.confluent.auth.username" usage:"schema registry basic authentication username"`
-				Password string `long:"schema-registry.confluent.auth.password" usage:"schema registry basic authentication password"`
-				Token    string `long:"schema-registry.confluent.auth.token" usage:"schema registry authentication bearer token"`
+				Username string `long:"schema-registry.confluent.auth.basic.username" usage:"schema registry basic authentication username"`
+				Password string `long:"schema-registry.confluent.auth.basic.password" usage:"schema registry basic authentication password"`
+				Token    string `long:"schema-registry.confluent.auth.bearer.token" usage:"schema registry authentication bearer token"`
 			}
 		}
 	} `mapstructure:"schema-registry"`
@@ -228,15 +228,15 @@ func (c Config) validateSchemaRegistryConfig() error {
 		}
 		if c.SchemaRegistry.Confluent.Authentication.Type == "basic" {
 			if c.SchemaRegistry.Confluent.Authentication.Username == "" {
-				return requiredConfigFieldErr("schema-registry.confluent.auth.username")
+				return requiredConfigFieldErr("schema-registry.confluent.auth.basic.username")
 			}
 			if c.SchemaRegistry.Confluent.Authentication.Password == "" {
-				return requiredConfigFieldErr("schema-registry.confluent.auth.password")
+				return requiredConfigFieldErr("schema-registry.confluent.auth.basic.password")
 			}
 		}
 		if c.SchemaRegistry.Confluent.Authentication.Type == "bearer" {
 			if c.SchemaRegistry.Confluent.Authentication.Token == "" {
-				return requiredConfigFieldErr("schema-registry.confluent.auth.token")
+				return requiredConfigFieldErr("schema-registry.confluent.auth.bearer.token")
 			}
 		}
 	case SchemaRegistryTypeBuiltin:
