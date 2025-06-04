@@ -264,7 +264,21 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 
 	switch config.SchemaRegistry.Type {
 	case SchemaRegistryTypeConfluent:
-		schemaRegistry, err = schemaregistry.NewClient(logger, sr.URLs(config.SchemaRegistry.Confluent.ConnectionString))
+		opts := []sr.ClientOpt{
+			sr.URLs(config.SchemaRegistry.Confluent.ConnectionString),
+		}
+		// Basic Auth
+		if config.SchemaRegistry.Confluent.Authentication.Type == "basic" {
+			opts = append(opts, sr.BasicAuth(
+				config.SchemaRegistry.Confluent.Authentication.Username,
+				config.SchemaRegistry.Confluent.Authentication.Password,
+			))
+		}
+		// Bearer Auth
+		if config.SchemaRegistry.Confluent.Authentication.Type == "bearer" {
+			opts = append(opts, sr.BearerToken(config.SchemaRegistry.Confluent.Authentication.Token))
+		}
+		schemaRegistry, err = schemaregistry.NewClient(logger, opts...)
 		if err != nil {
 			return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
 		}
