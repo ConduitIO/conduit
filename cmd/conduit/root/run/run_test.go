@@ -45,7 +45,7 @@ func TestRunCommandFlags(t *testing.T) {
 		{longName: "log.format", usage: "sets the format of the logging; accepts json, cli"},
 		{longName: "connectors.path", usage: "path to standalone connectors' directory"},
 		{longName: "processors.path", usage: "path to standalone processors' directory"},
-		{longName: "pipelines.path", usage: "path to pipelines' directory"},
+		{longName: "pipelines.path", usage: "path to a pipelines' directory or a pipeline configuration file"},
 		{longName: "pipelines.exit-on-degraded", usage: "exit Conduit if a pipeline is degraded"},
 		{longName: "pipelines.error-recovery.min-delay", usage: "minimum delay before restart"},
 		{longName: "pipelines.error-recovery.max-delay", usage: "maximum delay before restart"},
