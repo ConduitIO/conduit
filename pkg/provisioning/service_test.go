@@ -605,17 +605,17 @@ func TestService_getYamlFiles(t *testing.T) {
 	// 		├── conduit-rocks.yml (picked up because it's a YAML file)
 	// 		├── nested
 	// 		│         └── p.yaml (ignored because it's nested)
-	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it links to a YAML file)
+	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it ends in YAML)
 	// 		└── p.txt (ignored because it's not a YAML file)
 
 	want := []string{
-		"test/different_pipeline_file_types/another-pipeline.yaml",
+		"test/different_pipeline_file_types/pipelines/pipeline-symlink.yml",
 		"test/different_pipeline_file_types/pipelines/conduit-rocks.yaml",
 		"test/different_pipeline_file_types/pipelines/conduit-rocks.yml",
 	}
 	slices.Sort(want)
 
-	got, err := service.getYamlFiles(context.Background(), pipelinesPath)
+	got, err := service.getPipelineConfigFiles(context.Background(), pipelinesPath)
 	is.NoErr(err)
 
 	slices.Sort(got)
@@ -624,10 +624,9 @@ func TestService_getYamlFiles(t *testing.T) {
 
 func TestService_getYamlFiles_FilePaths(t *testing.T) {
 	testCases := []struct {
-		name    string
-		path    string
-		want    []string
-		wantErr error
+		name string
+		path string
+		want []string
 	}{
 		{
 			name: "read yaml file",
@@ -637,12 +636,12 @@ func TestService_getYamlFiles_FilePaths(t *testing.T) {
 		{
 			name: "read yaml file (symlink)",
 			path: "test/different_pipeline_file_types/pipelines/pipeline-symlink.yml",
-			want: []string{"test/different_pipeline_file_types/another-pipeline.yaml"},
+			want: []string{"test/different_pipeline_file_types/pipelines/pipeline-symlink.yml"},
 		},
 		{
-			name:    "non-yaml file",
-			path:    "test/different_pipeline_file_types/pipelines/p.txt",
-			wantErr: cerrors.New("test/different_pipeline_file_types/pipelines/p.txt is not a yaml file"),
+			name: "non-yaml file",
+			path: "test/different_pipeline_file_types/pipelines/p.txt",
+			want: []string{"test/different_pipeline_file_types/pipelines/p.txt"},
 		},
 	}
 
@@ -651,14 +650,9 @@ func TestService_getYamlFiles_FilePaths(t *testing.T) {
 			is := is.New(t)
 			service := NewService(nil, log.Nop(), nil, nil, nil, nil, nil, tc.path)
 
-			got, err := service.getYamlFiles(context.Background(), tc.path)
-			if tc.wantErr != nil {
-				is.True(err != nil) // expected an error
-				is.Equal(err.Error(), tc.wantErr.Error())
-			} else {
-				is.NoErr(err)
-				is.Equal(tc.want[0], got[0]) // expected a different pipeline
-			}
+			got, err := service.getPipelineConfigFiles(context.Background(), tc.path)
+			is.NoErr(err)
+			is.Equal(tc.want, got) // expected a different pipeline
 		})
 	}
 }

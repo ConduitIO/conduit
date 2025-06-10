@@ -100,7 +100,7 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path           string `long:"pipelines.path" usage:"path to pipelines' directory"`
+		Path           string `long:"pipelines.path" usage:"path to a pipelines' directory or a pipeline configuration file"`
 		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" mapstructure:"exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
 		ErrorRecovery  struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
