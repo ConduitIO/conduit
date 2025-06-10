@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.10.4
 	github.com/conduitio/conduit-connector-kafka v0.12.3
 	github.com/conduitio/conduit-connector-log v0.7.3
-	github.com/conduitio/conduit-connector-postgres v0.12.2
+	github.com/conduitio/conduit-connector-postgres v0.13.0
 	github.com/conduitio/conduit-connector-protocol v0.9.4
 	github.com/conduitio/conduit-connector-s3 v0.9.3
 	github.com/conduitio/conduit-connector-sdk v0.14.0
@@ -53,7 +53,7 @@ require (
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250404141209-ee84b53bf3d0
-	google.golang.org/grpc v1.72.2
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
