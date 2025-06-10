@@ -126,7 +126,7 @@ func TestService_Init_Create(t *testing.T) {
 		},
 		{
 			name:     "pipeline file",
-			testPath: "./test/pipelines1/pipeline.yml",
+			testPath: "./test/pipelines1/pipelines.yml",
 		},
 	}
 
@@ -621,4 +621,45 @@ func TestService_getYamlFiles(t *testing.T) {
 
 	slices.Sort(got)
 	is.Equal("", cmp.Diff(want, got)) // -want +got
+}
+
+func TestService_getYamlFiles_FilePaths(t *testing.T) {
+	testCases := []struct {
+		name    string
+		path    string
+		want    []string
+		wantErr error
+	}{
+		{
+			name: "read yaml file",
+			path: "test/different_pipeline_file_types/another-pipeline.yaml",
+			want: []string{"test/different_pipeline_file_types/another-pipeline.yaml"},
+		},
+		{
+			name: "read yaml file (symlink)",
+			path: "test/different_pipeline_file_types/pipelines/pipeline-symlink.yml",
+			want: []string{"test/different_pipeline_file_types/another-pipeline.yaml"},
+		},
+		{
+			name:    "non-yaml file",
+			path:    "test/different_pipeline_file_types/pipelines/p.txt",
+			wantErr: cerrors.New("test/different_pipeline_file_types/pipelines/p.txt is not a yaml file"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			service := NewService(nil, log.Nop(), nil, nil, nil, nil, nil, tc.path)
+
+			got, err := service.getYamlFiles(context.Background(), tc.path)
+			if tc.wantErr != nil {
+				is.True(err != nil) // expected an error
+				is.Equal(err.Error(), tc.wantErr.Error())
+			} else {
+				is.NoErr(err)
+				is.Equal(tc.want[0], got[0]) // expected a different pipeline
+			}
+		})
+	}
 }

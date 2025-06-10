@@ -179,6 +179,45 @@ func (s *Service) getYamlFiles(ctx context.Context, path string) ([]string, erro
 		Str("pipelines_path", path).
 		Msg("loading pipeline configuration files")
 
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to stat pipelines path %q: %w", path, err)
+	}
+	if !info.IsDir() {
+		return s.getYamlFile(path)
+	}
+
+	return s.getYamlFilesFromDir(ctx, path)
+}
+
+func (s *Service) getYamlFile(path string) ([]string, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to stat pipelines path %q: %w", path, err)
+	}
+
+	dir := filepath.Dir(path)
+	filename := filepath.Base(path)
+	filePath := path
+
+	// If it's a symlink, resolve it
+	if info.Mode()&os.ModeSymlink != 0 {
+		resolvedPath, err := s.resolveSymLink(dir, filename)
+		if err != nil {
+			return nil, cerrors.Errorf("could not resolve symlink %q: %w", path, err)
+		}
+
+		filePath = resolvedPath
+	}
+
+	if s.isYamlFile(filePath) {
+		return []string{filePath}, nil
+	}
+
+	return nil, cerrors.Errorf("%v is not a yaml file", filePath)
+}
+
+func (s *Service) getYamlFilesFromDir(ctx context.Context, path string) ([]string, error) {
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
 		s.logger.Warn(ctx).
