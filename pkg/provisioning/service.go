@@ -211,27 +211,6 @@ func (s *Service) getYamlFilesFromDir(ctx context.Context, path string) ([]strin
 	return files, nil
 }
 
-func (s *Service) resolveSymLink(basePath, symlink string) (string, error) {
-	fullPath := filepath.Join(basePath, symlink)
-	resolvedPath, err := os.Readlink(fullPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not read symlink: %w", err)
-	}
-
-	// If symlink path is relative, make it absolute
-	if !filepath.IsAbs(resolvedPath) {
-		resolvedPath = filepath.Join(basePath, resolvedPath)
-	}
-
-	// Check if the resolved path exists and is a regular file
-	_, err = os.Stat(resolvedPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not stat symlink: %w", err)
-	}
-
-	return resolvedPath, nil
-}
-
 func (s *Service) isYamlFile(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
