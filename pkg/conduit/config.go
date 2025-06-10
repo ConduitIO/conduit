@@ -39,6 +39,10 @@ const (
 
 	SchemaRegistryTypeConfluent = "confluent"
 	SchemaRegistryTypeBuiltin   = "builtin"
+
+	SchemaRegistryAuthTypeBasic  = "basic"
+	SchemaRegistryAuthTypeBearer = "bearer"
+	SchemaRegistryAuthTypeNone   = "none"
 )
 
 // Config holds all configurable values for Conduit.
@@ -120,6 +124,12 @@ type Config struct {
 
 		Confluent struct {
 			ConnectionString string `long:"schema-registry.confluent.connection-string" mapstructure:"connection-string" usage:"confluent schema registry connection string"`
+			Authentication   struct {
+				Type     string `long:"schema-registry.confluent.auth.type" usage:"schema registry authentication type; accepts none,basic,bearer"`
+				Username string `long:"schema-registry.confluent.auth.basic.username" usage:"schema registry basic authentication username"`
+				Password string `long:"schema-registry.confluent.auth.basic.password" usage:"schema registry basic authentication password"`
+				Token    string `long:"schema-registry.confluent.auth.bearer.token" usage:"schema registry authentication bearer token"`
+			}
 		}
 	} `mapstructure:"schema-registry"`
 
@@ -177,6 +187,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
+	cfg.SchemaRegistry.Confluent.Authentication.Type = SchemaRegistryAuthTypeNone
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
@@ -219,6 +230,25 @@ func (c Config) validateSchemaRegistryConfig() error {
 		if c.SchemaRegistry.Confluent.ConnectionString == "" {
 			return requiredConfigFieldErr("schema-registry.confluent.connection-string")
 		}
+		// check auth type
+		switch c.SchemaRegistry.Confluent.Authentication.Type {
+		case SchemaRegistryAuthTypeBasic:
+			if c.SchemaRegistry.Confluent.Authentication.Username == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.basic.username")
+			}
+			if c.SchemaRegistry.Confluent.Authentication.Password == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.basic.password")
+			}
+		case SchemaRegistryAuthTypeBearer:
+			if c.SchemaRegistry.Confluent.Authentication.Token == "" {
+				return requiredConfigFieldErr("schema-registry.confluent.auth.bearer.token")
+			}
+		case SchemaRegistryAuthTypeNone:
+			// no authentication required, do nothing.
+		default:
+			return requiredConfigFieldErr("schema-registry.confluent.auth.type")
+		}
+
 	case SchemaRegistryTypeBuiltin:
 		// all good
 	default:
