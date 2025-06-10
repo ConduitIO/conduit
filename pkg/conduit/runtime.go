@@ -268,14 +268,14 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 			sr.URLs(config.SchemaRegistry.Confluent.ConnectionString),
 		}
 		// Basic Auth
-		if config.SchemaRegistry.Confluent.Authentication.Type == "basic" {
+		if config.SchemaRegistry.Confluent.Authentication.Type == SchemaRegistryAuthTypeBasic {
 			opts = append(opts, sr.BasicAuth(
 				config.SchemaRegistry.Confluent.Authentication.Username,
 				config.SchemaRegistry.Confluent.Authentication.Password,
 			))
 		}
 		// Bearer Auth
-		if config.SchemaRegistry.Confluent.Authentication.Type == "bearer" {
+		if config.SchemaRegistry.Confluent.Authentication.Type == SchemaRegistryAuthTypeBearer {
 			opts = append(opts, sr.BearerToken(config.SchemaRegistry.Confluent.Authentication.Token))
 		}
 		schemaRegistry, err = schemaregistry.NewClient(logger, opts...)
