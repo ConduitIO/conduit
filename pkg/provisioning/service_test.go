@@ -166,7 +166,6 @@ func TestService_Init_Create(t *testing.T) {
 			is.NoErr(err)
 		})
 	}
-
 }
 
 func TestService_Init_Update(t *testing.T) {
