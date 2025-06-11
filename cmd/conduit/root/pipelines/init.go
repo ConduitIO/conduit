@@ -264,7 +264,7 @@ func (c *InitCommand) getPipelineDescription() string {
 
 	if c.isDemoPipeline() {
 		dsc += fmt.Sprintf("It is a demo pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
-			"Next step is simply run `conduit run` in your terminal and you should see a new record being logged every second.\n"+
+			"The next step is to simply run `conduit run` in your terminal and you should see a new record being logged every second.\n"+
 			"Check out https://conduit.io/docs/using/pipelines/configuration-file "+
 			"to learn about how this file is structured.", c.sourceConnector, c.destinationConnector)
 	} else {
