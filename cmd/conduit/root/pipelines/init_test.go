@@ -295,4 +295,3 @@ func TestInit_getPipelineDescription(t *testing.T) {
 		})
 	}
 }
-setSourceAndConnector
