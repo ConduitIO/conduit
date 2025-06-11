@@ -27,7 +27,7 @@ func TestInitExecutionNoArgs(t *testing.T) {
 	c := InitCommand{}
 	err := c.Args([]string{})
 	is.NoErr(err)
-	is.Equal(defaultPipelineName, c.args.pipelineName)
+	is.Equal("", c.args.pipelineName)
 }
 
 func TestInitExecutionMultipleArgs(t *testing.T) {
@@ -67,31 +67,42 @@ func TestInit_getPipelineName(t *testing.T) {
 		},
 		{
 			name:             "Default pipeline name with custom source and destination",
-			argsPipelineName: defaultPipelineName,
+			argsPipelineName: demoPipelineName,
 			flagsSource:      "custom-source",
 			flagsDestination: "custom-destination",
-			expected:         "custom-source-to-custom-destination",
+			expected:         demoPipelineName,
 		},
 		{
 			name:             "Default pipeline name with custom source only",
-			argsPipelineName: defaultPipelineName,
+			argsPipelineName: demoPipelineName,
+			flagsSource:      "custom-source",
+			flagsDestination: "",
+			expected:         demoPipelineName,
+		},
+		{
+			name:             "Default pipeline name with custom destination only",
+			argsPipelineName: demoPipelineName,
+			flagsSource:      "",
+			flagsDestination: "custom-destination",
+			expected:         demoPipelineName,
+		},
+		{
+			name:             "Default pipeline name with default source and destination",
+			flagsSource:      "",
+			flagsDestination: "",
+			expected:         demoPipelineName,
+		},
+		{
+			name:             "With custom source only",
 			flagsSource:      "custom-source",
 			flagsDestination: "",
 			expected:         fmt.Sprintf("custom-source-to-%s", defaultDestination),
 		},
 		{
-			name:             "Default pipeline name with custom destination only",
-			argsPipelineName: defaultPipelineName,
+			name:             "With custom destination only",
 			flagsSource:      "",
 			flagsDestination: "custom-destination",
 			expected:         fmt.Sprintf("%s-to-custom-destination", defaultSource),
-		},
-		{
-			name:             "Default pipeline name with default source and destination",
-			argsPipelineName: defaultPipelineName,
-			flagsSource:      "",
-			flagsDestination: "",
-			expected:         fmt.Sprintf("%s-to-%s", defaultSource, defaultDestination),
 		},
 	}
 
@@ -104,7 +115,180 @@ func TestInit_getPipelineName(t *testing.T) {
 			c.flags.Source = tt.flagsSource
 			c.flags.Destination = tt.flagsDestination
 
+			c.setSourceAndConnector()
 			got := c.getPipelineName()
+			is.Equal(got, tt.expected)
+		})
+	}
+}
+
+func TestInit_setSourceAndConnector(t *testing.T) {
+	tests := []struct {
+		name                string
+		flagsSource         string
+		flagsDestination    string
+		expectedSource      string
+		expectedDestination string
+	}{
+		{
+			name:                "Default source and destination",
+			flagsSource:         "",
+			flagsDestination:    "",
+			expectedSource:      defaultSource,
+			expectedDestination: defaultDestination,
+		},
+		{
+			name:                "Custom source only",
+			flagsSource:         "custom-source",
+			flagsDestination:    "",
+			expectedSource:      "custom-source",
+			expectedDestination: defaultDestination,
+		},
+		{
+			name:                "Custom destination only",
+			flagsSource:         "",
+			flagsDestination:    "custom-destination",
+			expectedSource:      defaultSource,
+			expectedDestination: "custom-destination",
+		},
+		{
+			name:                "Custom source and destination",
+			flagsSource:         "custom-source",
+			flagsDestination:    "custom-destination",
+			expectedSource:      "custom-source",
+			expectedDestination: "custom-destination",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			c := &InitCommand{}
+
+			c.flags.Source = tt.flagsSource
+			c.flags.Destination = tt.flagsDestination
+
+			c.setSourceAndConnector()
+
+			is.Equal(c.sourceConnector, tt.expectedSource)
+			is.Equal(c.destinationConnector, tt.expectedDestination)
+		})
+	}
+}
+
+func TestInit_isDemoPipeline(t *testing.T) {
+	tests := []struct {
+		name             string
+		flagsSource      string
+		flagsDestination string
+		expected         bool
+	}{
+		{
+			name:             "Both source and destination empty",
+			flagsSource:      "",
+			flagsDestination: "",
+			expected:         true,
+		},
+		{
+			name:             "Source set, destination empty",
+			flagsSource:      "custom-source",
+			flagsDestination: "",
+			expected:         false,
+		},
+		{
+			name:             "Source empty, destination set",
+			flagsSource:      "",
+			flagsDestination: "custom-destination",
+			expected:         false,
+		},
+		{
+			name:             "Both source and destination set",
+			flagsSource:      "custom-source",
+			flagsDestination: "custom-destination",
+			expected:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			c := &InitCommand{}
+
+			c.flags.Source = tt.flagsSource
+			c.flags.Destination = tt.flagsDestination
+
+			got := c.isDemoPipeline()
+			is.Equal(got, tt.expected)
+		})
+	}
+}
+
+func TestInit_getPipelineDescription(t *testing.T) {
+	baseDesc := "This pipeline was initialized using the `conduit pipelines init` command.\n"
+
+	demoDesc := func(src, dst string) string {
+		return baseDesc + fmt.Sprintf("It is a demo pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
+			"Next step is simply run `conduit run` in your terminal and you should see a new record being logged every second.", src, dst)
+	}
+
+	customDesc := func(src, dst string) string {
+		return baseDesc + fmt.Sprintf("It is a pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
+			"Make sure you update the configuration values before you run conduit via `conduit run", src, dst)
+	}
+
+	tests := []struct {
+		name             string
+		flagsSource      string
+		flagsDestination string
+		sourceConnector  string
+		destConnector    string
+		expected         string
+	}{
+		{
+			name:             "Demo pipeline",
+			flagsSource:      "",
+			flagsDestination: "",
+			sourceConnector:  defaultSource,
+			destConnector:    defaultDestination,
+			expected:         demoDesc(defaultSource, defaultDestination),
+		},
+		{
+			name:             "Custom source and destination",
+			flagsSource:      "custom-source",
+			flagsDestination: "custom-destination",
+			sourceConnector:  "custom-source",
+			destConnector:    "custom-destination",
+			expected:         customDesc("custom-source", "custom-destination"),
+		},
+		{
+			name:             "Custom source only",
+			flagsSource:      "custom-source",
+			flagsDestination: "",
+			sourceConnector:  "custom-source",
+			destConnector:    defaultDestination,
+			expected:         customDesc("custom-source", defaultDestination),
+		},
+		{
+			name:             "Custom destination only",
+			flagsSource:      "",
+			flagsDestination: "custom-destination",
+			sourceConnector:  defaultSource,
+			destConnector:    "custom-destination",
+			expected:         customDesc(defaultSource, "custom-destination"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			c := &InitCommand{}
+
+			c.flags.Source = tt.flagsSource
+			c.flags.Destination = tt.flagsDestination
+			c.sourceConnector = tt.sourceConnector
+			c.destinationConnector = tt.destConnector
+
+			got := c.getPipelineDescription()
 			is.Equal(got, tt.expected)
 		})
 	}

@@ -1,10 +1,11 @@
 version: "2.2"
 pipelines:
-  - id: example-pipeline
+  - id: "{{ .Name }}"
+    description: "{{ .Description }}"
     status: running
     name: "{{ .Name }}"
     connectors:
-      - id: example-source
+      - id: "{{ .SourceSpec.Name }}-source"
         type: source
         plugin: "{{ .SourceSpec.Name }}"
         {{ if gt (len .SourceSpec.Params) 0 -}}
@@ -16,7 +17,7 @@ pipelines:
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}
           {{- end }}
         {{- end }}
-      - id: example-destination
+      - id: "{{ .DestinationSpec.Name }}-destination"
         type: destination
         plugin: "{{ .DestinationSpec.Name }}"
         {{ if gt (len .DestinationSpec.Params) 0 -}}
