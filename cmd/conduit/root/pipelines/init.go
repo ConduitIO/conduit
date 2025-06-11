@@ -42,8 +42,8 @@ var (
 
 const (
 	defaultSource       = "generator"
-	defaultDestination  = "file"
-	defaultPipelineName = "generator-to-file"
+	defaultDestination  = "log"
+	defaultPipelineName = "generator-to-log"
 )
 
 type InitArgs struct {
@@ -52,7 +52,7 @@ type InitArgs struct {
 
 type InitFlags struct {
 	Source        string `long:"source" usage:"Source connector (any of the built-in connectors)." default:"generator"`
-	Destination   string `long:"destination" usage:"Destination connector (any of the built-in connectors)." default:"file"`
+	Destination   string `long:"destination" usage:"Destination connector (any of the built-in connectors)." default:"log"`
 	PipelinesPath string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
 }
 
@@ -71,8 +71,6 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
-	flags.SetDefault("source", "generator")
-	flags.SetDefault("destination", "file")
 	return flags
 }
 
@@ -92,10 +90,10 @@ func (c *InitCommand) Usage() string { return "init [PIPELINE_NAME]" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Initialize an example pipeline.",
+		Short: "Initialize a pipeline with the chosen connectors via flags, or a demo pipeline if no flags are specified.",
 		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
-a simple and runnable generator-to-log pipeline is configured. `,
+a simple and runnable generator-to-log pipeline is fully configured.`,
 		Example: "conduit pipelines init\n" +
 			"conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
 			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines",
@@ -103,11 +101,16 @@ a simple and runnable generator-to-log pipeline is configured. `,
 }
 
 func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
+	src := c.flags.Source
+	if src == "" {
+		src = defaultSource
+	}
+
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
-		if specs.Name == c.flags.Source || specs.Name == "builtin:"+c.flags.Source {
+		if specs.Name == src || specs.Name == "builtin:"+src {
 			if conn.NewSource == nil {
-				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", c.flags.Source)
+				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", src)
 			}
 
 			return connectorSpec{
@@ -117,15 +120,20 @@ func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
 		}
 	}
 
-	return connectorSpec{}, cerrors.Errorf("%v: %w", c.flags.Source, plugin.ErrPluginNotFound)
+	return connectorSpec{}, cerrors.Errorf("%v: %w", src, plugin.ErrPluginNotFound)
 }
 
 func (c *InitCommand) getDestinationSpec() (connectorSpec, error) {
+	dest := c.flags.Destination
+	if dest == "" {
+		dest = defaultDestination
+	}
+
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
-		if specs.Name == c.flags.Destination || specs.Name == "builtin:"+c.flags.Destination {
+		if specs.Name == dest || specs.Name == "builtin:"+dest {
 			if conn.NewDestination == nil {
-				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", c.flags.Destination)
+				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", dest)
 			}
 
 			return connectorSpec{
@@ -134,7 +142,7 @@ func (c *InitCommand) getDestinationSpec() (connectorSpec, error) {
 			}, nil
 		}
 	}
-	return connectorSpec{}, cerrors.Errorf("%v: %w", c.flags.Destination, plugin.ErrPluginNotFound)
+	return connectorSpec{}, cerrors.Errorf("%v: %w", dest, plugin.ErrPluginNotFound)
 }
 
 // getDemoSourceGeneratorSpec returns a simplified version of the source generator connector.
@@ -167,17 +175,11 @@ func (c *InitCommand) getDemoSourceGeneratorSpec(spec connectorSpec) connectorSp
 	}
 }
 
-// getDemoDestinationFileSpec returns a simplified version of the destination file connector.
-func (c *InitCommand) getDemoDestinationFileSpec(spec connectorSpec) connectorSpec {
+// getDemoDestinationLogSpec returns a simplified version of the destination log connector.
+func (c *InitCommand) getDemoDestinationLogSpec(_ connectorSpec) connectorSpec {
 	return connectorSpec{
-		Name: defaultDestination,
-		Params: map[string]config.Parameter{
-			"path": {
-				Description: spec.Params["path"].Description,
-				Type:        spec.Params["path"].Type,
-				Default:     "./destination.txt",
-			},
-		},
+		Name:   defaultDestination,
+		Params: map[string]config.Parameter{},
 	}
 }
 
@@ -187,7 +189,7 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	// provide a simplified version
+	// provide a working demo source spec
 	if c.flags.Source == "" {
 		srcSpec = c.getDemoSourceGeneratorSpec(srcSpec)
 	}
@@ -197,9 +199,9 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
-	// provide a simplified version
+	// provide a working demo destination spec
 	if c.flags.Destination == "" {
-		dstSpec = c.getDemoDestinationFileSpec(dstSpec)
+		dstSpec = c.getDemoDestinationLogSpec(dstSpec)
 	}
 
 	return pipelineTemplate{
