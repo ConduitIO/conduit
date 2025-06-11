@@ -73,7 +73,7 @@ func (s *Service) Init(ctx context.Context) error {
 		Str("pipelines_path", s.pipelinesPath).
 		Msg("initializing the provisioning service")
 
-	files, err := s.getYamlFiles(ctx, s.pipelinesPath)
+	files, err := s.getPipelineConfigFiles(ctx, s.pipelinesPath)
 	if err != nil {
 		return cerrors.Errorf("failed to read pipelines folder %q: %w", s.pipelinesPath, err)
 	}
@@ -167,10 +167,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// getYamlFiles reads files in the path and collects paths to all
-// files that end with .yml or .yaml. It only reads files in the top-level
-// directory and skips non-regular files.
-func (s *Service) getYamlFiles(ctx context.Context, path string) ([]string, error) {
+// getPipelineConfigFiles collects individual configuration files from the given path.
+// If the given path is a path to a file, then Conduit will attempt to load a pipeline
+// configuration file from that path (regardless of the file type). This is because
+// we assume that the user is intentionally using this file.
+// If the given path is a directory, then this method returns all entries in the directory
+// that are not directories themselves, and that have their names end in yml or yaml.
+func (s *Service) getPipelineConfigFiles(ctx context.Context, path string) ([]string, error) {
 	if path == "" {
 		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
 	}
@@ -179,6 +182,18 @@ func (s *Service) getYamlFiles(ctx context.Context, path string) ([]string, erro
 		Str("pipelines_path", path).
 		Msg("loading pipeline configuration files")
 
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to stat pipelines path %q: %w", path, err)
+	}
+	if !info.IsDir() {
+		return []string{path}, nil
+	}
+
+	return s.getYamlFilesFromDir(ctx, path)
+}
+
+func (s *Service) getYamlFilesFromDir(ctx context.Context, path string) ([]string, error) {
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
 		s.logger.Warn(ctx).
@@ -190,43 +205,12 @@ func (s *Service) getYamlFiles(ctx context.Context, path string) ([]string, erro
 	var files []string
 	for _, dirEntry := range dirEntries {
 		filePath := filepath.Join(path, dirEntry.Name())
-		// If it's a symlink, resolve it
-		if dirEntry.Type()&os.ModeSymlink != 0 {
-			resolvedPath, err := s.resolveSymLink(path, dirEntry.Name())
-			if err != nil {
-				return nil, cerrors.Errorf("could not resolve symlink %q: %w", filePath, err)
-			}
-
-			filePath = resolvedPath
-		}
-
 		if s.isYamlFile(filePath) {
 			files = append(files, filePath)
 		}
 	}
 
 	return files, nil
-}
-
-func (s *Service) resolveSymLink(basePath, symlink string) (string, error) {
-	fullPath := filepath.Join(basePath, symlink)
-	resolvedPath, err := os.Readlink(fullPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not read symlink: %w", err)
-	}
-
-	// If symlink path is relative, make it absolute
-	if !filepath.IsAbs(resolvedPath) {
-		resolvedPath = filepath.Join(basePath, resolvedPath)
-	}
-
-	// Check if the resolved path exists and is a regular file
-	_, err = os.Stat(resolvedPath)
-	if err != nil {
-		return "", cerrors.Errorf("could not stat symlink: %w", err)
-	}
-
-	return resolvedPath, nil
 }
 
 func (s *Service) isYamlFile(path string) bool {
