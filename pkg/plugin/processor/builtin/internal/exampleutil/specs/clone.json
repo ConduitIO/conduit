@@ -2,7 +2,7 @@
   "specification": {
     "name": "clone",
     "summary": "Clone records.",
-    "description": "Clone all records N times. All cloned records will have\nthe same data as the original record, except for the metadata field\n`clone.index`, which will be set to the index of the clone (0-based).\n\n**Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)\nto this processor if you only want to clone some records.",
+    "description": "Clone all records N times. All cloned records will have\nthe same data as the original record, except for the metadata field\n`clone.index`, which will be set to the index of the clone (0-based).\n\n**Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)\nto this processor if you only want to clone some records.\n\n**Important:** This processor currently only works using the pipeline architecture\nv2, which can be enabled using the flag `--preview.pipeline-arch-v2`.\nUsing it without the flag will result in an error.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {

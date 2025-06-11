@@ -50,7 +50,11 @@ the same data as the original record, except for the metadata field
 ` + "`clone.index`" + `, which will be set to the index of the clone (0-based).
 
 **Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)
-to this processor if you only want to clone some records.`,
+to this processor if you only want to clone some records.
+
+**Important:** This processor currently only works using the pipeline architecture
+v2, which can be enabled using the flag ` + "`--preview.pipeline-arch-v2`" + `.
+Using it without the flag will result in an error.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: cloneConfig{}.Parameters(),
