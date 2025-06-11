@@ -23,6 +23,7 @@ type connectorSpec struct {
 
 type pipelineTemplate struct {
 	Name            string
+	Description     string
 	SourceSpec      connectorSpec
 	DestinationSpec connectorSpec
 }
