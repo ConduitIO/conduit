@@ -16,7 +16,7 @@ package impl
 
 import (
 	"context"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -26,32 +26,50 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestSplitProcessor_Process_Success(t *testing.T) {
+func TestCloneProcessor_Process_Success(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
-		field  string
+		count  int
 		record opencdc.Record
 		want   sdk.MultiRecord
 	}{
 		{
-			name:  "single field",
-			field: ".Key.myslice",
+			name:  "with metadata",
+			count: 2,
+			record: opencdc.Record{
+				Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
+				Metadata: opencdc.Metadata{"foo": "bar"},
+			},
+			want: sdk.MultiRecord{
+				opencdc.Record{
+					Metadata: map[string]string{"clone.index": "0", "foo": "bar"},
+					Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
+				},
+				opencdc.Record{
+					Metadata: map[string]string{"clone.index": "1", "foo": "bar"},
+					Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
+				},
+			},
+		},
+		{
+			name:  "no metadata",
+			count: 3,
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 			},
 			want: sdk.MultiRecord{
 				opencdc.Record{
-					Metadata: map[string]string{"split.index": "0"},
-					Key:      opencdc.StructuredData{"myslice": 1},
+					Metadata: map[string]string{"clone.index": "0"},
+					Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 				},
 				opencdc.Record{
-					Metadata: map[string]string{"split.index": "1"},
-					Key:      opencdc.StructuredData{"myslice": 2},
+					Metadata: map[string]string{"clone.index": "1"},
+					Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 				},
 				opencdc.Record{
-					Metadata: map[string]string{"split.index": "2"},
-					Key:      opencdc.StructuredData{"myslice": 3},
+					Metadata: map[string]string{"clone.index": "2"},
+					Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 				},
 			},
 		},
@@ -60,9 +78,9 @@ func TestSplitProcessor_Process_Success(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			logger := log.Test(t)
-			proc := NewSplitProcessor(logger)
+			proc := NewCloneProcessor(logger)
 
-			cfg := config.Config{"field": tc.field}
+			cfg := config.Config{"count": strconv.Itoa(tc.count)}
 			err := proc.Configure(ctx, cfg)
 			is.NoErr(err)
 
@@ -73,55 +91,19 @@ func TestSplitProcessor_Process_Success(t *testing.T) {
 	}
 }
 
-func TestSplitProcessor_Process_Fail(t *testing.T) {
-	ctx := context.Background()
-	testCases := []struct {
-		name    string
-		field   string
-		record  opencdc.Record
-		wantErr string
-	}{
-		{
-			name:  "not a slice",
-			field: ".Key.id",
-			record: opencdc.Record{
-				Key: opencdc.StructuredData{"id": "123"},
-			},
-			wantErr: `field ".Key.id" is not a slice`,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
-			logger := log.Test(t)
-			proc := NewSplitProcessor(logger)
-
-			cfg := config.Config{"field": tc.field}
-			err := proc.Configure(ctx, cfg)
-			is.NoErr(err)
-
-			output := proc.Process(ctx, []opencdc.Record{tc.record})
-			is.True(len(output) == 1)
-			rec, ok := output[0].(sdk.ErrorRecord)
-			is.True(ok)
-			is.True(strings.Contains(rec.Error.Error(), tc.wantErr))
-		})
-	}
-}
-
-func TestSplitProcessor_Configure_Fail(t *testing.T) {
-	proc := NewSplitProcessor(log.Nop())
+func TestCloneProcessor_Configure_Fail(t *testing.T) {
+	proc := NewCloneProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name string
 		cfg  config.Config
 	}{
 		{
-			name: "invalid config, contains an invalid prefix for the field",
-			cfg:  config.Config{"field": ".Metadata.foo"},
+			name: "invalid config, less than 2",
+			cfg:  config.Config{"count": "1"},
 		}, {
-			name: "invalid config, invalid prefix",
-			cfg:  config.Config{"field": "aPayload.foo"},
+			name: "invalid config, not a number",
+			cfg:  config.Config{"count": "foo"},
 		}, {
 			name: "missing param",
 			cfg:  config.Config{},
