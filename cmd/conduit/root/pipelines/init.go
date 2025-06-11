@@ -275,7 +275,7 @@ func (c *InitCommand) getPipelineDescription() string {
 	return dsc
 }
 
-func (c *InitCommand) setSourceAndConnector() {
+func (c *InitCommand) setSourceAndDestinationConnector() {
 	c.sourceConnector = defaultSource
 	c.destinationConnector = defaultDestination
 
@@ -289,7 +289,7 @@ func (c *InitCommand) setSourceAndConnector() {
 }
 
 func (c *InitCommand) Execute(_ context.Context) error {
-	c.setSourceAndConnector()
+	c.setSourceAndDestinationConnector()
 	c.pipelineName = c.getPipelineName()
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
 

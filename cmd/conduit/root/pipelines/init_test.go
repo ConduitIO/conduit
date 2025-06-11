@@ -115,14 +115,14 @@ func TestInit_getPipelineName(t *testing.T) {
 			c.flags.Source = tt.flagsSource
 			c.flags.Destination = tt.flagsDestination
 
-			c.setSourceAndConnector()
+			c.setSourceAndDestinationConnector()
 			got := c.getPipelineName()
 			is.Equal(got, tt.expected)
 		})
 	}
 }
 
-func TestInit_setSourceAndConnector(t *testing.T) {
+func TestInit_setSourceAndDestinationConnector(t *testing.T) {
 	tests := []struct {
 		name                string
 		flagsSource         string
@@ -168,7 +168,7 @@ func TestInit_setSourceAndConnector(t *testing.T) {
 			c.flags.Source = tt.flagsSource
 			c.flags.Destination = tt.flagsDestination
 
-			c.setSourceAndConnector()
+			c.setSourceAndDestinationConnector()
 
 			is.Equal(c.sourceConnector, tt.expectedSource)
 			is.Equal(c.destinationConnector, tt.expectedDestination)
@@ -295,3 +295,4 @@ func TestInit_getPipelineDescription(t *testing.T) {
 		})
 	}
 }
+setSourceAndConnector
