@@ -168,7 +168,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 }
 
 // getPipelineConfigFiles collects individual configuration files from the given path.
-// If the given path is NOT a directory, then the path is used as is.
+// If the given path is a path to a file, then Conduit will attempt to load a pipeline
+// configuration file from that path (regardless of the file type). This is because
+// we assume that the user is intentionally using this file.
 // If the given path is a directory, then this method returns all entries in the directory
 // that are not directories themselves, and that have their names end in yml or yaml.
 func (s *Service) getPipelineConfigFiles(ctx context.Context, path string) ([]string, error) {
