@@ -41,9 +41,9 @@ var (
 )
 
 const (
-	defaultSource       = "generator"
-	defaultDestination  = "log"
-	defaultPipelineName = "generator-to-log"
+	defaultSource      = "generator"
+	defaultDestination = "log"
+	demoPipelineName   = "demo-pipeline"
 )
 
 type InitArgs struct {
@@ -57,9 +57,12 @@ type InitFlags struct {
 }
 
 type InitCommand struct {
-	args           InitArgs
-	flags          InitFlags
-	configFilePath string
+	args                 InitArgs
+	flags                InitFlags
+	configFilePath       string
+	sourceConnector      string
+	destinationConnector string
+	pipelineName         string
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
@@ -71,17 +74,15 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
+
 	return flags
 }
 
 func (c *InitCommand) Args(args []string) error {
-	switch len(args) {
-	case 0:
-		c.args.pipelineName = defaultPipelineName
-	case 1:
-		c.args.pipelineName = args[0]
-	default:
+	if len(args) > 1 {
 		return cerrors.Errorf("too many arguments")
+	} else if len(args) == 1 {
+		c.args.pipelineName = args[0]
 	}
 	return nil
 }
@@ -93,8 +94,9 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 		Short: "Initialize a pipeline with the chosen connectors via flags, or a demo pipeline if no flags are specified.",
 		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
-a simple and runnable generator-to-log pipeline is fully configured.`,
+a simple and runnable demo-pipeline is fully configured.`,
 		Example: "conduit pipelines init\n" +
+			"conduit pipelines init --source generator --destination s3 \n" +
 			"conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
 			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines",
 	}
@@ -145,8 +147,8 @@ func (c *InitCommand) getDestinationSpec() (connectorSpec, error) {
 	return connectorSpec{}, cerrors.Errorf("%v: %w", dest, plugin.ErrPluginNotFound)
 }
 
-// getDemoSourceGeneratorSpec returns a simplified version of the source generator connector.
-func (c *InitCommand) getDemoSourceGeneratorSpec(spec connectorSpec) connectorSpec {
+// getDemoSourceSpec returns a simplified version of the source generator connector.
+func (c *InitCommand) getDemoSourceSpec(spec connectorSpec) connectorSpec {
 	return connectorSpec{
 		Name: defaultSource,
 		Params: map[string]config.Parameter{
@@ -175,8 +177,8 @@ func (c *InitCommand) getDemoSourceGeneratorSpec(spec connectorSpec) connectorSp
 	}
 }
 
-// getDemoDestinationLogSpec returns a simplified version of the destination log connector.
-func (c *InitCommand) getDemoDestinationLogSpec(_ connectorSpec) connectorSpec {
+// getDemoDestinationSpec returns a simplified version of the destination log connector.
+func (c *InitCommand) getDemoDestinationSpec(_ connectorSpec) connectorSpec {
 	return connectorSpec{
 		Name:   defaultDestination,
 		Params: map[string]config.Parameter{},
@@ -191,7 +193,7 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 
 	// provide a working demo source spec
 	if c.flags.Source == "" {
-		srcSpec = c.getDemoSourceGeneratorSpec(srcSpec)
+		srcSpec = c.getDemoSourceSpec(srcSpec)
 	}
 
 	dstSpec, err := c.getDestinationSpec()
@@ -201,11 +203,12 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 
 	// provide a working demo destination spec
 	if c.flags.Destination == "" {
-		dstSpec = c.getDemoDestinationLogSpec(dstSpec)
+		dstSpec = c.getDemoDestinationSpec(dstSpec)
 	}
 
 	return pipelineTemplate{
-		Name:            c.getPipelineName(),
+		Name:            c.pipelineName,
+		Description:     c.getPipelineDescription(),
 		SourceSpec:      srcSpec,
 		DestinationSpec: dstSpec,
 	}, nil
@@ -240,25 +243,55 @@ func (c *InitCommand) write(pipeline pipelineTemplate) error {
 // getPipelineName returns the desired pipeline name based on configuration.
 // If user provided one, it'll respect it. Otherwise, it'll be based on source and dest connectors.
 func (c *InitCommand) getPipelineName() string {
-	src := defaultSource
-	dest := defaultDestination
-
-	if c.args.pipelineName != defaultPipelineName {
+	if c.args.pipelineName != "" {
 		return c.args.pipelineName
 	}
 
+	if c.isDemoPipeline() {
+		return demoPipelineName
+	}
+
+	return fmt.Sprintf("%s-to-%s", c.sourceConnector, c.destinationConnector)
+}
+
+func (c *InitCommand) isDemoPipeline() bool {
+	return c.flags.Source == "" && c.flags.Destination == ""
+}
+
+// getPipelineDescription returns a description that will be used in the template.
+func (c *InitCommand) getPipelineDescription() string {
+	dsc := "This pipeline was initialized using the `conduit pipelines init` command.\n"
+
+	if c.isDemoPipeline() {
+		dsc += fmt.Sprintf("It is a demo pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
+			"The next step is to simply run `conduit run` in your terminal and you should see a new record being logged every second.\n"+
+			"Check out https://conduit.io/docs/using/pipelines/configuration-file "+
+			"to learn about how this file is structured.", c.sourceConnector, c.destinationConnector)
+	} else {
+		dsc += fmt.Sprintf("It is a pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
+			"Make sure you update the configuration values before you run conduit via `conduit run", c.sourceConnector, c.destinationConnector)
+	}
+
+	return dsc
+}
+
+func (c *InitCommand) setSourceAndDestinationConnector() {
+	c.sourceConnector = defaultSource
+	c.destinationConnector = defaultDestination
+
 	if c.flags.Source != "" {
-		src = c.flags.Source
+		c.sourceConnector = c.flags.Source
 	}
 
 	if c.flags.Destination != "" {
-		dest = c.flags.Destination
+		c.destinationConnector = c.flags.Destination
 	}
-	return fmt.Sprintf("%s-to-%s", src, dest)
 }
 
 func (c *InitCommand) Execute(_ context.Context) error {
-	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("pipeline-%s.yaml", c.getPipelineName()))
+	c.setSourceAndDestinationConnector()
+	c.pipelineName = c.getPipelineName()
+	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
 
 	pipeline, err := c.buildTemplatePipeline()
 	if err != nil {

@@ -1,0 +1,114 @@
+{
+  "specification": {
+    "name": "clone",
+    "summary": "Clone records.",
+    "description": "Clone all records N times. For each input record, the processor\noutputs the original record plus N clones (for a total of N+1 records). Each clone\nis identical to the original, except the metadata field `clone.index` is\nset to the clone's index (0 for the original, 1 to N for the clones).\n\n**Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)\nto this processor if you only want to clone some records.\n\n**Important:** This processor currently only works using the pipeline architecture\nv2, which can be enabled using the flag `--preview.pipeline-arch-v2`.\nUsing it without the flag will result in an error.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "count": {
+        "default": "",
+        "description": "The number of times to clone each record (e.g. if count is 2, the processor\nwill output 3 records for every input record).",
+        "type": "int",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "greater-than",
+            "value": "0"
+          }
+        ]
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Clone record into multiple records",
+      "description": "This example takes a record and clones it once, producing 2 records, each containing the same data, except for the metadata field `clone.index`.",
+      "config": {
+        "count": "1"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "foo": "bar"
+        },
+        "key": {
+          "id": 123
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "age": 30,
+            "name": "Alice"
+          }
+        }
+      },
+      "want": [
+        {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "clone.index": "0",
+            "foo": "bar"
+          },
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "age": 30,
+              "name": "Alice"
+            }
+          }
+        },
+        {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "clone.index": "1",
+            "foo": "bar"
+          },
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "age": 30,
+              "name": "Alice"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
