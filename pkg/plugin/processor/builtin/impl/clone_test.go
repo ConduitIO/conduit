@@ -36,7 +36,7 @@ func TestCloneProcessor_Process_Success(t *testing.T) {
 	}{
 		{
 			name:  "with metadata",
-			count: 2,
+			count: 1,
 			record: opencdc.Record{
 				Key:      opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 				Metadata: opencdc.Metadata{"foo": "bar"},
@@ -54,7 +54,7 @@ func TestCloneProcessor_Process_Success(t *testing.T) {
 		},
 		{
 			name:  "no metadata",
-			count: 3,
+			count: 2,
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"myslice": []int{1, 2, 3}},
 			},
@@ -99,8 +99,8 @@ func TestCloneProcessor_Configure_Fail(t *testing.T) {
 		cfg  config.Config
 	}{
 		{
-			name: "invalid config, less than 2",
-			cfg:  config.Config{"count": "1"},
+			name: "invalid config, less than 1",
+			cfg:  config.Config{"count": "0"},
 		}, {
 			name: "invalid config, not a number",
 			cfg:  config.Config{"count": "foo"},

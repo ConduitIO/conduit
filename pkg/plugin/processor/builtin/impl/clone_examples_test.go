@@ -27,8 +27,8 @@ func ExampleCloneProcessor_simple() {
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Clone record into multiple records",
-		Description: "This example takes a record and clones it into 2 records, each containing the same data, except for the metadata field `clone.index`.",
-		Config:      config.Config{"count": "2"},
+		Description: "This example takes a record and clones it once, producing 2 records, each containing the same data, except for the metadata field `clone.index`.",
+		Config:      config.Config{"count": "1"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"foo": "bar"},

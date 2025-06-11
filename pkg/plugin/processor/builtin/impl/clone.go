@@ -36,18 +36,19 @@ type CloneProcessor struct {
 func NewCloneProcessor(log.CtxLogger) *CloneProcessor { return &CloneProcessor{} }
 
 type cloneConfig struct {
-	// The number of records after cloning (e.g. if count is 3, the processor
+	// The number of times to clone each record (e.g. if count is 2, the processor
 	// will output 3 records for every input record).
-	Count int `json:"count" validate:"required,gt=1"`
+	Count int `json:"count" validate:"required,gt=0"`
 }
 
 func (p *CloneProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "clone",
 		Summary: "Clone records.",
-		Description: `Clone all records N times. All cloned records will have
-the same data as the original record, except for the metadata field
-` + "`clone.index`" + `, which will be set to the index of the clone (0-based).
+		Description: `Clone all records N times. For each input record, the processor
+outputs the original record plus N clones (for a total of N+1 records). Each clone
+is identical to the original, except the metadata field ` + "`clone.index`" + ` is
+set to the clone's index (0 for the original, 1 to N for the clones).
 
 **Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)
 to this processor if you only want to clone some records.
@@ -72,15 +73,15 @@ func (p *CloneProcessor) Configure(ctx context.Context, c config.Config) error {
 func (p *CloneProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i, rec := range records {
-		mr := make(sdk.MultiRecord, p.config.Count)
-		for j := range p.config.Count {
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]string)
+		}
+
+		mr := make(sdk.MultiRecord, p.config.Count+1)
+		for j := range p.config.Count + 1 {
 			newRec := rec.Clone()
 			// Set the metadata to indicate the clone index
-			if newRec.Metadata == nil {
-				newRec.Metadata = make(map[string]string)
-			}
 			newRec.Metadata["clone.index"] = strconv.Itoa(j)
-
 			mr[j] = newRec
 		}
 		out[i] = mr

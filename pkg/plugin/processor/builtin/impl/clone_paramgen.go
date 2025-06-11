@@ -15,11 +15,11 @@ func (cloneConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		cloneConfigCount: {
 			Default:     "",
-			Description: "The number of records after cloning (e.g. if count is 3, the processor\nwill output 3 records for every input record).",
+			Description: "The number of times to clone each record (e.g. if count is 2, the processor\nwill output 3 records for every input record).",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationGreaterThan{V: 1},
+				config.ValidationGreaterThan{V: 0},
 			},
 		},
 	}
