@@ -33,5 +33,31 @@ services:
     networks:
       - confluent
 
+  schema-registry-basic-auth:
+    image: confluentinc/cp-schema-registry:7.9.1
+    depends_on:
+      - kafka
+    ports:
+      - '8086:8085'
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'PLAINTEXT://kafka:9092'
+      SCHEMA_REGISTRY_HOST_NAME: 'schema-registry-basic-auth'
+      SCHEMA_REGISTRY_LISTENERS: 'http://0.0.0.0:8085'
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: 'INFO'
+
+      # enable basic authentication
+      SCHEMA_REGISTRY_AUTHENTICATION_METHOD: BASIC
+      SCHEMA_REGISTRY_AUTHENTICATION_ROLES: admin,developer,user
+      SCHEMA_REGISTRY_AUTHENTICATION_REALM: SchemaRegistry-Props
+
+      SCHEMA_REGISTRY_OPTS: >
+        -Djava.security.auth.login.config=/etc/schema-registry/schema-registry.jaas
+
+    volumes:
+      - ./schema-registry.jaas:/etc/schema-registry/schema-registry.jaas:ro
+      - ./passwords.properties:/etc/schema-registry/passwords.properties:ro
+    networks:
+      - confluent
+
 networks:
   confluent:
