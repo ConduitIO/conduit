@@ -13,10 +13,10 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.10.4
 	github.com/conduitio/conduit-connector-kafka v0.12.3
 	github.com/conduitio/conduit-connector-log v0.7.3
-	github.com/conduitio/conduit-connector-postgres v0.13.1-0.20250611110928-9da30f9cd4b4
+	github.com/conduitio/conduit-connector-postgres v0.14.0
 	github.com/conduitio/conduit-connector-protocol v0.9.4
 	github.com/conduitio/conduit-connector-s3 v0.9.3
-	github.com/conduitio/conduit-connector-sdk v0.14.0
+	github.com/conduitio/conduit-connector-sdk v0.14.1
 	github.com/conduitio/conduit-processor-sdk v0.5.0
 	github.com/conduitio/conduit-schema-registry v0.2.6
 	github.com/conduitio/ecdysis v0.4.2
@@ -299,7 +299,7 @@ require (
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
-	golang.org/x/time v0.11.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250404141209-ee84b53bf3d0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
