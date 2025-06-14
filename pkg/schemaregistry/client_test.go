@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !integration
+
 package schemaregistry
 
 import (
@@ -29,6 +31,7 @@ import (
 )
 
 func TestClient_NotFound(t *testing.T) {
+	url := schemaregistrytest.TestSchemaRegistryURL(t)
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
@@ -37,7 +40,7 @@ func TestClient_NotFound(t *testing.T) {
 	c, err := NewClient(
 		logger,
 		sr.HTTPClient(&http.Client{Transport: rtr}),
-		sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)),
+		sr.URLs(url),
 	)
 	is.NoErr(err)
 
@@ -93,10 +96,12 @@ func TestClient_CacheMiss(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 
+	url := schemaregistrytest.TestSchemaRegistryURL(t)
+
 	// register schema in the schema registry but not in the client, to get a
 	// cache miss but fetch from registry should return the schema
 
-	srClient, err := sr.NewClient(sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
+	srClient, err := sr.NewClient(sr.URLs(url))
 	is.NoErr(err)
 	want, err := srClient.CreateSchema(ctx, "test-cache-miss", sr.Schema{
 		Schema: `"string"`,
@@ -110,7 +115,7 @@ func TestClient_CacheMiss(t *testing.T) {
 	c, err := NewClient(
 		logger,
 		sr.HTTPClient(&http.Client{Transport: rtr}),
-		sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)),
+		sr.URLs(url),
 	)
 	is.NoErr(err)
 

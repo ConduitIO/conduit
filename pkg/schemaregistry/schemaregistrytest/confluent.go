@@ -17,7 +17,10 @@
 package schemaregistrytest
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
+	"time"
 )
 
 // ExampleSchemaRegistryURL points to the schema registry defined in
@@ -27,10 +30,33 @@ func ExampleSchemaRegistryURL(exampleName string, port int) (string, func()) {
 	return "localhost:8085", func() {}
 }
 
-// TestSchemaRegistryURL points to the schema registry defined in
+// TestSchemaRegistryURL points to the schema registries defined in
 // /test/compose-schemaregistry.yaml.
 // This method is only used if the tests are run with --tags=integration.
-func TestSchemaRegistryURL(t testing.TB) string {
+func TestSchemaRegistryURL(t testing.TB, authType string) string {
 	t.Log("Using real schema registry server")
-	return "localhost:8085"
+	switch authType {
+	case "none":
+		return "localhost:8085"
+	case "basic":
+		return "localhost:8086"
+	default:
+		return "localhost:8085"
+	}
+}
+
+func WaitForSchemaRegistry(t testing.TB, url string, timeout time.Duration) error {
+	url = "http://" + url
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		req, _ := http.NewRequest("GET", url+"/subjects", nil)
+		req.SetBasicAuth("admin", "password")
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			resp.Body.Close()
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("schema registry did not become ready within %s", timeout)
 }
