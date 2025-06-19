@@ -1,15 +1,6 @@
 # Conduit
 
-<div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden', maxWidth: '100%' }}>
-  <iframe
-    src="https://www.loom.com/embed/0df6511a4c9c4e3a98dc43ada9e109df?sid=dba50455-ac4e-4e3d-ba66-db88a67f653b?hideEmbedTopBar=true&hide_title=true&hide_owner=true&hide_share=true&hide_speed=true"
-    webkitallowfullscreen
-    frameborder="0"
-    mozallowfullscreen
-    allowFullScreen
-    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-  ></iframe>
-</div>
+https://github.com/user-attachments/assets/5478e46f-3836-4309-9158-1cda6dc327a4
 
 _Data Integration for Production Data Stores. :dizzy:_
 
