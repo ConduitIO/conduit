@@ -1,6 +1,6 @@
 # Conduit
 
-https://github.com/user-attachments/assets/5478e46f-3836-4309-9158-1cda6dc327a4
+https://github.com/user-attachments/assets/cf8206c3-6a54-4b52-ad89-61f017db9422
 
 _Data Integration for Production Data Stores. :dizzy:_
 
