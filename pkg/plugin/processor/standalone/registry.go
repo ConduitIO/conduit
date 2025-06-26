@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/command"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/reactor"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
@@ -51,6 +52,9 @@ type Registry struct {
 	// old way of running processors, which is still supported for backwards
 	// compatibility.
 	buildCommandProcessor processorBuilderFunc[sdk.Processor]
+
+	// TODO comment
+	buildReactorProcessor processorBuilderFunc[sdk.Processor]
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -116,12 +120,19 @@ func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutil
 		return nil, cerrors.Errorf("failed to create command processor builder: %w", err)
 	}
 
+	reactorBuilder, err := reactor.NewBuilder(ctx, logger, runtime, schemaService)
+	if err != nil {
+		_ = runtime.Close(ctx)
+		return nil, cerrors.Errorf("failed to create reactor processor builder: %w", err)
+	}
+
 	r := &Registry{
 		logger:    logger,
 		pluginDir: pluginDir,
 		runtime:   runtime,
 
 		buildCommandProcessor: wrapProcessorBuilderFunc(commandBuilder.Build),
+		buildReactorProcessor: wrapProcessorBuilderFunc(reactorBuilder.Build),
 
 		plugins: map[string]map[string]blueprint{},
 	}
@@ -276,11 +287,12 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 
 	// TODO: first try to instantiate it as a reactor processor and then fall back
 	//  to a command processor if we fail.
-	buildFn := r.buildCommandProcessor
+	buildFn := r.buildReactorProcessor
 	p, err := buildFn(ctx, module, "init-processor")
 	if err != nil {
 		return blueprint{}, fmt.Errorf("failed to create a new command Wasm processor: %w", err)
 	}
+
 	defer func() {
 		err := p.Teardown(ctx)
 		if err != nil {
