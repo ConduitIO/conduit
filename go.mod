@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.6-20241220201140-4c5ba75caaf8.1
-	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
