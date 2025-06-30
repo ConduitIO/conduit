@@ -116,38 +116,56 @@ var (
 )
 
 func TestService_Init_Create(t *testing.T) {
-	is := is.New(t)
-	logger := log.Nop()
-	ctrl := gomock.NewController(t)
+	testCases := []struct {
+		name     string
+		testPath string
+	}{
+		{
+			name:     "pipelines directory",
+			testPath: "./test/pipelines1",
+		},
+		{
+			name:     "pipeline file",
+			testPath: "./test/pipelines1/pipelines.yml",
+		},
+	}
 
-	service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
-	service.pipelinesPath = "./test/pipelines1"
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			logger := log.Nop()
+			ctrl := gomock.NewController(t)
 
-	// return a pipeline not provisioned by API
-	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+			service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
+			service.pipelinesPath = tc.testPath
 
-	pipelineService.EXPECT().List(anyCtx)
-	// pipeline doesn't exist
-	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
-	// create pipeline
-	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
-	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
-	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
-	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
-	pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
+			// return a pipeline not provisioned by API
+			pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
-	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
-	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
-	connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
+			pipelineService.EXPECT().List(anyCtx)
+			// pipeline doesn't exist
+			pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+			// create pipeline
+			pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
+			pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
+			pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
+			pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
+			pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
 
-	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
-	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
+			connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
+			connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
+			connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
 
-	// start pipeline
-	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
+			procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
+			procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
 
-	err := service.Init(context.Background())
-	is.NoErr(err)
+			// start pipeline
+			lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
+
+			err := service.Init(context.Background())
+			is.NoErr(err)
+		})
+	}
 }
 
 func TestService_Init_Update(t *testing.T) {
@@ -587,19 +605,54 @@ func TestService_getYamlFiles(t *testing.T) {
 	// 		├── conduit-rocks.yml (picked up because it's a YAML file)
 	// 		├── nested
 	// 		│         └── p.yaml (ignored because it's nested)
-	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it links to a YAML file)
+	// 		├── pipeline-symlink.yml -> ../another-pipeline.yaml (picked up, because it ends in YAML)
 	// 		└── p.txt (ignored because it's not a YAML file)
 
 	want := []string{
-		"test/different_pipeline_file_types/another-pipeline.yaml",
+		"test/different_pipeline_file_types/pipelines/pipeline-symlink.yml",
 		"test/different_pipeline_file_types/pipelines/conduit-rocks.yaml",
 		"test/different_pipeline_file_types/pipelines/conduit-rocks.yml",
 	}
 	slices.Sort(want)
 
-	got, err := service.getYamlFiles(context.Background(), pipelinesPath)
+	got, err := service.getPipelineConfigFiles(context.Background(), pipelinesPath)
 	is.NoErr(err)
 
 	slices.Sort(got)
 	is.Equal("", cmp.Diff(want, got)) // -want +got
+}
+
+func TestService_getYamlFiles_FilePaths(t *testing.T) {
+	testCases := []struct {
+		name string
+		path string
+		want []string
+	}{
+		{
+			name: "read yaml file",
+			path: "test/different_pipeline_file_types/another-pipeline.yaml",
+			want: []string{"test/different_pipeline_file_types/another-pipeline.yaml"},
+		},
+		{
+			name: "read yaml file (symlink)",
+			path: "test/different_pipeline_file_types/pipelines/pipeline-symlink.yml",
+			want: []string{"test/different_pipeline_file_types/pipelines/pipeline-symlink.yml"},
+		},
+		{
+			name: "non-yaml file",
+			path: "test/different_pipeline_file_types/pipelines/p.txt",
+			want: []string{"test/different_pipeline_file_types/pipelines/p.txt"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			service := NewService(nil, log.Nop(), nil, nil, nil, nil, nil, tc.path)
+
+			got, err := service.getPipelineConfigFiles(context.Background(), tc.path)
+			is.NoErr(err)
+			is.Equal(tc.want, got) // expected a different pipeline
+		})
+	}
 }

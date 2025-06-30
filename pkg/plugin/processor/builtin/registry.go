@@ -45,6 +45,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"avro.encode":         Constructor(avro.NewEncodeProcessor),
 	"base64.decode":       Constructor(base64.NewDecodeProcessor),
 	"base64.encode":       Constructor(base64.NewEncodeProcessor),
+	"clone":               Constructor(impl.NewCloneProcessor),
 	"cohere.command":      Constructor(cohere.NewCommandProcessor),
 	"cohere.embed":        Constructor(cohere.NewEmbedProcessor),
 	"cohere.rerank":       Constructor(cohere.NewRerankProcessor),
