@@ -8,7 +8,7 @@ services:
       - confluent
 
   kafka:
-    image: confluentinc/cp-kafka:7.9.1
+    image: confluentinc/cp-kafka:8.0.0
     environment:
       KAFKA_BROKER_ID: '0'
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
