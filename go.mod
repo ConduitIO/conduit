@@ -44,7 +44,7 @@ require (
 	github.com/sashabaranov/go-openai v1.40.5
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.7
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/twmb/franz-go/pkg/sr v1.4.0
