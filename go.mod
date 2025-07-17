@@ -53,7 +53,7 @@ require (
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822
-	google.golang.org/grpc v1.73.0
+	google.golang.org/grpc v1.74.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
@@ -133,7 +133,7 @@ require (
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.9 // indirect
 	github.com/go-critic/go-critic v0.12.0 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
@@ -285,9 +285,9 @@ require (
 	go-simpler.org/musttag v0.13.0 // indirect
 	go-simpler.org/sloglint v0.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/otel v1.35.0 // indirect
-	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/trace v1.35.0 // indirect
+	go.opentelemetry.io/otel v1.36.0 // indirect
+	go.opentelemetry.io/otel/metric v1.36.0 // indirect
+	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
