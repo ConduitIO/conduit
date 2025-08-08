@@ -1,6 +1,6 @@
 # Conduit
 
-![Logo](https://raw.githubusercontent.com/ConduitIO/.github/main/images/conduit-logo-outlined.svg)
+<https://github.com/user-attachments/assets/cf8206c3-6a54-4b52-ad89-61f017db9422>
 
 _Data Integration for Production Data Stores. :dizzy:_
 
