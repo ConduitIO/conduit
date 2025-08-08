@@ -177,8 +177,8 @@ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMn
 github.com/ckaznocha/intrange v0.3.0 h1:VqnxtK32pxgkhJgYQEeOArVidIPg+ahLP7WBOXZd5ZY=
 github.com/ckaznocha/intrange v0.3.0/go.mod h1:+I/o2d2A1FBHgGELbGxzIcyd3/9l9DuwjM8FsbSS3Lo=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cohere-ai/cohere-go/v2 v2.14.1 h1:fXNrV02rfrP9ieI+S6mHV6Nt2Z0uEDPkK3rnc5bJWCM=
-github.com/cohere-ai/cohere-go/v2 v2.14.1/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVphT1y6nD2zYaKeR0=
+github.com/cohere-ai/cohere-go/v2 v2.15.0 h1:lyuF+piX0gSEeqXCx92SJYbifWngGCtvgNTyBhiLbAQ=
+github.com/cohere-ai/cohere-go/v2 v2.15.0/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVphT1y6nD2zYaKeR0=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
 github.com/conduitio/conduit-commons v0.6.0 h1:UgKXYAMEO3w759R5EmAP0Ax5yFWPGqvPMr/neltfsAI=
 github.com/conduitio/conduit-commons v0.6.0/go.mod h1:n+zdde8QZ+gX4m4tjv7qT1xomZSGZg/dpoTx/JR/fh4=
