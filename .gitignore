@@ -55,7 +55,7 @@ escape_analysis.txt
 *.prof
 
 # Compiled test wasm processors
-pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
+**/test/**/*.wasm
 
 # Test data
 **/test/*.txt
