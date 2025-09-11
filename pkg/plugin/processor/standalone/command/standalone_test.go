@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalone
+package command
 
 import (
 	"context"
@@ -26,12 +26,13 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 const (
-	testPluginDir = "./command/test/wasm_processors/"
+	testPluginDir = "./test/wasm_processors/"
 
 	testPluginChaosDir        = testPluginDir + "chaos/"
 	testPluginMalformedDir    = testPluginDir + "malformed/"
@@ -40,7 +41,8 @@ const (
 
 var (
 	// TestRuntime can be reused in tests to avoid recompiling the test modules
-	TestRuntime wazero.Runtime
+	TestRuntime        wazero.Runtime
+	CompiledHostModule *wazergo.CompiledModule[*HostModuleInstance]
 
 	ChaosProcessorBinary     []byte
 	MalformedProcessorBinary []byte
@@ -55,11 +57,6 @@ var (
 		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
 	}
 )
-
-type tuple[T1, T2 any] struct {
-	V1 T1
-	V2 T2
-}
 
 func TestMain(m *testing.M) {
 	exitOnError := func(err error, msg string) {
@@ -88,16 +85,15 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	// use interpreter runtime as it's faster for tests
-	newRuntime = func(ctx context.Context) wazero.Runtime {
+	TestRuntime = func(ctx context.Context) wazero.Runtime {
 		cfg := wazero.NewRuntimeConfigInterpreter()
 		return wazero.NewRuntimeWithConfig(ctx, cfg)
-	}
-
-	TestRuntime = newRuntime(ctx)
+	}(ctx)
 
 	_, err := wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
 	exitOnError(err, "error instantiating WASI")
 
+	CompiledHostModule, err = wazergo.Compile(ctx, TestRuntime, HostModule)
 	exitOnError(err, "error compiling host module")
 
 	// load test processors
