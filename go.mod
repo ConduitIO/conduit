@@ -47,7 +47,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.10.1
-	github.com/twmb/franz-go/pkg/sr v1.5.0
+	github.com/twmb/franz-go/pkg/sr v1.6.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.6.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
