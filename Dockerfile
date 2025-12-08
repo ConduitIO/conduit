@@ -7,7 +7,7 @@ COPY . .
 RUN CGO_ENABLED=0 make build
 
 # Copy built binaries to production slim image.
-FROM alpine:3.22 AS final
+FROM alpine:3.23 AS final
 # HTTP API
 EXPOSE 8080/tcp
 # gRPC API
