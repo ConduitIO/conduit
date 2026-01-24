@@ -27,7 +27,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/stealthrocket/wazergo"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/command"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/reactor"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
@@ -46,12 +47,14 @@ type Registry struct {
 	pluginDir string
 	runtime   wazero.Runtime
 
-	// hostModule is the conduit host module that exposes Conduit host functions
-	// to the WASM module. The host module is compiled once and instantiated
-	// multiple times, once for each WASM module.
-	hostModule *wazergo.CompiledModule[*hostModuleInstance]
+	// buildCommandProcessor is a builder function for command processors, which
+	// run their own main loop and call into Conduit host functions. This is the
+	// old way of running processors, which is still supported for backwards
+	// compatibility.
+	buildCommandProcessor processorBuilderFunc[sdk.Processor]
 
-	schemaService pprocutils.SchemaService
+	// TODO comment
+	buildReactorProcessor processorBuilderFunc[sdk.Processor]
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -65,8 +68,24 @@ type blueprint struct {
 	specification sdk.Specification
 	path          string
 	module        wazero.CompiledModule
+	buildFunc     processorBuilderFunc[sdk.Processor]
 	// TODO store hash of plugin binary and compare before running the binary to
 	// ensure someone can't switch the plugin after we registered it
+}
+
+// processorBuilderFunc is a function type that can build any processor
+type processorBuilderFunc[T sdk.Processor] func(
+	ctx context.Context,
+	processorModule wazero.CompiledModule,
+	id string,
+) (T, error)
+
+// wrapProcessorBuilderFunc takes a function that matches the signature of
+// processorBuilderFunc and returns a generic processorBuilderFunc[sdk.Processor].
+func wrapProcessorBuilderFunc[T sdk.Processor](build processorBuilderFunc[T]) processorBuilderFunc[sdk.Processor] {
+	return func(ctx context.Context, processorModule wazero.CompiledModule, id string) (sdk.Processor, error) {
+		return build(ctx, processorModule, id)
+	}
 }
 
 func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutils.SchemaService) (*Registry, error) {
@@ -95,19 +114,27 @@ func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutil
 		return nil, cerrors.Errorf("failed to instantiate WASI: %w", err)
 	}
 
-	// init host module
-	compiledHostModule, err := wazergo.Compile(ctx, runtime, hostModule)
+	commandBuilder, err := command.NewBuilder(ctx, logger, runtime, schemaService)
 	if err != nil {
 		_ = runtime.Close(ctx)
-		return nil, cerrors.Errorf("failed to compile host module: %w", err)
+		return nil, cerrors.Errorf("failed to create command processor builder: %w", err)
+	}
+
+	reactorBuilder, err := reactor.NewBuilder(ctx, logger, runtime, schemaService)
+	if err != nil {
+		_ = runtime.Close(ctx)
+		return nil, cerrors.Errorf("failed to create reactor processor builder: %w", err)
 	}
 
 	r := &Registry{
-		logger:        logger,
-		runtime:       runtime,
-		hostModule:    compiledHostModule,
-		pluginDir:     pluginDir,
-		schemaService: schemaService,
+		logger:    logger,
+		pluginDir: pluginDir,
+		runtime:   runtime,
+
+		buildCommandProcessor: wrapProcessorBuilderFunc(commandBuilder.Build),
+		buildReactorProcessor: wrapProcessorBuilderFunc(reactorBuilder.Build),
+
+		plugins: map[string]map[string]blueprint{},
 	}
 
 	r.reloadPlugins()
@@ -136,9 +163,9 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 		return nil, cerrors.Errorf("could not find standalone processor plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, r.schemaService, id, r.logger)
+	p, err := bp.buildFunc(ctx, bp.module, id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create a new WASM processor: %w", err)
+		return nil, cerrors.Errorf("failed to create a new Wasm processor: %w", err)
 	}
 
 	return p, nil
@@ -241,16 +268,16 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, error) {
 	wasmBytes, err := os.ReadFile(path)
 	if err != nil {
-		return blueprint{}, fmt.Errorf("failed to read WASM file %q: %w", path, err)
+		return blueprint{}, fmt.Errorf("failed to read Wasm file %q: %w", path, err)
 	}
 
 	r.logger.Debug(ctx).
 		Str("path", path).
-		Msg("compiling WASM module")
+		Msg("compiling Wasm module")
 
 	module, err := r.runtime.CompileModule(ctx, wasmBytes)
 	if err != nil {
-		return blueprint{}, fmt.Errorf("failed to compile WASM module: %w", err)
+		return blueprint{}, fmt.Errorf("failed to compile Wasm module: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -258,10 +285,14 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, "init-processor", r.logger)
+	// TODO: first try to instantiate it as a reactor processor and then fall back
+	//  to a command processor if we fail.
+	buildFn := r.buildReactorProcessor
+	p, err := buildFn(ctx, module, "init-processor")
 	if err != nil {
-		return blueprint{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
+		return blueprint{}, fmt.Errorf("failed to create a new command Wasm processor: %w", err)
 	}
+
 	defer func() {
 		err := p.Teardown(ctx)
 		if err != nil {
@@ -279,6 +310,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		specification: specs,
 		path:          path,
 		module:        module,
+		buildFunc:     buildFn,
 	}, nil
 }
 
