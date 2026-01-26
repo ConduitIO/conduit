@@ -578,8 +578,8 @@ github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xl
 github.com/pierrec/lz4/v4 v4.1.8/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/pierrec/lz4/v4 v4.1.22 h1:cKFw6uJDK+/gfw5BcDL0JL5aBsAFdsIT18eRtLj7VIU=
 github.com/pierrec/lz4/v4 v4.1.22/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
-github.com/piotrkowalczuk/promgrpc/v4 v4.1.4 h1:c0uCOlfeDBb0Mr1os7TY4g9RfPtaK4EEBo7kd9cICpU=
-github.com/piotrkowalczuk/promgrpc/v4 v4.1.4/go.mod h1:MGaZJU+KEuYk4UftJOYDhcOEy2cN0CmuaPw+ILFlweY=
+github.com/piotrkowalczuk/promgrpc/v4 v4.2.0 h1:foX9moE25+uIFfSUZeSQVll06fQsHm14cpkDjzotjLo=
+github.com/piotrkowalczuk/promgrpc/v4 v4.2.0/go.mod h1:MGaZJU+KEuYk4UftJOYDhcOEy2cN0CmuaPw+ILFlweY=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
