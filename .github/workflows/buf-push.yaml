@@ -11,7 +11,7 @@ jobs:
   push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
         # This step sets up the variable steps.buf-version.outputs.v
         # to contain the version of Buf (e.g. v1.36.0) from go.mod.
