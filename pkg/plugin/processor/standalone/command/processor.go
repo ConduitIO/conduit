@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalone
+package command
 
 import (
 	"context"
@@ -27,6 +27,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/common"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone/common/fromproto"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -45,9 +47,8 @@ const (
 	conduitLogLevelKey    = "CONDUIT_LOG_LEVEL"
 )
 
-type wasmProcessor struct {
+type WasmProcessor struct {
 	sdk.UnimplementedProcessor
-	protoconv protoConverter
 
 	id     string
 	logger log.CtxLogger
@@ -59,7 +60,7 @@ type wasmProcessor struct {
 	// WASM module)
 	commandRequests chan *processorv1.CommandRequest
 	// commandResponses is used to communicate replies between the actual
-	// processor (the WASM module) and wasmProcessor
+	// processor (the WASM module) and WasmProcessor
 	commandResponses chan tuple[*processorv1.CommandResponse, error]
 
 	// moduleStopped is used to know when the module stopped running
@@ -73,20 +74,20 @@ type tuple[T1, T2 any] struct {
 	V2 T2
 }
 
-func newWASMProcessor(
+func NewWasmProcessor(
 	ctx context.Context,
 
 	runtime wazero.Runtime,
 	processorModule wazero.CompiledModule,
-	hostModule *wazergo.CompiledModule[*hostModuleInstance],
+	hostModule *wazergo.CompiledModule[*HostModuleInstance],
 	schemaService pprocutils.SchemaService,
 
 	id string,
 	logger log.CtxLogger,
-) (*wasmProcessor, error) {
-	logger = logger.WithComponent("standalone.wasmProcessor")
+) (*WasmProcessor, error) {
+	logger = logger.WithComponentFromType(WasmProcessor{})
 	logger.Logger = logger.With().Str(log.ProcessorIDField, id).Logger()
-	wasmLogger := newWasmLogWriter(logger, processorModule)
+	wasmLogger := common.NewWasmLogWriter(logger, processorModule)
 
 	commandRequests := make(chan *processorv1.CommandRequest)
 	commandResponses := make(chan tuple[*processorv1.CommandResponse, error])
@@ -96,11 +97,11 @@ func newWASMProcessor(
 	logger.Debug(ctx).Msg("instantiating conduit host module")
 	ins, err := hostModule.Instantiate(
 		ctx,
-		hostModuleOptions(
+		HostModuleOptions(
 			logger,
+			schemaService,
 			commandRequests,
 			commandResponses,
-			schemaService,
 		),
 	)
 	if err != nil {
@@ -136,7 +137,7 @@ func newWASMProcessor(
 		return nil, fmt.Errorf("failed to instantiate processor module: %w", err)
 	}
 
-	p := &wasmProcessor{
+	p := &WasmProcessor{
 		id:               id,
 		logger:           logger,
 		module:           mod,
@@ -154,7 +155,7 @@ func newWASMProcessor(
 
 // run is the main loop of the WASM module. It runs in a goroutine and blocks
 // until the module is closed.
-func (p *wasmProcessor) run(ctx context.Context) {
+func (p *WasmProcessor) run(ctx context.Context) {
 	defer close(p.moduleStopped)
 
 	_, err := p.module.ExportedFunction("_start").Call(ctx)
@@ -175,7 +176,7 @@ func (p *wasmProcessor) run(ctx context.Context) {
 	p.logger.Err(ctx, err).Msg("WASM module stopped")
 }
 
-func (p *wasmProcessor) Specification() (sdk.Specification, error) {
+func (p *WasmProcessor) Specification() (sdk.Specification, error) {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Specify{
 			Specify: &processorv1.Specify_Request{},
@@ -193,13 +194,13 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 
 	switch specResp := resp.Response.(type) {
 	case *processorv1.CommandResponse_Specify:
-		return p.protoconv.specification(specResp.Specify)
+		return fromproto.Specification(specResp.Specify)
 	default:
 		return sdk.Specification{}, fmt.Errorf("unexpected response type: %T", resp)
 	}
 }
 
-func (p *wasmProcessor) Configure(ctx context.Context, config config.Config) error {
+func (p *WasmProcessor) Configure(ctx context.Context, config config.Config) error {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Configure{
 			Configure: &processorv1.Configure_Request{
@@ -221,7 +222,7 @@ func (p *wasmProcessor) Configure(ctx context.Context, config config.Config) err
 	}
 }
 
-func (p *wasmProcessor) Open(ctx context.Context) error {
+func (p *WasmProcessor) Open(ctx context.Context) error {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Open{
 			Open: &processorv1.Open_Request{},
@@ -241,8 +242,8 @@ func (p *wasmProcessor) Open(ctx context.Context) error {
 	}
 }
 
-func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	protoRecords, err := p.protoconv.records(records)
+func (p *WasmProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	protoRecords, err := fromproto.Records(records)
 	if err != nil {
 		p.logger.Err(ctx, err).Msg("failed to convert records to proto")
 		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
@@ -263,7 +264,7 @@ func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) [
 
 	switch procResp := resp.Response.(type) {
 	case *processorv1.CommandResponse_Process:
-		processedRecords, err := p.protoconv.processedRecords(procResp.Process.Records)
+		processedRecords, err := fromproto.ProcessedRecords(procResp.Process.Records)
 		if err != nil {
 			p.logger.Err(ctx, err).Msg("failed to convert processed records from proto")
 			return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
@@ -275,7 +276,7 @@ func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) [
 	}
 }
 
-func (p *wasmProcessor) Teardown(ctx context.Context) error {
+func (p *WasmProcessor) Teardown(ctx context.Context) error {
 	// TODO: we should probably have a timeout for the teardown command in case
 	//  the plugin is stuck
 	teardownErr := p.executeTeardownCommand(ctx)
@@ -285,7 +286,7 @@ func (p *wasmProcessor) Teardown(ctx context.Context) error {
 	return cerrors.Join(teardownErr, stopErr, p.moduleError)
 }
 
-func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
+func (p *WasmProcessor) executeTeardownCommand(ctx context.Context) error {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Teardown{
 			Teardown: &processorv1.Teardown_Request{},
@@ -304,7 +305,7 @@ func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
 	}
 }
 
-func (p *wasmProcessor) closeModule(ctx context.Context) error {
+func (p *WasmProcessor) closeModule(ctx context.Context) error {
 	// Closing the command channel will send an error code to the WASM module
 	// signaling it to exit.
 	close(p.commandRequests)
@@ -326,7 +327,7 @@ func (p *wasmProcessor) closeModule(ctx context.Context) error {
 // executeCommand sends a command request to the WASM module and waits for the
 // response. It returns the response, or an error if the response is an error.
 // If the context is canceled, it returns ctx.Err().
-func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.CommandRequest) (*processorv1.CommandResponse, error) {
+func (p *WasmProcessor) executeCommand(ctx context.Context, req *processorv1.CommandRequest) (*processorv1.CommandResponse, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -355,7 +356,7 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 
 	// check if the response is an error
 	if errResp, ok := resp.Response.(*processorv1.CommandResponse_Error); ok {
-		return nil, p.protoconv.error(errResp.Error)
+		return nil, fromproto.Error(errResp.Error)
 	}
 
 	return resp, nil
