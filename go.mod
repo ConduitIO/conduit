@@ -48,7 +48,7 @@ require (
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.11.0
 	github.com/twmb/franz-go/pkg/sr v1.7.0
-	github.com/twmb/go-cache v1.2.1
+	github.com/twmb/go-cache v1.3.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
