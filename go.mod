@@ -40,7 +40,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.0
 	github.com/sashabaranov/go-openai v1.41.2
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.10.2
