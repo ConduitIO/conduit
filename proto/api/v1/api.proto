@@ -424,7 +424,7 @@ service PipelineService {
         }
       }
       responses: {
-        key: "400"
+        key: "412"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}
@@ -454,14 +454,14 @@ service PipelineService {
         }
       }
       responses: {
-        key: "400"
+        key: "412"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}
           }
           examples: {
             key: "application/json"
-            value: '{ "code": 9, "message": "failed precondition error", "details": [] }'
+            value: '{ "code": 9, "message": "failed precondition error: pipeline cannot be started due to current state", "details": [] }'
           }
         }
       }
@@ -487,7 +487,7 @@ service PipelineService {
         }
       }
       responses: {
-        key: "400"
+        key: "412"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}
@@ -657,7 +657,7 @@ service ConnectorService {
           }
           examples: {
             key: "application/json"
-            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+            value: '{ "code": 3, "message": "invalid arguments error: invalid plugin configuration", "details": [] }'
           }
         }
       }
@@ -746,7 +746,7 @@ service ConnectorService {
         }
       }
       responses: {
-        key: "400"
+        key: "412"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}
@@ -957,7 +957,7 @@ service ProcessorService {
         }
       }
       responses: {
-        key: "400"
+        key: "412"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}

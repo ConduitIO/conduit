@@ -33,6 +33,8 @@ func PipelineError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrNoSourceConnectors): // NEW: Map pipeline without source connectors to FailedPrecondition
+		code = codes.FailedPrecondition
 	default:
 		code = codeFromError(err)
 	}
@@ -88,8 +90,8 @@ func codeFromError(err error) codes.Code {
 		return codes.AlreadyExists
 	case cerrors.Is(err, connector.ErrConnectorRunning):
 		return codes.FailedPrecondition
-	case cerrors.Is(err, &conn_plugin.ValidationError{}):
-		return codes.FailedPrecondition
+	case cerrors.Is(err, &conn_plugin.ValidationError{}): // CHANGED: Map plugin validation errors to InvalidArgument (400)
+		return codes.InvalidArgument
 	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached):

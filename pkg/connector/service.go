@@ -79,6 +79,7 @@ func (s *Service) Init(ctx context.Context) error {
 
 	for _, conn := range connectors {
 		measure.ConnectorsGauge.WithValues(strings.ToLower(conn.Type.String())).Inc()
+		// conn.Init sets conn.InitErr if there is an issue
 		conn.Init(s.logger, s.persister)
 	}
 
@@ -121,18 +122,18 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("connector is invalid: %w", err)
+		return nil, cerrors.Errorf("connector is invalid: %w", err) // Mapped to InvalidArgument (400)
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, cerrors.New("must provide a plugin") // Mapped to InvalidArgument (400)
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, cerrors.New("must provide a pipeline ID") // Mapped to InvalidArgument (400)
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		return nil, ErrInvalidConnectorType // Mapped to InvalidArgument (400)
 	}
 
 	now := time.Now().UTC()
@@ -148,6 +149,10 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 	}
 	conn.Init(s.logger, s.persister)
+	// Check for initialization errors (e.g., from plugin configuration validation)
+	if conn.InitErr != nil {
+		return nil, cerrors.Errorf("failed to initialize connector plugin: %w", conn.InitErr) // Will be mapped to InvalidArgument (400) via conn_plugin.ValidationError
+	}
 
 	if p == ProvisionTypeDLQ {
 		// do not persist the instance, just return the connector

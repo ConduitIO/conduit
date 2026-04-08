@@ -307,6 +307,37 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
+// StartPipeline attempts to start a pipeline.
+// NOTE: This is a simplified placeholder method for demonstration.
+// Actual pipeline starting logic might reside in a higher-level orchestrator.
+func (s *Service) StartPipeline(ctx context.Context, id string) error {
+	pl, err := s.Get(ctx, id)
+	if err != nil {
+		return err // ErrInstanceNotFound will be mapped to NotFound (404)
+	}
+
+	if pl.GetStatus() == StatusRunning {
+		return cerrors.Errorf("%w: pipeline %q is already running", ErrPipelineRunning, pl.ID) // Mapped to FailedPrecondition (412)
+	}
+	if pl.GetStatus() == StatusDegraded {
+		return cerrors.Errorf("pipeline %q is in a degraded state: %s", pl.ID, pl.Error) // Mapped to Internal (500)
+	}
+
+	// Check if the pipeline has any connectors.
+	// For simplicity, we assume no connectors implies no source connectors.
+	// A more robust check would involve checking types of attached connectors.
+	if len(pl.ConnectorIDs) == 0 {
+		return cerrors.Errorf("%w: pipeline %q can't be started without any connectors", ErrNoSourceConnectors, pl.ID) // Mapped to FailedPrecondition (412)
+	}
+
+	err = s.UpdateStatus(ctx, pl.ID, StatusRunning, "")
+	if err != nil {
+		return cerrors.Errorf("failed to update pipeline status to running: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) validatePipeline(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
 	var errs []error
