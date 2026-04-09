@@ -20,17 +20,35 @@ import (
 	"runtime/debug"
 )
 
-// version is set during the build process (i.e. the Makefile)
+// version is set by the `make update-version` target or defaults to "v0.0.0-dev".
 // It follows Go's convention for module version, where the version
 // starts with the letter v, followed by a semantic version.
-var version string
+var version = "v0.0.0-dev"
 
 func Version(appendOSArch bool) string {
-	v := "development"
-	if version != "" {
-		v = version
-	} else if info, ok := debug.ReadBuildInfo(); ok {
-		v = info.Main.Version
+	v := version // Start with the explicit constant from the source file
+
+	// If the constant is still the default development version,
+	// try to get a more specific version from build info.
+	// This covers cases where `make update-version` wasn't run (e.g., local dev build),
+	// but `go build` was, which might populate debug.ReadBuildInfo().Main.Version.
+	if v == "v0.0.0-dev" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			// debug.ReadBuildInfo().Main.Version gives the Go module version.
+			// If built from a tagged commit, it's the tag (e.g., "v1.2.3").
+			// Otherwise, it might be "(devel)" or "v0.0.0-unofficial".
+			// We only want to use it if it's a "real" version.
+			if info.Main.Version != "" &&
+				info.Main.Version != "(devel)" &&
+				info.Main.Version != "v0.0.0-unofficial" {
+				v = info.Main.Version
+			}
+		}
+	}
+
+	// Final fallback if nothing else yielded a proper version
+	if v == "v0.0.0-dev" {
+		v = "development"
 	}
 
 	if appendOSArch {

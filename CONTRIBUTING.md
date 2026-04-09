@@ -45,6 +45,20 @@ and that all the tests still run successfully.
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
 
+### Versioning
+
+Conduit's version is automatically managed by our CI/CD pipeline. The version constant
+in `pkg/conduit/version.go` is updated on release commits and then set to a development
+version (e.g., `v0.4.0-develop`) immediately after a release.
+
+When building locally, the `conduit version` command will reflect either:
+1. The version explicitly set in `pkg/conduit/version.go` (if `make update-version` was run).
+2. The Go module version (derived from `go.mod` and git tags, if available, by `debug.ReadBuildInfo`).
+3. A fallback to "development" if no other version information can be determined.
+
+You should not manually edit `pkg/conduit/version.go` unless you are specifically
+testing the versioning mechanism.
+
 ### Quick steps to contribute
 
 1. Fork the project

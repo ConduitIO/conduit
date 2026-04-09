@@ -3,13 +3,18 @@
 # changes the version will have the suffix "-dirty", it will
 # ignore any untracked files though to ensure Docker builds have
 # the correct version.
+# NOTE: This variable is now primarily for informational purposes or
+# for CI-driven version updates via 'update-version' target.
+# The version constant in pkg/conduit/version.go is the source of truth.
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
 build: check-go-version
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
+	# The version is now read directly from pkg/conduit/version.go,
+	# which is updated by `make update-version`. No need for ldflags injection.
+	go build -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit run"
@@ -84,3 +89,11 @@ check-go-version:
 .PHONY: markdown-lint
 markdown-lint:
 	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+
+.PHONY: update-version
+update-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION variable not set. Usage: make update-version VERSION=<version>"; \
+		exit 1; \
+	fi
+	./scripts/update-version.sh "$(VERSION)"
