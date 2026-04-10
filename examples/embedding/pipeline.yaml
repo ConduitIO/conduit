@@ -1,0 +1,14 @@
+- id: my-embedded-pipeline
+  status: running
+  processors: []
+  description: "A simple embedded pipeline"
+  source:
+    plugin: builtin:generator
+    settings:
+      recordsPerSecond: "1"
+      value: "hello world"
+      # Stop after a few records for the example to not run indefinitely
+      count: "5"
+  destinations:
+    - plugin: builtin:log
+      settings: {}
