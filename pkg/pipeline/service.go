@@ -114,6 +114,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
+		// Existing error is cerrors.Errorf("pipeline is invalid: %w", err), which is fine for wrapping
 		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
 	}
 
@@ -178,16 +179,16 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, ErrDLQPluginMissing // Use specific error
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, ErrDLQWindowSizeInvalid // Use specific error
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, ErrDLQNackThresholdInvalid // Use specific error
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, ErrDLQNackThresholdTooHigh // Use specific error
 	}
 
 	pl.DLQ = cfg

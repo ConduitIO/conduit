@@ -32,4 +32,11 @@ var (
 	ErrDescriptionOverLimit  = cerrors.New("pipeline description is over the character limit (8192)")
 	ErrConnectorIDNotFound   = cerrors.New("connector ID not found")
 	ErrProcessorIDNotFound   = cerrors.New("processor ID not found")
+
+	// NEW errors for specific validation/precondition failures
+	ErrPipelineStartFailed         = cerrors.New("failed to start pipeline")
+	ErrDLQPluginMissing            = cerrors.New("DLQ plugin must be provided")
+	ErrDLQWindowSizeInvalid        = cerrors.New("DLQ window size must be non-negative")
+	ErrDLQNackThresholdInvalid     = cerrors.New("DLQ window nack threshold must be non-negative")
+	ErrDLQNackThresholdTooHigh     = cerrors.New("DLQ window nack threshold must be lower than window size")
 )

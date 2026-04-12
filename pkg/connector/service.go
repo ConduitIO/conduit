@@ -121,15 +121,16 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
+		// Existing error wrapping is fine
 		return nil, cerrors.Errorf("connector is invalid: %w", err)
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, ErrPluginMissing // Use specific error
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, ErrPipelineIDMissing // Use specific error
 	}
 	if t != TypeSource && t != TypeDestination {
 		return nil, ErrInvalidConnectorType

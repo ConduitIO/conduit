@@ -29,11 +29,23 @@ func PipelineError(err error) error {
 	var code codes.Code
 
 	switch {
-	case cerrors.Is(err, pipeline.ErrNameMissing):
-		code = codes.InvalidArgument
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrNameMissing),
+		cerrors.Is(err, pipeline.ErrIDMissing),
+		cerrors.Is(err, pipeline.ErrInvalidCharacters),
+		cerrors.Is(err, pipeline.ErrNameOverLimit),
+		cerrors.Is(err, pipeline.ErrIDOverLimit),
+		cerrors.Is(err, pipeline.ErrDescriptionOverLimit),
+		cerrors.Is(err, pipeline.ErrDLQPluginMissing),
+		cerrors.Is(err, pipeline.ErrDLQWindowSizeInvalid),
+		cerrors.Is(err, pipeline.ErrDLQNackThresholdInvalid),
+		cerrors.Is(err, pipeline.ErrDLQNackThresholdTooHigh):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrPipelineStartFailed):
+		code = codes.FailedPrecondition
 	default:
+		// Fallback to generic error mapping if not a pipeline-specific error
 		code = codeFromError(err)
 	}
 
@@ -44,11 +56,19 @@ func ConnectorError(err error) error {
 	var code codes.Code
 
 	switch {
-	case cerrors.Is(err, connector.ErrInvalidConnectorType):
-		code = codes.InvalidArgument
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, connector.ErrInvalidConnectorType),
+		cerrors.Is(err, connector.ErrNameMissing),
+		cerrors.Is(err, connector.ErrIDMissing),
+		cerrors.Is(err, connector.ErrInvalidCharacters),
+		cerrors.Is(err, connector.ErrNameOverLimit),
+		cerrors.Is(err, connector.ErrIDOverLimit),
+		cerrors.Is(err, connector.ErrPluginMissing),
+		cerrors.Is(err, connector.ErrPipelineIDMissing):
+		code = codes.InvalidArgument
 	default:
+		// Fallback to generic error mapping
 		code = codeFromError(err)
 	}
 
@@ -88,7 +108,7 @@ func codeFromError(err error) codes.Code {
 		return codes.AlreadyExists
 	case cerrors.Is(err, connector.ErrConnectorRunning):
 		return codes.FailedPrecondition
-	case cerrors.Is(err, &conn_plugin.ValidationError{}):
+	case cerrors.Is(err, &conn_plugin.ValidationError{}): // Catches "invalid plugin config" errors
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
 		return codes.FailedPrecondition
@@ -99,6 +119,7 @@ func codeFromError(err error) codes.Code {
 	case cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig):
 		return codes.FailedPrecondition
 	default:
+		// If none of the specific errors matched, it's an internal server error by default
 		return codes.Internal
 	}
 }

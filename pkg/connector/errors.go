@@ -27,4 +27,8 @@ var (
 	ErrNameOverLimit             = cerrors.New("connector name is over the character limit (64)")
 	ErrNameMissing               = cerrors.New("must provide a connector name")
 	ErrIDMissing                 = cerrors.New("must provide a connector ID")
+
+	// NEW errors for specific validation failures
+	ErrPluginMissing     = cerrors.New("must provide a plugin")      // NEW
+	ErrPipelineIDMissing = cerrors.New("must provide a pipeline ID") // NEW
 )
