@@ -1,0 +1,3 @@
+go vet pkg/pipeline/service.go
+go vet pkg/connector/service.go
+go vet pkg/pipeline/errors.go
