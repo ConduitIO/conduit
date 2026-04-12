@@ -34,6 +34,10 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
+// Version is the version of the built-in connectors.
+// This constant is automatically updated by the CI/CD pipeline and the `make update-builtin-connector-version` target.
+const Version = "v0.0.0-develop"
+
 // DefaultBuiltinConnectors contains the default built-in connectors.
 // The key of the map is the import path of the module
 // containing the connector implementation.

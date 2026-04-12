@@ -92,3 +92,50 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  post-release-version-bump:
+    name: Bump built-in connector version for next development cycle
+    runs-on: ubuntu-latest
+    # This job should only run after the actual release (goreleaser, docker build) is complete.
+    needs: [release, build-push-docker-image]
+    # Only run for actual release tags (e.g., v1.2.3), not for nightly builds.
+    if: ${{ !contains(github.ref, '-nightly') }}
+    permissions:
+      contents: write # Required for git push
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for git history manipulation by the script
+          ref: main # Ensure we are on the main branch for the commit
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod' # Needed for potential Go tools if the script evolves
+
+      - name: Calculate next development version
+        id: calculate_version
+        run: |
+          current_tag="${{ github.ref_name }}" # e.g., v1.2.3
+          echo "Current tag: $current_tag"
+
+          # Remove 'v' prefix if present for parsing
+          version_without_v="${current_tag#v}" # e.g., 1.2.3
+
+          # Split into major, minor, patch components
+          IFS='.' read -r major minor patch <<< "$version_without_v"
+
+          # Increment minor version, set patch to 0, append -develop suffix.
+          # Use 10# to force base 10 for arithmetic to handle leading zeros safely.
+          next_minor=$((10#$minor + 1))
+          next_dev_version="v${major}.${next_minor}.0-develop"
+
+          echo "Next development version: $next_dev_version"
+          # Set the calculated version as an output variable for subsequent steps
+          echo "next_dev_version=$next_dev_version" >> $GITHUB_OUTPUT
+
+      - name: Update built-in connector version
+        # Execute the pre-existing script with the calculated development version
+        run: |
+          ./scripts/update-builtin-connector-version.sh "${{ steps.calculate_version.outputs.next_dev_version }}"

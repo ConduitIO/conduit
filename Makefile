@@ -84,3 +84,11 @@ check-go-version:
 .PHONY: markdown-lint
 markdown-lint:
 	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+
+.PHONY: update-builtin-connector-version
+update-builtin-connector-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION variable is not set. Usage: make update-builtin-connector-version VERSION=vX.Y.Z"; \
+		exit 1; \
+	fi
+	./scripts/update-builtin-connector-version.sh "$(VERSION)"
