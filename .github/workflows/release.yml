@@ -1,21 +1,64 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'The semantic version to release (e.g., v0.4.0)'
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: write # Needed for committing, tagging, and pushing
 
 jobs:
-  release:
-    name: Release
+  prepare-release:
+    name: Prepare Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main # Ensure we are on the main branch for updates
+          fetch-depth: 0 # Needed for git history commands
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Update Conduit version constant
+        run: go run scripts/update-version.go pkg/conduit/version.go "${{ github.event.inputs.release_version }}"
+
+      - name: Configure Git for automated commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Commit version update
+        run: |
+          git add pkg/conduit/version.go
+          git commit -m "chore: Update Conduit version to ${{ github.event.inputs.release_version }} for release"
+
+      - name: Tag and push release
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.release_version }}
+        run: |
+          git tag "$RELEASE_VERSION"
+          git push origin main
+          git push origin "$RELEASE_VERSION"
+
+  goreleaser-release: # Renamed job
+    name: GoReleaser Release
+    needs: prepare-release # This job now depends on the prepare-release job
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed by goreleaser to create releases
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_version }} # Checkout the tag created by prepare-release
           fetch-depth: 0
 
       - name: Set up Go
@@ -23,13 +66,18 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Set GORELEASER_PREVIOUS_TAG in actual release
-        if: ${{ !contains(github.ref, '-nightly') }}
-        # find previous tag by filtering out nightly tags and choosing the
-        # second to last tag (last one is the current release)
+      - name: Find previous tag for GoReleaser
+        id: get_previous_tag
         run: |
-          prev_tag=$(git tag | grep -v "nightly" | sort -r --version-sort | head -n 2 | tail -n 1)
+          current_tag="${{ github.event.inputs.release_version }}"
+          # Get all tags, filter out nightly tags, sort reverse semver, and pick the first one that is not the current tag.
+          prev_tag=$(git tag -l | grep -v "nightly" | sort -r --version-sort | awk '{if ($1 != "'"$current_tag"'") {print $1; exit}}')
+          if [ -z "$prev_tag" ]; then
+            echo "No previous tag found, assuming first release."
+            prev_tag="none" # Or empty, depending on GoReleaser's behavior for first release
+          fi
           echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> $GITHUB_ENV
+          echo "Previous tag found: $prev_tag"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -39,10 +87,11 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          GORELEASER_CURRENT_TAG: ${{ github.event.inputs.release_version }}
 
   build-push-docker-image:
     name: Build and push Docker image
+    needs: prepare-release # Now dependent on the prepare-release job
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,6 +102,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_version }} # Checkout the tag created by prepare-release
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -72,12 +123,10 @@ jobs:
         uses: docker/metadata-action@v5.7.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Makes no sense to have an image with tag v0, hence the check in the last line.
           tags: |
-            type=semver,pattern={{raw}}
-            type=raw,value=latest-nightly,enable=${{ contains(github.ref, '-nightly')  }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ !contains(github.ref, '-nightly') }}
-            type=semver,pattern=v{{major}},enable=${{ !contains(github.ref, '-nightly') && !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=semver,pattern={{raw}},value=${{ github.event.inputs.release_version }}
+            type=semver,pattern=v{{major}}.{{minor}},value=${{ github.event.inputs.release_version }}
+            type=semver,pattern=v{{major}},enable=${{ !startsWith(github.event.inputs.release_version, 'v0.') }},value=${{ github.event.inputs.release_version }}
           labels: |
             maintainer=ConduitIO
             org.opencontainers.image.title=Conduit
@@ -92,3 +141,51 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  bump-version:
+    name: Bump to Next Development Version
+    needs: prepare-release # This job runs after the release is prepared (committed and tagged)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main # Work on the main branch for the post-release bump
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Calculate next development version
+        id: calculate_next_version
+        run: |
+          release_version="${{ github.event.inputs.release_version }}"
+          # Strip 'v' prefix for parsing
+          version_no_v=$(echo "$release_version" | sed 's/^v//')
+          major=$(echo "$version_no_v" | cut -d'.' -f1)
+          minor=$(echo "$version_no_v" | cut -d'.' -f2)
+          # Patch is ignored for the next minor development version
+
+          # Increment minor version
+          next_minor=$((minor + 1))
+          next_develop_version="v${major}.${next_minor}.0-develop"
+          echo "Calculated next develop version: $next_develop_version"
+          echo "next_develop_version=$next_develop_version" >> $GITHUB_OUTPUT
+
+      - name: Update Conduit version constant to next development version
+        run: go run scripts/update-version.go pkg/conduit/version.go "${{ steps.calculate_next_version.outputs.next_develop_version }}"
+
+      - name: Configure Git for automated commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit version bump
+        run: |
+          git add pkg/conduit/version.go
+          git commit -m "chore: Bump Conduit version to ${{ steps.calculate_next_version.outputs.next_develop_version }} after release"
+
+      - name: Push version bump to main
+        run: git push origin main

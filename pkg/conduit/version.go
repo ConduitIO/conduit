@@ -23,14 +23,17 @@ import (
 // version is set during the build process (i.e. the Makefile)
 // It follows Go's convention for module version, where the version
 // starts with the letter v, followed by a semantic version.
-var version string
+// This value is updated by the CI/CD pipeline during releases.
+var version = "development" // Initialize with a default string literal for automation
 
 func Version(appendOSArch bool) string {
-	v := "development"
-	if version != "" {
-		v = version
-	} else if info, ok := debug.ReadBuildInfo(); ok {
-		v = info.Main.Version
+	v := version // Start with the value from the 'version' variable (can be updated by ldflags or script)
+	if v == "" || v == "development" { // If version is empty (e.g., initial state) or still "development" (not overwritten by ldflags)
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "(devel)" && info.Main.Version != "" {
+			v = info.Main.Version // Fallback to module version if available and not "(devel)"
+		} else {
+			v = "development" // Final fallback if no other version info is useful
+		}
 	}
 
 	if appendOSArch {
