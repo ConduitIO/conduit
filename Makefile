@@ -9,7 +9,7 @@ GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
 build: check-go-version
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
+	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.appVersion=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit run"
@@ -84,3 +84,11 @@ check-go-version:
 .PHONY: markdown-lint
 markdown-lint:
 	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+
+.PHONY: update-connector-version
+update-connector-version:
+	@if [ -z "$(CONNECTOR_VERSION)" ]; then \
+		echo "Error: CONNECTOR_VERSION is required. Usage: make update-connector-version CONNECTOR_VERSION=vX.Y.Z"; \
+		exit 1; \
+	fi
+	go run scripts/update-version.go "$(CONNECTOR_VERSION)"

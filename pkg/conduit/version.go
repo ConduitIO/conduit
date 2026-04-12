@@ -20,16 +20,25 @@ import (
 	"runtime/debug"
 )
 
-// version is set during the build process (i.e. the Makefile)
+// appVersion is set during the build process via ldflags (i.e., the Makefile)
 // It follows Go's convention for module version, where the version
 // starts with the letter v, followed by a semantic version.
-var version string
+var appVersion string
 
+// BuiltinConnectorVersion is the version that built-in connectors report.
+// It is updated by a script (e.g., scripts/update-version.go) before compilation
+// when making a release or setting a development version.
+// The value here acts as a default for local development.
+var BuiltinConnectorVersion = "v0.0.0-develop"
+
+// Version returns the application version string. If appendOSArch is true,
+// it appends the operating system and architecture information.
 func Version(appendOSArch bool) string {
 	v := "development"
-	if version != "" {
-		v = version
+	if appVersion != "" {
+		v = appVersion
 	} else if info, ok := debug.ReadBuildInfo(); ok {
+		// Fallback to module version if ldflags didn't set appVersion
 		v = info.Main.Version
 	}
 
@@ -37,4 +46,10 @@ func Version(appendOSArch bool) string {
 		v = fmt.Sprintf("%s %s/%s", v, runtime.GOOS, runtime.GOARCH)
 	}
 	return v
+}
+
+// GetBuiltinConnectorVersion returns the version string for built-in connectors.
+// This version is updated programmatically by the CI/CD pipeline.
+func GetBuiltinConnectorVersion() string {
+	return BuiltinConnectorVersion
 }
