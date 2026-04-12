@@ -460,8 +460,12 @@ service PipelineService {
             json_schema: {ref: ".google.rpc.Status"}
           }
           examples: {
-            key: "application/json"
+            key: "bad_request_failed_precondition"
             value: '{ "code": 9, "message": "failed precondition error", "details": [] }'
+          }
+          examples: {
+            key: "bad_request_invalid_arguments"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
           }
         }
       }
@@ -661,6 +665,18 @@ service ConnectorService {
           }
         }
       }
+      responses: {
+        key: "409"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }'
+          }
+        }
+      }
     };
   }
   rpc ValidateConnector(ValidateConnectorRequest) returns (ValidateConnectorResponse) {
@@ -724,6 +740,18 @@ service ConnectorService {
           examples: {
             key: "application/json"
             value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+          }
+        }
+      }
+      responses: {
+        key: "409"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }'
           }
         }
       }

@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package connector
 
 import (
@@ -40,6 +26,8 @@ type Service struct {
 	connectors map[string]*Instance
 	store      *Store
 	persister  *Persister
+	// New: Add a map to track connector names for uniqueness validation
+	instanceNames map[string]bool
 }
 
 // NewService creates a Store-backed implementation of Service.
@@ -49,6 +37,8 @@ func NewService(logger log.CtxLogger, db database.DB, persister *Persister) *Ser
 		store:      NewStore(db, logger),
 		connectors: make(map[string]*Instance),
 		persister:  persister,
+		// New: Initialize instanceNames
+		instanceNames: make(map[string]bool),
 	}
 }
 
@@ -80,6 +70,8 @@ func (s *Service) Init(ctx context.Context) error {
 	for _, conn := range connectors {
 		measure.ConnectorsGauge.WithValues(strings.ToLower(conn.Type.String())).Inc()
 		conn.Init(s.logger, s.persister)
+		// New: populate instanceNames map
+		s.instanceNames[conn.Config.Name] = true
 	}
 
 	return nil
@@ -124,12 +116,17 @@ func (s *Service) Create(
 		return nil, cerrors.Errorf("connector is invalid: %w", err)
 	}
 
+	// New: Check if connector name already exists
+	if s.instanceNames[cfg.Name] {
+		return nil, ErrNameAlreadyExists
+	}
+
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, ErrPluginMissing // Changed from cerrors.New
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, ErrPipelineIDMissing // Changed from cerrors.New
 	}
 	if t != TypeSource && t != TypeDestination {
 		return nil, ErrInvalidConnectorType
@@ -157,10 +154,13 @@ func (s *Service) Create(
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		// If store.Set returns an error related to plugin config,
+		// it should be caught by the error mapping in status.go
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	s.connectors[id] = conn
+	s.instanceNames[cfg.Name] = true // New: Add name to map
 	measure.ConnectorsGauge.WithValues(strings.ToLower(t.String())).Inc()
 	return conn, nil
 }
@@ -178,6 +178,7 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
+	delete(s.instanceNames, instance.Config.Name) // New: Remove name from map
 
 	err = instance.Close(ctx, dispenserFetcher)
 	if err != nil {
@@ -195,6 +196,15 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 	conn, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	// New: Check for name uniqueness if name changes
+	if data.Name != conn.Config.Name {
+		if s.instanceNames[data.Name] {
+			return nil, ErrNameAlreadyExists
+		}
+		delete(s.instanceNames, conn.Config.Name) // Remove old name
+		s.instanceNames[data.Name] = true        // Add new name
 	}
 
 	if conn.Plugin != plugin {

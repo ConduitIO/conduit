@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package pipeline
 
 import (
@@ -177,17 +163,18 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 		return nil, err
 	}
 
+	// Wrap validation errors with ErrInvalidPipelineConfig
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, cerrors.Errorf("DLQ plugin must be provided: %w", ErrInvalidPipelineConfig)
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, cerrors.Errorf("DLQ window size must be non-negative: %w", ErrInvalidPipelineConfig)
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, cerrors.Errorf("DLQ window nack threshold must be non-negative: %w", ErrInvalidPipelineConfig)
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, cerrors.Errorf("DLQ window nack threshold must be lower than window size: %w", ErrInvalidPipelineConfig)
 	}
 
 	pl.DLQ = cfg

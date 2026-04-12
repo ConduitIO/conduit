@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package status
 
 import (
@@ -29,10 +15,19 @@ func PipelineError(err error) error {
 	var code codes.Code
 
 	switch {
-	case cerrors.Is(err, pipeline.ErrNameMissing):
-		code = codes.InvalidArgument
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
+	// Map all client-side pipeline configuration/validation errors to InvalidArgument
+	case cerrors.Is(err, pipeline.ErrNameMissing),
+		cerrors.Is(err, pipeline.ErrIDMissing),
+		cerrors.Is(err, pipeline.ErrInvalidCharacters),
+		cerrors.Is(err, pipeline.ErrNameOverLimit),
+		cerrors.Is(err, pipeline.ErrIDOverLimit),
+		cerrors.Is(err, pipeline.ErrDescriptionOverLimit),
+		cerrors.Is(err, pipeline.ErrInvalidPipelineConfig):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
 	default:
 		code = codeFromError(err)
 	}
@@ -44,10 +39,21 @@ func ConnectorError(err error) error {
 	var code codes.Code
 
 	switch {
-	case cerrors.Is(err, connector.ErrInvalidConnectorType):
-		code = codes.InvalidArgument
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
+	// Map all client-side connector configuration/validation errors to InvalidArgument
+	case cerrors.Is(err, connector.ErrInvalidConnectorType),
+		cerrors.Is(err, connector.ErrNameMissing),
+		cerrors.Is(err, connector.ErrIDMissing),
+		cerrors.Is(err, connector.ErrInvalidCharacters),
+		cerrors.Is(err, connector.ErrNameOverLimit),
+		cerrors.Is(err, connector.ErrIDOverLimit),
+		cerrors.Is(err, connector.ErrPluginMissing),
+		cerrors.Is(err, connector.ErrPipelineIDMissing),
+		cerrors.Is(err, connector.ErrInvalidConnectorConfig):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
 	default:
 		code = codeFromError(err)
 	}
@@ -79,25 +85,19 @@ func codeFromError(err error) codes.Code {
 	case cerrors.Is(err, cerrors.ErrNotImpl):
 		return codes.Unimplemented
 	case cerrors.Is(err, cerrors.ErrEmptyID):
+		return codes.InvalidArgument // Consider replacing with specific ErrIDMissing from respective packages
+	case cerrors.Is(err, pipeline.ErrPipelineRunning),
+		cerrors.Is(err, pipeline.ErrPipelineNotRunning),
+		cerrors.Is(err, connector.ErrConnectorRunning),
+		cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached),
+		cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached),
+		cerrors.Is(err, orchestrator.ErrConnectorHasProcessorsAttached),
+		cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig):
+		return codes.FailedPrecondition
+	// Map plugin validation errors and orchestrator invalid config to InvalidArgument
+	case cerrors.Is(err, &conn_plugin.ValidationError{}),
+		cerrors.Is(err, orchestrator.ErrInvalidPipelineConfig):
 		return codes.InvalidArgument
-	case cerrors.Is(err, pipeline.ErrPipelineRunning):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, pipeline.ErrPipelineNotRunning):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
-		return codes.AlreadyExists
-	case cerrors.Is(err, connector.ErrConnectorRunning):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, &conn_plugin.ValidationError{}):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrConnectorHasProcessorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig):
-		return codes.FailedPrecondition
 	default:
 		return codes.Internal
 	}
