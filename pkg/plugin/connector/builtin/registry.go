@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
@@ -27,6 +26,7 @@ import (
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit-connector-sdk/schema"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -104,23 +104,16 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 }
 
 func (r *Registry) Init(ctx context.Context) {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		// we are using modules, build info should always be available, we are staying on the safe side
-		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly")
-		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
-	}
-
-	r.plugins = r.loadPlugins(buildInfo)
+	r.plugins = r.loadPlugins()
 	r.logger.Info(ctx).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
 }
 
-func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
+func (r *Registry) loadPlugins() map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.connectors))
 	for moduleName, conn := range r.connectors {
 		factory := newDispenserFactory(conn)
 
-		specs, err := getSpecification(moduleName, factory, buildInfo)
+		specs, err := getSpecification(moduleName, factory)
 		if err != nil {
 			// stop initialization if a built-in plugin is misbehaving
 			panic(err)
@@ -152,7 +145,7 @@ func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string
 	return plugins
 }
 
-func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
+func getSpecification(moduleName string, factory dispenserFactory) (pconnector.Specification, error) {
 	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
@@ -163,24 +156,11 @@ func getSpecification(moduleName string, factory dispenserFactory, buildInfo *de
 		return pconnector.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
 	}
 
-	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
-		// overwrite version with the import version
-		resp.Specification.Version = version
-	}
+	// Overwrite the version with the hardcoded BuiltinConnectorsVersion.
+	// This ensures all built-in connectors report the same version, managed centrally.
+	resp.Specification.Version = conduit.BuiltinConnectorsVersion
 
 	return resp.Specification, nil
-}
-
-func getModuleVersion(deps []*debug.Module, moduleName string) string {
-	for _, dep := range deps {
-		if dep.Path == moduleName {
-			if dep.Replace != nil {
-				return dep.Replace.Version
-			}
-			return dep.Version
-		}
-	}
-	return ""
 }
 
 func newFullName(pluginName, pluginVersion string) plugin.FullName {

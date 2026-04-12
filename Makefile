@@ -14,6 +14,30 @@ build: check-go-version
 	@echo "Get started by running:"
 	@echo " ./conduit run"
 
+# New targets for built-in connector version management
+BUILTIN_VERSION_UPDATER=./bin/update-builtin-version
+.PHONY: install-builtin-version-updater
+install-builtin-version-updater:
+	@go build -o $(BUILTIN_VERSION_UPDATER) ./scripts/update-builtin-version.go
+
+.PHONY: builtin-version
+builtin-version: install-builtin-version-updater
+	@if [ "$(VERSION_TYPE)" = "release" ]; then \
+		echo "Validating BuiltinConnectorsVersion for release tag $(VERSION_TAG)..."; \
+		$(BUILTIN_VERSION_UPDATER) release "$(VERSION_TAG)"; \
+	elif [ "$(VERSION_TYPE)" = "develop" ]; then \
+		echo "Updating BuiltinConnectorsVersion to develop..."; \
+		$(BUILTIN_VERSION_UPDATER) develop; \
+	else \
+		echo "Error: VERSION_TYPE must be 'release' or 'develop'."; \
+		exit 1; \
+	fi
+
+.PHONY: update-builtin-version-develop
+update-builtin-version-develop: install-builtin-version-updater
+	@echo "Updating BuiltinConnectorsVersion to develop..."
+	$(BUILTIN_VERSION_UPDATER) develop
+
 .PHONY: test
 test:
 	go test $(GOTEST_FLAGS) -race ./...

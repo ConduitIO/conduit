@@ -25,6 +25,10 @@ import (
 // starts with the letter v, followed by a semantic version.
 var version string
 
+// BuiltinConnectorsVersion is the version shared by all built-in connectors.
+// This constant is updated automatically by CI after a release.
+const BuiltinConnectorsVersion = "v0.1.0-develop"
+
 func Version(appendOSArch bool) string {
 	v := "development"
 	if version != "" {

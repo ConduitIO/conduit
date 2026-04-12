@@ -3,10 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - v*
+      - v* # Triggers for vX.Y.Z tags
 
 permissions:
-  contents: write
+  contents: write # Needed for goreleaser and for the post-release version bump
+  packages: write # For Docker image push
 
 jobs:
   release:
@@ -16,12 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Needed for git describe, goreleaser, and to fetch all tags for previous_tag
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+
+      # New: Validate BuiltinConnectorsVersion before release
+      - name: Validate BuiltinConnectorsVersion
+        if: ${{ !contains(github.ref, '-nightly') }} # Only for actual releases
+        run: |
+          make builtin-version VERSION_TYPE=release VERSION_TAG=${{ github.ref_name }}
 
       - name: Set GORELEASER_PREVIOUS_TAG in actual release
         if: ${{ !contains(github.ref, '-nightly') }}
@@ -40,6 +47,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+
+      # New: Post-release update of BuiltinConnectorsVersion
+      - name: Bump BuiltinConnectorsVersion to develop
+        if: success() && !contains(github.ref, '-nightly') # Only if release succeeded and not a nightly build
+        run: |
+          make update-builtin-version-develop
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pkg/conduit/version.go
+          git commit -m "chore: Bump BuiltinConnectorsVersion to next develop" || echo "No changes to commit" # Exit code 0 if no changes
+          # Push the changes to the 'main' branch, assuming releases are tagged from 'main'.
+          git push origin HEAD:main
 
   build-push-docker-image:
     name: Build and push Docker image
