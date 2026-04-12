@@ -24,6 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +106,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.Error(codes.NotFound, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id).Error())
 	}
 	return p, nil
 }
@@ -114,7 +116,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
+		return nil, status.Error(codes.InvalidArgument, cerrors.Errorf("pipeline is invalid: %w", err).Error())
 	}
 
 	t := time.Now()
@@ -148,13 +150,13 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 		return nil, err
 	}
 	if cfg.Name == "" {
-		return nil, ErrNameMissing
+		return nil, status.Error(codes.InvalidArgument, ErrNameMissing.Error())
 	}
 
 	// delete the old name from the names set
 	exists := s.instanceNames[cfg.Name]
 	if exists && pl.Config.Name != cfg.Name {
-		return nil, ErrNameAlreadyExists
+		return nil, status.Error(codes.AlreadyExists, ErrNameAlreadyExists.Error())
 	}
 
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
@@ -178,16 +180,16 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, status.Error(codes.InvalidArgument, "DLQ plugin must be provided")
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window size must be non-negative")
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window nack threshold must be non-negative")
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window nack threshold must be lower than window size")
 	}
 
 	pl.DLQ = cfg
@@ -230,7 +232,8 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 		}
 	}
 	if connectorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID)
+		// Use NotFound for missing sub-resource
+		return nil, status.Error(codes.NotFound, cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID).Error())
 	}
 
 	pl.ConnectorIDs = pl.ConnectorIDs[:connectorIndex+copy(pl.ConnectorIDs[connectorIndex:], pl.ConnectorIDs[connectorIndex+1:])]
@@ -274,7 +277,8 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		// Use NotFound for missing sub-resource
+		return nil, status.Error(codes.NotFound, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID).Error())
 	}
 
 	pl.ProcessorIDs = pl.ProcessorIDs[:processorIndex+copy(pl.ProcessorIDs[processorIndex:], pl.ProcessorIDs[processorIndex+1:])]
@@ -313,8 +317,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 
 	if cfg.Name == "" {
 		errs = append(errs, ErrNameMissing)
-	}
-	if s.instanceNames[cfg.Name] {
+	} else if s.instanceNames[cfg.Name] { // Only check if name is not empty
 		errs = append(errs, ErrNameAlreadyExists)
 	}
 	if len(cfg.Name) > NameLengthLimit {
@@ -325,13 +328,14 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	}
 	if id == "" {
 		errs = append(errs, ErrIDMissing)
-	}
-	matched := idRegex.MatchString(id)
-	if !matched {
-		errs = append(errs, ErrInvalidCharacters)
-	}
-	if len(id) > IDLengthLimit {
-		errs = append(errs, ErrIDOverLimit)
+	} else { // Only check regex and length if ID is not empty
+		matched := idRegex.MatchString(id)
+		if !matched {
+			errs = append(errs, ErrInvalidCharacters)
+		}
+		if len(id) > IDLengthLimit {
+			errs = append(errs, ErrIDOverLimit)
+		}
 	}
 
 	return cerrors.Join(errs...)
@@ -354,6 +358,43 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, er
 		return cerrors.Errorf("pipeline not updated: %w", err)
 	}
 	return nil
+}
+
+// Start will start a pipeline.
+func (s *Service) Start(ctx context.Context, id string) error {
+	pl, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Example: Check for minimum connectors for a pipeline to start, as per issue description.
+	if len(pl.ConnectorIDs) < 2 { // A typical pipeline needs at least one source and one destination.
+		return status.Error(codes.FailedPrecondition, cerrors.Errorf("pipeline %q needs at least 2 connectors (a source and a destination) to start", id).Error())
+	}
+	if pl.GetStatus() == StatusRunning {
+		return status.Error(codes.FailedPrecondition, cerrors.Errorf("pipeline %q is already running", id).Error())
+	}
+
+	// Placeholder for the actual start logic
+	s.logger.Info(ctx).Str(log.PipelineIDField, id).Msg("starting pipeline (placeholder)")
+	pl.SetStatus(StatusRunning)
+	return s.store.Set(ctx, pl.ID, pl)
+}
+
+// Stop will stop a pipeline.
+func (s *Service) Stop(ctx context.Context, id string) error {
+	pl, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if pl.GetStatus() == StatusStopped || pl.GetStatus() == StatusUserStopped {
+		return status.Error(codes.FailedPrecondition, cerrors.Errorf("pipeline %q is already stopped", id).Error())
+	}
+
+	// Placeholder for the actual stop logic
+	s.logger.Info(ctx).Str(log.PipelineIDField, id).Msg("stopping pipeline (placeholder)")
+	pl.SetStatus(StatusUserStopped)
+	return s.store.Set(ctx, pl.ID, pl)
 }
 
 func (s *Service) updateOldStatusMetrics(pl *Instance) {

@@ -24,6 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +106,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.Error(codes.NotFound, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id).Error())
 	}
 	return ins, nil
 }
@@ -121,18 +123,18 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("connector is invalid: %w", err)
+		return nil, status.Error(codes.InvalidArgument, cerrors.Errorf("connector is invalid: %w", err).Error())
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, status.Error(codes.InvalidArgument, "must provide a plugin")
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, status.Error(codes.InvalidArgument, "must provide a pipeline ID")
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		return nil, status.Error(codes.InvalidArgument, ErrInvalidConnectorType.Error())
 	}
 
 	now := time.Now().UTC()
@@ -248,7 +250,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.Error(codes.NotFound, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID).Error())
 	}
 
 	conn.ProcessorIDs = conn.ProcessorIDs[:processorIndex+copy(conn.ProcessorIDs[processorIndex:], conn.ProcessorIDs[processorIndex+1:])]
@@ -273,14 +275,14 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 		switch conn.Type {
 		case TypeSource:
 			if _, ok := state.(SourceState); !ok {
-				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Error(codes.InvalidArgument, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType).Error())
 			}
 		case TypeDestination:
 			if _, ok := state.(DestinationState); !ok {
-				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Error(codes.InvalidArgument, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType).Error())
 			}
 		default:
-			return nil, ErrInvalidConnectorType
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidConnectorType.Error())
 		}
 	}
 
@@ -306,13 +308,14 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	}
 	if id == "" {
 		errs = append(errs, ErrIDMissing)
-	}
-	matched := idRegex.MatchString(id)
-	if !matched {
-		errs = append(errs, ErrInvalidCharacters)
-	}
-	if len(id) > IDLengthLimit {
-		errs = append(errs, ErrIDOverLimit)
+	} else { // Only validate regex and length if ID is not empty
+		matched := idRegex.MatchString(id)
+		if !matched {
+			errs = append(errs, ErrInvalidCharacters)
+		}
+		if len(id) > IDLengthLimit {
+			errs = append(errs, ErrIDOverLimit)
+		}
 	}
 
 	return cerrors.Join(errs...)
