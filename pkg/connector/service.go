@@ -24,6 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +106,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.Errorf(codes.NotFound, "connector instance not found (ID: %s)", id)
 	}
 	return ins, nil
 }
@@ -119,20 +121,21 @@ func (s *Service) Create(
 	cfg Config,
 	p ProvisionType,
 ) (*Instance, error) {
+	// Validate connector config
 	err := s.validateConnector(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("connector is invalid: %w", err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid connector configuration: %v", err.Error())
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, status.Errorf(codes.InvalidArgument, "must provide a plugin")
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, status.Errorf(codes.InvalidArgument, "must provide a pipeline ID")
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		return nil, status.Errorf(codes.InvalidArgument, "invalid connector type")
 	}
 
 	now := time.Now().UTC()
@@ -157,7 +160,7 @@ func (s *Service) Create(
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	s.connectors[id] = conn
@@ -197,6 +200,13 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 		return nil, err
 	}
 
+	// Validation for data if any. Assuming data already validated, but if not, wrap similarly.
+	// For instance, if `data` is invalid in some way:
+	// err = s.validateConnectorConfigUpdate(data)
+	// if err != nil {
+	//    return nil, status.Errorf(codes.InvalidArgument, "invalid connector update configuration: %v", err.Error())
+	// }
+
 	if conn.Plugin != plugin {
 		s.logger.Warn(ctx).Msgf("connector plugin changing from %v to %v, "+
 			"this may lead to unexpected behavior and configuration issues.", conn.Plugin, plugin)
@@ -208,7 +218,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	return conn, nil
@@ -227,7 +237,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", connectorID, err)
 	}
 
 	return conn, err
@@ -248,7 +258,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.Errorf(codes.NotFound, "processor ID not found (ID: %s)", processorID)
 	}
 
 	conn.ProcessorIDs = conn.ProcessorIDs[:processorIndex+copy(conn.ProcessorIDs[processorIndex:], conn.ProcessorIDs[processorIndex+1:])]
@@ -257,7 +267,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", connectorID, err)
 	}
 
 	return conn, err
@@ -273,14 +283,14 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 		switch conn.Type {
 		case TypeSource:
 			if _, ok := state.(SourceState); !ok {
-				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Errorf(codes.InvalidArgument, "expected source state (ID: %s): invalid connector state type", id)
 			}
 		case TypeDestination:
 			if _, ok := state.(DestinationState); !ok {
-				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Errorf(codes.InvalidArgument, "expected destination state (ID: %s): invalid connector state type", id)
 			}
 		default:
-			return nil, ErrInvalidConnectorType
+			return nil, status.Errorf(codes.InvalidArgument, "invalid connector type for state update")
 		}
 	}
 
@@ -288,7 +298,7 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	return conn, err
@@ -302,7 +312,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 		errs = append(errs, ErrNameMissing)
 	}
 	if len(cfg.Name) > NameLengthLimit {
-		errs = append(errs, ErrNameOverLimit)
+		errs = append(errs, cerrors.Errorf("%w: max %d characters", ErrNameOverLimit, NameLengthLimit))
 	}
 	if id == "" {
 		errs = append(errs, ErrIDMissing)
@@ -312,7 +322,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 		errs = append(errs, ErrInvalidCharacters)
 	}
 	if len(id) > IDLengthLimit {
-		errs = append(errs, ErrIDOverLimit)
+		errs = append(errs, cerrors.Errorf("%w: max %d characters", ErrIDOverLimit, IDLengthLimit))
 	}
 
 	return cerrors.Join(errs...)
