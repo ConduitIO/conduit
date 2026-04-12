@@ -33,6 +33,21 @@ func PipelineError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
+	case cerrors.Is(err, pipeline.ErrIDMissing),
+		cerrors.Is(err, pipeline.ErrInvalidCharacters),
+		cerrors.Is(err, pipeline.ErrNameOverLimit),
+		cerrors.Is(err, pipeline.ErrIDOverLimit),
+		cerrors.Is(err, pipeline.ErrDescriptionOverLimit),
+		cerrors.Is(err, pipeline.ErrConnectorIDNotFound),
+		cerrors.Is(err, pipeline.ErrProcessorIDNotFound):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrDLQPluginMissing),
+		cerrors.Is(err, pipeline.ErrDLQWindowSizeNegative),
+		cerrors.Is(err, pipeline.ErrDLQWindowNackThresholdNegative),
+		cerrors.Is(err, pipeline.ErrDLQWindowNackThresholdTooHigh):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
@@ -48,6 +63,14 @@ func ConnectorError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, connector.ErrNameMissing),
+		cerrors.Is(err, connector.ErrNameOverLimit),
+		cerrors.Is(err, connector.ErrIDMissing),
+		cerrors.Is(err, connector.ErrInvalidCharacters),
+		cerrors.Is(err, connector.ErrIDOverLimit),
+		cerrors.Is(err, connector.ErrProcessorIDNotFound),
+		cerrors.Is(err, connector.ErrInvalidConnectorStateType):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
@@ -63,6 +86,11 @@ func ProcessorError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, processor.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, processor.ErrIDMissing),
+		cerrors.Is(err, processor.ErrInvalidCharacters),
+		cerrors.Is(err, processor.ErrIDOverLimit),
+		cerrors.Is(err, processor.ErrNameOverLimit):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
@@ -84,21 +112,22 @@ func codeFromError(err error) codes.Code {
 		return codes.FailedPrecondition
 	case cerrors.Is(err, pipeline.ErrPipelineNotRunning):
 		return codes.FailedPrecondition
-	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
+	case cerrors.Is(err, pipeline.ErrNameAlreadyExists): // This can be removed, already handled by PipelineError
 		return codes.AlreadyExists
 	case cerrors.Is(err, connector.ErrConnectorRunning):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, &conn_plugin.ValidationError{}):
 		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrConnectorHasProcessorsAttached):
-		return codes.FailedPrecondition
-	case cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig):
+	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached),
+		cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached),
+		cerrors.Is(err, orchestrator.ErrConnectorHasProcessorsAttached),
+		cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig),
+		cerrors.Is(err, orchestrator.ErrPipelineNoSource): // Added for StartPipeline
 		return codes.FailedPrecondition
 	default:
+		// If no specific mapping is found, default to Internal.
+		// Errors like "invalid plugin config" are wrapped by conn_plugin.ValidationError
+		// and will be caught above as FailedPrecondition.
 		return codes.Internal
 	}
 }

@@ -27,9 +27,15 @@ var (
 	ErrIDMissing             = cerrors.New("must provide a pipeline ID")
 	ErrNameAlreadyExists     = cerrors.New("pipeline name already exists")
 	ErrInvalidCharacters     = cerrors.New("pipeline ID contains invalid characters")
-	ErrNameOverLimit         = cerrors.New("pipeline name is over the character limit (64)")
-	ErrIDOverLimit           = cerrors.New("pipeline ID is over the character limit (64)")
+	ErrNameOverLimit         = cerrors.New("pipeline name is over the character limit (128)") // changed from 64
+	ErrIDOverLimit           = cerrors.New("pipeline ID is over the character limit (128)")   // changed from 64
 	ErrDescriptionOverLimit  = cerrors.New("pipeline description is over the character limit (8192)")
 	ErrConnectorIDNotFound   = cerrors.New("connector ID not found")
 	ErrProcessorIDNotFound   = cerrors.New("processor ID not found")
+
+	// DLQ validation errors
+	ErrDLQPluginMissing          = cerrors.New("DLQ plugin must be provided")
+	ErrDLQWindowSizeNegative     = cerrors.New("DLQ window size must be non-negative")
+	ErrDLQWindowNackThresholdNegative = cerrors.New("DLQ window nack threshold must be non-negative")
+	ErrDLQWindowNackThresholdTooHigh  = cerrors.New("DLQ window nack threshold must be lower than window size")
 )

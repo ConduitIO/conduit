@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/http/api/status" // New import
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +105,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.PipelineError(cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)) // Wrapped error
 	}
 	return p, nil
 }
@@ -114,7 +115,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("pipeline is invalid: %w", err)) // Wrapped error
 	}
 
 	t := time.Now()
@@ -130,7 +131,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	s.instances[pl.ID] = pl
@@ -145,16 +146,16 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 	if cfg.Name == "" {
-		return nil, ErrNameMissing
+		return nil, status.PipelineError(ErrNameMissing) // Wrapped error
 	}
 
 	// delete the old name from the names set
 	exists := s.instanceNames[cfg.Name]
 	if exists && pl.Config.Name != cfg.Name {
-		return nil, ErrNameAlreadyExists
+		return nil, status.PipelineError(ErrNameAlreadyExists) // Wrapped error
 	}
 
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
@@ -164,7 +165,7 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 	s.instanceNames[cfg.Name] = true
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -174,27 +175,27 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, status.PipelineError(ErrDLQPluginMissing) // Wrapped error
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, status.PipelineError(ErrDLQWindowSizeNegative) // Wrapped error
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, status.PipelineError(ErrDLQWindowNackThresholdNegative) // Wrapped error
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, status.PipelineError(ErrDLQWindowNackThresholdTooHigh) // Wrapped error
 	}
 
 	pl.DLQ = cfg
 	pl.UpdatedAt = time.Now()
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -204,13 +205,13 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 func (s *Service) AddConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -220,7 +221,7 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 	connectorIndex := -1
 	for index, id := range pl.ConnectorIDs {
@@ -230,7 +231,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 		}
 	}
 	if connectorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID)
+		return nil, status.PipelineError(cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID)) // Wrapped error
 	}
 
 	pl.ConnectorIDs = pl.ConnectorIDs[:connectorIndex+copy(pl.ConnectorIDs[connectorIndex:], pl.ConnectorIDs[connectorIndex+1:])]
@@ -238,7 +239,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -248,13 +249,13 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 	pl.ProcessorIDs = append(pl.ProcessorIDs, processorID)
 	pl.UpdatedAt = time.Now()
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -264,7 +265,7 @@ func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processor
 func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.PipelineError
 	}
 	processorIndex := -1
 	for index, id := range pl.ProcessorIDs {
@@ -274,7 +275,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.PipelineError(cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)) // Wrapped error
 	}
 
 	pl.ProcessorIDs = pl.ProcessorIDs[:processorIndex+copy(pl.ProcessorIDs[processorIndex:], pl.ProcessorIDs[processorIndex+1:])]
@@ -282,7 +283,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)) // Wrapped error
 	}
 
 	return pl, err
@@ -292,11 +293,11 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return err
+		return err // Get already wraps with status.PipelineError
 	}
 	err = s.store.Delete(ctx, pl.ID)
 	if err != nil {
-		return cerrors.Errorf("could not delete pipeline instance from store: %w", err)
+		return status.PipelineError(cerrors.Errorf("could not delete pipeline instance from store: %w", err)) // Wrapped error
 	}
 
 	delete(s.instances, pl.ID)
@@ -341,7 +342,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
 	pipeline, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return err // Get already wraps with status.PipelineError
 	}
 	s.updateOldStatusMetrics(pipeline)
 	pipeline.SetStatus(status)
@@ -351,7 +352,41 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, er
 
 	err = s.store.Set(ctx, pipeline.ID, pipeline)
 	if err != nil {
-		return cerrors.Errorf("pipeline not updated: %w", err)
+		return status.PipelineError(cerrors.Errorf("pipeline not updated: %w", err)) // Wrapped error
+	}
+	return nil
+}
+
+// Start will start the pipeline, which in turn will start all its connectors.
+func (s *Service) Start(ctx context.Context, id string, connectors map[string]StartableConnector, processors map[string]StartableProcessor) error {
+	pl, err := s.Get(ctx, id)
+	if err != nil {
+		return err // Get already wraps with status.PipelineError
+	}
+	err = pl.Start(ctx, s.logger, connectors, processors)
+	if err != nil {
+		return status.PipelineError(cerrors.Errorf("failed to start pipeline: %w", err)) // Wrapped error
+	}
+	err = s.store.Set(ctx, pl.ID, pl)
+	if err != nil {
+		return status.PipelineError(cerrors.Errorf("pipeline not updated: %w", err)) // Wrapped error
+	}
+	return nil
+}
+
+// Stop will stop the pipeline, which in turn will stop all its connectors.
+func (s *Service) Stop(ctx context.Context, id string, connectors map[string]StoppableConnector, processors map[string]StoppableProcessor) error {
+	pl, err := s.Get(ctx, id)
+	if err != nil {
+		return err // Get already wraps with status.PipelineError
+	}
+	err = pl.Stop(ctx, s.logger, connectors, processors)
+	if err != nil {
+		return status.PipelineError(cerrors.Errorf("failed to stop pipeline: %w", err)) // Wrapped error
+	}
+	err = s.store.Set(ctx, pl.ID, pl)
+	if err != nil {
+		return status.PipelineError(cerrors.Errorf("pipeline not updated: %w", err)) // Wrapped error
 	}
 	return nil
 }

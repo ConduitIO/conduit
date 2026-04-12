@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/http/api/status" // New import
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +105,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.ConnectorError(cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)) // Wrapped error
 	}
 	return ins, nil
 }
@@ -121,18 +122,18 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("connector is invalid: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("connector is invalid: %w", err)) // Wrapped error
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, status.ConnectorError(cerrors.New("must provide a plugin")) // Wrapped error
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, status.ConnectorError(cerrors.New("must provide a pipeline ID")) // Wrapped error
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		return nil, status.ConnectorError(ErrInvalidConnectorType) // Wrapped error
 	}
 
 	now := time.Now().UTC()
@@ -157,7 +158,7 @@ func (s *Service) Create(
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, status.ConnectorError(err) // Wrapped error
 	}
 
 	s.connectors[id] = conn
@@ -170,12 +171,12 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return err // Get already wraps with status.ConnectorError
 	}
 
 	err = s.store.Delete(ctx, id)
 	if err != nil {
-		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
+		return status.ConnectorError(cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)) // Wrapped error
 	}
 	delete(s.connectors, id)
 
@@ -194,7 +195,7 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 func (s *Service) Update(ctx context.Context, id string, plugin string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.ConnectorError
 	}
 
 	if conn.Plugin != plugin {
@@ -208,7 +209,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, status.ConnectorError(err) // Wrapped error
 	}
 
 	return conn, nil
@@ -218,7 +219,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 func (s *Service) AddProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.ConnectorError
 	}
 
 	conn.ProcessorIDs = append(conn.ProcessorIDs, processorID)
@@ -227,7 +228,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, status.ConnectorError(err) // Wrapped error
 	}
 
 	return conn, err
@@ -237,7 +238,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.ConnectorError
 	}
 
 	processorIndex := -1
@@ -248,7 +249,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.ConnectorError(cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)) // Wrapped error
 	}
 
 	conn.ProcessorIDs = conn.ProcessorIDs[:processorIndex+copy(conn.ProcessorIDs[processorIndex:], conn.ProcessorIDs[processorIndex+1:])]
@@ -257,7 +258,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, status.ConnectorError(err) // Wrapped error
 	}
 
 	return conn, err
@@ -266,21 +267,21 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already wraps with status.ConnectorError
 	}
 
 	if state != nil {
 		switch conn.Type {
 		case TypeSource:
 			if _, ok := state.(SourceState); !ok {
-				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.ConnectorError(cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)) // Wrapped error
 			}
 		case TypeDestination:
 			if _, ok := state.(DestinationState); !ok {
-				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.ConnectorError(cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)) // Wrapped error
 			}
 		default:
-			return nil, ErrInvalidConnectorType
+			return nil, status.ConnectorError(ErrInvalidConnectorType) // Wrapped error
 		}
 	}
 
@@ -288,7 +289,7 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, status.ConnectorError(err) // Wrapped error
 	}
 
 	return conn, err

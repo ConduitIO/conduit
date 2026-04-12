@@ -6,6 +6,7 @@ import "config/v1/parameter.proto";
 import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto"; // New import for .google.rpc.Status reference
 import "opencdc/v1/opencdc.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
@@ -465,6 +466,19 @@ service PipelineService {
           }
         }
       }
+      // Add 400 for InvalidArgument (e.g., pipeline ID format)
+      responses: {
+        key: "400_INVALID_ARGUMENT" // Custom key to differentiate from FailedPrecondition, though it maps to 400
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error (e.g., invalid pipeline ID)", "details": [] }'
+          }
+        }
+      }
     };
   }
 
@@ -502,129 +516,27 @@ service PipelineService {
   }
 
   rpc GetDLQ(GetDLQRequest) returns (GetDLQResponse) {
-    option (google.api.http) = {
-      get: "/v1/pipelines/{id}/dead-letter-queue"
-      response_body: "dlq"
+    option (google.api.http) = {get: "/v1/pipelines/{id}/dlq"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }'
+          }
+        }
+      }
     };
   }
 
   rpc UpdateDLQ(UpdateDLQRequest) returns (UpdateDLQResponse) {
     option (google.api.http) = {
-      put: "/v1/pipelines/{id}/dead-letter-queue"
+      put: "/v1/pipelines/{id}/dlq"
       body: "dlq"
-      response_body: "dlq"
-    };
-  }
-
-  rpc ExportPipeline(ExportPipelineRequest) returns (ExportPipelineResponse) {
-    option (google.api.http) = {
-      post: "/v1/pipelines/{id}/export"
-      response_body: "pipeline"
-    };
-  }
-
-  rpc ImportPipeline(ImportPipelineRequest) returns (ImportPipelineResponse) {
-    option (google.api.http) = {
-      post: "/v1/pipelines/import"
-      body: "pipeline"
-      response_body: "pipeline"
-    };
-  }
-}
-
-message ListPipelinesRequest {
-  // Regex to filter pipelines by name.
-  string name = 1;
-}
-message ListPipelinesResponse {
-  repeated Pipeline pipelines = 1;
-}
-
-message CreatePipelineRequest {
-  Pipeline.Config config = 1;
-}
-message CreatePipelineResponse {
-  Pipeline pipeline = 1;
-}
-
-message GetPipelineRequest {
-  string id = 1;
-}
-message GetPipelineResponse {
-  Pipeline pipeline = 1;
-}
-
-message UpdatePipelineRequest {
-  string id = 1;
-  Pipeline.Config config = 2;
-}
-message UpdatePipelineResponse {
-  Pipeline pipeline = 1;
-}
-
-message DeletePipelineRequest {
-  string id = 1;
-}
-message DeletePipelineResponse {}
-
-message StartPipelineRequest {
-  string id = 1;
-}
-message StartPipelineResponse {}
-
-message StopPipelineRequest {
-  string id = 1;
-  bool force = 2;
-}
-message StopPipelineResponse {}
-
-message GetDLQRequest {
-  string id = 1;
-}
-message GetDLQResponse {
-  Pipeline.DLQ dlq = 1;
-}
-message UpdateDLQRequest {
-  string id = 1;
-  Pipeline.DLQ dlq = 2;
-}
-message UpdateDLQResponse {
-  Pipeline.DLQ dlq = 1;
-}
-
-message ExportPipelineRequest {
-  string id = 1;
-}
-message ExportPipelineResponse {
-  Pipeline pipeline = 1;
-}
-message ImportPipelineRequest {
-  Pipeline pipeline = 1;
-}
-message ImportPipelineResponse {
-  Pipeline pipeline = 1;
-}
-
-// ConnectorService exposes CRUD functionality for managing connectors.
-service ConnectorService {
-  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
-    option (google.api.http) = {
-      get: "/v1/connectors"
-      response_body: "connectors"
-    };
-  }
-
-  rpc InspectConnector(InspectConnectorRequest) returns (stream InspectConnectorResponse) {
-    option (google.api.http) = {
-      get: "/v1/connectors/{id}/inspect"
-      response_body: "record"
-    };
-  }
-
-  rpc GetConnector(GetConnectorRequest) returns (GetConnectorResponse) {
-    option (google.api.http) = {
-      get: "/v1/connectors/{id}"
-      response_body: "connector"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       responses: {
@@ -639,6 +551,121 @@ service ConnectorService {
           }
         }
       }
+      responses: {
+        key: "400"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error (e.g., invalid DLQ configuration)", "details": [] }'
+          }
+        }
+      }
+    };
+  }
+
+  rpc ExportPipeline(ExportPipelineRequest) returns (ExportPipelineResponse) {
+    option (google.api.http) = {get: "/v1/pipelines/{id}/export"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }'
+          }
+        }
+      }
+    };
+  }
+}
+
+message ListPipelinesRequest {}
+message ListPipelinesResponse {
+  repeated Pipeline pipelines = 1;
+}
+
+message CreatePipelineRequest {
+  string id = 1 [(google.api.field_behavior) = OPTIONAL];
+  Pipeline.Config config = 2 [(google.api.field_behavior) = REQUIRED];
+}
+message CreatePipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message GetPipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message GetPipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message UpdatePipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  Pipeline.Config config = 2 [(google.api.field_behavior) = REQUIRED];
+}
+message UpdatePipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message DeletePipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message DeletePipelineResponse {}
+
+message StartPipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message StartPipelineResponse {}
+
+message StopPipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  // Force indicates if the pipeline should be forcefully stopped.
+  // When set to true, any in-flight records will be discarded and
+  // the pipeline will be stopped immediately. When set to false,
+  // in-flight records will be processed before the pipeline is stopped.
+  bool force = 2;
+}
+message StopPipelineResponse {}
+
+message GetDLQRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message GetDLQResponse {
+  Pipeline.DLQ dlq = 1;
+}
+
+message UpdateDLQRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  Pipeline.DLQ dlq = 2 [(google.api.field_behavior) = REQUIRED];
+}
+message UpdateDLQResponse {
+  Pipeline.DLQ dlq = 1;
+}
+
+message ExportPipelineRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message ExportPipelineResponse {
+  string pipeline_yaml = 1;
+}
+
+// ConnectorService exposes functionality for managing connectors.
+// Endpoints in this service can be used to create, fetch, modify or delete a
+// connector. Processors attached to a connector can be fetched together with
+// a connector, although they can not be modified through this service.
+// Modifying processors needs to be done through the service responsible for
+// managing processors.
+service ConnectorService {
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option (google.api.http) = {
+      get: "/v1/connectors"
+      response_body: "connectors"
     };
   }
 
@@ -657,39 +684,40 @@ service ConnectorService {
           }
           examples: {
             key: "application/json"
-            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+            value: '{ "code": 3, "message": "invalid arguments error (e.g., invalid connector configuration, missing plugin)", "details": [] }'
+          }
+        }
+      }
+      responses: {
+        key: "409"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }'
           }
         }
       }
     };
   }
-  rpc ValidateConnector(ValidateConnectorRequest) returns (ValidateConnectorResponse) {
+
+  rpc GetConnector(GetConnectorRequest) returns (GetConnectorResponse) {
     option (google.api.http) = {
-      post: "/v1/connectors/validate"
-      body: "*"
+      get: "/v1/connectors/{id}"
+      response_body: "connector"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       responses: {
-        key: "500"
+        key: "404"
         value: {
           schema: {
             json_schema: {ref: ".google.rpc.Status"}
           }
           examples: {
             key: "application/json"
-            value: '{ "code": 13, "message": "could not dispense destination", "details": [] }'
-          }
-        }
-      }
-      responses: {
-        key: "400"
-        value: {
-          schema: {
-            json_schema: {ref: ".google.rpc.Status"}
-          }
-          examples: {
-            key: "application/json"
-            value: '{ "code": 9, "message": "validation error: `aws.accessKeyId` config value must be set", "details": [] }'
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }'
           }
         }
       }
@@ -723,7 +751,7 @@ service ConnectorService {
           }
           examples: {
             key: "application/json"
-            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+            value: '{ "code": 3, "message": "invalid arguments error (e.g., invalid connector configuration)", "details": [] }'
           }
         }
       }
@@ -760,114 +788,28 @@ service ConnectorService {
     };
   }
 
-  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
-    option (google.api.http) = {
-      get: "/v1/connectors/plugins"
-      response_body: "plugins"
-    };
-  }
-}
-
-message CreateConnectorRequest {
-  Connector.Type type = 1;
-  // Used to reference a plugin. Its format is as follows:
-  // [PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]
-  // PLUGIN-TYPE: One of: builtin, standalone or any (default).
-  // PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
-  // VERSION: The plugin version as specified in the plugin specifications or latest (default).
-  // For more information, see: https://conduit.io/docs/using/connectors/referencing
-  string plugin = 2;
-  // ID of the pipeline to which the connector will get attached.
-  string pipeline_id = 3;
-  Connector.Config config = 4;
-}
-
-message CreateConnectorResponse {
-  Connector connector = 1;
-}
-
-message ValidateConnectorRequest {
-  Connector.Type type = 1;
-  // Plugin name is the name of the builtin plugin (builtin:name), or the absolute path of a standalone plugin.
-  string plugin = 2;
-  // Configurations for the connector to get validated
-  Connector.Config config = 4;
-}
-
-message ValidateConnectorResponse {}
-
-message ListConnectorsRequest {
-  string pipeline_id = 1;
-}
-
-message ListConnectorsResponse {
-  repeated Connector connectors = 1;
-}
-
-message InspectConnectorRequest {
-  string id = 1;
-}
-message InspectConnectorResponse {
-  opencdc.v1.Record record = 1;
-}
-
-message GetConnectorRequest {
-  string id = 1;
-}
-message GetConnectorResponse {
-  Connector connector = 1;
-}
-
-message UpdateConnectorRequest {
-  string id = 1;
-  Connector.Config config = 2;
-  string plugin = 3;
-}
-message UpdateConnectorResponse {
-  Connector connector = 1;
-}
-
-message DeleteConnectorRequest {
-  string id = 1;
-}
-message DeleteConnectorResponse {}
-
-message ListConnectorPluginsRequest {
-  // Regex to filter plugins by name.
-  string name = 1;
-}
-
-message ListConnectorPluginsResponse {
-  repeated ConnectorPluginSpecifications plugins = 1;
-}
-
-// ProcessorService exposes CRUD functionality for managing processors.
-service ProcessorService {
-  rpc ListProcessors(ListProcessorsRequest) returns (ListProcessorsResponse) {
-    option (google.api.http) = {
-      get: "/v1/processors"
-      response_body: "processors"
+  rpc GetConnectorState(GetConnectorStateRequest) returns (GetConnectorStateResponse) {
+    option (google.api.http) = {get: "/v1/connectors/{id}/state"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }'
+          }
+        }
+      }
     };
   }
 
-  rpc InspectProcessorIn(InspectProcessorInRequest) returns (stream InspectProcessorInResponse) {
+  rpc UpdateConnectorState(UpdateConnectorStateRequest) returns (UpdateConnectorStateResponse) {
     option (google.api.http) = {
-      get: "/v1/processors/{id}/inspect-in"
-      response_body: "record"
-    };
-  }
-
-  rpc InspectProcessorOut(InspectProcessorOutRequest) returns (stream InspectProcessorOutResponse) {
-    option (google.api.http) = {
-      get: "/v1/processors/{id}/inspect-out"
-      response_body: "record"
-    };
-  }
-
-  rpc GetProcessor(GetProcessorRequest) returns (GetProcessorResponse) {
-    option (google.api.http) = {
-      get: "/v1/processors/{id}"
-      response_body: "processor"
+      put: "/v1/connectors/{id}/state"
+      body: "state"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       responses: {
@@ -882,6 +824,86 @@ service ProcessorService {
           }
         }
       }
+      responses: {
+        key: "400"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error (e.g., invalid state type for connector)", "details": [] }'
+          }
+        }
+      }
+    };
+  }
+}
+
+message ListConnectorsRequest {}
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+
+message CreateConnectorRequest {
+  string id = 1 [(google.api.field_behavior) = OPTIONAL];
+  Connector.Type type = 2 [(google.api.field_behavior) = REQUIRED];
+  string plugin = 3 [(google.api.field_behavior) = REQUIRED];
+  string pipeline_id = 4 [(google.api.field_behavior) = REQUIRED];
+  Connector.Config config = 5 [(google.api.field_behavior) = REQUIRED];
+}
+message CreateConnectorResponse {
+  Connector connector = 1;
+}
+
+message GetConnectorRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message GetConnectorResponse {
+  Connector connector = 1;
+}
+
+message UpdateConnectorRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  string plugin = 2 [(google.api.field_behavior) = REQUIRED];
+  Connector.Config config = 3 [(google.api.field_behavior) = REQUIRED];
+}
+message UpdateConnectorResponse {
+  Connector connector = 1;
+}
+
+message DeleteConnectorRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message DeleteConnectorResponse {}
+
+message GetConnectorStateRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+message GetConnectorStateResponse {
+  Connector.DestinationState destination_state = 1;
+  Connector.SourceState source_state = 2;
+}
+
+message UpdateConnectorStateRequest {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  oneof state {
+    Connector.DestinationState destination_state = 2;
+    Connector.SourceState source_state = 3;
+  }
+}
+message UpdateConnectorStateResponse {
+  Connector connector = 1;
+}
+
+// ProcessorService exposes functionality for managing processors.
+// Endpoints in this service can be used to create, fetch, modify or delete a
+// processor.
+service ProcessorService {
+  rpc ListProcessors(ListProcessorsRequest) returns (ListProcessorsResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors"
+      response_body: "processors"
     };
   }
 
@@ -901,6 +923,39 @@ service ProcessorService {
           examples: {
             key: "application/json"
             value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+          }
+        }
+      }
+      responses: {
+        key: "409"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }'
+          }
+        }
+      }
+    };
+  }
+
+  rpc GetProcessor(GetProcessorRequest) returns (GetProcessorResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}"
+      response_body: "processor"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }'
           }
         }
       }
@@ -970,116 +1025,74 @@ service ProcessorService {
       }
     };
   }
-
-  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
-    option (google.api.http) = {
-      get: "/v1/processors/plugins"
-      response_body: "plugins"
-    };
-  }
 }
 
 message ListProcessorsRequest {
-  repeated string parent_ids = 1;
+  // If `parent_id` is specified, only processors attached to the specified
+  // entity will be returned. Otherwise, all processors will be returned.
+  string parent_id = 1;
+  // If `parent_type` is specified, only processors attached to the specified
+  // entity type will be returned. This field needs `parent_id` to be also set.
+  Processor.Parent.Type parent_type = 2;
 }
 message ListProcessorsResponse {
   repeated Processor processors = 1;
 }
 
-message InspectProcessorInRequest {
-  string id = 1;
-}
-message InspectProcessorInResponse {
-  opencdc.v1.Record record = 1;
-}
-
-message InspectProcessorOutRequest {
-  string id = 1;
-}
-message InspectProcessorOutResponse {
-  opencdc.v1.Record record = 1;
-}
-
 message CreateProcessorRequest {
-  string type = 1 [deprecated = true];
-  Processor.Parent parent = 3;
-  Processor.Config config = 4;
+  string id = 1 [(google.api.field_behavior) = OPTIONAL];
+  string plugin = 2 [(google.api.field_behavior) = REQUIRED];
+  Processor.Parent parent = 3 [(google.api.field_behavior) = REQUIRED];
+  Processor.Config config = 4 [(google.api.field_behavior) = REQUIRED];
   string condition = 5;
-  string plugin = 6;
 }
 message CreateProcessorResponse {
   Processor processor = 1;
 }
 
 message GetProcessorRequest {
-  string id = 1;
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
 }
 message GetProcessorResponse {
   Processor processor = 1;
 }
 
 message UpdateProcessorRequest {
-  string id = 1;
-  Processor.Config config = 2;
-  string plugin = 3;
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  Processor.Config config = 2 [(google.api.field_behavior) = REQUIRED];
+  string condition = 3;
 }
 message UpdateProcessorResponse {
   Processor processor = 1;
 }
 
 message DeleteProcessorRequest {
-  string id = 1;
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
 }
 message DeleteProcessorResponse {}
 
-message ListProcessorPluginsRequest {
-  // Regex to filter plugins by name.
-  string name = 1;
-}
-
-message ListProcessorPluginsResponse {
-  repeated ProcessorPluginSpecifications plugins = 1;
-}
-
-service InformationService {
-  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {
+// PluginService exposes functionality for managing plugins.
+service PluginService {
+  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
     option (google.api.http) = {
-      get: "/info"
-      response_body: "info"
+      get: "/v1/connector_plugins"
+      response_body: "plugins"
     };
   }
-}
-
-message GetInfoRequest {}
-
-message GetInfoResponse {
-  Info info = 1;
-}
-
-message Info {
-  string version = 1;
-  string os = 2;
-  string arch = 3;
-}
-
-// Deprecated: use ConnectorService and ProcessorService instead.
-service PluginService {
-  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
-    option deprecated = true;
+  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
     option (google.api.http) = {
-      get: "/v1/plugins"
+      get: "/v1/processor_plugins"
       response_body: "plugins"
     };
   }
 }
 
-message ListPluginsRequest {
-  option deprecated = true;
-  // Regex to filter plugins by name.
-  string name = 1;
+message ListConnectorPluginsRequest {}
+message ListConnectorPluginsResponse {
+  repeated ConnectorPluginSpecifications plugins = 1;
 }
 
-message ListPluginsResponse {
-  option deprecated = true;
-  repeated PluginSpecifications plugins = 1;
+message ListProcessorPluginsRequest {}
+message ListProcessorPluginsResponse {
+  repeated ProcessorPluginSpecifications plugins = 1;
 }
