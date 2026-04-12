@@ -1,0 +1,1 @@
+go vet pkg/plugin/connector/builtin/registry.go
