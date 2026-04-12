@@ -166,8 +166,8 @@ func getSpecification(moduleName string, factory dispenserFactory, buildInfo *de
 
 	// For built-in connectors, their reported version should always be Conduit's version.
 	// This ensures consistency when built-in connectors are part of the Conduit binary.
-	// We avoid importing conduit package to prevent circular dependencies
-	resp.Specification.Version = "v0.1.0-develop" // This will be overridden in the build process
+	// This version will be set properly during the build process via ldflags
+	resp.Specification.Version = "v0.1.0-develop"
 
 	// The original logic to derive version from module info (getModuleVersion)
 	// is now commented out/removed for built-in connectors to ensure they report
