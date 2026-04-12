@@ -6,6 +6,7 @@ import "config/v1/parameter.proto";
 import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
 import "opencdc/v1/opencdc.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 

@@ -32,4 +32,7 @@ var (
 	ErrDescriptionOverLimit  = cerrors.New("pipeline description is over the character limit (8192)")
 	ErrConnectorIDNotFound   = cerrors.New("connector ID not found")
 	ErrProcessorIDNotFound   = cerrors.New("processor ID not found")
+	// ErrMissingSourceOrDestination is returned when a pipeline cannot be started
+	// because it doesn't have a source or a destination connector.
+	ErrMissingSourceOrDestination = cerrors.New("pipeline must have at least one source and one destination connector")
 )

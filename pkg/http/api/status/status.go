@@ -31,6 +31,20 @@ func PipelineError(err error) error {
 	switch {
 	case cerrors.Is(err, pipeline.ErrNameMissing):
 		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrIDMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrNameOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrIDOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrInvalidCharacters):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrDescriptionOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrConnectorIDNotFound):
+		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrProcessorIDNotFound):
+		code = codes.NotFound
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
 	default:
@@ -46,6 +60,18 @@ func ConnectorError(err error) error {
 	switch {
 	case cerrors.Is(err, connector.ErrInvalidConnectorType):
 		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrIDMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrNameMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrNameOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrIDOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrInvalidCharacters):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrProcessorIDNotFound):
+		code = codes.NotFound
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
 	default:
@@ -86,10 +112,12 @@ func codeFromError(err error) codes.Code {
 		return codes.FailedPrecondition
 	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
 		return codes.AlreadyExists
+	case cerrors.Is(err, pipeline.ErrMissingSourceOrDestination):
+		return codes.FailedPrecondition
 	case cerrors.Is(err, connector.ErrConnectorRunning):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, &conn_plugin.ValidationError{}):
-		return codes.FailedPrecondition
+		return codes.InvalidArgument
 	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached):
