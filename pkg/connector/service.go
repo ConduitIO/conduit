@@ -104,6 +104,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
+		// Use the new strongly-typed error
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
 	}
 	return ins, nil
@@ -121,17 +122,21 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
+		// validateConnector already returns strongly-typed errors via cerrors.Join
 		return nil, cerrors.Errorf("connector is invalid: %w", err)
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		// Use the new strongly-typed error
+		return nil, ErrMissingPlugin
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		// Use the new strongly-typed error
+		return nil, ErrMissingPipelineID
 	}
 	if t != TypeSource && t != TypeDestination {
+		// Use the new strongly-typed error
 		return nil, ErrInvalidConnectorType
 	}
 
@@ -248,6 +253,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		}
 	}
 	if processorIndex == -1 {
+		// Use the new strongly-typed error
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
 	}
 
@@ -273,13 +279,16 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 		switch conn.Type {
 		case TypeSource:
 			if _, ok := state.(SourceState); !ok {
+				// Use the new strongly-typed error
 				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		case TypeDestination:
 			if _, ok := state.(DestinationState); !ok {
+				// Use the new strongly-typed error
 				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		default:
+			// Use the new strongly-typed error
 			return nil, ErrInvalidConnectorType
 		}
 	}

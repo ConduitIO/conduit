@@ -12,19 +12,82 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cerrors contains functions related to error handling.
-//
-// The standard library's errors package is missing some functionality which we need,
-// such as stack traces. To be certain that all errors created in Conduit are created
-// with the additional information, usage of this package is mandatory.
-//
-// At present, the package acts as a "thin forwarding layer", where we "mix and match"
-// functions from different packages.
 package cerrors
 
-var (
-	// ErrNotImpl should be used when a functionality which is not yet implemented was called.
-	ErrNotImpl = New("not impl")
-	// ErrEmptyID should be used when an entity was requested, but the ID was not provided.
-	ErrEmptyID = New("empty ID")
+import (
+	"fmt"
+	"google.golang.org/grpc/codes"
 )
+
+// GRPCCodeError is an interface that can be implemented by errors to provide a gRPC status code.
+type GRPCCodeError interface {
+	Error() string
+	GRPCCode() codes.Code
+}
+
+// grpcCodeError implements GRPCCodeError.
+type grpcCodeError struct {
+	msg  string
+	code codes.Code
+	err  error // wrapped error
+}
+
+func (e *grpcCodeError) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("%s: %s", e.msg, e.err.Error())
+	}
+	return e.msg
+}
+
+func (e *grpcCodeError) GRPCCode() codes.Code {
+	return e.code
+}
+
+func (e *grpcCodeError) Is(target error) bool {
+	if e.err != nil {
+		return Is(e.err, target)
+	}
+	// Direct comparison if no wrapped error
+	_, ok := target.(*grpcCodeError)
+	return ok && e.Error() == target.Error()
+}
+
+func (e *grpcCodeError) Unwrap() error {
+	return e.err
+}
+
+// NewWithGRPCCode creates a new error with a specific gRPC status code.
+func NewWithGRPCCode(code codes.Code, msg string) error {
+	return &grpcCodeError{msg: msg, code: code}
+}
+
+// NewWithGRPCCodef creates a new error with a specific gRPC status code and formatted message.
+func NewWithGRPCCodef(code codes.Code, format string, args ...any) error {
+	return &grpcCodeError{msg: fmt.Sprintf(format, args...), code: code}
+}
+
+// WrapWithGRPCCode wraps an existing error with a specific gRPC status code.
+func WrapWithGRPCCode(err error, code codes.Code, msg string) error {
+	return &grpcCodeError{msg: msg, code: code, err: err}
+}
+
+// WrapWithGRPCCodef wraps an existing error with a specific gRPC status code and formatted message.
+func WrapWithGRPCCodef(err error, code codes.Code, format string, args ...any) error {
+	return &grpcCodeError{msg: fmt.Sprintf(format, args...), code: code, err: err}
+}
+
+// Is returns true if err is an instance of target.
+func Is(err error, target error) bool {
+	return is(err, target)
+}
+
+// Join returns an error that is the concatenation of all errors.
+// If errs is empty, nil is returned.
+func Join(errs ...error) error {
+	return join(errs...)
+}
+
+// ErrNotImpl is a placeholder for something not implemented yet.
+var ErrNotImpl = New("not implemented")
+// ErrEmptyID is returned when an ID is expected but is empty.
+var ErrEmptyID = New("ID is empty")

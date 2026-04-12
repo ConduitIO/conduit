@@ -104,6 +104,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
+		// Use the new strongly-typed error
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
 	}
 	return p, nil
@@ -114,6 +115,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
+		// validatePipeline already returns strongly-typed errors via cerrors.Join
 		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
 	}
 
@@ -148,12 +150,14 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 		return nil, err
 	}
 	if cfg.Name == "" {
+		// Use the new strongly-typed error
 		return nil, ErrNameMissing
 	}
 
 	// delete the old name from the names set
 	exists := s.instanceNames[cfg.Name]
 	if exists && pl.Config.Name != cfg.Name {
+		// Use the new strongly-typed error
 		return nil, ErrNameAlreadyExists
 	}
 
@@ -178,16 +182,17 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		// Use a specific invalid argument error for DLQ plugin
+		return nil, cerrors.NewWithGRPCCode(codes.InvalidArgument, "DLQ plugin must be provided")
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, cerrors.NewWithGRPCCode(codes.InvalidArgument, "DLQ window size must be non-negative")
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, cerrors.NewWithGRPCCode(codes.InvalidArgument, "DLQ window nack threshold must be non-negative")
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, cerrors.NewWithGRPCCode(codes.InvalidArgument, "DLQ window nack threshold must be lower than window size")
 	}
 
 	pl.DLQ = cfg
@@ -230,6 +235,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 		}
 	}
 	if connectorIndex == -1 {
+		// Use the new strongly-typed error
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID)
 	}
 
@@ -274,6 +280,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 		}
 	}
 	if processorIndex == -1 {
+		// Use the new strongly-typed error
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
 	}
 

@@ -26,6 +26,11 @@ import (
 )
 
 func PipelineError(err error) error {
+	// If the error already has a gRPC code, use it.
+	if ce, ok := err.(cerrors.GRPCCodeError); ok {
+		return grpcstatus.Error(ce.GRPCCode(), err.Error())
+	}
+
 	var code codes.Code
 
 	switch {
@@ -41,6 +46,11 @@ func PipelineError(err error) error {
 }
 
 func ConnectorError(err error) error {
+	// If the error already has a gRPC code, use it.
+	if ce, ok := err.(cerrors.GRPCCodeError); ok {
+		return grpcstatus.Error(ce.GRPCCode(), err.Error())
+	}
+
 	var code codes.Code
 
 	switch {
@@ -56,6 +66,11 @@ func ConnectorError(err error) error {
 }
 
 func ProcessorError(err error) error {
+	// If the error already has a gRPC code, use it.
+	if ce, ok := err.(cerrors.GRPCCodeError); ok {
+		return grpcstatus.Error(ce.GRPCCode(), err.Error())
+	}
+
 	var code codes.Code
 
 	switch {
@@ -71,10 +86,19 @@ func ProcessorError(err error) error {
 }
 
 func PluginError(err error) error {
+	// If the error already has a gRPC code, use it.
+	if ce, ok := err.(cerrors.GRPCCodeError); ok {
+		return grpcstatus.Error(ce.GRPCCode(), err.Error())
+	}
 	return grpcstatus.Error(codeFromError(err), err.Error())
 }
 
 func codeFromError(err error) codes.Code {
+	// If the error implements GRPCCodeError, use its provided code.
+	if ce, ok := err.(cerrors.GRPCCodeError); ok {
+		return ce.GRPCCode()
+	}
+
 	switch {
 	case cerrors.Is(err, cerrors.ErrNotImpl):
 		return codes.Unimplemented
@@ -89,7 +113,8 @@ func codeFromError(err error) codes.Code {
 	case cerrors.Is(err, connector.ErrConnectorRunning):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, &conn_plugin.ValidationError{}):
-		return codes.FailedPrecondition
+		// Connector plugin validation errors should result in a Bad Request (400)
+		return codes.InvalidArgument
 	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrPipelineHasProcessorsAttached):
