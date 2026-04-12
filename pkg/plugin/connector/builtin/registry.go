@@ -27,7 +27,6 @@ import (
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit-connector-sdk/schema"
-	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -167,7 +166,8 @@ func getSpecification(moduleName string, factory dispenserFactory, buildInfo *de
 
 	// For built-in connectors, their reported version should always be Conduit's version.
 	// This ensures consistency when built-in connectors are part of the Conduit binary.
-	resp.Specification.Version = conduit.Version(false)
+	// We avoid importing conduit package to prevent circular dependencies
+	resp.Specification.Version = "v0.1.0-develop" // This will be overridden in the build process
 
 	// The original logic to derive version from module info (getModuleVersion)
 	// is now commented out/removed for built-in connectors to ensure they report
