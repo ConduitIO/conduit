@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package pipeline
 
 import (
@@ -24,6 +10,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +92,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.Errorf(codes.NotFound, "pipeline instance not found (ID: %s)", id)
 	}
 	return p, nil
 }
@@ -114,7 +102,10 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
+		if cerrors.Is(err, ErrNameAlreadyExists) {
+			return nil, status.Errorf(codes.AlreadyExists, "pipeline is invalid: %v", err)
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "pipeline is invalid: %v", err)
 	}
 
 	t := time.Now()
@@ -145,16 +136,16 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 	if cfg.Name == "" {
-		return nil, ErrNameMissing
+		return nil, status.Error(codes.InvalidArgument, ErrNameMissing.Error())
 	}
 
 	// delete the old name from the names set
 	exists := s.instanceNames[cfg.Name]
 	if exists && pl.Config.Name != cfg.Name {
-		return nil, ErrNameAlreadyExists
+		return nil, status.Error(codes.AlreadyExists, ErrNameAlreadyExists.Error())
 	}
 
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
@@ -174,20 +165,20 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, status.Error(codes.InvalidArgument, "DLQ plugin must be provided")
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window size must be non-negative")
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window nack threshold must be non-negative")
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, status.Error(codes.InvalidArgument, "DLQ window nack threshold must be lower than window size")
 	}
 
 	pl.DLQ = cfg
@@ -204,7 +195,7 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 func (s *Service) AddConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
@@ -220,7 +211,7 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 	connectorIndex := -1
 	for index, id := range pl.ConnectorIDs {
@@ -230,7 +221,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 		}
 	}
 	if connectorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrConnectorIDNotFound, connectorID)
+		return nil, status.Errorf(codes.NotFound, "connector ID %q not found in pipeline %q", connectorID, pipelineID)
 	}
 
 	pl.ConnectorIDs = pl.ConnectorIDs[:connectorIndex+copy(pl.ConnectorIDs[connectorIndex:], pl.ConnectorIDs[connectorIndex+1:])]
@@ -248,7 +239,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 	pl.ProcessorIDs = append(pl.ProcessorIDs, processorID)
 	pl.UpdatedAt = time.Now()
@@ -264,7 +255,7 @@ func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processor
 func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 	processorIndex := -1
 	for index, id := range pl.ProcessorIDs {
@@ -274,7 +265,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.Errorf(codes.NotFound, "processor ID %q not found in pipeline %q", processorID, pipelineID)
 	}
 
 	pl.ProcessorIDs = pl.ProcessorIDs[:processorIndex+copy(pl.ProcessorIDs[processorIndex:], pl.ProcessorIDs[processorIndex+1:])]
@@ -292,7 +283,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
-		return err
+		return err // Get already returns status.Error
 	}
 	err = s.store.Delete(ctx, pl.ID)
 	if err != nil {
@@ -341,7 +332,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
 	pipeline, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return err // Get already returns status.Error
 	}
 	s.updateOldStatusMetrics(pipeline)
 	pipeline.SetStatus(status)

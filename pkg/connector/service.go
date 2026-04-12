@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package connector
 
 import (
@@ -24,6 +10,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -104,7 +92,7 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		return nil, status.Errorf(codes.NotFound, "connector instance not found (ID: %s)", id)
 	}
 	return ins, nil
 }
@@ -121,18 +109,26 @@ func (s *Service) Create(
 ) (*Instance, error) {
 	err := s.validateConnector(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("connector is invalid: %w", err)
+		if cerrors.Is(err, ErrNameMissing) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "connector is invalid: %v", err)
 	}
 
 	// determine the path of the Connector binary
 	if plugin == "" {
-		return nil, cerrors.New("must provide a plugin")
+		return nil, status.Error(codes.InvalidArgument, "must provide a plugin")
 	}
 	if pipelineID == "" {
-		return nil, cerrors.New("must provide a pipeline ID")
+		return nil, status.Error(codes.InvalidArgument, "must provide a pipeline ID")
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		return nil, status.Error(codes.InvalidArgument, ErrInvalidConnectorType.Error())
+	}
+
+	// Check if connector with this ID already exists
+	if _, exists := s.connectors[id]; exists {
+		return nil, status.Errorf(codes.AlreadyExists, "connector with ID %q already exists", id)
 	}
 
 	now := time.Now().UTC()
@@ -157,7 +153,7 @@ func (s *Service) Create(
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	s.connectors[id] = conn
@@ -170,7 +166,7 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return err // Get already returns status.Error
 	}
 
 	err = s.store.Delete(ctx, id)
@@ -194,7 +190,17 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 func (s *Service) Update(ctx context.Context, id string, plugin string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
+	}
+
+	// Validate incoming config.Name, if it's different and already exists.
+	// This service doesn't track connector names in a map like pipeline.Service,
+	// so for simplicity, we'll validate other common fields here.
+	if data.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, ErrNameMissing.Error())
+	}
+	if len(data.Name) > NameLengthLimit {
+		return nil, status.Error(codes.InvalidArgument, ErrNameOverLimit.Error())
 	}
 
 	if conn.Plugin != plugin {
@@ -208,7 +214,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	return conn, nil
@@ -218,7 +224,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 func (s *Service) AddProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 
 	conn.ProcessorIDs = append(conn.ProcessorIDs, processorID)
@@ -227,7 +233,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", connectorID, err)
 	}
 
 	return conn, err
@@ -237,7 +243,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 
 	processorIndex := -1
@@ -248,7 +254,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		}
 	}
 	if processorIndex == -1 {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
+		return nil, status.Errorf(codes.NotFound, "processor ID %q not found in connector %q", processorID, connectorID)
 	}
 
 	conn.ProcessorIDs = conn.ProcessorIDs[:processorIndex+copy(conn.ProcessorIDs[processorIndex:], conn.ProcessorIDs[processorIndex+1:])]
@@ -257,7 +263,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", connectorID, err)
 	}
 
 	return conn, err
@@ -266,21 +272,21 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, err // Get already returns status.Error
 	}
 
 	if state != nil {
 		switch conn.Type {
 		case TypeSource:
 			if _, ok := state.(SourceState); !ok {
-				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Errorf(codes.InvalidArgument, "expected source state (ID: %s): %v", id, ErrInvalidConnectorStateType)
 			}
 		case TypeDestination:
 			if _, ok := state.(DestinationState); !ok {
-				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+				return nil, status.Errorf(codes.InvalidArgument, "expected destination state (ID: %s): %v", id, ErrInvalidConnectorStateType)
 			}
 		default:
-			return nil, ErrInvalidConnectorType
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidConnectorType.Error())
 		}
 	}
 
@@ -288,7 +294,7 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to save connector with ID %q: %w", id, err)
 	}
 
 	return conn, err
