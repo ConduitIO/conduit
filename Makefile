@@ -9,7 +9,7 @@ GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
 build: check-go-version
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.appVersion=${VERSION}' -X 'github.com/conduitio/conduit/pkg/plugin/connector/builtin.builtinConnectorVersionForBuild=${VERSION}'" -o conduit ./cmd/conduit/main.go
+	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.appVersion=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit run"
