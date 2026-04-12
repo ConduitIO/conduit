@@ -104,23 +104,25 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 }
 
 func (r *Registry) Init(ctx context.Context) {
-	buildInfo, ok := debug.ReadBuildInfo()
+	// The build info is no longer strictly needed for built-in connector versions,
+	// as we explicitly set it using the Version constant.
+	// The warning is kept for general debug info availability if needed elsewhere.
+	_, ok := debug.ReadBuildInfo()
 	if !ok {
-		// we are using modules, build info should always be available, we are staying on the safe side
-		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly")
-		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
+		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly in general if we use it elsewhere.")
 	}
 
-	r.plugins = r.loadPlugins(buildInfo)
+	r.plugins = r.loadPlugins()
 	r.logger.Info(ctx).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
 }
 
-func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
+func (r *Registry) loadPlugins() map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.connectors))
 	for moduleName, conn := range r.connectors {
 		factory := newDispenserFactory(conn)
 
-		specs, err := getSpecification(moduleName, factory, buildInfo)
+		// buildInfo is no longer needed in getSpecification, as the version is hardcoded.
+		specs, err := getSpecification(moduleName, factory)
 		if err != nil {
 			// stop initialization if a built-in plugin is misbehaving
 			panic(err)
@@ -152,7 +154,9 @@ func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string
 	return plugins
 }
 
-func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
+// getSpecification extracts the connector specification.
+// It now forces the version to be the one defined in pkg/plugin/connector/builtin/version.Version.
+func getSpecification(moduleName string, factory dispenserFactory) (pconnector.Specification, error) {
 	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
@@ -163,14 +167,21 @@ func getSpecification(moduleName string, factory dispenserFactory, buildInfo *de
 		return pconnector.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
 	}
 
-	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
-		// overwrite version with the import version
-		resp.Specification.Version = version
-	}
+	// Force the version of the built-in connector to match the version constant.
+	resp.Specification.Version = Version
+
+	// The getModuleVersion function and its logic for overwriting the version
+	// is no longer applicable for built-in connectors as their version is now
+	// centrally managed by the 'builtin.Version' constant.
+	// The function `getModuleVersion` is kept for now in case it's used elsewhere,
+	// but it is not called here for versioning.
 
 	return resp.Specification, nil
 }
 
+// getModuleVersion returns the version of the module from the build info.
+// This function is no longer used for setting the version of built-in connectors,
+// but it is kept in case it has other uses or for future reference.
 func getModuleVersion(deps []*debug.Module, moduleName string) string {
 	for _, dep := range deps {
 		if dep.Path == moduleName {

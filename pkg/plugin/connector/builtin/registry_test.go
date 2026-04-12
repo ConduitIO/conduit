@@ -38,13 +38,19 @@ func TestRegistry_InitList(t *testing.T) {
 
 	is.Equal(len(DefaultBuiltinConnectors), len(specs))
 	for _, gotSpec := range specs {
+		// Assert that the reported version matches the built-in constant version
+		is.Equal(gotSpec.Version, Version)
+
 		wantSpec := DefaultBuiltinConnectors["github.com/conduitio/conduit-connector-"+gotSpec.Name].NewSpecification()
+		// Ignore the Version field in the comparison, as we are now explicitly
+		// setting it to builtin.Version, which might differ from the connector's
+		// self-reported version within wantSpec.
 		is.Equal(
 			"",
 			cmp.Diff(
 				wantSpec,
 				gotSpec,
-				cmpopts.IgnoreFields(pconnector.Specification{}, "SourceParams", "DestinationParams"),
+				cmpopts.IgnoreFields(pconnector.Specification{}, "SourceParams", "DestinationParams", "Version"),
 			),
 		)
 	}
@@ -77,14 +83,11 @@ func TestRegistry_NewDispenser_PluginNotFound(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name: "existing plugin, with builtin prefix, with version",
-			pluginName: func() string {
-				v := DefaultBuiltinConnectors["github.com/conduitio/conduit-connector-file"].
-					NewSpecification().
-					Version
-				return "builtin:file@" + v
-			}(),
-			wantErr: false,
+			// This test case now verifies that the version is picked up correctly
+			// from the builtin.Version constant.
+			name:       "existing plugin, with builtin prefix, with correct version",
+			pluginName: "builtin:file@" + Version,
+			wantErr:    false,
 		},
 	}
 
