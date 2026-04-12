@@ -20,17 +20,33 @@ import (
 	"runtime/debug"
 )
 
-// version is set during the build process (i.e. the Makefile)
-// It follows Go's convention for module version, where the version
-// starts with the letter v, followed by a semantic version.
+// Current is the hardcoded version of Conduit. This value is updated by the
+// `scripts/update-version.go` script during the release process.
+// When building locally without `ldflags`, this is the default version.
+const Current = "v0.1.0-develop" // This line will be modified by the automation script.
+
+// version is set during the build process (i.e. the Makefile) via ldflags.
+// It takes precedence over the Current constant.
 var version string
 
+// Version returns the current Conduit application version.
+// It prioritizes the version injected via ldflags, then falls back to the
+// `Current` constant, and finally tries `debug.ReadBuildInfo().Main.Version`.
+// If appendOSArch is true, it appends the OS and architecture information.
 func Version(appendOSArch bool) string {
-	v := "development"
+	v := Current // Default to the hardcoded constant
 	if version != "" {
-		v = version
+		v = version // Override with ldflags if present
 	} else if info, ok := debug.ReadBuildInfo(); ok {
-		v = info.Main.Version
+		// Use module version from build info if it's not a development build
+		// and current constant is still default.
+		if info.Main.Version != "(devel)" && info.Main.Version != "" && v == Current {
+			v = info.Main.Version
+		}
+	}
+
+	if v == "" || v == "(devel)" { // Fallback if all else fails or Current is still initial/default
+		v = "development"
 	}
 
 	if appendOSArch {

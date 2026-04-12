@@ -27,6 +27,7 @@ import (
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit-connector-sdk/schema"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -104,10 +105,11 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 }
 
 func (r *Registry) Init(ctx context.Context) {
+	// buildInfo is still read but is not directly used for built-in connector versions anymore,
+	// as they will report Conduit's version.
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
-		// we are using modules, build info should always be available, we are staying on the safe side
-		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly")
+		r.logger.Warn(ctx).Msg("build info not available, this might affect external plugin version reporting")
 		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
 
@@ -163,10 +165,16 @@ func getSpecification(moduleName string, factory dispenserFactory, buildInfo *de
 		return pconnector.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
 	}
 
-	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
-		// overwrite version with the import version
-		resp.Specification.Version = version
-	}
+	// For built-in connectors, their reported version should always be Conduit's version.
+	// This ensures consistency when built-in connectors are part of the Conduit binary.
+	resp.Specification.Version = conduit.Version(false)
+
+	// The original logic to derive version from module info (getModuleVersion)
+	// is now commented out/removed for built-in connectors to ensure they report
+	// Conduit's version as per the issue's requirements.
+	// if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
+	// 	resp.Specification.Version = version
+	// }
 
 	return resp.Specification, nil
 }

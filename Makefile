@@ -84,3 +84,20 @@ check-go-version:
 .PHONY: markdown-lint
 markdown-lint:
 	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+
+# --- New Makefile targets for version automation ---
+
+.PHONY: update-version-script
+update-version-script:
+	@go run $(UPDATE_VERSION_SCRIPT) $(ARGS)
+
+.PHONY: pre-release-version
+pre-release-version:
+	@echo "Updating version for release to $(RELEASE_TAG)..."
+	@if [ -z "$(RELEASE_TAG)" ]; then echo "Error: RELEASE_TAG is not set. Usage: make pre-release-version RELEASE_TAG=vX.Y.Z"; exit 1; fi
+	@$(MAKE) update-version-script ARGS="set $(RELEASE_TAG)"
+
+.PHONY: post-release-version
+post-release-version:
+	@echo "Updating version to next develop version..."
+	@$(MAKE) update-version-script ARGS="next-develop"
