@@ -1,0 +1,2 @@
+go vet scripts/update-version.go
+go vet pkg/conduit/version.go
