@@ -1,17 +1,3 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package status
 
 import (
@@ -31,8 +17,28 @@ func PipelineError(err error) error {
 	switch {
 	case cerrors.Is(err, pipeline.ErrNameMissing):
 		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrIDMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
+	case cerrors.Is(err, pipeline.ErrInvalidCharacters):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrNameOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrIDOverLimit):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, pipeline.ErrDescriptionOverLimit):
+		code = codes.InvalidArgument
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrConnectorIDNotFound):
+		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrProcessorIDNotFound):
+		code = codes.NotFound
+	case cerrors.Is(err, pipeline.ErrInvalidPipelineStructure):
+		code = codes.FailedPrecondition
+	case cerrors.Is(err, pipeline.ErrInvalidDLQConfig):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
@@ -48,6 +54,14 @@ func ConnectorError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, connector.ErrNameMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrIDMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, connector.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
+	case cerrors.Is(err, connector.ErrPipelineIDMissing):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
@@ -63,6 +77,14 @@ func ProcessorError(err error) error {
 		code = codes.InvalidArgument
 	case cerrors.Is(err, processor.ErrInstanceNotFound):
 		code = codes.NotFound
+	case cerrors.Is(err, processor.ErrNameMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, processor.ErrIDMissing):
+		code = codes.InvalidArgument
+	case cerrors.Is(err, processor.ErrNameAlreadyExists):
+		code = codes.AlreadyExists
+	case cerrors.Is(err, processor.ErrParentIDMissing):
+		code = codes.InvalidArgument
 	default:
 		code = codeFromError(err)
 	}
