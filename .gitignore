@@ -64,3 +64,4 @@ pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
 !pkg/provisioning/test/source-file.txt
 
 golangci-report.xml
+.aider*
