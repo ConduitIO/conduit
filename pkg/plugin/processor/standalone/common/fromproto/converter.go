@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalone
+package fromproto
 
 import (
 	"fmt"
@@ -25,10 +25,7 @@ import (
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 )
 
-// protoConverter converts between the SDK and protobuf types.
-type protoConverter struct{}
-
-func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.Specification, error) {
+func Specification(resp *processorv1.Specify_Response) (sdk.Specification, error) {
 	params := make(config.Parameters, len(resp.Parameters))
 	err := params.FromProto(resp.Parameters)
 	if err != nil {
@@ -45,7 +42,7 @@ func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.S
 	}, nil
 }
 
-func (c protoConverter) records(in []opencdc.Record) ([]*opencdcv1.Record, error) {
+func Records(in []opencdc.Record) ([]*opencdcv1.Record, error) {
 	if in == nil {
 		return nil, nil
 	}
@@ -62,7 +59,7 @@ func (c protoConverter) records(in []opencdc.Record) ([]*opencdcv1.Record, error
 	return out, nil
 }
 
-func (c protoConverter) processedRecords(in []*processorv1.Process_ProcessedRecord) ([]sdk.ProcessedRecord, error) {
+func ProcessedRecords(in []*processorv1.Process_ProcessedRecord) ([]sdk.ProcessedRecord, error) {
 	if in == nil {
 		return nil, nil
 	}
@@ -70,7 +67,7 @@ func (c protoConverter) processedRecords(in []*processorv1.Process_ProcessedReco
 	out := make([]sdk.ProcessedRecord, len(in))
 	var err error
 	for i, r := range in {
-		out[i], err = c.processedRecord(r)
+		out[i], err = ProcessedRecord(r)
 		if err != nil {
 			return nil, err
 		}
@@ -79,24 +76,24 @@ func (c protoConverter) processedRecords(in []*processorv1.Process_ProcessedReco
 	return out, nil
 }
 
-func (c protoConverter) processedRecord(in *processorv1.Process_ProcessedRecord) (sdk.ProcessedRecord, error) {
+func ProcessedRecord(in *processorv1.Process_ProcessedRecord) (sdk.ProcessedRecord, error) {
 	if in == nil || in.Record == nil {
 		return nil, nil
 	}
 
 	switch v := in.Record.(type) {
 	case *processorv1.Process_ProcessedRecord_SingleRecord:
-		return c.singleRecord(v)
+		return SingleRecord(v)
 	case *processorv1.Process_ProcessedRecord_FilterRecord:
-		return c.filterRecord(v)
+		return FilterRecord(v)
 	case *processorv1.Process_ProcessedRecord_ErrorRecord:
-		return c.errorRecord(v)
+		return ErrorRecord(v)
 	default:
 		return nil, fmt.Errorf("unknown processed record type: %T", in.Record)
 	}
 }
 
-func (c protoConverter) singleRecord(in *processorv1.Process_ProcessedRecord_SingleRecord) (sdk.SingleRecord, error) {
+func SingleRecord(in *processorv1.Process_ProcessedRecord_SingleRecord) (sdk.SingleRecord, error) {
 	if in == nil {
 		return sdk.SingleRecord{}, nil
 	}
@@ -110,17 +107,17 @@ func (c protoConverter) singleRecord(in *processorv1.Process_ProcessedRecord_Sin
 	return sdk.SingleRecord(rec), nil
 }
 
-func (c protoConverter) filterRecord(_ *processorv1.Process_ProcessedRecord_FilterRecord) (sdk.FilterRecord, error) {
+func FilterRecord(_ *processorv1.Process_ProcessedRecord_FilterRecord) (sdk.FilterRecord, error) {
 	return sdk.FilterRecord{}, nil
 }
 
-func (c protoConverter) errorRecord(in *processorv1.Process_ProcessedRecord_ErrorRecord) (sdk.ErrorRecord, error) {
+func ErrorRecord(in *processorv1.Process_ProcessedRecord_ErrorRecord) (sdk.ErrorRecord, error) {
 	if in == nil || in.ErrorRecord == nil || in.ErrorRecord.Error == nil {
 		return sdk.ErrorRecord{}, nil
 	}
-	return sdk.ErrorRecord{Error: c.error(in.ErrorRecord.Error)}, nil
+	return sdk.ErrorRecord{Error: Error(in.ErrorRecord.Error)}, nil
 }
 
-func (c protoConverter) error(e *processorv1.Error) error {
+func Error(e *processorv1.Error) error {
 	return pprocutils.NewError(e.Code, e.Message)
 }
