@@ -178,16 +178,16 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 	}
 
 	if cfg.Plugin == "" {
-		return nil, cerrors.New("DLQ plugin must be provided")
+		return nil, cerrors.Errorf("%w: plugin must be provided", ErrInvalidDLQConfig)
 	}
 	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
+		return nil, cerrors.Errorf("%w: window size must be non-negative", ErrInvalidDLQConfig)
 	}
 	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+		return nil, cerrors.Errorf("%w: window nack threshold must be non-negative", ErrInvalidDLQConfig)
 	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
-		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+		return nil, cerrors.Errorf("%w: window nack threshold must be lower than window size", ErrInvalidDLQConfig)
 	}
 
 	pl.DLQ = cfg
@@ -205,6 +205,11 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
 		return nil, err
+	}
+	for _, id := range pl.ConnectorIDs {
+		if id == connectorID {
+			return nil, cerrors.Errorf("connector with ID %q already exists in pipeline %q", connectorID, pipelineID)
+		}
 	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
@@ -249,6 +254,11 @@ func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processor
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
 		return nil, err
+	}
+	for _, id := range pl.ProcessorIDs {
+		if id == processorID {
+			return nil, cerrors.Errorf("processor with ID %q already exists in pipeline %q", processorID, pipelineID)
+		}
 	}
 	pl.ProcessorIDs = append(pl.ProcessorIDs, processorID)
 	pl.UpdatedAt = time.Now()
