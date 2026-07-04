@@ -19,6 +19,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -499,6 +500,56 @@ func TestParser_V2_InvalidYaml(t *testing.T) {
 
 	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.True(err != nil)
+}
+
+// TestParser_V2_MultiDocument_IsolatesInvalidVersion is the regression test for
+// #2255: a single document with an unrecognized version must not discard the
+// valid documents around it in the same multi-document file.
+func TestParser_V2_MultiDocument_IsolatesInvalidVersion(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	doc := `version: 2.2
+pipelines:
+  - id: pipeline-a
+---
+version: 4
+pipelines:
+  - id: pipeline-bad
+---
+version: 2.2
+pipelines:
+  - id: pipeline-c
+`
+	got, err := parser.ParseConfigurations(context.Background(), bytes.NewBufferString(doc))
+
+	// the invalid document is reported...
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "unrecognized version 4"))
+
+	// ...but the two valid documents are still parsed, in order.
+	is.Equal(len(got), 2)
+	is.Equal(got[0].(v2.Configuration).Pipelines[0].ID, "pipeline-a")
+	is.Equal(got[1].(v2.Configuration).Pipelines[0].ID, "pipeline-c")
+}
+
+// TestParser_V2_MultiDocument_AllValid guards against a regression in the
+// two-decoder synchronization: a normal multi-document file must parse fully.
+func TestParser_V2_MultiDocument_AllValid(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	doc := `version: 2.2
+pipelines:
+  - id: pipeline-a
+---
+version: 2.2
+pipelines:
+  - id: pipeline-b
+`
+	got, err := parser.ParseConfigurations(context.Background(), bytes.NewBufferString(doc))
+	is.NoErr(err)
+	is.Equal(len(got), 2)
+	is.Equal(got[0].(v2.Configuration).Pipelines[0].ID, "pipeline-a")
+	is.Equal(got[1].(v2.Configuration).Pipelines[0].ID, "pipeline-b")
 }
 
 func TestParser_V2_EnvVars(t *testing.T) {

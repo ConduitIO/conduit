@@ -71,11 +71,10 @@ func NewParser(logger log.CtxLogger) *Parser {
 
 func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline, error) {
 	configs, err := p.ParseConfigurations(ctx, reader)
-	if err != nil {
-		return nil, err
-	}
-
-	return configs.ToConfig(), nil
+	// Return whatever parsed successfully alongside any per-document errors, so a
+	// single bad document doesn't discard the valid pipelines in the same file
+	// (see #2255). Callers that require strictness can check the error.
+	return configs.ToConfig(), err
 }
 
 func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Configurations, error) {
@@ -89,15 +88,34 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 
 	var configs Configurations
 	var warn warnings
+	// errs collects per-document failures. A single bad document (e.g. an
+	// unrecognized version) must not discard the valid documents around it in a
+	// multi-document file, so we keep parsing and aggregate the errors. See #2255.
+	var errs []error
 	for {
 		version, w, err := p.parseVersion(versionDecoder)
 		warn = append(warn, w...)
 		if err != nil {
-			// we probably reached the end of the document
+			// we probably reached the end of the file
 			if cerrors.Is(err, io.EOF) {
 				break
 			}
-			return nil, cerrors.Errorf("parsing error: %w", err)
+			// The version of this document could not be determined. The version
+			// decoder already consumed the document, so advance the configuration
+			// decoder past it too, keeping the two decoders in sync, then continue
+			// with the next document.
+			errs = append(errs, cerrors.Errorf("parsing error: %w", err))
+			var skip any
+			if skipErr := configurationDecoder.Decode(&skip); skipErr != nil {
+				if cerrors.Is(skipErr, io.EOF) {
+					break
+				}
+				// the decoders can no longer be kept in sync, stop parsing the
+				// rest of the file rather than risk misattributing documents
+				errs = append(errs, cerrors.Errorf("could not skip invalid document: %w", skipErr))
+				break
+			}
+			continue
 		}
 
 		cfg, w, err := p.parseConfiguration(configurationDecoder, version)
@@ -111,7 +129,12 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 			}
 			// check if we recovered from the error
 			if err != nil {
-				return nil, cerrors.Errorf("decoding error: %w", err)
+				// The document had a recognized version (so it was valid YAML and
+				// the configuration decoder consumed it), but decoding into the
+				// versioned config failed. Isolate the failure to this document
+				// and continue with the next one.
+				errs = append(errs, cerrors.Errorf("decoding error: %w", err))
+				continue
 			}
 		}
 
@@ -120,7 +143,7 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 
 	// sort warnings and log them
 	warn.Sort().Log(ctx, p.logger)
-	return configs, nil
+	return configs, cerrors.Join(errs...)
 }
 
 // parseVersion will return the version that should be used to parse the

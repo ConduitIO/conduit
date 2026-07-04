@@ -87,7 +87,8 @@ func (s *Service) Init(ctx context.Context) error {
 		cfg, err := s.parsePipelineConfigFile(ctx, file)
 		if err != nil {
 			errs = append(errs, err)
-			continue
+			// keep the pipelines that did parse; only the bad documents in the
+			// file are skipped (#2255), so fall through to append cfg.
 		}
 		configs = append(configs, cfg...)
 	}
@@ -238,7 +239,9 @@ func (s *Service) parsePipelineConfigFile(ctx context.Context, path string) ([]c
 
 	configs, err := s.parser.Parse(ctx, file)
 	if err != nil {
-		return nil, cerrors.Errorf("could not parse file %q: %w", path, err)
+		// return the pipelines that parsed successfully alongside the error; a
+		// single bad document must not drop the valid pipelines in the file (#2255)
+		return configs, cerrors.Errorf("could not parse file %q: %w", path, err)
 	}
 	return configs, nil
 }
