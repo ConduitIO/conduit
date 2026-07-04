@@ -19,6 +19,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -499,6 +500,76 @@ func TestParser_V2_InvalidYaml(t *testing.T) {
 
 	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.True(err != nil)
+}
+
+// TestParser_V2_MultiDocument is the regression suite for #2255: a bad document
+// in a multi-document file must be isolated to that document, leaving the valid
+// documents around it parsed in order. It exercises every position and failure
+// mode (unrecognized version, non-recoverable decode error, and syntax error) to
+// pin the two-decoder synchronization — a desync here would silently drop or
+// misattribute valid pipelines, which would be worse than the original bug.
+func TestParser_V2_MultiDocument(t *testing.T) {
+	// valid single-pipeline document for the given id
+	pipe := func(id string) string {
+		return "version: 2.2\npipelines:\n  - id: " + id + "\n"
+	}
+	// valid version, but an unrecognized major version -> parseVersion error path
+	badVersion := func(v string) string {
+		return "version: " + v + "\npipelines:\n  - id: bad\n"
+	}
+	// recognized version, but pipelines is the wrong type -> config decode error path
+	decodeErr := "version: 2.2\npipelines: \"not a list\"\n"
+	// unterminated flow sequence -> YAML syntax error (stops parsing this file)
+	syntaxErr := "version: 2.2\npipelines: [unterminated\n"
+
+	join := func(docs ...string) string { return strings.Join(docs, "---\n") }
+
+	testCases := []struct {
+		name    string
+		input   string
+		wantErr bool
+		wantIDs []string
+	}{
+		{"all valid", join(pipe("a"), pipe("b")), false, []string{"a", "b"}},
+		{"invalid version middle", join(pipe("a"), badVersion("4"), pipe("c")), true, []string{"a", "c"}},
+		{"invalid version first", join(badVersion("4"), pipe("a"), pipe("b")), true, []string{"a", "b"}},
+		{"invalid version last", join(pipe("a"), pipe("b"), badVersion("9")), true, []string{"a", "b"}},
+		{"two consecutive invalid versions", join(pipe("a"), badVersion("8"), badVersion("9"), pipe("b")), true, []string{"a", "b"}},
+		{"decode error middle", join(pipe("a"), decodeErr, pipe("c")), true, []string{"a", "c"}},
+		{"decode error first", join(decodeErr, pipe("a"), pipe("b")), true, []string{"a", "b"}},
+		{"two consecutive decode errors", join(pipe("a"), decodeErr, decodeErr, pipe("b")), true, []string{"a", "b"}},
+		// a genuine syntax error can't be resynced, so parsing stops but keeps the
+		// documents parsed before it (strictly better than dropping the whole file)
+		{"syntax error keeps prior", join(pipe("a"), syntaxErr, pipe("c")), true, []string{"a"}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			parser := NewParser(log.Nop())
+			got, err := parser.ParseConfigurations(context.Background(), bytes.NewBufferString(tc.input))
+			if tc.wantErr {
+				is.True(err != nil)
+			} else {
+				is.NoErr(err)
+			}
+			gotIDs := make([]string, len(got))
+			for i, c := range got {
+				gotIDs[i] = c.(v2.Configuration).Pipelines[0].ID
+			}
+			is.Equal(gotIDs, tc.wantIDs) // valid documents parsed, in order; bad ones skipped
+		})
+	}
+}
+
+// TestParser_V2_MultiDocument_IsolatesInvalidVersion pins the specific #2255
+// error message so the offending document remains identifiable.
+func TestParser_V2_MultiDocument_IsolatesInvalidVersion(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	doc := "version: 2.2\npipelines:\n  - id: a\n---\nversion: 4\npipelines:\n  - id: bad\n"
+	_, err := parser.ParseConfigurations(context.Background(), bytes.NewBufferString(doc))
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "unrecognized version 4"))
 }
 
 func TestParser_V2_EnvVars(t *testing.T) {
