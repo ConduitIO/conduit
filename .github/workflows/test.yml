@@ -21,3 +21,22 @@ jobs:
       - name: Test
         # The test coverate and the test report are needed for the SonarCloud analysis
         run: make test-integration GOTEST_FLAGS="-v -count=1"
+
+  build-cross:
+    # Cross-compile for the 32-bit release target. Regular CI only builds on
+    # 64-bit, so a dependency that fails to compile on 32-bit (e.g. one using
+    # math.MaxUint32 as an untyped int constant) would otherwise only surface
+    # when GoReleaser cross-compiles at release time. GoReleaser ships a
+    # linux/386 (i386) artifact, so guard that build here.
+    name: build (linux/386)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build linux/386
+        run: GOOS=linux GOARCH=386 go build ./...
