@@ -112,6 +112,7 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 				}
 				// the decoders can no longer be kept in sync, stop parsing the
 				// rest of the file rather than risk misattributing documents
+				p.logger.Warn(ctx).Err(skipErr).Msg("could not recover parser after an invalid document; any remaining documents in this file were not processed")
 				errs = append(errs, cerrors.Errorf("could not skip invalid document: %w", skipErr))
 				break
 			}
