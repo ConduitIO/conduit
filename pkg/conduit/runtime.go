@@ -761,6 +761,10 @@ func (r *Runtime) serveGRPC(
 	srv *grpc.Server,
 	address string,
 ) (net.Addr, error) {
+	// ctx governs only the Listen operation (address resolution / socket
+	// creation), not the returned listener's lifetime. Server shutdown is driven
+	// separately via t.Dying() below, so cancelling ctx after this returns does
+	// not close the listener.
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", address)
 	if err != nil {
@@ -794,6 +798,8 @@ func (r *Runtime) serveHTTP(
 	t *tomb.Tomb,
 	srv *http.Server,
 ) (net.Addr, error) {
+	// See the note in serveGRPC: ctx scopes the Listen call only, not the
+	// listener's lifetime.
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", srv.Addr)
 	if err != nil {
