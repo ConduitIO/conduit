@@ -421,6 +421,38 @@ func TestService_deleteOldPipelines_SkipsNonConfig(t *testing.T) {
 	is.Equal(len(deleted), 0)
 }
 
+// TestService_provisionPipeline_StatusStopped is the regression test for #2061: a
+// pipeline whose config says `status: stopped` must not be resumed on restart. A
+// pipeline that was running before the restart is marked StatusSystemStopped (the
+// lifecycle auto-resume marker); provisioning must convert it to StatusUserStopped
+// so the lifecycle service leaves it stopped, and must never call Start.
+func TestService_provisionPipeline_StatusStopped(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+
+	// existing pipeline, was running before the restart -> now SystemStopped, with
+	// a config identical to the incoming one so the import produces no actions.
+	instance := &pipeline.Instance{
+		ID:            "p1",
+		Config:        pipeline.Config{Name: "p1"},
+		DLQ:           pipeline.DefaultDLQ,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	instance.SetStatus(pipeline.StatusSystemStopped)
+	cfg := config.Pipeline{ID: "p1", Status: config.StatusStopped}
+
+	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(instance, nil).AnyTimes()
+	// the fix: convert the SystemStopped marker to UserStopped so lifecycle.Init
+	// does not resume it. gomock has no Start expectation on lifecycleService, so
+	// the test fails if the pipeline is (wrongly) started.
+	pipSrv.EXPECT().UpdateStatus(gomock.Any(), "p1", pipeline.StatusUserStopped, "")
+
+	err := srv.provisionPipeline(ctx, cfg)
+	is.NoErr(err)
+}
+
 func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
