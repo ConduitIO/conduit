@@ -59,7 +59,7 @@ Adopt the WASI Preview 2 component model as the primary any-language plugin arch
 
 - `ROADMAP.md` — Phase 1 "WASM everywhere," WASI Preview 2 / component model adoption, SDK
   rollout order
-- [20220121-conduit-plugin-architecture.md](20220121-conduit-plugin-architecture.md) — the
+- [20220121-Conduit-plugin-architecture.md](20220121-conduit-plugin-architecture.md) — the
   built-in vs. standalone dispenser model this builds on
 - [20260704-no-bespoke-dsl.md](20260704-no-bespoke-dsl.md) — WASM is what makes real-language
   transformations portable, so no DSL is needed

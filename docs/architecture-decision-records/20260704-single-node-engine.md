@@ -9,14 +9,14 @@ the engine (Kubernetes operator / control plane), not inside it.
 
 ## Context
 
-Data-integration systems that put distribution *inside* the engine pay for it forever. Kafka
+Data-integration systems that put distribution _inside_ the engine pay for it forever. Kafka
 Connect's rebalance protocol is the canonical example: worker-cluster membership and task
 rebalancing are a persistent source of operational pain, stop-the-world pauses, and subtle
 correctness bugs. We want Conduit to be boring to operate (Principle 4), embeddable as a library
 (a differentiator), and free of that class of failure.
 
 At the same time, real deployments need scale-out and high availability. The question is not
-*whether* Conduit distributes, but *where the distribution logic lives*.
+_whether_ Conduit distributes, but _where the distribution logic lives_.
 
 Two forces are in tension:
 
@@ -67,5 +67,5 @@ the commercial layer.
 
 - `ROADMAP.md` — Principle 8 (single-node engine, scale-out by scheduling); Phase 1 partition-
   claim RFC; Phase 3 operator, hot-pipeline parallelism, and active/passive HA
-- [20220121-conduit-plugin-architecture.md](20220121-conduit-plugin-architecture.md) — the
+- [20220121-Conduit-plugin-architecture.md](20220121-conduit-plugin-architecture.md) — the
   built-in/standalone plugin model the engine already assumes

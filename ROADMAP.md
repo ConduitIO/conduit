@@ -46,7 +46,7 @@ the monthly release cadence is a promise.
 
 ## Phase 0 — Revival (Weeks 0–8)
 
-*Goal: an unmistakable signal that Conduit is active, maintained, and shipping.*
+_Goal: an unmistakable signal that Conduit is active, maintained, and shipping._
 
 - [ ] Triage all open issues and PRs — every item closed, merged, or labeled with a decision
 - [ ] **Cut v0.15.0 stable** off the running nightly train: dependency upgrades, security
@@ -65,10 +65,11 @@ published.
 
 ## Phase 1 — Developer Experience Core (Months 1–4)
 
-*Goal: the best first-hour and first-week experience of any data integration tool — for humans
-and for their agents.*
+_Goal: the best first-hour and first-week experience of any data integration tool — for humans
+and for their agents._
 
 ### The 5-minute wow
+
 - [ ] `brew install conduit` / `curl | sh` / single-binary downloads for all platforms
 - [ ] `conduit init` — scaffolds a working pipeline (e.g., Postgres CDC → file/S3) with zero
       manual config
@@ -77,6 +78,7 @@ and for their agents.*
       inspection, pipeline graph
 
 ### CLI as product
+
 - [ ] `conduit pipeline validate | lint | dry-run`
 - [ ] `conduit doctor` — environment and config diagnostics
 - [ ] Hot-reload of pipeline configs in dev mode
@@ -85,18 +87,21 @@ and for their agents.*
 - [ ] Deterministic, machine-actionable errors: error code + failing config path + suggested fix
 
 ### Agent-native (a Phase 1 priority)
+
 - [ ] Official Conduit MCP server: agents can scaffold, validate, deploy, inspect, and repair
       pipelines
 - [ ] `llms.txt` + single-page condensed documentation dump for LLM context
 - [ ] `conduit generate "<natural language>"` — AI-assisted pipeline generation from plain English
 
 ### Plugin scaffolding
+
 - [ ] `conduit connector new --lang go|python|rust|ts` — full repo: SDK wiring, tests, CI,
       release workflow, acceptance-test harness
 - [ ] `conduit processor new` — same treatment
 - [ ] Target: **first working custom connector in under 30 minutes**
 
 ### WASM everywhere
+
 - [ ] WASM **connectors** (today: WASM processors only) — in-process, sandboxed, single portable
       artifact, no gRPC sidecar
 - [ ] WASI Preview 2 / component model adoption
@@ -109,16 +114,19 @@ and for their agents.*
   - [ ] C# / Ruby: demand-driven only — not speculatively built
 
 ### Connector registry
+
 - [ ] Public registry: `conduit connectors install <name>` pulls signed binaries/WASM artifacts
 - [ ] Community publishing via GitHub Action + signing
 - [ ] Registry web UI with search, verified badges, download stats
 
 ### Templates
+
 - [ ] Template gallery shipped with the registry: `postgres-iceberg`, `mysql-snowflake`,
       `postgres-pgvector-rag`, `shopify-warehouse`, `kafka-clickhouse`, and more
 - [ ] Community-contributed templates with the same publishing flow as connectors
 
 ### Deployment fundamentals (12-factor citizenship — the universal answer)
+
 - [ ] Env-var configuration for all engine settings
 - [ ] `/healthz` and `/readyz` endpoints; Prometheus metrics endpoint
 - [ ] Graceful SIGTERM drain (checkpoint, then exit) — see data-integrity invariants
@@ -129,20 +137,23 @@ and for their agents.*
       Nomad job spec (examples, not supported products — promoted only on demand)
 
 ### Long-lead protocol design (build in Phase 3, design now)
+
 - [ ] Design doc + protocol RFC: **partition claims** — sources declare their partitionable units
       so a scheduler can run one hot pipeline across multiple instances. Touches
       `conduit-connector-protocol`, so the seam ships early to avoid a breaking rev later
 
 ### Embedded v1
+
 - [ ] Stable, documented Go library API for embedding Conduit in applications
 - [ ] C ABI shared library (`libconduit`) as the base for cross-language bindings
 - [ ] Python and Node.js bindings (Java/Ruby to follow on demand)
 
 ## Phase 2 — Kafka Connect Migration, Connector Coverage & AI Pipelines (Months 3–8)
 
-*Goal: switching from Kafka Connect is a command; keeping a RAG index fresh is 10 lines of YAML.*
+_Goal: switching from Kafka Connect is a command; keeping a RAG index fresh is 10 lines of YAML._
 
 ### Migration tooling
+
 - [ ] `conduit migrate kafka-connect` — reads Kafka Connect worker/connector JSON (Debezium,
       JDBC, S3, etc.), emits Conduit pipeline config + compatibility report; never silently drops
       config it can't translate
@@ -151,8 +162,10 @@ and for their agents.*
       catalog parity (also the Java-team on-ramp)
 
 ### CDC (the moat)
+
 Production-grade change data capture — snapshot + streaming, schema evolution, heartbeats,
 tombstones:
+
 - [ ] PostgreSQL (harden existing)
 - [ ] MySQL
 - [ ] MongoDB
@@ -160,7 +173,9 @@ tombstones:
 - [ ] Oracle
 
 ### The AI data pipeline (first-class use case)
+
 The canonical pipeline — CDC → chunk → embed → vector store — as a headline Conduit workload:
+
 - [ ] Chunking processors (document splitting strategies for RAG)
 - [ ] Embedding processors: OpenAI, Voyage, local models
 - [ ] Vector destinations: pgvector, Qdrant, Pinecone, Turbopuffer
@@ -168,11 +183,13 @@ The canonical pipeline — CDC → chunk → embed → vector store — as a hea
 - [ ] Positioning docs: Conduit as the data layer for AI applications
 
 ### Iceberg-first lakehouse story
+
 - [ ] Best-in-class Apache Iceberg destination: upserts, compaction-friendly writes, catalog
       support (REST, Glue, Nessie)
 - [ ] Headline use case: operational DB → lakehouse in real time, no Kafka required
 
 ### Priority native connectors (rough order, after Iceberg)
+
 - [ ] Snowflake
 - [ ] S3 / GCS / Azure Blob with Parquet support
 - [ ] ClickHouse
@@ -188,10 +205,12 @@ The canonical pipeline — CDC → chunk → embed → vector store — as a hea
 - [ ] DuckDB / MotherDuck
 
 ### Kubernetes (static scale-out)
+
 - [ ] Helm chart: Deployment/StatefulSet, pipeline configs via ConfigMap or git-sync, HPA hooks,
       ServiceMonitor — covers static pipeline-to-instance assignment before the operator exists
 
 ### Enterprise correctness
+
 - [ ] Confluent Schema Registry wire compatibility (Avro, Protobuf, JSON Schema)
 - [ ] **Schema contracts & drift policy:** configurable behavior on schema drift — halt, DLQ, or
       auto-evolve — with drift surfaced in the UI
@@ -204,12 +223,14 @@ The canonical pipeline — CDC → chunk → embed → vector store — as a hea
 
 ## Phase 3 — Stateful Processing, Scale & Ecosystem (Months 6–12)
 
-*Goal: capture the 80% of stream-processing workloads that don't need Flink, and run credibly at
-enterprise fleet scale.*
+_Goal: capture the 80% of stream-processing workloads that don't need Flink, and run credibly at
+enterprise fleet scale._
 
 ### Lightweight state layer ("the 80% of Flink")
+
 Right-sized stateful processing — local state (embedded KV store), checkpointed with the
 pipeline, no distributed snapshots or state backends to tune:
+
 - [ ] Deduplication with TTL
 - [ ] Lookup/enrichment tables: cached reference data from a database or topic
 - [ ] Tumbling and sliding window aggregations (counts, sums, simple rollups)
@@ -217,12 +238,15 @@ pipeline, no distributed snapshots or state backends to tune:
       event-time processing)
 
 ### Streaming SQL partnerships (the other 20%)
+
 - [ ] First-class ingest/egress integrations and reference architectures with RisingWave,
       Materialize, and ClickHouse
 - [ ] Documented pattern: "Conduit + streaming SQL engine replaces Kafka Connect + Flink"
 
 ### Scale-out & high availability (open source)
+
 The engine stays single-node (Principle 8); distribution is scheduling:
+
 - [ ] **Kubernetes operator** (Apache-2.0, always): `Pipeline` CRD, bin-packing of pipelines
       across pods, health-based rescheduling, lag-based autoscaling
 - [ ] **Checkpoint-aware rolling upgrades:** drain → checkpoint → reschedule, no data interruption
@@ -235,6 +259,7 @@ The engine stays single-node (Principle 8); distribution is scheduling:
       warm standbys in v1)
 
 ### Fleet control plane (open source core)
+
 - [ ] Lightweight console that registers many Conduit instances: fleet-wide visibility, health,
       versions
 - [ ] GitOps-native: console reads state; pipeline config stays in git
@@ -243,12 +268,14 @@ The engine stays single-node (Principle 8); distribution is scheduling:
 - [ ] Rolling upgrades across a fleet
 
 ### Performance
+
 - [ ] Published, reproducible benchmarks (via [benchi](https://github.com/ConduitIO/benchi)) vs
       Kafka Connect and other stream processors, updated per release
 - [ ] Pipeline-wide batching; allocation reduction; profiling as CI gate
 - [ ] Investigate Arrow-based internal record format for columnar destinations
 
 ### Ecosystem tooling
+
 - [ ] **Terraform provider for the Conduit API:** pipelines, connectors, processors as
       declarative resources. Infrastructure Terraform (EKS modules, etc.) stays in `deploy/` as
       examples, not products
@@ -256,6 +283,7 @@ The engine stays single-node (Principle 8); distribution is scheduling:
 - [ ] OpenTelemetry traces + metrics, prebuilt Grafana dashboards
 
 ### AI-assisted connector development
+
 - [ ] `conduit connector generate --from-openapi <spec>` — AI-assisted connector scaffolding from
       API specs
 
@@ -295,7 +323,7 @@ engine · all connectors and processors · all SDKs · registry and templates ·
 Helm chart · **Kubernetes operator** (scheduling, rescheduling, autoscaling, checkpoint-aware
 rolling upgrades) · fleet console core
 
-**Commercial (separate product, separate repo) — what an *organization* needs to govern Conduit
+**Commercial (separate product, separate repo) — what an _organization_ needs to govern Conduit
 at fleet scale:** multi-cluster/multi-region federation · SSO/SAML/SCIM, RBAC, audit logs · data
 lineage, PII policy packs, org-level schema-contract enforcement, compliance reporting ·
 cross-fleet upgrade orchestration, SLA alerting, cost/throughput analytics · support and SLAs ·

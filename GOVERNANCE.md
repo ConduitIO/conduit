@@ -75,14 +75,14 @@ window, it is accepted. Silence is assent; objection starts a discussion.
   survives.
 
 When maintainers disagree and consensus cannot be reached, the change does not proceed until it
-can. The project biases toward *not* shipping a contested change to infrastructure people bet
+can. The project biases toward _not_ shipping a contested change to infrastructure people bet
 their data on.
 
 ## Transparency
 
 - Direction lives in `ROADMAP.md` and the public GitHub Project board.
 - Decisions of consequence are recorded as ADRs — immutable once merged, superseded rather than
-  edited, so future contributors can reconstruct *why* without archaeology.
+  edited, so future contributors can reconstruct _why_ without archaeology.
 - Releases follow a monthly train with changelogs generated from conventional commits.
 - Community happens in the open: [Discussions](https://github.com/ConduitIO/conduit/discussions),
   [Discord](https://discord.meroxa.com), and a monthly community call on a public calendar.
