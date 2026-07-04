@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
@@ -59,15 +60,18 @@ func (e *Entrypoint) Serve(cfg Config) {
 	}
 }
 
-// CancelOnInterrupt returns a context that is canceled when the interrupt
-// signal is received.
+// CancelOnInterrupt returns a context that is canceled when a termination signal
+// is received. It listens for both SIGINT (Ctrl-C) and SIGTERM (sent by
+// docker stop, kubectl delete pod, and systemctl stop) so that container and
+// service managers trigger a graceful drain rather than an abrupt kill.
+// Invariant 7: SIGTERM drains in-flight records and checkpoints before exit.
 // * After the first signal the function will continue to listen
 // * On the second signal executes a hard exit, without waiting for a graceful
 // shutdown.
 func (*Entrypoint) CancelOnInterrupt(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		select {
 		case <-signalChan: // first interrupt signal
