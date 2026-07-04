@@ -40,3 +40,15 @@ jobs:
 
       - name: Build linux/386
         run: GOOS=linux GOARCH=386 go build ./...
+
+  docker-build:
+    # Build the release Docker image. The image is otherwise only built by the
+    # release workflow, so a Dockerfile issue (e.g. a base image whose Go version
+    # is older than the go.mod directive) would only surface at release time.
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t conduit:ci .
