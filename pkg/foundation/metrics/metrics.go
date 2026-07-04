@@ -15,6 +15,10 @@
 package metrics
 
 import (
+	"encoding/base64"
+	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -417,21 +421,140 @@ func (m RecordBytesHistogram) Observe(r opencdc.Record) {
 }
 
 func (m RecordBytesHistogram) SizeOf(r opencdc.Record) float64 {
-	// TODO for now we call method Bytes() on key and payload to get the
-	//  bytes representation. In case of a structured payload or key it
-	//  is marshaled into JSON, which might not be the correct way to
-	//  determine bytes. Not sure how we could improve this part without
-	//  offloading the bytes calculation to the plugin.
-
 	var bytes int
 	if r.Key != nil {
-		bytes += len(r.Key.Bytes())
+		bytes += dataSize(r.Key)
 	}
 	if r.Payload.Before != nil {
-		bytes += len(r.Payload.Before.Bytes())
+		bytes += dataSize(r.Payload.Before)
 	}
 	if r.Payload.After != nil {
-		bytes += len(r.Payload.After.Bytes())
+		bytes += dataSize(r.Payload.After)
 	}
 	return float64(bytes)
+}
+
+// dataSize returns the size of d in bytes. For RawData this is the exact byte
+// length. For StructuredData it returns an approximation of the JSON-encoded
+// size computed by walking the value, WITHOUT calling Bytes() (which would run a
+// full json.Marshal and allocate the encoded output on every record — the
+// dominant cost measured in issue #2268). Any other Data implementation falls
+// back to the exact but slower Bytes() length.
+func dataSize(d opencdc.Data) int {
+	switch v := d.(type) {
+	case opencdc.RawData:
+		return len(v)
+	case opencdc.StructuredData:
+		return estimateJSONSize(map[string]any(v))
+	default:
+		return len(d.Bytes())
+	}
+}
+
+// estimateJSONSize returns the number of bytes v occupies when encoded as JSON,
+// computed by walking the value WITHOUT allocating the encoded output (the whole
+// point of #2268 — avoiding json.Marshal on every record). For the value kinds
+// produced by JSON decoding (string, bool, float64, nil, []any, map[string]any)
+// it is byte-exact against the opencdc encoder, including string escaping and
+// float formatting. Exotic types that only arise from programmatic construction
+// (other integer widths, time.Time, typed slices/maps, etc.) fall through to a
+// best-effort fmt fallback; those are not on the hot JSON-decoded path.
+func estimateJSONSize(v any) int {
+	switch val := v.(type) {
+	case nil:
+		return 4 // null
+	case string:
+		return stringJSONLen(val)
+	case bool:
+		if val {
+			return 4 // true
+		}
+		return 5 // false
+	case []byte:
+		// JSON encodes a byte slice as a base64 string.
+		return base64.StdEncoding.EncodedLen(len(val)) + 2
+	case map[string]any:
+		size := 2 // {}
+		i := 0
+		for k, vv := range val {
+			if i > 0 {
+				size++ // comma separator
+			}
+			size += stringJSONLen(k) + 1 // "key" (quoted+escaped) plus the colon
+			size += estimateJSONSize(vv)
+			i++
+		}
+		return size
+	case opencdc.StructuredData:
+		return estimateJSONSize(map[string]any(val))
+	case []any:
+		size := 2 // []
+		for i, vv := range val {
+			if i > 0 {
+				size++ // comma separator
+			}
+			size += estimateJSONSize(vv)
+		}
+		return size
+	case float64:
+		return floatLen(val)
+	case float32:
+		return floatLen(float64(val))
+	case int:
+		return intLen(int64(val))
+	case int64:
+		return intLen(val)
+	case int32:
+		return intLen(int64(val))
+	default:
+		// Rare types (other integer widths, custom stringers, etc.). Falling back
+		// to fmt keeps the estimate reasonable; this path is not hot.
+		return len(fmt.Sprint(v))
+	}
+}
+
+// stringJSONLen returns the exact number of bytes s occupies when encoded as a
+// JSON string, including the surrounding quotes and escaping. It mirrors the
+// encoder used by opencdc (goccy/go-json, HTML escaping on): ", \\, \n, \r and
+// \t cost 2 bytes; <, > and & and every other control character (< 0x20, which
+// includes backspace and form-feed — goccy does not use the \b/\f shortcuts)
+// are escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
+// bytes) cost 1. Computed without allocating. The only residual inexactness is
+// U+2028/U+2029, which goccy escapes to  /  (6 bytes) while this counts
+// their 3 UTF-8 bytes — a bounded, vanishingly rare difference.
+func stringJSONLen(s string) int {
+	n := 2 // surrounding quotes
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t':
+			n += 2
+		case c == '<' || c == '>' || c == '&' || c < 0x20:
+			n += 6
+		default:
+			n++
+		}
+	}
+	return n
+}
+
+// floatLen returns the length of f formatted as the opencdc JSON encoder
+// (goccy/go-json) would format it, using a stack buffer to avoid allocating. The
+// 'f' format is used for |f| in [1e-6, 1e21) and 'e' otherwise. Unlike
+// encoding/json, goccy does not trim a leading zero from the exponent (it emits
+// 1e-07, not 1e-7), so strconv's raw 'e' output matches it directly.
+func floatLen(f float64) int {
+	abs := math.Abs(f)
+	format := byte('f')
+	if abs != 0 && (abs < 1e-6 || abs >= 1e21) {
+		format = 'e'
+	}
+	var buf [40]byte
+	return len(strconv.AppendFloat(buf[:0], f, format, -1, 64))
+}
+
+// intLen returns the number of characters in the decimal representation of i,
+// using a stack buffer to avoid allocating.
+func intLen(i int64) int {
+	var buf [20]byte
+	return len(strconv.AppendInt(buf[:0], i, 10))
 }
