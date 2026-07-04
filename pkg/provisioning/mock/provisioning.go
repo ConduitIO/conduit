@@ -433,6 +433,44 @@ func (c *PipelineServiceUpdateDLQCall) DoAndReturn(f func(context.Context, strin
 	return c
 }
 
+// UpdateStatus mocks base method.
+func (m *PipelineService) UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateStatus", ctx, pipelineID, status, errMsg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateStatus indicates an expected call of UpdateStatus.
+func (mr *PipelineServiceMockRecorder) UpdateStatus(ctx, pipelineID, status, errMsg any) *PipelineServiceUpdateStatusCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStatus", reflect.TypeOf((*PipelineService)(nil).UpdateStatus), ctx, pipelineID, status, errMsg)
+	return &PipelineServiceUpdateStatusCall{Call: call}
+}
+
+// PipelineServiceUpdateStatusCall wrap *gomock.Call
+type PipelineServiceUpdateStatusCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *PipelineServiceUpdateStatusCall) Return(arg0 error) *PipelineServiceUpdateStatusCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *PipelineServiceUpdateStatusCall) Do(f func(context.Context, string, pipeline.Status, string) error) *PipelineServiceUpdateStatusCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *PipelineServiceUpdateStatusCall) DoAndReturn(f func(context.Context, string, pipeline.Status, string) error) *PipelineServiceUpdateStatusCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // ConnectorService is a mock of ConnectorService interface.
 type ConnectorService struct {
 	ctrl     *gomock.Controller

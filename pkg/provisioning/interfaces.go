@@ -31,6 +31,7 @@ type PipelineService interface {
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Update(ctx context.Context, pipelineID string, cfg pipeline.Config) (*pipeline.Instance, error)
+	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error
 	Delete(ctx context.Context, pipelineID string) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
 

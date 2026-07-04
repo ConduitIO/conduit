@@ -421,6 +421,54 @@ func TestService_deleteOldPipelines_SkipsNonConfig(t *testing.T) {
 	is.Equal(len(deleted), 0)
 }
 
+// TestService_provisionPipeline_StatusStopped is the regression test for #2061: a
+// pipeline whose config says `status: stopped` must not be resumed on restart.
+// Only the StatusSystemStopped auto-resume marker is converted to StatusUserStopped
+// (the necessary-and-sufficient state); other statuses are left as-is. In every
+// case the pipeline must not be started (lifecycleService has no Start expectation,
+// so gomock fails the test if Start is called).
+func TestService_provisionPipeline_StatusStopped(t *testing.T) {
+	testCases := []struct {
+		name          string
+		status        pipeline.Status
+		wantConverted bool // whether UpdateStatus(UserStopped) is expected
+	}{
+		// was running before restart -> SystemStopped -> must be converted so
+		// lifecycle.Init does not auto-resume it (the #2061 bug)
+		{"SystemStopped is converted to UserStopped", pipeline.StatusSystemStopped, true},
+		// already user-stopped: nothing to do, guard must skip
+		{"UserStopped is left alone", pipeline.StatusUserStopped, false},
+		// crashed while degraded: functionally stopped already, guard must skip
+		{"Degraded is left alone", pipeline.StatusDegraded, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+			srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+
+			// existing pipeline with a config identical to the incoming one, so the
+			// import produces no actions and the test isolates the status handling.
+			instance := &pipeline.Instance{
+				ID:            "p1",
+				Config:        pipeline.Config{Name: "p1"},
+				DLQ:           pipeline.DefaultDLQ,
+				ProvisionedBy: pipeline.ProvisionTypeConfig,
+			}
+			instance.SetStatus(tc.status)
+			cfg := config.Pipeline{ID: "p1", Status: config.StatusStopped}
+
+			pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(instance, nil).AnyTimes()
+			if tc.wantConverted {
+				pipSrv.EXPECT().UpdateStatus(gomock.Any(), "p1", pipeline.StatusUserStopped, "")
+			}
+
+			is.NoErr(srv.provisionPipeline(ctx, cfg))
+		})
+	}
+}
+
 func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()

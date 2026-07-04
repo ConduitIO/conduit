@@ -302,10 +302,26 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	}
 
 	// check if pipeline should be running
-	if cfg.Status == config.StatusRunning {
+	switch cfg.Status {
+	case config.StatusRunning:
 		err := s.lifecycleService.Start(ctx, cfg.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
+		}
+	case config.StatusStopped:
+		// The config says this pipeline should be stopped. If it was running
+		// before the restart it is now marked StatusSystemStopped (the marker the
+		// lifecycle service uses to auto-resume pipelines on startup). Convert it
+		// to StatusUserStopped so it is NOT resumed, honoring the config. See #2061.
+		pl, err := s.pipelineService.Get(ctx, cfg.ID)
+		if err != nil {
+			return cerrors.Errorf("could not get pipeline %q: %w", cfg.ID, err)
+		}
+		if pl.GetStatus() == pipeline.StatusSystemStopped {
+			err = s.pipelineService.UpdateStatus(ctx, cfg.ID, pipeline.StatusUserStopped, "")
+			if err != nil {
+				return cerrors.Errorf("could not mark pipeline %q as stopped: %w", cfg.ID, err)
+			}
 		}
 	}
 
