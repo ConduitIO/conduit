@@ -30,6 +30,9 @@ import (
 	"github.com/conduitio/yaml/v3"
 )
 
+// versionField is the name of the top-level pipeline-config version field.
+const versionField = "version"
+
 const LatestVersion = v2.LatestVersion
 
 // changelogs contains the changelogs from all versions
@@ -132,7 +135,7 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	// versionNode will store the node that contains the version field (for warning)
 	var versionNode yaml.Node
 	dec.WithHook(func(path []string, node *yaml.Node) {
-		if len(path) == 1 && path[0] == "version" {
+		if len(path) == 1 && path[0] == versionField {
 			versionNode = *node
 		}
 	})
@@ -145,7 +148,7 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	// if version is empty we default to the latest version
 	if out.Version == "" {
 		return LatestVersion, warnings{warning{
-			field:   "version",
+			field:   versionField,
 			line:    versionNode.Line,
 			column:  versionNode.Column,
 			value:   versionNode.Value,
@@ -164,7 +167,7 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	switch strings.Split(out.Version, ".")[0] {
 	case v1.MajorVersion:
 		return v1.LatestVersion, warnings{warning{
-			field:   "version",
+			field:   versionField,
 			line:    versionNode.Line,
 			column:  versionNode.Column,
 			value:   versionNode.Value,
@@ -172,7 +175,7 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 		}}, nil
 	case v2.MajorVersion:
 		return v2.LatestVersion, warnings{warning{
-			field:   "version",
+			field:   versionField,
 			line:    versionNode.Line,
 			column:  versionNode.Column,
 			value:   versionNode.Value,

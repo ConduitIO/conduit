@@ -17,6 +17,7 @@
 package schemaregistrytest
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -83,7 +84,8 @@ func inMemorySchemaRegistryURL(name string, logger *slog.Logger, port int) (stri
 			// NewUnstartedServer creates a listener. Close that listener and replace
 			// with a custom one.
 			_ = srv.Listener.Close()
-			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			var lc net.ListenConfig
+			l, err := lc.Listen(context.Background(), "tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err != nil {
 				panic(fmt.Sprintf("failed starting test server on port %d: %v", port, err))
 			}

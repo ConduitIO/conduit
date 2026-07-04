@@ -19,8 +19,9 @@ const _RecordFlag_name = "acknackretryfilter"
 var _RecordFlag_index = [...]uint8{0, 3, 7, 12, 18}
 
 func (i RecordFlag) String() string {
-	if i < 0 || i >= RecordFlag(len(_RecordFlag_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_RecordFlag_index)-1 {
 		return "RecordFlag(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _RecordFlag_name[_RecordFlag_index[i]:_RecordFlag_index[i+1]]
+	return _RecordFlag_name[_RecordFlag_index[idx]:_RecordFlag_index[idx+1]]
 }

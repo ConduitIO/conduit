@@ -66,7 +66,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	cmd := exec.Command("bash", "./test/build-test-processors.sh")
+	cmd := exec.CommandContext(context.Background(), "bash", "./test/build-test-processors.sh")
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

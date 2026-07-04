@@ -25,6 +25,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// unspecifiedString is the human-readable rendering of an UNSPECIFIED enum value.
+const unspecifiedString = "unspecified"
+
 // Indentation returns a string with the number of spaces equal to the level
 func Indentation(level int) string {
 	return strings.Repeat("  ", level)
@@ -194,9 +197,9 @@ func formatValidations(v []*configv1.Validation) string {
 		formattedType := formatType(validation.GetType().String())
 		value := validation.GetValue()
 		if value == "" {
-			result.WriteString(fmt.Sprintf("[%s]", formattedType))
+			fmt.Fprintf(&result, "[%s]", formattedType)
 		} else {
-			result.WriteString(fmt.Sprintf("[%s=%s]", formattedType, value))
+			fmt.Fprintf(&result, "[%s=%s]", formattedType, value)
 		}
 	}
 	return result.String()
@@ -218,7 +221,7 @@ func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
 	case apiv1.Connector_TYPE_DESTINATION:
 		return "destination"
 	case apiv1.Connector_TYPE_UNSPECIFIED:
-		return "unspecified"
+		return unspecifiedString
 	default:
 		return "unknown"
 	}
@@ -232,7 +235,7 @@ func ProcessorParentToString(processorParentType apiv1.Processor_Parent_Type) st
 	case apiv1.Processor_Parent_TYPE_PIPELINE:
 		return "pipeline"
 	case apiv1.Processor_Parent_TYPE_UNSPECIFIED:
-		return "unspecified"
+		return unspecifiedString
 	default:
 		return "unknown"
 	}

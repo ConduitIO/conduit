@@ -761,7 +761,8 @@ func (r *Runtime) serveGRPC(
 	srv *grpc.Server,
 	address string,
 ) (net.Addr, error) {
-	ln, err := net.Listen("tcp", address)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", address)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to listen on address %q: %w", address, err)
 	}
@@ -793,7 +794,8 @@ func (r *Runtime) serveHTTP(
 	t *tomb.Tomb,
 	srv *http.Server,
 ) (net.Addr, error) {
-	ln, err := net.Listen("tcp", srv.Addr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", srv.Addr)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.HTTP.Address, err)
 	}

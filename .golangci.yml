@@ -15,7 +15,7 @@ linters:
     - gocyclo
     - goheader
     - gomoddirectives
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - govet
@@ -70,6 +70,11 @@ linters:
       - linters:
           - goconst
         path: pkg/plugin/processor/builtin/impl
+      - linters:
+          - goconst
+        # test fixtures and acceptance-test harnesses are not named *_test.go
+        # but are test-only code where repeated literals are expected
+        path: (pkg/provisioning/test/|_testing\.go)
       - linters:
           - staticcheck
         text: "QF1008:" # could remove embedded field from selector

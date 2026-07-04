@@ -187,7 +187,7 @@ func (p *HTTPProcessor) Configure(ctx context.Context, c config.Config) error {
 	}
 
 	// preflight check
-	_, err = http.NewRequest(p.config.Method, p.config.URL, bytes.NewReader([]byte{}))
+	_, err = http.NewRequestWithContext(ctx, p.config.Method, p.config.URL, bytes.NewReader([]byte{}))
 	if err != nil {
 		return cerrors.Errorf("configuration check failed: %w", err)
 	}

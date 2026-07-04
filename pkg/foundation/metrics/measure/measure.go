@@ -19,6 +19,14 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 )
 
+// Metric label names, defined as constants to avoid typos and repetition across
+// the metric definitions below.
+const (
+	labelPipelineName = "pipeline_name"
+	labelType         = "type"
+	labelPlugin       = "plugin"
+)
+
 // Any changes in metrics defined below should also be reflected in the metrics documentation.
 var (
 	ConduitInfo = metrics.NewLabeledGauge("conduit_info",
@@ -31,19 +39,19 @@ var (
 	PipelineStatusGauge = metrics.NewLabeledGauge(
 		"conduit_pipeline_status",
 		"A pipeline's status (as specified in the gRPC API: https://buf.build/conduitio/conduit/docs/main:api.v1#api.v1.Pipeline.State).",
-		[]string{"pipeline_name"},
+		[]string{labelPipelineName},
 	)
 	PipelineRecoveringCount = metrics.NewLabeledCounter(
 		"pipeline_recovering_count",
 		"Number of times a pipeline have been recovering (by pipeline name)",
-		[]string{"pipeline_name"},
+		[]string{labelPipelineName},
 	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
-		[]string{"type"})
+		[]string{labelType})
 	ProcessorsGauge = metrics.NewLabeledGauge("conduit_processors",
 		"Number of processors by type.",
-		[]string{"type"})
+		[]string{labelType})
 	InspectorsGauge = metrics.NewLabeledGauge(
 		"conduit_inspector_sessions",
 		"Number of inspector sessions by ID of pipeline component (connector or processor)",
@@ -52,34 +60,34 @@ var (
 
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
 		"Number of bytes a connector processed by pipeline name, plugin and type (source, destination).",
-		[]string{"pipeline_name", "plugin", "type"},
+		[]string{labelPipelineName, labelPlugin, labelType},
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
 	DLQBytesHistogram = metrics.NewLabeledHistogram("conduit_dlq_bytes",
 		"Number of bytes a DLQ connector processed per pipeline and plugin.",
-		[]string{"pipeline_name", "plugin"},
+		[]string{labelPipelineName, labelPlugin},
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
 	PipelineExecutionDurationTimer = metrics.NewLabeledTimer("conduit_pipeline_execution_duration_seconds",
 		"Amount of time records spent in a pipeline.",
-		[]string{"pipeline_name"},
+		[]string{labelPipelineName},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 	ConnectorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_connector_execution_duration_seconds",
 		"Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination).",
-		[]string{"pipeline_name", "plugin", "type"},
+		[]string{labelPipelineName, labelPlugin, labelType},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 	ProcessorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_processor_execution_duration_seconds",
 		"Amount of time spent on processing records per pipeline and processor.",
-		[]string{"pipeline_name", "processor"},
+		[]string{labelPipelineName, "processor"},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 	DLQExecutionDurationTimer = metrics.NewLabeledTimer("conduit_dlq_execution_duration_seconds",
 		"Amount of time spent writing records to DLQ connector per pipeline and plugin.",
-		[]string{"pipeline_name", "plugin"},
+		[]string{labelPipelineName, labelPlugin},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 )

@@ -18,8 +18,9 @@ const _MessageStatus_name = "AckedNackedOpen"
 var _MessageStatus_index = [...]uint8{0, 5, 11, 15}
 
 func (i MessageStatus) String() string {
-	if i < 0 || i >= MessageStatus(len(_MessageStatus_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_MessageStatus_index)-1 {
 		return "MessageStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _MessageStatus_name[_MessageStatus_index[i]:_MessageStatus_index[i+1]]
+	return _MessageStatus_name[_MessageStatus_index[idx]:_MessageStatus_index[idx+1]]
 }

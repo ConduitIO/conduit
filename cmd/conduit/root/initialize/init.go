@@ -105,7 +105,7 @@ func (c *InitCommand) createConfigYAML() error {
 }
 
 func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.YAMLTree) {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem() // Dereference pointer to get the actual value
 	}
 
@@ -122,7 +122,7 @@ func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.Y
 		}
 
 		// Recursively process struct fields
-		if fieldValue.Kind() == reflect.Struct || (fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
+		if fieldValue.Kind() == reflect.Struct || (fieldValue.Kind() == reflect.Pointer && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
 			processConfigStruct(fieldValue, fullPath, cfgYAML)
 			continue
 		}

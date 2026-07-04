@@ -502,7 +502,7 @@ func TestCtxLoggerFatal(t *testing.T) {
 		t.Fatal("should not reach code after emitting fatal log")
 		return
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestCtxLoggerFatal")
+	cmd := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestCtxLoggerFatal")
 	cmd.Env = append(os.Environ(), "CTXLOGGER_FATAL=1")
 	err := cmd.Run()
 	if e, ok := err.(*exec.ExitError); !ok || e.ExitCode() != 1 {
