@@ -330,7 +330,12 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	}
 
 	defer func() {
-		if cerrors.Is(err, plugin.ErrUnimplemented) {
+		// Older connectors that predate the lifecycle methods return an
+		// "Unimplemented" gRPC status, which the protocol client unwraps into
+		// pconnector.ErrUnimplemented (a distinct sentinel from plugin.ErrUnimplemented,
+		// despite the identical message). Match pconnector's sentinel so we stay
+		// backwards compatible instead of fatally erroring. See issue #1999.
+		if cerrors.Is(err, pconnector.ErrUnimplemented) {
 			s.Instance.logger.Trace(ctx).Msg("lifecycle events not implemented on source connector plugin (it's probably an older connector)")
 			err = nil // ignore error to stay backwards compatible
 		}

@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/matryer/is"
@@ -156,6 +155,33 @@ func TestDestination_LifecycleOnDeleted_Success(t *testing.T) {
 	is.NoErr(err)
 }
 
+func TestDestination_LifecycleOnCreated_BackwardsCompatibility(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dest, destinationMock := newTestDestination(ctx, t, ctrl)
+
+	// before plugin is started we expect LastActiveConfig to be empty
+	is.Equal(dest.Instance.LastActiveConfig, Config{})
+
+	_ = expectDestinationOpen(dest, destinationMock)
+
+	// An older connector that predates lifecycle events returns
+	// pconnector.ErrUnimplemented (the "Unimplemented" gRPC status, unwrapped by
+	// the protocol client). Conduit must treat this as backwards compatible and
+	// open the destination without a fatal error. Regression test for #1999 —
+	// this is the exact path (created event during Open) that was crashing real
+	// pipelines against older connectors.
+	destinationMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
+	).Return(pconnector.DestinationLifecycleOnCreatedResponse{}, pconnector.ErrUnimplemented)
+
+	err := dest.Open(ctx)
+	is.NoErr(err)
+}
+
 func TestDestination_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -166,11 +192,13 @@ func TestDestination_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	// assume that there was a config already active, but with different settings
 	dest.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
-	// we should ignore the error if the plugin does not implement lifecycle events
+	// we should ignore the error if the plugin does not implement lifecycle
+	// events. Older connectors surface this as pconnector.ErrUnimplemented (see
+	// the trigger in destination.go and issue #1999).
 	destinationMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
 		pconnector.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
-	).Return(pconnector.DestinationLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
+	).Return(pconnector.DestinationLifecycleOnDeletedResponse{}, pconnector.ErrUnimplemented)
 
 	destinationMock.EXPECT().Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).Return(pconnector.DestinationTeardownResponse{}, nil)
 
