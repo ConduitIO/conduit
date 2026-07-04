@@ -22,7 +22,7 @@ anything not cohesive across all three isn't done). Tiers: **P0** foundational �
 differentiator · **P2** bet (can slip to Phase 2 without breaking the first-hour promise).
 
 | Release | Theme | Headline |
-|---|---|---|
+| --- | --- | --- |
 | **v0.15.1** | Correctness patch | **SIGTERM graceful drain** (invariant-7 fix, §0.1) |
 | **v0.16** | Foundations & the 5-min wow | Structured I/O + `ConduitError` (P0, re-scoped), `init` reconciliation (P0), 12-factor essentials (P0) |
 | **v0.17** | Agent-native & CLI-as-product | MCP server (P1), validate/lint/dry-run (P1), doctor (P1), **CLI verb parity** (P1), Go+Python scaffolding (P1) |
@@ -50,13 +50,21 @@ duplicate storms and unclean checkpoints on every K8s pod recycle, and undermine
 container/12-factor story Phase 1 is selling.
 
 **Plan:**
+
 - Design doc first (CLAUDE.md requires it for data-path work): signal set, drain sequence, grace
+
   deadline, force-stop-respects-checkpoint semantics.
+
 - Register SIGTERM; make the drain path the default; remove the second-signal `os.Exit` bypass; fix
+
   V2 force-stop to escalate only after checkpoint or hard deadline, never mid-ack.
+
 - Build the first **chaos test** (none exists today): SIGTERM/SIGKILL at random points under load →
+
   assert no double-delivery beyond at-least-once, no lost/torn checkpoint. Seeds `tests/chaos`.
+
 - **Decided: ship as v0.15.1** (out-of-band patch). It's small, it's a documented-invariant
+
   violation, it's pre-existing (not a v0.15.0 regression), and every container deployment hits it —
   patching now signals K8s-readiness rather than waiting a month for v0.16.
 
@@ -79,25 +87,36 @@ library/embedder callers, and `Import` which works on Go types — `import.go:33
 proto/`status.Status` payload (for CLI-via-client, MCP, UI). These are different representations;
 design them together or the "one error" claim silently breaks at the embedding boundary.
 
-**Acceptance criteria**
+**Acceptance criteria:**
+
 - A `ConduitError` type: `{ code, message, configPath?, suggestion?, fix?, docsUrl? }` where `fix` is
+
   **structured** `{configPath, op, value}` so MCP `repair` and CLI `repair`
   are thin appliers of the _same_ data, not divergent capabilities. Native-Go and proto encodings of
   it are defined together with a documented mapping.
+
 - Extract a `Result` type from each of the ~20 leaf CLI commands so human/JSON output share one path.
+
   **Investigate the framework route first:** `ecdysis` already has a dead `json`
   flag hook (`ecdysis@v0.4.2/decorators.go:434`) — if the `Command` interface can carry a generic
   "return a Result, render it" decorator, `--json` is an O(1) framework change, not O(n) per command.
+
 - Stable error-code enum in one registry file; CI guard fails a user-facing error with no code
+
   (mirror the release-build guards added in v0.15).
+
 - **Reuse, don't invent:** `configPath` from the YAML parser's existing
+
   line/column tracking (`config/yaml/linter.go:93-141`, currently log-only); `schemaVersion` from the
   YAML parser's proven version/per-version-model/changelog compat mechanism (`config/yaml/parser.go`).
+
 - Documented deterministic exit codes (0 ok · 1 runtime · 2 config/validation · 3 environment).
 - **Compat plan** for the public HTTP/gRPC error-shape change (announce → additive → migrate), per
+
   CLAUDE.md public-contract rules.
 
-**Edge cases & mitigation**
+**Edge cases & mitigation:**
+
 - Wrapped errors lose the code → error-boundary lint requiring `ConduitError` at user-facing returns.
 - JSON schema drift breaks agent/UI → contract-test snapshots; `schemaVersion` bumps are deliberate.
 - Secrets in errors/logs → redaction pass keyed on connector param sensitivity; test with a secret fixture.
@@ -109,14 +128,18 @@ design them together or the "one error" claim silently breaks at the embedding b
 pipeline — its own help says "run `conduit pipelines init`." `conduit pipelines init`
 (`pipelines/init.go`) is the one that scaffolds a runnable pipeline. v1 conflated them.
 
-**Acceptance criteria**
+**Acceptance criteria:**
+
 - **Decided:** `conduit init` becomes the single 5-min-wow entry that scaffolds a _running_
+
   generator→file pipeline. Project scaffolding moves under `conduit init --project`; the current
   `conduit pipelines init` is aliased to `conduit init` and deprecated (warn) for one release, then
   removed. One obvious entry point, no "run this other command" hand-off.
+
 - `conduit init` → `conduit run` shows records flowing in < 60s on a clean machine, zero required flags.
 - Generated config is commented, valid, passes `conduit pipeline validate`.
 - **Bundled templates use the registry template-manifest schema from day one**,
+
   even though the registry (v0.18) isn't live — so v0.16 templates aren't rewritten later.
 
 **Edge cases:** port/file collisions → free defaults, never overwrite without `--force`; non-empty dir
@@ -125,12 +148,16 @@ pipeline — its own help says "run `conduit pipelines init`." `conduit pipeline
 
 ### 1.3 12-factor essentials (the genuinely cheap ones)
 
-**Acceptance criteria**
+**Acceptance criteria:**
+
 - `/healthz` (liveness) + `/readyz` (readiness: DB open, pipelines loaded) → documented JSON; Prometheus
+
   endpoint (reuse the metrics registry from #2268). `readyz` = "engine can serve," degraded pipelines
   reported in body, not as not-ready.
+
 - Every engine setting env-configurable; documented precedence (flag > env > file); zero-config `run`.
 - `conduit run --pipelines <dir>` — **already exists as `--pipelines.path`**; this is a
+
   rename/alias, size accordingly.
 
 ---
@@ -142,19 +169,27 @@ provisioning's `actionsBuilder.Build`** (`import.go:113`) that doesn't exist —
 `repair` needs fix-synthesis. And MCP can't cleanly wrap CLI until §1.1's logic/output separation lands.
 So MCP rides the foundation but inherits its refactor.
 
-**Acceptance criteria**
+**Acceptance criteria:**
+
 - `conduit mcp` (stdio + optional HTTP) exposing tools that are **1:1 with CLI verbs** (see §3): a diff
+
   returned by `deploy` includes the **hot-swappable-vs-restart classification** so an agent knows a
   change will drop the pipeline before applying.
+
 - Every tool returns the §1.1 structured result; errors carry `code` + `suggestion` + structured `fix`.
 - **Rename MCP `diagnose` → `doctor`** to match the CLI verb (v1 violated its own shared-vocab rule).
 - Read tools vs write tools separated; **`--allow-mutations` is an operator-set startup flag, not
+
   agent-passable** — else the safety gate is theater. `deploy`/`repair` are
   diff-first (plan returned; apply is a second, explicitly-authorized call).
+
 - **HTTP transport security:** authn (token) + TLS for the HTTP MCP surface; documented.
 - **Agent `repair` touching ack/position/checkpoint-adjacent config still requires the human Tier-1
+
   sign-off path** — diff-first is not a substitute for review on data-path changes.
+
 - `llms.txt` + `/llms-full.txt` regenerated in CI from source (config schema, connector list, error
+
   registry, MCP tool catalog) — never hand-maintained.
 
 `conduit generate "<nl>"` → **v0.19** (needs MCP surface + templates + llms.txt as grounding). AC:
@@ -171,19 +206,30 @@ operator can do everything an agent can.** Add, with the same names the MCP tool
 
 - `conduit pipeline validate | lint | dry-run` — static schema/refs/types; all `--json`, all §1.1 errors.
 - `conduit pipeline inspect` — CLI peer of MCP `inspect_pipeline` + the UI per-stage
+
   view (live runtime/throughput). Distinct from the existing `describe` (static config) — state that
   both exist and what each does.
+
 - `conduit pipeline deploy|apply <file>` — diff-first, apply-is-a-second-call, the
+
   same safety UX the MCP `deploy` tool gets. (Today only `run --pipelines <dir>` / dev hot-reload exist.)
+
 - `conduit pipeline repair [--apply]` — thin applier of the structured `fix` field,
+
   sharing MCP `repair`'s engine so the human isn't a second-class citizen to the agent.
+
 - `conduit pipeline start|stop|pause` — the status enum already has User/System-Stopped;
+
   give humans and agents verbs for the transitions that already exist.
+
 - `conduit doctor` — env/config/plugin-compat diagnostics; pass/warn/fail with `suggestion`s.
 - `conduit open ui` (or `run` prints the UI URL) — the literal CLI→UI bridge; today
+
   `open` only has `open docs` and the UI has no discoverable entry point.
+
 - `conduit pipeline dev` + hot-reload — see §4 (its own subsystem, Tier-1-adjacent).
 - **Pin the status-enum display table as a §1.1 AC:** the enum is **5 values**
+
   (`Running, SystemStopped, UserStopped, Degraded, Recovering`) — one table mapping each to CLI text,
   JSON string, and UI badge/color, so the UI can't collapse `System/UserStopped` into one "Stopped"
   while the CLI keeps them distinct.
@@ -211,10 +257,15 @@ CLI/UI/agent all see "this will drop the pipeline" before apply. `dry-run` side 
 ## 5. Plugin scaffolding (P1: Go/Python v0.17 · Rust/TS v0.19)
 
 - `conduit connector new --lang go|python|rust|ts`, `conduit processor new` → full repo: SDK wiring,
+
   passing tests, CI, release workflow, acceptance harness.
+
 - **Target is a CI test, not a hope:** a scripted, timed run proves **first working custom connector
+
   < 30 min** per language on a clean machine.
+
 - Generated repos pass their own CI on first commit. Nightly regenerate-and-test to catch SDK/protocol
+
   drift. `doctor`-style toolchain preflight in `new`. Template CI matrix includes Windows.
 
 ---
@@ -232,22 +283,35 @@ the tree — the bar is the acceptance criteria below, not matching the retired 
 grpc-gateway-forwarded, websocket-proxied (`grpcutil/websocket.go`, `runtime.go:713-717`), **unused by
 any client today.** The UI consumes these, doesn't build new streaming primitives.
 
-**Acceptance criteria**
+**Acceptance criteria:**
+
 - **React**, consuming only documented APIs + the metrics/health endpoints; **TS API client generated
+
   from the served OpenAPI schema** (contract-tested) — provably just another API client (run it against
   a remote engine).
+
 - Live record flow (over the existing Inspect streams), per-stage inspection, pipeline graph whose node
+
   states map 1:1 to the 5-value status enum.
+
 - **Read/inspect-only in Phase 1 — state this explicitly:** the UI does not create/edit pipelines
+
   yet (CLI/MCP/library write; UI reads). It's a deliberate scoping line, not an omission.
+
 - **One shared React component library / design tokens for the built-in UI AND the registry web UI
+
  ** — both are React, both land ~v0.18; commit them to one visual language now or
   ship "two different-looking React apps," defeating the cohesion goal.
+
 - Errors render identically to the CLI (code/path/suggestion) **and are actionable** — one-click copy of
+
   the fixing command or trigger `repair` via the API.
+
 - In-UI empty state teaches the CLI verb (`conduit init`, shown + copyable) instead of a blank screen.
 - Accessibility: keyboard nav, WCAG AA contrast, **reduced-motion for the animated throughput view**,
+
   DOM-accessible (not canvas) record tables; works against a read-only engine.
+
 - **Reconnect/loading spec** for a dropped WS/SSE mid-session.
 
 **Edge cases:** render backpressure (server sampling + "sampled at N/sec") **and** surface _pipeline_
@@ -296,13 +360,20 @@ invariants (a claim must not let two instances double-read a partition). Design/
 ## 9. UX cohesion — the through-line
 
 CLI, UI, MCP, library are **four renderings of one operation set**:
+
 - **One result model + one `ConduitError` (code/path/suggestion/structured-fix)**, rendered as text
+
   (CLI), JSON (`--json`/MCP), and React (UI) — no surface invents vocabulary.
+
 - **Shared verbs, now with full CLI parity** (§3): `init, validate, dry-run, inspect, deploy, repair,
+
   start/stop/pause, doctor` mean the same thing in CLI, MCP, and UI. `diagnose`→`doctor` fixed.
+
 - **One 5-value status vocabulary**, pinned to a display table.
 - **Errors teach** — what/where/how-to-fix — and are **actionable** (CLI applies `fix`; UI one-click;
+
   MCP `repair`), all sharing one fix engine.
+
 - **React for all UI, one component library**, client generated from the served schema.
 - **The write asymmetry is explicit:** CLI/MCP/library write; the Phase-1 UI reads.
 
@@ -312,17 +383,26 @@ CLI, UI, MCP, library are **four renderings of one operation set**:
 
 1. **SIGTERM drain first** (§0.1) — live invariant-7 gap; likely v0.15.1.
 2. **§1.1 foundation is the linchpin AND the biggest hidden cost** — it's a CLI-wide Result-type refactor
-   + a Go-error-vs-proto dual-representation design + a public-API compat plan. Name it, estimate it
+   - a Go-error-vs-proto dual-representation design + a public-API compat plan. Name it, estimate it
+
    separately, investigate the ecdysis framework route to make `--json` O(1).
+
 3. **Agent-native rides the foundation** but inherits its refactor and needs a new provisioning
+
    preview/diff mode + fix-synthesis — wider than "wiring."
+
 4. **v0.18 = greenfield UI (largest item) + registry**, templates/Rust-TS pushed to v0.19.
 5. **WASM last, behind a go/no-go gate** — the WASI-P2 gap is presently _total_, not partial.
 6. **Two data-path items get Tier-1 rigor:** SIGTERM drain and hot-reload classification (both need a
+
    design doc + chaos tests; the chaos harness itself is new).
+
 7. **ADRs are deliverables:** React-for-UI, `ConduitError` as the cross-surface contract,
+
    WASI-P2 for WASM, partition-claims protocol — each gets an immutable ADR.
+
 8. **First-hour claim, honestly scoped:** CLI + agent wow by v0.17; **visual (UI) wow is v0.18** —
+
    competitors lead with UI, so consider a minimal live-tail slice earlier if the terminal-only month reads thin.
 
 **Top risks:** (a) §1.1 slips → the quarter slips (mitigate: ship the error registry + framework-level
