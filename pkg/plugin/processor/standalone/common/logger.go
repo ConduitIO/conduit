@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalone
+package common
 
 import (
 	"io"
@@ -23,27 +23,27 @@ import (
 	"github.com/tetratelabs/wazero"
 )
 
-// wasmLogWriter is a logger adapter for the WASM stderr and stdout streams.
+// WasmLogWriter is a logger adapter for the WASM stderr and stdout streams.
 // It parses the JSON log events and emits them as structured logs. It expects
 // the log events to be in the default format produced by zerolog. If the
 // parsing fails, it falls back to writing the raw bytes as-is.
-type wasmLogWriter struct {
+type WasmLogWriter struct {
 	logger zerolog.Logger
 }
 
-var _ io.Writer = (*wasmLogWriter)(nil)
+var _ io.Writer = (*WasmLogWriter)(nil)
 
-func newWasmLogWriter(logger log.CtxLogger, module wazero.CompiledModule) wasmLogWriter {
+func NewWasmLogWriter(logger log.CtxLogger, module wazero.CompiledModule) WasmLogWriter {
 	name := module.Name()
 	if name == "" {
 		// no module name, use the component name instead
 		name = logger.Component() + ".module"
 	}
 	logger = logger.WithComponent(name)
-	return wasmLogWriter{logger: logger.ZerologWithComponent()}
+	return WasmLogWriter{logger: logger.ZerologWithComponent()}
 }
 
-func (l wasmLogWriter) Write(p []byte) (int, error) {
+func (l WasmLogWriter) Write(p []byte) (int, error) {
 	err := l.emitJSONEvent(p)
 	if err != nil {
 		// fallback to writing the bytes as-is
@@ -52,7 +52,7 @@ func (l wasmLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (l wasmLogWriter) emitJSONEvent(p []byte) error {
+func (l WasmLogWriter) emitJSONEvent(p []byte) error {
 	var raw map[string]any
 	err := json.Unmarshal(p, &raw)
 	if err != nil {
