@@ -68,6 +68,7 @@ func TestCreatePipelineAction_Do(t *testing.T) {
 
 	a := createPipelineAction{
 		cfg:             haveCfg,
+		provisionedBy:   pipeline.ProvisionTypeConfig,
 		pipelineService: pipSrv,
 	}
 	err := a.Do(ctx)
@@ -254,6 +255,7 @@ func TestDeletePipelineAction_Rollback(t *testing.T) {
 
 	a := deletePipelineAction{
 		cfg:             haveCfg,
+		provisionedBy:   pipeline.ProvisionTypeConfig,
 		pipelineService: pipSrv,
 	}
 	err := a.Rollback(ctx)

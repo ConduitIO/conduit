@@ -288,7 +288,9 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	}
 	defer txn.Discard()
 
-	err = s.Import(importCtx, cfg)
+	// config-file provisioning tags pipelines as ProvisionTypeConfig so they are
+	// reconciled (and removed if they disappear from the config files) on restart.
+	err = s.importPipeline(importCtx, cfg, pipeline.ProvisionTypeConfig)
 	if err != nil {
 		return cerrors.Errorf("could not import pipeline: %w", err)
 	}

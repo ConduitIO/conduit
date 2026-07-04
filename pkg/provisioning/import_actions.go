@@ -40,6 +40,11 @@ type action interface {
 
 type createPipelineAction struct {
 	cfg config.Pipeline
+	// provisionedBy records how the pipeline was provisioned. Config-file
+	// provisioning uses ProvisionTypeConfig (subject to reconciliation/deletion
+	// on restart); programmatic callers of Import use ProvisionTypeAPI so their
+	// pipelines survive restarts (see #1274).
+	provisionedBy pipeline.ProvisionType
 
 	pipelineService PipelineService
 }
@@ -52,7 +57,7 @@ func (a createPipelineAction) Do(ctx context.Context) error {
 	_, err := a.pipelineService.Create(ctx, a.cfg.ID, pipeline.Config{
 		Name:        a.cfg.Name,
 		Description: a.cfg.Description,
-	}, pipeline.ProvisionTypeConfig)
+	}, a.provisionedBy)
 	if err != nil {
 		return cerrors.Errorf("failed to create pipeline: %w", err)
 	}

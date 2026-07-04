@@ -25,14 +25,26 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-// Import takes a pipeline config and imports it into Conduit.
+// Import takes a pipeline config and imports it into Conduit. Pipelines imported
+// this way are tagged with ProvisionTypeAPI, so they are treated as
+// programmatically provisioned and are NOT removed by the config-file
+// reconciliation on restart (see #1274). The config-file provisioning path uses
+// importPipeline with ProvisionTypeConfig instead.
 func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
+	return s.importPipeline(ctx, newConfig, pipeline.ProvisionTypeAPI)
+}
+
+// importPipeline imports a pipeline config, tagging any newly created pipeline
+// with the given provision type.
+func (s *Service) importPipeline(ctx context.Context, newConfig config.Pipeline, provisionedBy pipeline.ProvisionType) error {
 	oldConfig, err := s.Export(ctx, newConfig.ID)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
 		return cerrors.Errorf("could not export pipeline with ID %v, this could mean the Conduit state is corrupted: %w", err)
 	}
 
-	actions := s.newActionsBuilder().Build(oldConfig, newConfig)
+	builder := s.newActionsBuilder()
+	builder.pipelineProvisionType = provisionedBy
+	actions := builder.Build(oldConfig, newConfig)
 
 	failedActionIndex, err := s.executeActions(ctx, actions)
 	if err != nil {
@@ -80,6 +92,9 @@ func (s *Service) rollbackActions(ctx context.Context, actions []action) bool {
 
 func (s *Service) newActionsBuilder() actionsBuilder {
 	return actionsBuilder{
+		// default to config-file provisioning; importPipeline overrides this for
+		// programmatic (API) imports. See #1274.
+		pipelineProvisionType:  pipeline.ProvisionTypeConfig,
 		pipelineService:        s.pipelineService,
 		connectorService:       s.connectorService,
 		processorService:       s.processorService,
@@ -88,6 +103,7 @@ func (s *Service) newActionsBuilder() actionsBuilder {
 }
 
 type actionsBuilder struct {
+	pipelineProvisionType  pipeline.ProvisionType
 	pipelineService        PipelineService
 	connectorService       ConnectorService
 	processorService       ProcessorService
@@ -200,12 +216,16 @@ func (ab actionsBuilder) preparePipelineActions(oldConfig, newConfig config.Pipe
 		// no old config, it's a brand new pipeline
 		return []action{createPipelineAction{
 			cfg:             newConfig,
+			provisionedBy:   ab.pipelineProvisionType,
 			pipelineService: ab.pipelineService,
 		}}
 	} else if newConfig.ID == "" {
-		// no new config, it's an old pipeline that needs to be deleted
+		// no new config, it's an old pipeline that needs to be deleted.
+		// provisionedBy is carried so that a rollback of this delete recreates the
+		// pipeline with its original provision type (the zero value would be API).
 		return []action{deletePipelineAction{
 			cfg:             oldConfig,
+			provisionedBy:   ab.pipelineProvisionType,
 			pipelineService: ab.pipelineService,
 		}}
 	}
