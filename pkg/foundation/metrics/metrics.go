@@ -480,7 +480,7 @@ func estimateJSONSize(v any) int {
 			if i > 0 {
 				size++ // comma separator
 			}
-			size += len(k) + 3 // "key":
+			size += stringJSONLen(k) + 1 // "key" (quoted+escaped) plus the colon
 			size += estimateJSONSize(vv)
 			i++
 		}
@@ -515,15 +515,18 @@ func estimateJSONSize(v any) int {
 
 // stringJSONLen returns the exact number of bytes s occupies when encoded as a
 // JSON string, including the surrounding quotes and escaping. It mirrors the
-// encoder used by opencdc (goccy/go-json, HTML escaping on): ", \\ and the C0
-// control shortcuts cost 2 bytes; <, > and & and other control characters are
-// escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
-// bytes) cost 1. Computed without allocating.
+// encoder used by opencdc (goccy/go-json, HTML escaping on): ", \\, \n, \r and
+// \t cost 2 bytes; <, > and & and every other control character (< 0x20, which
+// includes backspace and form-feed — goccy does not use the \b/\f shortcuts)
+// are escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
+// bytes) cost 1. Computed without allocating. The only residual inexactness is
+// U+2028/U+2029, which goccy escapes to  /  (6 bytes) while this counts
+// their 3 UTF-8 bytes — a bounded, vanishingly rare difference.
 func stringJSONLen(s string) int {
 	n := 2 // surrounding quotes
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
-		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' || c == '\b' || c == '\f':
+		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t':
 			n += 2
 		case c == '<' || c == '>' || c == '&' || c < 0x20:
 			n += 6

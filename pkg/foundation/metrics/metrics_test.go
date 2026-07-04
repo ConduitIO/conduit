@@ -48,10 +48,12 @@ func structuredRecord() opencdc.Record {
 // boundary floats, unicode, and nesting.
 func TestEstimateJSONSize_ByteExactVsEncoder(t *testing.T) {
 	cases := map[string]opencdc.StructuredData{
-		"simple":         {"id": "12345"},
-		"url with &":     {"url": "https://example.com/x?a=1&b=2&c=3"},
-		"escapes":        {"s": "line1\nline2\ttab \"quote\" back\\slash"},
-		"html chars":     {"s": "a&b<c>d"},
+		"simple":       {"id": "12345"},
+		"url with &":   {"url": "https://example.com/x?a=1&b=2&c=3"},
+		"escapes":      {"s": "line1\nline2\ttab \"quote\" back\\slash"},
+		"html chars":   {"s": "a&b<c>d"},
+		"backspace/ff": {"s": "a\bb\fc\x01d"}, // goccy uses //, not shortcuts
+		"escaped key":    {"a\"b\nc": "v"}, // keys are escaped too
 		"epoch ms float": {"ts": float64(1_700_000_000_123)},
 		"float boundaries": {
 			"big":    1e20,  // 'f' format: 21 digits
