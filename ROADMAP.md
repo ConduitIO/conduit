@@ -48,20 +48,31 @@ the monthly release cadence is a promise.
 
 _Goal: an unmistakable signal that Conduit is active, maintained, and shipping._
 
-- [ ] Triage all open issues and PRs — every item closed, merged, or labeled with a decision
-- [ ] **Cut v0.15.0 stable** off the running nightly train: dependency upgrades, security
+- [x] Triage all open issues and PRs — every item closed, merged, or labeled with a decision
+- [x] **Cut v0.15.0 stable** off the running nightly train: dependency upgrades, security
       patches, bug fixes, Go version bump
-- [ ] Publish this roadmap + public GitHub Project board with milestones
-- [ ] Governance doc: Apache-2.0 commitment, maintainer ladder, decision process
-- [ ] Seed `docs/architecture-decision-records/` with the foundational decisions already made:
+- [ ] Publish this roadmap + public GitHub Project board with milestones — _roadmap published;
+      Project board still to do_
+- [x] Governance doc: Apache-2.0 commitment, maintainer ladder, decision process
+- [x] Seed `docs/architecture-decision-records/` with the foundational decisions already made:
       single-node engine (distribution via the scheduling layer), no bespoke DSL, WASM component
       model, local-state-only
 - [ ] Begin CNCF Sandbox application process
 - [ ] Revive Discord; monthly community call on a public calendar
-- [ ] Hold the monthly release train (cadence over scope)
+- [ ] Hold the monthly release train (cadence over scope) — _v0.15.0 is the first; next cadence
+      release due ~2026-08_
 
 **Definition of done:** zero untriaged issues, v0.15.0 stable shipped, roadmap and governance
 published.
+
+**Status — 2026-07-04:** Halfway through Phase 0. Shipped: **v0.15.0**, the first release under
+active maintenance — dependency + security refresh (~90 updates incl. `x/net`), Go 1.25, four
+provisioning/connector bug fixes (#1999, #2255, #1274, #2061) and a metrics perf win (#2268);
+triage complete; governance and the four foundational ADRs published. Release tooling was hardened
+along the way — CI now cross-builds `linux/386` and the release Docker image, so release-only build
+breaks are caught on PRs. **Remaining:** public Project board, CNCF Sandbox application, and
+community (Discord + monthly call) — the non-code items that pair with the launch announcement, and
+recruiting a co-maintainer (the gate on the deferred Tier-1 lifecycle work: #1659, arch-v2).
 
 ## Phase 1 — Developer Experience Core (Months 1–4)
 
