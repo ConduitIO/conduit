@@ -41,24 +41,49 @@ func structuredRecord() opencdc.Record {
 	}
 }
 
-// TestRecordBytesHistogram_SizeOf_ApproximatesJSON verifies that the marshal-free
-// estimate stays close to the real json.Marshal byte count (the value the metric
-// reported before #2268). We compute the "actual" size via Bytes(), which still
-// marshals to JSON, and assert the estimate is within 10%.
-func TestRecordBytesHistogram_SizeOf_ApproximatesJSON(t *testing.T) {
+// TestEstimateJSONSize_ByteExactVsEncoder is the core correctness test: for every
+// value kind produced by JSON decoding, the estimate must equal the byte count
+// of the real opencdc JSON encoder (StructuredData.Bytes()), including the
+// tricky cases — HTML-escaped characters, backslash/control escapes, epoch-ms and
+// boundary floats, unicode, and nesting.
+func TestEstimateJSONSize_ByteExactVsEncoder(t *testing.T) {
+	cases := map[string]opencdc.StructuredData{
+		"simple":         {"id": "12345"},
+		"url with &":     {"url": "https://example.com/x?a=1&b=2&c=3"},
+		"escapes":        {"s": "line1\nline2\ttab \"quote\" back\\slash"},
+		"html chars":     {"s": "a&b<c>d"},
+		"epoch ms float": {"ts": float64(1_700_000_000_123)},
+		"float boundaries": {
+			"big":    1e20,  // 'f' format: 21 digits
+			"bigger": 1e21,  // 'e' format
+			"small":  1e-7,  // 'e' format (goccy keeps 1e-07, no exponent trim)
+			"tiny":   1e-6,  // 'f' format
+			"neg":    -12.5, // sign
+		},
+		"unicode":  {"s": "héllo wörld 日本語"},
+		"bool/nil": {"a": true, "b": false, "c": nil},
+		"nested":   {"n": map[string]any{"a": []any{float64(1), "two", true, nil}}},
+		"array":    {"m": []any{float64(42), 98.6, "x", false}},
+	}
+	for name, sd := range cases {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			est := estimateJSONSize(map[string]any(sd))
+			actual := len(sd.Bytes())
+			is.Equal(est, actual) // estimate is byte-exact vs the opencdc JSON encoder
+		})
+	}
+}
+
+// TestRecordBytesHistogram_SizeOf_MatchesEncoder checks the full SizeOf path over
+// structured key + payload equals the real encoded size.
+func TestRecordBytesHistogram_SizeOf_MatchesEncoder(t *testing.T) {
 	is := is.New(t)
 	m := RecordBytesHistogram{}
 	rec := structuredRecord()
 
 	actual := len(rec.Key.Bytes()) + len(rec.Payload.After.Bytes())
-	est := int(m.SizeOf(rec))
-
-	diff := actual - est
-	if diff < 0 {
-		diff = -diff
-	}
-	is.True(actual > 0)
-	is.True(float64(diff) <= 0.10*float64(actual)) // estimate within 10% of real JSON size
+	is.Equal(int(m.SizeOf(rec)), actual)
 }
 
 func TestRecordBytesHistogram_SizeOf_RawDataExact(t *testing.T) {
@@ -78,12 +103,16 @@ func TestRecordBytesHistogram_SizeOf_Nil(t *testing.T) {
 	is.Equal(m.SizeOf(opencdc.Record{}), float64(0))
 }
 
-func TestEstimateJSONSize_ExactForSimpleObject(t *testing.T) {
+// TestRecordBytesHistogram_SizeOf_ZeroAlloc locks in the headline property of
+// #2268: computing a record's size must not allocate.
+func TestRecordBytesHistogram_SizeOf_ZeroAlloc(t *testing.T) {
 	is := is.New(t)
-	// {"id":"12345"} encodes to exactly 14 bytes; the estimator is exact here
-	// since there are no floats or escaped characters.
-	sd := opencdc.StructuredData{"id": "12345"}
-	is.Equal(estimateJSONSize(map[string]any(sd)), len(sd.Bytes()))
+	m := RecordBytesHistogram{}
+	rec := structuredRecord()
+	avg := testing.AllocsPerRun(100, func() {
+		_ = m.SizeOf(rec)
+	})
+	is.Equal(avg, 0.0) // SizeOf must be allocation-free
 }
 
 // BenchmarkRecordBytesHistogram_SizeOf measures the new marshal-free path.

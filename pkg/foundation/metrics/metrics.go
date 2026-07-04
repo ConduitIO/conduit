@@ -15,7 +15,9 @@
 package metrics
 
 import (
+	"encoding/base64"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -449,24 +451,28 @@ func dataSize(d opencdc.Data) int {
 	}
 }
 
-// estimateJSONSize approximates the number of bytes v occupies when encoded as
-// JSON, without allocating the encoded output. It is used only to feed the
-// record-size metric, so an approximation (e.g. it ignores string escaping and
-// uses the shortest float representation) is an acceptable trade for avoiding a
-// json.Marshal on every record. See issue #2268.
+// estimateJSONSize returns the number of bytes v occupies when encoded as JSON,
+// computed by walking the value WITHOUT allocating the encoded output (the whole
+// point of #2268 — avoiding json.Marshal on every record). For the value kinds
+// produced by JSON decoding (string, bool, float64, nil, []any, map[string]any)
+// it is byte-exact against the opencdc encoder, including string escaping and
+// float formatting. Exotic types that only arise from programmatic construction
+// (other integer widths, time.Time, typed slices/maps, etc.) fall through to a
+// best-effort fmt fallback; those are not on the hot JSON-decoded path.
 func estimateJSONSize(v any) int {
 	switch val := v.(type) {
 	case nil:
 		return 4 // null
 	case string:
-		return len(val) + 2 // surrounding quotes
+		return stringJSONLen(val)
 	case bool:
 		if val {
 			return 4 // true
 		}
 		return 5 // false
 	case []byte:
-		return len(val) + 2
+		// JSON encodes a byte slice as a base64 string.
+		return base64.StdEncoding.EncodedLen(len(val)) + 2
 	case map[string]any:
 		size := 2 // {}
 		i := 0
@@ -507,11 +513,40 @@ func estimateJSONSize(v any) int {
 	}
 }
 
-// floatLen returns the length of f formatted as JSON would format it (shortest
-// round-trippable representation), using a stack buffer to avoid allocating.
+// stringJSONLen returns the exact number of bytes s occupies when encoded as a
+// JSON string, including the surrounding quotes and escaping. It mirrors the
+// encoder used by opencdc (goccy/go-json, HTML escaping on): ", \\ and the C0
+// control shortcuts cost 2 bytes; <, > and & and other control characters are
+// escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
+// bytes) cost 1. Computed without allocating.
+func stringJSONLen(s string) int {
+	n := 2 // surrounding quotes
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' || c == '\b' || c == '\f':
+			n += 2
+		case c == '<' || c == '>' || c == '&' || c < 0x20:
+			n += 6
+		default:
+			n++
+		}
+	}
+	return n
+}
+
+// floatLen returns the length of f formatted as the opencdc JSON encoder
+// (goccy/go-json) would format it, using a stack buffer to avoid allocating. The
+// 'f' format is used for |f| in [1e-6, 1e21) and 'e' otherwise. Unlike
+// encoding/json, goccy does not trim a leading zero from the exponent (it emits
+// 1e-07, not 1e-7), so strconv's raw 'e' output matches it directly.
 func floatLen(f float64) int {
-	var buf [32]byte
-	return len(strconv.AppendFloat(buf[:0], f, 'g', -1, 64))
+	abs := math.Abs(f)
+	format := byte('f')
+	if abs != 0 && (abs < 1e-6 || abs >= 1e21) {
+		format = 'e'
+	}
+	var buf [40]byte
+	return len(strconv.AppendFloat(buf[:0], f, format, -1, 64))
 }
 
 // intLen returns the number of characters in the decimal representation of i,
