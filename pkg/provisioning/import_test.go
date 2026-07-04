@@ -19,8 +19,10 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
@@ -342,11 +344,62 @@ func TestActionsBuilder_PreparePipelineActions_Create(t *testing.T) {
 
 	want := []action{createPipelineAction{
 		cfg:             newConfig,
+		provisionedBy:   pipeline.ProvisionTypeConfig,
 		pipelineService: pipSrv,
 	}}
 
 	got := srv.newActionsBuilder().preparePipelineActions(oldConfig, newConfig)
 	is.Equal(got, want)
+}
+
+// TestService_Import_ProvisionType is the regression test for #1274: pipelines
+// created via the public Import method (used by embedders) must be tagged
+// ProvisionTypeAPI so the config-file reconciliation does not delete them on
+// restart, while the config-file path keeps tagging as ProvisionTypeConfig.
+// Previously Import hardcoded ProvisionTypeConfig, so embedder-provisioned
+// pipelines were swept on restart.
+func TestService_Import_ProvisionType(t *testing.T) {
+	newCfg := func() config.Pipeline {
+		return config.Pipeline{
+			ID:   "p-" + uuid.NewString(),
+			Name: "test",
+			DLQ:  config.DLQ{WindowSize: lang.Ptr(1), WindowNackThreshold: lang.Ptr(0)},
+		}
+	}
+	testCases := []struct {
+		name string
+		do   func(s *Service, ctx context.Context, cfg config.Pipeline) error
+		want pipeline.ProvisionType
+	}{
+		{
+			"public Import tags API",
+			func(s *Service, ctx context.Context, cfg config.Pipeline) error { return s.Import(ctx, cfg) },
+			pipeline.ProvisionTypeAPI,
+		},
+		{
+			"config-file path tags Config",
+			func(s *Service, ctx context.Context, cfg config.Pipeline) error {
+				return s.importPipeline(ctx, cfg, pipeline.ProvisionTypeConfig)
+			},
+			pipeline.ProvisionTypeConfig,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+			srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+			cfg := newCfg()
+
+			pipSrv.EXPECT().Get(ctx, cfg.ID).Return(nil, pipeline.ErrInstanceNotFound)
+			// gomock fails the test if Create is called with any other provision type.
+			pipSrv.EXPECT().Create(ctx, cfg.ID, gomock.Any(), tc.want)
+			pipSrv.EXPECT().UpdateDLQ(ctx, cfg.ID, gomock.Any())
+
+			is.NoErr(tc.do(srv, ctx, cfg))
+		})
+	}
 }
 
 func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
