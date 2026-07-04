@@ -21,6 +21,9 @@
 
 ### Conduit ###
 
+# Internal strategy notes — never ship public (see CLAUDE.md)
+/STRATEGY.md
+
 # Badger DB
 conduit.db
 
