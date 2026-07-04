@@ -15,6 +15,8 @@
 package metrics
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -417,21 +419,104 @@ func (m RecordBytesHistogram) Observe(r opencdc.Record) {
 }
 
 func (m RecordBytesHistogram) SizeOf(r opencdc.Record) float64 {
-	// TODO for now we call method Bytes() on key and payload to get the
-	//  bytes representation. In case of a structured payload or key it
-	//  is marshaled into JSON, which might not be the correct way to
-	//  determine bytes. Not sure how we could improve this part without
-	//  offloading the bytes calculation to the plugin.
-
 	var bytes int
 	if r.Key != nil {
-		bytes += len(r.Key.Bytes())
+		bytes += dataSize(r.Key)
 	}
 	if r.Payload.Before != nil {
-		bytes += len(r.Payload.Before.Bytes())
+		bytes += dataSize(r.Payload.Before)
 	}
 	if r.Payload.After != nil {
-		bytes += len(r.Payload.After.Bytes())
+		bytes += dataSize(r.Payload.After)
 	}
 	return float64(bytes)
+}
+
+// dataSize returns the size of d in bytes. For RawData this is the exact byte
+// length. For StructuredData it returns an approximation of the JSON-encoded
+// size computed by walking the value, WITHOUT calling Bytes() (which would run a
+// full json.Marshal and allocate the encoded output on every record — the
+// dominant cost measured in issue #2268). Any other Data implementation falls
+// back to the exact but slower Bytes() length.
+func dataSize(d opencdc.Data) int {
+	switch v := d.(type) {
+	case opencdc.RawData:
+		return len(v)
+	case opencdc.StructuredData:
+		return estimateJSONSize(map[string]any(v))
+	default:
+		return len(d.Bytes())
+	}
+}
+
+// estimateJSONSize approximates the number of bytes v occupies when encoded as
+// JSON, without allocating the encoded output. It is used only to feed the
+// record-size metric, so an approximation (e.g. it ignores string escaping and
+// uses the shortest float representation) is an acceptable trade for avoiding a
+// json.Marshal on every record. See issue #2268.
+func estimateJSONSize(v any) int {
+	switch val := v.(type) {
+	case nil:
+		return 4 // null
+	case string:
+		return len(val) + 2 // surrounding quotes
+	case bool:
+		if val {
+			return 4 // true
+		}
+		return 5 // false
+	case []byte:
+		return len(val) + 2
+	case map[string]any:
+		size := 2 // {}
+		i := 0
+		for k, vv := range val {
+			if i > 0 {
+				size++ // comma separator
+			}
+			size += len(k) + 3 // "key":
+			size += estimateJSONSize(vv)
+			i++
+		}
+		return size
+	case opencdc.StructuredData:
+		return estimateJSONSize(map[string]any(val))
+	case []any:
+		size := 2 // []
+		for i, vv := range val {
+			if i > 0 {
+				size++ // comma separator
+			}
+			size += estimateJSONSize(vv)
+		}
+		return size
+	case float64:
+		return floatLen(val)
+	case float32:
+		return floatLen(float64(val))
+	case int:
+		return intLen(int64(val))
+	case int64:
+		return intLen(val)
+	case int32:
+		return intLen(int64(val))
+	default:
+		// Rare types (other integer widths, custom stringers, etc.). Falling back
+		// to fmt keeps the estimate reasonable; this path is not hot.
+		return len(fmt.Sprint(v))
+	}
+}
+
+// floatLen returns the length of f formatted as JSON would format it (shortest
+// round-trippable representation), using a stack buffer to avoid allocating.
+func floatLen(f float64) int {
+	var buf [32]byte
+	return len(strconv.AppendFloat(buf[:0], f, 'g', -1, 64))
+}
+
+// intLen returns the number of characters in the decimal representation of i,
+// using a stack buffer to avoid allocating.
+func intLen(i int64) int {
+	var buf [20]byte
+	return len(strconv.AppendInt(buf[:0], i, 10))
 }
