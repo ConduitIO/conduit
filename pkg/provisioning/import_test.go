@@ -402,6 +402,25 @@ func TestService_Import_ProvisionType(t *testing.T) {
 	}
 }
 
+// TestService_deleteOldPipelines_SkipsNonConfig pins the other half of #1274: the
+// restart reconciliation sweep must not delete a pipeline that isn't config-file
+// provisioned (e.g. one created by an embedder via Import, tagged API), even when
+// it is absent from the current config files. gomock fails if Delete is called.
+func TestService_deleteOldPipelines_SkipsNonConfig(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+
+	pipSrv.EXPECT().List(ctx).Return(map[string]*pipeline.Instance{
+		"embedder-pl": {ID: "embedder-pl", ProvisionedBy: pipeline.ProvisionTypeAPI},
+	})
+
+	// keepIDs is empty: the pipeline is in no config file, yet must survive.
+	deleted := srv.deleteOldPipelines(ctx, nil)
+	is.Equal(len(deleted), 0)
+}
+
 func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
@@ -413,7 +432,10 @@ func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
 	newConfig := config.Pipeline{}
 
 	want := []action{deletePipelineAction{
-		cfg:             oldConfig,
+		cfg: oldConfig,
+		// the delete action must carry the builder's provision type so a rollback
+		// recreates the pipeline with the correct type (not the API zero value)
+		provisionedBy:   pipeline.ProvisionTypeConfig,
 		pipelineService: pipSrv,
 	}}
 

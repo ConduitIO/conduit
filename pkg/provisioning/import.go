@@ -220,9 +220,12 @@ func (ab actionsBuilder) preparePipelineActions(oldConfig, newConfig config.Pipe
 			pipelineService: ab.pipelineService,
 		}}
 	} else if newConfig.ID == "" {
-		// no new config, it's an old pipeline that needs to be deleted
+		// no new config, it's an old pipeline that needs to be deleted.
+		// provisionedBy is carried so that a rollback of this delete recreates the
+		// pipeline with its original provision type (the zero value would be API).
 		return []action{deletePipelineAction{
 			cfg:             oldConfig,
+			provisionedBy:   ab.pipelineProvisionType,
 			pipelineService: ab.pipelineService,
 		}}
 	}
