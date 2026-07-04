@@ -15,6 +15,7 @@
 package webhook
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
@@ -151,7 +152,8 @@ The response will be written under the record's ` + "`.Payload.After.response`."
 }
 
 func newTestServer() *httptest.Server {
-	l, err := net.Listen("tcp", "127.0.0.1:54321")
+	var lc net.ListenConfig
+	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:54321")
 	if err != nil {
 		log.Fatalf("failed starting test server on port 54321: %v", err)
 	}

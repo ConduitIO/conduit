@@ -17,9 +17,9 @@ const _ParentType_name = "ConnectorPipeline"
 var _ParentType_index = [...]uint8{0, 9, 17}
 
 func (i ParentType) String() string {
-	i -= 1
-	if i < 0 || i >= ParentType(len(_ParentType_index)-1) {
-		return "ParentType(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	idx := int(i) - 1
+	if i < 1 || idx >= len(_ParentType_index)-1 {
+		return "ParentType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _ParentType_name[_ParentType_index[i]:_ParentType_index[i+1]]
+	return _ParentType_name[_ParentType_index[idx]:_ParentType_index[idx+1]]
 }

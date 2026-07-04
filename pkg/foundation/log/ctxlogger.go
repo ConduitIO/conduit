@@ -77,7 +77,7 @@ func (l CtxLogger) WithComponent(component string) CtxLogger {
 
 func (l CtxLogger) WithComponentFromType(c any) CtxLogger {
 	cType := reflect.TypeOf(c)
-	for cType.Kind() == reflect.Ptr || cType.Kind() == reflect.Interface {
+	for cType.Kind() == reflect.Pointer || cType.Kind() == reflect.Interface {
 		cType = cType.Elem()
 	}
 

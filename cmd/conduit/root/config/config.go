@@ -51,7 +51,7 @@ the set environment variables, and the flags used. This command will show the co
 }
 
 func printStruct(ctx context.Context, v reflect.Value, parentPath string) {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 
@@ -67,7 +67,7 @@ func printStruct(ctx context.Context, v reflect.Value, parentPath string) {
 		}
 
 		if fieldValue.Kind() == reflect.Struct ||
-			(fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
+			(fieldValue.Kind() == reflect.Pointer && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
 			printStruct(ctx, fieldValue, fullPath)
 			continue
 		}

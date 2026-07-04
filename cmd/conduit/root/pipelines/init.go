@@ -82,7 +82,7 @@ func (c *InitCommand) Args(args []string) error {
 	if len(args) > 1 {
 		return cerrors.Errorf("too many arguments")
 	} else if len(args) == 1 {
-		c.args.pipelineName = args[0]
+		c.args.pipelineName = args[0] //nolint:gosec // guarded by the len(args) == 1 check above
 	}
 	return nil
 }

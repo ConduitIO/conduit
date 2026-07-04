@@ -50,7 +50,7 @@ func LoggerWithNodeID(logger log.CtxLogger, n Node) log.CtxLogger {
 // LoggerWithComponent creates a logger with the component set to the node name.
 func LoggerWithComponent(logger log.CtxLogger, v Node) log.CtxLogger {
 	t := reflect.TypeOf(v)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
