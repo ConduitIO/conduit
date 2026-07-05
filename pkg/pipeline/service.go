@@ -16,12 +16,14 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
@@ -104,7 +106,15 @@ func (s *Service) List(context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		// Invariant: errors.Is(err, ErrInstanceNotFound) still holds — the sentinel
+		// is wrapped, and the ConduitError adds the machine-actionable code.
+		err := conduiterr.Wrap(
+			CodePipelineNotFound,
+			fmt.Sprintf("pipeline %q not found", id),
+			ErrInstanceNotFound,
+		)
+		err.Suggestion = "run `conduit pipelines list` to see existing pipelines"
+		return nil, err
 	}
 	return p, nil
 }
