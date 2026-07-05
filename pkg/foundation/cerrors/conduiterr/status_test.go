@@ -98,15 +98,29 @@ func TestFromStatus_Nil(t *testing.T) {
 	is.True(got != nil) // never returns nil
 }
 
-// FuzzRoundTrip ensures ToStatus/FromStatus never panic on arbitrary string field
-// values and round-trip them faithfully.
-func FuzzRoundTrip(f *testing.F) {
-	f.Add("connector plugin not found", "/connectors/0/plugin", "install it", "https://x", "builtin:pg")
-	f.Add("", "", "", "", "")
-	f.Add("msg with \"quotes\" and \n newlines", "/a/b", "sug\tgest", "u", "v w")
+// Note on Code.Reason sanitization: ToStatus coerces Reason to valid UTF-8 like
+// every other wire field. It is defensive (a Go caller could Register a code with a
+// non-ASCII reason); it can't be exercised via a crafted *status.Status here because
+// proto validates UTF-8 on marshal — WithDetails rejects an invalid-UTF-8 reason
+// outright — which is also why the bad reason can't reach FromStatus over the wire.
 
-	f.Fuzz(func(t *testing.T, msg, configPath, suggestion, docsURL, fixValue string) {
-		e := conduiterr.New(conduiterr.CodeInvalidArgument, msg)
+// FuzzRoundTrip ensures ToStatus/FromStatus never panic on arbitrary codes and
+// string field values, round-trip them faithfully, and are idempotent on a relay
+// (a second round-trip must not lose data — the check that would catch a field
+// that silently fails to marshal).
+func FuzzRoundTrip(f *testing.F) {
+	f.Add(uint8(0), "connector plugin not found", "/connectors/0/plugin", "install it", "https://x", "builtin:pg")
+	f.Add(uint8(3), "", "", "", "", "")
+	f.Add(uint8(1), "msg with \"quotes\" and \n newlines", "/a/b", "sug\tgest", "u", "v w")
+	f.Add(uint8(2), "bad \x82 utf8", "/p\x82", "s\xff", "d\x80", "\x81val") // invalid-UTF-8 seed
+
+	want := func(s string) string { return strings.ToValidUTF8(s, "�") }
+
+	f.Fuzz(func(t *testing.T, codeSel uint8, msg, configPath, suggestion, docsURL, fixValue string) {
+		all := conduiterr.Codes()
+		code := all[int(codeSel)%len(all)]
+
+		e := conduiterr.New(code, msg)
 		e.ConfigPath = configPath
 		e.Suggestion = suggestion
 		e.DocsURL = docsURL
@@ -116,11 +130,12 @@ func FuzzRoundTrip(f *testing.F) {
 
 		got := conduiterr.FromStatus(conduiterr.ToStatus(e))
 
-		// Wire string fields must be valid UTF-8; ToStatus coerces stray bytes to
-		// U+FFFD rather than dropping the whole detail, so we compare against the
-		// coerced form.
-		want := func(s string) string { return strings.ToValidUTF8(s, "�") }
-
+		if got.Code.Reason() != code.Reason() {
+			t.Fatalf("code reason: got %q want %q", got.Code.Reason(), code.Reason())
+		}
+		if got.Code.GRPCCode() != code.GRPCCode() {
+			t.Fatalf("code grpc: got %v want %v", got.Code.GRPCCode(), code.GRPCCode())
+		}
 		if got.Message != want(msg) {
 			t.Fatalf("message: got %q want %q", got.Message, want(msg))
 		}
@@ -135,6 +150,15 @@ func FuzzRoundTrip(f *testing.F) {
 		}
 		if fixValue != "" && (got.Fix == nil || got.Fix.Value != want(fixValue)) {
 			t.Fatalf("fix: got %+v want value %q", got.Fix, want(fixValue))
+		}
+
+		// Relay: a second round-trip must be idempotent. If any field silently
+		// failed to marshal (dropping the detail), the relay diverges.
+		relay := conduiterr.FromStatus(conduiterr.ToStatus(got))
+		if relay.Code.Reason() != got.Code.Reason() || relay.Message != got.Message ||
+			relay.ConfigPath != got.ConfigPath || relay.Suggestion != got.Suggestion ||
+			relay.DocsURL != got.DocsURL {
+			t.Fatalf("relay not idempotent: %+v vs %+v", relay, got)
 		}
 	})
 }

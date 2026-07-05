@@ -55,9 +55,16 @@ func (c Code) IsZero() bool { return c.reason == "" }
 
 var registry = map[string]Code{}
 
-// register adds a Code to the global registry. It panics on a duplicate reason so
-// collisions are caught at init, not in production.
-func register(reason string, grpcCode codes.Code) Code {
+// Register adds a Code to the global registry and returns it. Each boundary package
+// registers the codes it owns, so the registry is the single source of truth for
+// docs, llms.txt, and the UI. It panics on a duplicate reason so collisions are
+// caught at init, not in production.
+//
+// Register MUST be called only from a package-level var initializer (as the
+// foundational codes below are). The registry is not synchronized; Go's package
+// initialization is single-threaded, so init-time registration is race-free, but
+// calling Register after program start or from a goroutine is a data race.
+func Register(reason string, grpcCode codes.Code) Code {
 	if _, ok := registry[reason]; ok {
 		panic("conduiterr: duplicate code reason " + reason)
 	}
@@ -87,16 +94,16 @@ func Codes() []Code {
 // as migration proceeds; these seed the registry and cover the fallbacks.
 var (
 	// CodeUnknown is the fallback when an un-coded error reaches a boundary.
-	CodeUnknown = register("internal.unknown", codes.Internal)
+	CodeUnknown = Register("internal.unknown", codes.Internal)
 	// CodeInternal is a coded internal failure.
-	CodeInternal = register("internal.error", codes.Internal)
+	CodeInternal = Register("internal.error", codes.Internal)
 	// CodeInvalidArgument is a generic invalid-input error.
-	CodeInvalidArgument = register("common.invalid_argument", codes.InvalidArgument)
+	CodeInvalidArgument = Register("common.invalid_argument", codes.InvalidArgument)
 	// CodeNotFound is a generic not-found error.
-	CodeNotFound = register("common.not_found", codes.NotFound)
+	CodeNotFound = Register("common.not_found", codes.NotFound)
 	// CodeConnectorPluginNotFound is raised when a referenced connector plugin
 	// cannot be located.
-	CodeConnectorPluginNotFound = register("connector.plugin_not_found", codes.NotFound)
+	CodeConnectorPluginNotFound = Register("connector.plugin_not_found", codes.NotFound)
 )
 
 // Fix is a structured, machine-appliable change that resolves an error. The same
@@ -110,8 +117,8 @@ type Fix struct {
 
 // ConduitError is Conduit's uniform user-facing error. Construct with New or Wrap.
 type ConduitError struct {
-	Code       Code
-	Message    string
+	Code       Code   // stable identity + gRPC category
+	Message    string // human-readable, no secrets
 	ConfigPath string // JSON-pointer into the offending config, optional
 	Suggestion string // human-readable fix hint, optional
 	Fix        *Fix   // structured, machine-appliable fix, optional
@@ -120,22 +127,38 @@ type ConduitError struct {
 	err error // wrapped cause, always non-nil after construction
 }
 
+// Error returns this error's Message only, not the wrapped cause's text. Use
+// Unwrap (or errors.Is/As) to reach the chain.
 func (e *ConduitError) Error() string { return e.Message }
 
+// Unwrap returns the wrapped cause so errors.Is/As and the cerrors stack-trace
+// walk traverse the chain.
 func (e *ConduitError) Unwrap() error { return e.err }
 
-// New creates a leaf ConduitError with no wrapped cause. It still captures a stack
-// frame at the call site so the error is traceable.
+// New creates a leaf ConduitError with no wrapped cause. It guarantees a non-empty
+// stack trace so the error is never trace-less.
+//
+// Caveat: because cerrors.New attributes the frame to its immediate caller, the
+// captured frame points into this constructor, not the site that called New. For
+// accurate call-site attribution, build the cause with cerrors.New/Errorf at the
+// real origination point and pass it to Wrap. A skip-aware helper in cerrors that
+// would let New capture the true caller is tracked as a follow-up.
 func New(code Code, msg string) *ConduitError {
 	return &ConduitError{Code: code, Message: msg, err: cerrors.New(msg)}
 }
 
 // Wrap creates a ConduitError around an existing cause, adding context.
 //
+// Message replaces (does not concatenate) the cause's text — Error() returns msg,
+// and the cause remains reachable via Unwrap. So msg should be the boundary-level,
+// user-facing description, not a "context: %w" fragment.
+//
 // Invariant: a boundary must not shadow an inner code. If cause already carries a
 // *ConduitError, the returned error takes that inner Code (and inherits its
 // structured fields where the wrap does not set them), so errors.As never surfaces
-// a code that hides a more specific inner one.
+// a code that hides a more specific inner one. Note this means Wrap's own code
+// argument is ignored when an inner ConduitError is present — an explicit-override
+// escape hatch is a tracked follow-up.
 func Wrap(code Code, msg string, cause error) *ConduitError {
 	e := &ConduitError{Code: code, Message: msg, err: cause}
 

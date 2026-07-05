@@ -66,7 +66,11 @@ func ToStatus(e *ConduitError) *status.Status {
 	}
 
 	info := &errdetails.ErrorInfo{
-		Reason:   e.Code.Reason(),
+		// Reason is sanitized like every other wire string: an invalid-UTF-8 byte
+		// in any proto string field fails the whole detail's marshal, and ToStatus'
+		// fallback would then silently drop all structured data. Registry reasons
+		// are ASCII today, but a reason arriving from a non-Go plugin is not trusted.
+		Reason:   valid(e.Code.Reason()),
 		Domain:   errorDomain,
 		Metadata: md,
 	}
@@ -95,8 +99,11 @@ func FromStatus(st *status.Status) *ConduitError {
 			continue
 		}
 
-		// Prefer the registered code; fall back to a code carrying the wire reason
-		// and the status' gRPC category so an unknown reason still round-trips.
+		// For a registered reason the LOCAL registry is authoritative for the gRPC
+		// category (reasons are stable; a reason's category does not change across
+		// versions). For an unknown reason we fall back to the wire status' code so
+		// the error still round-trips. If a client and server ever disagree on a
+		// registered reason's category, the local mapping wins by design.
 		code, ok := LookupCode(info.GetReason())
 		if !ok {
 			code = Code{reason: info.GetReason(), grpcCode: st.Code()}
