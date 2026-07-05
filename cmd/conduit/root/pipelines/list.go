@@ -29,15 +29,12 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*ListCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*ListCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*ListCommand)(nil)
 )
 
-type ListCommand struct {
-	output ecdysis.Output
-}
+type ListCommand struct{}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -49,27 +46,31 @@ be configured via --pipelines.path at the time of running Conduit.`,
 	}
 }
 
-func (c *ListCommand) Output(output ecdysis.Output) {
-	c.output = output
-}
-
 func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 
 func (c *ListCommand) Usage() string { return "list" }
 
-func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *ListCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	resp, err := client.PipelineServiceClient.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
 	if err != nil {
-		return cerrors.Errorf("failed to list pipelines: %w", err)
+		return nil, cerrors.Errorf("failed to list pipelines: %w", err)
 	}
 
 	sort.Slice(resp.Pipelines, func(i, j int) bool {
 		return resp.Pipelines[i].Id < resp.Pipelines[j].Id
 	})
 
-	c.output.Stdout(getPipelinesTable(resp.Pipelines) + "\n")
+	return resp, nil
+}
 
-	return nil
+// Render returns the human-readable table. The framework renders --json itself
+// (protojson over the returned response).
+func (c *ListCommand) Render(result any) string {
+	resp, ok := result.(*apiv1.ListPipelinesResponse)
+	if !ok {
+		return ""
+	}
+	return getPipelinesTable(resp.Pipelines) + "\n"
 }
 
 func getPipelinesTable(pipelines []*apiv1.Pipeline) string {

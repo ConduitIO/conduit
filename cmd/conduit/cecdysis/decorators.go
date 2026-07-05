@@ -22,7 +22,10 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
+	json "github.com/goccy/go-json"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // ------------------- CommandWithClient
@@ -70,6 +73,95 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 	}
 
 	return nil
+}
+
+// ------------------- CommandWithClient + result
+
+// CommandWithExecuteWithClientResult is like CommandWithExecuteWithClient but its
+// execution returns a result value that the framework renders: as JSON when the
+// --json flag is set (proto responses via protojson, otherwise via go-json), and
+// human-readable via Render otherwise. This gives client commands uniform --json
+// output without per-command flag plumbing.
+type CommandWithExecuteWithClientResult interface {
+	ecdysis.Command
+
+	// ExecuteWithClientResult does the work and returns the result to render. It
+	// must not write the result to output itself.
+	ExecuteWithClientResult(context.Context, *api.Client) (any, error)
+	// Render returns the human-readable rendering of a result. Not called for --json.
+	Render(result any) string
+}
+
+// CommandWithExecuteWithClientResultDecorator adds a Conduit API client and
+// renders the command's result as JSON (--json) or human-readable.
+type CommandWithExecuteWithClientResultDecorator struct{}
+
+func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Command, c ecdysis.Command) error {
+	v, ok := c.(CommandWithExecuteWithClientResult)
+	if !ok {
+		return nil
+	}
+
+	if cmd.Flags().Lookup("json") == nil {
+		cmd.Flags().Bool("json", false, "output the result as JSON")
+	}
+
+	old := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if old != nil {
+			if err := old(cmd, args); err != nil {
+				return err
+			}
+		}
+
+		grpcAddress, err := getGRPCAddress(cmd)
+		if err != nil {
+			return cerrors.Errorf("error reading gRPC address: %w", err)
+		}
+
+		client, err := api.NewClient(cmd.Context(), grpcAddress)
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+
+		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
+		result, err := v.ExecuteWithClientResult(ctx, client)
+		if err != nil {
+			return err
+		}
+
+		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+			b, err := marshalJSON(result)
+			if err != nil {
+				return cerrors.Errorf("could not marshal result to JSON: %w", err)
+			}
+			cmd.Println(string(b))
+			return nil
+		}
+
+		cmd.Print(v.Render(result))
+		return nil
+	}
+
+	return nil
+}
+
+// marshalJSON renders a result as indented JSON. Proto messages use protojson so
+// the output matches the HTTP API's JSON shape; everything else uses go-json.
+func marshalJSON(result any) ([]byte, error) {
+	if pm, ok := result.(proto.Message); ok {
+		b, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(pm)
+		if err != nil {
+			return nil, cerrors.Errorf("protojson marshal: %w", err)
+		}
+		return b, nil
+	}
+	b, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, cerrors.Errorf("json marshal: %w", err)
+	}
+	return b, nil
 }
 
 // getGRPCAddress returns the gRPC address configured by the user. If no address is found, the default address is returned.

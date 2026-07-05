@@ -15,14 +15,13 @@
 package pipelines
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"testing"
 
-	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
@@ -32,10 +31,6 @@ import (
 
 func TestListCommandExecuteWithClient(t *testing.T) {
 	is := is.New(t)
-
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -54,12 +49,11 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 	}
 
 	cmd := &ListCommand{}
-	cmd.Output(out)
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"+----+------------+----------------------+----------------------+\n"+
@@ -75,10 +69,6 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -90,11 +80,36 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	}
 
 	cmd := &ListCommand{}
-	cmd.Output(out)
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
+	output := strings.TrimSpace(cmd.Render(result))
 	is.True(len(output) == 0)
+}
+
+// TestListCommandExecuteWithClient_JSON proves the result is a proto response that
+// renders as the API's JSON shape — what `conduit pipelines list --json` emits.
+func TestListCommandExecuteWithClient_JSON(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	mockService := mock.NewMockPipelineService(ctrl)
+	testutils.MockGetPipelines(mockService, []*apiv1.Pipeline{
+		{Id: "1", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING}},
+	})
+	client := &api.Client{PipelineServiceClient: mockService}
+
+	cmd := &ListCommand{}
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
+	is.NoErr(err)
+
+	resp, ok := result.(*apiv1.ListPipelinesResponse)
+	is.True(ok) // result is a proto message -> protojson renders the API's JSON shape
+
+	b, err := protojson.Marshal(resp)
+	is.NoErr(err)
+	is.True(strings.Contains(string(b), `"id":"1"`))
 }
