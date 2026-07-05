@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -312,7 +313,11 @@ func TestService_GetInstanceNotFound(t *testing.T) {
 	// get pipeline instance that does not exist
 	got, err := service.Get(ctx, uuid.NewString())
 	is.True(err != nil)
-	is.True(cerrors.Is(err, ErrInstanceNotFound))
+	is.True(cerrors.Is(err, ErrInstanceNotFound)) // sentinel still in the chain
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // now also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineNotFound.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 	is.Equal(got, nil)
 }
 
