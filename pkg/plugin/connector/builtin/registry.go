@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
@@ -28,6 +29,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
@@ -190,7 +192,15 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, cfg pconnector.PluginConfig) (connector.Dispenser, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, plugin.ErrPluginNotFound
+		// Invariant: errors.Is(err, plugin.ErrPluginNotFound) still holds — the
+		// sentinel is wrapped, and the ConduitError adds the machine-actionable code.
+		err := conduiterr.Wrap(
+			conduiterr.CodeConnectorPluginNotFound,
+			fmt.Sprintf("builtin connector plugin %q not found", fullName.PluginName()),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "run `conduit connectors list` to see available built-in connectors"
+		return nil, err
 	}
 	b, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
@@ -198,7 +208,13 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}
-		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
+		err := conduiterr.Wrap(
+			conduiterr.CodeConnectorPluginNotFound,
+			fmt.Sprintf("builtin connector plugin %q not found; available versions: %v", fullName, availableVersions),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "check the plugin version, or omit it to use the latest"
+		return nil, err
 	}
 
 	return b.dispenserFactory(fullName, cfg, logger), nil

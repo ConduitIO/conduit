@@ -20,6 +20,7 @@ import (
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/google/go-cmp/cmp"
@@ -98,7 +99,11 @@ func TestRegistry_NewDispenser_PluginNotFound(t *testing.T) {
 
 			dispenser, err := underTest.NewDispenser(log.Nop(), plugin.FullName(tc.pluginName), pconnector.PluginConfig{})
 			if tc.wantErr {
-				is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
+				is.True(cerrors.Is(err, plugin.ErrPluginNotFound)) // sentinel still in the chain
+				ce, ok := conduiterr.Get(err)
+				is.True(ok) // now also carries a machine-actionable ConduitError code
+				is.Equal(ce.Code.Reason(), conduiterr.CodeConnectorPluginNotFound.Reason())
+				is.True(ce.Suggestion != "") // with a suggested fix
 				is.True(dispenser == nil)
 				return
 			}
