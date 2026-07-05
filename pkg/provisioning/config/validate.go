@@ -15,6 +15,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -27,84 +29,89 @@ const (
 	TypeDestination = "destination"
 )
 
-// Validate validates config field values for a pipeline
+// Validate validates config field values for a pipeline. Each error carries a
+// ConduitError code and a JSON-pointer configPath to the offending field; the
+// original sentinel stays in the chain for backward-compatible errors.Is checks.
 func Validate(cfg Pipeline) error {
 	var errs []error
 	if cfg.ID == "" {
-		errs = append(errs, cerrors.Errorf(`id is mandatory: %w`, ErrMandatoryField))
+		errs = append(errs, fieldError(CodeFieldRequired, "/id", "id is mandatory", ErrMandatoryField))
 	}
 	if len(cfg.ID) > pipeline.IDLengthLimit {
-		errs = append(errs, pipeline.ErrIDOverLimit)
+		errs = append(errs, fieldError(CodeFieldTooLong, "/id", pipeline.ErrIDOverLimit.Error(), pipeline.ErrIDOverLimit))
 	}
 	if len(cfg.Name) > pipeline.NameLengthLimit {
-		errs = append(errs, pipeline.ErrNameOverLimit)
+		errs = append(errs, fieldError(CodeFieldTooLong, "/name", pipeline.ErrNameOverLimit.Error(), pipeline.ErrNameOverLimit))
 	}
 	if len(cfg.Description) > pipeline.DescriptionLengthLimit {
-		errs = append(errs, pipeline.ErrDescriptionOverLimit)
+		errs = append(errs, fieldError(CodeFieldTooLong, "/description", pipeline.ErrDescriptionOverLimit.Error(), pipeline.ErrDescriptionOverLimit))
 	}
 	if cfg.Status != StatusRunning && cfg.Status != StatusStopped {
-		errs = append(errs, cerrors.Errorf(`"status" is invalid: %w`, ErrInvalidField))
+		errs = append(errs, fieldError(CodeFieldInvalid, "/status", `"status" is invalid`, ErrInvalidField))
 	}
 
 	errs = append(errs, validateConnectors(cfg.Connectors)...)
-	errs = append(errs, validateProcessors(cfg.Processors)...)
+	errs = append(errs, validateProcessors(cfg.Processors, "/processors")...)
 
 	return cerrors.Join(errs...)
 }
 
-// validateConnectors validates config field values for connectors
+// validateConnectors validates config field values for connectors. pathPrefix is
+// the JSON-pointer to the connectors slice ("/connectors").
 func validateConnectors(mp []Connector) []error {
 	var errs []error
 	ids := make(map[string]bool)
 	for i, cfg := range mp {
+		path := fmt.Sprintf("/connectors/%d", i)
 		if cfg.ID == "" {
-			errs = append(errs, cerrors.Errorf("connector %d: id is mandatory: %w", i+1, ErrMandatoryField))
+			errs = append(errs, fieldError(CodeFieldRequired, path+"/id", fmt.Sprintf("connector %d: id is mandatory", i+1), ErrMandatoryField))
 		}
 		if len(cfg.ID) > connector.IDLengthLimit {
-			errs = append(errs, cerrors.Errorf("connector %q: %w", cfg.ID, connector.ErrIDOverLimit))
+			errs = append(errs, fieldError(CodeFieldTooLong, path+"/id", fmt.Sprintf("connector %q: %s", cfg.ID, connector.ErrIDOverLimit), connector.ErrIDOverLimit))
 		}
 		if len(cfg.Name) > connector.NameLengthLimit {
-			errs = append(errs, cerrors.Errorf("connector %q: %w", cfg.ID, connector.ErrNameOverLimit))
+			errs = append(errs, fieldError(CodeFieldTooLong, path+"/name", fmt.Sprintf("connector %q: %s", cfg.ID, connector.ErrNameOverLimit), connector.ErrNameOverLimit))
 		}
 		if cfg.Plugin == "" {
-			errs = append(errs, cerrors.Errorf(`connector %q: "plugin" is mandatory: %w`, cfg.ID, ErrMandatoryField))
+			errs = append(errs, fieldError(CodeFieldRequired, path+"/plugin", fmt.Sprintf(`connector %q: "plugin" is mandatory`, cfg.ID), ErrMandatoryField))
 		}
 		if cfg.Type == "" {
-			errs = append(errs, cerrors.Errorf(`connector %q: "type" is mandatory: %w`, cfg.ID, ErrMandatoryField))
+			errs = append(errs, fieldError(CodeFieldRequired, path+"/type", fmt.Sprintf(`connector %q: "type" is mandatory`, cfg.ID), ErrMandatoryField))
 		}
 		if cfg.Type != "" && cfg.Type != TypeSource && cfg.Type != TypeDestination {
-			errs = append(errs, cerrors.Errorf(`connector %q: "type" is invalid: %w`, cfg.ID, ErrInvalidField))
+			errs = append(errs, fieldError(CodeFieldInvalid, path+"/type", fmt.Sprintf(`connector %q: "type" is invalid`, cfg.ID), ErrInvalidField))
 		}
 
-		pErrs := validateProcessors(cfg.Processors)
-		for _, pErr := range pErrs {
-			errs = append(errs, cerrors.Errorf("connector %q: %w", cfg.ID, pErr))
-		}
+		// nested processor errors already carry their own /connectors/i/processors/j path
+		errs = append(errs, validateProcessors(cfg.Processors, path+"/processors")...)
 
 		if ids[cfg.ID] {
-			errs = append(errs, cerrors.Errorf(`connector %q: "id" must be unique: %w`, cfg.ID, ErrDuplicateID))
+			errs = append(errs, fieldError(CodeIDDuplicate, path+"/id", fmt.Sprintf(`connector %q: "id" must be unique`, cfg.ID), ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
 	return errs
 }
 
-// validateProcessorsConfig validates config field values for processors
-func validateProcessors(mp []Processor) []error {
+// validateProcessors validates config field values for processors. pathPrefix is
+// the JSON-pointer to the processors slice (e.g. "/processors" or
+// "/connectors/0/processors").
+func validateProcessors(mp []Processor, pathPrefix string) []error {
 	var errs []error
 	ids := make(map[string]bool)
 	for i, cfg := range mp {
+		path := fmt.Sprintf("%s/%d", pathPrefix, i)
 		if cfg.ID == "" {
-			errs = append(errs, cerrors.Errorf("processor %d: id is mandatory: %w", i+1, ErrMandatoryField))
+			errs = append(errs, fieldError(CodeFieldRequired, path+"/id", fmt.Sprintf("processor %d: id is mandatory", i+1), ErrMandatoryField))
 		}
 		if cfg.Plugin == "" {
-			errs = append(errs, cerrors.Errorf(`processor %q: "plugin" is mandatory: %w`, cfg.ID, ErrMandatoryField))
+			errs = append(errs, fieldError(CodeFieldRequired, path+"/plugin", fmt.Sprintf(`processor %q: "plugin" is mandatory`, cfg.ID), ErrMandatoryField))
 		}
 		if cfg.Workers < 0 {
-			errs = append(errs, cerrors.Errorf(`processor %q: "workers" can't be negative: %w`, cfg.ID, ErrInvalidField))
+			errs = append(errs, fieldError(CodeFieldInvalid, path+"/workers", fmt.Sprintf(`processor %q: "workers" can't be negative`, cfg.ID), ErrInvalidField))
 		}
 		if ids[cfg.ID] {
-			errs = append(errs, cerrors.Errorf(`processor %q: "id" must be unique: %w`, cfg.ID, ErrDuplicateID))
+			errs = append(errs, fieldError(CodeIDDuplicate, path+"/id", fmt.Sprintf(`processor %q: "id" must be unique`, cfg.ID), ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
