@@ -19,10 +19,12 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/matryer/is"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -124,6 +126,45 @@ func TestProcessorError(t *testing.T) {
 			is.Equal(tt.want, ProcessorError(tt.args.err))
 		})
 	}
+}
+
+// TestConduitErrorFlowsThroughBoundary proves the ConduitError foundation reaches
+// the API: a ConduitError (even wrapped) yields a gRPC status with the code's
+// category and an additive google.rpc.ErrorInfo detail carrying the stable reason,
+// configPath, and suggestion.
+func TestConduitErrorFlowsThroughBoundary(t *testing.T) {
+	is := is.New(t)
+
+	ce := conduiterr.New(conduiterr.CodeConnectorPluginNotFound, "connector plugin not found")
+	ce.ConfigPath = "/connectors/0/plugin"
+	ce.Suggestion = "run `conduit connectors install <name>`"
+
+	// wrapped, to prove errors.As finds it through the chain
+	got := PipelineError(cerrors.Errorf("provisioning failed: %w", ce))
+
+	st, ok := grpcstatus.FromError(got)
+	is.True(ok)
+	is.Equal(st.Code(), codes.NotFound) // the code's gRPC category
+
+	var info *errdetails.ErrorInfo
+	for _, d := range st.Details() {
+		if ei, ok := d.(*errdetails.ErrorInfo); ok {
+			info = ei
+		}
+	}
+	is.True(info != nil) // the structured detail is present
+	is.Equal(info.GetReason(), conduiterr.CodeConnectorPluginNotFound.Reason())
+	is.Equal(info.GetDomain(), "conduit")
+	is.Equal(info.GetMetadata()["configPath"], "/connectors/0/plugin")
+	is.Equal(info.GetMetadata()["suggestion"], "run `conduit connectors install <name>`")
+}
+
+// TestNonConduitErrorUnchanged confirms the wiring is additive: a plain sentinel
+// error still maps exactly as before, with no detail.
+func TestNonConduitErrorUnchanged(t *testing.T) {
+	is := is.New(t)
+	got := PipelineError(pipeline.ErrInstanceNotFound)
+	is.Equal(grpcstatus.Error(codes.NotFound, pipeline.ErrInstanceNotFound.Error()), got)
 }
 
 func TestCodeFromError(t *testing.T) {

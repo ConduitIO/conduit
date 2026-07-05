@@ -17,6 +17,7 @@ package status
 import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -25,7 +26,24 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+// conduitErrorStatus returns the structured gRPC status for a ConduitError in err's
+// chain — its gRPC category plus a google.rpc.ErrorInfo detail carrying the stable
+// reason and any configPath/suggestion/fix — and true if one was found. This is the
+// single point where the ConduitError model reaches the API; boundaries that have
+// not yet been migrated fall through to the sentinel-based code mapping below,
+// unchanged.
+func conduitErrorStatus(err error) (error, bool) {
+	if ce, ok := conduiterr.Get(err); ok {
+		return conduiterr.ToStatus(ce).Err(), true
+	}
+	return nil, false
+}
+
 func PipelineError(err error) error {
+	if s, ok := conduitErrorStatus(err); ok {
+		return s
+	}
+
 	var code codes.Code
 
 	switch {
@@ -41,6 +59,10 @@ func PipelineError(err error) error {
 }
 
 func ConnectorError(err error) error {
+	if s, ok := conduitErrorStatus(err); ok {
+		return s
+	}
+
 	var code codes.Code
 
 	switch {
@@ -56,6 +78,10 @@ func ConnectorError(err error) error {
 }
 
 func ProcessorError(err error) error {
+	if s, ok := conduitErrorStatus(err); ok {
+		return s
+	}
+
 	var code codes.Code
 
 	switch {
@@ -71,6 +97,9 @@ func ProcessorError(err error) error {
 }
 
 func PluginError(err error) error {
+	if s, ok := conduitErrorStatus(err); ok {
+		return s
+	}
 	return grpcstatus.Error(codeFromError(err), err.Error())
 }
 
