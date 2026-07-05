@@ -20,9 +20,61 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/matryer/is"
 )
+
+// TestValidate_ConfigPathAndCode proves each validation error carries a
+// machine-actionable code and a JSON-pointer to the offending field — the "failing
+// config path" an agent or UI needs to point a user at exactly what to fix.
+func TestValidate_ConfigPathAndCode(t *testing.T) {
+	testCases := []struct {
+		name     string
+		cfg      Pipeline
+		wantPath string
+		wantCode conduiterr.Code
+	}{
+		{
+			name:     "missing pipeline id",
+			cfg:      Pipeline{Status: StatusRunning},
+			wantPath: "/id",
+			wantCode: CodeFieldRequired,
+		},
+		{
+			name:     "invalid status",
+			cfg:      Pipeline{ID: "pipeline1", Status: "bogus"},
+			wantPath: "/status",
+			wantCode: CodeFieldInvalid,
+		},
+		{
+			name:     "connector missing plugin",
+			cfg:      Pipeline{ID: "pipeline1", Status: StatusRunning, Connectors: []Connector{{ID: "con1", Type: TypeSource}}},
+			wantPath: "/connectors/0/plugin",
+			wantCode: CodeFieldRequired,
+		},
+		{
+			name: "nested processor missing id",
+			cfg: Pipeline{ID: "pipeline1", Status: StatusRunning, Connectors: []Connector{
+				{ID: "con1", Plugin: "builtin:file", Type: TypeSource, Processors: []Processor{{Plugin: "field.set"}}},
+			}},
+			wantPath: "/connectors/0/processors/0/id",
+			wantCode: CodeFieldRequired,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			err := Validate(tc.cfg)
+			is.True(err != nil)
+
+			ce, ok := conduiterr.Get(err)
+			is.True(ok) // carries a ConduitError
+			is.Equal(ce.Code.Reason(), tc.wantCode.Reason())
+			is.Equal(ce.ConfigPath, tc.wantPath)
+		})
+	}
+}
 
 func TestValidator_MandatoryFields(t *testing.T) {
 	tests := []struct {
