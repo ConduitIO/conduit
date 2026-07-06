@@ -18,6 +18,7 @@ package funnel
 
 import (
 	"context"
+	"io"
 	"iter"
 	"sync/atomic"
 	"time"
@@ -447,9 +448,13 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	originalBatch := batch.originalBatch()
 	err := w.Source.Ack(ctx, originalBatch.positions)
-	if err != nil {
+	if err != nil && !isClosedSourceStream(err) {
 		return cerrors.Errorf("failed to ack %d records in source: %w", len(originalBatch.positions), err)
 	}
+	// A closed source stream (io.EOF) means the source already stopped, typically
+	// because it errored; forwarding the ack is a no-op and this derived error must
+	// not mask the source's real cause (#1659). Safe under invariant 3: Source.Ack
+	// does not persist a position on this error path.
 
 	w.DLQ.Ack(ctx, batch)
 	w.updateTimer(batch.records)
@@ -462,10 +467,11 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 	if n > 0 {
 		// Successfully nacked n records, let's ack them, as they reached
 		// the end of the pipeline (in this case the DLQ).
-		err := w.Source.Ack(ctx, originalBatch.positions[:n])
-		if err != nil {
-			return cerrors.Errorf("task %s failed to ack %d records in source: %w", n, err)
+		ackErr := w.Source.Ack(ctx, originalBatch.positions[:n])
+		if ackErr != nil && !isClosedSourceStream(ackErr) {
+			return cerrors.Errorf("task %s failed to ack %d records in source: %w", taskID, n, ackErr)
 		}
+		// io.EOF suppressed, same as Ack (#1659).
 
 		w.updateTimer(batch.records[:n])
 	}
@@ -474,6 +480,14 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 		return cerrors.Errorf("failed to nack %d records: %w", len(batch.records)-n, err)
 	}
 	return nil
+}
+
+// isClosedSourceStream reports whether err is the sentinel a source connector's
+// stream returns once it has closed (io.EOF, which plugin.ErrStreamNotOpen
+// aliases). Forwarding an ack to a closed source stream is a no-op, and the
+// derived error must not mask the source's real failure. See #1659.
+func isClosedSourceStream(err error) bool {
+	return cerrors.Is(err, io.EOF)
 }
 
 func (w *Worker) updateTimer(records []opencdc.Record) {

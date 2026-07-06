@@ -278,7 +278,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 }
 
 func TestServiceLifecycle_PipelineError(t *testing.T) {
-	t.Skipf("this test fails, see github.com/ConduitIO/conduit/issues/1659")
+	// The #1659 fix is applied in funnel/worker.go; un-skipping this preview-arch
+	// test additionally needs mock-harness work (fatal-error teardown expectations).
+	t.Skipf("preview-arch test harness needs work, see github.com/ConduitIO/conduit/issues/1659")
 
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())

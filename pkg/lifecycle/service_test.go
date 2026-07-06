@@ -280,8 +280,6 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 }
 
 func TestServiceLifecycle_PipelineError(t *testing.T) {
-	t.Skipf("this test fails, see github.com/ConduitIO/conduit/issues/1659")
-
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -295,8 +293,12 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
 	is.NoErr(err)
 
-	// create mocked connectors
-	wantErr := cerrors.New("source connector error")
+	// create mocked connectors. The source error is fatal so the pipeline degrades
+	// immediately with it, instead of entering the (infinite) recovery loop — this
+	// isolates what #1659 is about: the *cause* reported for the degraded pipeline
+	// must be the source's real error, not the io.EOF the acker sees when the closed
+	// source stream rejects an ack.
+	wantErr := cerrors.FatalError(cerrors.New("source connector error"))
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
 	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, wantErr, false, 1)
@@ -346,11 +348,12 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(eventReceived)
 	is.Equal(pl.ID, event.ID)
 
-	// These conditions are NOT met
-	is.True( // expected error message to have "node <source id> stopped with error"
+	// With #1659 fixed, the degraded pipeline reports the source's real error, not
+	// the io.EOF the acker gets from the closed stream.
+	is.True( // error message attributes the failure to the source node
 		strings.Contains(pl.Error, fmt.Sprintf("node %s stopped with error:", source.ID)),
 	)
-	is.True( // expected error message to contain "source connector error"
+	is.True( // and carries the real cause
 		strings.Contains(pl.Error, wantErr.Error()),
 	)
 	is.True(cerrors.Is(event.Error, wantErr))
