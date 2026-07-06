@@ -248,8 +248,17 @@ func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error)
 func (n *SourceNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping source connector")
 	n.mctx.Lock()
-	n.connectorCtxCancel()
-	n.mctx.Unlock()
+	defer n.mctx.Unlock()
+	// connectorCtxCancel is nil if Run has not yet reached its initialization
+	// (force-stop raced source startup). Skipping the cancel is safe: stopForceful
+	// kills the pipeline tomb before calling ForceStop, so Run will observe the
+	// canceled node context and stop as soon as it starts. Canceling the connector
+	// context here only interrupts an in-flight Read faster — which by definition
+	// isn't happening yet. Guarding avoids a nil-deref panic (invariant 7: force
+	// at any instant must be recoverable, not crash). See issue #2539.
+	if n.connectorCtxCancel != nil {
+		n.connectorCtxCancel()
+	}
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
