@@ -32,9 +32,12 @@ import (
 )
 
 var (
-	// xerrors is used, since it provides the stack traces too
-	New    = xerrors.New    //nolint:forbidigo // xerrors.New is allowed here, but not anywhere else
-	Errorf = xerrors.Errorf //nolint:forbidigo // xerrors.Errorf is allowed here, but not anywhere else
+	// xerrors is used, since it provides the stack traces too. xerrors.New/Errorf
+	// are allowed here, but not anywhere else: the depguard rule above blocks
+	// importing golang.org/x/xerrors outside this file, so this is the only place
+	// that can call them at all.
+	New    = xerrors.New
+	Errorf = xerrors.Errorf
 	Is     = errors.Is
 	As     = errors.As
 	Unwrap = errors.Unwrap
