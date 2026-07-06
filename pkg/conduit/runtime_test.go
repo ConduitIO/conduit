@@ -60,18 +60,30 @@ func TestRuntime(t *testing.T) {
 	is.NoErr(err)
 	is.True(r != nil)
 
-	// set a cancel on a trigger to kill the context after THRESHOLD duration.
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		cancel()
-	}()
 
-	errC := make(chan error)
+	errC := make(chan error, 1)
 	go func() {
 		errC <- r.Run(ctx)
 	}()
-	err, got, recvErr := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), time.Second)
+
+	// Wait for the gRPC API to report ready before triggering graceful
+	// shutdown, instead of racing a fixed 500ms sleep. The old sleep was a
+	// double race: too short and the "grpc API started" assertion below hadn't
+	// been logged yet; longer than the receive budget and the runtime hadn't
+	// shut down in time. Polling the readiness marker synchronously (then
+	// cancelling) removes both races without changing any assertion.
+	startupDeadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(logs.String(), "grpc API started") {
+		if time.Now().After(startupDeadline) {
+			cancel()
+			t.Fatal("grpc API did not start within timeout")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+
+	err, got, recvErr := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 10*time.Second)
 	is.NoErr(recvErr)
 	is.True(got)
 	if !cerrors.Is(err, context.Canceled) {

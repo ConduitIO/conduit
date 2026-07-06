@@ -546,8 +546,23 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	err = service.Init(context.Background())
 	is.NoErr(err)
 
-	// give the pipeline time to run through
-	time.Sleep(1 * time.Second)
+	// Wait until the running pipeline (p4.P1) has actually delivered records to
+	// its destination file before asserting, rather than racing a fixed 1s
+	// sleep. This is the condition the final assertion (destFile is non-empty)
+	// depends on, and by the time records are written P1 has reached
+	// StatusRunning, so all the status/config assertions below become
+	// deterministic. A fixed sleep flaked under CI load.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		data, readErr := os.ReadFile(destFile)
+		if readErr == nil && len(data) != 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for records to be written to %s", destFile)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	// checking pipelines
 	pipelines := []*pipeline.Instance{p4.P1, p4.P2, p4.P3}
