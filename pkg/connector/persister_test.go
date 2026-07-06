@@ -179,36 +179,75 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 	is.Equal(conn, got)
 }
 
+// TestPersister_WaitsForOpenConnectorsAndFlush verifies that Wait blocks
+// until every started connector has been stopped and the flush triggered by
+// the last stop has actually completed. It used to simulate "connectors are
+// still open" by having a background goroutine time.Sleep(100ms) before
+// calling ConnectorStopped, then asserting Wait() unblocked within a
+// delay..delay+10ms wall-clock window. Under load the goroutine could be
+// descheduled past the 10ms tolerance (or, on a fast/idle machine, Wait()
+// could unblock suspiciously close to the sleep boundary), so the test
+// flaked independently of the fakeClock work in #2544 - it never went
+// through clock.AfterFunc (ConnectorStopped triggers an immediate flush, not
+// the delay-threshold timer), so there is no timer to fake here.
+//
+// Instead of tightening an already-flaky tolerance, this drops wall-clock
+// timing entirely: it synchronizes the goroutine and the Wait() call with
+// channels, and proves the "and flush" half of the contract by asserting the
+// persisted state is already visible in the store by the time Wait()
+// returns - which is only possible if Wait() actually blocked on flushWg
+// until the automatic flush triggered by the final ConnectorStopped call
+// finished. A 5s timeout guards against a genuine deadlock; it is not part
+// of the assertion.
 func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	persister, _ := initPersisterTest(time.Millisecond*100, 2)
+	persister, store := initPersisterTest(time.Millisecond*100, 2)
 
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	persister.ConnectorStarted()
 	persister.ConnectorStarted()
 	persister.ConnectorStarted()
 
-	timeAtStart := time.Now()
-	delay := time.Millisecond * 100
+	stoppedAll := make(chan struct{})
 	go func() {
-		time.Sleep(delay)
+		defer close(stoppedAll)
 		persister.ConnectorStopped()
 		persister.ConnectorStopped()
-		// before last stop we persist another change which should be flushed
-		// automatically when the connector is stopped
+		// before the last stop we persist another change which should be
+		// flushed automatically when the last connector is stopped
 		err := persister.Persist(ctx, conn, func(err error) {})
 		is.NoErr(err)
 		persister.ConnectorStopped()
 	}()
 
-	persister.Wait()
+	waitReturned := make(chan struct{})
+	go func() {
+		persister.Wait()
+		close(waitReturned)
+	}()
 
-	// we are testing a delay which is not exact, this is the acceptable margin
-	maxDelay := delay + time.Millisecond*10
-	if gotDelay := time.Since(timeAtStart); gotDelay > maxDelay {
-		t.Fatalf("wait delay should be between %s and %s, actual delay: %s", delay, maxDelay, gotDelay)
+	select {
+	case <-waitReturned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Wait to return once all connectors stopped and the final flush completed")
 	}
+
+	// connWg.Wait() (inside Wait) cannot unblock until all three
+	// ConnectorStopped calls have run, so the goroutine above must already
+	// be done - deterministically, not by timing.
+	select {
+	case <-stoppedAll:
+	default:
+		t.Fatal("Wait returned before the connector-stop goroutine finished")
+	}
+
+	// Wait also blocks on flushWg, so the flush triggered by the last
+	// ConnectorStopped must have completed by the time Wait returns - no
+	// polling or sleeping needed to observe the persisted state.
+	got, err := store.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.Equal(conn, got)
 }
 
 func initPersisterTest(
