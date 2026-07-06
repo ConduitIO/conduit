@@ -33,3 +33,16 @@ func TestWithUnknownReason(t *testing.T) {
 	is.True(cerrors.Is(ce, cause))                   // the cause stays reachable through the chain
 	is.Equal(ce.Error(), cause.Error())              // message unchanged
 }
+
+// TestWithUnknownReason_PreservesExistingCode guards the fallback against
+// downgrading an error that already carries a real code (the silent-downgrade
+// this whole guard exists to prevent).
+func TestWithUnknownReason_PreservesExistingCode(t *testing.T) {
+	is := is.New(t)
+
+	coded := New(CodeInvalidArgument, "bad field")
+	got := WithUnknownReason(coded, codes.NotFound)
+
+	is.Equal(got.Code.Reason(), CodeInvalidArgument.Reason()) // real reason preserved, not internal.unknown
+	is.Equal(got.Code.GRPCCode(), codes.InvalidArgument)      // real category preserved, not the NotFound arg
+}

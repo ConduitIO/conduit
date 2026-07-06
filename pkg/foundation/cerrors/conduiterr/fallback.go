@@ -34,6 +34,12 @@ import "google.golang.org/grpc/codes"
 // should switch to that Code (via Wrap, at the origination site) instead of
 // this fallback — see the package doc's migration note.
 func WithUnknownReason(err error, category codes.Code) *ConduitError {
+	// Never downgrade a real code: if the error already carries a registered
+	// ConduitError, return it unchanged. This helper only supplies the
+	// internal.unknown fallback for genuinely code-less errors.
+	if existing, ok := Get(err); ok {
+		return existing
+	}
 	e := WithCode(err, CodeUnknown)
 	e.Code = Code{reason: CodeUnknown.reason, grpcCode: category}
 	return e

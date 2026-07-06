@@ -139,12 +139,6 @@ linters:
       - linters:
           - forbidigo
         text: 'grpcstatus\.Error|status\.Error'
-        # pkg/http/api/status/status.go is the sanctioned sink: fallbackStatus
-        # is the one place under pkg/http/api allowed to build a raw status.
-        path: ^pkg/http/api/status/status\.go$
-      - linters:
-          - forbidigo
-        text: 'grpcstatus\.Error|status\.Error'
         # health_server.go implements the gRPC health-check protocol reply
         # (grpc.health.v1), not a Conduit business error - it has no
         # ConduitError code to carry and isn't reached by codes_contract_test.go.
