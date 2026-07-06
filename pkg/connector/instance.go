@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -117,7 +118,11 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
 		// connector is already running, might be a bug where an old connector is stuck
-		return nil, ErrConnectorRunning
+		// Invariant: errors.Is(err, ErrConnectorRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodeConnectorRunning, "connector is running", ErrConnectorRunning)
+		err.Suggestion = "wait for the current connector operation to finish, or restart the pipeline"
+		return nil, err
 	}
 
 	pluginDispenser, err := dispenserFetcher.NewDispenser(i.logger, i.Plugin, i.ID)

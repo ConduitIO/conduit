@@ -198,14 +198,16 @@ func TestService_Create_ValidateError(t *testing.T) {
 	service := NewService(logger, db)
 
 	testCases := []struct {
-		name    string
-		id      string
-		errType error
-		data    Config
+		name     string
+		id       string
+		errType  error
+		wantCode conduiterr.Code // zero value means "don't check the ConduitError code"
+		data     Config
 	}{{
-		name:    "empty config name",
-		id:      uuid.NewString(),
-		errType: ErrNameMissing,
+		name:     "empty config name",
+		id:       uuid.NewString(),
+		errType:  ErrNameMissing,
+		wantCode: CodePipelineNameMissing,
 		data: Config{
 			Name:        "",
 			Description: "",
@@ -252,8 +254,15 @@ func TestService_Create_ValidateError(t *testing.T) {
 				tt.data,
 				ProvisionTypeAPI,
 			)
-			is.True(cerrors.Is(err, tt.errType))
+			is.True(cerrors.Is(err, tt.errType)) // sentinel still in the chain
 			is.Equal(got, nil)
+
+			if !tt.wantCode.IsZero() {
+				ce, ok := conduiterr.Get(err)
+				is.True(ok) // also carries a machine-actionable ConduitError code
+				is.Equal(ce.Code.Reason(), tt.wantCode.Reason())
+				is.True(ce.Suggestion != "") // with a suggested fix
+			}
 		})
 	}
 }
@@ -273,6 +282,12 @@ func TestService_Create_PipelineNameExists(t *testing.T) {
 	got, err = service.Create(ctx, uuid.NewString(), conf, ProvisionTypeAPI)
 	is.Equal(got, nil)
 	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrNameAlreadyExists)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineNameAlreadyExists.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestService_CreateEmptyName(t *testing.T) {
@@ -285,6 +300,12 @@ func TestService_CreateEmptyName(t *testing.T) {
 	got, err := service.Create(ctx, uuid.NewString(), Config{Name: ""}, ProvisionTypeAPI)
 	is.True(err != nil)
 	is.Equal(got, nil)
+	is.True(cerrors.Is(err, ErrNameMissing)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineNameMissing.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestService_GetSuccess(t *testing.T) {
@@ -398,6 +419,12 @@ func TestService_Update_PipelineNameExists(t *testing.T) {
 	got, err := service.Update(ctx, instance2.ID, want)
 	is.True(err != nil)
 	is.Equal(got, nil)
+	is.True(cerrors.Is(err, ErrNameAlreadyExists)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineNameAlreadyExists.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestService_UpdateInvalidConfig(t *testing.T) {
@@ -415,4 +442,10 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 	got, err := service.Update(ctx, instance.ID, config)
 	is.True(err != nil)
 	is.Equal(got, nil)
+	is.True(cerrors.Is(err, ErrNameMissing)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineNameMissing.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }

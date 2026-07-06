@@ -158,13 +158,21 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 		return nil, err
 	}
 	if cfg.Name == "" {
-		return nil, ErrNameMissing
+		// Invariant: errors.Is(err, ErrNameMissing) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodePipelineNameMissing, "must provide a pipeline name", ErrNameMissing)
+		err.Suggestion = "provide a non-empty pipeline name"
+		return nil, err
 	}
 
 	// delete the old name from the names set
 	exists := s.instanceNames[cfg.Name]
 	if exists && pl.Config.Name != cfg.Name {
-		return nil, ErrNameAlreadyExists
+		// Invariant: errors.Is(err, ErrNameAlreadyExists) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodePipelineNameAlreadyExists, "pipeline name already exists", ErrNameAlreadyExists)
+		err.Suggestion = "choose a different pipeline name"
+		return nil, err
 	}
 
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
@@ -322,10 +330,18 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	var errs []error
 
 	if cfg.Name == "" {
-		errs = append(errs, ErrNameMissing)
+		// Invariant: errors.Is(err, ErrNameMissing) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		nameMissingErr := conduiterr.Wrap(CodePipelineNameMissing, "must provide a pipeline name", ErrNameMissing)
+		nameMissingErr.Suggestion = "provide a non-empty pipeline name"
+		errs = append(errs, nameMissingErr)
 	}
 	if s.instanceNames[cfg.Name] {
-		errs = append(errs, ErrNameAlreadyExists)
+		// Invariant: errors.Is(err, ErrNameAlreadyExists) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		nameExistsErr := conduiterr.Wrap(CodePipelineNameAlreadyExists, "pipeline name already exists", ErrNameAlreadyExists)
+		nameExistsErr.Suggestion = "choose a different pipeline name"
+		errs = append(errs, nameExistsErr)
 	}
 	if len(cfg.Name) > NameLengthLimit {
 		errs = append(errs, ErrNameOverLimit)

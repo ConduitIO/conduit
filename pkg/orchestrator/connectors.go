@@ -16,10 +16,12 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
@@ -59,10 +61,14 @@ func (c *ConnectorOrchestrator) Create(
 	}
 
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("cannot add a connector to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("cannot add a connector to the pipeline %q", pl.ID))
 	}
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, cerrors.Errorf("cannot create connector: %w", pipeline.ErrPipelineRunning)
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr("cannot create connector: " + pipeline.ErrPipelineRunning.Error())
 	}
 
 	err = c.Validate(ctx, t, plugin, config)
@@ -115,17 +121,25 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
-		return cerrors.Errorf("connector %q cannot be deleted: %w", conn.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return immutableProvisionedByConfigErr(fmt.Sprintf("connector %q cannot be deleted", conn.ID))
 	}
 	if len(conn.ProcessorIDs) != 0 {
-		return ErrConnectorHasProcessorsAttached
+		// Invariant: errors.Is(err, ErrConnectorHasProcessorsAttached) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodeConnectorHasProcessorsAttached, ErrConnectorHasProcessorsAttached.Error(), ErrConnectorHasProcessorsAttached)
+		err.Suggestion = "remove the connector's processors first, then delete the connector"
+		return err
 	}
 	pl, err := c.pipelines.Get(ctx, conn.PipelineID)
 	if err != nil {
 		return err
 	}
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
 	if err != nil {
@@ -164,7 +178,9 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, err
 	}
 	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("connector %q cannot be updated: %w", conn.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("connector %q cannot be updated", conn.ID))
 	}
 
 	pl, err := c.pipelines.Get(ctx, conn.PipelineID)
@@ -172,7 +188,9 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, err
 	}
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
 	err = c.Validate(ctx, conn.Type, conn.Plugin, config)

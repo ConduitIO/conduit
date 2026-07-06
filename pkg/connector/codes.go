@@ -26,4 +26,11 @@ var (
 	// CodeConnectorNotFound is raised when a referenced connector instance
 	// cannot be located.
 	CodeConnectorNotFound = conduiterr.Register("connector.instance_not_found", codes.NotFound)
+	// CodeConnectorRunning is raised when an operation requires the
+	// connector to not be running, but a connector instance for it already
+	// exists.
+	CodeConnectorRunning = conduiterr.Register("connector.running", codes.FailedPrecondition)
+	// CodeConnectorInvalidType is raised when a connector type is neither
+	// "source" nor "destination".
+	CodeConnectorInvalidType = conduiterr.Register("connector.invalid_type", codes.InvalidArgument)
 )

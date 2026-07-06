@@ -26,4 +26,16 @@ var (
 	// CodePipelineNotFound is raised when a referenced pipeline instance
 	// cannot be located.
 	CodePipelineNotFound = conduiterr.Register("pipeline.instance_not_found", codes.NotFound)
+	// CodePipelineRunning is raised when an operation requires the pipeline
+	// to be stopped, but it is currently running.
+	CodePipelineRunning = conduiterr.Register("pipeline.running", codes.FailedPrecondition)
+	// CodePipelineNotRunning is raised when an operation requires the
+	// pipeline to be running, but it is currently stopped.
+	CodePipelineNotRunning = conduiterr.Register("pipeline.not_running", codes.FailedPrecondition)
+	// CodePipelineNameAlreadyExists is raised when a pipeline config's name
+	// collides with an existing pipeline's name.
+	CodePipelineNameAlreadyExists = conduiterr.Register("pipeline.name_already_exists", codes.AlreadyExists)
+	// CodePipelineNameMissing is raised when a pipeline config is missing
+	// the required name field.
+	CodePipelineNameMissing = conduiterr.Register("pipeline.name_missing", codes.InvalidArgument)
 )
