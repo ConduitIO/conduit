@@ -143,3 +143,48 @@ func TestWrap_FrameIsCallerAccurate(t *testing.T) {
 	is.True(!strings.Contains(fr.Func, "conduiterr.Wrap"))
 	is.True(strings.HasSuffix(fr.Func, "conduiterr_test.TestWrap_FrameIsCallerAccurate"))
 }
+
+// TestWithCode_OverridesInnerCode is the guard for the #2526 escape-hatch
+// follow-up: unlike Wrap, which passes an inner ConduitError's code through
+// untouched (no-shadow invariant), WithCode must always adopt the code it is
+// given, even when err already carries a more specific inner ConduitError code.
+func TestWithCode_OverridesInnerCode(t *testing.T) {
+	is := is.New(t)
+	inner := conduiterr.New(conduiterr.CodeConnectorPluginNotFound, "no such plugin")
+	inner.ConfigPath = "/connectors/0/plugin"
+
+	recoded := conduiterr.WithCode(inner, conduiterr.CodeInternal)
+
+	is.Equal(recoded.Code.Reason(), conduiterr.CodeInternal.Reason())
+	is.Equal(recoded.Code.GRPCCode(), conduiterr.CodeInternal.GRPCCode())
+	// Structured fields still come along even though the code was overridden.
+	is.Equal(recoded.ConfigPath, "/connectors/0/plugin")
+	// The displayed message is unchanged; only the classification is.
+	is.Equal(recoded.Error(), "no such plugin")
+}
+
+// TestWithCode_CausePreservedInChain ensures the escape hatch does not sever
+// the chain: errors.Is/Get must still be able to reach through to the original
+// cause and the new code after WithCode reclassifies it.
+func TestWithCode_CausePreservedInChain(t *testing.T) {
+	is := is.New(t)
+	sentinel := cerrors.New("plugin missing")
+	inner := conduiterr.Wrap(conduiterr.CodeConnectorPluginNotFound, "no such plugin", sentinel)
+
+	recoded := conduiterr.WithCode(inner, conduiterr.CodeInternal)
+
+	is.True(cerrors.Is(recoded, sentinel))
+
+	ce, ok := conduiterr.Get(recoded)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), conduiterr.CodeInternal.Reason())
+}
+
+// TestWithCode_GuaranteesFrameWithNilCause mirrors Wrap's nil-cause guarantee:
+// WithCode(nil, code) must still carry a non-empty stack trace.
+func TestWithCode_GuaranteesFrameWithNilCause(t *testing.T) {
+	is := is.New(t)
+	err := conduiterr.WithCode(nil, conduiterr.CodeInternal)
+	is.True(frameCount(err) > 0)
+	is.Equal(err.Code.Reason(), conduiterr.CodeInternal.Reason())
+}

@@ -10,6 +10,7 @@ linters:
     - errcheck
     - errname
     - exhaustive
+    - forbidigo
     - goconst
     - gocritic
     - gocyclo
@@ -45,6 +46,24 @@ linters:
               desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead.
             - pkg: encoding/json
               desc: github.com/goccy/go-json is preferred for performance reasons.
+    forbidigo:
+      forbid:
+        # conduiterr#2526 follow-up: construction must go through New/Wrap (or the
+        # WithCode escape hatch), which guarantee a stack frame and a validated,
+        # registered Code. A raw literal skips both.
+        #
+        # Caveat: forbidigo only matches Ident/SelectorExpr node text, not the
+        # enclosing composite literal, so it cannot distinguish "constructing
+        # ConduitError{}" from "naming the ConduitError type" (e.g. as a var, param,
+        # or return type). In this codebase the type is meant to be reached via
+        # New/Wrap/Get, not named directly outside the package, so forbidding the
+        # bare identifier is the closest enforceable guard and today has zero known
+        # legitimate hits outside the package/tests (verified by grep). It also
+        # will not catch the literal if conduiterr is imported under a different
+        # local name.
+        - pattern: '^conduiterr\.ConduitError$'
+          msg: construct via conduiterr.New, conduiterr.Wrap, or conduiterr.WithCode instead of a raw ConduitError{} literal - see package doc.
+      exclude-godoc-examples: true
     gocyclo:
       min-complexity: 20
     goheader:
@@ -82,7 +101,13 @@ linters:
           - dogsled
           - gosec
           - goconst
+          - forbidigo
         path: (.+)_test\.go
+      - linters:
+          - forbidigo
+        # conduiterr's own constructors (New/Wrap/WithCode) are the only place
+        # allowed to build a ConduitError{} literal directly.
+        path: ^pkg/foundation/cerrors/conduiterr/
 formatters:
   enable:
     - gofmt

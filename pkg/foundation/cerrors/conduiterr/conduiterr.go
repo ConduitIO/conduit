@@ -22,8 +22,10 @@
 // with a google.rpc.ErrorInfo detail) and the mapping between the two live in
 // status.go, with a round-trip test that keeps the two encodings from drifting.
 //
-// Construction is only via New or Wrap; a bare &ConduitError{} literal carries no
-// stack trace (ConduitError is not itself an xerrors value) and is forbidden.
+// Construction is only via New, Wrap, or the WithCode escape hatch; a bare
+// &ConduitError{} literal carries no stack trace (ConduitError is not itself an
+// xerrors value) and is forbidden — enforced outside this package (and outside
+// _test.go files) by the forbidigo rule in .golangci.yml.
 package conduiterr
 
 import (
@@ -158,8 +160,9 @@ func New(code Code, msg string) *ConduitError {
 // *ConduitError, the returned error takes that inner Code (and inherits its
 // structured fields where the wrap does not set them), so errors.As never surfaces
 // a code that hides a more specific inner one. Note this means Wrap's own code
-// argument is ignored when an inner ConduitError is present — an explicit-override
-// escape hatch is a tracked follow-up.
+// argument is ignored when an inner ConduitError is present. A boundary that
+// genuinely needs to reclassify — the explicit-override escape hatch — should
+// use WithCode instead.
 func Wrap(code Code, msg string, cause error) *ConduitError {
 	e := &ConduitError{Code: code, Message: msg, err: cause}
 
@@ -183,6 +186,49 @@ func Wrap(code Code, msg string, cause error) *ConduitError {
 	if e.err == nil {
 		// Guarantee a frame even if cause was nil. Skip=1 for the same reason as
 		// New: attribute the frame to Wrap's caller, not to Wrap itself.
+		e.err = cerrors.NewWithStackDepth(1, msg)
+	}
+	return e
+}
+
+// WithCode is the explicit code-override escape hatch. Wrap intentionally
+// refuses to shadow an inner ConduitError's code (the no-shadow invariant); that
+// is correct for ordinary wrapping, but a boundary that genuinely needs to
+// reclassify an error — e.g. surface a generic lower-level code as a more
+// specific one at an API boundary — has no way to signal that intent through
+// Wrap. WithCode is that signal: it always adopts code, even when err already
+// is, or wraps, a *ConduitError with its own code. Use it sparingly and only
+// when the override is deliberate; reach for Wrap for ordinary context-adding.
+//
+// err becomes the wrapped cause (via Unwrap), so errors.Is/As and Get still
+// reach it and any inner ConduitError through the chain — only the Code
+// on the returned, outermost error changes. The returned error's Message is
+// err.Error() (for a *ConduitError cause, ConduitError.Error() returns just the
+// inner Message, not the full chain text, so the displayed message is
+// unchanged; only the classification is). Structured fields (ConfigPath,
+// Suggestion, Fix, DocsURL) are inherited from an inner ConduitError, if any,
+// since WithCode overrides the code, not the remediation data.
+//
+// Like New and Wrap, WithCode guarantees a non-empty stack trace: it captures a
+// frame at its caller (via cerrors.NewWithStackDepth) when err is nil or itself
+// carries none.
+func WithCode(err error, code Code) *ConduitError {
+	var msg string
+	if err != nil {
+		msg = err.Error()
+	}
+	e := &ConduitError{Code: code, Message: msg, err: err}
+
+	var inner *ConduitError
+	if err != nil && cerrors.As(err, &inner) {
+		e.ConfigPath = inner.ConfigPath
+		e.Suggestion = inner.Suggestion
+		e.Fix = inner.Fix
+		e.DocsURL = inner.DocsURL
+	}
+
+	if e.err == nil {
+		// Guarantee a frame even if err was nil, same reasoning as New/Wrap.
 		e.err = cerrors.NewWithStackDepth(1, msg)
 	}
 	return e
