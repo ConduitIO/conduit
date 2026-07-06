@@ -153,12 +153,9 @@ The response will be written under the record's ` + "`.Payload.After.response`."
 
 func newTestServer() *httptest.Server {
 	var lc net.ListenConfig
-	// Bind to an OS-assigned port (:0) instead of a fixed one so parallel test
-	// runs never collide on the same port. The caller reads back the real
-	// address via srv.URL, so the concrete port does not matter.
-	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:54321")
 	if err != nil {
-		log.Fatalf("failed starting test server: %v", err)
+		log.Fatalf("failed starting test server on port 54321: %v", err)
 	}
 
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
