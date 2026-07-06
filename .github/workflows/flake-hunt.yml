@@ -1,0 +1,45 @@
+name: flake hunt
+
+# Issue #2534: the PR-gating `test` workflow runs the suite once per PR
+# (-count=1), which is fast but gives order/timing-dependent flakes very few
+# chances to show up before they've already cost someone a rerun cycle. This
+# workflow repeats the same suite multiple times on a schedule, off the
+# critical path, so flakes surface here instead of on a contributor's PR.
+#
+# Deliberately not wired into branch protection: a red run here is a signal
+# to go fix a flaky test, not a reason to block merges.
+
+on:
+  schedule:
+    # Nightly, off-peak. Cron minute/hour offset from trigger-nightly.yml so
+    # the two scheduled workflows don't contend for runners at the same time.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  flake-hunt:
+    name: repeat test suite (-count=3 -race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Test (repeated x3, shuffled)
+        # -count=3 runs every test three times in the same process, which is
+        # exactly the kind of repetition that catches tests relying on
+        # process-global state (e.g. the math/rand and shared-fixture bugs
+        # fixed for #2534). -shuffle=on randomizes ordering on top of that;
+        # go test prints the seed it used so a failure here is reproducible
+        # locally with `-shuffle=<seed>`.
+        run: make test-integration GOTEST_FLAGS="-v -count=3 -shuffle=on"
+
+      - name: Report outcome
+        if: failure()
+        run: |
+          echo "::warning::Flake hunt found a failure. This does not block merges, but a real flake was caught - investigate and either fix it or file/update a tracking issue referencing ConduitIO/conduit#2534."

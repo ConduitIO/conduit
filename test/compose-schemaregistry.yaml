@@ -6,6 +6,19 @@ services:
       ZOOKEEPER_ADMIN_ENABLE_SERVER: 'false'
     networks:
       - confluent
+    # Root cause (issue #2534): `docker compose up --wait` only waits for a
+    # HEALTHY status if a healthcheck is defined. Without one, Compose treats
+    # "container is running" as ready and returns immediately, so tests race
+    # zookeeper accepting client connections on 2181.
+    healthcheck:
+      # `ruok` isn't in the default 4lw whitelist on this image (only `srvr`
+      # is); `srvr` returns server info and only succeeds once zookeeper is
+      # actually serving the client port.
+      test: ["CMD-SHELL", "echo srvr | nc -w 2 localhost 2181 | grep -q Mode || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   kafka:
     image: confluentinc/cp-kafka:7.9.1
@@ -16,13 +29,25 @@ services:
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
     links:
       - zookeeper
+    depends_on:
+      zookeeper:
+        condition: service_healthy
     networks:
       - confluent
+    # Same as above: gate on the broker actually answering the Kafka protocol,
+    # not just the container process being alive.
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.9.1
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - '8085:8085'
     environment:
@@ -32,6 +57,20 @@ services:
       SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: 'INFO'
     networks:
       - confluent
+    # This is the fix for the schema-registry flakes tracked in #2534
+    # (TestClient_NotFound/CacheMiss/CacheHit, avro encode/decode strategy
+    # tests): `docker compose up --wait` returned as soon as the container
+    # started, ~3-4s before the Jetty HTTP listener actually came up, so the
+    # first requests from the Go test suite got "connection refused" or, once
+    # a connection succeeded, a still-initializing registry occasionally
+    # returned unexpected error shapes instead of a clean 404. Gating on the
+    # REST API responding makes `--wait` mean what the tests need it to mean.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8085/subjects || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
 
 networks:
   confluent:
