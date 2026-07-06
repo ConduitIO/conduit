@@ -141,13 +141,11 @@ func (e *ConduitError) Unwrap() error { return e.err }
 // New creates a leaf ConduitError with no wrapped cause. It guarantees a non-empty
 // stack trace so the error is never trace-less.
 //
-// Caveat: because cerrors.New attributes the frame to its immediate caller, the
-// captured frame points into this constructor, not the site that called New. For
-// accurate call-site attribution, build the cause with cerrors.New/Errorf at the
-// real origination point and pass it to Wrap. A skip-aware helper in cerrors that
-// would let New capture the true caller is tracked as a follow-up.
+// The captured frame points at New's caller (the real origination site), not at
+// New itself: New calls cerrors.NewWithStackDepth(1, msg), which skips one extra
+// wrapper frame beyond what cerrors.New/Errorf capture on their own.
 func New(code Code, msg string) *ConduitError {
-	return &ConduitError{Code: code, Message: msg, err: cerrors.New(msg)}
+	return &ConduitError{Code: code, Message: msg, err: cerrors.NewWithStackDepth(1, msg)}
 }
 
 // Wrap creates a ConduitError around an existing cause, adding context.
@@ -183,7 +181,9 @@ func Wrap(code Code, msg string, cause error) *ConduitError {
 	}
 
 	if e.err == nil {
-		e.err = cerrors.New(msg) // guarantee a frame even if cause was nil
+		// Guarantee a frame even if cause was nil. Skip=1 for the same reason as
+		// New: attribute the frame to Wrap's caller, not to Wrap itself.
+		e.err = cerrors.NewWithStackDepth(1, msg)
 	}
 	return e
 }
