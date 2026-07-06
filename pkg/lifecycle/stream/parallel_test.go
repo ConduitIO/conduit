@@ -570,7 +570,27 @@ func TestParallelNode_Processor(t *testing.T) {
 		Process(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 			current := atomic.AddInt32(&workersCurrent, 1)
-			atomic.CompareAndSwapInt32(&workersHighWatermark, current-1, current)
+			// Ratchet the high watermark up to current using a CAS retry loop.
+			// A single-shot CAS(workersHighWatermark, current-1, current) is
+			// racy: it only succeeds if the goroutines that received lower
+			// "current" values from AddInt32 above have already applied their
+			// CAS, which the scheduler does not guarantee. Under real
+			// concurrency a goroutine holding a higher value can run its CAS
+			// before goroutines holding lower values, causing it to fail and
+			// permanently under-report the watermark (it does not retry). The
+			// loop below instead compares against the live value and retries
+			// until it either wins the update or observes a value already >=
+			// current, which correctly computes the max regardless of the
+			// order in which goroutines execute.
+			for {
+				hw := atomic.LoadInt32(&workersHighWatermark)
+				if current <= hw {
+					break
+				}
+				if atomic.CompareAndSwapInt32(&workersHighWatermark, hw, current) {
+					break
+				}
+			}
 			time.Sleep(time.Millisecond) // sleep to let other workers catch up
 			atomic.AddInt32(&workersCurrent, -1)
 
