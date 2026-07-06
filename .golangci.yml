@@ -63,6 +63,26 @@ linters:
         # local name.
         - pattern: '^conduiterr\.ConduitError$'
           msg: construct via conduiterr.New, conduiterr.Wrap, or conduiterr.WithCode instead of a raw ConduitError{} literal - see package doc.
+        # Execution plan §1.1 (CI error-code guard): pkg/http/api/status/status.go
+        # is the sole sanctioned chokepoint for building a gRPC status at the API
+        # boundary — every path through it now guarantees a google.rpc.ErrorInfo
+        # detail (see conduitErrorStatus / fallbackStatus). A raw grpcstatus.Error(f)
+        # or status.Error(f) call anywhere else under pkg/http/api bypasses that
+        # guarantee and reintroduces a codeless status the codes_contract_test.go
+        # guard cannot see (it only drives the four exported functions, not every
+        # call site). Forbidding the constructor here, structurally, is the
+        # backstop for call sites the contract test can't reach.
+        #
+        # Scope: this repo has exactly two other legitimate handwritten
+        # grpcstatus/status.Error(f) call sites today, both excluded below —
+        # pkg/http/api/health_server.go (the gRPC health-check protocol reply,
+        # not a Conduit business error) and the generated proto/api/v1/*.pb*.go
+        # files (already covered by `exclusions.generated: lax`, listed here only
+        # for auditability).
+        - pattern: '^grpcstatus\.Error(f)?$'
+          msg: build gRPC statuses via pkg/http/api/status (PipelineError/ConnectorError/ProcessorError/PluginError), not a raw grpcstatus.Error(f) call - see status.go's fallbackStatus.
+        - pattern: '^status\.Error(f)?$'
+          msg: build gRPC statuses via pkg/http/api/status (PipelineError/ConnectorError/ProcessorError/PluginError), not a raw status.Error(f) call - see status.go's fallbackStatus.
       exclude-godoc-examples: true
     gocyclo:
       min-complexity: 20
@@ -108,6 +128,21 @@ linters:
         # conduiterr's own constructors (New/Wrap/WithCode) are the only place
         # allowed to build a ConduitError{} literal directly.
         path: ^pkg/foundation/cerrors/conduiterr/
+      - linters:
+          - forbidigo
+        text: 'grpcstatus\.Error|status\.Error'
+        # The grpcstatus.Error(f)/status.Error(f) forbid pair (execution plan
+        # §1.1) only polices pkg/http/api - the API error boundary. Everywhere
+        # else in the tree keeps constructing gRPC statuses however it always
+        # has (e.g. proto/api/v1/*.pb*.go, which is also `generated: lax`).
+        path-except: ^pkg/http/api/
+      - linters:
+          - forbidigo
+        text: 'grpcstatus\.Error|status\.Error'
+        # health_server.go implements the gRPC health-check protocol reply
+        # (grpc.health.v1), not a Conduit business error - it has no
+        # ConduitError code to carry and isn't reached by codes_contract_test.go.
+        path: ^pkg/http/api/health_server\.go$
 formatters:
   enable:
     - gofmt
