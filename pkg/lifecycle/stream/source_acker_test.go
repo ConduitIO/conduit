@@ -16,6 +16,7 @@ package stream
 
 import (
 	"context"
+	"io"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -56,6 +57,37 @@ func TestSourceAckerNode_ForwardAck(t *testing.T) {
 	close(in)
 
 	// make sure out channel is closed
+	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
+	is.NoErr(err)
+	is.True(!ok)
+}
+
+// TestSourceAckerNode_AckClosedStreamSuppressed is a #1659 guard: when the source
+// stream is already closed, forwarding an ack returns io.EOF, which must be
+// suppressed (treated as a no-op) rather than surfaced — otherwise that derived
+// error can mask the source's real failure as the pipeline's cause.
+func TestSourceAckerNode_AckClosedStreamSuppressed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	src := mock.NewSource(ctrl)
+	helper := sourceAckerNodeTestHelper{ctrl: ctrl}
+
+	_, in, out := helper.newSourceAckerNode(ctx, t, src)
+
+	want := &Message{Ctx: ctx, Record: opencdc.Record{Position: []byte("foo")}}
+	// the source stream has already closed -> Ack returns io.EOF
+	src.EXPECT().Ack(want.Ctx, []opencdc.Position{want.Record.Position}).Return(io.EOF)
+
+	in <- want
+	got := <-out
+	is.Equal(got, want)
+
+	// acking must succeed: the io.EOF is suppressed, not returned as an error
+	err := got.Ack()
+	is.NoErr(err)
+
+	close(in)
 	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err)
 	is.True(!ok)

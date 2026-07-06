@@ -16,6 +16,7 @@ package stream
 
 import (
 	"context"
+	"io"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/semaphore"
@@ -71,9 +72,24 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err, n.ID())
+			// The message could not be forwarded downstream; nack it. Return the
+			// send failure itself even if the nack succeeds — otherwise a suppressed
+			// closed-stream ack-forward inside Nack (see the handlers below) could
+			// mask a genuine base.Send failure and let this node return nil. #1659.
+			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+				return nackErr
+			}
+			return err
 		}
 	}
+}
+
+// isClosedSourceStream reports whether err is the sentinel a source connector's
+// stream returns once it has closed (io.EOF, which plugin.ErrStreamNotOpen
+// aliases). Such an error is a consequence of the source having stopped and
+// carries no cause of its own, so forwarding an ack/nack to it is a no-op.
+func isClosedSourceStream(err error) bool {
+	return cerrors.Is(err, io.EOF)
 }
 
 func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Ticket) {
@@ -97,7 +113,19 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 			n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
 			err = n.Source.Ack(msg.Ctx, []opencdc.Position{msg.Record.Position})
 			if err != nil {
-				return cerrors.Errorf("failed to forward ack to source connector: %w", err)
+				if !isClosedSourceStream(err) {
+					return cerrors.Errorf("failed to forward ack to source connector: %w", err)
+				}
+				// The source stream is already closed (io.EOF) — the source
+				// connector has stopped, typically because it errored. That io.EOF
+				// carries no cause; the source's own Read error is the authoritative
+				// pipeline cause (#1659). Suppress this derived error so it can't win
+				// the tomb race and mask the real one. Safe under invariant 3:
+				// Source.Ack returns before it mutates/persists the position, so the
+				// checkpoint never advances past an unacked record, and the record is
+				// already durably handled downstream by the time this ack fires.
+				n.logger.Debug(msg.Ctx).Msg("source stream already closed, skipping ack forward")
+				err = nil
 			}
 
 			n.DLQHandlerNode.Ack(msg)
@@ -134,7 +162,16 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 			// the record "processed" so we need to ack it in the source.
 			err = n.Source.Ack(msg.Ctx, []opencdc.Position{msg.Record.Position})
 			if err != nil {
-				return cerrors.Errorf("failed to forward nack to source connector: %w", err)
+				if !isClosedSourceStream(err) {
+					return cerrors.Errorf("failed to forward nack to source connector: %w", err)
+				}
+				// Same as the ack handler: a closed source stream (io.EOF) is a
+				// derived error with no cause; suppress it so the source's real
+				// error stays the authoritative pipeline cause (#1659). Safe under
+				// invariant 3 (the record is already durably stored in the DLQ, and
+				// Source.Ack does not persist a position on this error path).
+				n.logger.Debug(msg.Ctx).Msg("source stream already closed, skipping nack forward")
+				err = nil
 			}
 
 			return nil
