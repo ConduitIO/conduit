@@ -94,7 +94,26 @@ func inMemorySchemaRegistryURL(name string, logger *slog.Logger, port int) (stri
 
 		srv.Start()
 		serverByTest[name] = srv
-		cleanup = srv.Close
+
+		// Issue #2534: the server is keyed by test name so that multiple
+		// TestSchemaRegistryURL calls from the *same* test (e.g. one to seed
+		// data directly, one via the client under test) share one backing
+		// registry. But if we only ever closed the server and left the
+		// stale, now-dead entry in the map, any later call with the same
+		// name (a second `-count` iteration in the same test binary, or any
+		// other re-entrant call) would be handed back a closed listener and
+		// fail with "connection refused" instead of getting a fresh server.
+		// Removing the entry on cleanup keeps sharing within one test while
+		// guaranteeing every new logical test run gets an isolated registry.
+		srvToClose := srv
+		cleanup = func() {
+			serverByTestLock.Lock()
+			if serverByTest[name] == srvToClose {
+				delete(serverByTest, name)
+			}
+			serverByTestLock.Unlock()
+			srvToClose.Close()
+		}
 	}
 	return srv.URL, cleanup
 }

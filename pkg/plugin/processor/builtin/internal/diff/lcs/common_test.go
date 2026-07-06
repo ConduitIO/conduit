@@ -105,12 +105,16 @@ func lcslen(l lcs) int {
 	return ans
 }
 
-// return a random string of length n made of characters from s
-func randstr(s string, n int) string {
+// randstr returns a random string of length n made of characters from s,
+// drawing from rng. Callers must pass their own *rand.Rand (rather than the
+// global math/rand functions) so that seeding one test's generator can never
+// perturb another test's sequence when tests run in the same process
+// (parallel tests, or repeated runs via `-count`). See issue #2534.
+func randstr(rng *rand.Rand, s string, n int) string {
 	src := []rune(s)
 	x := make([]rune, n)
 	for i := 0; i < n; i++ {
-		x[i] = src[rand.Intn(len(src))]
+		x[i] = src[rng.Intn(len(src))]
 	}
 	return string(x)
 }

@@ -106,12 +106,18 @@ func TestRegressionOld003(t *testing.T) {
 }
 
 func TestRandOld(t *testing.T) {
-	rand.Seed(1)
+	// Issue #2534: use a local generator seeded deterministically instead of
+	// reseeding the global math/rand source. The global source is
+	// process-wide, so calling rand.Seed(1) here made this test's "fixed
+	// seed" a lie as soon as any other test running in the same process
+	// (parallel, or a later -count iteration) also drew from the global
+	// source and advanced or reset its state.
+	rng := rand.New(rand.NewSource(1))
 	for i := 0; i < 1000; i++ {
 		// TODO(adonovan): use ASCII and bytesSeqs here? The use of
 		// non-ASCII isn't relevant to the property exercised by the test.
-		a := []rune(randstr("abω", 16))
-		b := []rune(randstr("abωc", 16))
+		a := []rune(randstr(rng, "abω", 16))
+		b := []rune(randstr(rng, "abωc", 16))
 		seq := runesSeqs{a, b}
 
 		const lim = 24 // large enough to get true lcs
@@ -184,15 +190,16 @@ func BenchmarkForwOld(b *testing.B) {
 func genBench(set string, n int) []struct{ before, after string } {
 	// before and after for benchmarks. 24 strings of length n with
 	// before and after differing at least once, and about 5%
-	rand.Seed(3)
+	// Local generator (see TestRandOld) so this doesn't touch global state.
+	rng := rand.New(rand.NewSource(3))
 	var ans []struct{ before, after string }
 	for i := 0; i < 24; i++ {
 		// maybe b should have an approximately known number of diffs
-		a := randstr(set, n)
+		a := randstr(rng, set, n)
 		cnt := 0
 		bb := make([]rune, 0, n)
 		for _, r := range a {
-			if rand.Float64() < .05 {
+			if rng.Float64() < .05 {
 				cnt++
 				r = 'N'
 			}
