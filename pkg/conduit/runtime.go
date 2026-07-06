@@ -710,6 +710,18 @@ func (r *Runtime) serveHTTPAPI(
 		return nil, cerrors.Errorf("failed to register metrics handler: %w", err)
 	}
 
+	readyzHandler := r.readyzHandler()
+	err = gwmux.HandlePath(
+		"GET",
+		"/readyz",
+		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+			readyzHandler.ServeHTTP(w, req)
+		},
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to register readyz handler: %w", err)
+	}
+
 	handler := grpcutil.WithWebsockets(
 		ctx,
 		grpcutil.WithDefaultGatewayMiddleware(allowCORS(gwmux, "http://localhost:4200")),
