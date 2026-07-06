@@ -45,7 +45,16 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 ## Quick start
 
-<https://conduit.io/docs/getting-started>
+The fastest way to see Conduit working — scaffold and run a demo pipeline with a
+single command:
+
+```sh
+conduit quickstart
+```
+
+Sample records flow to your console within seconds. State is in-memory and nothing
+is written to your working directory; press Ctrl-C to stop. For a full walkthrough,
+see <https://conduit.io/docs/getting-started>.
 
 ## Installation guide
 
