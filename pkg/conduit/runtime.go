@@ -39,6 +39,7 @@ import (
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -144,10 +145,23 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		case DBTypeSQLite:
 			db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 		default:
-			err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
+			// An unsupported DB type is a config/validation problem, not an
+			// environment one — return it directly instead of falling into
+			// the Unavailable tagging below, which is reserved for a
+			// genuinely unreachable database (connection refused, file
+			// locked/inaccessible, etc.) for the configured, valid type.
+			return nil, cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 		}
 		if err != nil {
-			return nil, cerrors.Errorf("failed to create a DB instance: %w", err)
+			// Pass the wrapped error (not the raw err) as Wrap's cause so the
+			// stack frame cerrors.Errorf captures here isn't discarded:
+			// conduiterr.Wrap only synthesizes a frame of its own when cause
+			// is nil, and the raw driver error typically carries none.
+			wrapped := cerrors.Errorf("failed to create a DB instance: %w", err)
+			// Tagged Unavailable: the database Conduit depends on could not
+			// be opened/dialed. pkg/conduit/exitcode maps this to exit code
+			// 3 (environment), distinct from a config/validation failure.
+			return nil, conduiterr.Wrap(conduiterr.CodeUnavailable, wrapped.Error(), wrapped)
 		}
 	}
 
@@ -780,7 +794,13 @@ func (r *Runtime) serveGRPC(
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", address)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", address, err)
+		// See the comment on the equivalent DB-creation-failure branch above:
+		// wrap first, then pass the wrapped error as the cause, so the
+		// captured stack frame isn't discarded.
+		wrapped := cerrors.Errorf("failed to listen on address %q: %w", address, err)
+		// Tagged Unavailable (e.g. the address is already bound by another
+		// process): pkg/conduit/exitcode maps this to exit code 3.
+		return nil, conduiterr.Wrap(conduiterr.CodeUnavailable, wrapped.Error(), wrapped)
 	}
 
 	t.Go(func() error {
@@ -815,7 +835,11 @@ func (r *Runtime) serveHTTP(
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", srv.Addr)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.HTTP.Address, err)
+		// Wrap-then-pass-the-wrapped-error, same reasoning as serveGRPC above
+		// (keeps the captured stack frame instead of discarding it).
+		wrapped := cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.HTTP.Address, err)
+		// Tagged Unavailable, same reasoning as serveGRPC above.
+		return nil, conduiterr.Wrap(conduiterr.CodeUnavailable, wrapped.Error(), wrapped)
 	}
 
 	t.Go(func() error {

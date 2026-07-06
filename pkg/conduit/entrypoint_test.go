@@ -68,32 +68,50 @@ func TestEntrypoint_CancelOnSignal_FirstSignalCancelsContext(t *testing.T) {
 // covering the hard-exit-on-second-signal half of CancelOnInterrupt's
 // contract, which the previous, os.Exit-based test could never assert
 // (asserting it would have killed the test binary). By injecting a fake exit
-// func, we can verify the second signal actually triggers exitCodeInterrupt
-// without terminating anything.
+// func, we can verify the second signal triggers the hard-exit path with the
+// POSIX 128+signum exit code for that signal (SIGINT -> 130, SIGTERM -> 143)
+// without terminating anything. This code moved off exitCodeInterrupt (2) in
+// the deterministic-exit-codes change: 2 is now the config/validation bucket
+// (pkg/conduit/exitcode), so a double-signal hard exit needed a value that
+// can't collide with it — 128+signum both avoids the collision and matches
+// what a shell reports for a process killed by that signal.
 func TestEntrypoint_CancelOnSignal_SecondSignalExits(t *testing.T) {
-	is := is.New(t)
-
-	sigChan := make(chan os.Signal, 1)
-	exitCalled := make(chan int, 1)
-	exit := func(code int) { exitCalled <- code }
-
-	ctx := cancelOnSignal(context.Background(), sigChan, exit)
-
-	sigChan <- syscall.SIGTERM
-
-	select {
-	case <-ctx.Done():
-	case <-time.After(5 * time.Second):
-		t.Fatal("first signal did not cancel the context")
+	tests := []struct {
+		name string
+		sig  syscall.Signal
+		want int
+	}{
+		{name: "SIGTERM", sig: syscall.SIGTERM, want: 143},
+		{name: "SIGINT", sig: syscall.SIGINT, want: 130},
 	}
 
-	sigChan <- syscall.SIGTERM
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
 
-	select {
-	case code := <-exitCalled:
-		is.Equal(code, exitCodeInterrupt)
-	case <-time.After(5 * time.Second):
-		t.Fatal("second signal did not trigger the hard-exit path")
+			sigChan := make(chan os.Signal, 1)
+			exitCalled := make(chan int, 1)
+			exit := func(code int) { exitCalled <- code }
+
+			ctx := cancelOnSignal(context.Background(), sigChan, exit)
+
+			sigChan <- syscall.SIGTERM // first signal: value doesn't affect the exit code
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(5 * time.Second):
+				t.Fatal("first signal did not cancel the context")
+			}
+
+			sigChan <- tt.sig
+
+			select {
+			case code := <-exitCalled:
+				is.Equal(code, tt.want)
+			case <-time.After(5 * time.Second):
+				t.Fatal("second signal did not trigger the hard-exit path")
+			}
+		})
 	}
 }
 

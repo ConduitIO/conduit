@@ -20,6 +20,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/root"
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -37,8 +38,12 @@ func Run(cfg conduit.Config) {
 	cmd.SilenceUsage = true
 
 	if err := cmd.Execute(); err != nil {
-		// error is already printed out
-		os.Exit(1)
+		// error is already printed out by cobra; the exit code is the single
+		// deterministic classifier shared with the `run` entrypoint (see
+		// pkg/conduit/exitcode) so one-shot commands and the long-running
+		// server never drift onto different exit conventions for the same
+		// kind of error.
+		os.Exit(exitcode.ExitCode(err))
 	}
-	os.Exit(0)
+	os.Exit(exitcode.OK)
 }
