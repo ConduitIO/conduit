@@ -80,6 +80,13 @@ type Service struct {
 
 	handlers         []FailureHandler
 	runningPipelines *csync.Map[string, *runnablePipeline]
+
+	// terminalErrors holds the terminal error of a pipeline after it has stopped
+	// and been removed from runningPipelines, so WaitPipeline can still report it
+	// to a caller that races the pipeline's own cleanup. Written before the
+	// runningPipelines entry is deleted; cleared when the pipeline is started
+	// again. See docs/design-documents/20260706-forceful-stop-test-determinism.md.
+	terminalErrors *csync.Map[string, error]
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -99,6 +106,7 @@ func NewService(
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
+		terminalErrors:   csync.NewMap[string, error](),
 	}
 }
 
@@ -190,6 +198,10 @@ func (s *Service) Start(
 		rp.backoff = oldRp.backoff
 		rp.recoveryAttempts = oldRp.recoveryAttempts
 	}
+
+	// A new run supersedes any terminal error recorded by a previous run of this
+	// pipeline, so a later WaitPipeline can't return a stale result.
+	s.terminalErrors.Delete(pipelineID)
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
 	if err := s.runPipeline(ctx, rp); err != nil {
@@ -371,13 +383,26 @@ func (s *Service) waitInternal() error {
 	return cerrors.Join(errs...)
 }
 
-// WaitPipeline blocks until the pipeline with the given ID is stopped.
+// WaitPipeline blocks until the pipeline with the given ID is stopped, and
+// returns the pipeline's terminal error (nil on a graceful stop).
+//
+// It is safe to call before, during, or after the pipeline's own cleanup: while
+// the pipeline is running it waits on the tomb; if the pipeline has already
+// stopped and removed itself from runningPipelines, it returns the recorded
+// terminal error instead of a false nil. Returns nil for an ID that never ran.
 func (s *Service) WaitPipeline(id string) error {
 	p, ok := s.runningPipelines.Get(id)
-	if !ok || p.t == nil {
-		return nil
+	if ok && p.t != nil {
+		return p.t.Wait()
 	}
-	return p.t.Wait()
+	// The pipeline already cleaned itself up (or never started under this ID).
+	// terminalErrors is written before the runningPipelines entry is deleted, so
+	// if the pipeline ran and stopped, its terminal error is here — recovering
+	// the result the lookup above would otherwise have lost to the cleanup race.
+	if err, ok := s.terminalErrors.Get(id); ok {
+		return err
+	}
+	return nil
 }
 
 // buildsNodes will build new nodes that will be assigned to the pipeline.Instance.
@@ -808,6 +833,12 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			Err(ctx, err).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Msg("pipeline stopped")
+
+		// Record the terminal error before removing the pipeline from
+		// runningPipelines, so a WaitPipeline caller that races this cleanup still
+		// sees the result instead of a false nil (ordering matters: set before
+		// delete leaves no window where neither is observable).
+		s.terminalErrors.Set(rp.pipeline.ID, err)
 
 		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
 		s.runningPipelines.Delete(rp.pipeline.ID)
