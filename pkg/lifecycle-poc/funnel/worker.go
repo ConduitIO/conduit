@@ -20,6 +20,7 @@ import (
 	"context"
 	"io"
 	"iter"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -89,8 +90,34 @@ type Worker struct {
 	processingLock chan struct{}
 	// stop stores the information if a graceful stop was triggered.
 	stop atomic.Bool
+	// teardownMu guards sourceTornDown and serializes teardown so the source is
+	// torn down at most once across the Stop/Close race.
+	teardownMu sync.Mutex
+	// sourceTornDown is set only after Source.Teardown SUCCEEDS, so a failed
+	// teardown is retried by a later call rather than masked as done.
+	sourceTornDown bool
 
 	logger log.CtxLogger
+}
+
+// tearDownSource releases the source connector's resources. It serves two
+// purposes: on a graceful stop it interrupts a blocked source Read, and on every
+// path it frees the source. It is called from both Stop (graceful) and Close (all
+// paths, including a fatal error where Stop is never called), so it is idempotent
+// — but only a *successful* teardown is remembered: if Source.Teardown fails, the
+// source is left un-torn-down so the next caller retries, rather than masking the
+// failure and leaking the source.
+func (w *Worker) tearDownSource(ctx context.Context) error {
+	w.teardownMu.Lock()
+	defer w.teardownMu.Unlock()
+	if w.sourceTornDown {
+		return nil
+	}
+	if err := w.Source.Teardown(ctx); err != nil {
+		return err // not marked torn down; a later Stop/Close call retries
+	}
+	w.sourceTornDown = true
+	return nil
 }
 
 func NewWorker(
@@ -184,7 +211,7 @@ func (w *Worker) Stop(ctx context.Context) error {
 	// Lock acquired, teardown the source and set stop to true to signal the
 	// worker it should stop processing, since it won't be able to deliver
 	// any acks.
-	err = w.Source.Teardown(ctx)
+	err = w.tearDownSource(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
@@ -207,6 +234,14 @@ func (w *Worker) acquireProcessingLock(ctx context.Context) (release func(), err
 
 func (w *Worker) Close(ctx context.Context) error {
 	var errs []error
+
+	// Guarantee the source is torn down on every shutdown path. On a graceful
+	// stop Stop already tore it down and this is a no-op; on a fatal-error path
+	// Stop is never called, so this is where the source's resources are released
+	// (without it the source connector/plugin would leak).
+	if err := w.tearDownSource(ctx); err != nil {
+		errs = append(errs, cerrors.Errorf("failed to tear down source: %w", err))
+	}
 
 	for task := range w.FirstTask.Tasks() {
 		err := task.Close(ctx)

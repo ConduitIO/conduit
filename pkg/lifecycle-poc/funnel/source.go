@@ -77,7 +77,8 @@ func (t *SourceTask) Open(ctx context.Context) error {
 }
 
 func (t *SourceTask) Close(context.Context) error {
-	// source is torn down in the worker on stop
+	// The source is torn down by the worker (Worker.tearDownSource, called from
+	// both Stop and Close), not here.
 	return nil
 }
 

@@ -74,6 +74,42 @@ func TestWorker_Ack(t *testing.T) {
 	is.NoErr(err)
 }
 
+// TestWorker_tearDownSource_RetriesAfterFailure guards #2559's review finding: a
+// failed Source.Teardown must NOT be remembered as done — the next Stop/Close call
+// must retry it, or a transient failure would silently reintroduce the source leak.
+func TestWorker_tearDownSource_RetriesAfterFailure(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	src := NewMockSource(ctrl)
+
+	teardownErr := cerrors.New("teardown failed")
+	gomock.InOrder(
+		src.EXPECT().Teardown(gomock.Any()).Return(teardownErr), // first attempt fails
+		src.EXPECT().Teardown(gomock.Any()).Return(nil),         // retry succeeds
+	)
+
+	w := &Worker{Source: src}
+	is.True(cerrors.Is(w.tearDownSource(ctx), teardownErr)) // failure surfaced, not masked
+	is.NoErr(w.tearDownSource(ctx))                         // retried and succeeded
+	is.NoErr(w.tearDownSource(ctx))                         // now a no-op (no third Teardown)
+}
+
+// TestWorker_tearDownSource_OnceOnSuccess confirms a successful teardown is
+// remembered: repeated calls (the Stop/Close race) tear the source down only once.
+func TestWorker_tearDownSource_OnceOnSuccess(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	src := NewMockSource(ctrl)
+	src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1) // exactly once despite 3 calls
+
+	w := &Worker{Source: src}
+	is.NoErr(w.tearDownSource(ctx))
+	is.NoErr(w.tearDownSource(ctx))
+	is.NoErr(w.tearDownSource(ctx))
+}
+
 func TestWorker_Ack_SourceError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
