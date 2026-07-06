@@ -296,13 +296,11 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// degraded pipeline must be the source's real error, not the io.EOF the acker
 	// sees when the closed source stream rejects an ack.
 	//
-	// The source's Teardown is intentionally not expected here (see
-	// generatorSourceFatalError): on this path funnel.Worker never calls
-	// Worker.Stop (that's reserved for graceful shutdown), so SourceTask.Close --
-	// a no-op by design, "source is torn down in the worker on stop" -- never
-	// tears down the source plugin. That's a real cleanup gap in the poc's
-	// fatal-error path, tracked separately from #1659/#2547; this test only
-	// asserts the error-reporting behavior, not source cleanup.
+	// The source's Teardown IS expected here (see generatorSourceFatalError):
+	// even on the fatal-error path, where Worker.Stop is never called, Worker.Close
+	// tears the source down via the idempotent Worker.tearDownSource (#2559). This
+	// test therefore also guards against regressing that cleanup — without it,
+	// Teardown is never called and the mock expectation fails.
 	wantErr := cerrors.FatalError(cerrors.New("source connector error"))
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
@@ -487,12 +485,10 @@ func generatorSource(
 
 // generatorSourceFatalError is like generatorSource, but for a source whose
 // Read returns a fatal, non-recovered error: the funnel Worker degrades the
-// pipeline directly from that error and never calls Worker.Stop, so
-// SourceTask.Close (a no-op, see its doc comment) never tears down the source
-// plugin on this path. Expecting Teardown here (like generatorSource does)
-// would make the mock harness assert a call the poc's fatal-error path never
-// makes. This is a source cleanup gap in the poc, not a bug in this
-// expectation -- see the comment on TestServiceLifecycle_PipelineError.
+// pipeline directly from that error and never calls Worker.Stop. Teardown is
+// still expected exactly once — Worker.Close tears the source down on this path
+// via the idempotent Worker.tearDownSource (#2559) — so requiring it here guards
+// against regressing that cleanup.
 func generatorSourceFatalError(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
@@ -505,7 +501,7 @@ func generatorSourceFatalError(
 		pmock.SourcePluginWithRun(),
 		pmock.SourcePluginWithRecords(records, wantErr),
 		pmock.SourcePluginWithAcks(len(records), false),
-		pmock.SourcePluginWithOptionalTeardown(),
+		pmock.SourcePluginWithTeardown(),
 	}
 	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl, sourcePluginOptions...)
 

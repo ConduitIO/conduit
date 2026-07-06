@@ -20,6 +20,7 @@ import (
 	"context"
 	"io"
 	"iter"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -89,8 +90,24 @@ type Worker struct {
 	processingLock chan struct{}
 	// stop stores the information if a graceful stop was triggered.
 	stop atomic.Bool
+	// teardownOnce guarantees the source is torn down exactly once, no matter
+	// which shutdown path (graceful Stop or Close) reaches it first.
+	teardownOnce sync.Once
 
 	logger log.CtxLogger
+}
+
+// tearDownSource tears the source down exactly once. Teardown serves two
+// purposes: on a graceful stop it interrupts a blocked source Read, and on every
+// path it releases the source connector's resources. It is called from both Stop
+// (graceful) and Close (all paths, including a fatal error where Stop is never
+// called), so it must be idempotent.
+func (w *Worker) tearDownSource(ctx context.Context) error {
+	var err error
+	w.teardownOnce.Do(func() {
+		err = w.Source.Teardown(ctx)
+	})
+	return err
 }
 
 func NewWorker(
@@ -184,7 +201,7 @@ func (w *Worker) Stop(ctx context.Context) error {
 	// Lock acquired, teardown the source and set stop to true to signal the
 	// worker it should stop processing, since it won't be able to deliver
 	// any acks.
-	err = w.Source.Teardown(ctx)
+	err = w.tearDownSource(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
@@ -207,6 +224,14 @@ func (w *Worker) acquireProcessingLock(ctx context.Context) (release func(), err
 
 func (w *Worker) Close(ctx context.Context) error {
 	var errs []error
+
+	// Guarantee the source is torn down on every shutdown path. On a graceful
+	// stop Stop already tore it down and this is a no-op; on a fatal-error path
+	// Stop is never called, so this is where the source's resources are released
+	// (without it the source connector/plugin would leak).
+	if err := w.tearDownSource(ctx); err != nil {
+		errs = append(errs, cerrors.Errorf("failed to tear down source: %w", err))
+	}
 
 	for task := range w.FirstTask.Tasks() {
 		err := task.Close(ctx)
