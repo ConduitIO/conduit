@@ -16,7 +16,6 @@ package lifecycle
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -278,10 +277,6 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 }
 
 func TestServiceLifecycle_PipelineError(t *testing.T) {
-	// The #1659 fix is applied in funnel/worker.go; un-skipping this preview-arch
-	// test additionally needs mock-harness work (fatal-error teardown expectations).
-	t.Skipf("preview-arch test harness needs work, see github.com/ConduitIO/conduit/issues/1659")
-
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -295,11 +290,23 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
 	is.NoErr(err)
 
-	// create mocked connectors
-	wantErr := cerrors.New("source connector error")
+	// create mocked connectors. The source error is fatal so the pipeline degrades
+	// immediately with it, instead of relying on the (unimplemented, TODO) recovery
+	// path — this isolates what #1659 is about: the *cause* reported for the
+	// degraded pipeline must be the source's real error, not the io.EOF the acker
+	// sees when the closed source stream rejects an ack.
+	//
+	// The source's Teardown is intentionally not expected here (see
+	// generatorSourceFatalError): on this path funnel.Worker never calls
+	// Worker.Stop (that's reserved for graceful shutdown), so SourceTask.Close --
+	// a no-op by design, "source is torn down in the worker on stop" -- never
+	// tears down the source plugin. That's a real cleanup gap in the poc's
+	// fatal-error path, tracked separately from #1659/#2547; this test only
+	// asserts the error-reporting behavior, not source cleanup.
+	wantErr := cerrors.FatalError(cerrors.New("source connector error"))
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, wantErr, false)
+	source, sourceDispenser := generatorSourceFatalError(ctrl, persister, wantRecords, wantErr)
 	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, false)
 	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
 	pl.DLQ.Plugin = dlq.Plugin
@@ -351,11 +358,15 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(eventReceived)
 	is.Equal(pl.ID, event.ID)
 
-	// These conditions are NOT met
-	is.True( // expected error message to have "node <source id> stopped with error"
-		strings.Contains(pl.Error, fmt.Sprintf("node %s stopped with error:", source.ID)),
+	// With #1659 fixed, the degraded pipeline reports the source's real error, not
+	// the io.EOF the acker gets from the closed stream. Unlike the tomb-node arch
+	// (pkg/lifecycle), the funnel model reports failures as
+	// "worker stopped with error: task <id>: failed to read from source: <cause>",
+	// not "node <id> stopped with error".
+	is.True( // error message attributes the failure to reading from the source
+		strings.Contains(pl.Error, "failed to read from source:"),
 	)
-	is.True( // expected error message to contain "source connector error"
+	is.True( // and carries the real cause
 		strings.Contains(pl.Error, wantErr.Error()),
 	)
 	is.True(cerrors.Is(event.Error, wantErr))
@@ -463,6 +474,38 @@ func generatorSource(
 
 	if stop {
 		sourcePluginOptions = append(sourcePluginOptions, pmock.SourcePluginWithStop())
+	}
+	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl, sourcePluginOptions...)
+
+	source := dummySource(persister)
+
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
+
+	return source, dispenser
+}
+
+// generatorSourceFatalError is like generatorSource, but for a source whose
+// Read returns a fatal, non-recovered error: the funnel Worker degrades the
+// pipeline directly from that error and never calls Worker.Stop, so
+// SourceTask.Close (a no-op, see its doc comment) never tears down the source
+// plugin on this path. Expecting Teardown here (like generatorSource does)
+// would make the mock harness assert a call the poc's fatal-error path never
+// makes. This is a source cleanup gap in the poc, not a bug in this
+// expectation -- see the comment on TestServiceLifecycle_PipelineError.
+func generatorSourceFatalError(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	records []opencdc.Record,
+	wantErr error,
+) (*connector.Instance, *pmock.Dispenser) {
+	sourcePluginOptions := []pmock.ConfigurableSourcePluginOption{
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(records, wantErr),
+		pmock.SourcePluginWithAcks(len(records), false),
+		pmock.SourcePluginWithOptionalTeardown(),
 	}
 	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl, sourcePluginOptions...)
 

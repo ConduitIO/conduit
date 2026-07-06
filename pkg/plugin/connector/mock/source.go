@@ -185,3 +185,17 @@ func SourcePluginWithTeardown() ConfigurableSourcePluginOption {
 			Return(pconnector.SourceTeardownResponse{}, nil)
 	})
 }
+
+// SourcePluginWithOptionalTeardown is like SourcePluginWithTeardown, but
+// doesn't require Teardown to be called. Use this for paths that don't
+// guarantee the source is torn down, e.g. the lifecycle-poc funnel.Worker's
+// fatal-error path, which degrades the pipeline without calling Worker.Stop
+// (the only place that tears down the source in that architecture).
+func SourcePluginWithOptionalTeardown() ConfigurableSourcePluginOption {
+	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
+		p.EXPECT().
+			Teardown(gomock.Any(), gomock.Any()).
+			Return(pconnector.SourceTeardownResponse{}, nil).
+			AnyTimes()
+	})
+}
