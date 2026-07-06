@@ -28,11 +28,10 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
-	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*ListCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*ListCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*ListCommand)(nil)
+	_ ecdysis.CommandWithFlags                    = (*ListCommand)(nil)
 )
 
 type ListFlags struct {
@@ -40,12 +39,7 @@ type ListFlags struct {
 }
 
 type ListCommand struct {
-	flags  ListFlags
-	output ecdysis.Output
-}
-
-func (c *ListCommand) Output(output ecdysis.Output) {
-	c.output = output
+	flags ListFlags
 }
 
 func (c *ListCommand) Flags() []ecdysis.Flag {
@@ -65,21 +59,29 @@ func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 
 func (c *ListCommand) Usage() string { return "list" }
 
-func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *ListCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	resp, err := client.ConnectorServiceClient.ListConnectors(ctx, &apiv1.ListConnectorsRequest{
 		PipelineId: c.flags.PipelineID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to list connectors: %w", err)
+		return nil, cerrors.Errorf("failed to list connectors: %w", err)
 	}
 
 	sort.Slice(resp.Connectors, func(i, j int) bool {
 		return resp.Connectors[i].Id < resp.Connectors[j].Id
 	})
 
-	c.output.Stdout(getConnectorsTable(resp.Connectors) + "\n")
+	return resp, nil
+}
 
-	return nil
+// Render returns the human-readable table. The framework renders --json itself
+// (protojson over the returned response).
+func (c *ListCommand) Render(result any) string {
+	resp, ok := result.(*apiv1.ListConnectorsResponse)
+	if !ok {
+		return ""
+	}
+	return getConnectorsTable(resp.Connectors) + "\n"
 }
 
 func getConnectorsTable(connectors []*apiv1.Connector) string {

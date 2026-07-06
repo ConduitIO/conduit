@@ -164,6 +164,32 @@ func marshalJSON(result any) ([]byte, error) {
 	return b, nil
 }
 
+// ProtoJSON marshals a proto message to its canonical protojson form as a
+// json.RawMessage, for embedding proto values inside a composite --json result
+// (e.g. a describe view assembled from several API calls). Using this keeps such
+// results consistent with the protojson shape the single-message commands emit —
+// enums as names, timestamps as RFC3339 — instead of go-json's struct encoding.
+func ProtoJSON(m proto.Message) (json.RawMessage, error) {
+	b, err := protojson.Marshal(m)
+	if err != nil {
+		return nil, cerrors.Errorf("protojson marshal: %w", err)
+	}
+	return json.RawMessage(b), nil
+}
+
+// ProtoJSONSlice is ProtoJSON over a slice, preserving order.
+func ProtoJSONSlice[T proto.Message](ms []T) ([]json.RawMessage, error) {
+	out := make([]json.RawMessage, len(ms))
+	for i, m := range ms {
+		raw, err := ProtoJSON(m)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = raw
+	}
+	return out, nil
+}
+
 // getGRPCAddress returns the gRPC address configured by the user. If no address is found, the default address is returned.
 func getGRPCAddress(cmd *cobra.Command) (string, error) {
 	var (

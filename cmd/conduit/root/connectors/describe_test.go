@@ -15,15 +15,15 @@
 package connectors
 
 import (
-	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
-	"github.com/conduitio/ecdysis"
+	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -66,15 +66,10 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
 	cmd := &DescribeCommand{args: DescribeArgs{ConnectorID: "1"}}
-	cmd.Output(out)
 
 	mockConnectorService := mock.NewMockConnectorService(ctrl)
 	testutils.MockGetConnector(
@@ -96,10 +91,10 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		ConnectorServiceClient: mockConnectorService,
 	}
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"ID: 1\n"+
@@ -117,4 +112,32 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		"      Workers: 0\n"+
 		"    Created At: 1970-01-01T00:00:00Z\n"+
 		"    Updated At: 1970-01-01T00:00:00Z\n")
+}
+
+// TestDescribeCommand_JSONConsistency proves the composite describe result
+// marshals its proto parts via protojson — the enum renders as its name
+// ("TYPE_SOURCE"), matching `connectors list --json`, not go-json's integer.
+func TestDescribeCommand_JSONConsistency(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	cmd := &DescribeCommand{args: DescribeArgs{ConnectorID: "1"}}
+
+	mockConnectorService := mock.NewMockConnectorService(ctrl)
+	testutils.MockGetConnector(
+		mockConnectorService, cmd.args.ConnectorID, "plugin1", "my-pipeline", apiv1.Connector_TYPE_SOURCE,
+		&apiv1.Connector_Config{Name: "Test"}, nil)
+
+	client := &api.Client{ConnectorServiceClient: mockConnectorService}
+
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
+	is.NoErr(err)
+
+	b, err := json.Marshal(result) // invokes DescribeResult.MarshalJSON
+	is.NoErr(err)
+	out := string(b)
+	is.True(strings.Contains(out, `"TYPE_SOURCE"`)) // protojson enum name, not the integer 1
+	is.True(strings.Contains(out, `"connector"`))
 }

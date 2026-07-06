@@ -15,7 +15,6 @@
 package processors
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -24,17 +23,12 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
-	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 
 func TestListCommandExecuteWithClient(t *testing.T) {
 	is := is.New(t)
-
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -78,12 +72,11 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 	}
 
 	cmd := &ListCommand{}
-	cmd.Output(out)
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 	is.Equal(output, ""+
 		"+------------+---------+------------------------------+----------------------------------+----------------------+----------------------+\n"+
 		"|     ID     | PLUGIN  |            PARENT            |            CONDITION             |       CREATED        |     LAST_UPDATED     |\n"+
@@ -96,10 +89,6 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -109,11 +98,10 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	client := &api.Client{ProcessorServiceClient: mockService}
 
 	cmd := &ListCommand{}
-	cmd.Output(out)
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
+	output := strings.TrimSpace(cmd.Render(result))
 	is.True(len(output) == 0)
 }

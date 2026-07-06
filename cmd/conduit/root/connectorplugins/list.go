@@ -28,11 +28,10 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
-	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*ListCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*ListCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*ListCommand)(nil)
+	_ ecdysis.CommandWithFlags                    = (*ListCommand)(nil)
 )
 
 type ListFlags struct {
@@ -40,12 +39,7 @@ type ListFlags struct {
 }
 
 type ListCommand struct {
-	flags  ListFlags
-	output ecdysis.Output
-}
-
-func (c *ListCommand) Output(output ecdysis.Output) {
-	c.output = output
+	flags ListFlags
 }
 
 func (c *ListCommand) Flags() []ecdysis.Flag {
@@ -65,22 +59,30 @@ func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 
 func (c *ListCommand) Usage() string { return "list" }
 
-func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *ListCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	regex := fmt.Sprintf(".*%s.*", c.flags.Name)
 	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
 		Name: regex,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to list connector plugins: %w", err)
+		return nil, cerrors.Errorf("failed to list connector plugins: %w", err)
 	}
 
 	sort.Slice(resp.Plugins, func(i, j int) bool {
 		return resp.Plugins[i].Name < resp.Plugins[j].Name
 	})
 
-	c.output.Stdout(getConnectorPluginsTable(resp.Plugins) + "\n")
+	return resp, nil
+}
 
-	return nil
+// Render returns the human-readable table. The framework renders --json itself
+// (protojson over the returned response).
+func (c *ListCommand) Render(result any) string {
+	resp, ok := result.(*apiv1.ListConnectorPluginsResponse)
+	if !ok {
+		return ""
+	}
+	return getConnectorPluginsTable(resp.Plugins) + "\n"
 }
 
 func getConnectorPluginsTable(connectorPlugins []*apiv1.ConnectorPluginSpecifications) string {

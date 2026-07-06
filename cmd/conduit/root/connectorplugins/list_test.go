@@ -15,7 +15,6 @@
 package connectorplugins
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -66,16 +65,11 @@ func TestListCommandFlags(t *testing.T) {
 func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	cmd := &ListCommand{
 		flags: ListFlags{
 			Name: "builtin",
 		},
 	}
-	cmd.Output(out)
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -98,10 +92,10 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 
 	client := &api.Client{ConnectorServiceClient: mockService}
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"+-----------------------+-------------------------------------------------------------------+\n"+
@@ -115,14 +109,9 @@ func TestListCommandExecuteWithClient_WithFlags(t *testing.T) {
 func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	cmd := &ListCommand{
 		flags: ListFlags{},
 	}
-	cmd.Output(out)
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -149,10 +138,10 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 
 	client := &api.Client{ConnectorServiceClient: mockService}
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"+-------------------------+-------------------------------------------------------------------+\n"+
@@ -167,10 +156,6 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -184,11 +169,10 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 	client := &api.Client{ConnectorServiceClient: mockService}
 
 	cmd := &ListCommand{}
-	cmd.Output(out)
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := strings.TrimSpace(buf.String())
+	output := strings.TrimSpace(cmd.Render(result))
 	is.True(len(output) == 0)
 }

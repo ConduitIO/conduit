@@ -15,6 +15,7 @@
 package pipelines
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -25,14 +26,14 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
+	json "github.com/goccy/go-json"
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithArgs                     = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -40,22 +41,74 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args   DescribeArgs
-	output ecdysis.Output
+	args DescribeArgs
+}
+
+// DescribeResult is the result of describing a pipeline: the pipeline plus the
+// processors, connectors, and DLQ needed to render the full detail view. It has
+// no single proto message, so it marshals its proto parts via protojson (see
+// MarshalJSON) to keep --json consistent with the single-message commands.
+type DescribeResult struct {
+	Pipeline            *apiv1.Pipeline               `json:"pipeline"`
+	PipelineProcessors  []*apiv1.Processor            `json:"pipelineProcessors"`
+	Connectors          []*apiv1.Connector            `json:"connectors"`
+	ConnectorProcessors map[string][]*apiv1.Processor `json:"connectorProcessors"`
+	Dlq                 *apiv1.Pipeline_DLQ           `json:"dlq"`
+}
+
+// MarshalJSON renders every proto part via protojson so this composite view emits
+// the same JSON shape (enum names, RFC3339 timestamps) as `pipelines list`.
+func (r *DescribeResult) MarshalJSON() ([]byte, error) {
+	pipeline, err := cecdysis.ProtoJSON(r.Pipeline)
+	if err != nil {
+		return nil, err
+	}
+	pipelineProcessors, err := cecdysis.ProtoJSONSlice(r.PipelineProcessors)
+	if err != nil {
+		return nil, err
+	}
+	connectors, err := cecdysis.ProtoJSONSlice(r.Connectors)
+	if err != nil {
+		return nil, err
+	}
+	connectorProcessors := make(map[string][]json.RawMessage, len(r.ConnectorProcessors))
+	for id, procs := range r.ConnectorProcessors {
+		raws, err := cecdysis.ProtoJSONSlice(procs)
+		if err != nil {
+			return nil, err
+		}
+		connectorProcessors[id] = raws
+	}
+
+	// DLQ is optional; emit null rather than an empty object when absent.
+	dlq := json.RawMessage("null")
+	if r.Dlq != nil {
+		if dlq, err = cecdysis.ProtoJSON(r.Dlq); err != nil {
+			return nil, err
+		}
+	}
+
+	out, err := json.Marshal(struct {
+		Pipeline            json.RawMessage              `json:"pipeline"`
+		PipelineProcessors  []json.RawMessage            `json:"pipelineProcessors"`
+		Connectors          []json.RawMessage            `json:"connectors"`
+		ConnectorProcessors map[string][]json.RawMessage `json:"connectorProcessors"`
+		Dlq                 json.RawMessage              `json:"dlq"`
+	}{pipeline, pipelineProcessors, connectors, connectorProcessors, dlq})
+	if err != nil {
+		return nil, cerrors.Errorf("marshal pipeline describe result: %w", err)
+	}
+	return out, nil
 }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Describe an existing pipeline",
-		Long: `This command requires Conduit to be already running since it will describe a pipeline registered 
+		Long: `This command requires Conduit to be already running since it will describe a pipeline registered
 by Conduit. You can list existing pipelines with the 'conduit pipelines list' command.`,
 		Example: "conduit pipelines describe pipeline-with-dlq\n" +
 			"conduit pipelines desc multiple-source-with-processor",
 	}
-}
-
-func (c *DescribeCommand) Output(output ecdysis.Output) {
-	c.output = output
 }
 
 func (c *DescribeCommand) Aliases() []string { return []string{"desc"} }
@@ -75,12 +128,12 @@ func (c *DescribeCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *DescribeCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	pipelineResp, err := client.PipelineServiceClient.GetPipeline(ctx, &apiv1.GetPipelineRequest{
 		Id: c.args.PipelineID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to get pipeline: %w", err)
+		return nil, cerrors.Errorf("failed to get pipeline: %w", err)
 	}
 
 	// Fetch pipeline processors
@@ -91,7 +144,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: processorID,
 		})
 		if err != nil {
-			return cerrors.Errorf("failed to get processor: %w", err)
+			return nil, cerrors.Errorf("failed to get processor: %w", err)
 		}
 		pipelineProcessors = append(pipelineProcessors, processor.Processor)
 	}
@@ -101,7 +154,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		PipelineId: c.args.PipelineID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
+		return nil, cerrors.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	connectors := make([]*apiv1.Connector, 0, len(connectorsResp.Connectors))
@@ -111,7 +164,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: conn.Id,
 		})
 		if err != nil {
-			return cerrors.Errorf("failed to get connector: %w", err)
+			return nil, cerrors.Errorf("failed to get connector: %w", err)
 		}
 
 		connectors = append(connectors, connDetails.Connector)
@@ -128,7 +181,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 				Id: processorID,
 			})
 			if err != nil {
-				return cerrors.Errorf("failed to get processor: %w", err)
+				return nil, cerrors.Errorf("failed to get processor: %w", err)
 			}
 			processors = append(processors, processor.Processor)
 		}
@@ -139,15 +192,34 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Id: c.args.PipelineID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
+		return nil, cerrors.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
-	err = displayPipeline(c.output, pipelineResp.Pipeline, pipelineProcessors, connectors, connectorProcessors, dlq.Dlq)
-	if err != nil {
-		return cerrors.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
+	return &DescribeResult{
+		Pipeline:            pipelineResp.Pipeline,
+		PipelineProcessors:  pipelineProcessors,
+		Connectors:          connectors,
+		ConnectorProcessors: connectorProcessors,
+		Dlq:                 dlq.Dlq,
+	}, nil
+}
+
+// Render returns the human-readable detail view.
+func (c *DescribeCommand) Render(result any) string {
+	res, ok := result.(*DescribeResult)
+	if !ok {
+		return ""
 	}
 
-	return nil
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	// displayPipeline never actually returns a non-nil error; the render step
+	// has no error channel, so we discard it.
+	_ = displayPipeline(out, res.Pipeline, res.PipelineProcessors, res.Connectors, res.ConnectorProcessors, res.Dlq)
+
+	return buf.String()
 }
 
 func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Processor, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, dlq *apiv1.Pipeline_DLQ) error {
