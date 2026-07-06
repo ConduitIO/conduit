@@ -20,11 +20,26 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
+)
+
+// Issue #2534: the stack frame's file path is asserted against the actual
+// location of this file (captured via runtime.Caller) rather than a
+// hardcoded "<...>/conduit/pkg/foundation/log/ctxlogger_test.go" pattern.
+// The hardcoded pattern only matches when the repository checkout has
+// "conduit" as the immediate parent directory of "pkg" (e.g. a plain
+// clone); it breaks under any other checkout layout, such as a nested git
+// worktree, a renamed clone directory, or a fork - a real env-dependent
+// failure, not a test-ordering one, and reproducible independent of
+// -shuffle.
+var (
+	_, thisFile, _, _ = runtime.Caller(0)
+	thisFilePattern   = regexp.QuoteMeta(thisFile)
 )
 
 func TestCtxLoggerComponent(t *testing.T) {
@@ -193,13 +208,13 @@ func TestCtxLoggerWithoutHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo"}`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}\],"error":"foo"}`,
 	}, {
 		name: "err one-field with error",
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","foo":"bar"}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}\],"error":"foo","foo":"bar"}\n`,
 	}, {
 		name: "err two-field with error",
 		logfunc: func(logger CtxLogger) {
@@ -208,7 +223,7 @@ func TestCtxLoggerWithoutHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","foo":"bar","n":123}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithoutHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}\],"error":"foo","foo":"bar","n":123}\n`,
 	}, {
 		name: "err empty without error",
 		logfunc: func(logger CtxLogger) {
@@ -416,13 +431,13 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","strval":"bar","intval":123}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}\],"error":"foo","strval":"bar","intval":123}\n`,
 	}, {
 		name: "err one-field with error",
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}],"error":"foo","foo":"bar","strval":"bar","intval":123}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}],"error":"foo","foo":"bar","strval":"bar","intval":123}\n`,
 	}, {
 		name: "err two-field with error",
 		logfunc: func(logger CtxLogger) {
@@ -431,7 +446,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","foo":"bar","n":123,"strval":"bar","intval":123}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":"` + thisFilePattern + `","line":\d*}\],"error":"foo","foo":"bar","n":123,"strval":"bar","intval":123}\n`,
 	}, {
 		name: "err empty without error",
 		logfunc: func(logger CtxLogger) {

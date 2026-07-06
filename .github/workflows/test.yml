@@ -20,7 +20,15 @@ jobs:
 
       - name: Test
         # The test coverate and the test report are needed for the SonarCloud analysis
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
+        #
+        # Issue #2534: -shuffle=on randomizes test (and subtest) execution
+        # order within each package, which catches tests that depend on
+        # process-global state or execution order without needing -count>1.
+        # It was deferred until the two order/env-dependent failures it
+        # surfaced (pkg/foundation/log and
+        # pkg/plugin/processor/builtin/internal/diff/difftest) were fixed;
+        # both are now hermetic and this can gate merges.
+        run: make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"
 
   build-cross:
     # Cross-compile for the 32-bit release target. Regular CI only builds on
