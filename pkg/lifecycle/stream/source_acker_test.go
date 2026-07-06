@@ -27,6 +27,8 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -91,6 +93,69 @@ func TestSourceAckerNode_AckClosedStreamSuppressed(t *testing.T) {
 	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err)
 	is.True(!ok)
+}
+
+// TestSourceAckerNode_NackClosedStreamSuppressed is the nack-path counterpart of
+// the ack guard (#1659): after a nacked record is durably stored in the DLQ, the
+// ack forwarded to the source can hit a closed stream (io.EOF); that must be
+// suppressed too, so it doesn't mask the source's real error.
+func TestSourceAckerNode_NackClosedStreamSuppressed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	src := mock.NewSource(ctrl)
+
+	// DLQ configured to accept the nack (high threshold) so the nack handler
+	// reaches the Source.Ack forward.
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+	dlqHandler.EXPECT().Close(gomock.Any())
+	dlqHandler.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil)
+	var dlqWg sync.WaitGroup
+	dlqWg.Add(1)
+	dlqNode := &DLQHandlerNode{
+		Name:                "dlq-handler-node",
+		Handler:             dlqHandler,
+		WindowSize:          1,
+		WindowNackThreshold: 100,
+		Timer:               noop.Timer{},
+		Histogram:           metrics.NewRecordBytesHistogram(noop.Histogram{}),
+	}
+	dlqNode.Add(1)
+	go func() {
+		defer dlqWg.Done()
+		err := dlqNode.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	node := &SourceAckerNode{Name: "acker-node", Source: src, DLQHandlerNode: dlqNode}
+	in := make(chan *Message)
+	out := node.Pub()
+	node.Sub(in)
+	var nodeWg sync.WaitGroup
+	nodeWg.Add(1)
+	go func() {
+		defer nodeWg.Done()
+		err := node.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	want := &Message{Ctx: ctx, Record: opencdc.Record{Position: []byte("foo")}}
+	// after the DLQ write, forwarding the ack to the closed source stream returns io.EOF
+	src.EXPECT().Ack(want.Ctx, []opencdc.Position{want.Record.Position}).Return(io.EOF)
+
+	in <- want
+	got := <-out
+	is.Equal(got, want)
+
+	// nacking must succeed: the record is stored in the DLQ and the source-ack
+	// io.EOF is suppressed, not surfaced
+	err := got.Nack(cerrors.New("downstream failure"), "test-node")
+	is.NoErr(err)
+
+	close(in)
+	is.NoErr((*csync.WaitGroup)(&nodeWg).WaitTimeout(ctx, time.Second))
+	is.NoErr((*csync.WaitGroup)(&dlqWg).WaitTimeout(ctx, time.Second))
 }
 
 func TestSourceAckerNode_AckOrder(t *testing.T) {
