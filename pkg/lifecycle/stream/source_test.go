@@ -221,6 +221,21 @@ func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
 	is.True(!ok)  // expected node to close outgoing channel
 }
 
+// TestSourceNode_ForceStop_BeforeRun guards #2539: force-stopping a source node
+// before Run has initialized its connector-context cancel must not panic. Before
+// the fix, ForceStop nil-dereferenced connectorCtxCancel and crashed the process
+// (invariant 7: force at any instant must be recoverable, not crash).
+func TestSourceNode_ForceStop_BeforeRun(t *testing.T) {
+	node := &SourceNode{
+		Name:          "source-node",
+		PipelineTimer: noop.Timer{},
+	}
+
+	// connectorCtxCancel is nil here — Run was never called. This must be a no-op,
+	// not a panic.
+	node.ForceStop(context.Background())
+}
+
 func TestSourceNode_ForceStop(t *testing.T) {
 	ctrl := gomock.NewController(t)
 

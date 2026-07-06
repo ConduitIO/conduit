@@ -59,7 +59,9 @@ type DLQHandlerNode struct {
 	// m guards access to Handler and window
 	m sync.Mutex
 
-	handlerCtxCancel context.CancelFunc
+	// stopper force-stops the handler context, coordinating with Run so a
+	// force-stop that races startup is neither lost nor a nil-panic. See #2539.
+	stopper forceStopper
 }
 
 func (n *DLQHandlerNode) ID() string {
@@ -73,10 +75,10 @@ func (n *DLQHandlerNode) Run(ctx context.Context) error {
 	n.window = newDLQWindow(n.WindowSize, n.WindowNackThreshold)
 
 	// start a fresh connector context to make sure the handler is running until
-	// this method returns
-	var handlerCtx context.Context
-	handlerCtx, n.handlerCtxCancel = context.WithCancel(context.Background())
-	defer n.handlerCtxCancel()
+	// this method returns. stopper.start also applies a force-stop that arrived
+	// before now (raced startup).
+	handlerCtx, handlerCtxCancel := n.stopper.start()
+	defer handlerCtxCancel()
 
 	err := n.Handler.Open(handlerCtx)
 	if err != nil {
@@ -207,7 +209,7 @@ func (n *DLQHandlerNode) SetLogger(logger log.CtxLogger) {
 
 func (n *DLQHandlerNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping DLQ handler node")
-	n.handlerCtxCancel()
+	n.stopper.stop()
 }
 
 // dlqWindow is responsible for tracking the last N nacks/acks and enforce a

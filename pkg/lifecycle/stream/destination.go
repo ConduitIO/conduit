@@ -36,7 +36,9 @@ type DestinationNode struct {
 	base   pubSubNodeBase
 	logger log.CtxLogger
 
-	connectorCtxCancel context.CancelFunc
+	// stopper force-stops the connector context, coordinating with Run so a
+	// force-stop that races startup is neither lost nor a nil-panic. See #2539.
+	stopper forceStopper
 }
 
 type Destination interface {
@@ -63,10 +65,10 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 	defer cleanup()
 
 	// start a fresh connector context to make sure the connector is running
-	// until this method returns
-	var connectorCtx context.Context
-	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
-	defer n.connectorCtxCancel()
+	// until this method returns. stopper.start also applies a force-stop that
+	// arrived before now (raced startup).
+	connectorCtx, connectorCtxCancel := n.stopper.start()
+	defer connectorCtxCancel()
 
 	var (
 		// lastPosition stores the position of the last successfully processed record
@@ -137,7 +139,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 func (n *DestinationNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping destination connector")
-	n.connectorCtxCancel()
+	n.stopper.stop()
 }
 
 // Sub will subscribe this node to an incoming channel.
