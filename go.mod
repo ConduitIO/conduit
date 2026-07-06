@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.9.4
 	github.com/conduitio/conduit-connector-s3 v0.9.3
 	github.com/conduitio/conduit-connector-sdk v0.14.1
-	github.com/conduitio/conduit-processor-sdk v0.5.0
+	github.com/conduitio/conduit-processor-sdk v0.5.1
 	github.com/conduitio/conduit-schema-registry v0.2.6
 	github.com/conduitio/ecdysis v0.5.0
 	github.com/conduitio/yaml/v3 v3.3.0
