@@ -15,12 +15,16 @@
 package conduiterr_test
 
 import (
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/matryer/is"
 )
+
+var _, thisFile, _, _ = runtime.Caller(0)
 
 func frameCount(err error) int {
 	frames, _ := cerrors.GetStackTrace(err).([]cerrors.Frame)
@@ -96,4 +100,46 @@ func TestRegistry_FoundationalCodesPresent(t *testing.T) {
 	is.True(ok)
 	is.Equal(c.Reason(), "connector.plugin_not_found")
 	is.True(len(conduiterr.Codes()) >= 5)
+}
+
+// TestNew_FrameIsCallerAccurate is the regression test for #2526: the frame
+// captured by New must point at the real call site (this test function, the
+// line that calls conduiterr.New below), not at New's own definition in
+// conduiterr.go. Before the fix, fr.File/fr.Line pointed into conduiterr.go
+// and fr.Func was "...conduiterr.New" instead of this test.
+func TestNew_FrameIsCallerAccurate(t *testing.T) {
+	is := is.New(t)
+
+	err := conduiterr.New(conduiterr.CodeInvalidArgument, "boom") // <-- line under test
+	const wantLine = 113                                          // line of the statement above
+
+	frames, ok := cerrors.GetStackTrace(err).([]cerrors.Frame)
+	is.True(ok)
+	is.True(len(frames) > 0)
+
+	fr := frames[0]
+	is.Equal(fr.File, thisFile)
+	is.Equal(fr.Line, wantLine)
+	is.True(!strings.Contains(fr.Func, "conduiterr.New"))
+	is.True(strings.HasSuffix(fr.Func, "conduiterr_test.TestNew_FrameIsCallerAccurate"))
+}
+
+// TestWrap_FrameIsCallerAccurate is the same regression guard for Wrap's
+// nil-cause fallback path (Wrap(code, msg, nil)), which also used to
+// attribute its guaranteed frame to Wrap itself rather than to the caller.
+func TestWrap_FrameIsCallerAccurate(t *testing.T) {
+	is := is.New(t)
+
+	err := conduiterr.Wrap(conduiterr.CodeInternal, "boom", nil) // <-- line under test
+	const wantLine = 133                                         // line of the statement above
+
+	frames, ok := cerrors.GetStackTrace(err).([]cerrors.Frame)
+	is.True(ok)
+	is.True(len(frames) > 0)
+
+	fr := frames[0]
+	is.Equal(fr.File, thisFile)
+	is.Equal(fr.Line, wantLine)
+	is.True(!strings.Contains(fr.Func, "conduiterr.Wrap"))
+	is.True(strings.HasSuffix(fr.Func, "conduiterr_test.TestWrap_FrameIsCallerAccurate"))
 }

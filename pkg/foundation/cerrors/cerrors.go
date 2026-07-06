@@ -24,6 +24,7 @@ package cerrors
 
 import (
 	"errors" //nolint:depguard // the std. errors package is allowed only in this package
+	"fmt"
 	"reflect"
 	"runtime"
 
@@ -39,6 +40,38 @@ var (
 	Unwrap = errors.Unwrap
 	Join   = errors.Join
 )
+
+// stackError is a cerrors-native equivalent of xerrors' unexported
+// errorString, used by NewWithStackDepth. It exists only because xerrors.New
+// hardcodes its caller depth (always attributes the frame to its immediate
+// caller) and exposes no way to skip additional frames. hasStackTrace and
+// getRuntimeFrame recognize it structurally (a "frame" field of type
+// xerrors.Frame), the same way they walk xerrors' own error type.
+type stackError struct {
+	s     string
+	frame xerrors.Frame
+}
+
+func (e *stackError) Error() string { return e.s }
+
+func (e *stackError) Format(s fmt.State, v rune) { xerrors.FormatError(e, s, v) }
+
+func (e *stackError) FormatError(p xerrors.Printer) (next error) {
+	p.Print(e.s)
+	e.frame.Format(p)
+	return nil
+}
+
+// NewWithStackDepth is like New, but lets the caller skip additional stack
+// frames when attributing the captured frame. New (equivalent to skip=0)
+// always attributes the frame to its own immediate caller; a function that
+// itself wraps New (e.g. conduiterr.New) needs skip=1 so the frame lands on
+// *its* caller instead of on the wrapper. skip counts wrapper layers between
+// the real call site and this function, analogous to runtime.Caller's skip
+// but relative to New's existing (fixed) depth.
+func NewWithStackDepth(skip int, msg string) error {
+	return &stackError{s: msg, frame: xerrors.Caller(1 + skip)}
+}
 
 type Frame struct {
 	Func string `json:"func,omitempty"`
@@ -107,9 +140,20 @@ func ForEach(err error, fn func(error)) {
 	}
 }
 
+// frameType is the reflect.Type of xerrors.Frame, used to recognize any
+// error carrying one structurally, regardless of which package defined the
+// concrete error type. This lets hasStackTrace/getRuntimeFrame walk both
+// xerrors' own error type and cerrors' stackError (see NewWithStackDepth)
+// without hardcoding "golang.org/x/xerrors" as the only allowed origin.
+var frameType = reflect.TypeOf(xerrors.Frame{})
+
 func hasStackTrace(err error) bool {
 	errT := reflect.TypeOf(err)
-	return errT != nil && errT.Elem().PkgPath() == "golang.org/x/xerrors"
+	if errT == nil || errT.Kind() != reflect.Pointer {
+		return false
+	}
+	f, ok := errT.Elem().FieldByName("frame")
+	return ok && f.Type == frameType
 }
 
 func getRuntimeFrame(err error) Frame {
