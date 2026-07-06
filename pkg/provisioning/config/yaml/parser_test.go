@@ -199,19 +199,12 @@ func TestParser_V1_EnvVars(t *testing.T) {
 	parser := NewParser(log.Nop())
 	filepath := "./v1/testdata/pipelines5-env-vars.yml"
 
-	// set env variables
-	err := os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_SECRET")
-	}
-	err = os.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_KEY")
-	}
-	err = os.Setenv("TEST_PARSER_AWS_URL", "aws-url")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
-	}
+	// set env variables; t.Setenv restores the previous value (and clears vars
+	// that were unset) when the test finishes, so they never leak into other
+	// tests in this package.
+	t.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
+	t.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
+	t.Setenv("TEST_PARSER_AWS_URL", "aws-url")
 
 	want := Configurations{
 		v1.Configuration{
@@ -577,19 +570,12 @@ func TestParser_V2_EnvVars(t *testing.T) {
 	parser := NewParser(log.Nop())
 	filepath := "./v2/testdata/pipelines5-env-vars.yml"
 
-	// set env variables
-	err := os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_SECRET")
-	}
-	err = os.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_KEY")
-	}
-	err = os.Setenv("TEST_PARSER_AWS_URL", "aws-url")
-	if err != nil {
-		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
-	}
+	// set env variables; t.Setenv restores the previous value (and clears vars
+	// that were unset) when the test finishes, so they never leak into other
+	// tests in this package.
+	t.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
+	t.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
+	t.Setenv("TEST_PARSER_AWS_URL", "aws-url")
 
 	want := Configurations{
 		v2.Configuration{

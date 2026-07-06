@@ -15,6 +15,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -169,8 +170,22 @@ func TestPipelineSimple(t *testing.T) {
 	err = orc.Pipelines.Start(ctx, pl.ID)
 	is.NoErr(err)
 
-	// give the pipeline time to run through
-	time.Sleep(time.Second)
+	// Wait until all 5 source records have been written to the destination file
+	// before stopping, instead of racing a fixed 1s sleep. A fixed sleep flaked
+	// on slow CI: if the pipeline hadn't drained all records yet, Stop cut it
+	// short and the file-content assertion below saw a truncated file.
+	const wantRecords = 5
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		got, readErr := os.ReadFile(destinationPath)
+		if readErr == nil && bytes.Count(got, []byte("\n")) >= wantRecords {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d records in %s", wantRecords, destinationPath)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	t.Log("stopping pipeline")
 	err = orc.Pipelines.Stop(ctx, pl.ID, false)
