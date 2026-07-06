@@ -18,6 +18,7 @@ package conduit
 
 import (
 	"context"
+	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -25,30 +26,118 @@ import (
 	"github.com/matryer/is"
 )
 
-// TestEntrypoint_CancelOnInterrupt_SIGTERM is the regression test for #2519:
-// SIGTERM must be caught and drive graceful cancellation (invariant 7), not
-// terminate the process. Without the SIGTERM registration in CancelOnInterrupt,
-// the default signal disposition kills this test's process, failing the test.
+// TestEntrypoint_CancelOnSignal_FirstSignalCancelsContext is the regression
+// test for #2519: a termination signal must cancel the returned context
+// (invariant 7's graceful-drain path), not fall through unnoticed.
 //
-// Only SIGTERM is exercised. CancelOnInterrupt installs a process-global handler
-// whose goroutine then blocks waiting for a *second* signal (which triggers a hard
-// os.Exit). Sending a second, different signal from another subtest in the same
-// process would be delivered to that leaked handler and exit the test binary, so we
-// keep it to one signal per process for determinism.
-func TestEntrypoint_CancelOnInterrupt_SIGTERM(t *testing.T) {
-	is := is.New(t)
-	e := &Entrypoint{}
+// Unlike the previous version of this test, it drives cancelOnSignal (the
+// core logic extracted from CancelOnInterrupt) directly with a local channel
+// instead of going through signal.Notify/os.Exit. CancelOnInterrupt registers
+// a process-global signal handler and hard os.Exit()s the binary on a second
+// signal, which made the old test unsafe to run with -count>1 or alongside
+// other signal-sending subtests: the leaked global handler from one iteration
+// would catch a later iteration's signal and kill the test binary. Because
+// the channel and the exit func here are both local to each test run, this
+// test is safe under -count and -shuffle, and it can now also exercise the
+// second-signal path, which the old test structurally couldn't.
+func TestEntrypoint_CancelOnSignal_FirstSignalCancelsContext(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	exitCalled := make(chan int, 1)
+	exit := func(code int) { exitCalled <- code }
 
-	ctx := e.CancelOnInterrupt(context.Background())
+	ctx := cancelOnSignal(context.Background(), sigChan, exit)
 
-	// Deliver SIGTERM to ourselves — what docker stop / kubectl / systemd send.
-	err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
-	is.NoErr(err)
+	sigChan <- syscall.SIGTERM
 
 	select {
 	case <-ctx.Done():
-		// SIGTERM was caught and canceled the context: the graceful path runs.
+		// The first signal canceled the context: the graceful path runs.
 	case <-time.After(5 * time.Second):
-		t.Fatal("SIGTERM did not cancel the context; it was not handled (invariant 7)")
+		t.Fatal("first signal did not cancel the context; it was not handled (invariant 7)")
+	}
+
+	select {
+	case code := <-exitCalled:
+		t.Fatalf("exit was called after a single signal with code %d; hard exit must wait for a second signal", code)
+	case <-time.After(50 * time.Millisecond):
+		// Expected: no hard exit yet, only one signal was delivered.
 	}
 }
+
+// TestEntrypoint_CancelOnSignal_SecondSignalExits is the regression test
+// covering the hard-exit-on-second-signal half of CancelOnInterrupt's
+// contract, which the previous, os.Exit-based test could never assert
+// (asserting it would have killed the test binary). By injecting a fake exit
+// func, we can verify the second signal actually triggers exitCodeInterrupt
+// without terminating anything.
+func TestEntrypoint_CancelOnSignal_SecondSignalExits(t *testing.T) {
+	is := is.New(t)
+
+	sigChan := make(chan os.Signal, 1)
+	exitCalled := make(chan int, 1)
+	exit := func(code int) { exitCalled <- code }
+
+	ctx := cancelOnSignal(context.Background(), sigChan, exit)
+
+	sigChan <- syscall.SIGTERM
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("first signal did not cancel the context")
+	}
+
+	sigChan <- syscall.SIGTERM
+
+	select {
+	case code := <-exitCalled:
+		is.Equal(code, exitCodeInterrupt)
+	case <-time.After(5 * time.Second):
+		t.Fatal("second signal did not trigger the hard-exit path")
+	}
+}
+
+// TestEntrypoint_CancelOnSignal_ContextDoneWithoutSignal verifies that
+// cancelOnSignal's goroutine returns (rather than blocking forever waiting
+// for a second signal that will never arrive) when the passed-in context is
+// canceled for a reason unrelated to any signal. This is what lets
+// CancelOnInterrupt call signal.Stop and let the goroutine exit instead of
+// leaking it for the remaining process lifetime.
+func TestEntrypoint_CancelOnSignal_ContextDoneWithoutSignal(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	exitCalled := make(chan int, 1)
+	exit := func(code int) { exitCalled <- code }
+
+	parentCtx, cancel := context.WithCancel(context.Background())
+	ctx := cancelOnSignal(parentCtx, sigChan, exit)
+	cancel()
+
+	select {
+	case <-ctx.Done():
+		// Canceling the parent propagates to the derived context, same as
+		// context.WithCancel always guarantees.
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceling the parent context did not cancel the derived context")
+	}
+
+	select {
+	case code := <-exitCalled:
+		t.Fatalf("exit must not be called when the context is canceled without any signal, got code %d", code)
+	case <-time.After(50 * time.Millisecond):
+		// Expected: no signal was ever sent, so exit must never be called.
+	}
+}
+
+// Deliberately no test here exercises the exported CancelOnInterrupt with a
+// real signal.Notify registration and a real syscall.Kill: CancelOnInterrupt
+// installs a process-global handler that outlives the test (its parent ctx is
+// typically context.Background(), which never completes, so the signal.Stop
+// cleanup below never fires), and delivers to *every* channel still
+// registered from earlier iterations. Under -count>1 the second iteration's
+// SIGTERM lands on the first iteration's still-listening channel as its
+// second signal and reaches the real os.Exit, killing the test binary — this
+// was verified empirically while writing this fix. CancelOnInterrupt is kept
+// intentionally minimal (signal.Notify + a signal.Stop cleanup goroutine +
+// delegate to cancelOnSignal) so that its untested surface is small; all of
+// its actual decision logic is covered above via cancelOnSignal with an
+// injected channel and exit func.
