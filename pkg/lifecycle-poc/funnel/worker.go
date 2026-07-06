@@ -90,24 +90,34 @@ type Worker struct {
 	processingLock chan struct{}
 	// stop stores the information if a graceful stop was triggered.
 	stop atomic.Bool
-	// teardownOnce guarantees the source is torn down exactly once, no matter
-	// which shutdown path (graceful Stop or Close) reaches it first.
-	teardownOnce sync.Once
+	// teardownMu guards sourceTornDown and serializes teardown so the source is
+	// torn down at most once across the Stop/Close race.
+	teardownMu sync.Mutex
+	// sourceTornDown is set only after Source.Teardown SUCCEEDS, so a failed
+	// teardown is retried by a later call rather than masked as done.
+	sourceTornDown bool
 
 	logger log.CtxLogger
 }
 
-// tearDownSource tears the source down exactly once. Teardown serves two
+// tearDownSource releases the source connector's resources. It serves two
 // purposes: on a graceful stop it interrupts a blocked source Read, and on every
-// path it releases the source connector's resources. It is called from both Stop
-// (graceful) and Close (all paths, including a fatal error where Stop is never
-// called), so it must be idempotent.
+// path it frees the source. It is called from both Stop (graceful) and Close (all
+// paths, including a fatal error where Stop is never called), so it is idempotent
+// — but only a *successful* teardown is remembered: if Source.Teardown fails, the
+// source is left un-torn-down so the next caller retries, rather than masking the
+// failure and leaking the source.
 func (w *Worker) tearDownSource(ctx context.Context) error {
-	var err error
-	w.teardownOnce.Do(func() {
-		err = w.Source.Teardown(ctx)
-	})
-	return err
+	w.teardownMu.Lock()
+	defer w.teardownMu.Unlock()
+	if w.sourceTornDown {
+		return nil
+	}
+	if err := w.Source.Teardown(ctx); err != nil {
+		return err // not marked torn down; a later Stop/Close call retries
+	}
+	w.sourceTornDown = true
+	return nil
 }
 
 func NewWorker(
