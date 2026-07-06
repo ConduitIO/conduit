@@ -67,3 +67,6 @@ pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
 !pkg/provisioning/test/source-file.txt
 
 golangci-report.xml
+# Claude Code local state
+.claude/worktrees/
+.claude/settings.local.json
