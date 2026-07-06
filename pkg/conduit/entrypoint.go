@@ -69,17 +69,49 @@ func (e *Entrypoint) Serve(cfg Config) {
 // * On the second signal executes a hard exit, without waiting for a graceful
 // shutdown.
 func (*Entrypoint) CancelOnInterrupt(ctx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(ctx)
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+	// If the caller's ctx is done for a reason unrelated to a signal (e.g. its
+	// own deadline or an explicit cancel upstream), stop routing OS signals to
+	// signalChan so the process-global handler installed above doesn't
+	// outlive this call. This is independent of the signal-driven path below:
+	// cancel() there only cancels the *derived* context returned to the
+	// caller, never this parameter ctx, so a real first/second signal is
+	// unaffected by this cleanup.
+	go func() {
+		<-ctx.Done()
+		signal.Stop(signalChan)
+	}()
+
+	return cancelOnSignal(ctx, signalChan, os.Exit)
+}
+
+// cancelOnSignal contains the core logic behind CancelOnInterrupt, with the
+// signal source and exit behavior injected so it can be exercised
+// deterministically in tests (a real signal.Notify channel is process-global
+// and os.Exit would kill the test binary).
+//
+// The returned context is canceled when the first value is received on
+// sigChan. If a second value is received afterwards, exit is called with
+// exitCodeInterrupt, mirroring the hard-exit-on-second-signal behavior
+// documented on CancelOnInterrupt.
+//
+// The caller remains responsible for registering sigChan with signal.Notify
+// (and calling signal.Stop when done); this function only consumes the
+// channel.
+func cancelOnSignal(ctx context.Context, sigChan <-chan os.Signal, exit func(int)) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
 	go func() {
 		select {
-		case <-signalChan: // first interrupt signal
+		case <-sigChan: // first interrupt signal
 			cancel()
 		case <-ctx.Done():
+			return
 		}
-		<-signalChan // second interrupt signal
-		os.Exit(exitCodeInterrupt)
+
+		<-sigChan // second interrupt signal
+		exit(exitCodeInterrupt)
 	}()
 
 	return ctx
