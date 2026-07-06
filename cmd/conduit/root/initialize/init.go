@@ -54,7 +54,12 @@ func (c *InitCommand) Usage() string { return "init" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: `Initialize Conduit with a configuration file and directories.`,
+		Short: `Set up a Conduit workspace: the config file and directories.`,
+		Long: `Set up a Conduit workspace in the current directory: write a conduit.yaml config
+file and create the pipelines, connectors, and processors directories.
+
+This prepares the workspace only — it does not create a pipeline. To scaffold a
+runnable pipeline afterward, use 'conduit pipelines init'.`,
 	}
 }
 
@@ -149,11 +154,15 @@ func (c *InitCommand) Execute(_ context.Context) error {
 		return cerrors.Errorf("failed to create config YAML: %w", err)
 	}
 
-	fmt.Println(`
-Conduit has been initialized!
-	
-To quickly create an example pipeline, run 'conduit pipelines init'.
-To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
+	fmt.Print(`
+Conduit workspace is ready.
+
+Next: create a pipeline
+  conduit pipelines init        a runnable demo pipeline (add --help to customize)
+
+Then start Conduit
+  conduit run
+`)
 
 	return nil
 }
