@@ -16,12 +16,14 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -190,7 +192,15 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, plugin.ErrPluginNotFound
+		// Invariant: errors.Is(err, plugin.ErrPluginNotFound) still holds — the
+		// sentinel is wrapped, and the ConduitError adds the machine-actionable code.
+		err := conduiterr.Wrap(
+			conduiterr.CodeProcessorPluginNotFound,
+			fmt.Sprintf("builtin processor plugin %q not found", fullName.PluginName()),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "check the plugin name and version"
+		return nil, err
 	}
 	b, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
@@ -198,7 +208,13 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}
-		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
+		err := conduiterr.Wrap(
+			conduiterr.CodeProcessorPluginNotFound,
+			fmt.Sprintf("builtin processor plugin %q not found; available versions: %v", fullName, availableVersions),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "check the plugin version, or omit it to use the latest"
+		return nil, err
 	}
 
 	p := b.constructor(r.logger)
