@@ -40,33 +40,54 @@ func TestPersister_EmptyFlushDoesNothing(t *testing.T) {
 	is.Equal(0, len(got))
 }
 
+// TestPersister_PersistFlushesAfterDelayThreshold verifies the delay-based
+// side of the flush contract described on Persist: a batch is flushed once
+// delayThreshold has elapsed (as long as the bundle-count threshold wasn't
+// hit first). It uses a fakeClock instead of real sleeps so the assertions
+// are exact rather than tolerance-based: advancing by less than the
+// threshold must never flush, and advancing to (or past) the threshold must
+// always flush. This replaces a previous version of the test that measured
+// real wall-clock delay against a fixed tolerance window, which flaked under
+// load when the timer fired later than the tolerance allowed.
 func TestPersister_PersistFlushesAfterDelayThreshold(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	delayThreshold := time.Millisecond * 100
 
 	persister, store := initPersisterTest(delayThreshold, 2)
+	clk := newFakeClock()
+	persister.clock = clk
 
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
-	persistAt := time.Now()
 	err := persister.Persist(ctx, conn, func(err error) {
 		if err != nil {
-			t.Fatalf("expected nil error, got: %v", err)
+			t.Errorf("expected nil error, got: %v", err)
 		}
 		close(callbackCalled)
 	})
 	is.NoErr(err)
 
-	// we are testing a delay which is not exact, this is the acceptable margin
-	maxDelay := delayThreshold + time.Millisecond*10
+	// Advancing by less than the threshold must not schedule a flush.
+	// fakeClock.Advance fires any due timers synchronously before
+	// returning, so this check is deterministic: there is no window in
+	// which the flush could still be "in flight".
+	clk.Advance(delayThreshold - time.Millisecond)
 	select {
 	case <-callbackCalled:
-		if gotDelay := time.Since(persistAt); gotDelay < delayThreshold || gotDelay > maxDelay {
-			t.Fatalf("flush delay should be between %s and %s, actual delay: %s", delayThreshold, maxDelay, gotDelay)
-		}
-	case <-time.After(maxDelay):
-		t.Fatalf("expected callback to be called in a certain time frame")
+		t.Fatal("flush was triggered before the delay threshold elapsed")
+	default:
+	}
+
+	// Advancing past the threshold must trigger the flush. The flush itself
+	// still runs in a background goroutine (flushNow, and the callback
+	// invocation within it), so we wait on the channel rather than asserting
+	// immediately - but with a generous timeout, not a tight tolerance.
+	clk.Advance(time.Millisecond * 2)
+	select {
+	case <-callbackCalled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected callback to be called after the delay threshold elapsed")
 	}
 
 	got, err := store.Get(ctx, conn.ID)
@@ -199,4 +220,99 @@ func initPersisterTest(
 
 	persister := NewPersister(logger, db, delayThreshold, bundleCountThreshold)
 	return persister, NewStore(db, logger)
+}
+
+// fakeClock is a test-only implementation of the connector package's clock
+// interface. It gives tests explicit, synchronous control over time so that
+// delay-threshold behavior (see Persister.Persist) can be asserted exactly
+// instead of within a real-time tolerance window.
+//
+// Advance fires any due timers synchronously, in the calling goroutine,
+// before returning. That means a call to Advance which does not cross a
+// timer's deadline is guaranteed to have triggered no side effects by the
+// time it returns - callers don't need to sleep or poll to check that
+// "nothing happened yet".
+type fakeClock struct {
+	mu     sync.Mutex
+	now    time.Time
+	timers []*fakeTimer
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{now: time.Now()}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) AfterFunc(d time.Duration, f func()) stoppableTimer {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	t := &fakeTimer{fireAt: c.now.Add(d), fn: f}
+	c.timers = append(c.timers, t)
+	return t
+}
+
+// Advance moves the fake clock forward by d and synchronously fires any
+// timers whose deadline is now due, in the order they were scheduled. Firing
+// happens after releasing the clock's internal lock (but before Advance
+// returns), so timer callbacks are free to call back into the clock (e.g.
+// schedule a new AfterFunc) without deadlocking.
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	now := c.now
+
+	remaining := make([]*fakeTimer, 0, len(c.timers))
+	var due []*fakeTimer
+	for _, t := range c.timers {
+		if !t.fireAt.After(now) {
+			due = append(due, t)
+		} else {
+			remaining = append(remaining, t)
+		}
+	}
+	c.timers = remaining
+	c.mu.Unlock()
+
+	for _, t := range due {
+		t.fire()
+	}
+}
+
+// fakeTimer is the fakeClock counterpart to *time.Timer, tracked by the
+// clock so Advance can fire it once its deadline is due.
+type fakeTimer struct {
+	fireAt time.Time
+	fn     func()
+
+	mu      sync.Mutex
+	stopped bool
+	fired   bool
+}
+
+// Stop mirrors *time.Timer.Stop: it returns true if this call is the one
+// that prevents the timer from firing, false if it had already fired or
+// been stopped.
+func (t *fakeTimer) Stop() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	stoppedNow := !t.stopped && !t.fired
+	t.stopped = true
+	return stoppedNow
+}
+
+func (t *fakeTimer) fire() {
+	t.mu.Lock()
+	if t.stopped || t.fired {
+		t.mu.Unlock()
+		return
+	}
+	t.fired = true
+	t.mu.Unlock()
+
+	t.fn()
 }
