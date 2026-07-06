@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/cmd/conduit/root/processorplugins"
 	"github.com/conduitio/conduit/cmd/conduit/root/processors"
+	"github.com/conduitio/conduit/cmd/conduit/root/quickstart"
 	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/conduit/cmd/conduit/root/version"
 	"github.com/conduitio/conduit/pkg/conduit"
@@ -98,6 +99,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&pipelines.PipelinesCommand{},
 		&processors.ProcessorsCommand{},
 		&processorplugins.ProcessorPluginsCommand{},
+		&quickstart.QuickstartCommand{},
 		&version.VersionCommand{},
 		runCmd,
 	}
