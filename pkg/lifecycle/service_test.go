@@ -456,6 +456,83 @@ func TestServiceLifecycle_Stop(t *testing.T) {
 	}
 }
 
+// TestServiceLifecycle_WaitPipeline_AfterCleanup is the deterministic regression
+// test for #2521: WaitPipeline must return the pipeline's terminal error even when
+// called after the pipeline has already removed itself from runningPipelines.
+// Before the fix it returned a false nil there, dropping ErrForceStop — the flake
+// the forceful-stop case hit intermittently. This forces the race window
+// explicitly by waiting for cleanup before calling WaitPipeline, so it fails 100%
+// of the time without the fix.
+func TestServiceLifecycle_WaitPipeline_AfterCleanup(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.Test(t)
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := asserterSource(ctrl, persister, generateRecords(0), nil, false, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, generateRecords(0), 1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		}, ps)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Let the source node finish initializing before force-stopping (matches the
+	// existing forceful case). Force-stopping mid-startup is a separate,
+	// independently-tracked robustness gap and not what this test exercises.
+	time.Sleep(100 * time.Millisecond)
+
+	err = ls.Stop(ctx, pl.ID, true)
+	is.NoErr(err)
+
+	// Deterministically wait until the pipeline has cleaned itself up (removed from
+	// runningPipelines) — this is exactly the window where WaitPipeline used to
+	// return a false nil.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := ls.runningPipelines.Get(pl.ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("pipeline was not cleaned up within timeout")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// WaitPipeline must still surface the force-stop error, not a false nil.
+	err = ls.WaitPipeline(pl.ID)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, pipeline.ErrForceStop))
+	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+}
+
 func TestServiceLifecycle_StopAll(t *testing.T) {
 	type testCase struct {
 		name    string
