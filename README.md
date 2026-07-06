@@ -274,6 +274,27 @@ or run Conduit and navigate to `http://localhost:8080/openapi` to open
 a [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to
 try it out.
 
+## Exit codes
+
+Every `conduit` CLI invocation — one-shot commands (`conduit pipelines list`, ...) and the
+long-running `conduit run` — exits with one of a small set of deterministic codes, so scripts and
+agents can branch on failure kind without parsing error text:
+
+| Code  | Meaning       | Examples                                                                     |
+| ----- | ------------- | ----------------------------------------------------------------------------- |
+| `0`   | Success       | The command succeeded, or `conduit run` shut down gracefully on a single SIGINT/SIGTERM. |
+| `1`   | Runtime error | An internal or unclassified error (a bug, an unexpected failure).           |
+| `2`   | Validation    | The request or config was rejected: invalid argument, not found, already exists, failed precondition. |
+| `3`   | Environment   | A required external dependency is unreachable: the server, the database, a rate limit, or an already-bound listen address. |
+
+`conduit run` treats a **second** SIGINT/SIGTERM (received after the first one has already started
+a graceful shutdown) as a forced kill and exits with the POSIX `128+signum` convention instead
+(`SIGINT` → `130`, `SIGTERM` → `143`) — the same value a shell reports for a process killed by that
+signal, so a forced kill is distinguishable from an ordinary classified exit code.
+
+See [ADR: deterministic CLI exit codes](docs/architecture-decision-records/20260706-deterministic-cli-exit-codes.md)
+for the full mapping and rationale, and `pkg/conduit/exitcode` for the implementation.
+
 ## Documentation
 
 To learn more about how to use Conduit

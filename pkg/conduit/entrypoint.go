@@ -21,12 +21,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-)
-
-const (
-	exitCodeErr       = 1
-	exitCodeInterrupt = 2
 )
 
 // Entrypoint provides methods related to the Conduit entrypoint (parsing
@@ -67,7 +63,8 @@ func (e *Entrypoint) Serve(cfg Config) {
 // Invariant 7: SIGTERM drains in-flight records and checkpoints before exit.
 // * After the first signal the function will continue to listen
 // * On the second signal executes a hard exit, without waiting for a graceful
-// shutdown.
+// shutdown, reporting the POSIX 128+signum exit code for the signal that
+// triggered it (SIGINT -> 130, SIGTERM -> 143) — see hardExitCode.
 func (*Entrypoint) CancelOnInterrupt(ctx context.Context) context.Context {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
@@ -94,8 +91,13 @@ func (*Entrypoint) CancelOnInterrupt(ctx context.Context) context.Context {
 //
 // The returned context is canceled when the first value is received on
 // sigChan. If a second value is received afterwards, exit is called with
-// exitCodeInterrupt, mirroring the hard-exit-on-second-signal behavior
-// documented on CancelOnInterrupt.
+// the POSIX 128+signum code for that second signal (see hardExitCode),
+// mirroring the hard-exit-on-second-signal behavior documented on
+// CancelOnInterrupt. This intentionally does not go through
+// pkg/conduit/exitcode.ExitCode: a forced double-signal kill is not a
+// classified error, and 128+signum is a distinct, well-known convention
+// (matching what a shell reports for a process killed by a signal) that a
+// script can tell apart from an ordinary exit-code bucket.
 //
 // The caller remains responsible for registering sigChan with signal.Notify
 // (and calling signal.Stop when done); this function only consumes the
@@ -110,16 +112,30 @@ func cancelOnSignal(ctx context.Context, sigChan <-chan os.Signal, exit func(int
 			return
 		}
 
-		<-sigChan // second interrupt signal
-		exit(exitCodeInterrupt)
+		sig := <-sigChan // second interrupt signal
+		exit(hardExitCode(sig))
 	}()
 
 	return ctx
 }
 
+// hardExitCode maps a second termination signal to the POSIX 128+signum exit
+// code convention (SIGINT -> 130, SIGTERM -> 143). CancelOnInterrupt only
+// ever registers os.Interrupt and syscall.SIGTERM, and os/signal always
+// delivers a syscall.Signal for those on every platform Conduit builds for,
+// so the fallback below is not expected to trigger in practice; it exists so
+// this function has no unhandled case.
+func hardExitCode(sig os.Signal) int {
+	s, ok := sig.(syscall.Signal)
+	if !ok {
+		return exitcode.Runtime
+	}
+	return 128 + int(s)
+}
+
 func (*Entrypoint) exitWithError(err error) {
 	_, _ = fmt.Fprintf(os.Stderr, "error: %+v\n", err)
-	os.Exit(exitCodeErr)
+	os.Exit(exitcode.ExitCode(err))
 }
 
 func (*Entrypoint) Splash() string {
