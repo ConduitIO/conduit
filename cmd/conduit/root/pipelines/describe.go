@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
+	json "github.com/goccy/go-json"
 )
 
 var (
@@ -44,14 +45,60 @@ type DescribeCommand struct {
 }
 
 // DescribeResult is the result of describing a pipeline: the pipeline plus the
-// processors, connectors, and DLQ needed to render the full detail view. Not a
-// single proto message, so --json renders it via go-json rather than protojson.
+// processors, connectors, and DLQ needed to render the full detail view. It has
+// no single proto message, so it marshals its proto parts via protojson (see
+// MarshalJSON) to keep --json consistent with the single-message commands.
 type DescribeResult struct {
 	Pipeline            *apiv1.Pipeline               `json:"pipeline"`
 	PipelineProcessors  []*apiv1.Processor            `json:"pipelineProcessors"`
 	Connectors          []*apiv1.Connector            `json:"connectors"`
 	ConnectorProcessors map[string][]*apiv1.Processor `json:"connectorProcessors"`
 	Dlq                 *apiv1.Pipeline_DLQ           `json:"dlq"`
+}
+
+// MarshalJSON renders every proto part via protojson so this composite view emits
+// the same JSON shape (enum names, RFC3339 timestamps) as `pipelines list`.
+func (r *DescribeResult) MarshalJSON() ([]byte, error) {
+	pipeline, err := cecdysis.ProtoJSON(r.Pipeline)
+	if err != nil {
+		return nil, err
+	}
+	pipelineProcessors, err := cecdysis.ProtoJSONSlice(r.PipelineProcessors)
+	if err != nil {
+		return nil, err
+	}
+	connectors, err := cecdysis.ProtoJSONSlice(r.Connectors)
+	if err != nil {
+		return nil, err
+	}
+	connectorProcessors := make(map[string][]json.RawMessage, len(r.ConnectorProcessors))
+	for id, procs := range r.ConnectorProcessors {
+		raws, err := cecdysis.ProtoJSONSlice(procs)
+		if err != nil {
+			return nil, err
+		}
+		connectorProcessors[id] = raws
+	}
+
+	// DLQ is optional; emit null rather than an empty object when absent.
+	dlq := json.RawMessage("null")
+	if r.Dlq != nil {
+		if dlq, err = cecdysis.ProtoJSON(r.Dlq); err != nil {
+			return nil, err
+		}
+	}
+
+	out, err := json.Marshal(struct {
+		Pipeline            json.RawMessage              `json:"pipeline"`
+		PipelineProcessors  []json.RawMessage            `json:"pipelineProcessors"`
+		Connectors          []json.RawMessage            `json:"connectors"`
+		ConnectorProcessors map[string][]json.RawMessage `json:"connectorProcessors"`
+		Dlq                 json.RawMessage              `json:"dlq"`
+	}{pipeline, pipelineProcessors, connectors, connectorProcessors, dlq})
+	if err != nil {
+		return nil, cerrors.Errorf("marshal pipeline describe result: %w", err)
+	}
+	return out, nil
 }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {

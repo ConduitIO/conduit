@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
+	json "github.com/goccy/go-json"
 )
 
 var (
@@ -44,11 +45,33 @@ type DescribeCommand struct {
 }
 
 // DescribeResult is the result of describing a connector: the connector plus
-// the processors attached to it. Not a single proto message, so --json renders
-// it via go-json rather than protojson.
+// the processors attached to it. It has no single proto message, so it marshals
+// its proto parts via protojson (see MarshalJSON) to keep --json consistent with
+// the single-message commands.
 type DescribeResult struct {
 	Connector  *apiv1.Connector   `json:"connector"`
 	Processors []*apiv1.Processor `json:"processors"`
+}
+
+// MarshalJSON renders the proto parts via protojson so this composite view emits
+// the same JSON shape (enum names, RFC3339 timestamps) as `connectors list`.
+func (r *DescribeResult) MarshalJSON() ([]byte, error) {
+	connector, err := cecdysis.ProtoJSON(r.Connector)
+	if err != nil {
+		return nil, err
+	}
+	processors, err := cecdysis.ProtoJSONSlice(r.Processors)
+	if err != nil {
+		return nil, err
+	}
+	out, err := json.Marshal(struct {
+		Connector  json.RawMessage   `json:"connector"`
+		Processors []json.RawMessage `json:"processors"`
+	}{connector, processors})
+	if err != nil {
+		return nil, cerrors.Errorf("marshal connector describe result: %w", err)
+	}
+	return out, nil
 }
 
 func (c *DescribeCommand) Usage() string { return "describe CONNECTOR_ID" }
