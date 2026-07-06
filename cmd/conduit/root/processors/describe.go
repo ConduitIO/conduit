@@ -15,6 +15,7 @@
 package processors
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -28,11 +29,10 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithArgs                     = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -40,12 +40,7 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args   DescribeArgs
-	output ecdysis.Output
-}
-
-func (c *DescribeCommand) Output(output ecdysis.Output) {
-	c.output = output
+	args DescribeArgs
 }
 
 func (c *DescribeCommand) Usage() string { return "describe PROCESSOR_ID" }
@@ -75,16 +70,32 @@ func (c *DescribeCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *DescribeCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	resp, err := client.ProcessorServiceClient.GetProcessor(ctx, &apiv1.GetProcessorRequest{
 		Id: c.args.ProcessorID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to get processor: %w", err)
+		return nil, cerrors.Errorf("failed to get processor: %w", err)
 	}
 
-	displayProcessor(c.output, resp.Processor)
-	return nil
+	return resp.Processor, nil
+}
+
+// Render returns the human-readable detail view. The framework renders --json
+// itself (protojson over the returned response).
+func (c *DescribeCommand) Render(result any) string {
+	p, ok := result.(*apiv1.Processor)
+	if !ok {
+		return ""
+	}
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	displayProcessor(out, p)
+
+	return buf.String()
 }
 
 func displayProcessor(out ecdysis.Output, p *apiv1.Processor) {

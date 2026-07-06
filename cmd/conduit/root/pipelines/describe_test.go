@@ -15,11 +15,9 @@
 package pipelines
 
 import (
-	"bytes"
 	"context"
 	"testing"
 
-	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 
@@ -67,15 +65,10 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 func TestDescribeCommandExecuteWithClient(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
 	cmd := &DescribeCommand{args: DescribeArgs{PipelineID: "1"}}
-	cmd.Output(out)
 
 	mockPipelineService := mock.NewMockPipelineService(ctrl)
 	mockProcessorService := mock.NewMockProcessorService(ctrl)
@@ -134,10 +127,10 @@ func TestDescribeCommandExecuteWithClient(t *testing.T) {
 		ConnectorServiceClient: mockConnectorService,
 	}
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"ID: 1\n"+

@@ -15,6 +15,7 @@
 package processorplugins
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -28,11 +29,10 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithArgs                     = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -40,12 +40,7 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args   DescribeArgs
-	output ecdysis.Output
-}
-
-func (c *DescribeCommand) Output(output ecdysis.Output) {
-	c.output = output
+	args DescribeArgs
 }
 
 func (c *DescribeCommand) Usage() string { return "describe PROCESSOR_PLUGIN_ID" }
@@ -75,21 +70,36 @@ func (c *DescribeCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *DescribeCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	resp, err := client.ProcessorServiceClient.ListProcessorPlugins(ctx, &apiv1.ListProcessorPluginsRequest{
 		Name: c.args.processorPluginID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to get processor plugin: %w", err)
+		return nil, cerrors.Errorf("failed to get processor plugin: %w", err)
 	}
 
 	if len(resp.Plugins) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	displayConnectorPluginsDescription(c.output, resp.Plugins[0])
+	return resp.Plugins[0], nil
+}
 
-	return nil
+// Render returns the human-readable detail view. The framework renders --json
+// itself (protojson over the returned response).
+func (c *DescribeCommand) Render(result any) string {
+	p, ok := result.(*apiv1.ProcessorPluginSpecifications)
+	if !ok {
+		return ""
+	}
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	displayConnectorPluginsDescription(out, p)
+
+	return buf.String()
 }
 
 func displayConnectorPluginsDescription(out ecdysis.Output, p *apiv1.ProcessorPluginSpecifications) {

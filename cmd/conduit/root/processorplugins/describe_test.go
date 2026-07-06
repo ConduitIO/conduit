@@ -15,7 +15,6 @@
 package processorplugins
 
 import (
-	"bytes"
 	"context"
 	"testing"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
-	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -67,15 +65,10 @@ func TestDescribeExecutionCorrectArgs(t *testing.T) {
 func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 	is := is.New(t)
 
-	buf := new(bytes.Buffer)
-	out := &ecdysis.DefaultOutput{}
-	out.Output(buf, nil)
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
 	cmd := &DescribeCommand{args: DescribeArgs{processorPluginID: "builtin:base64.encode@v0.1.0"}}
-	cmd.Output(out)
 
 	mockProcessorService := mock.NewMockProcessorService(ctrl)
 
@@ -111,10 +104,10 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 		ProcessorServiceClient: mockProcessorService,
 	}
 
-	err := cmd.ExecuteWithClient(ctx, client)
+	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
 
-	output := buf.String()
+	output := cmd.Render(result)
 
 	is.Equal(output, ""+
 		"Name: builtin:base64.encode@v0.1.0\n"+

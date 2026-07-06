@@ -15,6 +15,7 @@
 package connectors
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -28,11 +29,10 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
-	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClientResult = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithAliases                  = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithDocs                     = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithArgs                     = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -40,12 +40,15 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args   DescribeArgs
-	output ecdysis.Output
+	args DescribeArgs
 }
 
-func (c *DescribeCommand) Output(output ecdysis.Output) {
-	c.output = output
+// DescribeResult is the result of describing a connector: the connector plus
+// the processors attached to it. Not a single proto message, so --json renders
+// it via go-json rather than protojson.
+type DescribeResult struct {
+	Connector  *apiv1.Connector   `json:"connector"`
+	Processors []*apiv1.Processor `json:"processors"`
 }
 
 func (c *DescribeCommand) Usage() string { return "describe CONNECTOR_ID" }
@@ -75,12 +78,12 @@ func (c *DescribeCommand) Args(args []string) error {
 	return nil
 }
 
-func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+func (c *DescribeCommand) ExecuteWithClientResult(ctx context.Context, client *api.Client) (any, error) {
 	resp, err := client.ConnectorServiceClient.GetConnector(ctx, &apiv1.GetConnectorRequest{
 		Id: c.args.ConnectorID,
 	})
 	if err != nil {
-		return cerrors.Errorf("failed to get connector: %w", err)
+		return nil, cerrors.Errorf("failed to get connector: %w", err)
 	}
 
 	var processors []*apiv1.Processor
@@ -90,14 +93,28 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			Id: processorID,
 		})
 		if err != nil {
-			return cerrors.Errorf("failed to get processor: %w", err)
+			return nil, cerrors.Errorf("failed to get processor: %w", err)
 		}
 		processors = append(processors, processor.Processor)
 	}
 
-	displayConnector(c.output, resp.Connector, processors)
+	return &DescribeResult{Connector: resp.Connector, Processors: processors}, nil
+}
 
-	return nil
+// Render returns the human-readable detail view.
+func (c *DescribeCommand) Render(result any) string {
+	res, ok := result.(*DescribeResult)
+	if !ok {
+		return ""
+	}
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	displayConnector(out, res.Connector, res.Processors)
+
+	return buf.String()
 }
 
 func displayConnector(out ecdysis.Output, connector *apiv1.Connector, processors []*apiv1.Processor) {
