@@ -4,10 +4,10 @@
 
 `TestServiceLifecycle_Stop/user_stop:_forceful` flakes on CI. An earlier draft of
 this doc blamed a tomb death-reason race; **independent review disproved that** by
-empirical repro (the terminal *status* is always correct; only the returned error
+empirical repro (the terminal _status_ is always correct; only the returned error
 is wrong). The real defect is a **time-of-check/time-of-use race in
 `Service.WaitPipeline`**: it looks the pipeline up in `runningPipelines` by ID
-*after* the pipeline's own cleanup goroutine may have already removed it, and in
+_after_ the pipeline's own cleanup goroutine may have already removed it, and in
 that case returns a false `nil` — losing the terminal error (`ErrForceStop`). This
 is a shipped-code bug in `pkg/lifecycle/service.go` (Tier 1), not a test artifact.
 This doc proposes a bounded, minimal product fix plus the test hygiene, and calls
@@ -18,7 +18,7 @@ out the sibling `waitInternal`/`StopAll` path.
 `go test ./pkg/lifecycle/ -run '^TestServiceLifecycle_Stop$' -race -count=550`
 produced 5 failures, every one identical:
 
-```
+```text
 service_test.go:448: not true: err != nil     # WaitPipeline returned nil
 ```
 
@@ -56,7 +56,7 @@ the same microsecond window as the test goroutine resuming from `Stop()` to call
 teardown fast enough to lose the race often; the bug is the lookup-after-delete,
 not the record count.
 
-Once `WaitPipeline`'s `Get` *succeeds* (B), it is safe: `Delete` only removes the
+Once `WaitPipeline`'s `Get` _succeeds_ (B), it is safe: `Delete` only removes the
 map entry, not the `runnablePipeline`; `tomb.Wait()` on the retained handle returns
 the death reason even after the tomb is dead. The entire defect is the missed
 lookup at (A)/(C).
@@ -127,12 +127,14 @@ error from a `Degraded` state.
 
 ## Decision
 
-Adopt **Option A**. Alongside it, apply the test hygiene from the original draft —
-replace the forceful case's `time.Sleep(100ms)` with a bounded "pipeline is
-`Running`" poll and let the source stay parked until force-stopped — because it
-makes the test assert the intended *running-pipeline* scenario. But the hygiene is
-secondary; **Option A is the fix**, and acceptance must be measured on the combined
-change.
+Adopt **Option A**. The added regression test
+(`TestServiceLifecycle_WaitPipeline_AfterCleanup`) forces the exact cleanup-race
+window deterministically (wait for removal from `runningPipelines`, then
+`WaitPipeline`) and asserts `ErrForceStop`. Note: a poll-on-`StatusRunning` is
+_not_ a sufficient startup barrier here — `connectorCtxCancel` is set inside the
+source node's `Run` goroutine independently of the status flip, so the test retains
+a short startup settle before force-stopping. Force-stopping mid-startup is a
+separate nil-panic robustness gap (filed #2539) and is intentionally out of scope.
 
 ## Failure modes
 
@@ -151,7 +153,7 @@ change.
 - **Sibling path — `Wait(timeout)`/`waitInternal` uses `runningPipelines.Copy()`
   then waits** (service.go ~L338-372); a fast-finishing pipeline can vanish from
   the copy before being waited on. Lower severity (omitting an already-finished
-  pipeline from an *aggregate* wait is closer to correct), but it is the real
+  pipeline from an _aggregate_ wait is closer to correct), but it is the real
   SIGTERM/`StopAll` shutdown path (`pkg/conduit/runtime.go`,
   `20260704-graceful-shutdown-sigterm.md`). **In scope to audit**; fix or
   explicitly justify-as-safe in the same PR.
@@ -178,7 +180,7 @@ error" — strictly more correct. Rollback is reverting the diff.
 
 - #2521 — the flaky test (fixed by this once the product bug is fixed).
 - New issue (to file) — the `WaitPipeline` false-success product bug; distinct
-  from #1659 (which concerns *which* error surfaces when two nodes race), this is
+  from #1659 (which concerns _which_ error surfaces when two nodes race), this is
   the wait API dropping the error entirely.
 - #2534 — CI flakiness tracking; this clears the last blocking-suite offender.
 - `20260704-graceful-shutdown-sigterm.md` — the `StopAll`/`Wait` shutdown path the
