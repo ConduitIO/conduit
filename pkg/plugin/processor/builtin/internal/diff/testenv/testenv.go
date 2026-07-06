@@ -166,9 +166,24 @@ func allowMissingTool(tool string) bool {
 			return true
 		}
 	case "diff":
-		if os.Getenv("GO_BUILDER_NAME") != "" {
-			return true
-		}
+		// Issue #2534: this package is vendored from the Go project's
+		// internal testenv, where a missing/non-GNU "diff" is only
+		// tolerated on known builders (GO_BUILDER_NAME) or when running as
+		// a dependency (packageMainIsDevel() == false). Conduit has neither
+		// concept: it isn't a Go-toolchain builder, and TestVerifyUnified
+		// runs the module directly (packageMainIsDevel() == true) in every
+		// environment that matters (local dev, CI). That combination made
+		// this test-environment fall through to a hard t.Fatalf instead of
+		// a skip on any host lacking GNU diffutils - e.g. macOS, whose
+		// system "diff" is BSD-based and doesn't support "-version" the
+		// same way, causing a deterministic failure independent of test
+		// order/shuffle. The GNU diff comparison here is an optional
+		// cross-check against a real external tool, not a requirement for
+		// the diff algorithm's correctness (which is asserted elsewhere
+		// without external tools), so always allow skipping when it's
+		// unavailable rather than making the pass/fail outcome depend on
+		// unrelated build metadata.
+		return true
 	case "patch":
 		if os.Getenv("GO_BUILDER_NAME") != "" {
 			return true

@@ -31,7 +31,11 @@ import (
 )
 
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
+	// Issue #2534: use an OS-assigned port (0) instead of a hardcoded one to
+	// avoid flakes when the port is already in use. The port/URL is not
+	// captured in the generated example spec (pkg/plugin/processor/builtin/internal/exampleutil/specs),
+	// only Summary/Description/Config/Have/Want are, so this is safe to change.
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 0)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
@@ -115,7 +119,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 }
 
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 0)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
