@@ -39,14 +39,48 @@ type Persister struct {
 	delayThreshold       time.Duration
 	bundleCountThreshold int
 
+	// clock abstracts time so tests can control the passage of time
+	// deterministically instead of relying on real sleeps and timing
+	// tolerances. NewPersister sets this to a realClock; tests in this
+	// package may swap it for a fakeClock before exercising delay-based
+	// behavior.
+	clock clock
+
 	connWg sync.WaitGroup
 
 	// m guards all private variables below it.
 	m           sync.Mutex
 	bundleCount int
 	batch       map[string]persistData
-	flushTimer  *time.Timer
+	flushTimer  stoppableTimer
 	flushWg     sync.WaitGroup
+}
+
+// clock abstracts the two time operations the persister needs in order to
+// debounce flushes: reading the current time and scheduling a callback after
+// a delay. It exists purely to make the delay-threshold behavior
+// deterministically testable; NewPersister always wires up a realClock.
+type clock interface {
+	Now() time.Time
+	AfterFunc(d time.Duration, f func()) stoppableTimer
+}
+
+// stoppableTimer is the subset of *time.Timer's API the persister relies on.
+type stoppableTimer interface {
+	// Stop prevents the timer from firing, matching the semantics of
+	// *time.Timer.Stop: it returns true if the call stops the timer, false
+	// if the timer has already expired or been stopped.
+	Stop() bool
+}
+
+// realClock is the production clock implementation, backed directly by the
+// time package.
+type realClock struct{}
+
+func (realClock) Now() time.Time { return time.Now() }
+
+func (realClock) AfterFunc(d time.Duration, f func()) stoppableTimer {
+	return time.AfterFunc(d, f)
 }
 
 // PersistCallback is a function that's called when a connector is persisted.
@@ -73,6 +107,8 @@ func NewPersister(
 
 		delayThreshold:       delayThreshold,
 		bundleCountThreshold: bundleCountThreshold,
+
+		clock: realClock{},
 	}
 }
 
@@ -126,7 +162,7 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, callback Persis
 	}
 
 	if p.flushTimer == nil {
-		p.flushTimer = time.AfterFunc(p.delayThreshold, func() {
+		p.flushTimer = p.clock.AfterFunc(p.delayThreshold, func() {
 			p.Flush(context.Background()) // use a new context because action happens in background
 		})
 	}
@@ -173,7 +209,7 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 // flushNow will flush the state to the store.
 func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) {
 	defer p.flushWg.Done()
-	start := time.Now()
+	start := p.clock.Now()
 
 	tx, ctx, err := p.db.NewTransaction(ctx, true)
 	if err != nil {
@@ -202,6 +238,6 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) 
 	p.logger.Debug(ctx).
 		Err(err).
 		Int("count", len(batch)).
-		Dur(log.DurationField, time.Since(start)).
+		Dur(log.DurationField, p.clock.Now().Sub(start)).
 		Msg("persisted connectors")
 }
