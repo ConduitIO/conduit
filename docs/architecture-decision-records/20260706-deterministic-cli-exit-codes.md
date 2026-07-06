@@ -99,7 +99,7 @@ value cases, each via a new `conduiterr.CodeUnavailable` (`common.unavailable`, 
 - **Bind-in-use**: `pkg/conduit/runtime.go` `serveGRPC`/`serveHTTP` — `net.ListenConfig.Listen`
   failing because the configured address is already bound.
 - **Database unreachable**: `pkg/conduit/runtime.go` `NewRuntime` — `badger.New`/`postgres.New`/
-  `sqlite.New` failing to open/dial the configured database. (An *invalid* DB type, a
+  `sqlite.New` failing to open/dial the configured database. (An _invalid_ DB type, a
   config/validation problem, is deliberately **not** tagged Unavailable — it returns directly as
   a plain error, unchanged from before this PR, so it still exits `1`, matching prior behavior.)
 
