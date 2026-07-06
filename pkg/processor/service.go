@@ -18,11 +18,13 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
@@ -86,7 +88,15 @@ func (s *Service) List(_ context.Context) map[string]*Instance {
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.instances[id]
 	if !ok {
-		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
+		// Invariant: errors.Is(err, ErrInstanceNotFound) still holds — the sentinel
+		// is wrapped, and the ConduitError adds the machine-actionable code.
+		err := conduiterr.Wrap(
+			CodeProcessorNotFound,
+			fmt.Sprintf("processor %q not found", id),
+			ErrInstanceNotFound,
+		)
+		err.Suggestion = "check the processor ID in your pipeline configuration"
+		return nil, err
 	}
 	return ins, nil
 }

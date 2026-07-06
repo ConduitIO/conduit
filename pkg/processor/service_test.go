@@ -23,6 +23,7 @@ import (
 	dbmock "github.com/conduitio/conduit-commons/database/mock"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
@@ -328,7 +329,11 @@ func TestService_Get_Fail(t *testing.T) {
 	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	got, err := service.Get(ctx, "non-existent processor")
-	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
+	is.True(cerrors.Is(err, ErrInstanceNotFound)) // sentinel still in the chain
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // now also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodeProcessorNotFound.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 	is.Equal(got, nil)
 }
 

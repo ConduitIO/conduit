@@ -104,6 +104,9 @@ var (
 	// CodeConnectorPluginNotFound is raised when a referenced connector plugin
 	// cannot be located.
 	CodeConnectorPluginNotFound = Register("connector.plugin_not_found", codes.NotFound)
+	// CodeProcessorPluginNotFound is raised when a referenced processor plugin
+	// cannot be located.
+	CodeProcessorPluginNotFound = Register("processor.plugin_not_found", codes.NotFound)
 )
 
 // Fix is a structured, machine-appliable change that resolves an error. The same

@@ -16,6 +16,7 @@ package standalone
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
@@ -195,7 +197,15 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, plugin.ErrPluginNotFound
+		// Invariant: errors.Is(err, plugin.ErrPluginNotFound) still holds — the
+		// sentinel is wrapped, and the ConduitError adds the machine-actionable code.
+		err := conduiterr.Wrap(
+			conduiterr.CodeConnectorPluginNotFound,
+			fmt.Sprintf("standalone connector plugin %q not found", fullName.PluginName()),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "check the plugin name and version"
+		return nil, err
 	}
 	bp, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
@@ -203,7 +213,13 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}
-		return nil, cerrors.Errorf("could not find standalone connector plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+		err := conduiterr.Wrap(
+			conduiterr.CodeConnectorPluginNotFound,
+			fmt.Sprintf("standalone connector plugin %q not found; available versions: %v", fullName.PluginName(), availableVersions),
+			plugin.ErrPluginNotFound,
+		)
+		err.Suggestion = "check the plugin version, or omit it to use the latest"
+		return nil, err
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
