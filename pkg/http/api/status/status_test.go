@@ -29,35 +29,66 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+// reasonOf extracts the google.rpc.ErrorInfo reason from a gRPC status error,
+// or "" if none is present. Tests use this instead of comparing errors
+// directly now that every boundary function attaches a detail (see D1, the
+// CodeUnknown fallback wiring): two grpcstatus.Error values built the same way
+// compare equal, but a status with a details slice does not compare equal via
+// is.Equal, so assertions here check the pieces (code, message, reason)
+// instead of the whole error value.
+func reasonOf(t *testing.T, err error) string {
+	t.Helper()
+	st, ok := grpcstatus.FromError(err)
+	if !ok {
+		return ""
+	}
+	for _, d := range st.Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok {
+			return info.GetReason()
+		}
+	}
+	return ""
+}
+
 func TestPipelineError(t *testing.T) {
 	type args struct {
 		err error
 	}
 	tests := []struct {
-		name string
-		args args
-		want error
+		name     string
+		args     args
+		wantMsg  string
+		wantCode codes.Code
 	}{
 		{
 			name: "pipeline name error returns invalid argument grpc error",
 			args: args{
 				err: pipeline.ErrNameMissing,
 			},
-			want: grpcstatus.Error(codes.InvalidArgument, pipeline.ErrNameMissing.Error()),
+			wantMsg:  pipeline.ErrNameMissing.Error(),
+			wantCode: codes.InvalidArgument,
 		},
 		{
 			name: "pipeline not found error returns not found grpc error",
 			args: args{
 				err: pipeline.ErrInstanceNotFound,
 			},
-			want: grpcstatus.Error(codes.NotFound, pipeline.ErrInstanceNotFound.Error()),
+			wantMsg:  pipeline.ErrInstanceNotFound.Error(),
+			wantCode: codes.NotFound,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			is.Equal(tt.want, PipelineError(tt.args.err))
+			got := PipelineError(tt.args.err)
+			st, ok := grpcstatus.FromError(got)
+			is.True(ok)
+			is.Equal(st.Code(), tt.wantCode)
+			is.Equal(st.Message(), tt.wantMsg)
+			// D1: the fallback always attaches an ErrorInfo detail, even though
+			// these bare sentinels have not been migrated to a registered Code yet.
+			is.Equal(reasonOf(t, got), conduiterr.CodeUnknown.Reason())
 		})
 	}
 }
@@ -67,30 +98,38 @@ func TestConnectorError(t *testing.T) {
 		err error
 	}
 	tests := []struct {
-		name string
-		args args
-		want error
+		name     string
+		args     args
+		wantMsg  string
+		wantCode codes.Code
 	}{
 		{
 			name: "invalid connector type returns invalid argument grpc error",
 			args: args{
 				err: connector.ErrInvalidConnectorType,
 			},
-			want: grpcstatus.Error(codes.InvalidArgument, connector.ErrInvalidConnectorType.Error()),
+			wantMsg:  connector.ErrInvalidConnectorType.Error(),
+			wantCode: codes.InvalidArgument,
 		},
 		{
 			name: "connector not found error returns not found grpc error",
 			args: args{
 				err: connector.ErrInstanceNotFound,
 			},
-			want: grpcstatus.Error(codes.NotFound, connector.ErrInstanceNotFound.Error()),
+			wantMsg:  connector.ErrInstanceNotFound.Error(),
+			wantCode: codes.NotFound,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			is.Equal(tt.want, ConnectorError(tt.args.err))
+			got := ConnectorError(tt.args.err)
+			st, ok := grpcstatus.FromError(got)
+			is.True(ok)
+			is.Equal(st.Code(), tt.wantCode)
+			is.Equal(st.Message(), tt.wantMsg)
+			is.Equal(reasonOf(t, got), conduiterr.CodeUnknown.Reason())
 		})
 	}
 }
@@ -100,30 +139,38 @@ func TestProcessorError(t *testing.T) {
 		err error
 	}
 	tests := []struct {
-		name string
-		args args
-		want error
+		name     string
+		args     args
+		wantMsg  string
+		wantCode codes.Code
 	}{
 		{
 			name: "invalid processor parent type returns invalid argument grpc error",
 			args: args{
 				err: orchestrator.ErrInvalidProcessorParentType,
 			},
-			want: grpcstatus.Error(codes.InvalidArgument, orchestrator.ErrInvalidProcessorParentType.Error()),
+			wantMsg:  orchestrator.ErrInvalidProcessorParentType.Error(),
+			wantCode: codes.InvalidArgument,
 		},
 		{
 			name: "processor not found error returns not found grpc error",
 			args: args{
 				err: processor.ErrInstanceNotFound,
 			},
-			want: grpcstatus.Error(codes.NotFound, processor.ErrInstanceNotFound.Error()),
+			wantMsg:  processor.ErrInstanceNotFound.Error(),
+			wantCode: codes.NotFound,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			is.Equal(tt.want, ProcessorError(tt.args.err))
+			got := ProcessorError(tt.args.err)
+			st, ok := grpcstatus.FromError(got)
+			is.True(ok)
+			is.Equal(st.Code(), tt.wantCode)
+			is.Equal(st.Message(), tt.wantMsg)
+			is.Equal(reasonOf(t, got), conduiterr.CodeUnknown.Reason())
 		})
 	}
 }
@@ -160,11 +207,19 @@ func TestConduitErrorFlowsThroughBoundary(t *testing.T) {
 }
 
 // TestNonConduitErrorUnchanged confirms the wiring is additive: a plain sentinel
-// error still maps exactly as before, with no detail.
+// error still maps to the same category and message as before ConduitError
+// existed. It now also carries an ErrorInfo detail (the D1 fallback wiring),
+// which is the one deliberate, backward-compatible change: previously this
+// path returned a codeless status.
 func TestNonConduitErrorUnchanged(t *testing.T) {
 	is := is.New(t)
 	got := PipelineError(pipeline.ErrInstanceNotFound)
-	is.Equal(grpcstatus.Error(codes.NotFound, pipeline.ErrInstanceNotFound.Error()), got)
+
+	st, ok := grpcstatus.FromError(got)
+	is.True(ok)
+	is.Equal(st.Code(), codes.NotFound)
+	is.Equal(st.Message(), pipeline.ErrInstanceNotFound.Error())
+	is.Equal(reasonOf(t, got), conduiterr.CodeUnknown.Reason())
 }
 
 func TestCodeFromError(t *testing.T) {

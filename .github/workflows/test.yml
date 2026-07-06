@@ -30,6 +30,19 @@ jobs:
         # both are now hermetic and this can gate merges.
         run: make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"
 
+      - name: Error-code guard (execution plan §1.1)
+        # The codes_contract_test.go / registry-invariants tests already run
+        # as part of `go test ./...` above, so this step is redundant with the
+        # Test step above by design - it's a second, narrowly-scoped run so a
+        # codeless user-facing error (an API status with no
+        # google.rpc.ErrorInfo detail, or a class that silently degrades to
+        # conduiterr.CodeUnknown) shows up as its own named, unmissable CI
+        # check, the same way build-cross and docker-build below exist so a
+        # cross-compile or image regression doesn't hide inside the general
+        # test job. Without it, a codeless error would otherwise surface only
+        # in production, on the wire, to a user or agent.
+        run: go test ./pkg/http/api/status/... -run 'Codes|Registry' -v -race
+
   build-cross:
     # Cross-compile for the 32-bit release target. Regular CI only builds on
     # 64-bit, so a dependency that fails to compile on 32-bit (e.g. one using

@@ -23,7 +23,6 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 // conduitErrorStatus returns the structured gRPC status for a ConduitError in err's
@@ -37,6 +36,23 @@ func conduitErrorStatus(err error) (error, bool) {
 		return conduiterr.ToStatus(ce).Err(), true
 	}
 	return nil, false
+}
+
+// fallbackStatus is the sink for every one of this package's four boundary
+// functions once conduitErrorStatus finds no *ConduitError in err's chain. It
+// guarantees the wire is never codeless: category is whatever the caller's
+// legacy cerrors.Is matching already determined (preserved unchanged, so this
+// is purely additive), and reason is conduiterr.CodeUnknown's
+// ("internal.unknown") until the corresponding sentinel is migrated to a
+// registered Code at its origination site (see conduiterr.WithUnknownReason).
+//
+// Before this existed, this path returned a bare grpcstatus.Error with no
+// google.rpc.ErrorInfo detail at all — a codeless status that only an
+// end-to-end production trip through the API would reveal, not a unit test.
+// The codes_contract_test.go guard (execution plan §1.1) now fails the build
+// instead.
+func fallbackStatus(category codes.Code, err error) error {
+	return conduiterr.ToStatus(conduiterr.WithUnknownReason(err, category)).Err()
 }
 
 func PipelineError(err error) error {
@@ -55,7 +71,7 @@ func PipelineError(err error) error {
 		code = codeFromError(err)
 	}
 
-	return grpcstatus.Error(code, err.Error())
+	return fallbackStatus(code, err)
 }
 
 func ConnectorError(err error) error {
@@ -74,7 +90,7 @@ func ConnectorError(err error) error {
 		code = codeFromError(err)
 	}
 
-	return grpcstatus.Error(code, err.Error())
+	return fallbackStatus(code, err)
 }
 
 func ProcessorError(err error) error {
@@ -93,14 +109,14 @@ func ProcessorError(err error) error {
 		code = codeFromError(err)
 	}
 
-	return grpcstatus.Error(code, err.Error())
+	return fallbackStatus(code, err)
 }
 
 func PluginError(err error) error {
 	if s, ok := conduitErrorStatus(err); ok {
 		return s
 	}
-	return grpcstatus.Error(codeFromError(err), err.Error())
+	return fallbackStatus(codeFromError(err), err)
 }
 
 func codeFromError(err error) codes.Code {
