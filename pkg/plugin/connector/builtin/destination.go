@@ -57,7 +57,11 @@ func (d *destinationPluginAdapter) withLogger(ctx context.Context) context.Conte
 }
 
 func (d *destinationPluginAdapter) Configure(ctx context.Context, in pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling Configure")
+	// in.Config routinely carries secrets (DB urls with embedded passwords,
+	// SASL credentials, access keys). There is no per-parameter sensitivity
+	// metadata yet, so log.RedactAll redacts every value - see
+	// pkg/foundation/log/redact.go.
+	d.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling Configure") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
 	out, err := runSandbox(d.impl.Configure, d.withLogger(ctx), in.Clone(), d.logger, "Configure")
 	return out.Clone(), err
 }
@@ -108,19 +112,25 @@ func (d *destinationPluginAdapter) Teardown(ctx context.Context, in pconnector.D
 }
 
 func (d *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, in pconnector.DestinationLifecycleOnCreatedRequest) (pconnector.DestinationLifecycleOnCreatedResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnCreated")
+	// See the redaction note in Configure above.
+	d.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling LifecycleOnCreated") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
 	out, err := runSandbox(d.impl.LifecycleOnCreated, d.withLogger(ctx), in.Clone(), d.logger, "LifecycleOnCreated")
 	return out.Clone(), err
 }
 
 func (d *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, in pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnUpdated")
+	// See the redaction note in Configure above.
+	d.logger.Debug(ctx).
+		Any("configBefore", log.RedactAll(in.ConfigBefore)). //nolint:forbidigo // in.ConfigBefore is wrapped in log.RedactAll before logging
+		Any("configAfter", log.RedactAll(in.ConfigAfter)).   //nolint:forbidigo // in.ConfigAfter is wrapped in log.RedactAll before logging
+		Msg("calling LifecycleOnUpdated")
 	out, err := runSandbox(d.impl.LifecycleOnUpdated, d.withLogger(ctx), in.Clone(), d.logger, "LifecycleOnUpdated")
 	return out.Clone(), err
 }
 
 func (d *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, in pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnDeleted")
+	// See the redaction note in Configure above.
+	d.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling LifecycleOnDeleted") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
 	out, err := runSandbox(d.impl.LifecycleOnDeleted, d.withLogger(ctx), in.Clone(), d.logger, "LifecycleOnDeleted")
 	return out.Clone(), err
 }

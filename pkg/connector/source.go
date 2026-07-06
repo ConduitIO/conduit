@@ -374,9 +374,13 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 
 	// default should never happen
 	default:
+		// oldConfig/newConfig are connector settings and routinely carry
+		// secrets (DB urls with embedded passwords, SASL credentials, access
+		// keys). log.RedactAll redacts every value until per-parameter
+		// sensitivity metadata exists - see pkg/foundation/log/redact.go.
 		s.Instance.logger.Warn(ctx).
-			Any("oldConfig", oldConfig).
-			Any("newConfig", newConfig).
+			Any("oldConfig", log.RedactAll(oldConfig)).
+			Any("newConfig", log.RedactAll(newConfig)).
 			Msg("unexpected combination of old and new config")
 		// don't return an error when no event was triggered, strictly speaking
 		// the action did not fail

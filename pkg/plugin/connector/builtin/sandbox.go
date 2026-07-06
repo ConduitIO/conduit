@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -86,8 +87,11 @@ func returnResponse(ctx context.Context, res any, err error, c chan<- any, logge
 	select {
 	case <-ctx.Done():
 		// The context was cancelled, nobody will fetch the result.
+		// res is a pconnector response (e.g. SourceConfigureResponse) and, for
+		// some plugin calls, can echo back config values - log its type only,
+		// never its content. See pkg/foundation/log/redact.go.
 		logger.Error(ctx).
-			Any("response", res).
+			Str("response_type", fmt.Sprintf("%T", res)).
 			Err(err).
 			Msg("context cancelled when trying to return response from builtin connector plugin (this message comes from a detached plugin)")
 	case c <- res:

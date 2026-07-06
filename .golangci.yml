@@ -47,6 +47,11 @@ linters:
             - pkg: encoding/json
               desc: github.com/goccy/go-json is preferred for performance reasons.
     forbidigo:
+      # Needed for the pconnector.*Request field-access pattern below: without
+      # analyze-types, forbidigo only has literal source text to match against,
+      # and cannot tell a `config.Config`-typed selector from any other `.Config`
+      # access.
+      analyze-types: true
       forbid:
         # conduiterr#2526 follow-up: construction must go through New/Wrap (or the
         # WithCode escape hatch), which guarantee a stack frame and a validated,
@@ -83,6 +88,43 @@ linters:
           msg: build gRPC statuses via pkg/http/api/status (PipelineError/ConnectorError/ProcessorError/PluginError), not a raw grpcstatus.Error(f) call - see status.go's fallbackStatus.
         - pattern: '^status\.Error(f)?$'
           msg: build gRPC statuses via pkg/http/api/status (PipelineError/ConnectorError/ProcessorError/PluginError), not a raw status.Error(f) call - see status.go's fallbackStatus.
+        # v0.16.1 secrets-redaction follow-up (execution plan §1.1): connector
+        # config.Config routinely carries secrets (DB urls with embedded
+        # passwords, SASL credentials, access keys) and there is no
+        # per-parameter sensitivity metadata yet, so it must never be logged
+        # raw - see pkg/foundation/log/redact.go.
+        #
+        # This pattern only catches a direct `.Config`/`.ConfigBefore`/
+        # `.ConfigAfter` field read on one of the 8 pconnector request types
+        # that carry connector settings (verified empirically: with
+        # analyze-types on, forbidigo expands a field-selector expression like
+        # `in.Config` to "pconnector.SourceConfigureRequest.Config", but a
+        # composite literal key such as `pconnector.SourceConfigureRequest{Config:
+        # cfg}` expands to just "pconnector.Config" - so building the real
+        # request to send to a plugin does not trip this rule, only reading the
+        # field back out, e.g. to log it, does). Wrapping the value in
+        # log.RedactAll(...) still trips it, since forbidigo has no way to see
+        # the wrapping call - those (currently 10, all in
+        # pkg/plugin/connector/builtin/{source,destination}.go) need a
+        # `//nolint:forbidigo` with that justification.
+        #
+        # Known gap, documented rather than silently accepted: this does NOT
+        # cover pkg/connector/{source,destination}.go's
+        # `oldConfig`/`newConfig map[string]string` (bare locals, not a
+        # selector on a named type - forbidigo has no type info for them) or
+        # sandbox.go's generic `res any` echoed on a cancelled context (same
+        # reason, plus `res`/`oldConfig`/`newConfig` are reused throughout
+        # their functions for legitimate, unrelated purposes, so a name-based
+        # rule there would be all noise). sandbox.go's site has a dedicated
+        # regression test (pkg/plugin/connector/builtin/redact_test.go); the
+        # pkg/connector default branch is unreachable today (isEqual(nil, nil)
+        # returns early before the switch, per its own "should never happen"
+        # comment) and is fixed defensively, sharing the same RedactAll
+        # covered by pkg/foundation/log's tests, but has no dedicated
+        # reachability test since there is no live path to drive.
+        - pattern: '^pconnector\.(Source|Destination)(Configure|LifecycleOnCreated|LifecycleOnUpdated|LifecycleOnDeleted)Request\.(Config|ConfigBefore|ConfigAfter)$'
+          pkg: '^github\.com/conduitio/conduit-connector-protocol/pconnector$'
+          msg: never log a raw pconnector request Config/ConfigBefore/ConfigAfter field - wrap it in log.RedactAll(...) (pkg/foundation/log/redact.go) and silence this line with a `//nolint:forbidigo` explaining it is wrapped.
       exclude-godoc-examples: true
     gocyclo:
       min-complexity: 20
