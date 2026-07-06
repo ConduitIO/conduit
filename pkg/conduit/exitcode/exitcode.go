@@ -128,7 +128,7 @@ func ExitCode(err error) int {
 // fromGRPCCode maps a gRPC status category to an exit code bucket. The
 // mapping is total: every codes.Code value (including any the switch doesn't
 // name explicitly, and codes.OK) falls through to a defined bucket, matching
-// TestExitCode_CoversEveryRegisteredCode's assumption that every registered
+// TestExitCode_RegistryCompleteness's assumption that every registered
 // conduiterr.Code lands in exactly one of {1, 2, 3}.
 func fromGRPCCode(c codes.Code) int {
 	switch c {

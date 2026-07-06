@@ -146,7 +146,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 			db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 		default:
 			// An unsupported DB type is a config/validation problem, not an
-			// environment one — return it directly instead of falling into
+			// environment one. It stays exit 1 (the runtime default for an
+			// untagged error) by design — return it directly instead of falling into
 			// the Unavailable tagging below, which is reserved for a
 			// genuinely unreachable database (connection refused, file
 			// locked/inaccessible, etc.) for the configured, valid type.

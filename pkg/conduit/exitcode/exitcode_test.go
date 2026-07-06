@@ -139,6 +139,12 @@ func TestExitCode_ByGRPCCategory(t *testing.T) {
 			// actually receives back from a grpc.ClientConn call today).
 			rawStatus := grpcstatus.New(tt.code, "test error").Err()
 			is.Equal(exitcode.ExitCode(rawStatus), tt.want)
+
+			// The same status %w-wrapped — the shape a CLI command's error
+			// actually takes after passing back up through cerrors.Errorf
+			// layers. ExitCode must still unwrap to the gRPC category.
+			wrapped := cerrors.Errorf("call failed: %w", rawStatus)
+			is.Equal(exitcode.ExitCode(wrapped), tt.want)
 		})
 	}
 }
