@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -124,7 +125,12 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 	is.True(got == nil)
 }
 
@@ -460,7 +466,12 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 	is.True(got == nil)
 }
 
@@ -702,7 +713,12 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {

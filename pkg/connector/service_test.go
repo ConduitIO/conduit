@@ -247,6 +247,8 @@ func TestService_CreateError(t *testing.T) {
 		connType   Type
 		plugin     string
 		pipelineID string
+		wantErr    error           // non-nil means also assert errors.Is(err, wantErr)
+		wantCode   conduiterr.Code // zero value means "don't check the ConduitError code"
 		data       Config
 	}{
 		{
@@ -254,6 +256,8 @@ func TestService_CreateError(t *testing.T) {
 			connType:   0,
 			plugin:     "test-plugin",
 			pipelineID: uuid.NewString(),
+			wantErr:    ErrInvalidConnectorType,
+			wantCode:   CodeConnectorInvalidType,
 			data: Config{
 				Name:     "test-connector",
 				Settings: map[string]string{"foo": "bar"},
@@ -292,6 +296,16 @@ func TestService_CreateError(t *testing.T) {
 			)
 			is.True(err != nil)
 			is.Equal(got, nil)
+
+			if tt.wantErr != nil {
+				is.True(cerrors.Is(err, tt.wantErr)) // sentinel still in the chain
+			}
+			if !tt.wantCode.IsZero() {
+				ce, ok := conduiterr.Get(err)
+				is.True(ok) // also carries a machine-actionable ConduitError code
+				is.Equal(ce.Code.Reason(), tt.wantCode.Reason())
+				is.True(ce.Suggestion != "") // with a suggested fix
+			}
 		})
 	}
 }

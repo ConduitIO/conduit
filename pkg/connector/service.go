@@ -142,7 +142,11 @@ func (s *Service) Create(
 		return nil, cerrors.New("must provide a pipeline ID")
 	}
 	if t != TypeSource && t != TypeDestination {
-		return nil, ErrInvalidConnectorType
+		// Invariant: errors.Is(err, ErrInvalidConnectorType) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodeConnectorInvalidType, "invalid connector type", ErrInvalidConnectorType)
+		err.Suggestion = `set the connector type to either "source" or "destination"`
+		return nil, err
 	}
 
 	now := time.Now().UTC()

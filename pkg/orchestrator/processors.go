@@ -16,6 +16,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -50,11 +51,15 @@ func (p *ProcessorOrchestrator) Create(
 
 	// check if pipeline was provisioned by config
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("cannot add a processor to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("cannot add a processor to the pipeline %q", pl.ID))
 	}
 
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
 	// create processor and add to pipeline or connector
@@ -92,7 +97,9 @@ func (p *ProcessorOrchestrator) Create(
 			return err
 		})
 	default:
-		return nil, cerrors.Errorf("%w: %s", ErrInvalidProcessorParentType, parent.Type)
+		// Invariant: errors.Is(err, ErrInvalidProcessorParentType) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, invalidProcessorParentTypeErr(fmt.Sprintf("%s: %s", ErrInvalidProcessorParentType, parent.Type))
 	}
 
 	// commit db transaction and skip rollback
@@ -154,7 +161,9 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 
 	// check if processor was provisioned by config
 	if proc.ProvisionedBy != processor.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("processor %q cannot be updated: %w", proc.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("processor %q cannot be updated", proc.ID))
 	}
 	// provisioned by API
 	oldPlugin := proc.Plugin
@@ -166,7 +175,9 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 	}
 
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
 	proc, err = p.processors.Update(ctx, id, plugin, cfg)
@@ -205,7 +216,9 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 
 	// check if processor was provisioned by config
 	if proc.ProvisionedBy != processor.ProvisionTypeAPI {
-		return cerrors.Errorf("processor %q cannot be deleted: %w", proc.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return immutableProvisionedByConfigErr(fmt.Sprintf("processor %q cannot be deleted", proc.ID))
 	}
 
 	pl, err := p.getProcessorsPipeline(ctx, proc.Parent)
@@ -214,7 +227,9 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 	}
 
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
 	err = p.processors.Delete(ctx, id)
@@ -246,7 +261,9 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 			return err
 		})
 	default:
-		return cerrors.Errorf("%w: %s", ErrInvalidProcessorParentType, proc.Parent.Type)
+		// Invariant: errors.Is(err, ErrInvalidProcessorParentType) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return invalidProcessorParentTypeErr(fmt.Sprintf("%s: %s", ErrInvalidProcessorParentType, proc.Parent.Type))
 	}
 
 	// commit db transaction and skip rollback
@@ -270,6 +287,8 @@ func (p *ProcessorOrchestrator) getProcessorsPipeline(ctx context.Context, paren
 		}
 		return p.pipelines.Get(ctx, conn.PipelineID)
 	default:
-		return nil, cerrors.Errorf("%w: %s", ErrInvalidProcessorParentType, parent.Type)
+		// Invariant: errors.Is(err, ErrInvalidProcessorParentType) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, invalidProcessorParentTypeErr(fmt.Sprintf("%s: %s", ErrInvalidProcessorParentType, parent.Type))
 	}
 }

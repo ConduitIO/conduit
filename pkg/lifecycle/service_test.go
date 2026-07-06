@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -353,6 +354,66 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 		strings.Contains(pl.Error, wantErr.Error()),
 	)
 	is.True(cerrors.Is(event.Error, wantErr))
+}
+
+// TestServiceLifecycle_Start_AlreadyRunning proves Service.Start still returns
+// pipeline.ErrPipelineRunning (the sentinel every errors.Is(err,
+// pipeline.ErrPipelineRunning) check throughout the codebase relies on) when
+// the pipeline is already running, and that the error now also carries a
+// machine-actionable ConduitError code + suggestion.
+func TestServiceLifecycle_Start_AlreadyRunning(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.New(zerolog.Nop())
+
+	pl := &pipeline.Instance{ID: uuid.NewString(), Config: pipeline.Config{Name: "test-pipeline"}}
+	pl.SetStatus(pipeline.StatusRunning)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{},
+		testProcessorService{},
+		testConnectorPluginService{},
+		testPipelineService{pl.ID: pl},
+	)
+
+	err := ls.Start(ctx, pl.ID)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
+}
+
+// TestServiceLifecycle_Stop_NotRunning proves Service.Stop still returns
+// pipeline.ErrPipelineNotRunning when no pipeline is running for the given
+// ID, and that the error now also carries a machine-actionable ConduitError
+// code + suggestion.
+func TestServiceLifecycle_Stop_NotRunning(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.New(zerolog.Nop())
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{},
+		testProcessorService{},
+		testConnectorPluginService{},
+		testPipelineService{},
+	)
+
+	err := ls.Stop(ctx, uuid.NewString(), false)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineNotRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineNotRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestServiceLifecycle_Stop(t *testing.T) {

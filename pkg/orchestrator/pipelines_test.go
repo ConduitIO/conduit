@@ -20,6 +20,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
@@ -163,7 +164,12 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
 	is.Equal(got, nil)
-	is.Equal(err, pipeline.ErrPipelineRunning)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
@@ -231,7 +237,12 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
@@ -273,7 +284,12 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.Equal(err, ErrPipelineHasProcessorsAttached)
+	is.True(cerrors.Is(err, ErrPipelineHasProcessorsAttached)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineHasProcessorsAttached.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T) {
@@ -294,7 +310,12 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.Equal(err, ErrPipelineHasConnectorsAttached)
+	is.True(cerrors.Is(err, ErrPipelineHasConnectorsAttached)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), CodePipelineHasConnectorsAttached.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
@@ -377,8 +398,13 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, pipeline.DLQ{})
-	is.Equal(err, pipeline.ErrPipelineRunning)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
 	is.Equal(got, nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestPipelineOrchestrator_UpdateDLQ_PipelineProvisionedByConfig(t *testing.T) {

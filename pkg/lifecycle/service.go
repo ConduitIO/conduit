@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
@@ -182,7 +183,15 @@ func (s *Service) Start(
 	}
 
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, pipeline.ErrPipelineRunning)
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(
+			pipeline.CodePipelineRunning,
+			fmt.Sprintf("can't start pipeline %s: %s", pl.ID, pipeline.ErrPipelineRunning),
+			pipeline.ErrPipelineRunning,
+		)
+		err.Suggestion = "the pipeline is already running; stop it first if you need to restart it"
+		return err
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
@@ -265,11 +274,27 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 	rp, ok := s.runningPipelines.Get(pipelineID)
 
 	if !ok {
-		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
+		// Invariant: errors.Is(err, ErrPipelineNotRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(
+			pipeline.CodePipelineNotRunning,
+			fmt.Sprintf("pipeline %s is not running: %s", pipelineID, pipeline.ErrPipelineNotRunning),
+			pipeline.ErrPipelineNotRunning,
+		)
+		err.Suggestion = "start the pipeline before trying to stop it"
+		return err
 	}
 
 	if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning)
+		// Invariant: errors.Is(err, ErrPipelineNotRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(
+			pipeline.CodePipelineNotRunning,
+			fmt.Sprintf("can't stop pipeline with status %q: %s", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning),
+			pipeline.ErrPipelineNotRunning,
+		)
+		err.Suggestion = "start the pipeline before trying to stop it"
+		return err
 	}
 
 	switch force {

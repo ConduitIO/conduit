@@ -16,9 +16,10 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
 )
@@ -54,11 +55,15 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 	}
 
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
 	// TODO lock pipeline
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 	return po.pipelines.Update(ctx, pl.ID, cfg)
 }
@@ -70,16 +75,28 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	}
 
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
-		return cerrors.Errorf("pipeline %q cannot be deleted: %w", pl.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be deleted", pl.ID))
 	}
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 	if len(pl.ConnectorIDs) != 0 {
-		return ErrPipelineHasConnectorsAttached
+		// Invariant: errors.Is(err, ErrPipelineHasConnectorsAttached) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodePipelineHasConnectorsAttached, ErrPipelineHasConnectorsAttached.Error(), ErrPipelineHasConnectorsAttached)
+		err.Suggestion = "remove the pipeline's connectors first, then delete the pipeline"
+		return err
 	}
 	if len(pl.ProcessorIDs) != 0 {
-		return ErrPipelineHasProcessorsAttached
+		// Invariant: errors.Is(err, ErrPipelineHasProcessorsAttached) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		err := conduiterr.Wrap(CodePipelineHasProcessorsAttached, ErrPipelineHasProcessorsAttached.Error(), ErrPipelineHasProcessorsAttached)
+		err.Suggestion = "remove the pipeline's processors first, then delete the pipeline"
+		return err
 	}
 	return po.pipelines.Delete(ctx, pl.ID)
 }
@@ -91,11 +108,15 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 	}
 
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
+		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
+		// sentinel wrapped, ConduitError adds the code.
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
 	// TODO lock pipeline
 	if pl.GetStatus() == pipeline.StatusRunning {
-		return nil, pipeline.ErrPipelineRunning
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
 	// cast orchestrator to a ConnectorOrchestrator to get access to the plugin

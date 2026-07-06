@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
@@ -331,7 +332,12 @@ func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	err := orc.Connectors.Delete(ctx, conn.ID)
 	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestConnectorOrchestrator_Delete_ProcessorAttached(t *testing.T) {
@@ -540,7 +546,12 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 	got, err := orc.Connectors.Update(ctx, conn.ID, conn.Plugin, connector.Config{})
 	is.True(got == nil)
 	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // also carries a machine-actionable ConduitError code
+	is.Equal(ce.Code.Reason(), pipeline.CodePipelineRunning.Reason())
+	is.True(ce.Suggestion != "") // with a suggested fix
 }
 
 func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
