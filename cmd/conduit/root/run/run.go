@@ -32,6 +32,11 @@ var (
 	_ ecdysis.CommandWithConfig  = (*RunCommand)(nil)
 )
 
+// pipelinesFlagName is the --pipelines alias for --pipelines.path. It is excluded
+// from the viper config binding (name collides with the Pipelines struct) and
+// applied in Execute.
+const pipelinesFlagName = "pipelines"
+
 type RunFlags struct {
 	conduit.Config
 }
@@ -39,9 +44,19 @@ type RunFlags struct {
 type RunCommand struct {
 	flags RunFlags
 	Cfg   conduit.Config
+	// pipelinesAlias backs the --pipelines flag, a GitOps-friendly alias for
+	// --pipelines.path. It can't be bound to the config struct via viper (the name
+	// collides with the Pipelines struct key), so it's excluded from the config
+	// binding (see Config) and applied in Execute.
+	pipelinesAlias string
 }
 
-func (c *RunCommand) Execute(_ context.Context) error {
+func (c *RunCommand) Execute(ctx context.Context) error {
+	// --pipelines is an alias for --pipelines.path; apply it when explicitly set.
+	if cmd := ecdysis.CobraCmdFromContext(ctx); cmd != nil && cmd.Flags().Changed(pipelinesFlagName) {
+		c.Cfg.Pipelines.Path = c.pipelinesAlias
+	}
+
 	e := &conduit.Entrypoint{}
 
 	if !c.Cfg.API.Enabled {
@@ -57,9 +72,12 @@ func (c *RunCommand) Config() ecdysis.Config {
 	path := filepath.Dir(c.flags.ConduitCfg.Path)
 
 	return ecdysis.Config{
-		EnvPrefix:     "CONDUIT",
-		Parsed:        &c.Cfg,
-		Path:          c.flags.ConduitCfg.Path,
+		EnvPrefix: "CONDUIT",
+		Parsed:    &c.Cfg,
+		Path:      c.flags.ConduitCfg.Path,
+		// --pipelines collides with the Pipelines config struct key; exclude it from
+		// the viper binding and apply it in Execute (see pipelinesAlias).
+		ExcludedFlags: []string{pipelinesFlagName},
 		DefaultValues: conduit.DefaultConfigWithBasePath(path),
 	}
 }
@@ -101,6 +119,17 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("schema-registry.confluent.connection-string", c.Cfg.SchemaRegistry.Confluent.ConnectionString)
 	flags.SetDefault("preview.pipeline-arch-v2", c.Cfg.Preview.PipelineArchV2)
 	flags.SetDefault("preview.pipeline-arch-v2-disable-metrics", c.Cfg.Preview.PipelineArchV2DisableMetrics)
+
+	// --pipelines is a GitOps-friendly alias for --pipelines.path (point Conduit at
+	// a directory of pipeline configs). It's excluded from the viper config binding
+	// (see Config) because its name collides with the Pipelines struct; Execute
+	// copies it into Cfg.Pipelines.Path when set.
+	flags = append(flags, ecdysis.Flag{
+		Long:    pipelinesFlagName,
+		Usage:   "alias for --pipelines.path: path to a pipelines' directory or a pipeline configuration file",
+		Ptr:     &c.pipelinesAlias,
+		Default: c.Cfg.Pipelines.Path,
+	})
 	return flags
 }
 
