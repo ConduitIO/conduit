@@ -36,13 +36,12 @@ type DestinationAckerNode struct {
 
 	queueMutex sync.Mutex
 
-	// mctx guards access to the contextCtxCancel function
-	mctx sync.Mutex
-
 	base   subNodeBase
 	logger log.CtxLogger
 
-	connectorCtxCancel context.CancelFunc
+	// stopper force-stops the connector context, coordinating with Run so a
+	// force-stop that races startup is neither lost nor a nil-panic. See #2539.
+	stopper forceStopper
 }
 
 func (n *DestinationAckerNode) ID() string {
@@ -51,12 +50,10 @@ func (n *DestinationAckerNode) ID() string {
 
 func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	// start a fresh connector context to make sure the connector is running
-	// until this method returns
-	var connectorCtx context.Context
-	n.mctx.Lock()
-	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
-	n.mctx.Unlock()
-	defer n.connectorCtxCancel()
+	// until this method returns. stopper.start also applies a force-stop that
+	// arrived before now (raced startup).
+	connectorCtx, connectorCtxCancel := n.stopper.start()
+	defer connectorCtxCancel()
 
 	// signalChan is buffered to ensure signals don't get lost if worker is busy
 	signalChan := make(chan struct{}, 1)
@@ -253,7 +250,5 @@ func (n *DestinationAckerNode) SetLogger(logger log.CtxLogger) {
 
 func (n *DestinationAckerNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping destination acker node")
-	n.mctx.Lock()
-	n.connectorCtxCancel()
-	n.mctx.Unlock()
+	n.stopper.stop()
 }

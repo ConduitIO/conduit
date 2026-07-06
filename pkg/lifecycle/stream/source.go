@@ -44,11 +44,11 @@ type SourceNode struct {
 	base   pubNodeBase
 	logger log.CtxLogger
 
-	state              csync.ValueWatcher[nodeState]
-	connectorCtxCancel context.CancelFunc
+	state csync.ValueWatcher[nodeState]
 
-	// mctx guards access to the connector context
-	mctx sync.Mutex
+	// stopper force-stops the connector context, coordinating with Run so a
+	// force-stop that races startup is neither lost nor a nil-panic. See #2539.
+	stopper forceStopper
 
 	stop struct {
 		sync.Mutex
@@ -103,13 +103,11 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	defer cleanup()
 
 	// start a fresh connector context to make sure the connector is running
-	// until this method returns
-	var connectorCtx context.Context
-
-	n.mctx.Lock()
-	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
-	n.mctx.Unlock()
-	defer n.connectorCtxCancel()
+	// until this method returns. stopper.start also applies a force-stop that
+	// arrived before now (raced startup), so the connector context is canceled
+	// immediately in that case.
+	connectorCtx, connectorCtxCancel := n.stopper.start()
+	defer connectorCtxCancel()
 
 	// openMsgTracker tracks open messages until they are acked or nacked
 	var openMsgTracker OpenMessagesTracker
@@ -247,18 +245,7 @@ func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error)
 
 func (n *SourceNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping source connector")
-	n.mctx.Lock()
-	defer n.mctx.Unlock()
-	// connectorCtxCancel is nil if Run has not yet reached its initialization
-	// (force-stop raced source startup). Skipping the cancel is safe: stopForceful
-	// kills the pipeline tomb before calling ForceStop, so Run will observe the
-	// canceled node context and stop as soon as it starts. Canceling the connector
-	// context here only interrupts an in-flight Read faster — which by definition
-	// isn't happening yet. Guarding avoids a nil-deref panic (invariant 7: force
-	// at any instant must be recoverable, not crash). See issue #2539.
-	if n.connectorCtxCancel != nil {
-		n.connectorCtxCancel()
-	}
+	n.stopper.stop()
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
