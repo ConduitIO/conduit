@@ -39,6 +39,10 @@ import (
 // invariant 7: force at any instant must be recoverable, not crash), and it was
 // previously reimplemented per node — one of four correctly, the rest with a
 // nil-deref panic and, for two, an unsynchronized field. See #2539.
+//
+// A forceStopper is single-shot: once stopped it stays stopped, matching a node's
+// single-use lifecycle (a new pipeline run builds fresh nodes). It is not designed
+// to be reset and reused.
 type forceStopper struct {
 	mu      sync.Mutex
 	cancel  context.CancelFunc
