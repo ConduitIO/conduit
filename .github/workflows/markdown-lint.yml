@@ -17,4 +17,5 @@ jobs:
             !LICENSE.md
             !pkg/web/openapi/**
             !.github/*.md
+            !pkg/scaffold/template/**
 

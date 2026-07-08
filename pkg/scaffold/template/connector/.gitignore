@@ -1,0 +1,26 @@
+### Go ###
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/vendor
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+### Intellij ###
+.idea
+
+### VisualStudioCode ###
+.vscode
+
+# Binary, built with `make build`
+/conduit-connector-connectorname
+
+### OS ###
+.DS_Store

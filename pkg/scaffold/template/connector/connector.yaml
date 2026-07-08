@@ -1,0 +1,163 @@
+version: "1.0"
+specification:
+  name: connectorname
+  summary: A brief description of your connector.
+  description: |-
+    This is a detailed description of your connector.
+
+    It can contain information about the features and limitations of the connector, usage instructions, etc.
+
+    By default, it's inserted into the README file and Markdown syntax can be used.
+  version: v0.0.1
+  author: Your Name
+  source:
+    parameters:
+      - name: global_config_param_name
+        description: |-
+          GlobalConfigParam is named global_config_param_name and needs to be
+          provided by the user.
+        type: string
+        default: ""
+        validations:
+          - type: required
+            value: ""
+      - name: sourceConfigParam
+        description: SourceConfigParam must be provided by the user.
+        type: string
+        default: ""
+        validations:
+          - type: required
+            value: ""
+      - name: sdk.batch.delay
+        description: Maximum delay before an incomplete batch is read from the source.
+        type: duration
+        default: "0"
+        validations: []
+      - name: sdk.batch.size
+        description: Maximum size of batch before it gets read from the source.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.schema.context.enabled
+        description: |-
+          Specifies whether to use a schema context name. If set to false, no schema context name will
+          be used, and schemas will be saved with the subject name specified in the connector
+          (not safe because of name conflicts).
+        type: bool
+        default: "true"
+        validations: []
+      - name: sdk.schema.context.name
+        description: |-
+          Schema context name to be used. Used as a prefix for all schema subject names.
+          If empty, defaults to the connector ID.
+        type: string
+        default: ""
+        validations: []
+      - name: sdk.schema.extract.key.enabled
+        description: Whether to extract and encode the record key with a schema.
+        type: bool
+        default: "true"
+        validations: []
+      - name: sdk.schema.extract.key.subject
+        description: |-
+          The subject of the key schema. If the record metadata contains the field
+          "opencdc.collection" it is prepended to the subject name and separated
+          with a dot.
+        type: string
+        default: key
+        validations: []
+      - name: sdk.schema.extract.payload.enabled
+        description: Whether to extract and encode the record payload with a schema.
+        type: bool
+        default: "true"
+        validations: []
+      - name: sdk.schema.extract.payload.subject
+        description: |-
+          The subject of the payload schema. If the record metadata contains the
+          field "opencdc.collection" it is prepended to the subject name and
+          separated with a dot.
+        type: string
+        default: payload
+        validations: []
+      - name: sdk.schema.extract.type
+        description: The type of the payload schema.
+        type: string
+        default: avro
+        validations:
+          - type: inclusion
+            value: avro
+  destination:
+    parameters:
+      - name: global_config_param_name
+        description: |-
+          GlobalConfigParam is named global_config_param_name and needs to be
+          provided by the user.
+        type: string
+        default: ""
+        validations:
+          - type: required
+            value: ""
+      - name: destinationConfigParam
+        description: DestinationConfigParam must be either yes or no (defaults to yes).
+        type: string
+        default: "yes"
+        validations:
+          - type: inclusion
+            value: yes,no
+      - name: sdk.batch.delay
+        description: Maximum delay before an incomplete batch is written to the destination.
+        type: duration
+        default: "0"
+        validations: []
+      - name: sdk.batch.size
+        description: Maximum size of batch before it gets written to the destination.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.burst
+        description: |-
+          Allow bursts of at most X records (0 or less means that bursts are not
+          limited). Only takes effect if a rate limit per second is set. Note that
+          if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch
+          size will be equal to `sdk.rate.burst`.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.perSecond
+        description: Maximum number of records written per second (0 means no rate limit).
+        type: float
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.record.format
+        description: |-
+          The format of the output record. See the Conduit documentation for a full
+          list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format).
+        type: string
+        default: opencdc/json
+        validations: []
+      - name: sdk.record.format.options
+        description: |-
+          Options to configure the chosen output record format. Options are normally
+          key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except
+          for the `template` record format, where options are a Go template.
+        type: string
+        default: ""
+        validations: []
+      - name: sdk.schema.extract.key.enabled
+        description: Whether to extract and decode the record key with a schema.
+        type: bool
+        default: "true"
+        validations: []
+      - name: sdk.schema.extract.payload.enabled
+        description: Whether to extract and decode the record payload with a schema.
+        type: bool
+        default: "true"
+        validations: []

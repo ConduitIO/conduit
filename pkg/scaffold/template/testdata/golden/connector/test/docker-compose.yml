@@ -1,0 +1,6 @@
+# Configure the services needed for the integration tests.
+# More information at https://docs.docker.com/compose/
+version: "3.9"
+services:
+  hello-world:
+    image: "hello-world:latest"

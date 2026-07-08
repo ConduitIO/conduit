@@ -1,0 +1,29 @@
+version: 2
+builds:
+  - main: ./cmd/connector/main.go
+    goos:
+      - darwin
+      - linux
+      - windows
+    env:
+      - CGO_ENABLED=0
+checksum:
+  name_template: checksums.txt
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^go.mod:'
+      - '^.github:'
+      - Merge branch
