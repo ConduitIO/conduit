@@ -237,8 +237,26 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 		return fresh, ce
 	}
 
-	if err := s.importPipeline(ctx, desired, pipeline.ProvisionTypeConfig); err != nil {
+	// Wrap the apply in a single DB transaction, exactly as provisionPipeline
+	// does (service.go). Without it, importPipeline's actions each commit their
+	// own writes (and a single action can write more than once, e.g.
+	// createPipelineAction does Create then UpdateDLQ), so a crash — or an error
+	// whose in-process reverse rollback itself fails — could leave the store
+	// partially mutated with no recovery on restart. The transaction makes apply
+	// all-or-nothing: on any error we return before Commit and the deferred
+	// Discard drops every write. Invariant 5: state writes are atomic.
+	txn, importCtx, err := s.db.NewTransaction(ctx, true)
+	if err != nil {
+		return fresh, cerrors.Errorf("could not create db transaction: %w", err)
+	}
+	defer txn.Discard()
+
+	if err := s.importPipeline(importCtx, desired, pipeline.ProvisionTypeConfig); err != nil {
 		return fresh, err
+	}
+
+	if err := txn.Commit(); err != nil {
+		return fresh, cerrors.Errorf("could not commit db transaction: %w", err)
 	}
 	return fresh, nil
 }
