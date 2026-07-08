@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml"
@@ -49,12 +50,31 @@ func Run(ctx context.Context, path string) (Report, error) {
 // Options selects which additional, opt-in checks the engine runs on top of
 // the always-on parse -> enrich -> validate. The zero value is exactly
 // `pipelines validate` (errors only, offline). `pipelines lint` sets Warnings;
-// `pipelines dry-run` will set ResolvePlugins.
+// `pipelines dry-run` sets Enriched and ResolvePlugins.
 type Options struct {
 	// Warnings surfaces the parser's advisory warnings (deprecated/renamed/
 	// unknown fields, version fallback) as SeverityWarning findings. `lint`
 	// sets this; `validate` does not (it is errors-only).
 	Warnings bool
+
+	// Enriched exposes each file's fully-enriched pipeline configs (final IDs,
+	// injected DLQ defaults, worker counts) on FileReport.Enriched. `dry-run`
+	// sets this; validate/lint leave it off so their --json is unchanged.
+	Enriched bool
+
+	// ResolvePlugins checks every connector's plugin reference: a builtin
+	// (`builtin:...`) ref whose plugin is not in BuiltinPlugins is a
+	// connector.plugin_not_found error finding; a standalone/any ref is left
+	// advisory ("not statically verifiable"), never a false failure. `dry-run`
+	// sets this. The engine stays offline: BuiltinPlugins is injected by the
+	// command (from the builtin registry) rather than imported here.
+	ResolvePlugins bool
+
+	// BuiltinPlugins is the set of resolvable builtin connector references —
+	// both full module paths (github.com/conduitio/conduit-connector-<name>)
+	// and their short names (<name>) — supplied by the dry-run command from
+	// builtin.DefaultBuiltinConnectors. Only consulted when ResolvePlugins.
+	BuiltinPlugins map[string]struct{}
 }
 
 // RunWithOptions is Run with the opt-in checks in opts. Run(ctx, path) is
@@ -73,7 +93,7 @@ func RunWithOptions(ctx context.Context, path string, opts Options) (Report, err
 
 	checkCrossFileDuplicateIDs(frs)
 
-	return buildReport(frs), nil
+	return buildReport(frs, opts), nil
 }
 
 // CodeLintWarning is the stable code carried by every advisory `lint` warning
@@ -149,9 +169,46 @@ func validateFile(ctx context.Context, path string, opts Options) fileState {
 				fs.findings = append(fs.findings, findingFromError(e))
 			})
 		}
+
+		if opts.ResolvePlugins {
+			fs.findings = append(fs.findings, resolvePluginRefs(enriched, opts.BuiltinPlugins)...)
+		}
 	}
 
 	return fs
+}
+
+// resolvePluginRefs is the dry-run --resolve-plugins check: every connector's
+// plugin reference is classified by plugin.FullName. A builtin ref
+// (`builtin:...`) whose plugin name (or full module path) is not in builtins is
+// a connector.plugin_not_found error finding (codes.NotFound -> exit 2). A
+// standalone or unqualified ("any") ref is left alone — it points at a plugin
+// binary that isn't loaded during an offline dry-run, so it is "not statically
+// verifiable", never a false failure (design doc). configPath points at the
+// connector's plugin field within the file's pipelines list.
+func resolvePluginRefs(p config.Pipeline, builtins map[string]struct{}) []Finding {
+	var findings []Finding
+	for ci, conn := range p.Connectors {
+		fn := plugin.FullName(conn.Plugin)
+		if fn.PluginType() != plugin.PluginTypeBuiltin {
+			continue // standalone/any: not statically verifiable, advisory-by-omission
+		}
+		name := fn.PluginName()
+		if _, ok := builtins[name]; ok {
+			continue
+		}
+		if _, ok := builtins[conn.Plugin]; ok {
+			continue
+		}
+		findings = append(findings, Finding{
+			Severity:   SeverityError,
+			Code:       conduiterr.CodeConnectorPluginNotFound.Reason(),
+			Message:    fmt.Sprintf("connector %q: builtin plugin %q is not available", conn.ID, conn.Plugin),
+			ConfigPath: fmt.Sprintf("/pipelines/connectors/%d/plugin", ci),
+			Suggestion: "check the plugin name, or use a standalone plugin path; run `conduit connectors list` to see available builtins",
+		})
+	}
+	return findings
 }
 
 // findingFromError converts one element of a cerrors.ForEach walk into a
@@ -274,7 +331,7 @@ func checkCrossFileDuplicateIDs(frs []fileState) {
 // buildReport converts the engine's working fileState slice into the public
 // Report: findings sorted by configPath within each file (the design doc's
 // ordering guarantee), plus the report-wide Summary rollup.
-func buildReport(frs []fileState) Report {
+func buildReport(frs []fileState, opts Options) Report {
 	report := Report{Files: make([]FileReport, len(frs))}
 	report.Summary.Files = len(frs)
 
@@ -301,6 +358,9 @@ func buildReport(frs []fileState) Report {
 			OK:        len(fr.findings) == 0,
 			Pipelines: ids,
 			Findings:  findings,
+		}
+		if opts.Enriched {
+			report.Files[i].Enriched = fr.pipelines
 		}
 
 		report.Summary.Pipelines += len(ids)

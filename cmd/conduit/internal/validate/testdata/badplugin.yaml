@@ -1,0 +1,7 @@
+version: "2.2"
+pipelines:
+  - id: bad-plugin-pipeline
+    connectors:
+      - id: c1
+        type: source
+        plugin: builtin:doesnotexist
