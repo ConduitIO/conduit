@@ -14,7 +14,10 @@
 
 package validate
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+import (
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
+)
 
 // Severity is a Finding's severity. `validate` only ever produces
 // SeverityError findings (it is errors-only, per the CLI output
@@ -57,6 +60,11 @@ type FileReport struct {
 	OK        bool      `json:"ok"`
 	Pipelines []string  `json:"pipelines"`
 	Findings  []Finding `json:"findings"`
+	// Enriched is the fully-enriched configuration (final connector/processor
+	// IDs, injected DLQ defaults, worker counts) of each pipeline in this file.
+	// It is only populated by `pipelines dry-run` (Options.Enriched); validate
+	// and lint leave it nil so their --json output is unchanged.
+	Enriched []config.Pipeline `json:"enriched,omitempty"`
 }
 
 // Summary is the report-wide rollup `pipelines validate` renders as its
