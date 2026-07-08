@@ -208,14 +208,22 @@ func (w *Worker) Stop(ctx context.Context) error {
 	}
 	defer release()
 
-	// Lock acquired, teardown the source and set stop to true to signal the
-	// worker it should stop processing, since it won't be able to deliver
-	// any acks.
-	err = w.tearDownSource(ctx)
-	if err != nil {
+	// Lock acquired: no batch is currently being processed, but a new batch's
+	// first task can already be blocked in (or about to start) a source Read,
+	// unprotected by processingLock by design (see doTask) so a slow Read
+	// doesn't hold up Stop. Set stop *before* tearing down the source: doTask
+	// only treats a plugin.ErrPluginNotRunning from that Read as a graceful
+	// stop when w.stop.Load() is already true (see doTask's IsFirst check). If
+	// tearDownSource ran first, a Read racing the teardown could observe the
+	// torn-down plugin (ErrPluginNotRunning) before this flag flips, and get
+	// misreported as a real failure instead of a graceful stop — confirmed by
+	// repro under `-race -count=800` (pkg/lifecycle-poc/service_test.go
+	// TestServiceLifecycle_PipelineStop flaking with "failed to read from
+	// source: plugin is not running").
+	w.stop.Store(true)
+	if err := w.tearDownSource(ctx); err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
-	w.stop.Store(true)
 	return nil
 }
 
