@@ -51,23 +51,29 @@ var CodeStandaloneUnsafe = conduiterr.Register("provisioning.standalone_unsafe",
 // separate, live conduit run process" — only the process that actually
 // started a pipeline's goroutines (or a live RPC to it) can tell those apart.
 //
-// For BadgerDB and SQLite this is closed by a structural side effect: both
-// take an exclusive lock on their store file, so if a conduit run process is
-// genuinely running against the same store, OpenStore below fails outright
-// (the standalone command never gets to run at all) instead of silently
-// proceeding with a stale status. For Postgres — which allows concurrent
-// connections from multiple processes with no such lock — that safety net
-// does not exist, so NewLocalService refuses outright with
-// CodeStandaloneUnsafe rather than construct a PlanApplier whose AC-13 check
-// could be silently wrong. See the design doc's PR failure-mode analysis;
-// closing this gap for real (a live-server RPC, so the check is answered by
-// the process that actually owns the pipeline) is tracked as follow-up work.
+// Only BadgerDB closes this by a structural side effect: it takes an exclusive
+// lock on its store directory, so if a conduit run process is genuinely running
+// against the same store, OpenStore below fails outright (the standalone command
+// never gets to run at all) instead of silently proceeding with a stale status.
+// No other store type has that property — SQLite opens in WAL mode
+// (journal_mode=WAL, busy_timeout), which is explicitly designed for concurrent
+// multi-process access and does not fail closed; Postgres allows concurrent
+// connections with no store lock at all; InMemory gives each process a private
+// empty store, so a standalone apply can't even see the running server's state.
+// So NewLocalService refuses every store type except Badger (default-deny)
+// rather than allow-list "safe" ones — refusing outright with
+// CodeStandaloneUnsafe beats constructing a PlanApplier whose AC-13 check could
+// be silently wrong. An embedder that has externally guaranteed exclusive access
+// can still Plan/ApplyPlan against a *pkg/provisioning.Service it builds itself.
+// Closing this gap for real (a live-server RPC, so the running-pipeline check is
+// answered by the process that actually owns the pipeline) is tracked follow-up.
 func NewLocalService(ctx context.Context, cfg conduit.Config) (PlanApplier, func() error, error) {
-	if cfg.DB.Type == conduit.DBTypePostgres {
+	if cfg.DB.Type != conduit.DBTypeBadger {
 		ce := conduiterr.New(CodeStandaloneUnsafe, fmt.Sprintf(
-			"deploy/apply cannot safely run standalone against a %q store: a separate 'conduit run' process may have this pipeline open, "+
-				"and this command has no reliable way to detect that over a shared Postgres connection", cfg.DB.Type))
-		ce.Suggestion = "this is tracked as follow-up work (a live-server RPC path); for now, apply changes through a conduit run instance you control directly"
+			"deploy/apply cannot safely run standalone against a %q store: a separate 'conduit run' process may have "+
+				"this pipeline open, and only BadgerDB's exclusive store lock lets this command detect that "+
+				"(SQLite's WAL mode and Postgres both allow concurrent multi-process access)", cfg.DB.Type))
+		ce.Suggestion = "use a BadgerDB store, or apply changes through a conduit run instance you control directly (a live-server RPC path is tracked follow-up work)"
 		return nil, func() error { return nil }, ce
 	}
 
