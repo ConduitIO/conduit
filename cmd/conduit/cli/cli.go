@@ -28,6 +28,10 @@ func Run(cfg conduit.Config) {
 	e := ecdysis.New(ecdysis.WithDecorators(
 		cecdysis.CommandWithExecuteWithClientDecorator{},
 		cecdysis.CommandWithExecuteWithClientResultDecorator{},
+		// The offline sibling of CommandWithExecuteWithClientResultDecorator,
+		// for commands (doctor, pipelines validate, connector/processor new)
+		// whose own checks are the thing being run rather than a client call.
+		cecdysis.CommandWithResultDecorator{},
 	))
 
 	cmd := e.MustBuildCobraCommand(&root.RootCommand{Cfg: cfg})
