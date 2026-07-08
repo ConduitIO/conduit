@@ -1,0 +1,14 @@
+version: 2.2
+pipelines:
+  - id: lint-error-and-warning-pipeline
+    status: bogus-status
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: builtin:log
+    processors:
+      - id: proc1
+        type: js

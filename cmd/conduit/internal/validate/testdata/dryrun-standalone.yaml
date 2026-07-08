@@ -1,0 +1,11 @@
+version: 2.2
+pipelines:
+  - id: dryrun-standalone
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: standalone:my-custom-connector

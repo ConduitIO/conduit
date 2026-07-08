@@ -33,6 +33,15 @@ var (
 	// parser failures, which the parser itself returns as plain errors since
 	// it has no per-field configPath to attach at that stage.
 	CodeParseError = conduiterr.Register("config.parse_error", codes.InvalidArgument)
+	// CodeParserWarning is the stable code every advisory parser warning
+	// (deprecated/renamed/unknown field, version fallback — see
+	// pkg/provisioning/config/yaml.Warning) carries when surfaced as a
+	// validate.Finding by `conduit pipeline lint`/`dry-run`. It classifies
+	// into the same Validation exit-code bucket as the other config.Code*
+	// values, which is what lets `lint --strict` promote a warning-only run
+	// to exit 2 by reusing the existing bucket-ranking logic in
+	// cmd/conduit/internal/validate/exitcode.go instead of a parallel one.
+	CodeParserWarning = conduiterr.Register("config.parser_warning", codes.InvalidArgument)
 )
 
 // fieldError builds a ConduitError carrying a machine-actionable code, the

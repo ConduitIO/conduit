@@ -43,27 +43,98 @@ import (
 // including every file being unparseable — comes back as findings inside a
 // (possibly all-failing) Report, with a nil error.
 func Run(ctx context.Context, path string) (Report, error) {
-	files, err := config.ResolveFiles(path)
+	frs, err := resolveAndProcess(ctx, path, runOptions{})
 	if err != nil {
 		return Report{}, err
+	}
+	return buildReport(frs), nil
+}
+
+// RunLint behaves exactly like Run, plus one addition: every advisory
+// parser warning (deprecated/renamed/unknown field, version fallback — see
+// pkg/provisioning/config/yaml.Warning) is surfaced as a SeverityWarning
+// Finding carrying Line/Column, via Parser.ParseWithWarnings instead of
+// Parse. Warnings never affect Report.OK (errors only) — `lint --strict`'s
+// promotion of warnings to a failing exit code is the `lint` command's own
+// concern (LintExitError), not this engine's, matching the CLI output
+// conventions §4 rule that reducing findings to a process exit code is
+// command-owned aggregation, not shared engine machinery.
+func RunLint(ctx context.Context, path string) (Report, error) {
+	frs, err := resolveAndProcess(ctx, path, runOptions{includeWarnings: true})
+	if err != nil {
+		return Report{}, err
+	}
+	return buildReport(frs), nil
+}
+
+// RunDryRun behaves like RunLint (validate + warnings) and additionally
+// reports the enriched graph — final (pipelineID-prefixed) connector/
+// processor IDs, injected DLQ defaults, and worker counts, all already
+// computed by config.Enrich during the shared parse -> enrich -> validate
+// core — for every successfully-parsed pipeline. When resolvePlugins is
+// true (the `--resolve-plugins` flag, default on), every connector/processor
+// plugin ref is additionally resolved against the compiled-in builtin
+// registries (see plugins.go): an unknown "builtin:" ref becomes an error
+// Finding (connector.plugin_not_found / processor.plugin_not_found, exit
+// 2); a standalone or unprefixed ref is not statically verifiable (see
+// pkg/plugin/connector/service.go's newDispenser, which tries standalone
+// before builtin for an unprefixed ref) and is never flagged as a false
+// failure — its EnrichedConnector/EnrichedProcessor.PluginStatus is simply
+// left as "unverified" instead.
+func RunDryRun(ctx context.Context, path string, resolvePlugins bool) (DryRunReport, error) {
+	frs, err := resolveAndProcess(ctx, path, runOptions{includeWarnings: true, resolvePlugins: resolvePlugins})
+	if err != nil {
+		return DryRunReport{}, err
+	}
+	return DryRunReport{
+		Report:   buildReport(frs),
+		Enriched: buildEnrichedFiles(frs, resolvePlugins),
+	}, nil
+}
+
+// runOptions selects which of the three verbs' checks validateFile performs
+// beyond the shared parse -> enrich -> validate core every verb shares.
+// Zero value is `validate`'s behavior (errors only).
+type runOptions struct {
+	// includeWarnings adds every parser warning to a file's findings as a
+	// SeverityWarning, coded config.CodeParserWarning. Set by RunLint and
+	// RunDryRun; left false by Run.
+	includeWarnings bool
+	// resolvePlugins additionally resolves every connector/processor plugin
+	// ref against the compiled-in builtin registries. Set by RunDryRun
+	// when its own resolvePlugins parameter (the `--resolve-plugins` flag)
+	// is true; meaningless (and left false) for Run/RunLint, which have no
+	// such flag.
+	resolvePlugins bool
+}
+
+// resolveAndProcess resolves path into its files, runs validateFile over
+// each with opts, and performs the cross-file duplicate-ID pass — the part
+// of Run/RunLint/RunDryRun that is identical across all three; each of them
+// only differs in what it builds from the returned []fileState.
+func resolveAndProcess(ctx context.Context, path string, opts runOptions) ([]fileState, error) {
+	files, err := config.ResolveFiles(path)
+	if err != nil {
+		return nil, err
 	}
 	sort.Strings(files) // deterministic order, independent of directory-read order
 
 	frs := make([]fileState, len(files))
 	for i, f := range files {
-		frs[i] = validateFile(ctx, f)
+		frs[i] = validateFile(ctx, f, opts)
 	}
 
 	checkCrossFileDuplicateIDs(frs)
 
-	return buildReport(frs), nil
+	return frs, nil
 }
 
 // fileState is the engine's working representation of one resolved file: the
 // enriched pipelines it parsed successfully (used for cross-file duplicate-ID
-// detection, which needs every file's pipeline IDs at once) plus the
-// findings collected so far. buildReport converts this into the public
-// FileReport once every file (and the cross-file pass) has run.
+// detection, which needs every file's pipeline IDs at once, and — for
+// RunDryRun — to build the enriched-graph report) plus the findings
+// collected so far. buildReport converts this into the public FileReport
+// once every file (and the cross-file pass) has run.
 type fileState struct {
 	path      string
 	pipelines []config.Pipeline
@@ -73,8 +144,9 @@ type fileState struct {
 // validateFile runs parse -> enrich -> validate (in that order — enrichment
 // mutates connector/processor IDs that validation checks, matching
 // pkg/provisioning.Service.provisionPipeline's ordering at service.go:279-280)
-// over a single file, collecting every finding along the way.
-func validateFile(ctx context.Context, path string) fileState {
+// over a single file, collecting every finding along the way. opts selects
+// the lint/dry-run additions on top of that shared core.
+func validateFile(ctx context.Context, path string, opts runOptions) fileState {
 	fs := fileState{path: path}
 
 	f, err := os.Open(path)
@@ -86,8 +158,13 @@ func validateFile(ctx context.Context, path string) fileState {
 	}
 	defer f.Close()
 
+	// ParseWithWarnings is the additive parallel entry point added alongside
+	// Parse/ParseConfigurations (see yaml/parser.go) specifically so this
+	// package can receive warnings instead of only logging them; it changes
+	// nothing about what `conduit run` does with the parser (see this
+	// package's doc.go).
 	parser := yaml.NewParser(log.Nop())
-	pipelines, err := parser.Parse(ctx, f)
+	pipelines, warnings, err := parser.ParseWithWarnings(ctx, f)
 	// err here is parser.Parse's raw cerrors.Join of per-document failures
 	// (see parser.go: `return configs.ToConfig(), err`, no extra "%w" wrap) —
 	// walk it directly with cerrors.ForEach. Wrapping it first (e.g. via
@@ -97,6 +174,12 @@ func validateFile(ctx context.Context, path string) fileState {
 		cerrors.ForEach(err, func(e error) {
 			fs.findings = append(fs.findings, findingFromError(e))
 		})
+	}
+
+	if opts.includeWarnings {
+		for _, w := range warnings {
+			fs.findings = append(fs.findings, findingFromWarning(w))
+		}
 	}
 
 	for _, p := range pipelines {
@@ -110,9 +193,30 @@ func validateFile(ctx context.Context, path string) fileState {
 				fs.findings = append(fs.findings, findingFromError(e))
 			})
 		}
+
+		if opts.resolvePlugins {
+			fs.findings = append(fs.findings, resolvePluginFindings(enriched)...)
+		}
 	}
 
 	return fs
+}
+
+// findingFromWarning converts a parser Warning into a SeverityWarning
+// Finding. Every parser warning shares one stable code
+// (config.CodeParserWarning) — unlike a config.Validate error, a warning has
+// no per-field configPath (the parser's yaml.Warning carries a bare field
+// name plus Line/Column, not a JSON pointer into the pipeline document), so
+// ConfigPath is deliberately left empty and Line/Column carry the location
+// instead.
+func findingFromWarning(w yaml.Warning) Finding {
+	return Finding{
+		Severity: SeverityWarning,
+		Code:     config.CodeParserWarning.Reason(),
+		Message:  w.Message,
+		Line:     w.Line,
+		Column:   w.Column,
+	}
 }
 
 // findingFromError converts one element of a cerrors.ForEach walk into a
@@ -241,32 +345,43 @@ func buildReport(frs []fileState) Report {
 			findings = []Finding{}
 		}
 
-		report.Files[i] = FileReport{
-			Path:      fr.path,
-			OK:        len(fr.findings) == 0,
-			Pipelines: ids,
-			Findings:  findings,
-		}
-
-		report.Summary.Pipelines += len(ids)
+		fileErrors := 0
 		for _, find := range fr.findings {
 			switch find.Severity {
 			case SeverityWarning:
 				report.Summary.Warnings++
 			case SeverityError:
 				report.Summary.Errors++
+				fileErrors++
 			default:
 				// Every Finding this package constructs sets Severity
 				// explicitly (findingFromError and
-				// checkCrossFileDuplicateIDs both always use SeverityError;
-				// `lint`, in a future PR, will be the first caller to ever
-				// produce SeverityWarning). An unset/unknown value is a bug
+				// checkCrossFileDuplicateIDs use SeverityError;
+				// findingFromWarning and resolvePluginFindings's advisory
+				// case use SeverityWarning). An unset/unknown value is a bug
 				// in a finding constructor, not a real severity — counting
 				// it as an error is the conservative choice (never silently
 				// under-report a problem into exit 0).
 				report.Summary.Errors++
+				fileErrors++
 			}
 		}
+
+		report.Files[i] = FileReport{
+			Path: fr.path,
+			// OK is errors-only, matching Report.OK()'s own definition: a
+			// file with only advisory (SeverityWarning) findings — possible
+			// under `lint`/`dry-run`, never under `validate`, which produces
+			// no warnings — is still OK at this level. `lint --strict`'s
+			// promotion of warnings to a failure is the lint command's own
+			// rendering/exit-code concern (see LintExitError), not a change
+			// to what "OK" means here.
+			OK:        fileErrors == 0,
+			Pipelines: ids,
+			Findings:  findings,
+		}
+
+		report.Summary.Pipelines += len(ids)
 	}
 
 	return report

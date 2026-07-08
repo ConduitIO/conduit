@@ -61,14 +61,36 @@ func bucketRank(c conduiterr.Code) int {
 // itself a "hard command failure" per the CLI output conventions envelope
 // (ok:false, error:null) — see cecdysis.Outcome.ExitErr's doc for how that
 // reconciliation works structurally.
+//
+// Used as-is by `validate` and `dry-run` (neither has a `--strict` flag, so
+// warnings never affect their exit code); `lint` goes through
+// LintExitError instead.
 func ExitError(files []FileReport) (error, bool) {
+	return exitError(files, false)
+}
+
+// LintExitError is ExitError's `lint`-specific sibling: identical
+// worst-bucket aggregation, but when strict is true, SeverityWarning
+// findings are included alongside SeverityError ones — AC-2's "`lint
+// --strict` promotes a warning-only run to a failing exit code". When
+// strict is false this is exactly ExitError (a warnings-only run returns
+// (nil, false), i.e. exit 0, per AC-1).
+func LintExitError(files []FileReport, strict bool) (error, bool) {
+	return exitError(files, strict)
+}
+
+// exitError is ExitError/LintExitError's shared aggregation: the
+// worst-bucket code across every Finding whose severity qualifies —
+// SeverityError always; SeverityWarning too when includeWarnings is true.
+func exitError(files []FileReport, includeWarnings bool) (error, bool) {
 	var worst conduiterr.Code
 	haveWorst := false
 	count := 0
 
 	for _, f := range files {
 		for _, find := range f.Findings {
-			if find.Severity != SeverityError {
+			qualifies := find.Severity == SeverityError || (includeWarnings && find.Severity == SeverityWarning)
+			if !qualifies {
 				continue
 			}
 			count++

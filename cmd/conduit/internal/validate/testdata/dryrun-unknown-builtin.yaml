@@ -1,0 +1,11 @@
+version: 2.2
+pipelines:
+  - id: dryrun-unknown-builtin
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: builtin:nonexistent-connector

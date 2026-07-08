@@ -19,9 +19,10 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 // Severity is a Finding's severity. `validate` only ever produces
 // SeverityError findings (it is errors-only, per the CLI output
 // conventions' `--strict` row: validate has no `--strict` flag because it
-// has nothing for `--strict` to escalate). SeverityWarning exists so the
-// same Finding shape carries `lint`'s advisory findings without a second
-// type, once that verb ships.
+// has nothing for `--strict` to escalate). `lint` and `dry-run` are the
+// first callers to produce SeverityWarning: advisory parser warnings, and
+// (for dry-run) a standalone/unprefixed plugin ref that isn't statically
+// verifiable.
 type Severity string
 
 const (
@@ -31,8 +32,12 @@ const (
 
 // Finding is one located problem in a pipeline config file: the shared
 // "located finding" shape from the CLI output conventions (§1.1), reused
-// verbatim so `pipelines validate` and a future `doctor`/`lint` render and
-// marshal identically.
+// verbatim so `pipelines validate`, `lint`, and `dry-run` render and marshal
+// identically. Line and Column are populated only for a parser-warning
+// Finding (`lint`/`dry-run`'s SeverityWarning findings) — a
+// config.Validate error is located by ConfigPath (a JSON pointer) instead,
+// since the parser's warning has no such pointer to attach, only a bare
+// field name plus a YAML line/column.
 type Finding struct {
 	Severity   Severity        `json:"severity"`
 	Code       string          `json:"code"`
@@ -40,6 +45,8 @@ type Finding struct {
 	ConfigPath string          `json:"configPath,omitempty"`
 	Suggestion string          `json:"suggestion,omitempty"`
 	Fix        *conduiterr.Fix `json:"fix,omitempty"`
+	Line       int             `json:"line,omitempty"`
+	Column     int             `json:"column,omitempty"`
 }
 
 // FileReport is one resolved file's outcome: every pipeline ID found in it

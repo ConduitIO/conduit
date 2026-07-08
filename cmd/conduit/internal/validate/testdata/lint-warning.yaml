@@ -1,0 +1,14 @@
+version: 2.2
+pipelines:
+  - id: lint-warning-pipeline
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: builtin:log
+    processors:
+      - id: proc1
+        type: js
