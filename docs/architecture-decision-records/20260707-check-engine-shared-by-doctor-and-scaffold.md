@@ -23,7 +23,7 @@ written:
   are Go on PATH + min version, `GOPATH/bin` writable, git, docker. **None overlap
   with doctor's set.**
 
-The two check *sets* are disjoint by design. What is genuinely shareable is the
+The two check _sets_ are disjoint by design. What is genuinely shareable is the
 mechanism: the result type, the interface, the `recover()`-wrapped runner, the
 human/JSON rendering, and the exit-code aggregation. Leaving this as "reconcile at
 implementation" (both docs' hedge) would produce exactly the two-parallel-`doctor`-

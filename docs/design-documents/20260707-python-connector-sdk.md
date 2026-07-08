@@ -73,7 +73,7 @@ with the **`protocolbuffers/python` + `protocolbuffers/pyi`** remote BSR plugins
 output, not `betterproto`. Two takeaways:
 
 1. **It is not prior art for this SDK's transport.** It targets the WASM
-   component-model path for *processors*; connectors use go-plugin/gRPC
+   component-model path for _processors_; connectors use go-plugin/gRPC
    subprocesses, a different mechanism entirely (per the repo map in CLAUDE.md:
    "`conduit-processor-sdk`: standalone processors compile to WASM" vs.
    `conduit-connector-sdk` which has no WASM story). Do not conflate the two —
@@ -133,7 +133,7 @@ A Python plugin must:
 3. Print exactly one handshake line to **stdout** (not stderr — stdout is the
    channel go-plugin's client parses) once the gRPC server is listening:
 
-   ```
+   ```text
    CORE-PROTOCOL-VERSION|APP-PROTOCOL-VERSION|NETWORK|ADDRESS|PROTOCOL|SERVER-CERT
    ```
 
@@ -186,7 +186,7 @@ A Python plugin must:
      it's a few lines with `grpc_reflection`.
 6. Exec with a **clean environment**. Conduit's dispenser sets
    `cmd.Env = make([]string, 0)` before appending its own vars
-   (`pconnector/client/client.go:45`) — the subprocess gets *only* go-plugin's
+   (`pconnector/client/client.go:45`) — the subprocess gets _only_ go-plugin's
    own vars plus the Conduit-set ones below, **no inherited `PATH`**. Practical
    consequence for Python: the connector's launch shebang/entry point must be an
    absolute interpreter path (e.g. baked into a PyInstaller/zipapp artifact, or a
@@ -288,8 +288,8 @@ design collapses it.
 #### 2.1 async, not sync — and why
 
 The `Run` RPC is a bidirectional stream: a source must be able to emit records
-*and* receive ack callbacks concurrently on the same logical connection; a
-destination must receive record batches *and* emit ack batches concurrently.
+_and_ receive ack callbacks concurrently on the same logical connection; a
+destination must receive record batches _and_ emit ack batches concurrently.
 `grpc.aio` models this natively as two independent `async for` loops over one
 call object. A sync `grpcio` implementation could do this too (with a background
 thread pulling one direction while the RPC thread pushes the other), but that
@@ -395,7 +395,7 @@ needed, no boilerplate for authors.
 #### 2.5 Errors: exceptions, not `(n, err)`
 
 Go's `Destination.Write(ctx, batch) (n int, err error)` requires the SDK to
-*enforce* an invariant that's easy to get wrong: `n == len(batch)` must imply
+_enforce_ an invariant that's easy to get wrong: `n == len(batch)` must imply
 `err == nil`, and `n < len(batch)` must imply `err != nil`
 (`conduit-connector-sdk/destination.go:345-350` logs it as a connector bug
 otherwise). Python favors exceptions for error propagation and this SDK follows
@@ -503,7 +503,7 @@ name anticipated in
 
 Proposed layout:
 
-```
+```text
 conduit-connector-sdk-python/
   pyproject.toml            # uv-managed; hatchling build backend
   src/conduit/
@@ -694,8 +694,8 @@ exists in Go specifically because Go lacks structured exceptions with attached
 data cleanly separable from control flow, and it requires the SDK to defend an
 invariant (`destination.go:345-350`) that a well-designed Python API can make
 structurally unrepresentable instead of enforced-at-runtime (§2.5). Parity of
-*behavior* (correct per-record acks on partial failure) is kept; parity of
-*shape* is not a goal in itself.
+_behavior_ (correct per-record acks on partial failure) is kept; parity of
+_shape_ is not a goal in itself.
 
 ## Failure modes
 
@@ -897,7 +897,7 @@ Analyzed against CLAUDE.md's data-integrity invariants, scoped to what an SDK
   description with the current v2 protocol (`Configure`/`Open`/`Run`/`Stop`/
   `Teardown`) actually running today.
 - [WASM component model](../architecture-decision-records/20260704-wasm-component-model.md)
-  — the *other* extension mechanism (processors, not connectors); referenced
+  — the _other_ extension mechanism (processors, not connectors); referenced
   in Context to explain why `conduit-processor-sdk-python` is not transport
   prior art for this SDK.
 - `ConduitIO/conduit-connector-protocol` — the wire contract this SDK

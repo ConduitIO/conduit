@@ -25,6 +25,7 @@ python` today only as an explicit error naming the blocker + a tracking issue.
 ## Decision — orchestrate the upstream template, do NOT reimplement boilerplate
 
 Option C: the command runs the canonical template's own setup flow.
+
 - Rejected A (embedded/duplicated skeleton — guarantees drift) and B (`gh repo
   create --template` as primary — breaks offline/local-first; keep as `--remote`).
 - The template `setup.sh` already encodes the recipe: module/token rename, tool
@@ -32,6 +33,7 @@ Option C: the command runs the canonical template's own setup flow.
   determinism).
 
 **Template sourcing (the core tension: reproducible vs catch-drift):**
+
 - **Vendored snapshot, `go:embed`'d, pinned per Conduit release** — default
   generation is offline, deterministic, reproducible. A release-time `//go:generate`
   script machine-syncs the snapshot from upstream `main` and records the SHA (a
@@ -43,7 +45,7 @@ Option C: the command runs the canonical template's own setup flow.
 
 ## CLI UX & ergonomics (the <30-min experience)
 
-```
+```text
 conduit connector new [name] [flags]
 conduit processor new [name] [flags]
 ```
@@ -65,7 +67,7 @@ no partial directory.
 **Felt experience** — stream progress, verify a real `go build` in-flow, show a
 wall-clock timer + copy-paste next steps:
 
-```
+```text
 conduit connector new s3
 ✓ Toolchain OK (go 1.23.4, git 2.44)
 ✓ Wrote 24 files → ./conduit-connector-s3
@@ -148,6 +150,7 @@ machine-synced, never hand-maintained.
 ## Review outcome (2026-07-07) — SOUND-WITH-CONCERNS
 
 Must-fix during implementation:
+
 - **connector ≠ processor symmetry**: the PROCESSOR template's `setup.sh` does ONLY
   the rename — it does NOT `install-tools`/`generate` like the connector one, and
   `make generate` uses different tools (`conn-sdk-cli specgen` vs `paramgen`). The

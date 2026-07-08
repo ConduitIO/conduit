@@ -51,7 +51,7 @@ structural, not copy-paste. Register as subcommands of the existing
 
 ## CLI UX & ergonomics
 
-```
+```text
 conduit pipelines validate <path> [flags]   # alias: conduit pipeline validate ...
 conduit pipelines lint     <path> [flags]
 conduit pipelines dry-run  <path> [flags]
@@ -66,7 +66,7 @@ Flags: `--json` (all), `--strict` (lint/validate: warnings → exit 2),
 
 **FAIL output — collect all, never fail-fast:**
 
-```
+```text
 ✗ pipelines/orders.yaml
 
   config.field_required   /connectors/0/plugin
@@ -150,6 +150,7 @@ that forks the contract the API/MCP already speak (`status.go`).
 ## Review outcome (2026-07-07) — SOUND-WITH-CONCERNS
 
 Must-fix during implementation:
+
 - **Cross-file duplicate-ID detection is NEW code, not reuse** — `findDuplicateIDs`
   (`service.go:100`) is outside `parse→enrich→validate` and returns a bare sentinel.
   Give it a `provisioning.pipeline_id_duplicate` code + `configPath`.

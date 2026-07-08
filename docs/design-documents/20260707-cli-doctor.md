@@ -51,7 +51,7 @@ shared classifier, not a re-decision.
 
 ## CLI UX & ergonomics
 
-```
+```text
 $ conduit doctor
 Conduit doctor — checking your environment
 
@@ -142,6 +142,7 @@ one §1.1 result model. Factor `openStore` so a future `NewRuntime` could even r
 ## Review outcome (2026-07-07) — SOUND-WITH-CONCERNS
 
 Must-fix during implementation:
+
 - **`Report.ExitCode()` (N results → 1 exit code) is NEW aggregation, not free reuse**
   — take the MAX bucket, not the first. Now owned by the shared `pkg/conduit/check`
   engine (see ADR `20260707-check-engine-shared-by-doctor-and-scaffold.md`).
