@@ -1081,6 +1081,25 @@ func (s testConnectorService) Create(context.Context, string, connector.Type, st
 	return s[testDLQID], nil
 }
 
+// WaitPersisted is a no-op here: none of the existing tests using
+// testConnectorService directly exercise StopAndWait's durability wait (they
+// assert on WaitPipeline/Stop instead). Tests that do need a real durability
+// signal use testConnectorServiceWithPersister below, which forwards to the
+// real *connector.Persister the test's connectors were actually Init'd with.
+func (s testConnectorService) WaitPersisted() {}
+
+// testConnectorServiceWithPersister wraps testConnectorService and forwards
+// WaitPersisted to the real persister backing its connectors, for tests that
+// must observe actual durability (StopAndWait's drain-and-persist guarantee).
+type testConnectorServiceWithPersister struct {
+	testConnectorService
+	persister *connector.Persister
+}
+
+func (s testConnectorServiceWithPersister) WaitPersisted() {
+	s.persister.WaitPendingWrites()
+}
+
 // testProcessorService fulfills the ProcessorService interface.
 type testProcessorService map[string]*processor.Instance
 

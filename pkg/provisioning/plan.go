@@ -27,8 +27,17 @@
 // Invariant 7 (graceful shutdown / no silent mutation of live work): ApplyPlan
 // refuses to run against a pipeline that is currently running rather than
 // attempting an in-process stop-drain-restart (see the design doc's Failure
-// modes, option (a)) — the safe Wave-2 default. Callers that want to apply a
-// restart-class change to a running pipeline must stop it first.
+// modes, option (a)) — the safe Wave-2 default for the standalone (no live
+// lifecycle) case. Callers that want to apply a restart-class change to a
+// running pipeline via ApplyPlan must stop it first.
+//
+// ApplyPlanLive (added for issue #2588, see
+// docs/design-documents/20260708-live-server-deploy-apply.md) is the
+// live-server counterpart used only where a running lifecycle.Service is
+// available: instead of refusing, it drives lifecycleService.StopAndWait to
+// gracefully drain and durably checkpoint the pipeline before reusing the
+// same importPipeline path, then restarts it. ApplyPlan itself is unchanged
+// and keeps refusing running pipelines — it has no lifecycle to drive.
 package provisioning
 
 import (
@@ -237,27 +246,159 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 		return fresh, ce
 	}
 
-	// Wrap the apply in a single DB transaction, exactly as provisionPipeline
-	// does (service.go). Without it, importPipeline's actions each commit their
-	// own writes (and a single action can write more than once, e.g.
-	// createPipelineAction does Create then UpdateDLQ), so a crash — or an error
-	// whose in-process reverse rollback itself fails — could leave the store
-	// partially mutated with no recovery on restart. The transaction makes apply
-	// all-or-nothing: on any error we return before Commit and the deferred
-	// Discard drops every write. Invariant 5: state writes are atomic.
+	if err := s.transactionalImport(ctx, desired); err != nil {
+		return fresh, err
+	}
+	return fresh, nil
+}
+
+// transactionalImport wraps importPipeline in a single DB transaction, exactly
+// as provisionPipeline does (service.go). Without it, importPipeline's actions
+// each commit their own writes (and a single action can write more than once,
+// e.g. createPipelineAction does Create then UpdateDLQ), so a crash — or an
+// error whose in-process reverse rollback itself fails — could leave the store
+// partially mutated with no recovery on restart. The transaction makes the
+// import all-or-nothing: on any error this returns before Commit and the
+// deferred Discard drops every write. Invariant 5: state writes are atomic.
+//
+// Shared by ApplyPlan and ApplyPlanLive so the two apply paths can't drift on
+// crash-safety — see docs/design-documents/20260708-live-server-deploy-apply.md,
+// "Review outcome & required rework", blocker 2 (landed as #2595).
+func (s *Service) transactionalImport(ctx context.Context, desired config.Pipeline) error {
 	txn, importCtx, err := s.db.NewTransaction(ctx, true)
 	if err != nil {
-		return fresh, cerrors.Errorf("could not create db transaction: %w", err)
+		return cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	defer txn.Discard()
 
 	if err := s.importPipeline(importCtx, desired, pipeline.ProvisionTypeConfig); err != nil {
-		return fresh, err
+		return err
 	}
 
 	if err := txn.Commit(); err != nil {
-		return fresh, cerrors.Errorf("could not commit db transaction: %w", err)
+		return cerrors.Errorf("could not commit db transaction: %w", err)
 	}
+	return nil
+}
+
+// ApplyPlanLive is ApplyPlan's Tier-1 live-server counterpart (design doc §2,
+// as reworked): it recomputes and hash-verifies the plan exactly like
+// ApplyPlan, but where ApplyPlan refuses a running pipeline outright,
+// ApplyPlanLive drives the pipeline's own lifecycle to apply the change
+// safely:
+//
+//  1. If the pipeline is not currently running (or does not exist yet), this
+//     is identical to ApplyPlan's tail: transactionalImport and return. There
+//     is nothing live to disrupt.
+//  2. If the pipeline is running, ApplyPlanLive calls
+//     lifecycleService.StopAndWait (never Stop — see that method's doc for
+//     why: only StopAndWait proves the pipeline has fully drained AND its
+//     positions are durably persisted before anything mutates it).
+//  3. Once StopAndWait returns, transactionalImport runs exactly as in step 1
+//     — the pipeline is now stopped and quiescent, so this is safe.
+//  4. Only if the import commits does ApplyPlanLive call
+//     lifecycleService.Start to resume the pipeline under the new config,
+//     which resumes from the checkpointed position each connector's Open
+//     reads on startup (invariant 2: at-least-once).
+//
+// Failure handling (design doc "Failure modes" + AC-5/AC-6): on any error
+// after StopAndWait — whether the import fails (importPipeline's own reverse
+// rollback already ran, see import.go) or Start itself fails — ApplyPlanLive
+// returns the error and does NOT attempt to (re)start the pipeline. It is
+// left stopped rather than auto-started into a half-applied or just-rolled-
+// back state; an operator/agent can inspect the error and retry Start
+// explicitly once they've confirmed the pipeline's state. This is the
+// property that makes a crash between StopAndWait and Start (or mid-import)
+// recoverable: the transaction (step 3) makes the store consistent
+// (all-or-nothing), the pipeline is left stopped either way, and a subsequent
+// Start — whenever it happens — resumes from the last durable checkpoint.
+//
+// Scope decision (design doc §2, left open there — "may still stop-restart
+// for safety"): ApplyPlanLive does NOT branch on individual Changes' Effect
+// (EffectInPlace vs EffectRestart) — every non-empty Diff against a running
+// pipeline goes through the full stop-drain-restart, even a diff that is
+// EffectInPlace-only (e.g. a connector settings change). A finer-grained "no
+// stop needed for in-place-only changes" optimization is explicitly deferred
+// to true in-place hot-reload (§4 of the design doc, out of scope for
+// #2588 PR1): inventing a narrower classifier here, ahead of that design
+// work, risks silently under-draining a change that looks in-place but isn't
+// (see the design doc's Item 6 rework, which made the same conservative call
+// for the operator-authorization gate).
+func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, hash string) (Diff, error) {
+	fresh, err := s.Plan(ctx, desired)
+	if err != nil {
+		return Diff{}, err
+	}
+
+	if fresh.Hash != hash {
+		ce := conduiterr.New(CodePlanStale, fmt.Sprintf(
+			"plan for pipeline %q is stale: the presented hash %q does not match the current plan hash %q; "+
+				"the config file or the live pipeline state changed since the plan was computed", desired.ID, hash, fresh.Hash))
+		ce.Suggestion = "re-run 'conduit pipelines deploy' to compute a fresh plan, review it, then apply its hash"
+		return fresh, ce
+	}
+
+	if fresh.Empty() {
+		// Idempotent: desired already matches current state. Nothing to apply,
+		// so there is nothing that could disrupt a live pipeline here either.
+		return fresh, nil
+	}
+
+	current, err := s.pipelineService.Get(ctx, desired.ID)
+	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+		return fresh, cerrors.Errorf("could not check whether pipeline %v is running: %w", desired.ID, err)
+	}
+	running := err == nil && isRunningStatus(current.GetStatus())
+
+	if !running {
+		// Nothing live to disrupt — identical to ApplyPlan's tail.
+		if err := s.transactionalImport(ctx, desired); err != nil {
+			return fresh, err
+		}
+		return fresh, nil
+	}
+
+	// Invariant 7 / Tier-1 safety: StopAndWait — not Stop — is the only
+	// primitive that proves the pipeline is fully drained and its positions
+	// are durably persisted before importPipeline runs against it. See
+	// lifecycle.Service.StopAndWait's doc and the design doc's blocker 1.
+	//
+	// KNOWN GAP (flagged, not fixed, in PR1 of #2588 — see the design doc's
+	// Failure modes, "Concurrent applies / apply-during-manual-stop", which
+	// calls for a per-pipeline provisioning lock this method does not yet
+	// take): between StopAndWait returning and transactionalImport/Start
+	// below, nothing prevents a concurrent caller from independently calling
+	// Start on this now-genuinely-stopped pipeline. If that happens, this
+	// method's own Start call below fails (Start refuses an
+	// already-running pipeline), the store nonetheless already has the new
+	// config (transactionalImport committed), and the concurrently-started
+	// pipeline keeps running with the connector instances it loaded before
+	// the mutation — a config-drift condition (not a data-loss one:
+	// invariants 1-3 aren't violated) until it's stopped and started again.
+	// Not reachable from outside this package in PR1 (no API/CLI/MCP surface
+	// calls ApplyPlanLive yet), so there is no live exploitability today —
+	// but a per-pipeline lock belongs in or before whichever PR first exposes
+	// this method to concurrent external callers (tracked for PR2).
+	if err := s.lifecycleService.StopAndWait(ctx, desired.ID); err != nil {
+		return fresh, cerrors.Errorf("could not stop pipeline %q to apply live changes: %w", desired.ID, err)
+	}
+
+	if err := s.transactionalImport(ctx, desired); err != nil {
+		// The pipeline is already stopped (StopAndWait above) and the
+		// transaction guarantees the store wasn't left partially mutated
+		// (invariant 5). Leave it stopped — do not attempt to restart into a
+		// half-applied or rolled-back state — and surface the error as-is.
+		return fresh, err
+	}
+
+	if err := s.lifecycleService.Start(ctx, desired.ID); err != nil {
+		// The new config is already durably committed; only the restart
+		// failed. Leave the pipeline stopped with the valid new config and
+		// surface the error so an operator/agent can retry Start once the
+		// underlying issue (e.g. a bad plugin path) is resolved.
+		return fresh, cerrors.Errorf("pipeline %q was updated but failed to restart, it remains stopped with the new config: %w", desired.ID, err)
+	}
+
 	return fresh, nil
 }
 
@@ -268,6 +409,24 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 // or having partially failed into, an error), so the same invariant-7
 // concern applies — only a pipeline a human/system has actually stopped
 // (StatusUserStopped, StatusSystemStopped) is safe to mutate.
+//
+// KNOWN GAP (pre-existing, not introduced by ApplyPlanLive, flagged during
+// its review): a pipeline that reached StatusDegraded via a fatal error (or
+// exhausted error-recovery retries) has, by the time that status is visible
+// here, already removed itself from lifecycle.Service's runningPipelines —
+// see Service.runPipeline's cleanup goroutine in pkg/lifecycle/service.go,
+// which calls UpdateStatus(StatusDegraded, ...) and runningPipelines.Delete
+// in the same terminal step. So isRunningStatus correctly reports "true"
+// (there was live work, and the pipeline needs an explicit decision before
+// being mutated) but StopAndWait/Stop then fails with
+// pipeline.ErrPipelineNotRunning against that same pipeline, since it is no
+// longer registered as running. ApplyPlan has the identical dead end today
+// (refuses with CodePipelineRunning, but the suggested fix — "stop the
+// pipeline first" — also fails for the same reason). Fixing this requires
+// either excluding StatusDegraded here or making Stop/StopAndWait tolerant of
+// an already-self-stopped Degraded pipeline; out of scope for this change,
+// surfaced for an explicit decision rather than silently left as a
+// non-obvious dead end.
 func isRunningStatus(status pipeline.Status) bool {
 	switch status {
 	case pipeline.StatusRunning, pipeline.StatusRecovering, pipeline.StatusDegraded:

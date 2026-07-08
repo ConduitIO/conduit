@@ -74,4 +74,10 @@ type ConnectorPluginService interface {
 type LifecycleService interface {
 	Start(ctx context.Context, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
+	// StopAndWait gracefully stops the pipeline and blocks until it has fully
+	// drained and its connectors' positions are durably persisted — see
+	// lifecycle.Service.StopAndWait's doc. ApplyPlanLive relies on this
+	// (rather than Stop) to know it is safe to mutate a running pipeline's
+	// stored config; see docs/design-documents/20260708-live-server-deploy-apply.md.
+	StopAndWait(ctx context.Context, pipelineID string) error
 }

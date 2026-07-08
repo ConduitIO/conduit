@@ -113,6 +113,13 @@ type Runtime struct {
 type lifecycleService interface {
 	Start(ctx context.Context, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
+	// StopAndWait is required so this interface stays a superset of
+	// provisioning.LifecycleService (Go requires that for the implicit
+	// interface-to-interface assignment in newRuntime below to type-check).
+	// See lifecycle.Service.StopAndWait's doc for what it guarantees, and
+	// lifecycle-poc(pkg/lifecycle-poc).Service.StopAndWait for why the
+	// Preview.PipelineArchV2 implementation always refuses.
+	StopAndWait(ctx context.Context, pipelineID string) error
 	Init(ctx context.Context) error
 }
 

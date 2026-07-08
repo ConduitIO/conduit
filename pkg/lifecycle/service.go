@@ -119,10 +119,14 @@ type runnablePipeline struct {
 	recoveryAttempts *atomic.Int64
 }
 
-// ConnectorService can fetch and create a connector instance.
+// ConnectorService can fetch and create a connector instance, and report when
+// every position/state write already queued for persistence has been
+// durably committed — see WaitPersisted's doc and StopAndWait, which relies
+// on it to await durability after a pipeline has fully drained.
 type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
+	WaitPersisted()
 }
 
 // ProcessorService can fetch a processor instance and make a runnable processor from it.
@@ -427,6 +431,56 @@ func (s *Service) WaitPipeline(id string) error {
 	if err, ok := s.terminalErrors.Get(id); ok {
 		return err
 	}
+	return nil
+}
+
+// StopAndWait gracefully stops the pipeline with the given ID and blocks
+// until it has reached full quiescence: every node goroutine has exited
+// (drain complete — see stream.SourceNode.Run's openMsgTracker.Wait(), which
+// keeps the source's Teardown from running until every in-flight message has
+// been acked or nacked end-to-end) AND every connector position/state write
+// that drain triggered has been durably flushed to the store.
+//
+// Callers MUST use StopAndWait instead of Stop when they intend to mutate the
+// pipeline's stored connectors/processors/config immediately afterward (e.g.
+// provisioning.Service.ApplyPlanLive's stop-drain-restart). Stop(ctx, id,
+// false) alone only injects a stop-control-message into the source node and
+// returns — it does not wait for the drain, let alone the position flush, to
+// complete. Racing a mutation against that in-flight drain could tear down or
+// reconfigure a connector while old goroutines are still mid-flight,
+// corrupting acks or losing the final position write.
+//
+// Invariant 1 (never ack upstream before the downstream write is durable) and
+// invariant 3 (at-least-once: no path may drop a record without delivering or
+// DLQ-routing it) are why StopAndWait blocks on both signals rather than just
+// the first: WaitPipeline alone proves every record was acked end-to-end, but
+// says nothing about whether the resulting position write actually reached
+// disk — connector.Persister batches and flushes asynchronously, so without
+// the second wait a caller could observe a "stopped" pipeline whose last
+// checkpoint is still only in memory, and mutate/restart it into that gap.
+// See docs/design-documents/20260708-live-server-deploy-apply.md, "Review
+// outcome & required rework", blocker 1, which traced this exact race in the
+// original (pre-rework) design.
+//
+// StopAndWait requires the pipeline to already be running (it delegates to
+// Stop, which returns pipeline.ErrPipelineNotRunning-coded errors otherwise)
+// and only ever stops gracefully — there is no forceful variant, since a
+// forceful stop provides none of the drain/flush guarantees a caller needing
+// this primitive is asking for.
+func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
+	if err := s.Stop(ctx, pipelineID, false); err != nil {
+		return cerrors.Errorf("could not stop pipeline %s: %w", pipelineID, err)
+	}
+
+	if err := s.WaitPipeline(pipelineID); err != nil {
+		return cerrors.Errorf("pipeline %s did not stop gracefully: %w", pipelineID, err)
+	}
+
+	// Invariant 1/3: do not return — and thus do not let a caller mutate or
+	// tear down this pipeline's connectors — until every position/state write
+	// the drain above already triggered is durably persisted.
+	s.connectors.WaitPersisted()
+
 	return nil
 }
 
