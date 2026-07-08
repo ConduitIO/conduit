@@ -117,8 +117,8 @@ human path. This is the enforced gate the MCP design deferred to #2588.
 **Tier 1** (mutates live pipelines on the data path + API contract). Requires:
 the kill-mid-apply recovery test (AC-6), the drain-no-loss test (AC-3), rollback
 (AC-5), stale-hash (AC-4), the enforced-gate test (AC-7), human sign-off, and a
-failure-mode analysis in the PR. Chaos suite: add the stop-drain-restart-under-load
-- kill-mid-apply case.
+failure-mode analysis in the PR. Chaos suite: add a stop-drain-restart-under-load
+and kill-mid-apply case.
 
 ## Scope boundary
 
