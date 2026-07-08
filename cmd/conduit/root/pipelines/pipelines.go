@@ -35,6 +35,8 @@ func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 		&DescribeCommand{},
 		&ValidateCommand{},
 		&LintCommand{},
+		&DeployCommand{},
+		&ApplyCommand{},
 	}
 }
 

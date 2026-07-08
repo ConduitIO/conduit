@@ -890,8 +890,19 @@ type fakeAction struct {
 	string   string
 	do       func(context.Context) error
 	rollback func(context.Context) error
+	describe func() Change
 }
 
 func (f fakeAction) String() string                     { return f.string }
 func (f fakeAction) Do(ctx context.Context) error       { return f.do(ctx) }
 func (f fakeAction) Rollback(ctx context.Context) error { return f.rollback(ctx) }
+
+// Describe returns the zero Change when describe is unset — the existing
+// executeActions/rollbackActions tests in this file only exercise Do/
+// Rollback and never call Describe, so they don't need to set it.
+func (f fakeAction) Describe() Change {
+	if f.describe == nil {
+		return Change{}
+	}
+	return f.describe()
+}
