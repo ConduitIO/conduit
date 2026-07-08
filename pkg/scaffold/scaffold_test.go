@@ -145,6 +145,35 @@ func TestGenerate_DestinationExists_NoForce(t *testing.T) {
 	assert.Equal(t, exitcode.Validation, exitcode.ExitCode(err))
 }
 
+// TestGenerate_Force_Overwrites is the --force half of "destination exists
+// -> refuse; --force to overwrite (never silent clobber)": a pre-existing
+// directory (with content scaffold.Generate never wrote, proving it's the
+// caller's own directory, not a leftover from a prior run) is replaced when
+// --force is set, and the result is the fresh, buildable scaffold — not a
+// merge of old and new content.
+func TestGenerate_Force_Overwrites(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	marker := filepath.Join(dir, "pre-existing-marker.txt")
+	require.NoError(t, os.WriteFile(marker, []byte("should be gone after --force"), 0o644))
+
+	res, err := scaffold.Generate(context.Background(), scaffold.Request{
+		Kind:         scaffold.KindConnector,
+		Language:     scaffold.LanguageGo,
+		Name:         "s3",
+		Module:       "github.com/devaris/conduit-connector-s3",
+		Path:         dir,
+		Force:        true,
+		Git:          false,
+		SkipGenerate: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, dir, res.Path)
+
+	assert.NoFileExists(t, marker, "--force must replace the destination, not merge into it")
+	assertBuilds(t, dir)
+}
+
 func TestGenerate_MissingToolchain_NoPartialDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
 	t.Setenv("PATH", t.TempDir())
