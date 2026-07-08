@@ -243,10 +243,13 @@ func TestApplyPlan_MatchingHash_Executes(t *testing.T) {
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 
-	pipSrv.EXPECT().Get(ctx, "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
-	pipSrv.EXPECT().Create(ctx, "p1", gomock.Any(), pipeline.ProvisionTypeConfig).
+	// apply wraps importPipeline in a DB transaction (plan.go), so the writes
+	// inside it run with the transactional ctx, not the plain ctx Plan uses —
+	// match gomock.Any() on ctx rather than pinning the transaction plumbing.
+	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
+	pipSrv.EXPECT().Create(gomock.Any(), "p1", gomock.Any(), pipeline.ProvisionTypeConfig).
 		Return(&pipeline.Instance{ID: "p1"}, nil)
-	pipSrv.EXPECT().UpdateDLQ(ctx, "p1", gomock.Any()).Return(&pipeline.Instance{ID: "p1"}, nil)
+	pipSrv.EXPECT().UpdateDLQ(gomock.Any(), "p1", gomock.Any()).Return(&pipeline.Instance{ID: "p1"}, nil)
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
@@ -254,6 +257,40 @@ func TestApplyPlan_MatchingHash_Executes(t *testing.T) {
 	applied, err := srv.ApplyPlan(ctx, desired, diff.Hash)
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
+}
+
+// TestApplyPlan_WrapsImportInTransaction is the regression test for the
+// crash-safety fix (#2588 review): apply must run importPipeline inside a single
+// DB transaction (invariant 5 — state writes are atomic), exactly as
+// provisionPipeline does, so a crash or a failed in-process rollback can't leave
+// the store partially mutated. It captures the ctx importPipeline's Create runs
+// with: under the fix that is the transactional child ctx, distinct from the
+// plain ctx handed to ApplyPlan. Removing the transaction wrapping regresses the
+// captured ctx back to the plain ctx and fails this test.
+func TestApplyPlan_WrapsImportInTransaction(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+
+	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
+	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
+
+	var createCtx context.Context
+	pipSrv.EXPECT().Create(gomock.Any(), "p1", gomock.Any(), pipeline.ProvisionTypeConfig).
+		DoAndReturn(func(c context.Context, _ string, _ pipeline.Config, _ pipeline.ProvisionType) (*pipeline.Instance, error) {
+			createCtx = c
+			return &pipeline.Instance{ID: "p1"}, nil
+		})
+	pipSrv.EXPECT().UpdateDLQ(gomock.Any(), "p1", gomock.Any()).Return(&pipeline.Instance{ID: "p1"}, nil)
+
+	diff, err := srv.Plan(ctx, desired)
+	is.NoErr(err)
+	_, err = srv.ApplyPlan(ctx, desired, diff.Hash)
+	is.NoErr(err)
+
+	is.True(createCtx != nil) // importPipeline ran
+	is.True(createCtx != ctx) // ...under the transactional ctx, not the plain one
 }
 
 // TestApplyPlan_StaleHash_RefusedNoMutation is the regression test for AC-7:
@@ -316,17 +353,19 @@ func TestApplyPlan_PartialFailure_RollsBackPrefix(t *testing.T) {
 		},
 	}
 
-	pipSrv.EXPECT().Get(ctx, "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
+	// apply wraps importPipeline in a DB transaction (plan.go), so calls inside
+	// it run with the transactional ctx — match gomock.Any() on ctx.
+	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
 
 	// Pipeline create (and its rollback, a Delete) succeeds; the connector
 	// create that follows fails, forcing a rollback of the pipeline create.
-	pipSrv.EXPECT().Create(ctx, "p1", gomock.Any(), pipeline.ProvisionTypeConfig).
+	pipSrv.EXPECT().Create(gomock.Any(), "p1", gomock.Any(), pipeline.ProvisionTypeConfig).
 		Return(&pipeline.Instance{ID: "p1"}, nil)
-	pipSrv.EXPECT().UpdateDLQ(ctx, "p1", gomock.Any()).Return(&pipeline.Instance{ID: "p1"}, nil)
-	pipSrv.EXPECT().AddConnector(ctx, "p1", "p1:conn:src").Return(&pipeline.Instance{ID: "p1"}, nil)
+	pipSrv.EXPECT().UpdateDLQ(gomock.Any(), "p1", gomock.Any()).Return(&pipeline.Instance{ID: "p1"}, nil)
+	pipSrv.EXPECT().AddConnector(gomock.Any(), "p1", "p1:conn:src").Return(&pipeline.Instance{ID: "p1"}, nil)
 
 	wantErr := cerrors.New("forced connector create failure")
-	connSrv.EXPECT().Create(ctx, "p1:conn:src", gomock.Any(), "builtin:generator", "p1", gomock.Any(), gomock.Any()).
+	connSrv.EXPECT().Create(gomock.Any(), "p1:conn:src", gomock.Any(), "builtin:generator", "p1", gomock.Any(), gomock.Any()).
 		Return(nil, wantErr)
 
 	// rollbackActions rolls back the whole executed-plus-failed prefix in
@@ -334,8 +373,8 @@ func TestApplyPlan_PartialFailure_RollsBackPrefix(t *testing.T) {
 	// failed createConnectorAction is rolled back first (its own comment:
 	// "ignore instance not found errors, this means the action failed to
 	// create the connector in the first place"), then the pipeline create.
-	connSrv.EXPECT().Delete(ctx, "p1:conn:src", gomock.Any()).Return(connector.ErrInstanceNotFound)
-	pipSrv.EXPECT().Delete(ctx, "p1").Return(nil)
+	connSrv.EXPECT().Delete(gomock.Any(), "p1:conn:src", gomock.Any()).Return(connector.ErrInstanceNotFound)
+	pipSrv.EXPECT().Delete(gomock.Any(), "p1").Return(nil)
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
