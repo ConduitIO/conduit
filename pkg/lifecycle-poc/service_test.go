@@ -15,6 +15,7 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strconv"
@@ -263,8 +264,12 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	)
 	is.NoErr(err)
 
-	// wait for pipeline to finish consuming records from the source
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the source to have acked every record before stopping: stopping
+	// earlier races Worker.Stop against the in-flight batch loop and can leave
+	// some of the 10 records undelivered, which fails the asserterDestination /
+	// SourcePluginWithAcks mock expectations in t.Cleanup with an unrelated-looking
+	// error. See waitForRecordsAcked.
+	waitForRecordsAcked(t, source, wantRecords)
 
 	is.Equal(pipeline.StatusRunning, pl.GetStatus())
 	is.Equal("", pl.Error)
@@ -283,6 +288,13 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	// Without this, the persister's background flush timer can fire after this
+	// test function returns and log via logger (log.Test(t), backed by t.Log),
+	// which panics ("Log in goroutine after ... has completed") and can corrupt
+	// unrelated concurrently-scheduled tests in the same process. Confirmed by
+	// repro under `-race -shuffle=on -count=1500` under CPU load; the race
+	// detector flags the underlying unsynchronized access to testing.T state.
+	defer persister.Wait()
 
 	ps := pipeline.NewService(logger, db)
 
@@ -377,6 +389,11 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	// See the comment on the equivalent defer in TestServiceLifecycle_PipelineError:
+	// without waiting, the persister's background flush goroutine can outlive this
+	// test function (goroutine leak); harmless here since the logger is a no-op and
+	// db is test-local, but kept consistent with the other tests in this file.
+	defer persister.Wait()
 
 	ps := pipeline.NewService(logger, db)
 
@@ -423,8 +440,12 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	)
 	is.NoErr(err)
 
-	// wait for pipeline to finish consuming records from the source
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the source to have acked every record before stopping: stopping
+	// earlier races Worker.Stop against the in-flight batch loop and can leave
+	// some of the 10 records undelivered, which fails the asserterDestination /
+	// SourcePluginWithAcks mock expectations in t.Cleanup with an unrelated-looking
+	// error. See waitForRecordsAcked.
+	waitForRecordsAcked(t, source, wantRecords)
 	err = ls.StopAll(ctx, false)
 	is.NoErr(err)
 
@@ -434,6 +455,39 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 
 	is.Equal(pipeline.StatusSystemStopped, pl.GetStatus())
 	is.Equal("", pl.Error)
+}
+
+// waitForRecordsAcked blocks until the source connector has acked through the
+// position of the last of the given records (or returns immediately if records
+// is empty). It fails the test if that doesn't happen within the timeout.
+//
+// This is the deterministic replacement for a fixed time.Sleep used to let
+// records "finish flowing" before a test stops the pipeline: a sleep is a
+// guess at a duration, and under CI load the guess can be wrong, causing
+// Worker.Stop to cut the pipeline off mid-delivery. Source.Ack persists the
+// last acked position on connector.Instance.State (see pkg/connector/source.go),
+// which is exported and lock-guarded via the embedded sync.RWMutex, so it's a
+// legitimate, non-invasive observation point — no product code changes needed.
+func waitForRecordsAcked(t *testing.T, source *connector.Instance, records []opencdc.Record) {
+	t.Helper()
+	if len(records) == 0 {
+		return
+	}
+	want := records[len(records)-1].Position
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		source.RLock()
+		state, ok := source.State.(connector.SourceState)
+		source.RUnlock()
+		if ok && bytes.Equal(state.Position, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for source to ack all %d records (last acked state: %+v)", len(records), source.State)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func generateRecords(count int) []opencdc.Record {

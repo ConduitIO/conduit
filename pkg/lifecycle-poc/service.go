@@ -56,6 +56,15 @@ type Service struct {
 	handlers         []FailureHandler
 	runningPipelines *csync.Map[string, *runnablePipeline]
 
+	// terminalErrors holds the terminal error of a pipeline after it has stopped
+	// and been removed from runningPipelines, so WaitPipeline can still report it
+	// to a caller that races the pipeline's own cleanup goroutine. Written before
+	// the runningPipelines entry is deleted; cleared when the pipeline is started
+	// again. Ports the fix applied to the sibling pkg/lifecycle package for the
+	// same WaitPipeline lookup-after-delete race — see
+	// docs/design-documents/20260706-forceful-stop-test-determinism.md.
+	terminalErrors *csync.Map[string, error]
+
 	isGracefulShutdown atomic.Bool
 	metricsDisabled    bool
 }
@@ -76,6 +85,7 @@ func NewService(
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
+		terminalErrors:   csync.NewMap[string, error](),
 		metricsDisabled:  metricsDisabled,
 	}
 }
@@ -160,6 +170,10 @@ func (s *Service) Start(
 	if err != nil {
 		return cerrors.Errorf("could not build tasks for pipeline %s: %w", pl.ID, err)
 	}
+
+	// A new run supersedes any terminal error recorded by a previous run of this
+	// pipeline, so a later WaitPipeline can't return a stale result.
+	s.terminalErrors.Delete(pipelineID)
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running pipeline")
 
@@ -281,13 +295,33 @@ func (s *Service) waitInternal() error {
 	return cerrors.Join(errs...)
 }
 
-// WaitPipeline blocks until the pipeline with the given ID is stopped.
+// WaitPipeline blocks until the pipeline with the given ID is stopped, and
+// returns the pipeline's terminal error (nil on a graceful stop).
+//
+// It is safe to call before, during, or after the pipeline's own cleanup: while
+// the pipeline is running it waits on the tomb; if the pipeline has already
+// stopped and removed itself from runningPipelines, it returns the recorded
+// terminal error instead of a false nil. Returns nil for an ID that never ran.
+//
+// Without this fallback there is a time-of-check/time-of-use race: the cleanup
+// goroutine (runPipeline) can call runningPipelines.Delete(id) between this
+// method's lookup and return, in which case a naive "!ok -> return nil" drops
+// the terminal error the caller was waiting for. See
+// docs/design-documents/20260706-forceful-stop-test-determinism.md, which
+// diagnosed and fixed the identical bug in the sibling pkg/lifecycle package.
 func (s *Service) WaitPipeline(id string) error {
 	p, ok := s.runningPipelines.Get(id)
-	if !ok || p.t == nil {
-		return nil
+	if ok && p.t != nil {
+		return p.t.Wait()
 	}
-	return p.t.Wait()
+	// The pipeline already cleaned itself up (or never started under this ID).
+	// terminalErrors is written before the runningPipelines entry is deleted, so
+	// if the pipeline ran and stopped, its terminal error is here — recovering
+	// the result the lookup above would otherwise have lost to the cleanup race.
+	if err, ok := s.terminalErrors.Get(id); ok {
+		return err
+	}
+	return nil
 }
 
 // buildRunnablePipeline will build and connect all tasks configured in the pipeline.
@@ -575,6 +609,31 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 
 	var workersWg sync.WaitGroup
 
+	// startupDone is closed once the initial "running" status write below has
+	// fully completed. The cleanup goroutine waits on it before writing its own
+	// terminal status to the same *pipeline.Instance.
+	//
+	// pipeline.Service.UpdateStatus is not safe to call concurrently for the same
+	// ID: SetStatus is lock-guarded, but the errMsg field write and the store's
+	// JSON-encode of the whole instance for persistence are not. With the mocks
+	// used in tests there is no real I/O delay, so the worker can run to
+	// completion and the cleanup goroutine can reach its own UpdateStatus call
+	// while the initial UpdateStatus(StatusRunning) call below is still in
+	// flight, corrupting whichever field loses the race and, worst case,
+	// clobbering a correct terminal status back to "running" — confirmed by
+	// repro: `-race -shuffle=on -count=1500` under CPU load caught the two
+	// UpdateStatus calls racing on the same struct.
+	//
+	// Both t.Go calls below stay adjacent (nothing slow between them) so
+	// tomb.alive reaches 2 before either goroutine can possibly finish; ordering
+	// the UpdateStatus calls via this channel instead of via t.Go call order
+	// avoids a second bug that surfaced when this was first tried by
+	// interleaving a synchronous UpdateStatus between the two t.Go calls: if the
+	// worker finishes before that call returns, tomb.alive can hit 0 before the
+	// cleanup goroutine is even registered, and the later t.Go panics with
+	// "tomb.Go called after all goroutines terminated".
+	startupDone := make(chan struct{})
+
 	// TODO(multi-connector): when we have multiple connectors spawn a worker for each source
 	workersWg.Add(1)
 	rp.t.Go(func() error {
@@ -586,17 +645,36 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		closeErr := rp.w.Close(context.Background())
 		err := cerrors.Join(doErr, closeErr)
 		if err != nil {
-			return cerrors.Errorf("worker stopped with error: %w", err)
+			err = cerrors.Errorf("worker stopped with error: %w", err)
+			// Record the reason on the tomb synchronously, before returning (and
+			// thus before the deferred workersWg.Done() above fires). Without
+			// this, tomb.v2 only records a t.Go'd function's return value in its
+			// *own* post-return bookkeeping (t.run, after f() returns) — which
+			// races the cleanup goroutine below waking from workersWg.Wait() and
+			// reading rp.t.Err(). Losing that race makes the cleanup goroutine
+			// observe tomb.ErrStillAlive for a pipeline that actually died with a
+			// fatal error, misreporting it as gracefully stopped (status
+			// UserStopped/SystemStopped instead of Degraded, dropping the error
+			// entirely) — confirmed by repro under `-race -count=500`. Kill is
+			// idempotent and safe to call here: t.run's own kill(err) call after
+			// this function returns is then a no-op (reason already set).
+			rp.t.Kill(err)
+			return err
 		}
 
 		return nil
 	})
+
 	rp.t.Go(func() error {
 		// Use fresh context for cleanup function, otherwise the updated status
 		// will potentially fail to be stored.
 		ctx := context.Background()
 
 		workersWg.Wait()
+		// Wait for the initial StatusRunning write below to fully finish before
+		// this goroutine writes its own terminal status to the same
+		// *pipeline.Instance. See the comment on startupDone above.
+		<-startupDone
 		err := rp.t.Err()
 
 		switch err {
@@ -647,6 +725,12 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Msg("pipeline stopped")
 
+		// Record the terminal error before removing the pipeline from
+		// runningPipelines, so a WaitPipeline caller that races this cleanup still
+		// sees the result instead of a false nil (ordering matters: set before
+		// delete leaves no window where neither is observable).
+		s.terminalErrors.Set(rp.pipeline.ID, err)
+
 		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
 		s.runningPipelines.Delete(rp.pipeline.ID)
 
@@ -654,7 +738,14 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return err
 	})
 
-	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+	// Both goroutines are now registered (tomb.alive holds them alive regardless
+	// of how fast either finishes), so it's now safe to make the potentially slow
+	// UpdateStatus call and then release the cleanup goroutine to make its own.
+	// close(startupDone) unconditionally, including on error, so the cleanup
+	// goroutine (already blocked on it) is never left hanging.
+	err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+	close(startupDone)
+	return err
 }
 
 // notify notifies all registered FailureHandlers about an error.
