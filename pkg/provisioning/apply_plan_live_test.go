@@ -229,15 +229,24 @@ func TestApplyPlanLive_StaleHash_RefusedNoMutation_RunningPipeline(t *testing.T)
 }
 
 // TestApplyPlanLive_ImportFails_RunningPipeline_LeftStopped is the regression
-// test for AC-5/AC-6 against a running pipeline: once StopAndWait has
-// succeeded, the pipeline is stopped. If the transactional import then fails
-// (importPipeline's own reverse rollback already ran — see
-// TestApplyPlan_PartialFailure_RollsBackPrefix for that invariant pinned at
-// the import layer), ApplyPlanLive must surface the error and must NOT call
-// Start — no Start expectation is set on lifecycleSrv, so gomock fails the
-// test if it's called. The pipeline is left stopped (StopAndWait already ran,
-// Start never does), matching the design doc's "never auto-start into a
-// half-applied or rolled-back state."
+// test for AC-5 (partial-apply failure leaves the running pipeline stopped, not
+// half-applied-and-running): once StopAndWait has succeeded, the pipeline is
+// stopped. If the transactional import then fails (importPipeline's own reverse
+// rollback already ran — see TestApplyPlan_PartialFailure_RollsBackPrefix for
+// that invariant pinned at the import layer), ApplyPlanLive must surface the
+// error and must NOT call Start — no Start expectation is set on lifecycleSrv,
+// so gomock fails the test if it's called. The pipeline is left stopped
+// (StopAndWait already ran, Start never does), matching the design doc's "never
+// auto-start into a half-applied or rolled-back state."
+//
+// This is the control-flow half of AC-6, NOT a real crash-recovery test. A true
+// SIGKILL-mid-apply test belongs to the Phase-2 chaos suite (see CLAUDE.md's
+// process-maturity table — chaos is not yet a live gate), so it is deliberately
+// deferred, not claimed here. Crash safety in PR1 rests on two things that ARE
+// verified: the DB-transaction atomicity of importPipeline (#2595, tested
+// separately) and StopAndWait's durable-checkpoint guarantee
+// (TestServiceLifecycle_StopAndWait_DrainsAndPersists); this test pins the
+// leave-stopped control flow on top of them.
 func TestApplyPlanLive_ImportFails_RunningPipeline_LeftStopped(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
