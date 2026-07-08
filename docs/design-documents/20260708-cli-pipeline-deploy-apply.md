@@ -34,7 +34,7 @@ What does NOT exist yet: (1) a way to compute the diff **without executing it**
 
 ### 1. A cobra-free preview engine in `pkg/provisioning`
 
-```
+```text
 Plan(ctx, desired config.Pipeline) (Diff, error)   // Export(current)+Build(old,new), DESCRIBE actions, never Do()
 Diff{ PipelineID string; Changes []Change; Hash string }   // Hash = stable digest of the ordered Changes
 Change{ Resource (pipeline|connector|processor); ID; Action (create|update|delete);
