@@ -1,0 +1,13 @@
+version: 2.2
+pipelines:
+  - id: broken-pipeline
+    status: bogus-status
+    connectors:
+      - id: ""
+        type: bogus-type
+      - id: dup-conn
+        type: source
+        plugin: builtin:generator
+      - id: dup-conn
+        type: source
+        plugin: builtin:generator

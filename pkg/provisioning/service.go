@@ -17,10 +17,8 @@ package provisioning
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -174,58 +172,25 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 // we assume that the user is intentionally using this file.
 // If the given path is a directory, then this method returns all entries in the directory
 // that are not directories themselves, and that have their names end in yml or yaml.
+//
+// The resolution logic itself lives in config.ResolveFiles, shared with the
+// offline `conduit pipelines validate|lint|dry-run` commands
+// (cmd/conduit/internal/validate) so the two surfaces can't drift on what "a
+// pipeline config path" means; this method only adds the service's own
+// logging and error-wrapping conventions.
 func (s *Service) getPipelineConfigFiles(ctx context.Context, path string) ([]string, error) {
-	if path == "" {
-		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, cerrors.New("pipeline path cannot be empty"))
-	}
-
 	s.logger.Debug(ctx).
 		Str("pipelines_path", path).
 		Msg("loading pipeline configuration files")
 
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to stat pipelines path %q: %w", path, err)
-	}
-	if !info.IsDir() {
-		return []string{path}, nil
-	}
-
-	return s.getYamlFilesFromDir(ctx, path)
-}
-
-func (s *Service) getYamlFilesFromDir(ctx context.Context, path string) ([]string, error) {
-	dirEntries, err := os.ReadDir(path)
+	files, err := config.ResolveFiles(path)
 	if err != nil {
 		s.logger.Warn(ctx).
 			Err(err).
-			Msg("could not read pipelines directory")
-		return nil, err
+			Msg("could not resolve pipeline config files")
+		return nil, cerrors.Errorf("failed to read pipelines folder %q: %w", path, err)
 	}
-
-	var files []string
-	for _, dirEntry := range dirEntries {
-		filePath := filepath.Join(path, dirEntry.Name())
-		if s.isYamlFile(filePath) {
-			files = append(files, filePath)
-		}
-	}
-
 	return files, nil
-}
-
-func (s *Service) isYamlFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	if !info.Mode().IsRegular() {
-		return false
-	}
-
-	// Check if it's a YAML file
-	ext := strings.ToLower(filepath.Ext(path))
-	return ext == ".yml" || ext == ".yaml"
 }
 
 func (s *Service) parsePipelineConfigFile(ctx context.Context, path string) ([]config.Pipeline, error) {

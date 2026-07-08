@@ -1,0 +1,1 @@
+not a pipeline config, must be ignored by directory resolution

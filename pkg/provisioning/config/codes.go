@@ -27,13 +27,21 @@ var (
 	CodeFieldInvalid  = conduiterr.Register("config.field_invalid", codes.InvalidArgument)
 	CodeFieldTooLong  = conduiterr.Register("config.field_too_long", codes.InvalidArgument)
 	CodeIDDuplicate   = conduiterr.Register("config.id_duplicate", codes.InvalidArgument)
+	// CodeParseError is raised when a pipeline config document can't be parsed
+	// at all (invalid YAML, unrecognized version). It exists for offline
+	// consumers (cmd/conduit/internal/validate) that need a stable code for
+	// parser failures, which the parser itself returns as plain errors since
+	// it has no per-field configPath to attach at that stage.
+	CodeParseError = conduiterr.Register("config.parse_error", codes.InvalidArgument)
 )
 
-// fieldError builds a ConduitError carrying a machine-actionable code and the
-// JSON-pointer path to the offending field. The sentinel is kept in the chain so
-// existing errors.Is checks (ErrMandatoryField, ErrInvalidField, …) still hold.
-func fieldError(code conduiterr.Code, configPath, msg string, sentinel error) error {
+// fieldError builds a ConduitError carrying a machine-actionable code, the
+// JSON-pointer path to the offending field, and a human-readable suggestion for
+// how to fix it. The sentinel is kept in the chain so existing errors.Is checks
+// (ErrMandatoryField, ErrInvalidField, …) still hold.
+func fieldError(code conduiterr.Code, configPath, msg, suggestion string, sentinel error) error {
 	e := conduiterr.Wrap(code, msg, sentinel)
 	e.ConfigPath = configPath
+	e.Suggestion = suggestion
 	return e
 }
