@@ -62,12 +62,13 @@ type Options struct {
 	// sets this; validate/lint leave it off so their --json is unchanged.
 	Enriched bool
 
-	// ResolvePlugins checks every connector's plugin reference: a builtin
-	// (`builtin:...`) ref whose plugin is not in BuiltinPlugins is a
-	// connector.plugin_not_found error finding; a standalone/any ref is left
-	// advisory ("not statically verifiable"), never a false failure. `dry-run`
-	// sets this. The engine stays offline: BuiltinPlugins is injected by the
-	// command (from the builtin registry) rather than imported here.
+	// ResolvePlugins checks every connector AND processor plugin reference: a
+	// builtin (`builtin:...`) ref whose plugin is not in BuiltinPlugins /
+	// BuiltinProcessors is a connector.plugin_not_found / processor.plugin_not_found
+	// error finding; a standalone/any ref is left advisory ("not statically
+	// verifiable"), never a false failure. `dry-run` sets this. The engine stays
+	// offline: the builtin sets are injected by the command (from the builtin
+	// registries) rather than imported here.
 	ResolvePlugins bool
 
 	// BuiltinPlugins is the set of resolvable builtin connector references —
@@ -75,6 +76,12 @@ type Options struct {
 	// and their short names (<name>) — supplied by the dry-run command from
 	// builtin.DefaultBuiltinConnectors. Only consulted when ResolvePlugins.
 	BuiltinPlugins map[string]struct{}
+
+	// BuiltinProcessors is the set of resolvable builtin processor plugin names
+	// (e.g. "json.decode", "field.set") — the keys of
+	// builtin.DefaultBuiltinProcessors, supplied by the dry-run command. Only
+	// consulted when ResolvePlugins.
+	BuiltinProcessors map[string]struct{}
 }
 
 // RunWithOptions is Run with the opt-in checks in opts. Run(ctx, path) is
@@ -171,7 +178,7 @@ func validateFile(ctx context.Context, path string, opts Options) fileState {
 		}
 
 		if opts.ResolvePlugins {
-			fs.findings = append(fs.findings, resolvePluginRefs(enriched, opts.BuiltinPlugins)...)
+			fs.findings = append(fs.findings, resolvePluginRefs(enriched, opts)...)
 		}
 	}
 
@@ -186,29 +193,55 @@ func validateFile(ctx context.Context, path string, opts Options) fileState {
 // binary that isn't loaded during an offline dry-run, so it is "not statically
 // verifiable", never a false failure (design doc). configPath points at the
 // connector's plugin field within the file's pipelines list.
-func resolvePluginRefs(p config.Pipeline, builtins map[string]struct{}) []Finding {
+func resolvePluginRefs(p config.Pipeline, opts Options) []Finding {
 	var findings []Finding
+	add := func(f Finding, ok bool) {
+		if ok {
+			findings = append(findings, f)
+		}
+	}
 	for ci, conn := range p.Connectors {
-		fn := plugin.FullName(conn.Plugin)
-		if fn.PluginType() != plugin.PluginTypeBuiltin {
-			continue // standalone/any: not statically verifiable, advisory-by-omission
+		add(builtinRefFinding(conn.Plugin, conn.ID,
+			fmt.Sprintf("/pipelines/connectors/%d/plugin", ci),
+			conduiterr.CodeConnectorPluginNotFound.Reason(), "connector", opts.BuiltinPlugins))
+		// processors attached to a connector
+		for pi, proc := range conn.Processors {
+			add(builtinRefFinding(proc.Plugin, proc.ID,
+				fmt.Sprintf("/pipelines/connectors/%d/processors/%d/plugin", ci, pi),
+				conduiterr.CodeProcessorPluginNotFound.Reason(), "processor", opts.BuiltinProcessors))
 		}
-		name := fn.PluginName()
-		if _, ok := builtins[name]; ok {
-			continue
-		}
-		if _, ok := builtins[conn.Plugin]; ok {
-			continue
-		}
-		findings = append(findings, Finding{
-			Severity:   SeverityError,
-			Code:       conduiterr.CodeConnectorPluginNotFound.Reason(),
-			Message:    fmt.Sprintf("connector %q: builtin plugin %q is not available", conn.ID, conn.Plugin),
-			ConfigPath: fmt.Sprintf("/pipelines/connectors/%d/plugin", ci),
-			Suggestion: "check the plugin name, or use a standalone plugin path; run `conduit connectors list` to see available builtins",
-		})
+	}
+	// pipeline-level processors
+	for pi, proc := range p.Processors {
+		add(builtinRefFinding(proc.Plugin, proc.ID,
+			fmt.Sprintf("/pipelines/processors/%d/plugin", pi),
+			conduiterr.CodeProcessorPluginNotFound.Reason(), "processor", opts.BuiltinProcessors))
 	}
 	return findings
+}
+
+// builtinRefFinding classifies one plugin reference. A builtin (`builtin:...`)
+// ref whose plugin name (or full ref) is not in builtins yields a not-found
+// Finding (ok=true); a standalone/"any" ref, or a resolvable builtin, yields
+// none. kind ("connector"/"processor") shapes the message + suggestion.
+func builtinRefFinding(pluginRef, id, configPath, code, kind string, builtins map[string]struct{}) (Finding, bool) {
+	fn := plugin.FullName(pluginRef)
+	if fn.PluginType() != plugin.PluginTypeBuiltin {
+		return Finding{}, false // standalone/any: not statically verifiable, advisory-by-omission
+	}
+	if _, ok := builtins[fn.PluginName()]; ok {
+		return Finding{}, false
+	}
+	if _, ok := builtins[pluginRef]; ok {
+		return Finding{}, false
+	}
+	return Finding{
+		Severity:   SeverityError,
+		Code:       code,
+		Message:    fmt.Sprintf("%s %q: builtin plugin %q is not available", kind, id, pluginRef),
+		ConfigPath: configPath,
+		Suggestion: fmt.Sprintf("check the plugin name, or use a standalone plugin path; run `conduit %s-plugins list` to see available builtins", kind),
+	}, true
 }
 
 // findingFromError converts one element of a cerrors.ForEach walk into a

@@ -94,3 +94,40 @@ func TestRunWithOptions_ResolvePlugins_Standalone_Advisory(t *testing.T) {
 	is.True(report.OK())
 	is.Equal(report.Summary.Errors, 0)
 }
+
+// processorBuiltinsForTest is the injected builtin processor set the dry-run
+// command builds from builtin.DefaultBuiltinProcessors (keys are the names).
+var processorBuiltinsForTest = map[string]struct{}{"json.decode": {}}
+
+// AC-6 (processors): --resolve-plugins flags an unknown builtin PROCESSOR as
+// processor.plugin_not_found (codes.NotFound -> exit 2), not just connectors.
+func TestRunWithOptions_ResolvePlugins_UnknownBuiltinProcessor(t *testing.T) {
+	is := is.New(t)
+
+	report, err := RunWithOptions(context.Background(), "testdata/badprocessor.yaml",
+		Options{ResolvePlugins: true, BuiltinPlugins: builtinsForTest, BuiltinProcessors: processorBuiltinsForTest})
+	is.NoErr(err)
+	is.True(!report.OK())
+	is.Equal(report.Summary.Errors, 1)
+
+	var f Finding
+	for _, ff := range report.Files[0].Findings {
+		if ff.Code == conduiterr.CodeProcessorPluginNotFound.Reason() {
+			f = ff
+		}
+	}
+	is.Equal(f.Severity, SeverityError)
+	is.Equal(f.Code, conduiterr.CodeProcessorPluginNotFound.Reason())
+	is.Equal(bucketRank(conduiterr.CodeProcessorPluginNotFound), 2) // Validation -> exit 2
+}
+
+// A known builtin processor resolves cleanly.
+func TestRunWithOptions_ResolvePlugins_KnownBuiltinProcessor_OK(t *testing.T) {
+	is := is.New(t)
+
+	report, err := RunWithOptions(context.Background(), "testdata/goodprocessor.yaml",
+		Options{ResolvePlugins: true, BuiltinPlugins: builtinsForTest, BuiltinProcessors: processorBuiltinsForTest})
+	is.NoErr(err)
+	is.True(report.OK())
+	is.Equal(report.Summary.Errors, 0)
+}

@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	procbuiltin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -111,9 +112,10 @@ func (c *DryRunCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 	c.renderer = ui.NewRenderer(rendererOutput(ctx), c.flags.NoColor)
 
 	report, err := validate.RunWithOptions(ctx, c.args.Path, validate.Options{
-		Enriched:       true,
-		ResolvePlugins: c.flags.ResolvePlugins,
-		BuiltinPlugins: builtinPluginSet(),
+		Enriched:          true,
+		ResolvePlugins:    c.flags.ResolvePlugins,
+		BuiltinPlugins:    builtinPluginSet(),
+		BuiltinProcessors: builtinProcessorSet(),
 	})
 	if err != nil {
 		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInvalidArgument,
@@ -193,6 +195,19 @@ func builtinPluginSet() map[string]struct{} {
 	for fullPath := range builtin.DefaultBuiltinConnectors {
 		set[fullPath] = struct{}{}
 		set[strings.TrimPrefix(path.Base(fullPath), "conduit-connector-")] = struct{}{}
+	}
+	return set
+}
+
+// builtinProcessorSet returns the set of resolvable builtin processor plugin
+// names (e.g. "json.decode", "field.set") — the keys of
+// builtin.DefaultBuiltinProcessors, which are already the plugin names a config
+// references (unlike connectors, whose keys are full module paths). Injected
+// into the validate engine so it stays offline/decoupled from the registry.
+func builtinProcessorSet() map[string]struct{} {
+	set := make(map[string]struct{}, len(procbuiltin.DefaultBuiltinProcessors))
+	for name := range procbuiltin.DefaultBuiltinProcessors {
+		set[name] = struct{}{}
 	}
 	return set
 }

@@ -1,0 +1,10 @@
+version: "2.2"
+pipelines:
+  - id: bad-processor-pipeline
+    connectors:
+      - id: c1
+        type: source
+        plugin: builtin:generator
+    processors:
+      - id: proc1
+        plugin: builtin:doesnotexist
