@@ -8,7 +8,7 @@ the design rationale.
 ## Quick start
 
 ```console
-$ conduit mcp
+conduit mcp
 ```
 
 Starts the MCP server on stdio — the primary channel for an agent that spawns Conduit as a
@@ -19,7 +19,7 @@ process already owns it.
 Point the `inspect` tool at a running Conduit:
 
 ```console
-$ conduit mcp --api-address localhost:8084
+conduit mcp --api-address localhost:8084
 ```
 
 ## Tool catalog
@@ -52,7 +52,7 @@ filesystem. They are **absent from the tool catalog** — not merely present-and
 the operator starts the server with `--allow-mutations`:
 
 ```console
-$ conduit mcp --allow-mutations
+conduit mcp --allow-mutations
 ```
 
 This is a startup/process-level flag. There is no corresponding tool argument: an agent cannot
@@ -97,7 +97,7 @@ ever reaches the MCP protocol handler.
   schema, connector list, error registry, and this tool catalog) is deferred; the tool catalog
   itself is stable and documented here in the interim.
 - **North-star E2E** (a scripted agent going zero → running pipeline using only MCP + `llms.txt`):
-  deferred pending the `llms.txt` generator. Today, an agent can reach a *valid, provisioned*
+  deferred pending the `llms.txt` generator. Today, an agent can reach a _valid, provisioned_
   pipeline via `dry_run` → `deploy` → `apply`; running it requires a `conduit run` over the
   applied store until the live-server RPC path (tracked follow-up, referenced in the design doc as
   #2588) lands, at which point `apply` gains apply-to-a-running-server for the CLI and MCP
