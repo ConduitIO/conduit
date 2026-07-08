@@ -129,41 +129,9 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		Hook(ctxutil.FilepathLogCtxHook{})
 	zerolog.DefaultContextLogger = &logger.Logger
 
-	var db database.DB
-	db = cfg.DB.Driver
-
-	if db == nil {
-		var err error
-		switch cfg.DB.Type {
-		case DBTypeBadger:
-			db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
-		case DBTypePostgres:
-			db, err = postgres.New(context.Background(), logger.Logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
-		case DBTypeInMemory:
-			db = &inmemory.DB{}
-			logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
-		case DBTypeSQLite:
-			db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
-		default:
-			// An unsupported DB type is a config/validation problem, not an
-			// environment one. It stays exit 1 (the runtime default for an
-			// untagged error) by design — return it directly instead of falling into
-			// the Unavailable tagging below, which is reserved for a
-			// genuinely unreachable database (connection refused, file
-			// locked/inaccessible, etc.) for the configured, valid type.
-			return nil, cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
-		}
-		if err != nil {
-			// Pass the wrapped error (not the raw err) as Wrap's cause so the
-			// stack frame cerrors.Errorf captures here isn't discarded:
-			// conduiterr.Wrap only synthesizes a frame of its own when cause
-			// is nil, and the raw driver error typically carries none.
-			wrapped := cerrors.Errorf("failed to create a DB instance: %w", err)
-			// Tagged Unavailable: the database Conduit depends on could not
-			// be opened/dialed. pkg/conduit/exitcode maps this to exit code
-			// 3 (environment), distinct from a config/validation failure.
-			return nil, conduiterr.Wrap(conduiterr.CodeUnavailable, wrapped.Error(), wrapped)
-		}
+	db, err := OpenStore(cfg, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	configureMetrics()
@@ -185,12 +153,69 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		logger: logger,
 	}
 
-	err := createServices(r)
+	err = createServices(r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to initialize services: %w", err)
 	}
 
 	return r, nil
+}
+
+// OpenStore opens the database driver configured by cfg (or returns
+// cfg.DB.Driver directly, when the embedder set one explicitly) without
+// doing anything else — no metrics, no persister, no services. It is the
+// exact DB-open logic NewRuntime uses, extracted so `conduit doctor`'s
+// store.reachable check (see
+// docs/design-documents/20260707-cli-doctor.md) can probe database
+// reachability the same way `conduit run` would, instead of reimplementing
+// or drifting from it.
+//
+// logger is a required parameter (not derived internally from cfg.Log) so a
+// caller that only wants to probe reachability — doctor runs before any
+// Runtime exists — can supply a throwaway logger (e.g. log.Nop()) instead of
+// depending on Runtime construction order or Config.Log.NewLogger being set.
+//
+// The returned database.DB is opened but not pinged; callers that only want
+// to validate config (not actually dial/open anything) should not call this.
+// A caller that opens a store here is responsible for calling Close on it.
+func OpenStore(cfg Config, logger log.CtxLogger) (database.DB, error) {
+	if cfg.DB.Driver != nil {
+		return cfg.DB.Driver, nil
+	}
+
+	var db database.DB
+	var err error
+	switch cfg.DB.Type {
+	case DBTypeBadger:
+		db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
+	case DBTypePostgres:
+		db, err = postgres.New(context.Background(), logger.Logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
+	case DBTypeInMemory:
+		db = &inmemory.DB{}
+		logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
+	case DBTypeSQLite:
+		db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
+	default:
+		// An unsupported DB type is a config/validation problem, not an
+		// environment one. It stays exit 1 (the runtime default for an
+		// untagged error) by design — return it directly instead of falling into
+		// the Unavailable tagging below, which is reserved for a
+		// genuinely unreachable database (connection refused, file
+		// locked/inaccessible, etc.) for the configured, valid type.
+		return nil, cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
+	}
+	if err != nil {
+		// Pass the wrapped error (not the raw err) as Wrap's cause so the
+		// stack frame cerrors.Errorf captures here isn't discarded:
+		// conduiterr.Wrap only synthesizes a frame of its own when cause
+		// is nil, and the raw driver error typically carries none.
+		wrapped := cerrors.Errorf("failed to create a DB instance: %w", err)
+		// Tagged Unavailable: the database Conduit depends on could not
+		// be opened/dialed. pkg/conduit/exitcode maps this to exit code
+		// 3 (environment), distinct from a config/validation failure.
+		return nil, conduiterr.Wrap(conduiterr.CodeUnavailable, wrapped.Error(), wrapped)
+	}
+	return db, nil
 }
 
 // Create all necessary internal services

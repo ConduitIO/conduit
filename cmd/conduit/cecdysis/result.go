@@ -17,6 +17,7 @@ package cecdysis
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -123,6 +124,63 @@ type CommandWithResult interface {
 	Render(outcome Outcome) string
 }
 
+// CommandWithResultExitCode is implemented by a CommandWithResult whose
+// domain findings (Outcome.OK == false) must still fail the process exit
+// code — e.g. `doctor`'s failing checks, or a future `pipelines validate`
+// run that found errors. Per the CLI output conventions §1, a domain
+// finding is NOT a HARD command failure: ExecuteWithResult returns
+// (Outcome{OK: false, ...}, nil), so the --json envelope's "error" stays
+// null. But per conventions §4, a multi-result command still must reduce
+// its findings to a nonzero process exit code. Without this interface,
+// there would be no way to do that: CommandWithResultDecorator's RunE
+// returns nil whenever ExecuteWithResult returns a nil error (see Decorate),
+// so cmd/conduit/cli's classification of the returned error would always see
+// OK and exit 0 — silently wrong for a command whose checks failed.
+//
+// Implement this alongside CommandWithResult. ExitCode is only consulted
+// when ExecuteWithResult returns a nil error; a HARD failure's exit code is
+// already classified from the error itself, via pkg/conduit/exitcode.
+type CommandWithResultExitCode interface {
+	CommandWithResult
+	// ExitCode returns the process exit code for a successful (err == nil)
+	// run's Outcome — e.g. by delegating to check.Report.ExitCode() (see
+	// pkg/conduit/check). Return 0 (exitcode.OK) when nothing failed.
+	ExitCode(outcome Outcome) int
+}
+
+// exitCodeAnnotation is the cobra Command.Annotations key
+// CommandWithResultDecorator uses to smuggle a CommandWithResultExitCode's
+// exit code out of a successful (err == nil) RunE. RunE's own return value
+// can't carry it without turning a domain finding into what looks like a
+// HARD failure (see CommandWithResultExitCode's doc), so this rides out on
+// the leaf *cobra.Command instead — cmd/conduit/cli reads it back via
+// ResultExitCode from the *cobra.Command cmd.ExecuteC() returns (the leaf
+// command that actually ran), after a nil-error Execute().
+const exitCodeAnnotation = "conduit.exitCode"
+
+// ResultExitCode returns the exit code CommandWithResultDecorator recorded
+// on cmd via a CommandWithResultExitCode's ExitCode method, if any, and
+// whether one was recorded at all. cmd should be the *cobra.Command
+// cmd.ExecuteC() returned (the leaf command that actually ran), not the
+// root command — Annotations are per-Command, not inherited from a parent.
+func ResultExitCode(cmd *cobra.Command) (int, bool) {
+	if cmd == nil || cmd.Annotations == nil {
+		return 0, false
+	}
+	s, ok := cmd.Annotations[exitCodeAnnotation]
+	if !ok {
+		return 0, false
+	}
+	code, err := strconv.Atoi(s)
+	if err != nil {
+		// Should not happen — this package is the only writer of this
+		// annotation, and it always writes strconv.Itoa's output. Treat a
+		// corrupted value as "nothing recorded" rather than panicking.
+		return 0, false
+	}
+	return code, true
+}
+
 // CommandWithResultDecorator wires CommandWithResult's --json flag, renders
 // the shared Result envelope (JSON) or Outcome (human), and — structurally,
 // for every command it decorates, per CLI output conventions §5 — sets
@@ -174,6 +232,18 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 			// wired in cmd/conduit/cli) still classifies it correctly;
 			// SilenceErrors above stops cobra from printing it a second time.
 			return err
+		}
+
+		// A domain finding (Outcome.OK == false with a nil err) still needs
+		// to fail the process exit code — see CommandWithResultExitCode's
+		// doc for why this can't ride on RunE's return value.
+		if ec, ok := v.(CommandWithResultExitCode); ok {
+			if code := ec.ExitCode(outcome); code != 0 {
+				if cmd.Annotations == nil {
+					cmd.Annotations = map[string]string{}
+				}
+				cmd.Annotations[exitCodeAnnotation] = strconv.Itoa(code)
+			}
 		}
 
 		if asJSON {
