@@ -34,6 +34,7 @@ require (
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.19.0
 	github.com/matryer/is v1.4.1
+	github.com/mattn/go-isatty v0.0.22
 	github.com/neilotoole/slogt v1.1.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.3.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -204,7 +205,6 @@ require (
 	github.com/maratori/testpackage v1.1.1 // indirect
 	github.com/matoous/godox v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mgechev/revive v1.7.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
