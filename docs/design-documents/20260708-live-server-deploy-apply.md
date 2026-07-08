@@ -133,3 +133,65 @@ transactional apply; the `repair` tool.
   and the MCP design (`20260708-mcp-server.md`, whose deferred data-path gate lands here).
 - Execution plan §2 (MCP `deploy_pipeline`), §4 (hot-reload).
 - `provisioning.Service.Plan`/`ApplyPlan`, the `lifecycleService`, `api.proto`.
+
+## Review outcome & required rework (2026-07-08) — NEEDS-REWORK → reworked
+
+A Tier-1 design review verified the plan against the code and found **two
+data-integrity blockers** in the original Decision above. Both are folded in
+here; the sections above are superseded where they conflict.
+
+### Blocker 1 (fixed here): `Stop(ctx,id,false)` does NOT drain before returning
+
+Traced through `pkg/lifecycle/service.go`: graceful `Stop` injects a
+"stop-here" control message into the source node and returns immediately — it
+does **not** wait for the message to propagate, the destination to ack, or the
+connector position to durably flush (the `connector.Persister` is an async
+batched writer; only `Persister.Wait()` blocks for durability). Drain completion
+is observable only via `Service.WaitPipeline(id)` (`service.go:418`), which is
+**not on the `LifecycleService` interface** (`interfaces.go:74-77`). So the
+original §2 — `Stop` then immediately `importPipeline` — races an in-flight drain
+and can tear down a connector while old goroutines are still mid-flight
+(invariant-1/3 loss). **Rework:**
+
+- Add **`StopAndWait(ctx, id) error`** to the lifecycle service (and its
+  `LifecycleService`/`lifecycleService` interfaces). It does: `Stop(ctx,id,false)`
+  → `WaitPipeline(id)` (all node goroutines exited) → **await the connector
+  persister's durable flush** (the lifecycle service reaches the persister via
+  the connector service it already holds — expose a "wait for pending position
+  writes" on `connector.Service`/`Persister` rather than giving provisioning a
+  persister handle). Only after all three is the pipeline safe to mutate.
+- `ApplyPlanLive` calls `lifecycleService.StopAndWait(ctx, id)` (not `Stop`)
+  before `importPipeline`, then `Start`. AC-3's "drains — asserted no in-flight
+  record loss" now has a real primitive to rest on.
+
+### Blocker 2 (already landed): apply must be transactional
+
+The review found `ApplyPlan`'s `importPipeline` wasn't wrapped in a DB
+transaction (unlike `provisionPipeline`), so a crash mid-apply left partial
+state — AC-6 (kill-mid-apply) would have failed. **Fixed and merged as #2595**
+(the standalone crash-safety fix). `ApplyPlanLive` inherits it; the doc's earlier
+"transactional-per-action" phrasing was wrong (the guarantee is the enclosing
+transaction, now present).
+
+### Item 6 (reworked conservative): the data-path gate
+
+There is no existing taxonomy mapping a `Change.ConfigPath` to
+"ack/position/checkpoint-adjacent," and `EffectRestart` is a broad bucket. Do
+**not** invent a fine-grained classifier that could misfire toward silently
+allowing a data-path change. Wave-of-#2588 gates **every `EffectRestart` apply
+against a running pipeline** behind the operator authorization flag (conservative
+default); a finer classifier is future work.
+
+### Open parity item
+
+The drain analysis is for `pkg/lifecycle` (the default). `pkg/lifecycle-poc`
+(`Preview.PipelineArchV2`, `runtime.go:259`) has its own Stop semantics — audit
+its `StopAndWait` equivalent before enabling live apply under that arch, or gate
+live apply off when the preview arch is active.
+
+### Restart-from-checkpoint (confirmed)
+
+`connector.Source.Open` resumes from the persisted `SourceState.Position`
+(`source.go:64,227,285`), and `Start` rebuilds from the stored instance — so
+post-apply `Start` resumes at-least-once (invariant 2), provided StopAndWait
+awaited the durable flush (blocker 1).
