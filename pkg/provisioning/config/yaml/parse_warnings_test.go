@@ -15,6 +15,7 @@
 package yaml
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"reflect"
@@ -24,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 // TestParseWithWarnings_MatchesParse is the AC-4 guard for `pipelines lint`:
@@ -94,4 +96,50 @@ func normalizePipelines(ps []config.Pipeline) {
 			sort.Slice(conn.Processors, func(a, b int) bool { return conn.Processors[a].ID < conn.Processors[b].ID })
 		}
 	}
+}
+
+// TestParser_WarningsExposure_DoesNotChangeRunBehavior is the stronger AC-4
+// guard (carried forward from the closed #2592): it asserts byte-for-byte that
+// the run path (Parse -> ParseConfigurations, what conduit run uses) still LOGS
+// the same warnings, while the new lint/dry-run path (ParseWithWarnings) RETURNS
+// those same warnings and logs nothing. Unlike TestParseWithWarnings_MatchesParse
+// (which compares parsed pipelines), this one locks the observable side effect —
+// logging — that the warnings-exposure refactor must not change.
+func TestParser_WarningsExposure_DoesNotChangeRunBehavior(t *testing.T) {
+	is := is.New(t)
+	const fixture = "./v1/testdata/pipelines1-success.yml"
+
+	// The run path must keep logging warnings and must keep NOT returning them.
+	var runLog bytes.Buffer
+	runFile, err := os.Open(fixture)
+	is.NoErr(err)
+	defer runFile.Close()
+	runPipelines, err := NewParser(log.New(zerolog.New(&runLog))).Parse(context.Background(), runFile)
+	is.NoErr(err)
+	is.True(len(runPipelines) > 0)
+
+	wantRunLog := `{"level":"warn","component":"yaml.Parser","line":5,"column":5,"field":"unknownField","message":"field unknownField not found in type v1.Pipeline"}
+{"level":"warn","component":"yaml.Parser","line":17,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":23,"column":5,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":30,"column":5,"field":"dead-letter-queue","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"1.12","message":"unrecognized version 1.12, falling back to parser version 1.1"}
+{"level":"warn","component":"yaml.Parser","line":51,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+`
+	is.Equal(runLog.String(), wantRunLog) // run's logged warnings unchanged by the refactor
+
+	// The new lint/dry-run channel: same file, ParseWithWarnings — returns the
+	// warnings instead of logging them, and logs nothing itself.
+	var lintLog bytes.Buffer
+	lintFile, err := os.Open(fixture)
+	is.NoErr(err)
+	defer lintFile.Close()
+	lintPipelines, warnings, err := NewParser(log.New(zerolog.New(&lintLog))).ParseWithWarnings(context.Background(), lintFile)
+	is.NoErr(err)
+	is.Equal(len(lintPipelines), len(runPipelines)) // same parse result
+	is.Equal(len(warnings), 6)                      // same 6 warnings, returned not logged
+	is.Equal(lintLog.String(), "")                  // ParseWithWarnings never logs on its own
+
+	is.Equal(warnings[0].Line, 5)
+	is.Equal(warnings[0].Column, 5)
+	is.Equal(warnings[0].Field, "unknownField")
 }
