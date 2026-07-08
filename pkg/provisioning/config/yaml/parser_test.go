@@ -155,6 +155,65 @@ func TestParser_V1_Warnings(t *testing.T) {
 	is.Equal(out.String(), want)
 }
 
+// TestParser_WarningsExposure_DoesNotChangeRunBehavior is the AC-4 guard for
+// docs/design-documents/20260708-cli-pipeline-inspect-lint-dryrun.md: adding
+// ParseWithWarnings (the new, additive channel `lint`/`dry-run` use to
+// receive warnings instead of only logging them) must not change what
+// `conduit run` observes on the ParseConfigurations/Parse path — Service
+// still calls Parse, still only gets ([]config.Pipeline, error) back, and
+// still sees every warning logged, byte-for-byte identical to before
+// Warning/Warnings existed (see TestParser_V1_Warnings above, which this
+// test's first half re-asserts via the run path specifically).
+func TestParser_WarningsExposure_DoesNotChangeRunBehavior(t *testing.T) {
+	is := is.New(t)
+	filepath := "./v1/testdata/pipelines1-success.yml"
+
+	// --- the `run` path: pkg/provisioning.Service.parsePipelineConfigFile
+	// calls exactly Parser.Parse -> ParseConfigurations. It must keep
+	// logging warnings and must keep NOT returning them.
+	var runLog bytes.Buffer
+	runParser := NewParser(log.New(zerolog.New(&runLog)))
+
+	runFile, err := os.Open(filepath)
+	is.NoErr(err)
+	defer runFile.Close()
+
+	runPipelines, err := runParser.Parse(context.Background(), runFile)
+	is.NoErr(err)
+	is.True(len(runPipelines) > 0) // run still gets its pipelines back
+
+	wantRunLog := `{"level":"warn","component":"yaml.Parser","line":5,"column":5,"field":"unknownField","message":"field unknownField not found in type v1.Pipeline"}
+{"level":"warn","component":"yaml.Parser","line":17,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":23,"column":5,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":30,"column":5,"field":"dead-letter-queue","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"1.12","message":"unrecognized version 1.12, falling back to parser version 1.1"}
+{"level":"warn","component":"yaml.Parser","line":51,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+`
+	is.Equal(runLog.String(), wantRunLog) // run's logged warnings are byte-for-byte unchanged by the refactor
+
+	// --- the new, additive `lint`/`dry-run` channel: a separate Parser
+	// instance (its own logger/capture) over the same file, via
+	// ParseWithWarnings instead of Parse.
+	var lintLog bytes.Buffer
+	lintParser := NewParser(log.New(zerolog.New(&lintLog)))
+
+	lintFile, err := os.Open(filepath)
+	is.NoErr(err)
+	defer lintFile.Close()
+
+	lintPipelines, warnings, err := lintParser.ParseWithWarnings(context.Background(), lintFile)
+	is.NoErr(err)
+	is.Equal(len(lintPipelines), len(runPipelines)) // same parse result as the run path
+	is.Equal(len(warnings), 6)                      // same 6 warnings the run path logged, returned instead
+	is.Equal(lintLog.String(), "")                  // ParseWithWarnings never logs on its own; a caller renders/returns them
+
+	// Spot-check the located fields lint's Finding needs (line/column/field).
+	is.Equal(warnings[0].Line, 5)
+	is.Equal(warnings[0].Column, 5)
+	is.Equal(warnings[0].Field, "unknownField")
+	is.Equal(warnings[0].Message, "field unknownField not found in type v1.Pipeline")
+}
+
 func TestParser_V1_DuplicatePipelineId(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())

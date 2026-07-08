@@ -50,7 +50,7 @@ func newConfigLinter(changelogs ...internal.Changelog) *configLinter {
 	}
 }
 
-func (cl *configLinter) DecoderHook(version string, warn *warnings) yaml.DecoderHook {
+func (cl *configLinter) DecoderHook(version string, warn *Warnings) yaml.DecoderHook {
 	return func(path []string, node *yaml.Node) {
 		if w, ok := cl.InspectNode(version, path, node); ok {
 			*warn = append(*warn, w)
@@ -58,11 +58,11 @@ func (cl *configLinter) DecoderHook(version string, warn *warnings) yaml.Decoder
 	}
 }
 
-func (cl *configLinter) InspectNode(version string, path []string, node *yaml.Node) (warning, bool) {
+func (cl *configLinter) InspectNode(version string, path []string, node *yaml.Node) (Warning, bool) {
 	if c, ok := cl.findChange(version, path); ok {
 		return cl.newWarning(path[len(path)-1], node, c.Message), true
 	}
-	return warning{}, false
+	return Warning{}, false
 }
 
 func (cl *configLinter) findChange(version string, path []string) (internal.Change, bool) {
@@ -90,52 +90,72 @@ func (cl *configLinter) findChange(version string, path []string) (internal.Chan
 	return internal.Change{}, false
 }
 
-func (cl *configLinter) newWarning(field string, node *yaml.Node, message string) warning {
-	return warning{
-		field:   field,
-		line:    node.Line,
-		column:  node.Column,
-		value:   node.Value,
-		message: message,
+func (cl *configLinter) newWarning(field string, node *yaml.Node, message string) Warning {
+	return Warning{
+		Field:   field,
+		Line:    node.Line,
+		Column:  node.Column,
+		Value:   node.Value,
+		Message: message,
 	}
 }
 
-type warnings []warning
+// Warnings is a collection of Warning, in the order they were collected by
+// the parser. Exported (originally package-private) so callers outside this
+// package — currently cmd/conduit/internal/validate, backing the `lint` and
+// `dry-run` CLI verbs — can turn them into advisory findings instead of only
+// reading them from the log stream. See Parser.ParseWithWarnings.
+type Warnings []Warning
 
-func (w warnings) Sort() warnings {
+// Sort orders w by line number ascending, in place, and returns it for
+// chaining. Used identically by both the logging path (ParseConfigurations)
+// and the returning path (ParseWithWarnings) so a caller sees the same order
+// either way.
+func (w Warnings) Sort() Warnings {
 	sort.Slice(w, func(i, j int) bool {
-		return w[i].line < w[j].line
+		return w[i].Line < w[j].Line
 	})
 	return w
 }
 
-func (w warnings) Log(ctx context.Context, logger log.CtxLogger) {
+// Log writes every warning in w to logger at Warn level. This is
+// `conduit run`'s (via pkg/provisioning.Service) only consumer of parser
+// warnings today — ParseConfigurations calls it unconditionally, exactly as
+// before this type was exported, so that behavior is unchanged.
+func (w Warnings) Log(ctx context.Context, logger log.CtxLogger) {
 	for _, ww := range w {
 		ww.Log(ctx, logger)
 	}
 }
 
-type warning struct {
-	field   string
-	line    int
-	column  int
-	value   string
-	message string
+// Warning is one advisory parser finding: a deprecated/renamed/unknown field,
+// or a version fallback, located at Line/Column with a human-readable
+// Message. Exported so cmd/conduit/internal/validate can map it onto a
+// validate.Finding with Severity: "warning" — see that package's report.go.
+type Warning struct {
+	Field   string
+	Line    int
+	Column  int
+	Value   string
+	Message string
 }
 
-func (w warning) Log(ctx context.Context, logger log.CtxLogger) {
+// Log writes w to logger at Warn level, mirroring the JSON shape
+// TestParser_V1_Warnings/TestParser_V2_Warnings pin: line, column, field,
+// (optional) value, then the message.
+func (w Warning) Log(ctx context.Context, logger log.CtxLogger) {
 	e := logger.Warn(ctx)
-	if w.line != 0 {
-		e = e.Int("line", w.line)
+	if w.Line != 0 {
+		e = e.Int("line", w.Line)
 	}
-	if w.column != 0 {
-		e = e.Int("column", w.column)
+	if w.Column != 0 {
+		e = e.Int("column", w.Column)
 	}
-	if w.field != "" {
-		e = e.Str("field", w.field)
+	if w.Field != "" {
+		e = e.Str("field", w.Field)
 	}
-	if w.value != "" {
-		e = e.Str("value", w.value)
+	if w.Value != "" {
+		e = e.Str("value", w.Value)
 	}
-	e.Msg(w.message)
+	e.Msg(w.Message)
 }

@@ -77,7 +77,41 @@ func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline
 	return configs.ToConfig(), err
 }
 
+// ParseConfigurations is unchanged by the Warnings-exposure refactor below:
+// it still only logs warnings (via parseConfigurations + Warnings.Log) and
+// never returns them, exactly as before Warning/Warnings were exported. This
+// is `conduit run`'s path (pkg/provisioning.Service.parsePipelineConfigFile
+// -> s.parser.Parse -> here) and must keep behaving identically — see
+// TestParser_WarningsExposure_DoesNotChangeRunBehavior in parser_test.go.
 func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Configurations, error) {
+	configs, warn, err := p.parseConfigurations(ctx, reader)
+	warn.Log(ctx, p.logger)
+	return configs, err
+}
+
+// ParseWithWarnings behaves like Parse but additionally returns every
+// warning collected while parsing (deprecated/renamed/unknown fields,
+// version-fallback) instead of only logging them. It is a purely additive
+// entry point, added for the offline `lint`/`dry-run` CLI verbs
+// (cmd/conduit/internal/validate) to surface warnings as advisory findings
+// with line/column. It shares parseConfigurations with
+// ParseConfigurations/Parse but does not change what those two (or the
+// `conduit run` path built on them) do.
+func (p *Parser) ParseWithWarnings(ctx context.Context, reader io.Reader) ([]config.Pipeline, Warnings, error) {
+	configs, warn, err := p.parseConfigurations(ctx, reader)
+	return configs.ToConfig(), warn, err
+}
+
+// parseConfigurations is the shared parsing core behind ParseConfigurations
+// and ParseWithWarnings: identical parse loop, per-document error handling,
+// and sorted-warnings computation as the pre-refactor ParseConfigurations
+// body — the only difference between the two exported callers is what each
+// does with the returned Warnings (log-and-discard vs. return-to-caller).
+// TestParser_V1_Warnings/TestParser_V2_Warnings (which assert
+// ParseConfigurations's logged JSON output) and every other parser test
+// exercising ParseConfigurations/Parse continue to pin that caller's
+// behavior unchanged.
+func (p *Parser) parseConfigurations(ctx context.Context, reader io.Reader) (Configurations, Warnings, error) {
 	// we redirect everything read from reader to buffer with TeeReader, so that
 	// we can first parse the version of the file and choose what type we
 	// actually need to parse the configuration
@@ -87,7 +121,7 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 	configurationDecoder := yaml.NewDecoder(&buffer)
 
 	var configs Configurations
-	var warn warnings
+	var warn Warnings
 	// errs collects per-document failures. A single bad document (e.g. an
 	// unrecognized version) must not discard the valid documents around it in a
 	// multi-document file, so we keep parsing and aggregate the errors. See #2255.
@@ -142,16 +176,14 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 		configs = append(configs, cfg)
 	}
 
-	// sort warnings and log them
-	warn.Sort().Log(ctx, p.logger)
-	return configs, cerrors.Join(errs...)
+	return configs, warn.Sort(), cerrors.Join(errs...)
 }
 
 // parseVersion will return the version that should be used to parse the
 // configuration and any warnings if we defaulted to a version that's compatible
 // with the requested one. If we could not recognize the version the function
 // returns an error.
-func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
+func (p *Parser) parseVersion(dec *yaml.Decoder) (string, Warnings, error) {
 	var out struct {
 		Version string `yaml:"version"`
 	}
@@ -171,12 +203,12 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 
 	// if version is empty we default to the latest version
 	if out.Version == "" {
-		return LatestVersion, warnings{warning{
-			field:   versionField,
-			line:    versionNode.Line,
-			column:  versionNode.Column,
-			value:   versionNode.Value,
-			message: fmt.Sprintf("no version defined, falling back to parser version %v", LatestVersion),
+		return LatestVersion, Warnings{Warning{
+			Field:   versionField,
+			Line:    versionNode.Line,
+			Column:  versionNode.Column,
+			Value:   versionNode.Value,
+			Message: fmt.Sprintf("no version defined, falling back to parser version %v", LatestVersion),
 		}}, nil
 	}
 
@@ -190,20 +222,20 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	// we did not recognize the version, we check if we even know the major version
 	switch strings.Split(out.Version, ".")[0] {
 	case v1.MajorVersion:
-		return v1.LatestVersion, warnings{warning{
-			field:   versionField,
-			line:    versionNode.Line,
-			column:  versionNode.Column,
-			value:   versionNode.Value,
-			message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v1.LatestVersion),
+		return v1.LatestVersion, Warnings{Warning{
+			Field:   versionField,
+			Line:    versionNode.Line,
+			Column:  versionNode.Column,
+			Value:   versionNode.Value,
+			Message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v1.LatestVersion),
 		}}, nil
 	case v2.MajorVersion:
-		return v2.LatestVersion, warnings{warning{
-			field:   versionField,
-			line:    versionNode.Line,
-			column:  versionNode.Column,
-			value:   versionNode.Value,
-			message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v2.LatestVersion),
+		return v2.LatestVersion, Warnings{Warning{
+			Field:   versionField,
+			Line:    versionNode.Line,
+			Column:  versionNode.Column,
+			Value:   versionNode.Value,
+			Message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v2.LatestVersion),
 		}}, nil
 	}
 
@@ -211,9 +243,9 @@ func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	return "", nil, cerrors.Errorf("unrecognized version %v", out.Version)
 }
 
-func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configuration, warnings, error) {
+func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configuration, Warnings, error) {
 	// set up decoder hooks
-	var w warnings
+	var w Warnings
 	dec.KnownFields(true)
 	dec.WithHook(multiDecoderHook(
 		envDecoderHook,                    // replace environment variables with their values
@@ -235,17 +267,17 @@ func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configur
 // yamlTypeErrorToWarnings converts yaml.TypeError to warnings if it only
 // contains recoverable errors. If it contains at least one actual error it
 // returns nil and the error itself.
-func (p *Parser) yamlTypeErrorToWarnings(typeErr *yaml.TypeError) (warnings, error) {
-	warn := make(warnings, len(typeErr.Errors))
+func (p *Parser) yamlTypeErrorToWarnings(typeErr *yaml.TypeError) (Warnings, error) {
+	warn := make(Warnings, len(typeErr.Errors))
 	for i, uerr := range typeErr.Errors {
 		switch uerr := uerr.(type) {
 		case *yaml.UnknownFieldError:
-			warn[i] = warning{
-				field:   uerr.Field(),
-				line:    uerr.Line(),
-				column:  uerr.Column(),
-				value:   "", // no value in UnknownFieldError
-				message: uerr.Error(),
+			warn[i] = Warning{
+				Field:   uerr.Field(),
+				Line:    uerr.Line(),
+				Column:  uerr.Column(),
+				Value:   "", // no value in UnknownFieldError
+				Message: uerr.Error(),
 			}
 		default:
 			// we don't tolerate any other errors
