@@ -51,7 +51,11 @@ func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server) (*http.Server, error) {
 		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, "could not load --tls-cert/--tls-key", err)
 	}
 
-	handler := newMCPHTTPHandler(srv, token)
+	// Bound the request body: a tool call carries a pipeline config (KBs), so a
+	// few MiB is generous. Without this an authenticated client could post an
+	// arbitrarily large body that is buffered/parsed in memory (a DoS vector,
+	// blast-radius-limited to token holders, but cheap to close).
+	handler := limitRequestBody(newMCPHTTPHandler(srv, token), maxRequestBodyBytes)
 
 	return &http.Server{
 		Addr:      c.flags.HTTP,
@@ -62,6 +66,21 @@ func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server) (*http.Server, error) {
 		// http.Server exposed beyond localhost.
 		ReadHeaderTimeout: 10 * time.Second,
 	}, nil
+}
+
+// maxRequestBodyBytes bounds an HTTP MCP request body. 4 MiB is generous for a
+// tool call carrying a pipeline config plus JSON-RPC framing, while capping the
+// memory an authenticated caller can force the server to buffer.
+const maxRequestBodyBytes = 4 << 20 // 4 MiB
+
+// limitRequestBody caps every request body at max bytes; a request that exceeds
+// it fails the read with http.MaxBytesError (413-shaped) rather than being
+// buffered in full.
+func limitRequestBody(next http.Handler, maxBytes int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // validateHTTPConfig reports whether flags carry everything --http requires

@@ -173,10 +173,13 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 		return err
 	}
 
+	// HTTP mode serves the network transport ONLY — it does not co-run stdio.
+	// `--http` is the network-daemon mode (systemd/container), which has no
+	// attached stdin; co-running stdio there would hit EOF immediately and
+	// could tear the whole errgroup (and the HTTP server) down on startup. The
+	// stdio transport is the default, no-`--http` path above, for the
+	// agent-owns-the-subprocess case.
 	grp, gctx := errgroup.WithContext(ctx)
-	grp.Go(func() error {
-		return srv.Run(gctx, &sdkmcp.StdioTransport{})
-	})
 	grp.Go(func() error {
 		<-gctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
