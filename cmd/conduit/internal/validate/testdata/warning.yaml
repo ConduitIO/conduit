@@ -1,0 +1,10 @@
+version: "2.2"
+pipelines:
+  - id: warn-pipeline
+    connectors:
+      - id: c1
+        type: source
+        plugin: builtin:generator
+    processors:
+      - id: proc1
+        type: base64.encode

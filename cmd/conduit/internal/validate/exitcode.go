@@ -88,3 +88,30 @@ func ExitError(files []FileReport) (error, bool) {
 	}
 	return conduiterr.New(worst, fmt.Sprintf("%d problem(s) found", count)), true
 }
+
+// ExitErrorStrict is ExitError with `lint --strict` semantics. Error findings
+// still dominate and bucket as usual; additionally, when strict is true, a
+// warning-only run yields a Validation(2) error so `lint --strict` fails on
+// warnings alone. Without strict, warnings never affect the exit code (they are
+// invisible to ExitError, which only ever counts SeverityError findings).
+func ExitErrorStrict(files []FileReport, strict bool) (error, bool) {
+	if err, ok := ExitError(files); ok {
+		return err, true // error findings dominate regardless of --strict
+	}
+	if !strict {
+		return nil, false
+	}
+	warnings := 0
+	for _, f := range files {
+		for _, find := range f.Findings {
+			if find.Severity == SeverityWarning {
+				warnings++
+			}
+		}
+	}
+	if warnings == 0 {
+		return nil, false
+	}
+	return conduiterr.New(conduiterr.CodeInvalidArgument,
+		fmt.Sprintf("%d warning(s) treated as errors (--strict)", warnings)), true
+}

@@ -43,6 +43,23 @@ import (
 // including every file being unparseable — comes back as findings inside a
 // (possibly all-failing) Report, with a nil error.
 func Run(ctx context.Context, path string) (Report, error) {
+	return RunWithOptions(ctx, path, Options{})
+}
+
+// Options selects which additional, opt-in checks the engine runs on top of
+// the always-on parse -> enrich -> validate. The zero value is exactly
+// `pipelines validate` (errors only, offline). `pipelines lint` sets Warnings;
+// `pipelines dry-run` will set ResolvePlugins.
+type Options struct {
+	// Warnings surfaces the parser's advisory warnings (deprecated/renamed/
+	// unknown fields, version fallback) as SeverityWarning findings. `lint`
+	// sets this; `validate` does not (it is errors-only).
+	Warnings bool
+}
+
+// RunWithOptions is Run with the opt-in checks in opts. Run(ctx, path) is
+// RunWithOptions(ctx, path, Options{}).
+func RunWithOptions(ctx context.Context, path string, opts Options) (Report, error) {
 	files, err := config.ResolveFiles(path)
 	if err != nil {
 		return Report{}, err
@@ -51,13 +68,22 @@ func Run(ctx context.Context, path string) (Report, error) {
 
 	frs := make([]fileState, len(files))
 	for i, f := range files {
-		frs[i] = validateFile(ctx, f)
+		frs[i] = validateFile(ctx, f, opts)
 	}
 
 	checkCrossFileDuplicateIDs(frs)
 
 	return buildReport(frs), nil
 }
+
+// CodeLintWarning is the stable code carried by every advisory `lint` warning
+// finding. The parser's warnings (deprecated/renamed/unknown fields, version
+// fallback) don't carry per-field conduiterr codes, so lint attaches this one
+// so a --json consumer can still filter on `code`. It is advisory-only:
+// warnings never affect the exit code unless `lint --strict` is set (see
+// ExitErrorStrict), so this code never flows through ExitError's bucket
+// classification.
+const CodeLintWarning = "config.lint_warning"
 
 // fileState is the engine's working representation of one resolved file: the
 // enriched pipelines it parsed successfully (used for cross-file duplicate-ID
@@ -74,7 +100,7 @@ type fileState struct {
 // mutates connector/processor IDs that validation checks, matching
 // pkg/provisioning.Service.provisionPipeline's ordering at service.go:279-280)
 // over a single file, collecting every finding along the way.
-func validateFile(ctx context.Context, path string) fileState {
+func validateFile(ctx context.Context, path string, opts Options) fileState {
 	fs := fileState{path: path}
 
 	f, err := os.Open(path)
@@ -87,12 +113,25 @@ func validateFile(ctx context.Context, path string) fileState {
 	defer f.Close()
 
 	parser := yaml.NewParser(log.Nop())
-	pipelines, err := parser.Parse(ctx, f)
-	// err here is parser.Parse's raw cerrors.Join of per-document failures
-	// (see parser.go: `return configs.ToConfig(), err`, no extra "%w" wrap) —
-	// walk it directly with cerrors.ForEach. Wrapping it first (e.g. via
-	// cerrors.Errorf("...: %w", err)) would collapse every finding into one;
-	// see this package's doc.go and TestValidateFile_ParseErrors_AllFindings.
+
+	// Both Parse and ParseWithWarnings return the same []config.Pipeline and the
+	// same raw cerrors.Join of per-document failures — the only difference is
+	// ParseWithWarnings also returns the advisory warnings the run path only
+	// logs (see parser.go). lint asks for them; validate does not.
+	var pipelines []config.Pipeline
+	if opts.Warnings {
+		var warns []yaml.Warning
+		pipelines, warns, err = parser.ParseWithWarnings(ctx, f)
+		for _, w := range warns {
+			fs.findings = append(fs.findings, warningFinding(w))
+		}
+	} else {
+		pipelines, err = parser.Parse(ctx, f)
+	}
+	// err here is the parser's raw cerrors.Join of per-document failures (no
+	// extra "%w" wrap) — walk it directly with cerrors.ForEach. Wrapping it
+	// first (e.g. via cerrors.Errorf("...: %w", err)) would collapse every
+	// finding into one; see doc.go and TestValidateFile_ParseErrors_AllFindings.
 	if err != nil {
 		cerrors.ForEach(err, func(e error) {
 			fs.findings = append(fs.findings, findingFromError(e))
@@ -146,6 +185,22 @@ func findingFromError(e error) Finding {
 		ConfigPath: ce.ConfigPath,
 		Suggestion: ce.Suggestion,
 		Fix:        ce.Fix,
+	}
+}
+
+// warningFinding converts one parser Warning into an advisory (SeverityWarning)
+// Finding. Warnings locate by line/column in the source file rather than by a
+// config-path JSON pointer, and carry the fixed CodeLintWarning code (the
+// parser's warnings have no per-field conduiterr code of their own). A warning
+// never affects the exit code unless `lint --strict` is set.
+func warningFinding(w yaml.Warning) Finding {
+	return Finding{
+		Severity:   SeverityWarning,
+		Code:       CodeLintWarning,
+		Message:    w.Message,
+		ConfigPath: w.Field,
+		Line:       w.Line,
+		Column:     w.Column,
 	}
 }
 
