@@ -76,6 +76,28 @@ type Outcome struct {
 	OK      bool
 	Summary any
 	Result  any
+
+	// ExitErr, when non-nil, is returned by CommandWithResultDecorator after
+	// it has already rendered this Outcome (JSON or human) — purely so the
+	// process gets a correctly classified nonzero exit code (via
+	// pkg/conduit/exitcode, applied where cmd.Execute()'s returned error
+	// reaches cmd/conduit/cli) for a domain failure (OK:false) that is NOT a
+	// hard command failure.
+	//
+	// This exists because ecdysis routes the process exit code through
+	// cmd.Execute()'s returned error, and CommandWithResult's contract keeps
+	// domain findings out of that error (they belong in Summary/Result with
+	// the envelope's error field staying null, per CLI output conventions
+	// §1) — so there is no other channel back to the process exit code for
+	// "the run completed and found problems." ExitErr is never rendered
+	// itself (RunE returns it after Render/marshal has already written the
+	// full Outcome to output) and never appears in the --json envelope.
+	//
+	// A command with findings synthesizes this via its own classification
+	// logic (see docs/design-documents/20260707-cli-output-conventions.md
+	// §4: reducing N findings to one exit code is new aggregation logic each
+	// command owns, not something this package does on a command's behalf).
+	ExitErr error
 }
 
 // CommandWithResult can be implemented by a command that needs the shared
@@ -237,11 +259,16 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 			// stdout" envelope on stderr instead. Write to OutOrStdout
 			// explicitly everywhere in this file instead.
 			fmt.Fprintln(cmd.OutOrStdout(), string(b))
-			return nil
+			// outcome.ExitErr (nil for most commands) is returned, not
+			// swallowed, AFTER the envelope above is already written —
+			// see Outcome.ExitErr's doc: this is how a domain failure
+			// (OK:false, Error:null in the envelope just emitted) still
+			// gives the process a nonzero, correctly classified exit code.
+			return outcome.ExitErr
 		}
 
 		fmt.Fprint(cmd.OutOrStdout(), v.Render(outcome))
-		return nil
+		return outcome.ExitErr
 	}
 
 	return nil

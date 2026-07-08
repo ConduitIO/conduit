@@ -328,6 +328,38 @@ for the full mapping and rationale, `pkg/conduit/exitcode` for the implementatio
 `pkg/conduit/check` for the multi-result aggregation `doctor` (and future multi-check commands)
 share.
 
+## Validating pipeline configs
+
+`conduit pipelines validate <path>` (alias: `conduit pipeline validate`) statically checks one
+pipeline config file, or every `.yml`/`.yaml` file in a directory (not recursed), without starting
+Conduit or contacting a running instance — it's fully offline, so it's safe to run in CI or before
+`conduit run` with no server anywhere nearby.
+
+```console
+$ conduit pipelines validate pipelines/orders.yaml
+✗ pipelines/orders.yaml
+✗ config.field_required   /connectors/0/plugin
+    connector "orders:postgres": "plugin" is mandatory
+    → set connectors[0].plugin (e.g. "builtin:postgres")
+
+Summary: 1 files · 0 passed · 1 failed · 1 problems
+Fix the ✗ items above, then re-run.
+```
+
+(the connector's ID is shown enriched — `<pipelineID>:<connectorID>` — since validation runs after the same
+default-enrichment step `conduit run` applies; `--json`'s `configPath` still points at your original
+`connectors[0]`.)
+
+Every problem in every file is reported — a bad file never stops the rest from being checked.
+Exits `0` if every pipeline is valid, `2` otherwise (see Exit codes above). Add `--json` for the
+structured `{command, ok, summary, result, error}` envelope, or `-q/--quiet` to suppress passing
+(`✓`) lines and show only failures and the summary.
+
+`lint` (advisory warnings, e.g. deprecated fields) and `dry-run` (shows the enriched pipeline graph
+and optionally resolves builtin plugin references) share the same engine and are planned as
+follow-ups — see
+[the design doc](docs/design-documents/20260707-cli-pipeline-validate.md).
+
 ## Documentation
 
 To learn more about how to use Conduit

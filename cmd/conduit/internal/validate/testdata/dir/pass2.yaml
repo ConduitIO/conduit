@@ -1,0 +1,8 @@
+version: 2.2
+pipelines:
+  - id: dir-pass-2
+    status: stopped
+    connectors:
+      - id: dst
+        type: destination
+        plugin: builtin:log

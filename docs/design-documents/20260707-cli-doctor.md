@@ -51,7 +51,7 @@ shared classifier, not a re-decision.
 
 ## CLI UX & ergonomics
 
-```console
+```text
 $ conduit doctor
 Conduit doctor — checking your environment
 

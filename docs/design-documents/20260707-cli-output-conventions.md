@@ -64,7 +64,7 @@ a bare `{code,message}` is non-conformant.
 - **A located finding renders identically across commands** (one template — the
   reviews flagged doctor's `└`-line vs validate's inline pointer as divergent):
 
-  ```console
+  ```text
   ✗ config.field_required   /connectors/0/plugin
       connector "pg-source": "plugin" is mandatory
       → set connectors[0].plugin (e.g. "builtin:postgres")

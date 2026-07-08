@@ -1,0 +1,8 @@
+version: 2.2
+pipelines:
+  - id: dir-pass-1
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
