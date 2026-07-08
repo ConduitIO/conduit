@@ -91,18 +91,23 @@ Exit codes (via `exitcode`): lint 0 (2 under `--strict` w/ warnings); dry-run 0 
 
 ## Acceptance criteria
 
-1. `lint` on a file with a deprecated field → one `warning` finding with `line`+`column`; exit 0; `--json` `severity:"warning"`.
+1. `lint` on a file with a deprecated field → one `warning` finding with `line`+`column`; exit 0; `--json`
+   `severity:"warning"`.
 2. `lint --strict` on the same file → exit 2; warning promoted to failure in the summary.
 3. `lint` on a file with an error + a warning → exit 2 (error dominates), both rendered.
-4. `run` behavior is unchanged by the warnings-exposure refactor — a test asserts a provision/run path still logs (not returns) warnings as before.
-5. `dry-run` on a valid file → exit 0; output shows enriched IDs (`pipelineID:connectorID`), injected DLQ defaults, worker counts.
-6. `dry-run --resolve-plugins` with an unknown builtin plugin → `connector.plugin_not_found`, exit 2; with a standalone ref → advisory line, exit 0 (not a false fail).
+4. `run` behavior is unchanged by the warnings-exposure refactor — a test asserts a provision/run path still logs (not
+   returns) warnings as before.
+5. `dry-run` on a valid file → exit 0; output shows enriched IDs (`pipelineID:connectorID`), injected DLQ defaults,
+   worker counts.
+6. `dry-run --resolve-plugins` with an unknown builtin plugin → `connector.plugin_not_found`, exit 2; with a
+   standalone ref → advisory line, exit 0 (not a false fail).
 7. `lint`/`dry-run` are **offline** — asserted no API dial.
 8. `inspect <running-pipeline>` → status (correct enum value), per-stage rows, `--json` matches schema; exit 0.
 9. `inspect <missing-pipeline>` → coded `not_found` finding, exit 2 (not a panic).
 10. `inspect` with no server reachable → exit 3 (environment), actionable message.
 11. `inspect --records 5` → streams ≤5 in-flight records per inspectable stage, then stops (bounded, doesn't hang).
-12. The 5-value status enum renders all of `running/system-stopped/user-stopped/degraded/recovering` (table-driven test over the enum) — the pinned §3 status-display AC.
+12. The 5-value status enum renders all of `running/system-stopped/user-stopped/degraded/recovering` (table-driven
+    test over the enum) — the pinned §3 status-display AC.
 13. All three `--json` outputs conform to the shared envelope (`command/ok/summary/result/error`).
 
 ## Failure modes
@@ -131,6 +136,11 @@ in-memory pipeline. No serialized-format or data-path change.
 ## Review outcome (2026-07-08) — SOUND (technical) / SHIP-WITH-UX-CHANGES (inline)
 
 Verified against code:
-- **lint**: warnings are already collected locally (`config/yaml/parser.go:90` `var warn warnings`) and only logged — exposing them via the parser return is a clean additive change (AC-4 guards `run` behavior).
-- **inspect**: live-state APIs all exist — `GetPipeline`/`GetDLQ` (`pipeline_v1.go:68/189`), the 5-value enum (`pkg/pipeline/instance.go:25-29`), `InspectConnector` server-stream (`connector_v1.go:88`) backed by `pkg/inspector`. The online (inspect) / offline (lint, dry-run) split is correct.
-- **UX fixes (minor):** the 5-value status enum renders via the shared `ui` helper (consistent label/glyph + ASCII fallback), and `validate`/`lint`/`dry-run` `--help` cross-reference each other so the three-verb split is discoverable.
+- **lint**: warnings are already collected locally (`config/yaml/parser.go:90` `var warn warnings`) and only logged —
+  exposing them via the parser return is a clean additive change (AC-4 guards `run` behavior).
+- **inspect**: live-state APIs all exist — `GetPipeline`/`GetDLQ` (`pipeline_v1.go:68/189`), the 5-value enum
+  (`pkg/pipeline/instance.go:25-29`), `InspectConnector` server-stream (`connector_v1.go:88`) backed by
+  `pkg/inspector`. The online (inspect) / offline (lint, dry-run) split is correct.
+- **UX fixes (minor):** the 5-value status enum renders via the shared `ui` helper (consistent label/glyph + ASCII
+  fallback), and `validate`/`lint`/`dry-run` `--help` cross-reference each other so the three-verb split is
+  discoverable.

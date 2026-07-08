@@ -116,18 +116,26 @@ Exit codes (via `exitcode`): 0 applied / no-op; 2 validation or **stale plan**;
 
 ## Acceptance criteria
 
-1. New pipeline (no current) → Diff is all `create`; `--json` lists every resource; exit 0, no side effects (assert store unchanged after `deploy`).
-2. Change one connector `Settings` field → one `update`/`in_place` Change naming the exact `configPath`; `deploy` leaves state unchanged.
+1. New pipeline (no current) → Diff is all `create`; `--json` lists every resource; exit 0, no side effects (assert
+   store unchanged after `deploy`).
+2. Change one connector `Settings` field → one `update`/`in_place` Change naming the exact `configPath`; `deploy`
+   leaves state unchanged.
 3. Change connector `Type` (immutable) → `delete`+`create` (or `update`/`restart`), Effect=`restart`.
 4. Remove a resource from the file → `delete` Change; add one → `create`.
-5. `deploy` output includes a stable `hash`; two `deploy`s of the same file+state produce the **same** hash; changing the file changes the hash.
+5. `deploy` output includes a stable `hash`; two `deploy`s of the same file+state produce the **same** hash; changing
+   the file changes the hash.
 6. `apply --plan-hash <H>` where `H` matches → executes; store reflects the new config; exit 0.
-7. `apply --plan-hash <stale>` (file or current state changed since) → refused with `provisioning.plan_stale`, exit 2, **no mutation**.
+7. `apply --plan-hash <stale>` (file or current state changed since) → refused with `provisioning.plan_stale`, exit 2,
+   **no mutation**.
 8. Idempotent: `apply` of an already-applied config → empty Diff, "nothing to do," exit 0, no actions executed.
-9. Partial apply: an action fails mid-sequence → the executed prefix is rolled back in reverse (assert via a forced-failure action), exit 1, final state == pre-apply state.
+9. Partial apply: an action fails mid-sequence → the executed prefix is rolled back in reverse (assert via a
+   forced-failure action), exit 1, final state == pre-apply state.
 10. `--json` envelope conforms to the conventions schema on success and on stale/failed apply.
-11. **Tier-1 data integrity:** applying a `restart` change to a RUNNING pipeline drains in-flight records before teardown (invariant 3/7) OR the plan/apply refuses on a running pipeline with an actionable error; verified by a kill-mid-apply recovery test that asserts no record loss and recoverable position state.
-12. `deploy`/`apply` on an unparseable/invalid file → validation findings (reusing the validate engine), exit 2, before any Plan.
+11. **Tier-1 data integrity:** applying a `restart` change to a RUNNING pipeline drains in-flight records before
+    teardown (invariant 3/7) OR the plan/apply refuses on a running pipeline with an actionable error; verified by a
+    kill-mid-apply recovery test that asserts no record loss and recoverable position state.
+12. `deploy`/`apply` on an unparseable/invalid file → validation findings (reusing the validate engine), exit 2,
+    before any Plan.
 
 ## Failure modes (Tier 1)
 
@@ -177,6 +185,16 @@ classification **in the diff**. Deferred: true live in-place hot-swap execution
 ## Review outcome (2026-07-08) — SOUND-WITH-CONCERNS (technical + UX, inline)
 
 Verified against code:
-- **Sound**: actions hold their config (`import_actions.go` create/update/delete structs), so `actionsBuilder.Build(old,new)` is a describable diff — the `Plan`/`Describe` preview is achievable without executing.
-- **Tier-1 strengthened (confirmed gap, not just an open question):** `pipeline.Service.Update` (`service.go:155`) AND `Delete` (`:310`) have **no running-state guard**, and `importPipeline` does no stop/drain — the raw path would mutate/delete a *live* pipeline. So Wave-2 `apply` MUST stop-drain-restart (invariant 7) or refuse a running pipeline. **New AC-13:** `apply` never silently mutates a running pipeline — it either refuses with an actionable error or performs a graceful stop-with-drain → actions → restart; verified by a kill-mid-apply test asserting no record loss.
-- **UX fixes (must-do):** the diff symbols (`+`/`~`/`-`) and the status-enum label render through the shared `cmd/conduit/internal/ui` helper with ASCII fallback (not hand-rolled); the "applying will RESTART pipeline X" warning is prominent before a destructive apply; the `--yes` confirm matches scaffold's behavior. Token model (recompute-at-apply, refuse on mismatch) is coherent.
+- **Sound**: actions hold their config (`import_actions.go` create/update/delete structs), so
+  `actionsBuilder.Build(old,new)` is a describable diff — the `Plan`/`Describe` preview is achievable without
+  executing.
+- **Tier-1 strengthened (confirmed gap, not just an open question):** `pipeline.Service.Update` (`service.go:155`) AND
+  `Delete` (`:310`) have **no running-state guard**, and `importPipeline` does no stop/drain — the raw path would
+  mutate/delete a *live* pipeline. So Wave-2 `apply` MUST stop-drain-restart (invariant 7) or refuse a running
+  pipeline. **New AC-13:** `apply` never silently mutates a running pipeline — it either refuses with an actionable
+  error or performs a graceful stop-with-drain → actions → restart; verified by a kill-mid-apply test asserting no
+  record loss.
+- **UX fixes (must-do):** the diff symbols (`+`/`~`/`-`) and the status-enum label render through the shared
+  `cmd/conduit/internal/ui` helper with ASCII fallback (not hand-rolled); the "applying will RESTART pipeline X"
+  warning is prominent before a destructive apply; the `--yes` confirm matches scaffold's behavior. Token model
+  (recompute-at-apply, refuse on mismatch) is coherent.
