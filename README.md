@@ -35,6 +35,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Quick start](#quick-start)
 - [Installation guide](#installation-guide)
+- [Preflight checks](#preflight-checks)
 - [Configuring Conduit](#configuring-conduit)
 - [Storage](#storage)
 - [Connectors](#connectors)
@@ -127,6 +128,31 @@ Conduit version, you should run the following command:
 ```sh
 docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
+
+## Preflight checks
+
+Before running Conduit for the first time (or after changing configuration), run
+`conduit doctor` to check whether your environment is ready:
+
+```sh
+conduit doctor
+```
+
+It runs a set of offline, non-destructive checks — config resolution and
+validation, database reachability, API address availability, plugin
+directories, the built-in plugin registry, and whether a running engine is
+reachable — and reports pass/warn/fail for each, grouped by category. It does
+not start a Runtime; this is distinct from the running server's `/readyz` and
+`/healthz` endpoints, which answer "is the running engine serving?" instead of
+"would `conduit run` succeed here?".
+
+Useful flags: `--json` for machine-readable output, `--check <name>` (repeatable)
+to run only specific checks, `--deep` to additionally verify standalone connector
+plugin binaries in an isolated subprocess, `--require-server` to fail instead of
+warn when no Conduit server is reachable, and `-q`/`--quiet` to only print
+warnings, failures, and the summary. See `conduit doctor --help` for the full
+list of checks and exit codes, and
+[the design doc](docs/design-documents/20260707-cli-doctor.md) for the rationale.
 
 ## Configuring Conduit
 
@@ -292,8 +318,47 @@ a graceful shutdown) as a forced kill and exits with the POSIX `128+signum` conv
 (`SIGINT` → `130`, `SIGTERM` → `143`) — the same value a shell reports for a process killed by that
 signal, so a forced kill is distinguishable from an ordinary classified exit code.
 
+A multi-result command like `conduit doctor` (many checks, one process) reduces its checks to a
+single exit code by taking the **worst** bucket across every failing check — a database that can't
+be reached (environment, `3`) always outranks an invalid config field (validation, `2`) in the
+final exit code, regardless of which check ran first. Warnings never affect the exit code.
+
 See [ADR: deterministic CLI exit codes](docs/architecture-decision-records/20260706-deterministic-cli-exit-codes.md)
-for the full mapping and rationale, and `pkg/conduit/exitcode` for the implementation.
+for the full mapping and rationale, `pkg/conduit/exitcode` for the implementation, and
+`pkg/conduit/check` for the multi-result aggregation `doctor` (and future multi-check commands)
+share.
+
+## Validating pipeline configs
+
+`conduit pipelines validate <path>` (alias: `conduit pipeline validate`) statically checks one
+pipeline config file, or every `.yml`/`.yaml` file in a directory (not recursed), without starting
+Conduit or contacting a running instance — it's fully offline, so it's safe to run in CI or before
+`conduit run` with no server anywhere nearby.
+
+```console
+$ conduit pipelines validate pipelines/orders.yaml
+✗ pipelines/orders.yaml
+✗ config.field_required   /connectors/0/plugin
+    connector "orders:postgres": "plugin" is mandatory
+    → set connectors[0].plugin (e.g. "builtin:postgres")
+
+Summary: 1 files · 0 passed · 1 failed · 1 problems
+Fix the ✗ items above, then re-run.
+```
+
+(the connector's ID is shown enriched — `<pipelineID>:<connectorID>` — since validation runs after the same
+default-enrichment step `conduit run` applies; `--json`'s `configPath` still points at your original
+`connectors[0]`.)
+
+Every problem in every file is reported — a bad file never stops the rest from being checked.
+Exits `0` if every pipeline is valid, `2` otherwise (see Exit codes above). Add `--json` for the
+structured `{command, ok, summary, result, error}` envelope, or `-q/--quiet` to suppress passing
+(`✓`) lines and show only failures and the summary.
+
+`lint` (advisory warnings, e.g. deprecated fields) and `dry-run` (shows the enriched pipeline graph
+and optionally resolves builtin plugin references) share the same engine and are planned as
+follow-ups — see
+[the design doc](docs/design-documents/20260707-cli-pipeline-validate.md).
 
 ## Documentation
 

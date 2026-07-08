@@ -17,6 +17,7 @@ package cecdysis
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -75,6 +76,28 @@ type Outcome struct {
 	OK      bool
 	Summary any
 	Result  any
+
+	// ExitErr, when non-nil, is returned by CommandWithResultDecorator after
+	// it has already rendered this Outcome (JSON or human) — purely so the
+	// process gets a correctly classified nonzero exit code (via
+	// pkg/conduit/exitcode, applied where cmd.Execute()'s returned error
+	// reaches cmd/conduit/cli) for a domain failure (OK:false) that is NOT a
+	// hard command failure.
+	//
+	// This exists because ecdysis routes the process exit code through
+	// cmd.Execute()'s returned error, and CommandWithResult's contract keeps
+	// domain findings out of that error (they belong in Summary/Result with
+	// the envelope's error field staying null, per CLI output conventions
+	// §1) — so there is no other channel back to the process exit code for
+	// "the run completed and found problems." ExitErr is never rendered
+	// itself (RunE returns it after Render/marshal has already written the
+	// full Outcome to output) and never appears in the --json envelope.
+	//
+	// A command with findings synthesizes this via its own classification
+	// logic (see docs/design-documents/20260707-cli-output-conventions.md
+	// §4: reducing N findings to one exit code is new aggregation logic each
+	// command owns, not something this package does on a command's behalf).
+	ExitErr error
 }
 
 // CommandWithResult can be implemented by a command that needs the shared
@@ -99,6 +122,63 @@ type CommandWithResult interface {
 	// (the decorator renders that itself via ui.RenderFinding, since there
 	// is no Outcome to hand Render in that case).
 	Render(outcome Outcome) string
+}
+
+// CommandWithResultExitCode is implemented by a CommandWithResult whose
+// domain findings (Outcome.OK == false) must still fail the process exit
+// code — e.g. `doctor`'s failing checks, or a future `pipelines validate`
+// run that found errors. Per the CLI output conventions §1, a domain
+// finding is NOT a HARD command failure: ExecuteWithResult returns
+// (Outcome{OK: false, ...}, nil), so the --json envelope's "error" stays
+// null. But per conventions §4, a multi-result command still must reduce
+// its findings to a nonzero process exit code. Without this interface,
+// there would be no way to do that: CommandWithResultDecorator's RunE
+// returns nil whenever ExecuteWithResult returns a nil error (see Decorate),
+// so cmd/conduit/cli's classification of the returned error would always see
+// OK and exit 0 — silently wrong for a command whose checks failed.
+//
+// Implement this alongside CommandWithResult. ExitCode is only consulted
+// when ExecuteWithResult returns a nil error; a HARD failure's exit code is
+// already classified from the error itself, via pkg/conduit/exitcode.
+type CommandWithResultExitCode interface {
+	CommandWithResult
+	// ExitCode returns the process exit code for a successful (err == nil)
+	// run's Outcome — e.g. by delegating to check.Report.ExitCode() (see
+	// pkg/conduit/check). Return 0 (exitcode.OK) when nothing failed.
+	ExitCode(outcome Outcome) int
+}
+
+// exitCodeAnnotation is the cobra Command.Annotations key
+// CommandWithResultDecorator uses to smuggle a CommandWithResultExitCode's
+// exit code out of a successful (err == nil) RunE. RunE's own return value
+// can't carry it without turning a domain finding into what looks like a
+// HARD failure (see CommandWithResultExitCode's doc), so this rides out on
+// the leaf *cobra.Command instead — cmd/conduit/cli reads it back via
+// ResultExitCode from the *cobra.Command cmd.ExecuteC() returns (the leaf
+// command that actually ran), after a nil-error Execute().
+const exitCodeAnnotation = "conduit.exitCode"
+
+// ResultExitCode returns the exit code CommandWithResultDecorator recorded
+// on cmd via a CommandWithResultExitCode's ExitCode method, if any, and
+// whether one was recorded at all. cmd should be the *cobra.Command
+// cmd.ExecuteC() returned (the leaf command that actually ran), not the
+// root command — Annotations are per-Command, not inherited from a parent.
+func ResultExitCode(cmd *cobra.Command) (int, bool) {
+	if cmd == nil || cmd.Annotations == nil {
+		return 0, false
+	}
+	s, ok := cmd.Annotations[exitCodeAnnotation]
+	if !ok {
+		return 0, false
+	}
+	code, err := strconv.Atoi(s)
+	if err != nil {
+		// Should not happen — this package is the only writer of this
+		// annotation, and it always writes strconv.Itoa's output. Treat a
+		// corrupted value as "nothing recorded" rather than panicking.
+		return 0, false
+	}
+	return code, true
 }
 
 // CommandWithResultDecorator wires CommandWithResult's --json flag, renders
@@ -154,6 +234,18 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 			return err
 		}
 
+		// A domain finding (Outcome.OK == false with a nil err) still needs
+		// to fail the process exit code — see CommandWithResultExitCode's
+		// doc for why this can't ride on RunE's return value.
+		if ec, ok := v.(CommandWithResultExitCode); ok {
+			if code := ec.ExitCode(outcome); code != 0 {
+				if cmd.Annotations == nil {
+					cmd.Annotations = map[string]string{}
+				}
+				cmd.Annotations[exitCodeAnnotation] = strconv.Itoa(code)
+			}
+		}
+
 		if asJSON {
 			res := Result{Command: v.ResultCommand(), OK: outcome.OK, Summary: outcome.Summary, Result: outcome.Result}
 			b, merr := marshalJSON(res)
@@ -167,11 +259,16 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 			// stdout" envelope on stderr instead. Write to OutOrStdout
 			// explicitly everywhere in this file instead.
 			fmt.Fprintln(cmd.OutOrStdout(), string(b))
-			return nil
+			// outcome.ExitErr (nil for most commands) is returned, not
+			// swallowed, AFTER the envelope above is already written —
+			// see Outcome.ExitErr's doc: this is how a domain failure
+			// (OK:false, Error:null in the envelope just emitted) still
+			// gives the process a nonzero, correctly classified exit code.
+			return outcome.ExitErr
 		}
 
 		fmt.Fprint(cmd.OutOrStdout(), v.Render(outcome))
-		return nil
+		return outcome.ExitErr
 	}
 
 	return nil

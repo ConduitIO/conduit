@@ -72,8 +72,26 @@ func TestValidate_ConfigPathAndCode(t *testing.T) {
 			is.True(ok) // carries a ConduitError
 			is.Equal(ce.Code.Reason(), tc.wantCode.Reason())
 			is.Equal(ce.ConfigPath, tc.wantPath)
+			is.True(ce.Suggestion != "") // every validation error carries a remediation hint
 		})
 	}
+}
+
+// TestValidate_ConnectorMissingPlugin_SuggestionMatchesDesignExample locks in
+// the exact suggestion wording from
+// docs/design-documents/20260707-cli-pipeline-validate.md's FAIL output
+// example, so `pipelines validate`'s rendered output stays in sync with the
+// design doc it was reviewed against.
+func TestValidate_ConnectorMissingPlugin_SuggestionMatchesDesignExample(t *testing.T) {
+	is := is.New(t)
+	cfg := Pipeline{ID: "pipeline1", Status: StatusRunning, Connectors: []Connector{{ID: "pg-source", Type: TypeSource}}}
+
+	err := Validate(cfg)
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Suggestion, `set connectors[0].plugin (e.g. "builtin:postgres")`)
 }
 
 func TestValidator_MandatoryFields(t *testing.T) {

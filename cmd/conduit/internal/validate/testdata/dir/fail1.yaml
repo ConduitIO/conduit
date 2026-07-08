@@ -1,0 +1,7 @@
+version: 2.2
+pipelines:
+  - id: dir-fail-1
+    status: running
+    connectors:
+      - id: src
+        type: bogus-type

@@ -41,13 +41,23 @@ func Run(cfg conduit.Config) {
 	// Help will still be shown via --help
 	cmd.SilenceUsage = true
 
-	if err := cmd.Execute(); err != nil {
+	// ExecuteC (not Execute) so a nil-error run can still report a non-OK
+	// exit code for a domain finding — e.g. `doctor` reporting a failed
+	// check with Outcome.OK == false but no HARD error (see
+	// cecdysis.CommandWithResultExitCode). leaf is the actual subcommand
+	// that ran; Annotations are per-Command, not inherited, so ResultExitCode
+	// must be read off leaf, not cmd.
+	leaf, err := cmd.ExecuteC()
+	if err != nil {
 		// error is already printed out by cobra; the exit code is the single
 		// deterministic classifier shared with the `run` entrypoint (see
 		// pkg/conduit/exitcode) so one-shot commands and the long-running
 		// server never drift onto different exit conventions for the same
 		// kind of error.
 		os.Exit(exitcode.ExitCode(err))
+	}
+	if code, ok := cecdysis.ResultExitCode(leaf); ok {
+		os.Exit(code)
 	}
 	os.Exit(exitcode.OK)
 }
