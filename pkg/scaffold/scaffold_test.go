@@ -92,6 +92,7 @@ func TestGenerate_Processor(t *testing.T) {
 }
 
 func TestGenerate_SkipGenerate_StillBuilds(t *testing.T) {
+	requireNetwork(t)
 	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
 	res, err := scaffold.Generate(context.Background(), scaffold.Request{
 		Kind:         scaffold.KindConnector,
@@ -152,6 +153,7 @@ func TestGenerate_DestinationExists_NoForce(t *testing.T) {
 // --force is set, and the result is the fresh, buildable scaffold — not a
 // merge of old and new content.
 func TestGenerate_Force_Overwrites(t *testing.T) {
+	requireNetwork(t)
 	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	marker := filepath.Join(dir, "pre-existing-marker.txt")
@@ -239,5 +241,14 @@ func requireNetwork(t *testing.T) {
 	t.Helper()
 	if os.Getenv("CONDUIT_TEST_NO_NETWORK") != "" {
 		t.Skip("CONDUIT_TEST_NO_NETWORK set")
+	}
+	// These tests `go install` external codegen tools (conn-sdk-cli/paramgen)
+	// from GitHub and build a full connector — unreliable in the standard CI
+	// test job (module-proxy/rate limits). They are the full-generate E2E
+	// coverage that belongs in the dedicated scaffold-e2e job (see issue #2575),
+	// which sets CONDUIT_SCAFFOLD_E2E. Skip them in CI otherwise; they still run
+	// locally (CI unset).
+	if os.Getenv("CI") != "" && os.Getenv("CONDUIT_SCAFFOLD_E2E") == "" {
+		t.Skip("full-generate E2E test — runs in the scaffold-e2e job (#2575), not the standard CI test run")
 	}
 }
