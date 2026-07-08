@@ -1,0 +1,9 @@
+version: "2.2"
+pipelines:
+  - id: mixed-pipeline
+    connectors:
+      - id: c1
+        type: source
+    processors:
+      - id: proc1
+        type: base64.encode

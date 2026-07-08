@@ -77,7 +77,48 @@ func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline
 	return configs.ToConfig(), err
 }
 
+// Warning is one advisory lint finding surfaced by ParseWithWarnings — a
+// deprecated/renamed/unknown field or a version fallback, located by line and
+// column. It is the exported view of the parser's internal warning type so the
+// `pipelines lint` engine can render the warnings that the run/provisioning
+// path only logs.
+type Warning struct {
+	Field   string
+	Line    int
+	Column  int
+	Value   string
+	Message string
+}
+
+// ParseWithWarnings is Parse plus the advisory warnings the parser would
+// otherwise only log. It is additive and offline: the run/provisioning path
+// keeps using Parse/ParseConfigurations (which continue to log warnings), so
+// exposing warnings here changes no run behavior — it only gives `pipelines
+// lint` a return channel for the warnings it renders.
+func (p *Parser) ParseWithWarnings(ctx context.Context, reader io.Reader) ([]config.Pipeline, []Warning, error) {
+	configs, warn, err := p.parse(ctx, reader)
+	warn = warn.Sort()
+	ws := make([]Warning, len(warn))
+	for i, w := range warn {
+		ws[i] = Warning{Field: w.field, Line: w.line, Column: w.column, Value: w.value, Message: w.message}
+	}
+	return configs.ToConfig(), ws, err
+}
+
+// ParseConfigurations parses every pipeline configuration document in reader
+// and logs any advisory warnings — the historical behavior the run/provisioning
+// path relies on. lint uses ParseWithWarnings instead to render them.
 func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Configurations, error) {
+	configs, warn, err := p.parse(ctx, reader)
+	// sort warnings and log them (unchanged run behavior)
+	warn.Sort().Log(ctx, p.logger)
+	return configs, err
+}
+
+// parse is the shared parse loop for ParseConfigurations (which logs the
+// returned warnings) and ParseWithWarnings (which returns them to the caller).
+// It never logs, so the caller decides the warnings' fate.
+func (p *Parser) parse(ctx context.Context, reader io.Reader) (Configurations, warnings, error) {
 	// we redirect everything read from reader to buffer with TeeReader, so that
 	// we can first parse the version of the file and choose what type we
 	// actually need to parse the configuration
@@ -142,9 +183,7 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 		configs = append(configs, cfg)
 	}
 
-	// sort warnings and log them
-	warn.Sort().Log(ctx, p.logger)
-	return configs, cerrors.Join(errs...)
+	return configs, warn, cerrors.Join(errs...)
 }
 
 // parseVersion will return the version that should be used to parse the

@@ -40,6 +40,11 @@ type Finding struct {
 	ConfigPath string          `json:"configPath,omitempty"`
 	Suggestion string          `json:"suggestion,omitempty"`
 	Fix        *conduiterr.Fix `json:"fix,omitempty"`
+	// Line and Column locate an advisory `lint` warning in the source file
+	// (1-based; 0 = unknown). They are only ever set on SeverityWarning
+	// findings surfaced by the parser — error findings locate via ConfigPath.
+	Line   int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
 }
 
 // FileReport is one resolved file's outcome: every pipeline ID found in it
