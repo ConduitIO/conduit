@@ -32,6 +32,12 @@ type action interface {
 	String() string
 	Do(context.Context) error
 	Rollback(context.Context) error
+	// Describe returns a stable, human/--json-renderable Change describing
+	// what Do would execute, without executing anything. It reads only the
+	// config the action already holds (see each implementation) — this is
+	// what makes Plan (plan.go) a read-only preview of the exact same action
+	// list ApplyPlan later runs, with no separate/divergent describe path.
+	Describe() Change
 }
 
 // --------------------
@@ -51,6 +57,22 @@ type createPipelineAction struct {
 
 func (a createPipelineAction) String() string {
 	return fmt.Sprintf("create pipeline with ID %v", a.cfg.ID)
+}
+
+// Describe returns EffectInPlace: a pipeline that does not exist yet has
+// nothing running to disrupt. This also seeds Plan's brand-new-pipeline
+// override (see plan.go), which forces every Change in an all-create Diff to
+// EffectInPlace, including this pipeline's own nested connector/processor
+// creates that would otherwise (in the general, existing-pipeline case)
+// report EffectRestart.
+func (a createPipelineAction) Describe() Change {
+	return Change{
+		Resource: ResourcePipeline,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionCreate,
+		Effect:   EffectInPlace,
+		Code:     "provisioning.pipeline.create",
+	}
 }
 
 func (a createPipelineAction) Do(ctx context.Context) error {
@@ -109,6 +131,20 @@ type createConnectorAction struct {
 
 func (a createConnectorAction) String() string {
 	return fmt.Sprintf("create connector with ID %v", a.cfg.ID)
+}
+
+// Describe returns EffectRestart: adding a connector changes a pipeline's
+// topology, which — for an existing pipeline — requires a restart to take
+// effect. Plan overrides this to EffectInPlace when the whole pipeline is
+// also being created for the first time (see plan.go's Plan doc).
+func (a createConnectorAction) Describe() Change {
+	return Change{
+		Resource: ResourceConnector,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionCreate,
+		Effect:   EffectRestart,
+		Code:     "provisioning.connector.create",
+	}
 }
 
 func (a createConnectorAction) Do(ctx context.Context) error {
@@ -170,6 +206,20 @@ func (a createProcessorAction) String() string {
 	return fmt.Sprintf("create processor with ID %v", a.cfg.ID)
 }
 
+// Describe returns EffectRestart: adding a processor changes a pipeline's
+// (or connector's) processor chain, which requires a restart to take effect
+// on an existing pipeline. Plan overrides this to EffectInPlace when the
+// whole pipeline is also being created for the first time.
+func (a createProcessorAction) Describe() Change {
+	return Change{
+		Resource: ResourceProcessor,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionCreate,
+		Effect:   EffectRestart,
+		Code:     "provisioning.processor.create",
+	}
+}
+
 func (a createProcessorAction) Do(ctx context.Context) error {
 	_, err := a.processorService.Create(
 		ctx,
@@ -212,6 +262,31 @@ type updatePipelineAction struct {
 
 func (a updatePipelineAction) String() string {
 	return fmt.Sprintf("update pipeline with ID %v", a.oldConfig.ID)
+}
+
+// Describe reports which config.PipelineMutableFields changed (Status is
+// excluded — config.PipelineIgnoredFields — matching what
+// preparePipelineActions itself compares to decide an update is needed at
+// all). Effect is EffectRestart when the pipeline's connector or processor
+// membership changed (adding/removing a resource is a topology change,
+// matching createConnectorAction/createProcessorAction's own classification
+// and the design doc's UX example: "connectors changed" -> restart);
+// otherwise EffectInPlace, since Name/Description/DLQ are metadata the
+// running pipeline.Service.Update call can apply without stopping anything.
+func (a updatePipelineAction) Describe() Change {
+	effect := EffectInPlace
+	if !equalConnectorIDs(a.oldConfig.Connectors, a.newConfig.Connectors) ||
+		!equalProcessorIDs(a.oldConfig.Processors, a.newConfig.Processors) {
+		effect = EffectRestart
+	}
+	return Change{
+		Resource:    ResourcePipeline,
+		ID:          a.oldConfig.ID,
+		Action:      ChangeActionUpdate,
+		Effect:      effect,
+		ConfigPaths: diffPipelineFields(a.oldConfig, a.newConfig),
+		Code:        "provisioning.pipeline.update",
+	}
 }
 
 func (a updatePipelineAction) Do(ctx context.Context) error {
@@ -322,6 +397,23 @@ func (a updateConnectorAction) String() string {
 	return fmt.Sprintf("update connector with ID %v", a.oldConfig.ID)
 }
 
+// Describe reports which config.ConnectorMutableFields changed. Effect is
+// always EffectInPlace: prepareConnectorActions only ever builds an
+// updateConnectorAction when config.ConnectorImmutableFields (Type) is
+// unchanged — a Type change instead produces a delete+create pair (see
+// deleteConnectorAction/createConnectorAction, both EffectRestart), so this
+// action, by construction, never represents a topology-changing update.
+func (a updateConnectorAction) Describe() Change {
+	return Change{
+		Resource:    ResourceConnector,
+		ID:          a.oldConfig.ID,
+		Action:      ChangeActionUpdate,
+		Effect:      EffectInPlace,
+		ConfigPaths: diffConnectorFields(a.oldConfig, a.newConfig),
+		Code:        "provisioning.connector.update",
+	}
+}
+
 func (a updateConnectorAction) Do(ctx context.Context) error {
 	return a.update(ctx, a.newConfig)
 }
@@ -382,6 +474,22 @@ func (a updateProcessorAction) String() string {
 	return fmt.Sprintf("update processor with ID %v", a.oldConfig.ID)
 }
 
+// Describe reports which processor fields changed. Effect is EffectInPlace:
+// processors have no immutable-field classification (see
+// prepareProcessorActions — "all parts of a processor are updateable"), so
+// every processor change, including Plugin, runs through
+// processorService.Update rather than a delete+create pair.
+func (a updateProcessorAction) Describe() Change {
+	return Change{
+		Resource:    ResourceProcessor,
+		ID:          a.oldConfig.ID,
+		Action:      ChangeActionUpdate,
+		Effect:      EffectInPlace,
+		ConfigPaths: diffProcessorFields(a.oldConfig, a.newConfig),
+		Code:        "provisioning.processor.update",
+	}
+}
+
 func (a updateProcessorAction) Do(ctx context.Context) error {
 	return a.update(ctx, a.newConfig)
 }
@@ -416,6 +524,20 @@ func (a deletePipelineAction) String() string {
 	return fmt.Sprintf("delete pipeline with ID %v", a.cfg.ID)
 }
 
+// Describe returns EffectRestart: removing a pipeline entirely tears down
+// any live work it was doing (Effect has no "stop"/"n/a" state to represent
+// that more precisely — see the Effect doc), so it is treated as the more
+// disruptive of the two buckets rather than silently as EffectInPlace.
+func (a deletePipelineAction) Describe() Change {
+	return Change{
+		Resource: ResourcePipeline,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionDelete,
+		Effect:   EffectRestart,
+		Code:     "provisioning.pipeline.delete",
+	}
+}
+
 func (a deletePipelineAction) Do(ctx context.Context) error {
 	return createPipelineAction(a).Rollback(ctx)
 }
@@ -430,6 +552,22 @@ func (a deleteConnectorAction) String() string {
 	return fmt.Sprintf("delete connector with ID %v", a.cfg.ID)
 }
 
+// Describe returns EffectRestart: removing a connector changes topology,
+// same as createConnectorAction. This also covers the Type-change case
+// (prepareConnectorActions pairs this with a createConnectorAction when
+// config.ConnectorImmutableFields differ), which must always read as
+// restart — never overridden to EffectInPlace outside Plan's brand-new
+// -pipeline case.
+func (a deleteConnectorAction) Describe() Change {
+	return Change{
+		Resource: ResourceConnector,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionDelete,
+		Effect:   EffectRestart,
+		Code:     "provisioning.connector.delete",
+	}
+}
+
 func (a deleteConnectorAction) Do(ctx context.Context) error {
 	return createConnectorAction(a).Rollback(ctx)
 }
@@ -442,6 +580,18 @@ type deleteProcessorAction createProcessorAction // piggyback on create action a
 
 func (a deleteProcessorAction) String() string {
 	return fmt.Sprintf("delete processor with ID %v", a.cfg.ID)
+}
+
+// Describe returns EffectRestart: removing a processor changes a pipeline's
+// (or connector's) processor chain, same as createProcessorAction.
+func (a deleteProcessorAction) Describe() Change {
+	return Change{
+		Resource: ResourceProcessor,
+		ID:       a.cfg.ID,
+		Action:   ChangeActionDelete,
+		Effect:   EffectRestart,
+		Code:     "provisioning.processor.delete",
+	}
 }
 
 func (a deleteProcessorAction) Do(ctx context.Context) error {

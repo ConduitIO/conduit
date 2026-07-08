@@ -890,6 +890,62 @@ func (r *Runtime) serveHTTP(
 	return ln.Addr(), nil
 }
 
+// InitProvisioningOnly initializes just the metadata services
+// (processor/connector/pipeline — the ones ProvisionService.Plan/ApplyPlan
+// read and mutate) so ProvisionService is ready to use, without starting the
+// gRPC/HTTP API servers, the connector-utils callback server, or any
+// pipeline's actual dataflow (lifecycleService.Init, which would resume
+// previously-running pipelines, is deliberately never called here).
+//
+// It exists for the standalone `conduit pipelines deploy|apply` CLI commands
+// (see cmd/conduit/internal/deploy), which need a working ProvisionService
+// without booting the full server — reusing NewRuntime's exact, real service
+// construction (schema registry, builtin connector/processor registries)
+// rather than a second, parallel bootstrap that could drift from it.
+//
+// Known limitation (documented, not silently papered over): connectorPluginService
+// is initialized with an empty connector-utils address (no live callback
+// server is started), so a connector plugin that needs it during OnDelete
+// (invoked when apply deletes a connector, including the delete+create pair
+// for a Type change) may fail to run its cleanup hook correctly in this
+// standalone mode. See docs/design-documents/20260708-cli-pipeline-deploy-apply.md's
+// PR failure-mode analysis.
+//
+// Callers must call r.DB.Close() when done; InitProvisioningOnly does not
+// start anything that needs its own shutdown path (no goroutines, no
+// listeners), so there is nothing else to release.
+func (r *Runtime) InitProvisioningOnly(ctx context.Context) error {
+	if err := r.processorService.Init(ctx); err != nil {
+		return cerrors.Errorf("failed to init processor service: %w", err)
+	}
+
+	r.connectorPluginService.Init(ctx, "", r.Config.Connectors.MaxReceiveRecordSize)
+
+	if err := r.connectorService.Init(ctx); err != nil {
+		return cerrors.Errorf("failed to init connector service: %w", err)
+	}
+
+	// Invariant 7 / Tier-1 safety (see plan.go's isRunningStatus and AC-13):
+	// pipelineService.Init converts any persisted StatusRunning to
+	// StatusSystemStopped (it cannot know whether the process that set
+	// StatusRunning is still alive) — the *same* laundering conduit run
+	// itself relies on after a real restart. That means a status read
+	// through *this* Runtime can never distinguish "was running before an
+	// unrelated crash" from "is actually running right now in a separate,
+	// live conduit run process" — only the process that actually started a
+	// pipeline's goroutines (or a live RPC to it) can tell the difference.
+	// See the design doc's PR failure-mode analysis for how the CLI commands
+	// account for this (DB-type gate on the standalone apply path: BadgerDB/
+	// SQLite's exclusive file lock makes "a live conduit run has this store
+	// open too" fail at OpenStore instead of silently proceeding; Postgres,
+	// which allows concurrent connections, is refused outright).
+	if err := r.pipelineService.Init(ctx); err != nil {
+		return cerrors.Errorf("failed to init pipeline service: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	err := r.processorService.Init(ctx)
 	if err != nil {

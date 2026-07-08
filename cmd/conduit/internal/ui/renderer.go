@@ -129,3 +129,59 @@ func (r *Renderer) Color() bool { return !r.plain }
 // Glyphs reports whether this Renderer uses Unicode glyphs, as opposed to
 // the ASCII fallback.
 func (r *Renderer) Glyphs() bool { return !r.plain }
+
+// DiffAction is the three-way verdict DiffGlyph selects a symbol for:
+// resource create/update/delete, as rendered by `pipelines deploy|apply`'s
+// plan/diff output. It is a separate type from Status (rather than reusing
+// StatusPass/Warn/Fail) because a diff's semantics are genuinely different —
+// "created" is not "passed" — so a future change to one glyph set can't
+// silently affect the other.
+type DiffAction int
+
+const (
+	DiffCreate DiffAction = iota
+	DiffUpdate
+	DiffDelete
+)
+
+// Diff glyph strings. Unicode is used on a color-capable TTY; ASCII is the
+// fallback everywhere else, matching Glyph's convention.
+const (
+	glyphDiffCreateUnicode = "+"
+	glyphDiffUpdateUnicode = "~"
+	glyphDiffDeleteUnicode = "-"
+	glyphDiffCreateASCII   = "[+]"
+	glyphDiffUpdateASCII   = "[~]"
+	glyphDiffDeleteASCII   = "[-]"
+)
+
+// DiffGlyph returns the glyph for a plan/diff action: colored (green/yellow/
+// red) on a color-capable TTY, or the bracketed ASCII fallback otherwise. An
+// out-of-range action renders as DiffUpdate — the neutral middle ground,
+// since a diff symbol (unlike Glyph's pass/fail) has no "conservatively
+// surface a problem" bias to fall back on.
+func (r *Renderer) DiffGlyph(action DiffAction) string {
+	if r.plain {
+		switch action {
+		case DiffCreate:
+			return glyphDiffCreateASCII
+		case DiffDelete:
+			return glyphDiffDeleteASCII
+		case DiffUpdate:
+			return glyphDiffUpdateASCII
+		default:
+			return glyphDiffUpdateASCII
+		}
+	}
+
+	switch action {
+	case DiffCreate:
+		return ansiGreen + glyphDiffCreateUnicode + ansiReset
+	case DiffDelete:
+		return ansiRed + glyphDiffDeleteUnicode + ansiReset
+	case DiffUpdate:
+		return ansiYellow + glyphDiffUpdateUnicode + ansiReset
+	default:
+		return ansiYellow + glyphDiffUpdateUnicode + ansiReset
+	}
+}
