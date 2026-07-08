@@ -1,0 +1,8 @@
+version: 99.0
+pipelines:
+  - id: p1
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator

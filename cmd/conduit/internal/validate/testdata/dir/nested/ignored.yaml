@@ -1,0 +1,3 @@
+version: 2.2
+pipelines:
+  - id: nested-should-be-ignored

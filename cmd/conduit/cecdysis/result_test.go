@@ -37,6 +37,12 @@ import (
 // set, so cobra never prints a second, duplicate "Error: ..." line over it.
 type resultTestCmd struct {
 	fail bool
+	// exitErr, when set, is carried on a successful (err == nil)
+	// ExecuteWithResult return via Outcome.ExitErr — the "domain failure,
+	// not a hard command failure" case Outcome.ExitErr's doc describes:
+	// findings-with-problems still render as OK:false/Error:null, but the
+	// process should still exit nonzero.
+	exitErr error
 }
 
 func (c *resultTestCmd) Usage() string         { return "resulttestcmd" }
@@ -50,9 +56,10 @@ func (c *resultTestCmd) ExecuteWithResult(context.Context) (cecdysis.Outcome, er
 		return cecdysis.Outcome{}, err
 	}
 	return cecdysis.Outcome{
-		OK:      true,
+		OK:      c.exitErr == nil,
 		Summary: map[string]any{"count": 3},
 		Result:  map[string]any{"detail": "all good"},
+		ExitErr: c.exitErr,
 	}, nil
 }
 
@@ -292,4 +299,74 @@ func TestCommandWithResultDecorator_JSONFlagRegistered(t *testing.T) {
 	is := is.New(t)
 	cmd := newEcdysis().MustBuildCobraCommand(&resultTestCmd{})
 	is.True(cmd.Flags().Lookup("json") != nil)
+}
+
+// TestCommandWithResultDecorator_OutcomeExitErr_JSON is the load-bearing
+// contract test for Outcome.ExitErr, added for `pipelines validate`: a
+// domain failure (findings, not a hard command failure) still renders the
+// full Outcome — OK:false, Error:null, Summary/Result intact — exactly like
+// TestCommandWithResultDecorator_JSON_Success, but cmd.Execute() returns a
+// non-nil error afterwards so the process exit code (via
+// pkg/conduit/exitcode, applied in cmd/conduit/cli) still classifies as
+// something other than 0.
+func TestCommandWithResultDecorator_OutcomeExitErr_JSON(t *testing.T) {
+	is := is.New(t)
+
+	exitErr := conduiterr.New(conduiterr.CodeInvalidArgument, "2 problems found")
+	cmd := newEcdysis().MustBuildCobraCommand(&resultTestCmd{exitErr: exitErr})
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--json"})
+
+	err := cmd.Execute()
+	is.True(err != nil) // exit-code classification, per Outcome.ExitErr's doc
+	is.Equal(err, error(exitErr))
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal(out.Bytes(), &got))
+	is.Equal(got.Command, "test.command")
+	is.True(!got.OK)
+	is.True(got.Error == nil) // findings, not a hard failure — the envelope stays clean
+	summary, ok := got.Summary.(map[string]any)
+	is.True(ok)
+	is.Equal(summary["count"], float64(3)) // Summary/Result still fully rendered
+
+	// ExitErr must never leak into the rendered output itself.
+	is.True(!strings.Contains(out.String(), "2 problems found"))
+	is.Equal(errOut.String(), "")
+}
+
+// TestCommandWithResultDecorator_OutcomeExitErr_Human is the human-output
+// analogue: Render's output is written in full, then the nonzero exit error
+// is returned silently (SilenceErrors means cobra prints nothing more for
+// it) — no duplicate/extra text appears.
+func TestCommandWithResultDecorator_OutcomeExitErr_Human(t *testing.T) {
+	is := is.New(t)
+
+	exitErr := conduiterr.New(conduiterr.CodeInvalidArgument, "2 problems found")
+	cmd := newEcdysis().MustBuildCobraCommand(&resultTestCmd{exitErr: exitErr})
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{})
+
+	err := cmd.Execute()
+	is.True(err != nil)
+	is.Equal(err, error(exitErr))
+	is.Equal(out.String(), "OK=false\n") // Render still ran normally
+	is.Equal(errOut.String(), "")        // no duplicate/extra error text
+}
+
+// TestCommandWithResultDecorator_NilExitErr_StillExitsZero guards the
+// default case: a command that never sets Outcome.ExitErr (every command
+// before `pipelines validate`) is unaffected — cmd.Execute() still returns
+// nil on a successful, OK:true run.
+func TestCommandWithResultDecorator_NilExitErr_StillExitsZero(t *testing.T) {
+	is := is.New(t)
+	cmd := newEcdysis().MustBuildCobraCommand(&resultTestCmd{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{})
+	is.NoErr(cmd.Execute())
 }
