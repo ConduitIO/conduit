@@ -52,7 +52,7 @@ The **`error`** object uses the same fields (`code`, `message`, `suggestion?`,
 error MUST carry `suggestion` (its human output already shows remediation text);
 a bare `{code,message}` is non-conformant.
 
-> **`configPath` note:** its *syntax* legitimately varies — a `conduit.yaml` dotted
+> **`configPath` note:** its _syntax_ legitimately varies — a `conduit.yaml` dotted
 > key (`db.badger.path`) for doctor, a pipeline-doc JSON pointer
 > (`/connectors/0/plugin`) for validate. Same field, two address spaces; document
 > this on the field, do not invent two field names.
@@ -64,7 +64,7 @@ a bare `{code,message}` is non-conformant.
 - **A located finding renders identically across commands** (one template — the
   reviews flagged doctor's `└`-line vs validate's inline pointer as divergent):
 
-  ```
+  ```text
   ✗ config.field_required   /connectors/0/plugin
       connector "pg-source": "plugin" is mandatory
       → set connectors[0].plugin (e.g. "builtin:postgres")
@@ -98,7 +98,7 @@ Validate's builtin-plugin resolution toggle is `--resolve-plugins` (NOT
 Every command routes its exit through `exitcode.ExitCode` (0 ok · 1 runtime · 2
 config/validation · 3 environment). No command invents "a distinct exit code."
 Multi-result commands (doctor, validate) that must reduce N findings to one exit
-code take the **worst** (max) bucket — this is *new* aggregation logic, NOT free
+code take the **worst** (max) bucket — this is _new_ aggregation logic, NOT free
 reuse of the single-error classifier; own it explicitly (synthesize a
 `*conduiterr.ConduitError` per failing result, classify each, take the max;
 environment 3 > validation 2 > runtime 1).
