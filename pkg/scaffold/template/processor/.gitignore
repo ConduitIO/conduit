@@ -1,0 +1,29 @@
+### Go ###
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.wasm
+/vendor
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+### Intellij ###
+.idea
+
+### VisualStudioCode ###
+.vscode
+
+# Binary, built with `make build`
+/conduit-processor-processorname.wasm
+
+### OS ###
+.DS_Store
+
+

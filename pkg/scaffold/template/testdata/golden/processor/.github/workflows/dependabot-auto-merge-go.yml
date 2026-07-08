@@ -1,0 +1,39 @@
+# This action automatically merges dependabot PRs that update go dependencies (only patch and minor updates).
+# Based on: https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically/automating-dependabot-with-github-actions#enable-auto-merge-on-a-pull-request 
+
+name: Dependabot auto-merge
+on:
+  pull_request:
+    # Run this action when dependabot labels the PR, we care about the 'go' label.
+    types: [labeled]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  dependabot-go:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'go') }}
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2.4.0
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Approve PR
+        # Approve only patch and minor updates
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for Dependabot PRs
+        # Enable auto-merging only for patch and minor updates
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

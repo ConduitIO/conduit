@@ -1,0 +1,28 @@
+name: lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      # This step sets up the variable steps.golangci-lint-version.outputs.v
+      # to contain the version of golangci-lint (e.g. v1.54.2).
+      # The version is taken from go.mod.
+      - name: Golangci-lint version
+        id: golangci-lint-version
+        run: |
+          GOLANGCI_LINT_VERSION=$( go list -modfile=tools/go.mod -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2 )
+          echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ steps.golangci-lint-version.outputs.v }}

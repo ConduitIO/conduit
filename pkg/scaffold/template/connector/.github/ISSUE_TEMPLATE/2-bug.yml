@@ -1,0 +1,29 @@
+name: 🐛 Bug
+description: Report a bug.
+title: "Bug: <title>"
+labels: [bug, triage]
+body:
+- type: textarea
+  attributes:
+    label: Bug description
+    description: A concise description of what you're experiencing and what you expected to happen instead.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Steps to reproduce
+    description: Steps to reproduce the behavior.
+    placeholder: |
+      1. In this environment...
+      2. With this config...
+      3. Run '...'
+      4. See error...
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Version
+    description: "Version of connector"
+    placeholder: v0.1.0 darwin/amd64
+  validations:
+    required: true

@@ -1,0 +1,27 @@
+version: 2
+builds:
+  - main: ./cmd/processor/main.go
+    goos:
+      - wasip1
+    goarch:
+      - wasm
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-s -w -X 'github.com/conduitio/conduit-processor-processorname.version={{ .Tag }}'"
+checksum:
+  name_template: checksums.txt
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}.wasm
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^go.mod:'
+      - '^.github:'
+      - Merge branch
