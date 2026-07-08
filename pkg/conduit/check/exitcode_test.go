@@ -29,6 +29,14 @@ func TestReport_ExitCode_Empty(t *testing.T) {
 	is.Equal(check.Report{}.ExitCode(), exitcode.OK)
 }
 
+// canceledTestCode is registered at package-var-init time, per
+// conduiterr.Register's own documented invariant ("MUST be called only from
+// a package-level var initializer... calling Register after program start
+// or from a goroutine is a data race") — not inside the test function body
+// that uses it, matching the convention pkg/conduit/exitcode's own test
+// suite (testCodes) already establishes.
+var canceledTestCode = conduiterr.Register("test.check.exitcode.canceled", codes.Canceled)
+
 // TestReport_ExitCode_FailNeverReportsOK guards the pathological case where
 // a Fail result's Code resolves to a gRPC category exitcode.ExitCode itself
 // treats as OK (codes.Canceled) — something no well-behaved registered
@@ -38,10 +46,8 @@ func TestReport_ExitCode_Empty(t *testing.T) {
 func TestReport_ExitCode_FailNeverReportsOK(t *testing.T) {
 	is := is.New(t)
 
-	canceledCode := conduiterr.Register("test.check.exitcode.canceled", codes.Canceled)
-
 	r := check.Report{Checks: []check.CheckResult{
-		{Name: "misbehaving", Status: check.StatusFail, Code: canceledCode.Reason()},
+		{Name: "misbehaving", Status: check.StatusFail, Code: canceledTestCode.Reason()},
 	}}
 
 	is.Equal(r.ExitCode(), exitcode.Runtime)

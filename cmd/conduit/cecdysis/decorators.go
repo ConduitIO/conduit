@@ -16,6 +16,7 @@ package cecdysis
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -136,11 +137,18 @@ func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, 
 			if err != nil {
 				return cerrors.Errorf("could not marshal result to JSON: %w", err)
 			}
-			cmd.Println(string(b))
+			// cmd.Println/cmd.Print resolve through cobra's OutOrStderr, not
+			// OutOrStdout (see cobra's own doc on Print: "fallback to
+			// Stderr if not set") — and no production call site ever calls
+			// cmd.SetOut, so using them here put --json output on stderr
+			// instead of stdout. Write to OutOrStdout explicitly instead;
+			// see cecdysis.CommandWithResultDecorator for the same fix
+			// applied to this decorator's offline sibling.
+			fmt.Fprintln(cmd.OutOrStdout(), string(b))
 			return nil
 		}
 
-		cmd.Print(v.Render(result))
+		fmt.Fprint(cmd.OutOrStdout(), v.Render(result))
 		return nil
 	}
 

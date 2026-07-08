@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -150,6 +152,50 @@ func TestCommandWithResultDecorator_JSON_Success(t *testing.T) {
 	summary, ok := got.Summary.(map[string]any)
 	is.True(ok)
 	is.Equal(summary["count"], float64(3)) // JSON numbers decode as float64
+}
+
+// TestCommandWithResultDecorator_JSON_ActuallyGoesToRealStdout is the
+// regression test for a bug caught in review: cobra's Print/Println
+// resolve through OutOrStderr, not OutOrStdout ("fallback to Stderr if not
+// set", per cobra's own doc) — so Decorate must never call cmd.Print(ln)
+// itself, only fmt.Fprint(ln)(cmd.OutOrStdout(), ...). Every other test in
+// this file calls cmd.SetOut(&buf), which masks that distinction (cobra's
+// getOut returns the same writer regardless of which fallback it would have
+// used), exactly the way the pre-fix code passed all of them. This test
+// deliberately does NOT call SetOut/SetErr — it swaps the real
+// process-level os.Stdout/os.Stderr instead, matching production
+// (cmd/conduit/cli never calls SetOut either), so a regression here would
+// actually be caught.
+func TestCommandWithResultDecorator_JSON_ActuallyGoesToRealStdout(t *testing.T) {
+	is := is.New(t)
+
+	stdoutR, stdoutW, err := os.Pipe()
+	is.NoErr(err)
+	stderrR, stderrW, err := os.Pipe()
+	is.NoErr(err)
+
+	origStdout, origStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = stdoutW, stderrW
+
+	cmd := newEcdysis().MustBuildCobraCommand(&resultTestCmd{})
+	cmd.SetArgs([]string{"--json"})
+	execErr := cmd.Execute()
+
+	os.Stdout, os.Stderr = origStdout, origStderr
+	is.NoErr(stdoutW.Close())
+	is.NoErr(stderrW.Close())
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	_, _ = io.Copy(&stdoutBuf, stdoutR)
+	_, _ = io.Copy(&stderrBuf, stderrR)
+
+	is.NoErr(execErr)
+	is.Equal(stderrBuf.String(), "") // nothing at all on stderr for a success
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal(stdoutBuf.Bytes(), &got))
+	is.Equal(got.Command, "test.command")
+	is.True(got.OK)
 }
 
 // TestCommandWithResultDecorator_JSON_SingleObject asserts --json emits

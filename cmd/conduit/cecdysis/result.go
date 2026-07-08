@@ -16,6 +16,7 @@ package cecdysis
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -159,11 +160,17 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 			if merr != nil {
 				return cerrors.Errorf("could not marshal result to JSON: %w", merr)
 			}
-			cmd.Println(string(b))
+			// cmd.Println/cmd.Print resolve through cobra's OutOrStderr, not
+			// OutOrStdout (cobra's own doc: "fallback to Stderr if not
+			// set") — since no production call site ever calls cmd.SetOut,
+			// using them here would silently put the "single JSON object to
+			// stdout" envelope on stderr instead. Write to OutOrStdout
+			// explicitly everywhere in this file instead.
+			fmt.Fprintln(cmd.OutOrStdout(), string(b))
 			return nil
 		}
 
-		cmd.Print(v.Render(outcome))
+		fmt.Fprint(cmd.OutOrStdout(), v.Render(outcome))
 		return nil
 	}
 
@@ -185,11 +192,16 @@ func renderResultError(cmd *cobra.Command, command string, err error, asJSON boo
 		b, merr := marshalJSON(res)
 		if merr != nil {
 			// Should not happen (see doc above); fall back to something
-			// rather than emitting nothing on stdout under --json.
+			// rather than emitting nothing at all under --json. This one
+			// case intentionally goes to stderr (via the correctly-behaved
+			// PrintErrln, which does resolve through ErrOrStderr) since
+			// there is no well-formed JSON object to put on stdout here.
 			cmd.PrintErrln("Error:", err)
 			return
 		}
-		cmd.Println(string(b))
+		// See the OutOrStdout note in Decorate: cmd.Println would put this
+		// on stderr instead of stdout in production.
+		fmt.Fprintln(cmd.OutOrStdout(), string(b))
 		return
 	}
 

@@ -137,25 +137,30 @@ func WithTimeout(d time.Duration) Option {
 }
 
 // Run executes every Check and collects the results into a Report. It never
-// panics and never blocks past a check's timeout budget:
+// panics itself, and it bounds each check's execution with a context
+// deadline — though whether that deadline actually stops a slow check is up
+// to that check (see the second bullet):
 //
-//   - Per-check recover(): a panicking Check.Run is converted into a
-//     StatusFail CheckResult (Code: conduiterr.CodeInternal's reason, i.e.
-//     "internal.error") instead of crashing the calling process. This
-//     isolation covers the panic happening synchronously inside Run; it does
-//     NOT cover a panic in a goroutine a Check spawns and does not join back
-//     before returning — Go's runtime has no way to recover across a
-//     goroutine boundary. A Check with that shape (e.g. a future check that
-//     dispenses a go-plugin, per the ADR's noted limitation) must isolate
-//     itself, e.g. by running in a subprocess with its own timeout and
-//     treating an abnormal child exit as Fail.
+//   - Per-check recover(): a panic from either Check.Name() or Check.Run is
+//     converted into a StatusFail CheckResult (Code: conduiterr.CodeInternal's
+//     reason, i.e. "internal.error") instead of crashing the calling
+//     process — the defer is registered before either method is called, so
+//     both are covered, not just Run. This isolation covers a panic
+//     happening synchronously inside those calls; it does NOT cover a panic
+//     in a goroutine a Check spawns and does not join back before
+//     returning — Go's runtime has no way to recover across a goroutine
+//     boundary. A Check with that shape (e.g. a future check that dispenses
+//     a go-plugin, per the ADR's noted limitation) must isolate itself,
+//     e.g. by running in a subprocess with its own timeout and treating an
+//     abnormal child exit as Fail.
 //   - Per-check context timeout: each Check.Run is given a context derived
 //     from ctx with a deadline — the check's own TimeoutCheck.Timeout() if it
 //     implements that interface, else the Run call's WithTimeout option, else
-//     DefaultTimeout. A Check must itself honor ctx (pass it to
-//     exec.CommandContext, net.Dial, etc.) for the timeout to actually bound
-//     its execution; Run cannot force-abandon a check that ignores ctx and
-//     never returns.
+//     DefaultTimeout. This only bounds Run's wall-clock time if the Check
+//     itself honors ctx (passing it to exec.CommandContext, net.Dial, etc.);
+//     Run has no way to force-abandon a check that ignores ctx and blocks
+//     forever — the deadline is advisory to the check, not a guillotine Run
+//     enforces from outside.
 //
 // Checks run sequentially, in the order given. Ordering only affects
 // Report.Checks; it never affects Report.ExitCode (see its doc).
@@ -174,8 +179,15 @@ func Run(ctx context.Context, checks []Check, opts ...Option) Report {
 }
 
 // runOne runs a single check with panic isolation and a per-check timeout.
+//
+// The defer/recover is registered before anything else, including the call
+// to c.Name() below: Name() is caller-supplied code too, and a panic there
+// (before the deferred recover exists) would otherwise escape uncaught and
+// take down the whole Run() call — the exact isolation failure this
+// function exists to prevent. name starts at a fallback label so the
+// recovered CheckResult is never blank if Name() itself is what panicked.
 func runOne(ctx context.Context, c Check, defaultTimeout time.Duration) (result CheckResult) {
-	name := c.Name()
+	name := "unknown"
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -187,6 +199,8 @@ func runOne(ctx context.Context, c Check, defaultTimeout time.Duration) (result 
 			}
 		}
 	}()
+
+	name = c.Name()
 
 	timeout := defaultTimeout
 	if tc, ok := c.(TimeoutCheck); ok {

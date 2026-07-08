@@ -43,6 +43,17 @@ type timeoutCheck struct {
 
 func (c timeoutCheck) Timeout() time.Duration { return c.timeout }
 
+// panicNameCheck panics from Name() itself, not from Run — a narrower case
+// than TestRun_PanicIsolated's, since a panicking Name() can happen before
+// any recover() has been registered if the runner isn't careful about
+// ordering (see TestRun_PanicIsolated_FromName).
+type panicNameCheck struct{}
+
+func (panicNameCheck) Name() string { panic("name boom") }
+func (panicNameCheck) Run(context.Context) check.CheckResult {
+	return check.CheckResult{Status: check.StatusPass}
+}
+
 func TestRun_PanicIsolated(t *testing.T) {
 	is := is.New(t)
 
@@ -71,6 +82,36 @@ func TestRun_PanicIsolated(t *testing.T) {
 	// The panic must not have prevented the next check from running (that's
 	// the whole point of per-check isolation, not just "the process didn't
 	// crash").
+	is.Equal(report.Checks[1].Name, "fine")
+	is.Equal(report.Checks[1].Status, check.StatusPass)
+}
+
+// TestRun_PanicIsolated_FromName is the regression test for a bug caught in
+// review: an earlier version of runOne called c.Name() before registering
+// the deferred recover(), so a panic from Name() itself escaped uncaught and
+// crashed the whole Run() call — the exact failure mode per-check isolation
+// exists to prevent, and worse than a panic from Run because it would also
+// abort every check after the panicking one, not just that one check.
+func TestRun_PanicIsolated_FromName(t *testing.T) {
+	is := is.New(t)
+
+	fine := fnCheck{
+		name: "fine",
+		run: func(context.Context) check.CheckResult {
+			return check.CheckResult{Status: check.StatusPass}
+		},
+	}
+
+	report := check.Run(context.Background(), []check.Check{panicNameCheck{}, fine})
+
+	is.Equal(len(report.Checks), 2)
+	is.Equal(report.Checks[0].Status, check.StatusFail)
+	is.Equal(report.Checks[0].Code, "internal.error")
+	is.True(strings.Contains(report.Checks[0].Message, "name boom"))
+	is.Equal(report.Checks[0].Name, "unknown") // Name() panicked before it could report its own name
+
+	// The panic in the first check's Name() must not have prevented the
+	// second check from running at all.
 	is.Equal(report.Checks[1].Name, "fine")
 	is.Equal(report.Checks[1].Status, check.StatusPass)
 }
