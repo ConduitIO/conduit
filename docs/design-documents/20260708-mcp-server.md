@@ -31,15 +31,16 @@ All already return the §1.1 structured shapes (`validate.Report`, `check.Report
 `provisioning.Diff`, `scaffold.Result`) with `conduiterr` codes — so the MCP
 result mapping is a serialization, not new logic.
 
-**One real adapter concern (path vs content):** the validate/lint/dry-run/deploy
-engines take a filesystem _path_, but an MCP agent naturally passes config
-_content_ (inline YAML), not a path on the server host. The MCP tools accept a
-`config` (content) argument and write it to a private temp file for the
-path-based engine (cleaned up after), OR — cleaner — add a content-accepting
-entry alongside the path one (e.g. `validate.RunContent(ctx, name, []byte)`)
-reused by both. The tool must NOT accept an arbitrary server path from an agent
-(that would let an agent read/validate arbitrary host files); content-in is the
-safe interface. Decide the temp-file-vs-content-entry split in implementation.
+**One real adapter concern (path vs content) — decided.** The
+validate/lint/dry-run/deploy engines take a filesystem _path_, but an MCP agent
+naturally passes config _content_ (inline YAML), not a path on the server host.
+The MCP tools take a `config` (content) argument and the adapter writes it to a
+**private temp file** (0600, in an os.MkdirTemp dir, removed after the call) for
+the path-based engine — done uniformly for all four offline tools rather than
+forking each engine's signature (the review's recommendation: less surface, no
+correctness gain from a content entry). The tools **never** accept a server path
+from an agent — that would let an agent read/validate arbitrary host files.
+Content-in is the only safe interface.
 
 `repair` (§3) is not built yet — it is out of scope for this doc; add its MCP tool
 when the CLI verb lands (same-engine rule).
@@ -60,10 +61,26 @@ when the CLI verb lands (same-engine rule).
 
 Implementing the MCP JSON-RPC/tool protocol by hand is out of scope and
 error-prone. Use the **official `github.com/modelcontextprotocol/go-sdk`**
-(Anthropic-maintained, **at v1.7.0 — stable and past 1.0**), the right long-term
-bet and now production-ready, so no fallback is needed. This is the one genuinely
-new dependency; everything else is reuse. Justified in the implementation PR per
-the no-new-deps rule.
+(Anthropic-maintained, pin the current GA **v1.6.1** — v1.7.0 is not yet
+released; requires go 1.25.0, which the repo already uses). This is the one
+genuinely new dependency; everything else is reuse. Justified in the
+implementation PR per the no-new-deps rule.
+
+Confirmed SDK API the implementation uses (verified against v1.6.1
+`github.com/modelcontextprotocol/go-sdk/mcp`):
+
+- Transports: `mcp.StdioTransport{}` via `Server.Run(ctx, t)`; HTTP via
+  `mcp.NewStreamableHTTPHandler(getServer, opts)` returning an `http.Handler` —
+  both bind the same `*Server`, so stdio + `--http` serve one tool catalog.
+- Tools: `mcp.AddTool[In, Out any](s, *Tool, handler)` auto-derives the input
+  JSON schema (2020-12) from the `In` struct's `json`/`jsonschema` tags and
+  validates before the handler runs.
+- Results: `CallToolResult{Content, StructuredContent, IsError}` — engine result
+  → `StructuredContent`; a `conduiterr.ConduitError` → `Content` text +
+  `IsError:true`.
+- Conditional registration: `Server.AddTool` is a plain pre-`Run` method, so the
+  `--allow-mutations` gate is just an `if` around the write-tool `AddTool` calls —
+  no runtime tool-hiding API needed.
 
 ### 2a. How MCP tools reach their target — same engines, same constraints
 
@@ -109,12 +126,20 @@ Wave 2.
   `Diff` + `hash`), then `apply` with that `hash`. `ApplyPlan` refuses a stale
   hash (`provisioning.plan_stale`). So mutation is always an explicit,
   plan-authorized second call — never a one-shot.
-- **Data-path repair/apply still needs human Tier-1 sign-off:** an `apply` whose
-  diff touches ack/position/checkpoint-adjacent config is flagged in the tool
-  result as requiring human review; diff-first is not a substitute for the Tier-1
-  human gate on data-path changes (§2). The `Diff`'s per-change `Effect`
-  (restart/in_place) surfaces "this will drop the pipeline" to the agent before it
-  applies.
+- **Data-path human sign-off is enforced structurally, not by a flag.** The
+  review correctly flagged that a "requires human review" _field_ in the result
+  is theater for an autonomous agent that can just proceed. In Wave 3 the
+  enforcement is real and structural: MCP `apply` inherits the Wave-2
+  Badger-not-running gate — it can only apply to a **stopped** store (a live
+  `conduit run` makes `OpenStore` fail closed), so **Wave-3 MCP `apply` cannot
+  mutate a running pipeline at all.** There is no live data-path change to
+  sign off on. The `Diff`'s per-change `Effect` (restart/in_place) is surfaced to
+  the agent as _information_ ("applying this will require a restart"), not as an
+  honor-system gate. When #2588 adds apply-to-a-running-server, that new path is
+  where the enforced human-sign-off gate must live (apply-to-running of a
+  data-path diff hard-refuses at the tool layer without an explicit operator
+  authorization) — it lands **with** #2588, not as an unenforced promise now.
+  Same for the future `repair` tool.
 
 ### 4. Structured results (§1.1)
 
