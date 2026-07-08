@@ -330,10 +330,13 @@ share.
 
 ## Validating pipeline configs
 
-`conduit pipelines validate <path>` (alias: `conduit pipeline validate`) statically checks one
-pipeline config file, or every `.yml`/`.yaml` file in a directory (not recursed), without starting
-Conduit or contacting a running instance — it's fully offline, so it's safe to run in CI or before
-`conduit run` with no server anywhere nearby.
+`conduit pipelines validate|lint|dry-run <path>` (alias: `conduit pipeline ...`) share one offline
+engine that statically checks one pipeline config file, or every `.yml`/`.yaml` file in a directory
+(not recursed), without starting Conduit or contacting a running instance — all three are fully
+offline, so they're safe to run in CI or before `conduit run` with no server anywhere nearby.
+
+**`validate`** — parse, enrich, and check every field. Every problem in every file is reported — a
+bad file never stops the rest from being checked.
 
 ```console
 $ conduit pipelines validate pipelines/orders.yaml
@@ -350,15 +353,44 @@ Fix the ✗ items above, then re-run.
 default-enrichment step `conduit run` applies; `--json`'s `configPath` still points at your original
 `connectors[0]`.)
 
-Every problem in every file is reported — a bad file never stops the rest from being checked.
-Exits `0` if every pipeline is valid, `2` otherwise (see Exit codes above). Add `--json` for the
-structured `{command, ok, summary, result, error}` envelope, or `-q/--quiet` to suppress passing
-(`✓`) lines and show only failures and the summary.
+Exits `0` if every pipeline is valid, `2` otherwise (see Exit codes above).
 
-`lint` (advisory warnings, e.g. deprecated fields) and `dry-run` (shows the enriched pipeline graph
-and optionally resolves builtin plugin references) share the same engine and are planned as
-follow-ups — see
-[the design doc](docs/design-documents/20260707-cli-pipeline-validate.md).
+**`lint`** — everything `validate` checks, plus advisory warnings (deprecated/renamed/unknown
+fields, pipeline-config version fallback), each with its source line and column. Warnings exit `0`
+unless `--strict` is set, in which case a warning also exits `2`, same as an error:
+
+```console
+$ conduit pipelines lint pipelines/orders.yaml
+⚠ pipelines/orders.yaml
+⚠ config.parser_warning   line 14, column 9
+    please use field 'plugin' (introduced in version 2.2)
+
+Summary: 1 files · 0 passed · 1 warned · 0 failed · 0 errors · 1 warnings
+Warnings are advisory (exit 0). Re-run with --strict to treat them as failures.
+```
+
+**`dry-run`** — everything `validate` checks, plus the enriched pipeline graph (final
+`<pipelineID>:<connectorID>` IDs, injected dead-letter-queue defaults, worker counts) — exactly
+what `conduit run` would provision, without provisioning it. With `--resolve-plugins` (default on),
+every `builtin:`-prefixed plugin ref is checked against the compiled-in builtin registry; an
+unknown one is an error (exit `2`). A `standalone:`/unprefixed ref can't be statically verified and
+is reported `(unverified)`, never as a false failure:
+
+```console
+$ conduit pipelines dry-run pipelines/orders.yaml
+✓ pipelines/orders.yaml
+  pipeline orders
+    connector orders:postgres source     builtin:postgres
+    connector orders:s3       destination builtin:s3
+    dlq: plugin=builtin:log window-size=1 window-nack-threshold=0
+
+Summary: 1 files · 1 passed · 0 failed · 0 problems
+```
+
+All three add `--json` for the structured `{command, ok, summary, result, error}` envelope, or
+`-q/--quiet` to suppress passing (`✓`) lines and show only failures and the summary. See
+[the design docs](docs/design-documents/20260707-cli-pipeline-validate.md) for the full engine and
+flag reference.
 
 ## Documentation
 

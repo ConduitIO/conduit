@@ -79,7 +79,11 @@ never requires (or contacts) a running Conduit instance.
 <path> is a single .yml/.yaml file, or a directory of them (not recursed into
 subdirectories). Every problem found is reported — a bad file, or a bad pipeline within a
 file, never stops the rest from being checked. Exits 0 if every pipeline is valid, 2
-otherwise.`,
+otherwise.
+
+See also: 'conduit pipelines lint' (validate + advisory warnings, with --strict) and
+'conduit pipelines dry-run' (validate + the enriched pipeline graph + builtin plugin-ref
+resolution).`,
 		Example: "conduit pipelines validate pipelines/orders.yaml\n" +
 			"conduit pipelines validate ./pipelines --json\n" +
 			"conduit pipeline validate ./pipelines --quiet",
