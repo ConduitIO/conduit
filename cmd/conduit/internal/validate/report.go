@@ -20,9 +20,12 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 // SeverityError findings (it is errors-only, per the CLI output
 // conventions' `--strict` row: validate has no `--strict` flag because it
 // has nothing for `--strict` to escalate). `lint` and `dry-run` are the
-// first callers to produce SeverityWarning: advisory parser warnings, and
-// (for dry-run) a standalone/unprefixed plugin ref that isn't statically
-// verifiable.
+// first callers to produce SeverityWarning: advisory parser warnings. Note
+// dry-run's OTHER advisory case — a standalone/unprefixed plugin ref that
+// isn't statically verifiable — is deliberately NOT a Finding at all (see
+// plugins.go's pluginResolutionUnverified and dryrun.go's PluginStatus): it
+// surfaces only as an annotation on the enriched-graph output, exactly so
+// it can never accidentally flip a clean run to not-OK.
 type Severity string
 
 const (

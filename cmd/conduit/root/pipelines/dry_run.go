@@ -157,8 +157,13 @@ func (c *DryRunCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 }
 
 // Render returns the human-readable rendering of a dry-run: one line per
-// file (✓/✗), every finding under a failing file, then the enriched graph
-// for every pipeline in every file, and a summary line.
+// file with a three-way pass/warn/fail glyph (dry-run always includes
+// parser warnings — see validate.RunDryRun — so a file can be "OK" at the
+// FileReport.OK/errors-only level yet still have warning findings to show;
+// fileLintStatus, shared with lint.go, is what makes sure those aren't
+// silently dropped from human output the way a plain OK/not-OK branch
+// would), every finding under a non-clean file, then the enriched graph for
+// every pipeline in every file, and a summary line.
 func (c *DryRunCommand) Render(outcome cecdysis.Outcome) string {
 	summary, _ := outcome.Summary.(validate.Summary)
 	result, _ := outcome.Result.(validate.DryRunResult)
@@ -176,20 +181,30 @@ func (c *DryRunCommand) Render(outcome cecdysis.Outcome) string {
 	}
 
 	var b strings.Builder
-	passed := 0
+	passed, warned, failed := 0, 0, 0
 	for _, f := range result.Files {
-		if f.OK {
+		status, hasErrors, hasWarnings := fileLintStatus(f)
+		switch {
+		case hasErrors:
+			failed++
+		case hasWarnings:
+			warned++
+		default:
 			passed++
 		}
 
-		if f.OK {
+		if !hasErrors && !hasWarnings {
 			if !c.flags.Quiet {
-				fmt.Fprintf(&b, "%s %s\n", c.renderer.Glyph(ui.StatusPass), f.Path)
+				fmt.Fprintf(&b, "%s %s\n", c.renderer.Glyph(status), f.Path)
 			}
 		} else {
-			fmt.Fprintf(&b, "%s %s\n", c.renderer.Glyph(ui.StatusFail), f.Path)
+			fmt.Fprintf(&b, "%s %s\n", c.renderer.Glyph(status), f.Path)
 			for _, finding := range f.Findings {
-				ui.RenderFinding(&b, c.renderer.Glyph(ui.StatusFail), finding.Code, finding.ConfigPath, finding.Message, finding.Suggestion)
+				glyph := c.renderer.Glyph(ui.StatusFail)
+				if finding.Severity == validate.SeverityWarning {
+					glyph = c.renderer.Glyph(ui.StatusWarn)
+				}
+				ui.RenderFinding(&b, glyph, finding.Code, findingLocation(finding), finding.Message, finding.Suggestion)
 			}
 		}
 
@@ -199,8 +214,8 @@ func (c *DryRunCommand) Render(outcome cecdysis.Outcome) string {
 		fmt.Fprintln(&b)
 	}
 
-	fmt.Fprintf(&b, "Summary: %d files · %d passed · %d failed · %d problems\n",
-		summary.Files, passed, summary.Files-passed, summary.Errors)
+	fmt.Fprintf(&b, "Summary: %d files · %d passed · %d warned · %d failed · %d errors · %d warnings\n",
+		summary.Files, passed, warned, failed, summary.Errors, summary.Warnings)
 
 	if summary.Errors > 0 {
 		fmt.Fprintln(&b, "Fix the ✗ items above, then re-run.")

@@ -355,13 +355,15 @@ func buildReport(frs []fileState) Report {
 				fileErrors++
 			default:
 				// Every Finding this package constructs sets Severity
-				// explicitly (findingFromError and
-				// checkCrossFileDuplicateIDs use SeverityError;
-				// findingFromWarning and resolvePluginFindings's advisory
-				// case use SeverityWarning). An unset/unknown value is a bug
-				// in a finding constructor, not a real severity — counting
-				// it as an error is the conservative choice (never silently
-				// under-report a problem into exit 0).
+				// explicitly (findingFromError, checkCrossFileDuplicateIDs,
+				// and pluginNotFoundFinding all use SeverityError;
+				// findingFromWarning uses SeverityWarning — an unverifiable
+				// standalone/unprefixed plugin ref, by contrast, never
+				// produces a Finding at all, only a PluginStatus annotation
+				// on the enriched output; see plugins.go). An unset/unknown
+				// value is a bug in a finding constructor, not a real
+				// severity — counting it as an error is the conservative
+				// choice (never silently under-report a problem into exit 0).
 				report.Summary.Errors++
 				fileErrors++
 			}

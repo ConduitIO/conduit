@@ -131,6 +131,31 @@ func TestDryRunCommand_ValidFile_EnrichedGraph(t *testing.T) {
 	is.True(p.DLQ.WindowSize > 0)
 }
 
+// TestDryRunCommand_WarningOnlyFile_HumanShowsWarning is a regression test:
+// dry-run always includes parser warnings (validate.RunDryRun sets
+// includeWarnings unconditionally), so a file with a warning but no error
+// is still "OK" at the errors-only FileReport.OK level — Render must not
+// use that boolean alone to decide whether to print findings, or a
+// warning-only file's warning would be silently dropped from human output
+// (while still present in --json, an OK/--json asymmetry bug fixed by
+// having Render classify pass/warn/fail via fileLintStatus, same as lint).
+func TestDryRunCommand_WarningOnlyFile_HumanShowsWarning(t *testing.T) {
+	is := is.New(t)
+
+	cmd := newDryRunEcdysis().MustBuildCobraCommand(&DryRunCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"../../internal/validate/testdata/lint-warning.yaml"})
+
+	err := cmd.Execute()
+	is.NoErr(err) // no error finding, so dry-run (no --strict) still exits 0
+	is.Equal(exitcode.ExitCode(err), exitcode.OK)
+
+	got := out.String()
+	is.True(strings.Contains(got, "config.parser_warning")) // the warning must still be rendered
+	is.True(strings.Contains(got, "please use field 'plugin'"))
+}
+
 // TestDryRunCommand_UnknownBuiltinPlugin_ExitTwo covers AC-6's first half:
 // an unknown "builtin:" plugin ref fails with connector.plugin_not_found
 // and exits 2.
