@@ -68,6 +68,7 @@ Pipeline "orders"  [●running]              (uptime 4h12m)
 Status glyph/label uses the 5-value enum (`running/system-stopped/user-stopped/
 degraded/recovering`) via `internal/ui`. `--json` per verb, conforming to the
 conventions envelope:
+
 - `lint`/`dry-run`: same `files[]`/`findings[]` shape as `validate`, warnings as
   `severity:"warning"`; `dry-run` adds `result.enriched[]` (final IDs, DLQ, workers).
 - `inspect`: `result:{pipelineID,status,uptime,stages:[{role,id,plugin,status,in,out,errors}],dlq}`.
@@ -136,6 +137,7 @@ in-memory pipeline. No serialized-format or data-path change.
 ## Review outcome (2026-07-08) — SOUND (technical) / SHIP-WITH-UX-CHANGES (inline)
 
 Verified against code:
+
 - **lint**: warnings are already collected locally (`config/yaml/parser.go:90` `var warn warnings`) and only logged —
   exposing them via the parser return is a clean additive change (AC-4 guards `run` behavior).
 - **inspect**: live-state APIs all exist — `GetPipeline`/`GetDLQ` (`pipeline_v1.go:68/189`), the 5-value enum

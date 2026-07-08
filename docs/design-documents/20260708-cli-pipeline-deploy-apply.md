@@ -141,7 +141,7 @@ Exit codes (via `exitcode`): 0 applied / no-op; 2 validation or **stale plan**;
 
 - **Apply to a running pipeline (the crux).** Today `importPipeline` is invoked at
   provision time; whether the service `Update`/delete actions are safe against a
-  *running* pipeline is the open question this doc forces a decision on. Options:
+  _running_ pipeline is the open question this doc forces a decision on. Options:
   (a) `apply` requires the target pipeline **stopped** (simplest, safe; the Diff
   says "restart" and apply stops-drains-restarts around the actions); (b) true
   in-place update for `in_place` changes only. **Recommendation for Wave 2:
@@ -149,7 +149,7 @@ Exit codes (via `exitcode`): 0 applied / no-op; 2 validation or **stale plan**;
   actions → restart, and the Diff's `restart` effect tells the operator up front.
   In-place live hot-swap is deferred to §4 hot-reload. Decide in review.
 - **Partial apply + crash:** inherited `rollbackActions` covers in-process failure;
-  a process crash *between* actions is the same exposure the existing provisioner
+  a process crash _between_ actions is the same exposure the existing provisioner
   has — call it out, and ensure apply is re-runnable (idempotent Build) so a
   re-`apply` reconciles to desired.
 - **Token replay / TOCTOU:** the hash is recomputed at apply and compared; if
@@ -185,12 +185,13 @@ classification **in the diff**. Deferred: true live in-place hot-swap execution
 ## Review outcome (2026-07-08) — SOUND-WITH-CONCERNS (technical + UX, inline)
 
 Verified against code:
+
 - **Sound**: actions hold their config (`import_actions.go` create/update/delete structs), so
   `actionsBuilder.Build(old,new)` is a describable diff — the `Plan`/`Describe` preview is achievable without
   executing.
 - **Tier-1 strengthened (confirmed gap, not just an open question):** `pipeline.Service.Update` (`service.go:155`) AND
   `Delete` (`:310`) have **no running-state guard**, and `importPipeline` does no stop/drain — the raw path would
-  mutate/delete a *live* pipeline. So Wave-2 `apply` MUST stop-drain-restart (invariant 7) or refuse a running
+  mutate/delete a _live_ pipeline. So Wave-2 `apply` MUST stop-drain-restart (invariant 7) or refuse a running
   pipeline. **New AC-13:** `apply` never silently mutates a running pipeline — it either refuses with an actionable
   error or performs a graceful stop-with-drain → actions → restart; verified by a kill-mid-apply test asserting no
   record loss.
