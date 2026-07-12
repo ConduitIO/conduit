@@ -12,7 +12,7 @@ gate is, why it exists, and what to check when it fires.
 An `apply` (CLI `conduit pipelines apply`, or the MCP `apply` tool) against a **running** pipeline
 fails with:
 
-```
+```text
 code: provisioning.live_apply_unauthorized
 message: pipeline "orders" is running; applying any change to it restarts it (a graceful, no-loss
          drain-and-restart), which requires operator authorization
@@ -37,7 +37,7 @@ The gate is deliberately coarse: it keys on "the pipeline is running and the dif
 diff labels `in_place` still goes through the drain-and-restart path today, so it is gated too. See
 the design doc's "Item 6 (reworked conservative)" for why a narrower, effect-based classifier was
 explicitly rejected — a misclassified "safe" change is a data-loss bug waiting to happen. The only
-diff that is *not* gated is an empty one (a no-op apply changes nothing and restarts nothing).
+diff that is _not_ gated is an empty one (a no-op apply changes nothing and restarts nothing).
 
 ## Remediation
 
@@ -83,7 +83,7 @@ Pick one:
   every apply against a running pipeline until an operator explicitly opts in.
 - **Scope: the whole server, for its whole lifetime**, not per-pipeline or per-request. If you need
   to authorize a single change, prefer remediation option 2 (stop, apply, start) — enabling the
-  flag broadly means *every* apply against *any* running pipeline on that server is now
+  flag broadly means _every_ apply against _any_ running pipeline on that server is now
   unattended-authorized until the process restarts.
 - **Only an empty diff is exempt.** The gate fires whenever the diff is non-empty against a pipeline
   the server currently considers running (`Status.Running`/`Recovering`/`Degraded`; see
