@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
@@ -322,6 +323,34 @@ func (s *Service) WaitPipeline(id string) error {
 		return err
 	}
 	return nil
+}
+
+// StopAndWait exists to satisfy the LifecycleService interfaces shared with
+// the sibling pkg/lifecycle package (see provisioning.LifecycleService and
+// conduit.Runtime's lifecycleService) but is intentionally unimplemented
+// here: it always refuses with a CodeStopAndWaitUnsupported error.
+//
+// This is a deliberate Tier-1 safety guard, not a TODO. The Stop-and-restart
+// primitive backing provisioning.Service.ApplyPlanLive (stop-drain-restart on
+// the data path) requires a proven quiescence+durability guarantee — see
+// pkg/lifecycle.Service.StopAndWait's doc. That guarantee was established by
+// auditing pkg/lifecycle's specific Stop/WaitPipeline/Persister interaction
+// (docs/design-documents/20260708-live-server-deploy-apply.md, "Review
+// outcome & required rework"). This package's funnel.Worker-based Stop has a
+// different implementation and has not had the equivalent audit. Silently
+// building StopAndWait on top of an unaudited stop path here would let
+// ApplyPlanLive apply-to-running under Preview.PipelineArchV2 without the
+// safety case the design review actually verified — exactly the class of bug
+// blocker 1 found in the original (pre-rework) design. Refusing outright, so
+// ApplyPlanLive's error surfaces immediately instead of silently risking
+// data loss, is intentional until this architecture's drain semantics get
+// the same audit (tracked as the design doc's "Open parity item").
+func (s *Service) StopAndWait(context.Context, string) error {
+	ce := conduiterr.New(CodeStopAndWaitUnsupported,
+		"live apply (stop-drain-restart of a running pipeline) is not supported under the "+
+			"experimental Preview.PipelineArchV2 lifecycle service")
+	ce.Suggestion = "disable Preview.PipelineArchV2, or stop the pipeline manually before applying changes"
+	return ce
 }
 
 // buildRunnablePipeline will build and connect all tasks configured in the pipeline.

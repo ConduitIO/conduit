@@ -91,6 +91,22 @@ func (s *Service) Check(ctx context.Context) error {
 	return s.store.db.Ping(ctx)
 }
 
+// WaitPersisted blocks until every connector position/state write already
+// queued for persistence (via a connector's Ack -> Persister.Persist, or the
+// final flush a connector's Teardown triggers via Persister.ConnectorStopped)
+// has been durably committed to the store.
+//
+// It deliberately does not take a pipeline or connector ID: the persister
+// batches writes across every connector in the process, so there is no
+// narrower durability signal to observe than "the batch(es) already in
+// flight have landed" — see Persister.WaitPendingWrites's doc for why that is
+// still a precise, non-deadlocking signal for a caller that already knows
+// (e.g. via lifecycle.Service.WaitPipeline) that the connector it cares about
+// has stopped and thus already triggered its final flush.
+func (s *Service) WaitPersisted() {
+	s.persister.WaitPendingWrites()
+}
+
 // List returns a map of Instances keyed by their ID. Instances do not
 // necessarily have a running plugin associated with them.
 func (s *Service) List(context.Context) map[string]*Instance {

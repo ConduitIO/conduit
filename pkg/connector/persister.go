@@ -175,6 +175,34 @@ func (p *Persister) Wait() {
 	p.flushWg.Wait()
 }
 
+// WaitPendingWrites blocks until every flush already triggered (via Flush, the
+// bundle-count threshold, the delay timer, or ConnectorStopped) has finished
+// writing to the store — but, unlike Wait, it does NOT block on connWg (every
+// connector across the whole process reaching ConnectorStopped).
+//
+// This distinction matters for a caller that only wants to know "has this
+// pipeline's already-triggered write actually landed durably", not "has every
+// connector in the process stopped running": since the persister's batching is
+// shared across all pipelines, connWg only reaches zero once every connector
+// on every pipeline has stopped, so calling Wait from a single pipeline's
+// stop-and-drain path would deadlock for as long as any other pipeline stays
+// running. WaitPendingWrites has no such coupling — it only observes flushWg,
+// which a connector's own ConnectorStopped call already increments
+// synchronously (see triggerFlush) before that call returns. A caller that
+// calls WaitPendingWrites strictly after learning (e.g. via a WaitGroup/tomb
+// join) that ConnectorStopped has already been called for the connector it
+// cares about is guaranteed to observe that connector's flush complete: the
+// Add(1) happened-before the Wait() call by construction, and sync.WaitGroup
+// cannot miss a Done that was already pending when Wait was entered.
+//
+// Used by lifecycle.Service.StopAndWait to await durability (invariant 1/3)
+// after a pipeline has fully drained, without deadlocking on unrelated running
+// pipelines. See docs/design-documents/20260708-live-server-deploy-apply.md,
+// "Review outcome & required rework", blocker 1.
+func (p *Persister) WaitPendingWrites() {
+	p.flushWg.Wait()
+}
+
 // Flush will trigger a goroutine that persists any in-memory data to the store.
 // To wait for the changes to be actually persisted you need to call Wait.
 func (p *Persister) Flush(ctx context.Context) {

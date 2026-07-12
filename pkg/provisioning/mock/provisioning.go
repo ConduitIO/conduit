@@ -1108,3 +1108,41 @@ func (c *LifecycleServiceStopCall) DoAndReturn(f func(context.Context, string, b
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// StopAndWait mocks base method.
+func (m *LifecycleService) StopAndWait(ctx context.Context, pipelineID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopAndWait", ctx, pipelineID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopAndWait indicates an expected call of StopAndWait.
+func (mr *LifecycleServiceMockRecorder) StopAndWait(ctx, pipelineID any) *LifecycleServiceStopAndWaitCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopAndWait", reflect.TypeOf((*LifecycleService)(nil).StopAndWait), ctx, pipelineID)
+	return &LifecycleServiceStopAndWaitCall{Call: call}
+}
+
+// LifecycleServiceStopAndWaitCall wrap *gomock.Call
+type LifecycleServiceStopAndWaitCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *LifecycleServiceStopAndWaitCall) Return(arg0 error) *LifecycleServiceStopAndWaitCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *LifecycleServiceStopAndWaitCall) Do(f func(context.Context, string) error) *LifecycleServiceStopAndWaitCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *LifecycleServiceStopAndWaitCall) DoAndReturn(f func(context.Context, string) error) *LifecycleServiceStopAndWaitCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
