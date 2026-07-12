@@ -53,7 +53,7 @@ func (f *fakePlanApplier) ApplyPlan(_ context.Context, _ config.Pipeline, hash s
 func newServerWithFake(fake *fakePlanApplier, allowMutations bool) *sdkmcp.Server {
 	return NewServer(Config{
 		AllowMutations: allowMutations,
-		newLocalService: func(context.Context, conduit.Config) (deploy.PlanApplier, func() error, error) {
+		newDeployService: func(context.Context, conduit.Config) (deploy.PlanApplier, func() error, error) {
 			return fake, func() error { return nil }, nil
 		},
 	})

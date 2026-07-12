@@ -215,6 +215,11 @@ func (s *Service) Plan(ctx context.Context, desired config.Pipeline) (Diff, erro
 // there is nothing to do (Diff.Empty()) so a no-op re-apply against a
 // running pipeline stays idempotent instead of being needlessly refused.
 func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash string) (Diff, error) {
+	// Tier-1 hard gate: serialize every ApplyPlan/ApplyPlanLive call for this
+	// pipeline ID — see lock.go's doc and pipelineLocks.
+	unlock := s.pipelineLocks.Lock(desired.ID)
+	defer unlock()
+
 	fresh, err := s.Plan(ctx, desired)
 	if err != nil {
 		return Diff{}, err
@@ -235,11 +240,11 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 		return fresh, nil
 	}
 
-	current, err := s.pipelineService.Get(ctx, desired.ID)
-	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		return fresh, cerrors.Errorf("could not check whether pipeline %v is running: %w", desired.ID, err)
+	running, err := s.isRunning(ctx, desired.ID)
+	if err != nil {
+		return fresh, err
 	}
-	if err == nil && isRunningStatus(current.GetStatus()) {
+	if running {
 		ce := conduiterr.New(CodePipelineRunning, fmt.Sprintf(
 			"pipeline %q is running; apply refuses to mutate a live pipeline", desired.ID))
 		ce.Suggestion = fmt.Sprintf("stop the pipeline first (conduit pipelines stop %s), then re-run apply", desired.ID)
@@ -301,6 +306,22 @@ func (s *Service) transactionalImport(ctx context.Context, desired config.Pipeli
 //     which resumes from the checkpointed position each connector's Open
 //     reads on startup (invariant 2: at-least-once).
 //
+// allowRestartOnRunning is the enforced data-path gate (design doc's Item 6
+// rework): if the target pipeline is running AND fresh's Changes include ANY
+// EffectRestart change, ApplyPlanLive refuses with CodeLiveApplyUnauthorized
+// unless allowRestartOnRunning is true — see hasRestartEffect and
+// CodeLiveApplyUnauthorized's doc. This parameter must only ever be sourced
+// from a process-level operator flag (conduit.Config.API.AllowLiveRestartApply,
+// read once at server startup) — never from the RPC request itself — so an
+// agent driving ApplyPipeline over the API can never set it; see
+// pkg/http/api/pipeline_v1.go's ApplyPipeline handler, this method's only
+// caller in this codebase (PR2 of #2588 — PR1 had no external caller at all).
+// The gate is intentionally conservative and coarse: it does not attempt to
+// classify *which* EffectRestart changes are actually ack/position/checkpoint
+// -adjacent (see the design doc's Item 6 rework for why a finer classifier is
+// out of scope) — every restart-class change against a running pipeline needs
+// the flag, full stop.
+//
 // Failure handling (design doc "Failure modes" + AC-5/AC-6): on any error
 // after StopAndWait — whether the import fails (importPipeline's own reverse
 // rollback already ran, see import.go) or Start itself fails — ApplyPlanLive
@@ -315,16 +336,28 @@ func (s *Service) transactionalImport(ctx context.Context, desired config.Pipeli
 //
 // Scope decision (design doc §2, left open there — "may still stop-restart
 // for safety"): ApplyPlanLive does NOT branch on individual Changes' Effect
-// (EffectInPlace vs EffectRestart) — every non-empty Diff against a running
-// pipeline goes through the full stop-drain-restart, even a diff that is
-// EffectInPlace-only (e.g. a connector settings change). A finer-grained "no
-// stop needed for in-place-only changes" optimization is explicitly deferred
-// to true in-place hot-reload (§4 of the design doc, out of scope for
-// #2588 PR1): inventing a narrower classifier here, ahead of that design
-// work, risks silently under-draining a change that looks in-place but isn't
-// (see the design doc's Item 6 rework, which made the same conservative call
-// for the operator-authorization gate).
-func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, hash string) (Diff, error) {
+// (EffectInPlace vs EffectRestart) for the stop-drain-restart decision itself
+// — every non-empty Diff against a running pipeline goes through the full
+// stop-drain-restart, even a diff that is EffectInPlace-only (e.g. a
+// connector settings change). (Effect IS consulted for the authorization gate
+// above — that's a distinct decision: whether to proceed at all, not how.) A
+// finer-grained "no stop needed for in-place-only changes" optimization is
+// explicitly deferred to true in-place hot-reload (§4 of the design doc, out
+// of scope for #2588): inventing a narrower classifier here, ahead of that
+// design work, risks silently under-draining a change that looks in-place but
+// isn't (see the design doc's Item 6 rework, which made the same conservative
+// call for the operator-authorization gate).
+func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, hash string, allowRestartOnRunning bool) (Diff, error) {
+	// Tier-1 hard gate: serialize every ApplyPlan/ApplyPlanLive call for this
+	// pipeline ID for the method's *entire* body — see lock.go's doc. Holding
+	// this lock across the running-check(s), the authorization gate, and the
+	// stop/import/start sequence below is what makes the TOCTOU close after
+	// this comment actually close something: without it, two concurrent
+	// ApplyPlanLive calls for the same ID could each pass their own running
+	// check before either starts mutating.
+	unlock := s.pipelineLocks.Lock(desired.ID)
+	defer unlock()
+
 	fresh, err := s.Plan(ctx, desired)
 	if err != nil {
 		return Diff{}, err
@@ -344,11 +377,39 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, nil
 	}
 
-	current, err := s.pipelineService.Get(ctx, desired.ID)
-	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		return fresh, cerrors.Errorf("could not check whether pipeline %v is running: %w", desired.ID, err)
+	running, err := s.isRunning(ctx, desired.ID)
+	if err != nil {
+		return fresh, err
 	}
-	running := err == nil && isRunningStatus(current.GetStatus())
+
+	if !running {
+		// TOCTOU close (design doc's "Concurrent applies / apply-during-
+		// manual-stop" + this method's former KNOWN GAP): the pipeline lock
+		// above only serializes concurrent ApplyPlan/ApplyPlanLive calls for
+		// this ID — it does NOT stop an external Start (e.g. the Start RPC,
+		// called directly against the lifecycle/pipeline service outside
+		// provisioning) from racing in between the check above and here. Plan
+		// (above) and the hash comparison are not free, so re-Get and
+		// re-branch immediately before the mutating write rather than trust
+		// the earlier snapshot: if the pipeline became running in that
+		// window, fall through to the running branch below (StopAndWait) —
+		// never let the !running path's plain transactionalImport run against
+		// a pipeline that is, right now, actually running.
+		running, err = s.isRunning(ctx, desired.ID)
+		if err != nil {
+			return fresh, err
+		}
+	}
+
+	if running && !allowRestartOnRunning && hasRestartEffect(fresh.Changes) {
+		ce := conduiterr.New(CodeLiveApplyUnauthorized, fmt.Sprintf(
+			"pipeline %q is running and this plan includes a restart-class change; applying it requires operator "+
+				"authorization", desired.ID))
+		ce.Suggestion = "have an operator restart the Conduit server with --api.allow-live-restart-apply (or the " +
+			"equivalent config/env setting) to authorize live restart-class applies, or stop the pipeline first and " +
+			"apply while it's stopped"
+		return fresh, ce
+	}
 
 	if !running {
 		// Nothing live to disrupt — identical to ApplyPlan's tail.
@@ -363,22 +424,13 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// are durably persisted before importPipeline runs against it. See
 	// lifecycle.Service.StopAndWait's doc and the design doc's blocker 1.
 	//
-	// KNOWN GAP (flagged, not fixed, in PR1 of #2588 — see the design doc's
-	// Failure modes, "Concurrent applies / apply-during-manual-stop", which
-	// calls for a per-pipeline provisioning lock this method does not yet
-	// take): between StopAndWait returning and transactionalImport/Start
-	// below, nothing prevents a concurrent caller from independently calling
-	// Start on this now-genuinely-stopped pipeline. If that happens, this
-	// method's own Start call below fails (Start refuses an
-	// already-running pipeline), the store nonetheless already has the new
-	// config (transactionalImport committed), and the concurrently-started
-	// pipeline keeps running with the connector instances it loaded before
-	// the mutation — a config-drift condition (not a data-loss one:
-	// invariants 1-3 aren't violated) until it's stopped and started again.
-	// Not reachable from outside this package in PR1 (no API/CLI/MCP surface
-	// calls ApplyPlanLive yet), so there is no live exploitability today —
-	// but a per-pipeline lock belongs in or before whichever PR first exposes
-	// this method to concurrent external callers (tracked for PR2).
+	// The KNOWN GAP flagged here in PR1 (a concurrent external Start racing
+	// between StopAndWait and Start below) is closed by pipelineLocks above:
+	// this method now holds the pipeline's lock for its entire body, so a
+	// second ApplyPlanLive/ApplyPlan call for the same ID cannot interleave.
+	// A raw lifecycleService.Start call from outside provisioning entirely
+	// (bypassing this package) is a separate, pre-existing surface this lock
+	// does not reach — unchanged from PR1, and out of scope here.
 	if err := s.lifecycleService.StopAndWait(ctx, desired.ID); err != nil {
 		return fresh, cerrors.Errorf("could not stop pipeline %q to apply live changes: %w", desired.ID, err)
 	}
@@ -400,6 +452,36 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	}
 
 	return fresh, nil
+}
+
+// hasRestartEffect reports whether changes includes at least one
+// EffectRestart change — the trigger for ApplyPlanLive's operator-
+// authorization gate. See ApplyPlanLive's doc for why this is deliberately
+// coarse (every EffectRestart change, not a finer ack/position/checkpoint
+// classification).
+func hasRestartEffect(changes []Change) bool {
+	for _, c := range changes {
+		if c.Effect == EffectRestart {
+			return true
+		}
+	}
+	return false
+}
+
+// isRunning reports whether the pipeline identified by id currently has
+// live, in-process work per isRunningStatus. A not-yet-existing pipeline
+// (pipeline.ErrInstanceNotFound) is reported as not running: there is
+// nothing running to disrupt, matching Plan/ApplyPlan's existing tolerance
+// of a not-found pipeline elsewhere in this file.
+func (s *Service) isRunning(ctx context.Context, id string) (bool, error) {
+	current, err := s.pipelineService.Get(ctx, id)
+	if err != nil {
+		if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+			return false, nil
+		}
+		return false, cerrors.Errorf("could not check whether pipeline %v is running: %w", id, err)
+	}
+	return isRunningStatus(current.GetStatus()), nil
 }
 
 // isRunningStatus reports whether status represents a pipeline with live,

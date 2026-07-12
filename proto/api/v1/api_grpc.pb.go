@@ -30,6 +30,8 @@ const (
 	PipelineService_UpdateDLQ_FullMethodName      = "/api.v1.PipelineService/UpdateDLQ"
 	PipelineService_ExportPipeline_FullMethodName = "/api.v1.PipelineService/ExportPipeline"
 	PipelineService_ImportPipeline_FullMethodName = "/api.v1.PipelineService/ImportPipeline"
+	PipelineService_PlanPipeline_FullMethodName   = "/api.v1.PipelineService/PlanPipeline"
+	PipelineService_ApplyPipeline_FullMethodName  = "/api.v1.PipelineService/ApplyPipeline"
 )
 
 // PipelineServiceClient is the client API for PipelineService service.
@@ -54,6 +56,19 @@ type PipelineServiceClient interface {
 	UpdateDLQ(ctx context.Context, in *UpdateDLQRequest, opts ...grpc.CallOption) (*UpdateDLQResponse, error)
 	ExportPipeline(ctx context.Context, in *ExportPipelineRequest, opts ...grpc.CallOption) (*ExportPipelineResponse, error)
 	ImportPipeline(ctx context.Context, in *ImportPipelineRequest, opts ...grpc.CallOption) (*ImportPipelineResponse, error)
+	// PlanPipeline computes the diff needed to reconcile a pipeline's
+	// currently stored state with the desired config, without applying
+	// anything (read-only, safe to call against a running pipeline). See
+	// docs/design-documents/20260708-live-server-deploy-apply.md.
+	PlanPipeline(ctx context.Context, in *PlanPipelineRequest, opts ...grpc.CallOption) (*PlanPipelineResponse, error)
+	// ApplyPipeline executes the plan for a desired pipeline config, gated on
+	// the caller presenting the hash of the plan it reviewed (a stale hash is
+	// refused, never partially applied). Against a running pipeline whose plan
+	// includes a restart-class change, this requires the server to have been
+	// started with the live-restart-apply operator flag — see
+	// docs/design-documents/20260708-live-server-deploy-apply.md and
+	// docs/operations/live-restart-apply.md.
+	ApplyPipeline(ctx context.Context, in *ApplyPipelineRequest, opts ...grpc.CallOption) (*ApplyPipelineResponse, error)
 }
 
 type pipelineServiceClient struct {
@@ -174,6 +189,26 @@ func (c *pipelineServiceClient) ImportPipeline(ctx context.Context, in *ImportPi
 	return out, nil
 }
 
+func (c *pipelineServiceClient) PlanPipeline(ctx context.Context, in *PlanPipelineRequest, opts ...grpc.CallOption) (*PlanPipelineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PlanPipelineResponse)
+	err := c.cc.Invoke(ctx, PipelineService_PlanPipeline_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pipelineServiceClient) ApplyPipeline(ctx context.Context, in *ApplyPipelineRequest, opts ...grpc.CallOption) (*ApplyPipelineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyPipelineResponse)
+	err := c.cc.Invoke(ctx, PipelineService_ApplyPipeline_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PipelineServiceServer is the server API for PipelineService service.
 // All implementations must embed UnimplementedPipelineServiceServer
 // for forward compatibility
@@ -196,6 +231,19 @@ type PipelineServiceServer interface {
 	UpdateDLQ(context.Context, *UpdateDLQRequest) (*UpdateDLQResponse, error)
 	ExportPipeline(context.Context, *ExportPipelineRequest) (*ExportPipelineResponse, error)
 	ImportPipeline(context.Context, *ImportPipelineRequest) (*ImportPipelineResponse, error)
+	// PlanPipeline computes the diff needed to reconcile a pipeline's
+	// currently stored state with the desired config, without applying
+	// anything (read-only, safe to call against a running pipeline). See
+	// docs/design-documents/20260708-live-server-deploy-apply.md.
+	PlanPipeline(context.Context, *PlanPipelineRequest) (*PlanPipelineResponse, error)
+	// ApplyPipeline executes the plan for a desired pipeline config, gated on
+	// the caller presenting the hash of the plan it reviewed (a stale hash is
+	// refused, never partially applied). Against a running pipeline whose plan
+	// includes a restart-class change, this requires the server to have been
+	// started with the live-restart-apply operator flag — see
+	// docs/design-documents/20260708-live-server-deploy-apply.md and
+	// docs/operations/live-restart-apply.md.
+	ApplyPipeline(context.Context, *ApplyPipelineRequest) (*ApplyPipelineResponse, error)
 	mustEmbedUnimplementedPipelineServiceServer()
 }
 
@@ -235,6 +283,12 @@ func (UnimplementedPipelineServiceServer) ExportPipeline(context.Context, *Expor
 }
 func (UnimplementedPipelineServiceServer) ImportPipeline(context.Context, *ImportPipelineRequest) (*ImportPipelineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ImportPipeline not implemented")
+}
+func (UnimplementedPipelineServiceServer) PlanPipeline(context.Context, *PlanPipelineRequest) (*PlanPipelineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PlanPipeline not implemented")
+}
+func (UnimplementedPipelineServiceServer) ApplyPipeline(context.Context, *ApplyPipelineRequest) (*ApplyPipelineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyPipeline not implemented")
 }
 func (UnimplementedPipelineServiceServer) mustEmbedUnimplementedPipelineServiceServer() {}
 
@@ -447,6 +501,42 @@ func _PipelineService_ImportPipeline_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PipelineService_PlanPipeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlanPipelineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).PlanPipeline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PipelineService_PlanPipeline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).PlanPipeline(ctx, req.(*PlanPipelineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PipelineService_ApplyPipeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyPipelineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).ApplyPipeline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PipelineService_ApplyPipeline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).ApplyPipeline(ctx, req.(*ApplyPipelineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PipelineService_ServiceDesc is the grpc.ServiceDesc for PipelineService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -497,6 +587,14 @@ var PipelineService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ImportPipeline",
 			Handler:    _PipelineService_ImportPipeline_Handler,
+		},
+		{
+			MethodName: "PlanPipeline",
+			Handler:    _PipelineService_PlanPipeline_Handler,
+		},
+		{
+			MethodName: "ApplyPipeline",
+			Handler:    _PipelineService_ApplyPipeline_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -600,7 +600,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
-	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
+	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines, r.ProvisionService, r.Config.API.AllowLiveRestartApply)
 	pipelineAPIv1.Register(grpcServer)
 
 	processorAPIv1 := api.NewProcessorAPIv1(r.Orchestrator.Processors, r.Orchestrator.ProcessorPlugins)

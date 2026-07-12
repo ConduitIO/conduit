@@ -530,6 +530,59 @@ service PipelineService {
       response_body: "pipeline"
     };
   }
+
+  // PlanPipeline computes the diff needed to reconcile a pipeline's
+  // currently stored state with the desired config, without applying
+  // anything (read-only, safe to call against a running pipeline). See
+  // docs/design-documents/20260708-live-server-deploy-apply.md.
+  rpc PlanPipeline(PlanPipelineRequest) returns (PlanPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/plan"
+      body: "*"
+      response_body: "diff"
+    };
+  }
+
+  // ApplyPipeline executes the plan for a desired pipeline config, gated on
+  // the caller presenting the hash of the plan it reviewed (a stale hash is
+  // refused, never partially applied). Against a running pipeline whose plan
+  // includes a restart-class change, this requires the server to have been
+  // started with the live-restart-apply operator flag — see
+  // docs/design-documents/20260708-live-server-deploy-apply.md and
+  // docs/operations/live-restart-apply.md.
+  rpc ApplyPipeline(ApplyPipelineRequest) returns (ApplyPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/apply"
+      body: "*"
+      response_body: "diff"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "400"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }'
+          }
+        }
+      }
+      responses: {
+        key: "412"
+        value: {
+          schema: {
+            json_schema: {ref: ".google.rpc.Status"}
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }'
+          }
+        }
+      }
+    };
+  }
 }
 
 message ListPipelinesRequest {
@@ -603,6 +656,95 @@ message ImportPipelineRequest {
 }
 message ImportPipelineResponse {
   Pipeline pipeline = 1;
+}
+
+// PipelineDocument is the whole-pipeline-document shape used by
+// PlanPipeline/ApplyPipeline: unlike Pipeline.Config (name/description only,
+// used by the incremental CreatePipeline/UpdatePipeline RPCs), it carries a
+// pipeline's connectors, processors and DLQ inline — the same shape a
+// provisioning config file (YAML) parses into
+// (pkg/provisioning/config.Pipeline) — so a client can Plan/Apply an entire
+// pipeline definition in one call, the same unit `conduit pipelines deploy|
+// apply` operates on.
+message PipelineDocument {
+  message Connector {
+    string id = 1;
+    // type is "source" or "destination".
+    string type = 2;
+    string plugin = 3;
+    string name = 4;
+    map<string, string> settings = 5;
+    repeated PipelineDocument.Processor processors = 6;
+  }
+
+  message Processor {
+    string id = 1;
+    string plugin = 2;
+    map<string, string> settings = 3;
+    int32 workers = 4;
+    string condition = 5;
+  }
+
+  message DLQ {
+    string plugin = 1;
+    map<string, string> settings = 2;
+    uint64 window_size = 3;
+    uint64 window_nack_threshold = 4;
+  }
+
+  string id = 1;
+  // status is "running" or "stopped"; only meaningful for a not-yet-existing
+  // pipeline (whether ApplyPipeline should start it after creating it).
+  string status = 2;
+  string name = 3;
+  string description = 4;
+  repeated Connector connectors = 5;
+  repeated Processor processors = 6;
+  DLQ dlq = 7;
+}
+
+// Diff is Plan's result: every change needed to reconcile a pipeline's
+// currently stored state with a desired PipelineDocument, plus a hash
+// binding this exact diff — ApplyPipeline refuses to run unless the caller
+// presents this hash. Mirrors pkg/provisioning.Diff/Change exactly (field
+// for field) so the API's plan/apply semantics never drift from the CLI
+// standalone path's.
+message Diff {
+  message Change {
+    // resource is "pipeline", "connector" or "processor".
+    string resource = 1;
+    string id = 2;
+    // action is "create", "update" or "delete".
+    string action = 3;
+    // effect is "in_place" (safe on a running pipeline) or "restart"
+    // (requires stopping it).
+    string effect = 4;
+    repeated string config_paths = 5;
+    // code is a stable, dotted identifier for this kind of change, e.g.
+    // "provisioning.connector.update".
+    string code = 6;
+  }
+
+  string pipeline_id = 1;
+  repeated Change changes = 2;
+  string hash = 3;
+}
+
+message PlanPipelineRequest {
+  PipelineDocument config = 1;
+}
+message PlanPipelineResponse {
+  Diff diff = 1;
+}
+
+message ApplyPipelineRequest {
+  PipelineDocument config = 1;
+  // hash must match the hash from a prior PlanPipeline call for this exact
+  // config, or the apply is refused (provisioning.plan_stale).
+  string hash = 2;
+}
+message ApplyPipelineResponse {
+  Diff diff = 1;
 }
 
 // ConnectorService exposes CRUD functionality for managing connectors.

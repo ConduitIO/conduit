@@ -62,12 +62,22 @@ type Config struct {
 	// address — an MCP server may run with no Conduit instance nearby.
 	APIAddress string
 
-	// newLocalService and newAPIClient construct the deploy/apply and
+	// newDeployService and newAPIClient construct the deploy/apply and
 	// inspect engines respectively. Both default to the real
 	// implementations in NewServer; overridable only from this package's
 	// own tests (unexported — no production caller needs to inject a fake).
-	newLocalService func(ctx context.Context, cfg conduit.Config) (deploy.PlanApplier, func() error, error)
-	newAPIClient    func(ctx context.Context, address string) (inspectClient, error)
+	//
+	// newDeployService defaults to deploy.NewService (PR2 of #2588), not
+	// deploy.NewLocalService directly: it prefers a live Conduit server
+	// reachable at StoreConfig.API.GRPC.Address — so the apply tool can reach
+	// a genuinely running pipeline via the server's ApplyPipeline RPC
+	// (provisioning.Service.ApplyPlanLive) — and falls back to
+	// NewLocalService's standalone Badger-only path when no server answers.
+	// deploy/inspect/apply's --allow-mutations gate (AllowMutations, above)
+	// is unchanged and orthogonal: it decides whether the apply tool is
+	// registered at all, not which transport a registered apply tool uses.
+	newDeployService func(ctx context.Context, cfg conduit.Config) (deploy.PlanApplier, func() error, error)
+	newAPIClient     func(ctx context.Context, address string) (inspectClient, error)
 }
 
 // server holds the state every tool handler closes over. It is deliberately
@@ -92,8 +102,8 @@ type server struct {
 // calls (cmd/conduit/internal/validate, pkg/conduit/check via doctorcheck,
 // cmd/conduit/internal/deploy, pkg/scaffold, the API client) — see doc.go.
 func NewServer(cfg Config) *sdkmcp.Server {
-	if cfg.newLocalService == nil {
-		cfg.newLocalService = deploy.NewLocalService
+	if cfg.newDeployService == nil {
+		cfg.newDeployService = deploy.NewService
 	}
 	if cfg.newAPIClient == nil {
 		cfg.newAPIClient = newAPIInspectClient

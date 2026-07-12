@@ -195,3 +195,55 @@ live apply off when the preview arch is active.
 (`source.go:64,227,285`), and `Start` rebuilds from the stored instance — so
 post-apply `Start` resumes at-least-once (invariant 2), provided StopAndWait
 awaited the durable flush (blocker 1).
+
+## PR2 status (issue #2588)
+
+PR2 delivers the API surface + CLI/MCP wiring on top of PR1's
+`StopAndWait`/`ApplyPlanLive`:
+
+- **Per-pipeline provisioning lock** (`pkg/provisioning/lock.go`,
+  `pipelineLocks`): `ApplyPlan` and `ApplyPlanLive` each hold the target
+  pipeline's lock for their entire body, closing the "Concurrent applies /
+  apply-during-manual-stop" gap flagged as a KNOWN GAP in PR1's
+  `ApplyPlanLive`. Verified with `-race -count=20`
+  (`TestPipelineLocks_SerializesSameID`).
+- **TOCTOU close inside `ApplyPlanLive`**: the running-check is repeated
+  immediately before the mutating write (not just once, early); if the
+  pipeline became running in between (e.g. an external `Start` call not
+  routed through this lock), the method falls through to the StopAndWait
+  branch instead of mutating a live pipeline directly
+  (`TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains`).
+- **Two additive API RPCs**: `PipelineService.PlanPipeline` (read-only) and
+  `ApplyPipeline` (mutating), in `proto/api/v1/api.proto`. Handlers in
+  `pkg/http/api/pipeline_v1.go` call the live `runtime.ProvisionService.Plan`
+  / `ApplyPlanLive`, reusing the standalone path's config-enrich/validate
+  step (`config.Enrich` + `config.Validate`) so the two surfaces can't drift
+  on what a valid desired config is. Additive only — every existing RPC is
+  unchanged; `buf generate` re-run twice produces no incremental diff.
+- **Enforced data-path gate**: `ApplyPipeline` refuses any `EffectRestart`
+  change against a running pipeline unless the server was started with
+  `--api.allow-live-restart-apply` (`conduit.Config.API.AllowLiveRestartApply`,
+  a process-level flag with no `ApplyPipelineRequest` field — not
+  agent-passable). Coded `provisioning.live_apply_unauthorized`. See
+  `docs/operations/live-restart-apply.md`.
+- **CLI/MCP**: `deploy`/`apply` (CLI) and the MCP `deploy`/`apply` tools now
+  prefer a live server (`cmd/conduit/internal/deploy.NewService`, health-
+  checked with a bounded probe) and fall back to the standalone
+  `NewLocalService` path when none is reachable — same `PlanApplier`
+  interface, same `--json`/result shape either way
+  (`TestNewService_PrefersLiveServer` /
+  `TestNewService_FallsBackToStandalone_WhenNoServerReachable`).
+
+Inherited from PR1, not re-tested here: AC-3's real drain-no-loss guarantee
+(`TestServiceLifecycle_StopAndWait_DrainsAndPersists`,
+`pkg/lifecycle`) and the DB-transaction crash-safety of `importPipeline`
+(#2595). PR2 does not touch either.
+
+Still deferred (unchanged from PR1's scope boundary): true in-place hot-reload
+(§4), multi-pipeline transactional apply, the `repair` tool, and the
+`pkg/lifecycle-poc` `StopAndWait` parity audit (see "Open parity item" above)
+— `ApplyPlanLive` still has no arch-v2-specific branch; a server running with
+`preview.pipeline-arch-v2` gets whatever `lifecycle_v2.Service.StopAndWait`
+does today (always refuses, per its own doc), so `ApplyPipeline` against a
+running pipeline under that preview architecture fails closed rather than
+silently skipping the drain.
