@@ -137,7 +137,7 @@ func (c *ApplyCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome,
 
 	newService := c.newService
 	if newService == nil {
-		newService = deploy.NewLocalService
+		newService = deploy.NewService
 	}
 	svc, closeSvc, err := newService(ctx, c.flags.Config)
 	if err != nil {

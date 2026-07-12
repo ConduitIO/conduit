@@ -103,6 +103,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("api.enabled", c.Cfg.API.Enabled)
 	flags.SetDefault("api.http.address", c.Cfg.API.HTTP.Address)
 	flags.SetDefault("api.grpc.address", c.Cfg.API.GRPC.Address)
+	flags.SetDefault("api.allow-live-restart-apply", c.Cfg.API.AllowLiveRestartApply)
 	flags.SetDefault("log.level", c.Cfg.Log.Level)
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)

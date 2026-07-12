@@ -19,12 +19,17 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/http/api/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/provisioning"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -33,7 +38,8 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
-	api := NewPipelineAPIv1(psMock)
+	provMock := mock.NewProvisioner(ctrl)
+	api := NewPipelineAPIv1(psMock, provMock, false)
 
 	config := pipeline.Config{
 		Name:        "test-pipeline",
@@ -77,7 +83,8 @@ func TestPipelineAPIv1_StopPipeline(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
-	api := NewPipelineAPIv1(psMock)
+	provMock := mock.NewProvisioner(ctrl)
+	api := NewPipelineAPIv1(psMock, provMock, false)
 
 	id := uuid.NewString()
 	force := true
@@ -94,7 +101,8 @@ func TestPipelineAPIv1_ListPipelinesByName(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
-	api := NewPipelineAPIv1(psMock)
+	provMock := mock.NewProvisioner(ctrl)
+	api := NewPipelineAPIv1(psMock, provMock, false)
 
 	names := []string{"do-not-want-this-pipeline", "want-p1", "want-p2", "skip", "another-skipped"}
 	pls := make([]*pipeline.Instance, 0)
@@ -149,4 +157,103 @@ func sortPipelines(p []*apiv1.Pipeline) {
 	sort.Slice(p, func(i, j int) bool {
 		return p[i].Id < p[j].Id
 	})
+}
+
+// TestPipelineAPIv1_PlanPipeline_ReadOnly is the regression test for AC-1:
+// PlanPipeline calls Provisioner.Plan (never ApplyPlanLive — no expectation
+// is set on it, so gomock fails the test if PlanPipeline attempts to mutate
+// anything) and returns its Diff translated field-for-field via toproto.Diff.
+func TestPipelineAPIv1_PlanPipeline_ReadOnly(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	psMock := mock.NewPipelineOrchestrator(ctrl)
+	provMock := mock.NewProvisioner(ctrl)
+	api := NewPipelineAPIv1(psMock, provMock, false)
+
+	diff := provisioning.Diff{
+		PipelineID: "p1",
+		Hash:       "abc123",
+		Changes: []provisioning.Change{
+			{Resource: provisioning.ResourceConnector, ID: "p1:conn:src", Action: provisioning.ChangeActionUpdate, Effect: provisioning.EffectInPlace, ConfigPaths: []string{"settings.table"}, Code: "provisioning.connector.update"},
+		},
+	}
+	provMock.EXPECT().Plan(ctx, gomock.Any()).Return(diff, nil)
+
+	got, err := api.PlanPipeline(ctx, &apiv1.PlanPipelineRequest{
+		Config: &apiv1.PipelineDocument{Id: "p1"},
+	})
+	is.NoErr(err)
+	is.Equal(got.Diff.PipelineId, "p1")
+	is.Equal(got.Diff.Hash, "abc123")
+	is.Equal(len(got.Diff.Changes), 1)
+	is.Equal(got.Diff.Changes[0].Resource, "connector")
+	is.Equal(got.Diff.Changes[0].Effect, "in_place")
+	is.Equal(got.Diff.Changes[0].ConfigPaths, []string{"settings.table"})
+}
+
+// TestPipelineAPIv1_ApplyPipeline_PassesServerSideAuthorizationFlag is the
+// regression test proving the operator-authorization gate is wired from
+// server construction, not the request: ApplyPipelineRequest has no field
+// for it (see api.proto), so the ONLY way ApplyPipeline can pass true to
+// Provisioner.ApplyPlanLive's allowRestartOnRunning parameter is the value
+// NewPipelineAPIv1 was constructed with. This test constructs two API
+// instances from the identical request and asserts each calls
+// ApplyPlanLive with the flag it was constructed with — proving an RPC
+// caller cannot influence it.
+func TestPipelineAPIv1_ApplyPipeline_PassesServerSideAuthorizationFlag(t *testing.T) {
+	for _, allow := range []bool{false, true} {
+		t.Run(map[bool]string{false: "flag_off", true: "flag_on"}[allow], func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+			psMock := mock.NewPipelineOrchestrator(ctrl)
+			provMock := mock.NewProvisioner(ctrl)
+			api := NewPipelineAPIv1(psMock, provMock, allow)
+
+			var gotAllow bool
+			provMock.EXPECT().ApplyPlanLive(ctx, gomock.Any(), "abc123", gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ config.Pipeline, _ string, allowRestartOnRunning bool) (provisioning.Diff, error) {
+					gotAllow = allowRestartOnRunning
+					return provisioning.Diff{PipelineID: "p1", Hash: "abc123"}, nil
+				})
+
+			_, err := api.ApplyPipeline(ctx, &apiv1.ApplyPipelineRequest{
+				Config: &apiv1.PipelineDocument{Id: "p1"},
+				Hash:   "abc123",
+				// Note: no field on ApplyPipelineRequest can set the
+				// authorization flag — this is the point of the test.
+			})
+			is.NoErr(err)
+			is.Equal(gotAllow, allow)
+		})
+	}
+}
+
+// TestPipelineAPIv1_ApplyPipeline_GateDenied_SurfacesCodedError proves a
+// provisioning.CodeLiveApplyUnauthorized error from ApplyPlanLive (the
+// enforced data-path gate refusing a restart-class apply against a running
+// pipeline) surfaces through the RPC as a FailedPrecondition status, not a
+// generic/unknown error — an agent driving the API can tell "refused by
+// policy" apart from "server error".
+func TestPipelineAPIv1_ApplyPipeline_GateDenied_SurfacesCodedError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	psMock := mock.NewPipelineOrchestrator(ctrl)
+	provMock := mock.NewProvisioner(ctrl)
+	api := NewPipelineAPIv1(psMock, provMock, false)
+
+	wantErr := conduiterr.New(provisioning.CodeLiveApplyUnauthorized, "pipeline \"p1\" is running and this plan includes a restart-class change")
+	provMock.EXPECT().ApplyPlanLive(ctx, gomock.Any(), "abc123", false).Return(provisioning.Diff{}, wantErr)
+
+	_, err := api.ApplyPipeline(ctx, &apiv1.ApplyPipelineRequest{
+		Config: &apiv1.PipelineDocument{Id: "p1"},
+		Hash:   "abc123",
+	})
+	is.True(err != nil)
+
+	st, ok := grpcstatus.FromError(err)
+	is.True(ok)
+	is.Equal(st.Code(), codes.FailedPrecondition)
 }

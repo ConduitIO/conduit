@@ -143,7 +143,7 @@ func (c *DeployCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 
 	newService := c.newService
 	if newService == nil {
-		newService = deploy.NewLocalService
+		newService = deploy.NewService
 	}
 	svc, closeSvc, err := newService(ctx, c.flags.Config)
 	if err != nil {
@@ -234,6 +234,7 @@ func storeConfigDefaults(flags ecdysis.Flags) conduit.Config {
 	cfg := conduit.DefaultConfigWithBasePath(currentPath)
 
 	flags.SetDefault("config.path", cfg.ConduitCfg.Path)
+	flags.SetDefault("api.grpc.address", cfg.API.GRPC.Address)
 	flags.SetDefault("db.type", cfg.DB.Type)
 	flags.SetDefault("db.badger.path", cfg.DB.Badger.Path)
 	flags.SetDefault("db.postgres.connection-string", cfg.DB.Postgres.ConnectionString)

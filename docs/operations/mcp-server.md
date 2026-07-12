@@ -60,11 +60,17 @@ enable mutations by passing a parameter, only the human who launched `conduit mc
 
 `apply` is additionally diff-first and token-bound: an agent must call `deploy` first (which
 returns a `Diff` and a `hash`), then call `apply` with that exact `hash`. A stale or mismatched
-hash is refused (`provisioning.plan_stale`) with nothing mutated. `apply` also inherits the
-standalone deploy/apply engine's Badger-only structural gate (see
-[`cmd/conduit/internal/deploy`](../../cmd/conduit/internal/deploy)): it can only run against a
-stopped BadgerDB store, so it structurally cannot mutate a pipeline a live `conduit run` process
-has open.
+hash is refused (`provisioning.plan_stale`) with nothing mutated.
+
+`deploy`/`apply` prefer a live Conduit server: if one is reachable at the configured
+`api.grpc.address`, they call its `PlanPipeline`/`ApplyPipeline` RPCs — which means `apply` **can**
+mutate a genuinely running pipeline via a graceful stop-drain-restart (see
+[`docs/operations/live-restart-apply.md`](live-restart-apply.md) for the separate, server-side
+operator gate that requires). Without a reachable server, they fall back to the standalone engine
+(see [`cmd/conduit/internal/deploy`](../../cmd/conduit/internal/deploy)), which keeps its
+Badger-only structural gate and refuses outright to touch a running pipeline. Either way,
+`--allow-mutations` above is the orthogonal gate deciding whether the `apply` tool is registered at
+all; it says nothing about which transport a registered `apply` tool uses.
 
 ## HTTP transport
 
@@ -97,8 +103,9 @@ ever reaches the MCP protocol handler.
   schema, connector list, error registry, and this tool catalog) is deferred; the tool catalog
   itself is stable and documented here in the interim.
 - **North-star E2E** (a scripted agent going zero → running pipeline using only MCP + `llms.txt`):
-  deferred pending the `llms.txt` generator. Today, an agent can reach a _valid, provisioned_
-  pipeline via `dry_run` → `deploy` → `apply`; running it requires a `conduit run` over the
-  applied store until the live-server RPC path (tracked follow-up, referenced in the design doc as
-  #2588) lands, at which point `apply` gains apply-to-a-running-server for the CLI and MCP
-  simultaneously.
+  deferred pending the `llms.txt` generator. The live-server RPC path (#2588) has landed — `apply`
+  now reaches a genuinely running pipeline when a server is reachable, gated by the server's
+  `--api.allow-live-restart-apply` operator flag (see
+  [`docs/operations/live-restart-apply.md`](live-restart-apply.md)) for restart-class changes — so
+  what remains for the north-star E2E is the `llms.txt` generator itself, not the apply-to-running
+  capability.

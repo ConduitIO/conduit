@@ -48,3 +48,15 @@ var CodePlanStale = conduiterr.Register("provisioning.plan_stale", codes.FailedP
 // side (stop the pipeline first), matching FailedPrecondition's exit-code-2
 // classification (pkg/conduit/exitcode), not an environment failure.
 var CodePipelineRunning = conduiterr.Register("provisioning.pipeline_running", codes.FailedPrecondition)
+
+// CodeLiveApplyUnauthorized is raised by ApplyPlanLive when it refuses to
+// apply a restart-class (EffectRestart) change to a currently-running
+// pipeline because the caller did not authorize it — see ApplyPlanLive's
+// allowRestartOnRunning parameter and
+// docs/design-documents/20260708-live-server-deploy-apply.md, "Item 6
+// (reworked conservative): the data-path gate". The authorization is a
+// process-level operator flag (conduit.Config.API.AllowLiveRestartApply),
+// never a value the RPC caller/agent can set directly — see
+// pkg/http/api/pipeline_v1.go's ApplyPipeline handler, the only caller that
+// can set allowRestartOnRunning to true.
+var CodeLiveApplyUnauthorized = conduiterr.Register("provisioning.live_apply_unauthorized", codes.FailedPrecondition)

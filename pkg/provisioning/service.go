@@ -39,6 +39,10 @@ type Service struct {
 	connectorPluginService ConnectorPluginService
 	lifecycleService       LifecycleService
 	pipelinesPath          string
+
+	// pipelineLocks serializes ApplyPlan/ApplyPlanLive calls per pipeline ID
+	// — see lock.go's doc.
+	pipelineLocks *pipelineLocks
 }
 
 func NewService(
@@ -61,6 +65,7 @@ func NewService(
 		connectorPluginService: connPluginService,
 		lifecycleService:       lifecycleService,
 		pipelinesPath:          pipelinesDir,
+		pipelineLocks:          newPipelineLocks(),
 	}
 }
 

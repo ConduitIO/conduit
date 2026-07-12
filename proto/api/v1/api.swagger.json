@@ -75,7 +75,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "$ref": "#/definitions/v1Connector"
+                "$ref": "#/definitions/apiv1Connector"
               }
             }
           },
@@ -111,7 +111,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Connector"
+              "$ref": "#/definitions/apiv1Connector"
             }
           },
           "400": {
@@ -257,7 +257,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Connector"
+              "$ref": "#/definitions/apiv1Connector"
             }
           },
           "404": {
@@ -366,7 +366,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Connector"
+              "$ref": "#/definitions/apiv1Connector"
             }
           },
           "400": {
@@ -578,6 +578,72 @@
         ]
       }
     },
+    "/v1/pipelines/apply": {
+      "post": {
+        "summary": "ApplyPipeline executes the plan for a desired pipeline config, gated on\nthe caller presenting the hash of the plan it reviewed (a stale hash is\nrefused, never partially applied). Against a running pipeline whose plan\nincludes a restart-class change, this requires the server to have been\nstarted with the live-restart-apply operator flag — see\ndocs/design-documents/20260708-live-server-deploy-apply.md and\ndocs/operations/live-restart-apply.md.",
+        "operationId": "PipelineService_ApplyPipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Diff"
+            }
+          },
+          "400": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "412": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ApplyPipelineRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
     "/v1/pipelines/import": {
       "post": {
         "operationId": "PipelineService_ImportPipeline",
@@ -609,6 +675,46 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/v1Pipeline"
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/plan": {
+      "post": {
+        "summary": "PlanPipeline computes the diff needed to reconcile a pipeline's\ncurrently stored state with the desired config, without applying\nanything (read-only, safe to call against a running pipeline). See\ndocs/design-documents/20260708-live-server-deploy-apply.md.",
+        "operationId": "PipelineService_PlanPipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Diff"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PlanPipelineRequest"
             }
           }
         ],
@@ -817,7 +923,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/PipelineDLQ"
+              "$ref": "#/definitions/v1PipelineDLQ"
             }
           },
           "500": {
@@ -852,7 +958,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/PipelineDLQ"
+              "$ref": "#/definitions/v1PipelineDLQ"
             }
           },
           "500": {
@@ -881,7 +987,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/PipelineDLQ"
+              "$ref": "#/definitions/v1PipelineDLQ"
             }
           }
         ],
@@ -1113,7 +1219,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "$ref": "#/definitions/v1Processor"
+                "$ref": "#/definitions/apiv1Processor"
               }
             }
           },
@@ -1153,7 +1259,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Processor"
+              "$ref": "#/definitions/apiv1Processor"
             }
           },
           "400": {
@@ -1247,7 +1353,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Processor"
+              "$ref": "#/definitions/apiv1Processor"
             }
           },
           "404": {
@@ -1356,7 +1462,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/v1Processor"
+              "$ref": "#/definitions/apiv1Processor"
             }
           },
           "400": {
@@ -1540,32 +1646,6 @@
         }
       }
     },
-    "PipelineDLQ": {
-      "type": "object",
-      "properties": {
-        "plugin": {
-          "type": "string",
-          "title": "plugin is the connector plugin used for storing DLQ records\ndefault = builtin:log, configured to log with level WARN"
-        },
-        "settings": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "title": "settings are the plugin settings"
-        },
-        "windowSize": {
-          "type": "string",
-          "format": "uint64",
-          "title": "window_size defines how many last acks/nacks are monitored in the window\nthat controls if the pipeline should stop (0 disables the window)\ndefault = 1"
-        },
-        "windowNackThreshold": {
-          "type": "string",
-          "format": "uint64",
-          "title": "window_nack_threshold defines the number of nacks in the window that are\ntolerated. Crossing the threshold stops the pipeline.\ndefault = 0"
-        }
-      }
-    },
     "PipelineServiceStopPipelineBody": {
       "type": "object",
       "properties": {
@@ -1653,6 +1733,48 @@
         }
       }
     },
+    "apiv1Connector": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "destinationState": {
+          "$ref": "#/definitions/ConnectorDestinationState"
+        },
+        "sourceState": {
+          "$ref": "#/definitions/ConnectorSourceState"
+        },
+        "config": {
+          "$ref": "#/definitions/v1ConnectorConfig"
+        },
+        "type": {
+          "$ref": "#/definitions/v1ConnectorType"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "pipelineId": {
+          "type": "string"
+        },
+        "processorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "readOnly": true
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
     "apiv1Info": {
       "type": "object",
       "properties": {
@@ -1664,6 +1786,36 @@
         },
         "arch": {
           "type": "string"
+        }
+      }
+    },
+    "apiv1Processor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "config": {
+          "$ref": "#/definitions/v1ProcessorConfig"
+        },
+        "condition": {
+          "type": "string",
+          "title": "Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate\nto a boolean value, indicating a condition to run the processor for a specific record or not. (template functions\nprovided by `sprig` are injected)"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "parent": {
+          "$ref": "#/definitions/ProcessorParent"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },
@@ -1753,6 +1905,20 @@
         }
       }
     },
+    "opencdcv1Change": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "$ref": "#/definitions/v1Data",
+          "description": "Before contains the data before the operation occurred. This field is\noptional and should only be populated for operations \"update\" and \"delete\"\n(if the system supports fetching the data before the operation)."
+        },
+        "after": {
+          "$ref": "#/definitions/v1Data",
+          "description": "After contains the data after the operation occurred. This field should be\npopulated for all operations except \"delete\"."
+        }
+      },
+      "description": "Change represents the data before and after the operation occurred."
+    },
     "opencdcv1Operation": {
       "type": "string",
       "enum": [
@@ -1782,59 +1948,23 @@
       "default": "NULL_VALUE",
       "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
     },
-    "v1Change": {
+    "v1ApplyPipelineRequest": {
       "type": "object",
       "properties": {
-        "before": {
-          "$ref": "#/definitions/v1Data",
-          "description": "Before contains the data before the operation occurred. This field is\noptional and should only be populated for operations \"update\" and \"delete\"\n(if the system supports fetching the data before the operation)."
-        },
-        "after": {
-          "$ref": "#/definitions/v1Data",
-          "description": "After contains the data after the operation occurred. This field should be\npopulated for all operations except \"delete\"."
-        }
-      },
-      "description": "Change represents the data before and after the operation occurred."
-    },
-    "v1Connector": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "readOnly": true
-        },
-        "destinationState": {
-          "$ref": "#/definitions/ConnectorDestinationState"
-        },
-        "sourceState": {
-          "$ref": "#/definitions/ConnectorSourceState"
-        },
         "config": {
-          "$ref": "#/definitions/v1ConnectorConfig"
+          "$ref": "#/definitions/v1PipelineDocument"
         },
-        "type": {
-          "$ref": "#/definitions/v1ConnectorType"
-        },
-        "plugin": {
-          "type": "string"
-        },
-        "pipelineId": {
-          "type": "string"
-        },
-        "processorIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "readOnly": true
-        },
-        "createdAt": {
+        "hash": {
           "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
+          "description": "hash must match the hash from a prior PlanPipeline call for this exact\nconfig, or the apply is refused (provisioning.plan_stale)."
+        }
+      }
+    },
+    "v1ApplyPipelineResponse": {
+      "type": "object",
+      "properties": {
+        "diff": {
+          "$ref": "#/definitions/v1Diff"
         }
       }
     },
@@ -1925,7 +2055,7 @@
       "type": "object",
       "properties": {
         "connector": {
-          "$ref": "#/definitions/v1Connector"
+          "$ref": "#/definitions/apiv1Connector"
         }
       }
     },
@@ -1969,7 +2099,7 @@
       "type": "object",
       "properties": {
         "processor": {
-          "$ref": "#/definitions/v1Processor"
+          "$ref": "#/definitions/apiv1Processor"
         }
       }
     },
@@ -1997,6 +2127,55 @@
     "v1DeleteProcessorResponse": {
       "type": "object"
     },
+    "v1Diff": {
+      "type": "object",
+      "properties": {
+        "pipelineId": {
+          "type": "string"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1DiffChange"
+          }
+        },
+        "hash": {
+          "type": "string"
+        }
+      },
+      "description": "Diff is Plan's result: every change needed to reconcile a pipeline's\ncurrently stored state with a desired PipelineDocument, plus a hash\nbinding this exact diff — ApplyPipeline refuses to run unless the caller\npresents this hash. Mirrors pkg/provisioning.Diff/Change exactly (field\nfor field) so the API's plan/apply semantics never drift from the CLI\nstandalone path's."
+    },
+    "v1DiffChange": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "string",
+          "description": "resource is \"pipeline\", \"connector\" or \"processor\"."
+        },
+        "id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "description": "action is \"create\", \"update\" or \"delete\"."
+        },
+        "effect": {
+          "type": "string",
+          "description": "effect is \"in_place\" (safe on a running pipeline) or \"restart\"\n(requires stopping it)."
+        },
+        "configPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "type": "string",
+          "description": "code is a stable, dotted identifier for this kind of change, e.g.\n\"provisioning.connector.update\"."
+        }
+      }
+    },
     "v1ExportPipelineResponse": {
       "type": "object",
       "properties": {
@@ -2009,7 +2188,7 @@
       "type": "object",
       "properties": {
         "connector": {
-          "$ref": "#/definitions/v1Connector"
+          "$ref": "#/definitions/apiv1Connector"
         }
       }
     },
@@ -2017,7 +2196,7 @@
       "type": "object",
       "properties": {
         "dlq": {
-          "$ref": "#/definitions/PipelineDLQ"
+          "$ref": "#/definitions/v1PipelineDLQ"
         }
       }
     },
@@ -2041,7 +2220,7 @@
       "type": "object",
       "properties": {
         "processor": {
-          "$ref": "#/definitions/v1Processor"
+          "$ref": "#/definitions/apiv1Processor"
         }
       }
     },
@@ -2096,7 +2275,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "$ref": "#/definitions/v1Connector"
+            "$ref": "#/definitions/apiv1Connector"
           }
         }
       }
@@ -2144,7 +2323,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "$ref": "#/definitions/v1Processor"
+            "$ref": "#/definitions/apiv1Processor"
           }
         }
       }
@@ -2197,6 +2376,145 @@
         }
       }
     },
+    "v1PipelineDLQ": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "type": "string",
+          "title": "plugin is the connector plugin used for storing DLQ records\ndefault = builtin:log, configured to log with level WARN"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "settings are the plugin settings"
+        },
+        "windowSize": {
+          "type": "string",
+          "format": "uint64",
+          "title": "window_size defines how many last acks/nacks are monitored in the window\nthat controls if the pipeline should stop (0 disables the window)\ndefault = 1"
+        },
+        "windowNackThreshold": {
+          "type": "string",
+          "format": "uint64",
+          "title": "window_nack_threshold defines the number of nacks in the window that are\ntolerated. Crossing the threshold stops the pipeline.\ndefault = 0"
+        }
+      }
+    },
+    "v1PipelineDocument": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "description": "status is \"running\" or \"stopped\"; only meaningful for a not-yet-existing\npipeline (whether ApplyPipeline should start it after creating it)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PipelineDocumentConnector"
+          }
+        },
+        "processors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PipelineDocumentProcessor"
+          }
+        },
+        "dlq": {
+          "$ref": "#/definitions/v1PipelineDocumentDLQ"
+        }
+      },
+      "description": "PipelineDocument is the whole-pipeline-document shape used by\nPlanPipeline/ApplyPipeline: unlike Pipeline.Config (name/description only,\nused by the incremental CreatePipeline/UpdatePipeline RPCs), it carries a\npipeline's connectors, processors and DLQ inline — the same shape a\nprovisioning config file (YAML) parses into\n(pkg/provisioning/config.Pipeline) — so a client can Plan/Apply an entire\npipeline definition in one call, the same unit `conduit pipelines deploy|\napply` operates on."
+    },
+    "v1PipelineDocumentConnector": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "type is \"source\" or \"destination\"."
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "processors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PipelineDocumentProcessor"
+          }
+        }
+      }
+    },
+    "v1PipelineDocumentDLQ": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "windowSize": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "windowNackThreshold": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "v1PipelineDocumentProcessor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "workers": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "condition": {
+          "type": "string"
+        }
+      }
+    },
     "v1PipelineStatus": {
       "type": "string",
       "enum": [
@@ -2208,6 +2526,22 @@
       ],
       "default": "STATUS_UNSPECIFIED",
       "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
+    },
+    "v1PlanPipelineRequest": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/v1PipelineDocument"
+        }
+      }
+    },
+    "v1PlanPipelineResponse": {
+      "type": "object",
+      "properties": {
+        "diff": {
+          "$ref": "#/definitions/v1Diff"
+        }
+      }
     },
     "v1PluginSpecifications": {
       "type": "object",
@@ -2277,36 +2611,6 @@
       ],
       "default": "TYPE_UNSPECIFIED",
       "description": "Deprecated: use config.v1.Parameter.Type instead.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
-    },
-    "v1Processor": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "readOnly": true
-        },
-        "config": {
-          "$ref": "#/definitions/v1ProcessorConfig"
-        },
-        "condition": {
-          "type": "string",
-          "title": "Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate\nto a boolean value, indicating a condition to run the processor for a specific record or not. (template functions\nprovided by `sprig` are injected)"
-        },
-        "plugin": {
-          "type": "string"
-        },
-        "parent": {
-          "$ref": "#/definitions/ProcessorParent"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      }
     },
     "v1ProcessorConfig": {
       "type": "object",
@@ -2380,7 +2684,7 @@
           "description": "Key represents a value that should identify the entity (e.g. database row)."
         },
         "payload": {
-          "$ref": "#/definitions/v1Change",
+          "$ref": "#/definitions/opencdcv1Change",
           "description": "Payload holds the payload change (data before and after the operation\noccurred)."
         }
       },
@@ -2396,7 +2700,7 @@
       "type": "object",
       "properties": {
         "connector": {
-          "$ref": "#/definitions/v1Connector"
+          "$ref": "#/definitions/apiv1Connector"
         }
       }
     },
@@ -2404,7 +2708,7 @@
       "type": "object",
       "properties": {
         "dlq": {
-          "$ref": "#/definitions/PipelineDLQ"
+          "$ref": "#/definitions/v1PipelineDLQ"
         }
       }
     },
@@ -2420,7 +2724,7 @@
       "type": "object",
       "properties": {
         "processor": {
-          "$ref": "#/definitions/v1Processor"
+          "$ref": "#/definitions/apiv1Processor"
         }
       }
     },

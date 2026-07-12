@@ -42,6 +42,26 @@ func (m *MockPipelineService) EXPECT() *MockPipelineServiceMockRecorder {
 	return m.recorder
 }
 
+// ApplyPipeline mocks base method.
+func (m *MockPipelineService) ApplyPipeline(ctx context.Context, in *apiv1.ApplyPipelineRequest, opts ...grpc.CallOption) (*apiv1.ApplyPipelineResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ApplyPipeline", varargs...)
+	ret0, _ := ret[0].(*apiv1.ApplyPipelineResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyPipeline indicates an expected call of ApplyPipeline.
+func (mr *MockPipelineServiceMockRecorder) ApplyPipeline(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyPipeline", reflect.TypeOf((*MockPipelineService)(nil).ApplyPipeline), varargs...)
+}
+
 // GetDLQ mocks base method.
 func (m *MockPipelineService) GetDLQ(ctx context.Context, in *apiv1.GetDLQRequest, opts ...grpc.CallOption) (*apiv1.GetDLQResponse, error) {
 	m.ctrl.T.Helper()
@@ -100,4 +120,24 @@ func (mr *MockPipelineServiceMockRecorder) ListPipelines(ctx, in any, opts ...an
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelines", reflect.TypeOf((*MockPipelineService)(nil).ListPipelines), varargs...)
+}
+
+// PlanPipeline mocks base method.
+func (m *MockPipelineService) PlanPipeline(ctx context.Context, in *apiv1.PlanPipelineRequest, opts ...grpc.CallOption) (*apiv1.PlanPipelineResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PlanPipeline", varargs...)
+	ret0, _ := ret[0].(*apiv1.PlanPipelineResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PlanPipeline indicates an expected call of PlanPipeline.
+func (mr *MockPipelineServiceMockRecorder) PlanPipeline(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlanPipeline", reflect.TypeOf((*MockPipelineService)(nil).PlanPipeline), varargs...)
 }

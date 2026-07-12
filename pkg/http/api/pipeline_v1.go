@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/pipeline.go -package=mock -mock_names=PipelineOrchestrator=PipelineOrchestrator . PipelineOrchestrator
+//go:generate mockgen -typed -destination=mock/pipeline.go -package=mock -mock_names=PipelineOrchestrator=PipelineOrchestrator,Provisioner=Provisioner . PipelineOrchestrator,Provisioner
 
 package api
 
@@ -25,6 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/http/api/status"
 	"github.com/conduitio/conduit/pkg/http/api/toproto"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/provisioning"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )
@@ -49,14 +51,42 @@ type PipelineOrchestrator interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type PipelineAPIv1 struct {
-	apiv1.UnimplementedPipelineServiceServer
-	ps PipelineOrchestrator
+// Provisioner is the subset of *pkg/provisioning.Service the PlanPipeline/
+// ApplyPipeline RPCs need — *pkg/provisioning.Service satisfies it directly.
+// Declaring it here (rather than depending on *provisioning.Service
+// concretely) keeps this package's dependency narrow and lets it be
+// unit-tested against a mock (see mock/pipeline.go), the same pattern
+// cmd/conduit/internal/deploy.PlanApplier uses for the CLI standalone path.
+//
+// ApplyPlanLive is the live-server counterpart of the CLI's ApplyPlan (see
+// pkg/provisioning/plan.go): it drives the pipeline's lifecycle to
+// stop-drain-restart a running pipeline instead of refusing outright.
+type Provisioner interface {
+	Plan(ctx context.Context, desired config.Pipeline) (provisioning.Diff, error)
+	ApplyPlanLive(ctx context.Context, desired config.Pipeline, hash string, allowRestartOnRunning bool) (provisioning.Diff, error)
 }
 
-// NewPipelineAPIv1 returns a new pipeline API server.
-func NewPipelineAPIv1(ps PipelineOrchestrator) *PipelineAPIv1 {
-	return &PipelineAPIv1{ps: ps}
+type PipelineAPIv1 struct {
+	apiv1.UnimplementedPipelineServiceServer
+	ps          PipelineOrchestrator
+	provisioner Provisioner
+	// allowLiveRestartApply is the enforced data-path gate (design doc
+	// docs/design-documents/20260708-live-server-deploy-apply.md, Item 6):
+	// whether ApplyPipeline may apply a restart-class change to a running
+	// pipeline. It is set ONCE at server construction from a process-level
+	// operator flag (conduit.Config.API.AllowLiveRestartApply, see
+	// pkg/conduit/config.go and pkg/conduit/runtime.go's wiring into
+	// NewPipelineAPIv1) — the ApplyPipelineRequest proto has no field for
+	// this, so an RPC caller (agent or otherwise) cannot set or override it;
+	// only restarting the Conduit process with the flag changes this value.
+	allowLiveRestartApply bool
+}
+
+// NewPipelineAPIv1 returns a new pipeline API server. allowLiveRestartApply
+// is the operator-controlled data-path gate for ApplyPipeline — see
+// PipelineAPIv1.allowLiveRestartApply's doc.
+func NewPipelineAPIv1(ps PipelineOrchestrator, provisioner Provisioner, allowLiveRestartApply bool) *PipelineAPIv1 {
+	return &PipelineAPIv1{ps: ps, provisioner: provisioner, allowLiveRestartApply: allowLiveRestartApply}
 }
 
 // Register registers the service in the server.
@@ -229,4 +259,72 @@ func (p *PipelineAPIv1) ImportPipeline(context.Context, *apiv1.ImportPipelineReq
 
 func (p *PipelineAPIv1) ExportPipeline(context.Context, *apiv1.ExportPipelineRequest) (*apiv1.ExportPipelineResponse, error) {
 	return &apiv1.ExportPipelineResponse{}, cerrors.ErrNotImpl
+}
+
+// PlanPipeline computes the diff needed to reconcile a pipeline's currently
+// stored state with req.Config, without applying anything — the API
+// counterpart of `conduit pipelines deploy` (see
+// cmd/conduit/internal/deploy.PlanApplier), reusing the exact same
+// provisioning.Service.Plan a running server already has. Read-only: safe to
+// call against a running pipeline.
+func (p *PipelineAPIv1) PlanPipeline(
+	ctx context.Context,
+	req *apiv1.PlanPipelineRequest,
+) (*apiv1.PlanPipelineResponse, error) {
+	desired, err := enrichAndValidate(req.GetConfig())
+	if err != nil {
+		return nil, status.PipelineError(err)
+	}
+
+	diff, err := p.provisioner.Plan(ctx, desired)
+	if err != nil {
+		return nil, status.PipelineError(cerrors.Errorf("failed to plan pipeline: %w", err))
+	}
+
+	return &apiv1.PlanPipelineResponse{Diff: toproto.Diff(diff)}, nil
+}
+
+// ApplyPipeline executes the plan for req.Config, refusing unless req.Hash
+// matches the freshly recomputed plan's hash exactly (provisioning.plan_stale
+// otherwise — see pkg/provisioning/plan.go). Against a running pipeline it
+// gracefully stops-drains-restarts it (provisioning.Service.ApplyPlanLive)
+// instead of the CLI standalone path's outright refusal — see
+// docs/design-documents/20260708-live-server-deploy-apply.md.
+//
+// Tier-1 data-path gate: if the target pipeline is running and the plan
+// includes a restart-class change, this requires the server to have been
+// started with the live-restart-apply operator flag (p.allowLiveRestartApply,
+// see its doc) — the request has no field for this, so no caller can bypass
+// it. Absent the flag, ApplyPlanLive itself refuses with
+// provisioning.live_apply_unauthorized before touching the pipeline.
+func (p *PipelineAPIv1) ApplyPipeline(
+	ctx context.Context,
+	req *apiv1.ApplyPipelineRequest,
+) (*apiv1.ApplyPipelineResponse, error) {
+	desired, err := enrichAndValidate(req.GetConfig())
+	if err != nil {
+		return nil, status.PipelineError(err)
+	}
+
+	diff, err := p.provisioner.ApplyPlanLive(ctx, desired, req.GetHash(), p.allowLiveRestartApply)
+	if err != nil {
+		return nil, status.PipelineError(cerrors.Errorf("failed to apply pipeline: %w", err))
+	}
+
+	return &apiv1.ApplyPipelineResponse{Diff: toproto.Diff(diff)}, nil
+}
+
+// enrichAndValidate converts in to a config.Pipeline and runs it through the
+// exact same enrich -> validate pipeline deploy.ParseSinglePipeline uses for
+// the CLI standalone path (config.Enrich then config.Validate), so a
+// PlanPipeline/ApplyPipeline caller gets the same coded validation failures
+// (and the same DLQ-default-filling, connector/processor enrichment) a
+// `conduit pipelines deploy` file-based caller would, never a partially
+// -defaulted config reaching provisioning.Service.
+func enrichAndValidate(in *apiv1.PipelineDocument) (config.Pipeline, error) {
+	desired := config.Enrich(fromproto.PipelineDocument(in))
+	if err := config.Validate(desired); err != nil {
+		return config.Pipeline{}, err
+	}
+	return desired, nil
 }

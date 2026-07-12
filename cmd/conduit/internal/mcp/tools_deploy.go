@@ -43,7 +43,7 @@ func (s *server) deploy(ctx context.Context, _ *sdkmcp.CallToolRequest, in Deplo
 		return toolErr[deploy.Result](err)
 	}
 
-	svc, closeSvc, err := s.cfg.newLocalService(ctx, s.cfg.StoreConfig)
+	svc, closeSvc, err := s.cfg.newDeployService(ctx, s.cfg.StoreConfig)
 	if err != nil {
 		return toolErr[deploy.Result](err)
 	}
@@ -77,13 +77,21 @@ type ApplyArgs struct {
 // apply implements the apply (write) tool: recompute the Diff and execute it
 // only if hash matches the freshly recomputed plan's hash exactly — a
 // mismatch is refused with provisioning.plan_stale, nothing mutated (design
-// doc AC-5). It inherits ApplyPlan's Invariant-7 guard (refuses to mutate a
-// pipeline it believes is running) and deploy.NewLocalService's Badger-only
-// structural gate (refuses to run at all against a store a live `conduit
-// run` might have open) — so this tool cannot mutate a running pipeline,
-// with no separate honor-system flag required (design doc §3). Only
-// registered when the server was started with --allow-mutations. Same
-// engine as `conduit pipelines apply`.
+// doc AC-5). Only registered when the server was started with
+// --allow-mutations.
+//
+// Since #2588 PR2, s.cfg.newDeployService prefers a live Conduit server
+// (deploy.NewService — see its doc) over the standalone path: if one is
+// reachable at StoreConfig.API.GRPC.Address, apply calls its ApplyPipeline
+// RPC, which CAN mutate a genuinely running pipeline (a graceful
+// stop-drain-restart via provisioning.Service.ApplyPlanLive) — gated
+// server-side by its own Tier-1 operator-authorization flag
+// (conduit.Config.API.AllowLiveRestartApply), which this tool has no way to
+// set (see pkg/http/api.PipelineAPIv1's doc). Without a reachable server, it
+// falls back to deploy.NewLocalService's Badger-only standalone path, which
+// still refuses outright to touch a running pipeline (Invariant-7). Either
+// way, --allow-mutations (above) is the orthogonal gate deciding whether
+// this tool is registered at all. Same engine as `conduit pipelines apply`.
 func (s *server) apply(ctx context.Context, _ *sdkmcp.CallToolRequest, in ApplyArgs) (*sdkmcp.CallToolResult, Result[deploy.Result], error) {
 	if in.Hash == "" {
 		ce := conduiterr.New(conduiterr.CodeInvalidArgument, "hash is required (from the deploy tool's result)")
@@ -98,7 +106,7 @@ func (s *server) apply(ctx context.Context, _ *sdkmcp.CallToolRequest, in ApplyA
 		return toolErr[deploy.Result](err)
 	}
 
-	svc, closeSvc, err := s.cfg.newLocalService(ctx, s.cfg.StoreConfig)
+	svc, closeSvc, err := s.cfg.newDeployService(ctx, s.cfg.StoreConfig)
 	if err != nil {
 		return toolErr[deploy.Result](err)
 	}

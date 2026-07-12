@@ -80,6 +80,20 @@ type Config struct {
 			// for the Conduit CLI.
 			Address string `long:"api.grpc.address" usage:"address for serving the gRPC API"`
 		}
+		// AllowLiveRestartApply is the Tier-1 enforced data-path gate for the
+		// ApplyPipeline RPC (see
+		// docs/design-documents/20260708-live-server-deploy-apply.md, Item 6,
+		// and pkg/http/api.PipelineAPIv1.allowLiveRestartApply): when false
+		// (the default), ApplyPipeline refuses to apply a restart-class
+		// change to a currently-running pipeline, no matter who calls it or
+		// what they pass — see
+		// pkg/provisioning.CodeLiveApplyUnauthorized. This is a
+		// process-level operator flag, deliberately not settable via the API
+		// itself (there is no corresponding ApplyPipelineRequest field): an
+		// operator authorizes live restart-class applies by restarting
+		// Conduit with this flag set, not by anything an API caller/agent
+		// can pass in a request. See docs/operations/live-restart-apply.md.
+		AllowLiveRestartApply bool `long:"api.allow-live-restart-apply" mapstructure:"allow-live-restart-apply" usage:"allow ApplyPipeline to apply a restart-class change to a running pipeline (Tier-1 operator authorization; see docs/operations/live-restart-apply.md)"`
 	}
 
 	Log struct {

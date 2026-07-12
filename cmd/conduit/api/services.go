@@ -37,6 +37,8 @@ type PipelineService interface {
 	ListPipelines(ctx context.Context, in *apiv1.ListPipelinesRequest, opts ...grpc.CallOption) (*apiv1.ListPipelinesResponse, error)
 	GetPipeline(ctx context.Context, in *apiv1.GetPipelineRequest, opts ...grpc.CallOption) (*apiv1.GetPipelineResponse, error)
 	GetDLQ(ctx context.Context, in *apiv1.GetDLQRequest, opts ...grpc.CallOption) (*apiv1.GetDLQResponse, error)
+	PlanPipeline(ctx context.Context, in *apiv1.PlanPipelineRequest, opts ...grpc.CallOption) (*apiv1.PlanPipelineResponse, error)
+	ApplyPipeline(ctx context.Context, in *apiv1.ApplyPipelineRequest, opts ...grpc.CallOption) (*apiv1.ApplyPipelineResponse, error)
 }
 
 //go:generate mockgen -destination=mock/processor_service.go -package=mock . ProcessorService
