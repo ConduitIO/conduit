@@ -307,10 +307,14 @@ func (s *Service) transactionalImport(ctx context.Context, desired config.Pipeli
 //     reads on startup (invariant 2: at-least-once).
 //
 // allowRestartOnRunning is the enforced data-path gate (design doc's Item 6
-// rework): if the target pipeline is running AND fresh's Changes include ANY
-// EffectRestart change, ApplyPlanLive refuses with CodeLiveApplyUnauthorized
-// unless allowRestartOnRunning is true — see hasRestartEffect and
-// CodeLiveApplyUnauthorized's doc. This parameter must only ever be sourced
+// rework): if the target pipeline is running AND fresh is a non-empty change,
+// ApplyPlanLive refuses with CodeLiveApplyUnauthorized unless
+// allowRestartOnRunning is true — see CodeLiveApplyUnauthorized's doc. The gate
+// keys on "any non-empty change to a running pipeline" (not just EffectRestart
+// changes) because every such apply currently restarts the pipeline via
+// StopAndWait->import->Start (there is no true in-place live hot-swap yet —
+// §4 hot-reload), so the authorized set exactly matches the restarted set. This
+// parameter must only ever be sourced
 // from a process-level operator flag (conduit.Config.API.AllowLiveRestartApply,
 // read once at server startup) — never from the RPC request itself — so an
 // agent driving ApplyPipeline over the API can never set it; see
@@ -401,13 +405,23 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		}
 	}
 
-	if running && !allowRestartOnRunning && hasRestartEffect(fresh.Changes) {
+	// Gate every non-empty apply to a running pipeline behind operator
+	// authorization — not just EffectRestart changes. In Wave-of-#2588,
+	// applying ANY change to a running pipeline goes through the full
+	// StopAndWait -> import -> Start below (there is no true in-place live
+	// hot-swap yet — that is §4 hot-reload), so every such apply restarts the
+	// pipeline (a graceful, no-loss drain, but a real availability blip). The
+	// authorization boundary therefore keys on "a non-empty change to a
+	// running pipeline", so the set of applies that require the flag exactly
+	// matches the set that actually restart the pipeline. (fresh is non-empty
+	// here — the idempotent-empty case already returned above.)
+	if running && !allowRestartOnRunning {
 		ce := conduiterr.New(CodeLiveApplyUnauthorized, fmt.Sprintf(
-			"pipeline %q is running and this plan includes a restart-class change; applying it requires operator "+
-				"authorization", desired.ID))
+			"pipeline %q is running; applying any change to it restarts it (a graceful, no-loss drain-and-restart), "+
+				"which requires operator authorization", desired.ID))
 		ce.Suggestion = "have an operator restart the Conduit server with --api.allow-live-restart-apply (or the " +
-			"equivalent config/env setting) to authorize live restart-class applies, or stop the pipeline first and " +
-			"apply while it's stopped"
+			"equivalent config/env setting) to authorize live applies, or stop the pipeline first and apply while " +
+			"it's stopped"
 		return fresh, ce
 	}
 
@@ -452,20 +466,6 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	}
 
 	return fresh, nil
-}
-
-// hasRestartEffect reports whether changes includes at least one
-// EffectRestart change — the trigger for ApplyPlanLive's operator-
-// authorization gate. See ApplyPlanLive's doc for why this is deliberately
-// coarse (every EffectRestart change, not a finer ack/position/checkpoint
-// classification).
-func hasRestartEffect(changes []Change) bool {
-	for _, c := range changes {
-		if c.Effect == EffectRestart {
-			return true
-		}
-	}
-	return false
 }
 
 // isRunning reports whether the pipeline identified by id currently has

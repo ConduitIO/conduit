@@ -153,7 +153,7 @@ func TestApplyPlanLive_RunningPipeline_StopsAppliesRestarts(t *testing.T) {
 	is.True(!diff.Empty())
 	is.Equal(diff.Changes[0].Effect, EffectInPlace) // sanity: this is the in-place-only case
 
-	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
 	is.Equal(order, []string{"stop", "import", "start"})
@@ -275,8 +275,8 @@ func TestApplyPlanLive_ImportFails_RunningPipeline_LeftStopped(t *testing.T) {
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
 
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
-	is.True(err != nil) // the import failure must be surfaced, not swallowed
+	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
+	is.True(err != nil)                                       // the import failure must be surfaced, not swallowed
 }
 
 // TestApplyPlanLive_RestartFails_LeftStoppedWithNewConfig is the regression
@@ -305,7 +305,7 @@ func TestApplyPlanLive_RestartFails_LeftStoppedWithNewConfig(t *testing.T) {
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
 
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // the restart failure must still be reachable in the chain
 }
@@ -361,6 +361,37 @@ func TestApplyPlanLive_RestartOnRunning_DeniedWithoutFlag(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), CodeLiveApplyUnauthorized.Reason())
+}
+
+// TestApplyPlanLive_InPlaceChangeOnRunning_DeniedWithoutFlag is the regression
+// test for the tightened gate: the authorization boundary keys on "any non-empty
+// change to a running pipeline", NOT just EffectRestart changes. An
+// EffectInPlace-only diff (settingsUpdateFixture — a connector settings change,
+// no restart-class change) against a RUNNING pipeline must still be refused with
+// CodeLiveApplyUnauthorized without the operator flag, because ApplyPlanLive
+// restarts the pipeline (StopAndWait -> import -> Start) to apply ANY change
+// (there is no true in-place live hot-swap yet — §4 hot-reload). No mutation
+// expectation is set, so gomock fails if the gate lets it through.
+func TestApplyPlanLive_InPlaceChangeOnRunning_DeniedWithoutFlag(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+
+	old, desired := settingsUpdateFixture()
+	expectExportRunning(pipSrv, connSrv, procSrv, old)
+
+	diff, err := srv.Plan(ctx, desired)
+	is.NoErr(err)
+	is.True(!diff.Empty())
+	is.Equal(diff.Changes[0].Effect, EffectInPlace) // sanity: an in-place change, NOT restart-class
+
+	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeLiveApplyUnauthorized.Reason()) // still gated even though not restart-class
 }
 
 // TestApplyPlanLive_RestartOnRunning_AllowedWithFlag is
@@ -459,7 +490,7 @@ func TestApplyPlanLive_StopAndWaitFails_NoMutation(t *testing.T) {
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
 
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
 }
@@ -523,7 +554,7 @@ func TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains(t *testing.T) {
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
 
-	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
 }

@@ -45,14 +45,16 @@ Add `ProvisionService.ApplyPlanLive(ctx, desired, hash)` (or a mode on
 `ApplyPlan`) used only by the server handler, which HAS a running lifecycle:
 
 - Recompute + verify the hash (stale → `plan_stale`, as now).
-- If the target pipeline is **running** and the diff's effect is `restart`:
-  `lifecycleService.Stop(ctx, id, false)` — **graceful drain** (invariant 7: in-flight
-  records finish + checkpoint before teardown) → wait for stopped → `importPipeline`
+- If the target pipeline is **running** (any non-empty diff, regardless of
+  effect): `StopAndWait` — **graceful drain** (invariant 7: in-flight records
+  finish + checkpoint + durable position flush before teardown) → `importPipeline`
   (apply the actions, inheriting the reverse-order rollback) → `lifecycleService.Start(ctx, id)`
   (resumes from the checkpointed position — invariant 2, at-least-once).
-- If the diff is `in_place`-only (no restart-class change): apply without a
-  stop (future optimization; Wave-of-#2588 may still stop-restart for safety and
-  defer true in-place to §4 hot-reload — decide in review).
+- There is no separate `in_place`-only fast path in Wave-of-#2588: without a true
+  in-place hot-swap (deferred to §4 hot-reload), an `EffectInPlace` change against
+  a running pipeline still goes through StopAndWait for safety. Because it restarts
+  the pipeline just like a `restart`-class change, it is gated identically (see
+  "Item 6 (reworked conservative)").
 - On any failure after Stop, the pipeline is left **stopped** with the rollback
   applied and a clear error — never half-mutated-and-running. A crash between
   Stop and Start is recoverable: the pipeline is stopped + the store is
@@ -178,9 +180,16 @@ transaction, now present).
 There is no existing taxonomy mapping a `Change.ConfigPath` to
 "ack/position/checkpoint-adjacent," and `EffectRestart` is a broad bucket. Do
 **not** invent a fine-grained classifier that could misfire toward silently
-allowing a data-path change. Wave-of-#2588 gates **every `EffectRestart` apply
-against a running pipeline** behind the operator authorization flag (conservative
-default); a finer classifier is future work.
+allowing a data-path change. The gate is therefore the coarsest possible: it
+keys on **any non-empty diff against a running pipeline**, not on the `effect`
+field at all. The reasoning: there is no true in-place live hot-swap yet
+(§4 hot-reload is future work), so even an `EffectInPlace` change goes through
+the same StopAndWait drain-and-restart path today — it restarts the pipeline
+just as a `restart`-class change does, so it must be gated identically.
+Distinguishing `in_place` from `restart` at the gate would imply a safety
+difference that does not exist in the current mechanism. Only an empty (no-op)
+diff is exempt, because it restarts nothing. A finer classifier — and a genuine
+in-place path that would justify not gating `EffectInPlace` — is future work.
 
 ### Open parity item
 
@@ -220,11 +229,14 @@ PR2 delivers the API surface + CLI/MCP wiring on top of PR1's
   step (`config.Enrich` + `config.Validate`) so the two surfaces can't drift
   on what a valid desired config is. Additive only — every existing RPC is
   unchanged; `buf generate` re-run twice produces no incremental diff.
-- **Enforced data-path gate**: `ApplyPipeline` refuses any `EffectRestart`
-  change against a running pipeline unless the server was started with
+- **Enforced data-path gate**: `ApplyPipeline` refuses **any non-empty change**
+  against a running pipeline unless the server was started with
   `--api.allow-live-restart-apply` (`conduit.Config.API.AllowLiveRestartApply`,
   a process-level flag with no `ApplyPipelineRequest` field — not
-  agent-passable). Coded `provisioning.live_apply_unauthorized`. See
+  agent-passable). The gate keys on running + non-empty-diff, not on the change
+  `effect`, because every apply against a running pipeline drains-and-restarts it
+  today (see "Item 6 (reworked conservative)"). Coded
+  `provisioning.live_apply_unauthorized`. See
   `docs/operations/live-restart-apply.md`.
 - **CLI/MCP**: `deploy`/`apply` (CLI) and the MCP `deploy`/`apply` tools now
   prefer a live server (`cmd/conduit/internal/deploy.NewService`, health-

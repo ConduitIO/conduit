@@ -14,28 +14,30 @@ fails with:
 
 ```
 code: provisioning.live_apply_unauthorized
-message: pipeline "orders" is running and this plan includes a restart-class change; applying it
-         requires operator authorization
+message: pipeline "orders" is running; applying any change to it restarts it (a graceful, no-loss
+         drain-and-restart), which requires operator authorization
 suggestion: have an operator restart the Conduit server with --api.allow-live-restart-apply (or
-            the equivalent config/env setting) to authorize live restart-class applies, or stop
-            the pipeline first and apply while it's stopped
+            the equivalent config/env setting) to authorize live applies against running
+            pipelines, or stop the pipeline first and apply while it's stopped
 ```
 
 ## Diagnosis
 
-This is not a bug — it's the Tier-1 data-path gate. Applying a `restart`-class change (see the
-`effect` field in `apply`'s `Diff` output: `in_place` vs `restart`) to a running pipeline means the
-server gracefully stops it, drains and durably checkpoints it
+This is not a bug — it's the Tier-1 data-path gate. Applying **any** change to a running pipeline
+means the server gracefully stops it, drains and durably checkpoints it
 (`lifecycle.Service.StopAndWait`), applies the change, and restarts it
-(`provisioning.Service.ApplyPlanLive`). That is real, in-place mutation of live infrastructure —
+(`provisioning.Service.ApplyPlanLive`). There is no true in-place live hot-swap yet, so every
+non-empty apply against a running pipeline is a real drain-and-restart of live infrastructure —
 exactly the kind of change this project's data-integrity invariants (see `CLAUDE.md`) require a
 human decision for, not something an agent or CI job should be able to trigger unattended by
 default.
 
-The gate is deliberately coarse: it fires for **every** `EffectRestart` change against a running
-pipeline, not a finer classification of which changes actually touch ack/position/checkpoint
-state. See the design doc's "Item 6 (reworked conservative)" for why a narrower classifier was
-explicitly rejected — a misclassified "safe" restart change is a data-loss bug waiting to happen.
+The gate is deliberately coarse: it keys on "the pipeline is running and the diff is non-empty",
+**not** on the `effect` field (`in_place` vs `restart`) of individual changes. Even a change the
+diff labels `in_place` still goes through the drain-and-restart path today, so it is gated too. See
+the design doc's "Item 6 (reworked conservative)" for why a narrower, effect-based classifier was
+explicitly rejected — a misclassified "safe" change is a data-loss bug waiting to happen. The only
+diff that is *not* gated is an empty one (a no-op apply changes nothing and restarts nothing).
 
 ## Remediation
 
@@ -78,15 +80,16 @@ Pick one:
 ## Operational notes
 
 - **Default is off.** `AllowLiveRestartApply` defaults to `false` — a fresh `conduit run` refuses
-  every restart-class apply against a running pipeline until an operator explicitly opts in.
+  every apply against a running pipeline until an operator explicitly opts in.
 - **Scope: the whole server, for its whole lifetime**, not per-pipeline or per-request. If you need
   to authorize a single change, prefer remediation option 2 (stop, apply, start) — enabling the
-  flag broadly means *every* restart-class apply against *any* running pipeline on that server is
-  now unattended-authorized until the process restarts.
-- **`in_place`-only changes are never gated** — the gate only fires when the diff includes at least
-  one `restart`-class change against a pipeline the server currently considers running
-  (`Status.Running`/`Recovering`/`Degraded`; see `provisioning.isRunningStatus`). A no-op or
-  in-place-only diff applies normally regardless of this flag.
+  flag broadly means *every* apply against *any* running pipeline on that server is now
+  unattended-authorized until the process restarts.
+- **Only an empty diff is exempt.** The gate fires whenever the diff is non-empty against a pipeline
+  the server currently considers running (`Status.Running`/`Recovering`/`Degraded`; see
+  `provisioning.isRunningStatus`) — regardless of whether the changes are labeled `in_place` or
+  `restart`. A no-op (empty) diff applies normally regardless of this flag because it restarts
+  nothing.
 - **This flag does not, by itself, make an apply safe** — it only removes the "did a human decide
   this" gate. Invariant 7 (graceful shutdown), invariant 2 (crash-safe resume), and invariant 5
   (atomic state writes) are enforced unconditionally by `ApplyPlanLive`/`StopAndWait`, whether or
