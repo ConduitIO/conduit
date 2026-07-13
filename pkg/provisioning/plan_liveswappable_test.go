@@ -30,8 +30,15 @@ func TestChange_liveSwappable(t *testing.T) {
 		ch   Change
 		want bool
 	}{
-		// processors: only an update is live-swappable
-		{"processor update", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate}, true},
+		// processors: an update is live-swappable, EXCEPT a Workers change (a
+		// node-topology change a swap can't make — regression for the review's
+		// MAJOR-1)
+		{"processor update (no paths)", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate}, true},
+		{"processor update settings", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate, ConfigPaths: []string{"settings.field"}}, true},
+		{"processor update plugin", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate, ConfigPaths: []string{"plugin"}}, true},
+		{"processor update condition", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate, ConfigPaths: []string{"condition"}}, true},
+		{"processor update workers", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate, ConfigPaths: []string{"workers"}}, false},
+		{"processor update settings+workers", Change{Resource: ResourceProcessor, Action: ChangeActionUpdate, ConfigPaths: []string{"settings.field", "workers"}}, false},
 		{"processor create", Change{Resource: ResourceProcessor, Action: ChangeActionCreate}, false},
 		{"processor delete", Change{Resource: ResourceProcessor, Action: ChangeActionDelete}, false},
 

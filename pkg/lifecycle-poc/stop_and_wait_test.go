@@ -49,3 +49,23 @@ func TestServiceLifecycle_StopAndWait_Unsupported(t *testing.T) {
 	is.Equal(ce.Code.Reason(), CodeStopAndWaitUnsupported.Reason())
 	is.True(ce.Suggestion != "")
 }
+
+// TestServiceLifecycle_ReconfigureProcessor_Unsupported pins the same parity
+// refusal for the live in-place hot-reload path (PR1 of §4): this preview
+// lifecycle service must refuse ReconfigureProcessor with the same stable code
+// rather than silently no-op, so provisioning.applyInPlace never runs an
+// in-place swap against the unaudited arch.
+func TestServiceLifecycle_ReconfigureProcessor_Unsupported(t *testing.T) {
+	is := is.New(t)
+
+	logger := log.New(zerolog.Nop())
+	ls := NewService(logger, testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, testPipelineService{}, true)
+
+	err := ls.ReconfigureProcessor(context.Background(), uuid.NewString(), uuid.NewString())
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeStopAndWaitUnsupported.Reason())
+	is.True(ce.Suggestion != "")
+}

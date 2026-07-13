@@ -131,7 +131,20 @@ type Change struct {
 func (c Change) liveSwappable() bool {
 	switch c.Resource {
 	case ResourceProcessor:
-		return c.Action == ChangeActionUpdate
+		if c.Action != ChangeActionUpdate {
+			return false
+		}
+		// A Workers change alters the node topology (a single-worker
+		// ProcessorNode vs a parallel ParallelNode) — an in-place processor swap
+		// cannot make that change (ReconfigureProcessor only swaps the processor
+		// inside an existing node), so it must restart. Every other processor
+		// field (plugin, condition, settings) is a live swap.
+		for _, p := range c.ConfigPaths {
+			if p == configPathWorkers {
+				return false
+			}
+		}
+		return true
 	case ResourcePipeline:
 		if c.Action != ChangeActionUpdate {
 			return false
@@ -582,6 +595,17 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 // already-swapped processors back — so the store and the live pipeline agree on
 // the old config and the pipeline keeps running unchanged, and returns the error.
 func (s *Service) applyInPlace(ctx context.Context, desired, oldConfig config.Pipeline, diff Diff) (bool, error) {
+	// Once we commit to an in-place apply it mutates live node state that must
+	// reach a consistent end, so detach from the caller's cancellation (keeping
+	// values). Otherwise a caller context cancelled mid-swap would abandon
+	// ProcessorNode.Reconfigure's wait while the Run goroutine still completes the
+	// swap — reporting a failure the apply actually landed — and would make the
+	// rollback's transactional import fail, skipping it. The work here is bounded
+	// (a config commit plus a few processor Opens). The apply is already
+	// authorized and lock-held (see ApplyPlanLive); the caller learns the outcome
+	// from the return value, not by cancelling.
+	ctx = context.WithoutCancel(ctx)
+
 	if err := s.transactionalImport(ctx, desired); err != nil {
 		return false, err
 	}
@@ -590,7 +614,10 @@ func (s *Service) applyInPlace(ctx context.Context, desired, oldConfig config.Pi
 	for _, c := range diff.Changes {
 		if c.Resource != ResourceProcessor || c.Action != ChangeActionUpdate {
 			// The only other live-swappable change is a pipeline
-			// name/description update, already applied by the store import above.
+			// name/description update, applied by the store import above. Caveat:
+			// that updates the stored instance; a running pipeline's
+			// metric-label name (baked in at node-build time) reflects it only on
+			// the next restart. Cosmetic — not a data-path concern.
 			continue
 		}
 		err := s.lifecycleService.ReconfigureProcessor(ctx, desired.ID, c.ID)
@@ -704,6 +731,9 @@ const (
 	configPathConnectors  = "connectors"
 	configPathProcessors  = "processors"
 	configPathDLQ         = "dlq"
+	// configPathWorkers is a processor-level path (see diffProcessorFields); a
+	// change to it is a node-topology change, not a live swap.
+	configPathWorkers = "workers"
 )
 
 func diffPipelineFields(oldCfg, newCfg config.Pipeline) []string {
@@ -757,7 +787,7 @@ func diffProcessorFields(oldCfg, newCfg config.Processor) []string {
 		paths = append(paths, "plugin")
 	}
 	if oldCfg.Workers != newCfg.Workers {
-		paths = append(paths, "workers")
+		paths = append(paths, configPathWorkers)
 	}
 	if oldCfg.Condition != newCfg.Condition {
 		paths = append(paths, "condition")

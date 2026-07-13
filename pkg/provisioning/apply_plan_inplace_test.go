@@ -76,6 +76,41 @@ func TestApplyPlanLive_ProcessorUpdate_AppliesInPlace_NoRestart(t *testing.T) {
 	is.Equal(applied.Hash, diff.Hash)
 }
 
+// TestApplyPlanLive_ProcessorUpdate_InPlace_CompletesDespiteCallerCancel proves
+// the in-place apply detaches from the caller's context once it starts committing
+// live state (review MINOR-1): cancelling the caller context mid-apply must not
+// abandon the swap (which would report a failure the apply actually landed) — the
+// apply runs to a consistent end on a non-cancelled context and reports success.
+func TestApplyPlanLive_ProcessorUpdate_InPlace_CompletesDespiteCallerCancel(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	ctrl := gomock.NewController(t)
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+
+	old, desired := processorUpdateFixture()
+	expectExportRunning(pipSrv, connSrv, procSrv, old)
+
+	// The forward import runs on the detached context; cancel the caller context
+	// as a side-effect to prove the rest of the apply proceeds regardless.
+	procSrv.EXPECT().Update(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+		DoAndReturn(func(importCtx context.Context, _, _ string, _ processor.Config) (*processor.Instance, error) {
+			cancel()
+			is.NoErr(importCtx.Err()) // detached: not cancelled by the caller
+			return &processor.Instance{ID: "p1:proc:1"}, nil
+		})
+	lifecycleSrv.EXPECT().ReconfigureProcessor(gomock.Any(), "p1", "p1:proc:1").
+		DoAndReturn(func(swapCtx context.Context, _, _ string) error {
+			is.NoErr(swapCtx.Err()) // swap runs on the detached context too
+			return nil
+		})
+
+	diff, err := srv.Plan(ctx, desired)
+	is.NoErr(err)
+	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
+	is.NoErr(err)
+	is.Equal(applied.Hash, diff.Hash)
+}
+
 // TestApplyPlanLive_ProcessorUpdate_NotLiveReconfigurable_FallsBackToRestart:
 // when the live node can't be swapped (ReconfigureProcessor reports the processor
 // isn't live-reconfigurable, e.g. it's parallelized), the config is already
