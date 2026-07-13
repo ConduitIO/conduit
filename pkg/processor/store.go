@@ -133,7 +133,9 @@ func (*Store) trimKeyPrefix(key string) string {
 func (*Store) encode(i *Instance) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
-	err := enc.Encode(*i)
+	// Encode the pointer, not *i: Instance now holds a sync/atomic value that must
+	// not be copied (go vet copylocks). JSON output is identical either way.
+	err := enc.Encode(i)
 	if err != nil {
 		return nil, err
 	}

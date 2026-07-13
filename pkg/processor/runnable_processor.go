@@ -142,7 +142,7 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 
 func (p *RunnableProcessor) Teardown(ctx context.Context) error {
 	err := p.proc.Teardown(ctx)
-	p.running = false
+	p.running.Store(false)
 	return err
 }
 

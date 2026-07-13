@@ -17,6 +17,7 @@ package processor
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
@@ -427,7 +428,7 @@ func TestService_UpdateWhileRunning_BypassesRunningGuard(t *testing.T) {
 
 	inst, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
 	is.NoErr(err)
-	inst.running = true // as it is inside a running pipeline
+	inst.running.Store(true) // as it is inside a running pipeline
 
 	newConfig := Config{Settings: map[string]string{"k": "v"}}
 
@@ -471,7 +472,7 @@ func TestService_MakeRunnableProcessorForReconfigure_BypassesRunningGuard(t *tes
 
 	inst, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
 	is.NoErr(err)
-	inst.running = true // as it is inside a running pipeline being reconfigured
+	inst.running.Store(true) // as it is inside a running pipeline being reconfigured
 
 	// MakeRunnableProcessor refuses a running instance — the guard the fresh-
 	// start path relies on so two nodes never wrap the same instance.
@@ -485,7 +486,7 @@ func TestService_MakeRunnableProcessorForReconfigure_BypassesRunningGuard(t *tes
 	rp, err := service.MakeRunnableProcessorForReconfigure(ctx, inst)
 	is.NoErr(err)
 	is.True(rp != nil)
-	is.True(inst.running) // unchanged: the swap does not toggle the running flag
+	is.True(inst.running.Load()) // unchanged: the swap does not toggle the running flag
 }
 
 // TestReconfigureSwap_KeepsInstanceRunning_GuardsStayArmed is the regression test
@@ -516,7 +517,7 @@ func TestReconfigureSwap_KeepsInstanceRunning_GuardsStayArmed(t *testing.T) {
 	// Pipeline start: build the live runnable R1 (sets running=true).
 	r1, err := service.MakeRunnableProcessor(ctx, inst)
 	is.NoErr(err)
-	is.True(inst.running)
+	is.True(inst.running.Load())
 
 	// Reconfigure: build R2 for the SAME instance (does not touch running).
 	r2, err := service.MakeRunnableProcessorForReconfigure(ctx, inst)
@@ -525,7 +526,7 @@ func TestReconfigureSwap_KeepsInstanceRunning_GuardsStayArmed(t *testing.T) {
 	// Successful-swap teardown of the old runnable: the instance stays running via
 	// R2, so running must remain true.
 	is.NoErr(r1.TeardownForReconfigure(ctx))
-	is.True(inst.running) // regression: the plain Teardown would make this false
+	is.True(inst.running.Load()) // regression: the plain Teardown would make this false
 
 	// The real-world consequence: the running-guards must still be armed.
 	_, err = service.Update(ctx, inst.ID, procType, Config{Settings: map[string]string{"k": "v"}})
@@ -538,14 +539,51 @@ func TestReconfigureSwap_KeepsInstanceRunning_GuardsStayArmed(t *testing.T) {
 	r3, err := service.MakeRunnableProcessorForReconfigure(ctx, inst)
 	is.NoErr(err)
 	is.NoErr(r3.TeardownForReconfigure(ctx))
-	is.True(inst.running)
+	is.True(inst.running.Load())
 
 	// A real pipeline stop tears down the node's current processor (R2) via the
 	// plain Teardown, which clears running and re-arms ordinary Update/Delete.
 	is.NoErr(r2.Teardown(ctx))
-	is.True(!inst.running)
+	is.True(!inst.running.Load())
 	_, err = service.Update(ctx, inst.ID, procType, Config{Settings: map[string]string{"k": "v2"}})
 	is.NoErr(err) // now allowed: the instance is genuinely stopped
+}
+
+// TestService_RunningFlag_ConcurrentUpdateAndTeardown_NoRace pins the
+// synchronization of Instance.running: it is read on the API goroutine (Update's
+// guard) and written on the pipeline's Run goroutine (Teardown at stop). With a
+// plain bool this is a data race the -race detector fails on; running is an
+// atomic.Bool so this is race-free. Run with -race for it to be meaningful.
+func TestService_RunningFlag_ConcurrentUpdateAndTeardown_NoRace(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+
+	procType := "processor-type"
+	p := proc_mock.NewProcessor(gomock.NewController(t))
+	p.EXPECT().Teardown(gomock.Any()).Return(nil).AnyTimes()
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
+	service := NewService(log.Nop(), db, registry)
+
+	inst, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
+	is.NoErr(err)
+	proc, err := service.MakeRunnableProcessor(ctx, inst) // running = true
+	is.NoErr(err)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			// Reads inst.running via the guard; return value is irrelevant here.
+			_, _ = service.Update(ctx, inst.ID, procType, Config{})
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		_ = proc.Teardown(ctx) // writes inst.running
+	}()
+	wg.Wait()
 }
 
 func TestService_Update_NonExistentProcessor(t *testing.T) {

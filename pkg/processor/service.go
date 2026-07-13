@@ -102,20 +102,26 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 }
 
 func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
-	if i.running {
+	// Reserve the instance as running with a single atomic test-and-set: this both
+	// enforces the guard (refuse an already-running instance) and closes the
+	// read-then-write race two concurrent callers would otherwise have. On any
+	// subsequent build failure we release the reservation so the instance is not
+	// left wrongly marked running.
+	if !i.running.CompareAndSwap(false, true) {
 		return nil, ErrProcessorRunning
 	}
 
 	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
 	if err != nil {
+		i.running.Store(false)
 		return nil, err
 	}
 	cond, err := newProcessorCondition(i.Condition)
 	if err != nil {
+		i.running.Store(false)
 		return nil, cerrors.Errorf("invalid condition: %w", err)
 	}
 
-	i.running = true
 	return newRunnableProcessor(p, cond, i), nil
 }
 
@@ -203,7 +209,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, cfg Conf
 	// callers (the orchestrator / HTTP+gRPC API) are refused here; the sole
 	// exception is provisioning's live in-place reconfigure, which uses
 	// UpdateWhileRunning and immediately swaps the node to match.
-	if instance.running {
+	if instance.running.Load() {
 		return nil, cerrors.Errorf("could not update processor instance (ID: %s): %w", id, ErrProcessorRunning)
 	}
 
@@ -255,7 +261,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if instance.running {
+	if instance.running.Load() {
 		return cerrors.Errorf("could not delete processor instance (ID: %s): %w", id, ErrProcessorRunning)
 	}
 
