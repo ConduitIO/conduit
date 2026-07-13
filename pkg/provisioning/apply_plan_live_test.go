@@ -157,6 +157,7 @@ func TestApplyPlanLive_RunningPipeline_StopsAppliesRestarts(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
 	is.Equal(order, []string{"stop", "import", "start"})
+	is.Equal(applied.AppliedMode, ApplyModeRestart) // ground truth: non-live-eligible change restarted
 }
 
 // TestApplyPlanLive_StoppedPipeline_NoLifecycleCalls confirms ApplyPlanLive
@@ -182,6 +183,7 @@ func TestApplyPlanLive_StoppedPipeline_NoLifecycleCalls(t *testing.T) {
 	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
+	is.Equal(applied.AppliedMode, ApplyModeProvisioned) // ground truth: not running, imported without disruption
 }
 
 // TestApplyPlanLive_Idempotent_NoOp is the regression test for AC-8's
@@ -204,6 +206,7 @@ func TestApplyPlanLive_Idempotent_NoOp(t *testing.T) {
 	applied, err := srv.ApplyPlanLive(ctx, current, diff.Hash, false)
 	is.NoErr(err)
 	is.True(applied.Empty())
+	is.Equal(applied.AppliedMode, ApplyModeUnknown) // no mutating apply ran, so no mode is claimed
 }
 
 // TestApplyPlanLive_StaleHash_RefusedNoMutation_RunningPipeline is the

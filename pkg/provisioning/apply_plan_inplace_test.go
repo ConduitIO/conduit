@@ -74,6 +74,7 @@ func TestApplyPlanLive_ProcessorUpdate_AppliesInPlace_NoRestart(t *testing.T) {
 	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
+	is.Equal(applied.AppliedMode, ApplyModeInPlace) // ground truth: swapped live, no restart
 }
 
 // TestApplyPlanLive_ProcessorUpdate_InPlace_CompletesDespiteCallerCancel proves
@@ -145,9 +146,11 @@ func TestApplyPlanLive_ProcessorUpdate_NotLiveReconfigurable_FallsBackToRestart(
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
 
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
+	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
 	is.NoErr(err)
-	is.Equal(order, []string{"stop", "start"}) // fell back to a restart
+	is.Equal(order, []string{"stop", "start"})      // fell back to a restart
+	is.Equal(applied.AppliedMode, ApplyModeRestart) // ground truth: reported as restart, NOT in_place,
+	is.True(diff.LiveEligible())                    // even though the pre-apply plan was live-eligible
 }
 
 // TestApplyPlanLive_ProcessorUpdate_OpenFails_RollsBack: when the new processor

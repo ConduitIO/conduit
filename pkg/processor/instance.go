@@ -18,6 +18,7 @@ package processor
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -62,7 +63,13 @@ type Instance struct {
 	// before the processor is actually running.
 	inInsp  *inspector.Inspector
 	outInsp *inspector.Inspector
-	running bool
+	// running guards the instance against a concurrent Update/Delete while it is
+	// live in a pipeline. It is read on the API goroutine (Service.Update/Delete)
+	// and written on the pipeline's Run goroutine (RunnableProcessor.Teardown at
+	// stop), so it must be accessed atomically. MakeRunnableProcessor uses
+	// CompareAndSwap to reserve it, which also makes the "refuse if already
+	// running" guard a single atomic test-and-set rather than a racy read+write.
+	running atomic.Bool
 }
 
 func (i *Instance) init(logger log.CtxLogger) {

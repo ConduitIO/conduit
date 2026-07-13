@@ -1107,6 +1107,10 @@ func (s testProcessorService) MakeRunnableProcessor(context.Context, *processor.
 	return nil, cerrors.New("not implemented")
 }
 
+func (s testProcessorService) MakeRunnableProcessorForReconfigure(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
+	return nil, cerrors.New("not implemented")
+}
+
 func (s testProcessorService) Get(_ context.Context, id string) (*processor.Instance, error) {
 	proc, ok := s[id]
 	if !ok {

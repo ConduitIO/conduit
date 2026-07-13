@@ -133,6 +133,11 @@ type ConnectorService interface {
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
+	// MakeRunnableProcessorForReconfigure builds a runnable for an
+	// already-running instance without the running guard — for the live in-place
+	// reconfigure swap (ReconfigureProcessor). See
+	// processor.Service.MakeRunnableProcessorForReconfigure.
+	MakeRunnableProcessorForReconfigure(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
 // ConnectorPluginService can create a connector plugin dispenser.
