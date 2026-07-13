@@ -42,8 +42,8 @@ var catalog = []ToolInfo{
 	{
 		Name: ToolApply,
 		Description: "Applies the plan computed by deploy, only if hash still matches the freshly " +
-			"recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a currently " +
-			"-running pipeline. Same engine as `conduit pipelines apply`.",
+			"recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a " +
+			"currently-running pipeline. Same engine as `conduit pipelines apply`.",
 		Mutates: true,
 	},
 	{

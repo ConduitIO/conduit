@@ -72,19 +72,19 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 A file source and destination plugin for Conduit.
 
-## How it works
+**How it works**
 
 The Source connector listens for changes appended to the source file and
 sends records with the changes.
 The Destination connector receives records and writes them to a file.
 
-### Source
+**Source**
 
 The Source connector only cares to have a valid path, even if the file
 doesn't exist, it will still run and wait until a file with the configured
 name is there, then it will start listening to changes and sending records.
 
-### Destination
+**Destination**
 
 The Destination connector will create the file if it doesn't exist, and
 records with changes will be appended to the destination file when received.
@@ -129,9 +129,9 @@ connector makes it possible to configure the records' fields, the operation
 (whether the record was created, updated or deleted), the rate at which records
 are produced, and other properties of the connector.
 
-## Examples
+**Examples**
 
-### Bursts
+**Bursts**
 
 The following configuration generates 100 records in bursts of 10 records each,
 with a 1-second sleep time between bursts.
@@ -164,7 +164,7 @@ pipelines:
           operations: create
 ```
 
-### Collections
+**Collections**
 
 The following configuration generates records forever with a steady rate of 1000
 records per second. Records are generated in the `users` and `orders` collections.
@@ -233,7 +233,7 @@ Author: Meroxa, Inc.
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
-## Source
+**Source**
 
 A Kafka source connector is represented by a single consumer in a Kafka consumer
 group. By virtue of that, a source's logical position is the respective
@@ -244,11 +244,11 @@ which is needed for Kafka to find the offsets for our consumer.
 A source is getting associated with a consumer group ID the first time the
 `Read()` method is called.
 
-## Destination
+**Destination**
 
 The destination connector writes records to Kafka.
 
-### Output format
+**Output format**
 
 The output format can be adjusted using configuration options provided by the
 connector SDK:
@@ -259,7 +259,7 @@ connector SDK:
 See [this article](https://conduit.io/docs/connectors/output-formats) for more
 info on configuring the output format.
 
-### Batching
+**Batching**
 
 Batching can also be configured using connector SDK provided options:
 
@@ -332,7 +332,7 @@ Author: Meroxa, Inc.
 
 A destination connector that logs all incoming records.
 
-## Destination
+**Destination**
 
 The destination connector logs records using the built-in Conduit logger.
 
@@ -348,7 +348,7 @@ that contains raw byte data.
 Keep in mind that Conduit's log level needs to be configured lower or equal to
 the log level of the connector in order for the records to show up in the logs.
 
-### Known issues
+**Known issues**
 
 - **Only when using as a [standalone connector](https://conduit.io/docs/core-concepts#standalone-connector)**: Messages larger than 64KB will not be logged when using `log.level` as `info`.
   This is a known issue caused by the default buffer value of `go-plugin`. More information can be found in [this comment](https://github.com/ConduitIO/conduit-connector-log/issues/81#issuecomment-2904224580).
@@ -379,7 +379,7 @@ Author: Meroxa, Inc.
 
 Conduit connector for PostgreSQL
 
-## Source
+**Source**
 
 The Postgres Source Connector connects to a database with the provided `url` and
 starts creating records for each change detected in the provided tables.
@@ -387,7 +387,7 @@ starts creating records for each change detected in the provided tables.
 Upon starting, the source takes a snapshot of the provided tables in the database,
 then switches into CDC mode. In CDC mode, the plugin reads from a buffer of CDC events.
 
-### Snapshot
+**Snapshot**
 
 When the connector first starts, snapshot mode is enabled. The connector acquires
 a read-only lock on the tables, and then reads all rows of the tables into Conduit.
@@ -397,7 +397,7 @@ switches into CDC mode.
 This behavior is enabled by default, but can be turned off by adding
 `"snapshotMode": "never"` to the Source configuration.
 
-### Change Data Capture
+**Change Data Capture**
 
 This connector implements Change Data Capture (CDC) features for PostgreSQL by
 creating a logical replication slot and a publication that listens to changes in the
@@ -405,7 +405,7 @@ configured tables. Every detected change is converted into a record. If there ar
 records available, the connector blocks until a record is available or the connector
 receives a stop signal.
 
-#### Logical Replication Configuration
+**Logical Replication Configuration**
 
 When the connector switches to CDC mode, it attempts to run the initial setup commands
 to create its logical replication slot and publication. It will connect to an existing
@@ -442,19 +442,19 @@ pipelines:
 attempt to delete the replication slot and publication. This is the default behaviour
 and can be disabled by setting `logrepl.autoCleanup` to `false`.
 
-### Key Handling
+**Key Handling**
 
 The connector will automatically look up the primary key column for the specified tables
 and use them as the key value. If that can't be determined, the connector will return
 an error.
 
-## Destination
+**Destination**
 
 The Postgres Destination takes a Conduit record and stores it using a SQL statement.
 The Destination is designed to handle different payloads and keys. Because of this,
 each record is individually parsed and upserted.
 
-### Handling record operations
+**Handling record operations**
 
 Based on the `Operation` field in the record, the destination will either insert,
 update or delete the record in the target table. Snapshot records are always inserted.
@@ -516,7 +516,7 @@ An S3 source and destination plugin for Conduit, written in Go.
 The S3 connector is one of [Conduit](https://github.com/ConduitIO/conduit)
 builtin plugins. It provides both, a source and a destination S3 connectors.
 
-## Source
+**Source**
 
 The S3 Source Connector connects to a S3 bucket with the provided
 configurations, using `aws.bucket`, `aws.accessKeyId`,`aws.secretAccessKey` and
@@ -524,7 +524,7 @@ configurations, using `aws.bucket`, `aws.accessKeyId`,`aws.secretAccessKey` and
 error will occur. After that, the `Open` method is called to start the
 connection from the provided position.
 
-### Change Data Capture (CDC)
+**Change Data Capture (CDC)**
 
 This connector implements CDC features for S3 by scanning the bucket for changes
 every `pollingPeriod` and detecting any change that happened after a certain
@@ -534,7 +534,7 @@ buffer that is checked on each Read request.
 * To capture "delete" and "update", the S3 bucket versioning must be enabled.
 * To capture "create" actions, the bucket versioning doesn't matter.
 
-#### Position Handling
+**Position Handling**
 
 The connector goes through two modes.
 
@@ -554,19 +554,19 @@ The connector goes through two modes.
   than the last record returned, which will ensure that no duplications are in
   place.
 
-### Record Keys
+**Record Keys**
 
 The S3 object key uniquely identifies the objects in an Amazon S3 bucket, which
 is why a record key is the key read from the S3 bucket.
 
-## Destination
+**Destination**
 
 The S3 Destination Connector connects to an S3 bucket with the provided
 configurations, using `aws.bucket`, `aws.accessKeyId`,`aws.secretAccessKey` and
 `aws.region`. If the permissions fail, the connector will not be ready for
 writing to S3.
 
-### Writer
+**Writer**
 
 The S3 destination writer has a buffer with the size of `bufferSize`, for each
 time `Write` is called, a new record is added to the buffer. When the buffer is
@@ -663,7 +663,7 @@ Author: Meroxa, Inc.
 
 | Name | Class | Description |
 | --- | --- | --- |
-| `apply` | write (requires --allow-mutations) | Applies the plan computed by deploy, only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a currently -running pipeline. Same engine as `conduit pipelines apply`. |
+| `apply` | write (requires --allow-mutations) | Applies the plan computed by deploy, only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a currently-running pipeline. Same engine as `conduit pipelines apply`. |
 | `deploy` | read | Computes the diff (create/update/delete per pipeline/connector/processor) needed to deploy a pipeline config against its current stored state, and a plan hash to bind a later apply call to. Mutates nothing. Same engine as `conduit pipelines deploy`. |
 | `doctor` | read | Checks whether the local machine and configuration are ready for `conduit run` — offline, non-destructive. Same engine as `conduit doctor`. |
 | `dry_run` | read | Everything validate checks, plus the fully-enriched pipeline graph `conduit run` would load and a builtin-plugin existence check. Same engine as `conduit pipelines dry-run`. |

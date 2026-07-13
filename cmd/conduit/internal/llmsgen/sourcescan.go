@@ -20,6 +20,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -63,9 +64,24 @@ func scanRegisteredCodes(repoRoot string) ([]registeredCode, error) {
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "testdata":
+			name := d.Name()
+			// Skip build/test-fixture dirs, hidden dirs, and nested module
+			// checkouts so a local run scans the same set a clean CI checkout
+			// does. Hidden dirs matter because .claude/worktrees holds gitignored
+			// full-repo copies (absent in CI) that would otherwise double-count
+			// Register call-sites — a green-CI/red-local split, the inverse of the
+			// drift this generator prevents. A subdir with its own go.mod is a
+			// nested module, not part of this one.
+			if name == "node_modules" || name == "testdata" {
 				return filepath.SkipDir
+			}
+			if path != repoRoot && strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			if path != repoRoot {
+				if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}

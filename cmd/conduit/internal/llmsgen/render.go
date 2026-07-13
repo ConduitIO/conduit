@@ -189,6 +189,48 @@ func renderConfigSchemaSection(b *strings.Builder, cfg configSchema) {
 		"top-level `dead-letter-queue` before 1.1. New pipelines should use v2.\n\n")
 }
 
+// sanitizeConnectorDescription neutralizes ATX headings in a connector's
+// Description so they cannot bleed into llms-full.txt's document outline as
+// false sections — a connector README's "## How it works" must not read as a
+// sibling of the generator's own "## 2. Built-in connectors". Heading lines
+// outside fenced code blocks become bold text (the emphasis is kept, the outline
+// entry is not); fenced blocks and their contents are left untouched.
+func sanitizeConnectorDescription(desc string) string {
+	lines := strings.Split(desc, "\n")
+	inFence := false
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		if bold, ok := atxHeadingToBold(trimmed); ok {
+			lines[i] = bold
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// atxHeadingToBold converts an ATX heading line ("## Title", optional trailing
+// #) to bold ("**Title**"), returning ok=false when line is not an ATX heading.
+func atxHeadingToBold(line string) (string, bool) {
+	n := 0
+	for n < len(line) && line[n] == '#' {
+		n++
+	}
+	if n < 1 || n > 6 || n >= len(line) || line[n] != ' ' {
+		return "", false
+	}
+	text := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(line[n+1:]), "#"))
+	if text == "" {
+		return "", false
+	}
+	return "**" + text + "**", true
+}
+
 func renderConnectorsSection(b *strings.Builder, connectors []connectorInfo) {
 	fmt.Fprintf(b, "## 2. Built-in connectors (%d)\n\n", len(connectors))
 
@@ -196,7 +238,7 @@ func renderConnectorsSection(b *strings.Builder, connectors []connectorInfo) {
 		fmt.Fprintf(b, "### %s (%s)\n\n", c.Name, c.Version)
 		fmt.Fprintf(b, "%s\n\n", c.Summary)
 		if c.Description != "" {
-			fmt.Fprintf(b, "%s\n\n", c.Description)
+			fmt.Fprintf(b, "%s\n\n", sanitizeConnectorDescription(c.Description))
 		}
 		fmt.Fprintf(b, "Author: %s\n\n", c.Author)
 
