@@ -8,7 +8,7 @@ to the agent."_
 
 > **The honest headline, up front.** The structured `Fix` field this feature applies **already
 > exists** in the codebase and already round-trips over gRPC and JSON. What does **not** exist is
-> any error site that *populates* it: every `Fix` produced by Conduit today is `nil`. `repair` is
+> any error site that _populates_ it: every `Fix` produced by Conduit today is `nil`. `repair` is
 > therefore **not** "wire a command over existing data." The load-bearing work is **fix
 > synthesis** — teaching a scoped set of error sites to emit a real, machine-appliable `Fix`. This
 > doc treats that as the feature and the command as the thin shell the plan already promised it
@@ -18,7 +18,7 @@ to the agent."_
 
 ## 1. Problem & use-case
 
-Conduit already tells a user (and an agent) *what* is wrong and *where*: a `ConduitError` carries
+Conduit already tells a user (and an agent) _what_ is wrong and _where_: a `ConduitError` carries
 a stable `Code`, a `ConfigPath` (JSON-pointer), and a human `Suggestion`
 (`pkg/foundation/cerrors/conduiterr/conduiterr.go:164-172`). Roughly 40 error sites populate
 `Suggestion` today (e.g. `pkg/provisioning/config/validate.go`, `pkg/connector/service.go:132`,
@@ -26,7 +26,7 @@ a stable `Code`, a `ConfigPath` (JSON-pointer), and a human `Suggestion`
 **apply** the fix without hand-editing YAML.
 
 The execution plan's cohesion through-line (§9) is "errors teach — what/where/how-to-fix — and
-are **actionable**": CLI applies `fix`, UI one-click, MCP `repair`, *all sharing one fix engine*.
+are **actionable**": CLI applies `fix`, UI one-click, MCP `repair`, _all sharing one fix engine_.
 `repair` is the CLI+MCP half of that promise.
 
 Two concrete use-cases:
@@ -36,7 +36,7 @@ Two concrete use-cases:
   `conduit pipelines repair orders.yaml` shows the proposed edit; `--apply` writes it.
 - **Agent, MCP.** An agent that just got a structured error with a `Fix` calls the `repair` tool,
   sees the same proposed edit (classified for safety), and — if the operator allowed mutations and
-  the fix is not data-path-adjacent — applies it. If it *is* data-path-adjacent, the agent is
+  the fix is not data-path-adjacent — applies it. If it _is_ data-path-adjacent, the agent is
   refused and told to route to the human Tier-1 path (§7).
 
 **Non-goal:** `repair` is not a config generator, not a linter-autoformatter, and not a substitute
@@ -53,15 +53,15 @@ the repaired config into a running engine is still `deploy`/`apply`'s job (and i
 | `ConduitError.Fix *Fix` field | `conduiterr.go:164-172` | **Exists.** Inherited through `Wrap`/`WithCode` (`conduiterr.go:178-179, 226`). |
 | `Fix` over gRPC status (encode/decode) | `conduiterr/status.go:60-66, 120-127` | **Exists.** Carried as JSON in the `google.rpc.ErrorInfo` `fix` metadata key; round-trip test `status_test.go:TestRoundTrip_AllFields`. |
 | `Fix` in the offline validate `Finding` shape | `cmd/conduit/internal/validate/report.go:44` | **Exists.** `Finding.Fix *conduiterr.Fix`, plumbed from the error at `engine.go:263, 277`. |
-| Sites that *set* a real `Fix` value | — | **None.** Grep for `Fix:` / `.Fix =` in non-test code returns only the four *plumbing* copies (`validate/engine.go:263,277`, `mcp/result.go:106`, `cecdysis/result.go:326`) and the inheritance in `conduiterr.go`. **Every `Fix` is `nil` at runtime today.** |
+| Sites that _set_ a real `Fix` value | — | **None.** Grep for `Fix:` / `.Fix =` in non-test code returns only the four _plumbing_ copies (`validate/engine.go:263,277`, `mcp/result.go:106`, `cecdysis/result.go:326`) and the inheritance in `conduiterr.go`. **Every `Fix` is `nil` at runtime today.** |
 | `Suggestion` (human text) population | ~40 sites | Exists — but `Suggestion` is prose, not machine-appliable. |
 | Diff-first / plan-hash pattern to copy | `cmd/conduit/root/pipelines/apply.go`, `cmd/conduit/internal/deploy/`, `pkg/provisioning/plan.go` | **Exists.** `deploy` computes a `Diff`+`Hash` (read); `apply` re-computes and refuses unless the presented hash matches (`provisioning.CodePlanStale`). This is the exact UX `repair` mirrors. |
 | MCP tool pattern + `--allow-mutations` gate | `cmd/conduit/internal/mcp/tools_deploy.go`, `server.go:157-176`, `root/mcp/mcp.go:57` | **Exists.** Read tools always registered; write tools (`apply`, `scaffold_*`) registered only when the operator started `conduit mcp --allow-mutations` — never an agent-passable argument (`server.go:43-50`). |
-| Data-path classification primitive | `pkg/provisioning/plan.go:81-92` (`Effect`: `EffectInPlace`/`EffectRestart`), `Change.ConfigPaths` (`plan.go:94-106`) | **Exists** for the deploy/apply path — reusable to classify whether an *applied* fix would disturb a running pipeline. |
+| Data-path classification primitive | `pkg/provisioning/plan.go:81-92` (`Effect`: `EffectInPlace`/`EffectRestart`), `Change.ConfigPaths` (`plan.go:94-106`) | **Exists** for the deploy/apply path — reusable to classify whether an _applied_ fix would disturb a running pipeline. |
 | Closest-match / "did you mean" for plugin names | — | **Does not exist.** No Levenshtein/suggest logic anywhere. This bounds which errors can get a deterministic fix in v1 (§6). |
 
 **Conclusion:** the data model and the wire/offline plumbing for `Fix` are done and tested. The
-applier and — critically — the *producers* are not.
+applier and — critically — the _producers_ are not.
 
 ---
 
@@ -82,12 +82,12 @@ Two refinements this plan adds (both backward-compatible, additive):
 
 1. **`Op` becomes a closed enum, validated.** Today `Op` is a free `string`. The applier must
    reject any `Op` outside `{set, remove, add}` rather than silently no-op. A `rename` op is
-   *tempting* for deprecated-field migration but is expressible as `add` new-key + `remove`
+   _tempting_ for deprecated-field migration but is expressible as `add` new-key + `remove`
    old-key; keep the op set at three and represent a rename as an ordered **`Fix` bundle** (below)
    so the applier stays trivial.
 
 2. **A finding may carry an ordered list of fixes, not just one.** The wire field stays a single
-   `*Fix` (unchanged public contract). For multi-edit fixes (rename = add+remove) the *producer*
+   `_Fix` (unchanged public contract). For multi-edit fixes (rename = add+remove) the _producer*
    emits the primary `Fix` and the repair engine expands known compound codes into their edit
    sequence. Rationale: changing `ConduitError.Fix` to `[]Fix` is a public-contract change to the
    error shape (§1.1 froze it); a compound-fix registry keyed by `Code` avoids that. Documented as
@@ -171,7 +171,7 @@ type ApplyInput struct {
 A `Fix` carries only a `ConfigPath`. The engine classifies each fix's pointer against the
 data-integrity invariants **before** offering to apply it:
 
-- **`data_path`** — pointer matches a data-path-adjacent prefix: `/…/connectors/*/settings/*`
+- **`data_path`** — pointer matches a data-path-adjacent prefix: `/…/connectors/_/settings/_`
   (source table/collection/position-affecting keys live here), `/…/connectors/*/plugin`,
   `/…/connectors/*/type`, any DLQ config, and any connector/pipeline **`id`** on a pipeline that
   **already exists in the store** (connector positions are keyed by connector ID — renaming one
@@ -193,7 +193,7 @@ posture (`internal/deploy/service.go`).
 store and does **not** touch a running pipeline. This is the single most important safety property:
 the mutation is a text edit to YAML, reviewable as a diff, and the only path from there into a live
 engine is `deploy`/`apply`, which keeps its own plan-hash + Invariant-7 running-pipeline guard
-(`provisioning.CodePipelineRunning`, `plan.go:250`). `repair` therefore *cannot* skip, corrupt, or
+(`provisioning.CodePipelineRunning`, `plan.go:250`). `repair` therefore _cannot_ skip, corrupt, or
 reorder a record directly; the worst it can do is write a bad config that `deploy` then refuses or
 that `validate` catches on re-run (which the applier does automatically, §8).
 
@@ -213,7 +213,7 @@ Signature: `conduit pipelines repair <file> [--apply] [--plan-hash H] [--fix PAT
 - **Read (default, no `--apply`):** `Collect` → render the proposed fixes as a diff (before/after
   per finding, class-tagged), print the `Hash`. Mutates nothing. Exit 0 if fixes exist, exit 0 with
   an "already clean" summary if none.
-- **Apply (`--apply`):** requires `--plan-hash H` (from the read step) *or* `--yes` to bind to a
+- **Apply (`--apply`):** requires `--plan-hash H` (from the read step) _or_ `--yes` to bind to a
   freshly recomputed plan — identical ergonomics to `apply.go:112-119, 138-152`. Applies **only the
   `safe` fixes** by default; `--fix <configPath>` selects specific ones; a `data_path` fix requires
   `--escalate` **and** prints the Tier-1 warning. Re-validates the result and writes the file
@@ -247,7 +247,7 @@ Mirror the `deploy`/`apply` two-tool split (`tools_deploy.go`, `server.go:117-17
 ## 6. Which error classes get a `Fix` in v1 (scoped — do not boil the ocean)
 
 This is the real feature. **Selection rule: a fix ships in v1 only if its `Value` is
-*deterministic* (no human judgement, no closest-match guess) AND its `ConfigPath` is not
+_deterministic_ (no human judgement, no closest-match guess) AND its `ConfigPath` is not
 data-path-adjacent.** That rule is strict on purpose — it is why the v1 set is small.
 
 **In scope for v1 (fix producers to add):**
@@ -256,8 +256,8 @@ data-path-adjacent.** That rule is strict on purpose — it is why the v1 set is
 | --- | --- | --- | --- | --- |
 | 1 | Deprecated/renamed field | parser lint warnings (`config/yaml` linter, surfaced as `validate` warnings, `engine.go:warningFinding`) | rename old key → canonical new key (compound add+remove, §3.1). Semantics-preserving by definition. | `safe` |
 | 2 | `config.field_invalid` on `/status` (`validate.go:55`) | invalid pipeline status enum | `set` to the canonical enum value (`running`/`stopped`) when the invalid value unambiguously maps (e.g. case/whitespace normalization); otherwise **no fix** (ambiguous). | `safe` (lifecycle metadata, not record path) |
-| 3 | `config.field_invalid` on processor `/workers` negative (`validate.go:126`) | `set` to `1` — the ordering-preserving default (workers>1 can reorder within a key, inv. 4; 1 is the safe direction). | `restart` (flag it) |
-| 4 | `config.field_too_long` on `/description` (`validate.go:51`) | `set` to the value truncated to the limit. Lossy but non-data-path; offered, never auto-applied silently (shown in diff). | `safe` |
+| 3 | `config.field_invalid` on processor `/workers` negative | `validate.go:126` | `set` to `1` — the ordering-preserving default (workers>1 can reorder within a key, inv. 4; 1 is the safe direction). | `restart` (flag it) |
+| 4 | `config.field_too_long` on `/description` | `validate.go:51` | `set` to the value truncated to the limit. Lossy but non-data-path; offered, never auto-applied silently (shown in diff). | `safe` |
 
 **Explicitly OUT of scope for v1 (and why — the honest part):**
 
@@ -270,7 +270,7 @@ data-path-adjacent.** That rule is strict on purpose — it is why the v1 set is
   derivable from the file. No fix.
 - **Missing required `/plugin`, `/id`, `/type`** (`validate.go:73,85,89`): no deterministic value
   to supply. No fix.
-- **ID duplicate** (`validate.go:101,130`): a suffix-rename *looks* mechanical but changing a
+- **ID duplicate** (`validate.go:101,130`): a suffix-rename _looks_ mechanical but changing a
   connector ID rekeys its stored position (data-path, inv. 2/3). Classified `data_path`; **no
   auto-fix in v1** even for a new pipeline, because the applier cannot cheaply prove the pipeline is
   new at collect time. Revisit once the store-state check is available to the engine.
@@ -304,7 +304,7 @@ consistent with `apply`.
 
 ## 8. Acceptance criteria (detailed, testable checklist)
 
-**Data model & producers**
+### Data model & producers
 
 - [ ] **AC-1** For each v1 error class (§6 rows 1–4), the producing site emits a non-nil
       `ConduitError.Fix` with a correct `ConfigPath`, a valid `Op ∈ {set, remove, add}`, and a
@@ -317,7 +317,7 @@ consistent with `apply`.
       type, is rejected by the applier with an internal error and **never written**. (Test:
       malformed-`Fix` fixture.)
 
-**Shared engine (one path CLI+MCP)**
+### Shared engine (one path CLI+MCP)
 
 - [ ] **AC-4** `repair.Collect` and `repair.CollectContent` return byte-identical `Plan.Fixes` /
       `Plan.Hash` for the same config supplied as a file vs as content. (Test asserts CLI and MCP
@@ -328,7 +328,7 @@ consistent with `apply`.
       byte-identical output; it performs **no** store access and **no** running-pipeline mutation.
       (Test: apply against a fixture with no engine/store wired at all.)
 
-**Diff-first UX**
+### Diff-first UX
 
 - [ ] **AC-7** Read mode (`repair <file>` / MCP `repair`) writes nothing to disk and returns a
       hash. (Test: file mtime/bytes unchanged; hash non-empty.)
@@ -338,7 +338,7 @@ consistent with `apply`.
       `repair.plan_stale` (exit 2), file unchanged. (Test: mutate file between collect and apply.)
 - [ ] **AC-10** Applied output **passes `validate`** for every finding it claimed to fix, and does
       not introduce a new finding. (Test: re-run `validate.Run` on the result; assert clean for the
-      targeted codes.) *This is the safety net that makes a bad producer visible.*
+      targeted codes.) _This is the safety net that makes a bad producer visible._
 - [ ] **AC-11** The write is atomic (temp + rename); a simulated crash mid-write leaves the original
       file intact. (Test: inject a write failure; assert original bytes.)
 - [ ] **AC-12** Comments and unrelated formatting in the config are preserved across a repair.
@@ -346,7 +346,7 @@ consistent with `apply`.
 - [ ] **AC-13** `--json` on read and apply emits one JSON object and nothing else on stdout
       (logs to stderr, per `deploy/service.go:stderrLogger`). (Test: stdout parses as one object.)
 
-**Tier-1 / safety (the load-bearing ACs)**
+### Tier-1 / safety (the load-bearing ACs)
 
 - [ ] **AC-14** A `data_path`-class fix is **refused** by `repair --apply` unless `--escalate` is
       passed, with `repair.data_path_fix_refused` and a message naming the human Tier-1 path.
@@ -363,7 +363,7 @@ consistent with `apply`.
 - [ ] **AC-18** Applying a fix does not, by itself, start/stop/mutate any pipeline in the store.
       (Test: store snapshot unchanged after apply.)
 
-**Failure modes**
+### Failure modes
 
 - [ ] **AC-19** A fix whose target field was already hand-changed is skipped with
       `repair.fix_no_longer_applies`; other selected fixes still apply (partial success is reported
@@ -374,7 +374,7 @@ consistent with `apply`.
 - [ ] **AC-21** `--apply` with zero appliable fixes → `repair.no_fixes_available` (exit 2); read
       mode with zero fixes → exit 0 "clean". (Test both.)
 
-**Docs / conventions**
+### Docs / conventions
 
 - [ ] **AC-22** New error codes appear in the error registry and pass the §1.1 CI code-presence
       guard. `llms.txt`/MCP tool catalog regenerated to include `repair`/`repair_apply`.
@@ -386,7 +386,7 @@ consistent with `apply`.
 ## 9. Failure modes (think-first, per CLAUDE.md)
 
 1. **The file changed since the fix was computed.** Handled by the plan-hash (`repair.plan_stale`,
-   AC-9) *and* a per-fix pre-application check (`repair.fix_no_longer_applies`, AC-19) — the hash
+   AC-9) _and_ a per-fix pre-application check (`repair.fix_no_longer_applies`, AC-19) — the hash
    catches whole-file drift, the per-fix check catches a targeted edit that happens to leave the
    hash's other inputs alone. Belt and suspenders because the cost of applying a stale fix (writing
    to the wrong line) is silent config corruption.
@@ -419,9 +419,9 @@ consistent with `apply`.
 | --- | --- | --- |
 | CLI command + MCP two-tool shells over the engine | **S** | Copy-shape of `apply.go` + `tools_deploy.go`. The genuinely thin part the plan promised. |
 | Shared `internal/repair` engine (Collect/Apply, hash, per-fix pre-check) | **M** | Reuses `validate.Run` and the deploy hash idiom; new classifier. |
-| **Fix producers for the v1 starter set (§6)** | **M, and it is the dependency** | Touching ~4–8 error sites, each needing a golden test and a `validate`-passes-after assertion. Small in LoC, but it is *new error-contract surface* and the thing that must land first — the engine has nothing to apply until it exists. |
+| **Fix producers for the v1 starter set (§6)** | **M, and it is the dependency** | Touching ~4–8 error sites, each needing a golden test and a `validate`-passes-after assertion. Small in LoC, but it is _new error-contract surface_ and the thing that must land first — the engine has nothing to apply until it exists. |
 | **Comment-preserving YAML node editor** | **M–L, the sleeper cost** | A marshal-from-struct round-trip strips comments (violates §1.2's "generated configs are commented"). Needs node-level editing over the parser AST. This, not the command, is where the schedule risk actually lives. |
-| Data-path classifier + default-deny table | **S–M** | Reuses `Effect` semantics; the risk is *completeness* of the deny-list — an omission is an invariant risk, so it is default-deny. |
+| Data-path classifier + default-deny table | **S–M** | Reuses `Effect` semantics; the risk is _completeness_ of the deny-list — an omission is an invariant risk, so it is default-deny. |
 
 **Top risk:** the YAML editor. If comment preservation proves expensive, the fallback is to ship
 v1 applying fixes only to files it can edit losslessly and refusing (with a clear message) files
