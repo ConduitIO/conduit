@@ -157,6 +157,20 @@ type Config struct {
 		CPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
 		MemProfile   string `long:"dev.memprofile" usage:"write memory profile to file"`
 		BlockProfile string `long:"dev.blockprofile" usage:"write block profile to file"`
+
+		// Enabled turns on the hot-reload dev watcher (see pkg/conduit/dev
+		// and docs/design-documents/20260712-pipeline-dev-hot-reload.md §4).
+		// `conduit run --dev` and `conduit pipelines dev` both set this
+		// (via the --dev alias, see cmd/conduit/root/run.RunCommand) rather
+		// than exposing "--dev.enabled" as the primary spelling — it is here,
+		// under the existing Dev config group, for the same reason the flags
+		// above are: it is a run-time, --pipelines.path-scoped mode, not a
+		// distinct subsystem toggle.
+		Enabled bool `long:"dev.enabled" mapstructure:"enabled" usage:"watch pipelines.path and hot-reload changes into the running engine (see 'conduit run --dev')"`
+		// JSON selects --json structured dev-watcher event lines (one apply
+		// = one JSON object) over the default human-readable status line.
+		// Only meaningful when Enabled.
+		JSON bool `long:"dev.json" mapstructure:"json" usage:"emit dev-watcher apply events as JSON lines instead of human-readable text"`
 	}
 }
 

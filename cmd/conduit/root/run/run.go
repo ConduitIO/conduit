@@ -37,6 +37,14 @@ var (
 // applied in Execute.
 const pipelinesFlagName = "pipelines"
 
+// devFlagName is the short --dev alias for --dev.enabled (see
+// docs/design-documents/20260712-pipeline-dev-hot-reload.md §4: "conduit run
+// --dev [--pipelines.path <dir>]"). Like --pipelines/--pipelines.path, it
+// can't be bound directly onto conduit.Config (the name "dev" is already a
+// struct — conduit.Config.Dev — not a bool), so it is excluded from the
+// viper config binding and applied in Execute.
+const devFlagName = "dev"
+
 type RunFlags struct {
 	conduit.Config
 }
@@ -49,12 +57,21 @@ type RunCommand struct {
 	// collides with the Pipelines struct key), so it's excluded from the config
 	// binding (see Config) and applied in Execute.
 	pipelinesAlias string
+	// devAlias backs the --dev flag — see devFlagName's doc.
+	devAlias bool
 }
 
 func (c *RunCommand) Execute(ctx context.Context) error {
+	cmd := ecdysis.CobraCmdFromContext(ctx)
+
 	// --pipelines is an alias for --pipelines.path; apply it when explicitly set.
-	if cmd := ecdysis.CobraCmdFromContext(ctx); cmd != nil && cmd.Flags().Changed(pipelinesFlagName) {
+	if cmd != nil && cmd.Flags().Changed(pipelinesFlagName) {
 		c.Cfg.Pipelines.Path = c.pipelinesAlias
+	}
+	// --dev is an alias for --dev.enabled; apply it when explicitly set (never
+	// clobber an explicit --dev.enabled=false with a stray --dev.enabled default).
+	if cmd != nil && cmd.Flags().Changed(devFlagName) {
+		c.Cfg.Dev.Enabled = c.devAlias
 	}
 
 	e := &conduit.Entrypoint{}
@@ -75,9 +92,10 @@ func (c *RunCommand) Config() ecdysis.Config {
 		EnvPrefix: "CONDUIT",
 		Parsed:    &c.Cfg,
 		Path:      c.flags.ConduitCfg.Path,
-		// --pipelines collides with the Pipelines config struct key; exclude it from
-		// the viper binding and apply it in Execute (see pipelinesAlias).
-		ExcludedFlags: []string{pipelinesFlagName},
+		// --pipelines and --dev collide with existing conduit.Config struct
+		// keys (Pipelines, Dev); exclude them from the viper binding and
+		// apply them in Execute (see pipelinesAlias/devAlias).
+		ExcludedFlags: []string{pipelinesFlagName, devFlagName},
 		DefaultValues: conduit.DefaultConfigWithBasePath(path),
 	}
 }
@@ -131,12 +149,34 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 		Ptr:     &c.pipelinesAlias,
 		Default: c.Cfg.Pipelines.Path,
 	})
+	// --dev is the short alias for --dev.enabled: watch --pipelines.path and
+	// hot-reload changes into the running engine (see
+	// docs/design-documents/20260712-pipeline-dev-hot-reload.md §4). Excluded
+	// from the viper config binding (see Config) because its name collides
+	// with the Dev struct; Execute copies it into Cfg.Dev.Enabled when set.
+	flags = append(flags, ecdysis.Flag{
+		Long:    devFlagName,
+		Usage:   "alias for --dev.enabled: watch pipelines.path and hot-reload changes into the running engine",
+		Ptr:     &c.devAlias,
+		Default: c.Cfg.Dev.Enabled,
+	})
 	return flags
 }
 
 func (c *RunCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Run Conduit",
-		Long:  `Starts the Conduit server and runs the configured pipelines.`,
+		Long: `Starts the Conduit server and runs the configured pipelines.
+
+With --dev, additionally watches pipelines.path and hot-reloads changes into the running engine as
+you save: a processor-only edit applies in place (no restart); a source/destination/topology edit
+applies via a labeled graceful restart; a bad edit (parse/validation failure) is reported and never
+touches the running pipeline. Every apply --dev drives is authorized by the fact that you ran
+--dev and are watching it — it does not set --api.allow-live-restart-apply, which stays
+independently gated for the gRPC/HTTP/MCP surface. See
+docs/design-documents/20260712-pipeline-dev-hot-reload.md and docs/operations/dev-hot-reload.md.`,
+		Example: "conduit run\n" +
+			"conduit run --dev\n" +
+			"conduit run --dev --pipelines.path ./pipelines --dev.json",
 	}
 }

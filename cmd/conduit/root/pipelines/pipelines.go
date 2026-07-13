@@ -18,6 +18,11 @@ import (
 	"github.com/conduitio/ecdysis"
 )
 
+// envPrefix is the environment variable prefix every subcommand's
+// ecdysis.Config uses (CONDUIT_DB_TYPE, CONDUIT_PIPELINES_PATH, ...) — a
+// shared constant so deploy/apply/dev can't drift on it independently.
+const envPrefix = "CONDUIT"
+
 var (
 	_ ecdysis.CommandWithDocs        = (*PipelinesCommand)(nil)
 	_ ecdysis.CommandWithSubCommands = (*PipelinesCommand)(nil)
@@ -42,6 +47,7 @@ func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 		&RepairCommand{},
 		&StartCommand{},
 		&StopCommand{},
+		&DevCommand{},
 	}
 }
 
