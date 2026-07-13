@@ -82,6 +82,15 @@ func (n *pubSubNodeBase) Sub(in <-chan *Message) {
 	n.subNodeBase.Sub(in)
 }
 
+// In returns the inbound message channel this node reads from. It is exposed so
+// a PubSubNode (e.g. ProcessorNode) can select over the inbound channel together
+// with its own control signals (such as a live-reconfigure wake) instead of
+// blocking solely in Trigger's Receive. The channel is set by Sub during wiring;
+// In returns nil until then.
+func (n *pubSubNodeBase) In() <-chan *Message {
+	return n.subNodeBase.in
+}
+
 func (n *pubSubNodeBase) Pub() <-chan *Message {
 	return n.pubNodeBase.Pub()
 }
