@@ -128,67 +128,37 @@ func NewServer(cfg Config) *sdkmcp.Server {
 			"the operator started conduit mcp with --allow-mutations.",
 	})
 
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolValidate,
-		Description: "Offline, static validation of a pipeline configuration (errors only, no side effects). " +
-			"Same engine as `conduit pipelines validate`.",
-	}, s.validate)
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolLint,
-		Description: "Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/" +
-			"unknown fields, version fallback). Same engine as `conduit pipelines lint`.",
-	}, s.lint)
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolDryRun,
-		Description: "Everything validate checks, plus the fully-enriched pipeline graph `conduit run` would " +
-			"load and a builtin-plugin existence check. Same engine as `conduit pipelines dry-run`.",
-	}, s.dryRun)
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolDoctor,
-		Description: "Checks whether the local machine and configuration are ready for `conduit run` — offline, " +
-			"non-destructive. Same engine as `conduit doctor`.",
-	}, s.doctor)
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolDeploy,
-		Description: "Computes the diff (create/update/delete per pipeline/connector/processor) needed to " +
-			"deploy a pipeline config against its current stored state, and a plan hash to bind a later apply " +
-			"call to. Mutates nothing. Same engine as `conduit pipelines deploy`.",
-	}, s.deploy)
-	sdkmcp.AddTool(srv, &sdkmcp.Tool{
-		Name: ToolInspect,
-		Description: "Reports a running pipeline's live status, per-stage connector summary, and DLQ. Requires " +
-			"a running Conduit (conduit mcp --api-address). Same engine as `conduit pipelines inspect`.",
-	}, s.inspect)
+	sdkmcp.AddTool(srv, tool(ToolValidate), s.validate)
+	sdkmcp.AddTool(srv, tool(ToolLint), s.lint)
+	sdkmcp.AddTool(srv, tool(ToolDryRun), s.dryRun)
+	sdkmcp.AddTool(srv, tool(ToolDoctor), s.doctor)
+	sdkmcp.AddTool(srv, tool(ToolDeploy), s.deploy)
+	sdkmcp.AddTool(srv, tool(ToolInspect), s.inspect)
 
 	if cfg.AllowMutations {
-		sdkmcp.AddTool(srv, &sdkmcp.Tool{
-			Name: ToolApply,
-			Description: "Applies the plan computed by deploy, only if hash still matches the freshly " +
-				"recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a currently " +
-				"-running pipeline. Same engine as `conduit pipelines apply`.",
-		}, s.apply)
-		sdkmcp.AddTool(srv, &sdkmcp.Tool{
-			Name: ToolStart,
-			Description: "Starts a pipeline registered in a running Conduit (transitions to Running). " +
-				"Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is " +
-				"already running (pipeline.running). Same engine as `conduit pipelines start`.",
-		}, s.start)
-		sdkmcp.AddTool(srv, &sdkmcp.Tool{
-			Name: ToolStop,
-			Description: "Stops a running pipeline registered in a running Conduit — graceful drain by " +
-				"default, or immediate with force:true. Requires --api-address, like inspect; no offline " +
-				"fallback. Refused if the pipeline isn't running (pipeline.not_running). Same engine as " +
-				"`conduit pipelines stop`.",
-		}, s.stop)
-		sdkmcp.AddTool(srv, &sdkmcp.Tool{
-			Name:        ToolScaffoldConnector,
-			Description: "Scaffolds a new Go connector plugin repository (source and/or destination). Same engine as `conduit connector new`.",
-		}, s.scaffoldConnector)
-		sdkmcp.AddTool(srv, &sdkmcp.Tool{
-			Name:        ToolScaffoldProcessor,
-			Description: "Scaffolds a new Go (WASM) processor plugin repository. Same engine as `conduit processor new`.",
-		}, s.scaffoldProcessor)
+		sdkmcp.AddTool(srv, tool(ToolApply), s.apply)
+		sdkmcp.AddTool(srv, tool(ToolStart), s.start)
+		sdkmcp.AddTool(srv, tool(ToolStop), s.stop)
+		sdkmcp.AddTool(srv, tool(ToolScaffoldConnector), s.scaffoldConnector)
+		sdkmcp.AddTool(srv, tool(ToolScaffoldProcessor), s.scaffoldProcessor)
 	}
 
 	return srv
+}
+
+// tool looks up name in Catalog() and returns the sdkmcp.Tool literal
+// AddTool registers it under. Catalog is the single source of truth for
+// name + description (D4 of the llms.txt generation design doc): a tool's
+// description is written once, here indirectly via catalog.go, and both
+// NewServer and the llms.txt generator read it from the same place. tool
+// panics if name isn't in the catalog — a programming error (a Tool* const
+// used here without a matching catalog.go entry), not a runtime condition,
+// so failing loudly at server construction is correct.
+func tool(name string) *sdkmcp.Tool {
+	for _, info := range catalog {
+		if info.Name == name {
+			return &sdkmcp.Tool{Name: info.Name, Description: info.Description}
+		}
+	}
+	panic("mcp: tool " + name + " has no Catalog() entry — add one in catalog.go")
 }

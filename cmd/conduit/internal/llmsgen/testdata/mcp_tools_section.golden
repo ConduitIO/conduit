@@ -1,0 +1,7 @@
+## 4. MCP tool catalog (2)
+
+| Name | Class | Description |
+| --- | --- | --- |
+| `read_tool` | read | Reads something. |
+| `write_tool` | write (requires --allow-mutations) | Mutates something. |
+

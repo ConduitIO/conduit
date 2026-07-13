@@ -1,0 +1,22 @@
+## 2. Built-in connectors (1)
+
+### widget (v1.2.3)
+
+A synthetic connector used only by this test.
+
+Longer description.
+Second line.
+
+Author: Test Author
+
+#### Source parameters
+
+| Key | Type | Default | Required | Description | Validations |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string |  | yes | File path. | required |
+| `batch.size` | int | 100 | no | Batch size. | greater-than(0), less-than(10000) |
+
+#### Destination parameters
+
+(none)
+

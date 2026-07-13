@@ -85,6 +85,14 @@ install-tools: download
 generate:
 	go generate -x ./...
 
+# generate-llms is a convenience alias for local iteration on
+# cmd/conduit/internal/llmsgen; `make generate`'s go:generate directive
+# already produces llms.txt/llms-full.txt, and CI's validate-generated-files
+# job calls `make generate`, not this target.
+.PHONY: generate-llms
+generate-llms:
+	go run ./cmd/conduit/internal/llmsgen
+
 .PHONY: check-go-version
 check-go-version:
 	@if [ "${GO_VERSION_CHECK}" != "" ]; then\

@@ -381,6 +381,15 @@ documentation:
 - [Conduit Package structure](docs/package_structure.md)
   provides more information about the different packages in Conduit.
 
+### llms.txt
+
+[`llms.txt`](llms.txt) and [`llms-full.txt`](llms-full.txt) at the repo root are a
+machine-readable index for agents and LLM tools, generated straight from the pipeline config
+schema, the built-in connector registry, the stable error-code registry, and the `conduit mcp`
+tool catalog — see [`cmd/conduit/internal/llmsgen`](cmd/conduit/internal/llmsgen). They are
+never hand-edited: `make generate` regenerates both, and CI fails the build if the committed
+files drift from source.
+
 ## Contributing
 
 For a complete guide to contributing to Conduit, see
