@@ -60,6 +60,9 @@ func TestRunCommandFlags(t *testing.T) {
 		{longName: "dev.cpuprofile", usage: "write CPU profile to file"},
 		{longName: "dev.memprofile", usage: "write memory profile to file"},
 		{longName: "dev.blockprofile", usage: "write block profile to file"},
+		{longName: "dev.enabled", usage: "watch pipelines.path and hot-reload changes into the running engine (see 'conduit run --dev')"},
+		{longName: "dev.json", usage: "emit dev-watcher apply events as JSON lines instead of human-readable text"},
+		{longName: "dev", usage: "alias for --dev.enabled: watch pipelines.path and hot-reload changes into the running engine"},
 	}
 
 	e := ecdysis.New()

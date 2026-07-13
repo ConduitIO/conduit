@@ -111,7 +111,7 @@ func (c *ApplyCommand) Args(args []string) error {
 func (c *ApplyCommand) Config() ecdysis.Config {
 	path := filepath.Dir(c.flags.ConduitCfg.Path)
 	return ecdysis.Config{
-		EnvPrefix:     "CONDUIT",
+		EnvPrefix:     envPrefix,
 		Parsed:        &c.flags.Config,
 		Path:          c.flags.ConduitCfg.Path,
 		DefaultValues: conduit.DefaultConfigWithBasePath(path),

@@ -37,6 +37,7 @@ import (
 	pconnutils "github.com/conduitio/conduit-connector-protocol/pconnutils/v1/server"
 	connutilsv1 "github.com/conduitio/conduit-connector-protocol/proto/connutils/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
+	"github.com/conduitio/conduit/pkg/conduit/dev"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -1027,5 +1028,70 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		})
 	}
 
+	if r.Config.Dev.Enabled {
+		if err := r.startDevWatcher(ctx, t); err != nil {
+			return cerrors.Errorf("failed to start dev watcher: %w", err)
+		}
+	}
+
 	return nil
+}
+
+// startDevWatcher starts the `conduit run --dev` hot-reload file watcher
+// (pkg/conduit/dev) as a tomb-managed goroutine, once startup provisioning
+// (ProvisionService.Init above) and pipeline auto-resume
+// (lifecycleService.Init above) have both already run — the watcher only
+// ever reacts to *subsequent* edits, per
+// docs/design-documents/20260712-pipeline-dev-hot-reload.md §4.
+//
+// Invariant 7: ctx here is the tomb-derived context Run constructed at its
+// top (`t, ctx := tomb.WithContext(ctx)`), so Ctrl-C/SIGTERM cancelling it
+// cancels the watcher the same way it cancels every other service — t.Go
+// makes dev.Watcher.Run's return value part of the tomb's shutdown
+// accounting, and a normal cancellation (context.Canceled) is translated to
+// nil so it is never mistaken for a watcher failure.
+func (r *Runtime) startDevWatcher(ctx context.Context, t *tomb.Tomb) error {
+	w, err := dev.New(r.ProvisionService, r.lifecycleService, r.devPipelineStatus, dev.Options{
+		Path:   r.Config.Pipelines.Path,
+		Logger: r.logger,
+		Out:    os.Stdout,
+		JSON:   r.Config.Dev.JSON,
+	})
+	if err != nil {
+		return err
+	}
+
+	t.Go(func() error {
+		err := w.Run(ctx)
+		if err != nil && cerrors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	})
+	return nil
+}
+
+// devPipelineStatus is the dev.StatusFunc the watcher uses purely to label
+// an apply accurately (see dev.StatusFunc's doc) — it reports whether
+// pipelineID currently has live, in-process work, mirroring
+// provisioning.isRunningStatus's classification (pkg/provisioning/plan.go),
+// which is unexported and cannot be called from here. This duplicates a
+// three-case predicate, not engine behavior: keep it in sync with
+// provisioning's own definition if that classification ever changes.
+func (r *Runtime) devPipelineStatus(ctx context.Context, pipelineID string) (bool, error) {
+	inst, err := r.Orchestrator.Pipelines.Get(ctx, pipelineID)
+	if err != nil {
+		if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	switch inst.GetStatus() {
+	case pipeline.StatusRunning, pipeline.StatusRecovering, pipeline.StatusDegraded:
+		return true, nil
+	case pipeline.StatusSystemStopped, pipeline.StatusUserStopped:
+		return false, nil
+	default:
+		return false, nil
+	}
 }
