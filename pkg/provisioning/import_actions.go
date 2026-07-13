@@ -499,7 +499,14 @@ func (a updateProcessorAction) Rollback(ctx context.Context) error {
 }
 
 func (a updateProcessorAction) update(ctx context.Context, cfg config.Processor) error {
-	_, err := a.processorService.Update(
+	// UpdateWhileRunning, not Update: provisioning applies this action either on a
+	// stopped pipeline (the restart path, where the processor isn't running so the
+	// two are equivalent) or as part of a live in-place reconfigure, where the
+	// processor IS running and applyInPlace immediately swaps the node to match
+	// via lifecycle.ReconfigureProcessor. Update's running-instance guard exists
+	// for direct API callers who do NOT swap the node; it must not block the
+	// provisioning path, which always does. See processor.Service.UpdateWhileRunning.
+	_, err := a.processorService.UpdateWhileRunning(
 		ctx,
 		cfg.ID,
 		cfg.Plugin,

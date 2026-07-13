@@ -407,6 +407,45 @@ func TestService_Update_Success(t *testing.T) {
 	is.Equal(newProcType, got.Plugin)
 }
 
+// TestService_UpdateWhileRunning_BypassesRunningGuard is the regression test for
+// the live in-place hot-reload bug: Update refuses a RUNNING processor
+// (ErrProcessorRunning), which is exactly the guard that made
+// provisioning.applyInPlace fail before it committed the new config through
+// UpdateWhileRunning instead — so ReconfigureProcessor was never reached and
+// in-place hot-reload never worked. UpdateWhileRunning must bypass that guard (it
+// is paired with an immediate node swap) and commit the config.
+func TestService_UpdateWhileRunning_BypassesRunningGuard(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+
+	procType := "processor-type"
+	p := proc_mock.NewProcessor(gomock.NewController(t))
+	p.EXPECT().Teardown(gomock.Any()).Return(nil).AnyTimes()
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
+	service := NewService(log.Nop(), db, registry)
+
+	inst, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
+	is.NoErr(err)
+	inst.running = true // as it is inside a running pipeline
+
+	newConfig := Config{Settings: map[string]string{"k": "v"}}
+
+	// Update refuses a running instance — the guard direct API callers rely on.
+	_, err = service.Update(ctx, inst.ID, procType, newConfig)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrProcessorRunning))
+
+	// UpdateWhileRunning bypasses it and commits the new config.
+	got, err := service.UpdateWhileRunning(ctx, inst.ID, procType, newConfig)
+	is.NoErr(err)
+	is.Equal(newConfig, got.Config)
+
+	reread, err := service.Get(ctx, inst.ID)
+	is.NoErr(err)
+	is.Equal(newConfig, reread.Config)
+}
+
 func TestService_Update_NonExistentProcessor(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
