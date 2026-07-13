@@ -353,6 +353,18 @@ func (s *Service) StopAndWait(context.Context, string) error {
 	return ce
 }
 
+// ReconfigureProcessor refuses under the experimental Preview.PipelineArchV2
+// lifecycle service, mirroring StopAndWait: live in-place apply is not supported
+// under this arch. Returning the same coded error means a live apply is cleanly
+// refused rather than silently downgraded.
+func (s *Service) ReconfigureProcessor(context.Context, string, string) error {
+	ce := conduiterr.New(CodeStopAndWaitUnsupported,
+		"live in-place apply (processor reconfigure on a running pipeline) is not supported under "+
+			"the experimental Preview.PipelineArchV2 lifecycle service")
+	ce.Suggestion = "disable Preview.PipelineArchV2, or stop the pipeline manually before applying changes"
+	return ce
+}
+
 // buildRunnablePipeline will build and connect all tasks configured in the pipeline.
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,

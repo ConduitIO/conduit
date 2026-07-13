@@ -80,4 +80,12 @@ type LifecycleService interface {
 	// (rather than Stop) to know it is safe to mutate a running pipeline's
 	// stored config; see docs/design-documents/20260708-live-server-deploy-apply.md.
 	StopAndWait(ctx context.Context, pipelineID string) error
+	// ReconfigureProcessor swaps a processor's config in a running pipeline in
+	// place, without a restart — see lifecycle.Service.ReconfigureProcessor.
+	// ApplyPlanLiveInPlace uses it for live-eligible diffs; the caller persists
+	// the new config first. Returns lifecycle.ErrProcessorNotLiveReconfigurable
+	// when the processor cannot be swapped live (e.g. it is parallelized), so
+	// the caller falls back to a restart. See the live in-place hot-reload
+	// design doc.
+	ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error
 }
