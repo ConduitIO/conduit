@@ -162,12 +162,18 @@ func (w *Watcher) applyPipeline(ctx context.Context, path string, desired config
 			wasRunning = running
 		}
 	}
-	mode := ModeProvisioned
+	// Pre-apply expectation, used ONLY as a fallback if the engine does not
+	// report a ground-truth mode below (an idempotent empty apply detected only
+	// inside ApplyPlanLive's re-Plan). The authoritative label comes from the
+	// engine's AppliedMode — the plan-derived guess can be wrong, because a
+	// live-eligible diff falls back to a restart when a processor cannot be
+	// swapped in place (e.g. it runs parallel).
+	expectedMode := ModeProvisioned
 	if wasRunning {
 		if plan.LiveEligible() {
-			mode = ModeInPlace
+			expectedMode = ModeInPlace
 		} else {
-			mode = ModeRestart
+			expectedMode = ModeRestart
 		}
 	}
 
@@ -183,6 +189,9 @@ func (w *Watcher) applyPipeline(ctx context.Context, path string, desired config
 		w.reportRawError(ctx, path, desired.ID, cerrors.Errorf("could not apply pipeline %q: %w", desired.ID, err))
 		return
 	}
+
+	// Report the mode the engine actually applied, not the pre-apply guess.
+	mode := modeFromApplied(diff.AppliedMode, expectedMode)
 
 	started := w.ensureRunning(ctx, desired)
 

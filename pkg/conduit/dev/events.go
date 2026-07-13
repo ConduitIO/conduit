@@ -45,10 +45,11 @@ const (
 	OutcomeDeleted Outcome = "deleted"
 )
 
-// Mode classifies *how* an OutcomeApplied event was applied. It is derived
-// from the pre-apply running status (StatusFunc) and the Diff's
-// LiveEligible() classification — see this package's doc and
-// pkg/provisioning/plan.go's Diff.LiveEligible.
+// Mode classifies *how* an OutcomeApplied event was applied. It is taken from
+// the engine's ground-truth provisioning.Diff.AppliedMode (the path
+// ApplyPlanLive actually took), falling back to the pre-apply running status
+// (StatusFunc) + Diff.LiveEligible() guess only when the engine reports no mode
+// — see modeFromApplied and pkg/provisioning/plan.go's ApplyMode.
 type Mode string
 
 const (
@@ -66,6 +67,28 @@ const (
 	// ensure-running may have started it (see Event.Started).
 	ModeProvisioned Mode = "provisioned"
 )
+
+// modeFromApplied maps the engine's ground-truth provisioning.ApplyMode to the
+// dev watcher's reported Mode. The engine's value is authoritative — it reflects
+// the path ApplyPlanLive actually took, including an in-place->restart fallback
+// the pre-apply plan cannot foresee. fallback is used only when the engine
+// reports ApplyModeUnknown (it ran no mutating apply, e.g. an idempotent empty
+// diff detected only inside ApplyPlanLive's re-Plan), where the caller's own
+// pre-apply expectation is the best label available.
+func modeFromApplied(applied provisioning.ApplyMode, fallback Mode) Mode {
+	switch applied {
+	case provisioning.ApplyModeInPlace:
+		return ModeInPlace
+	case provisioning.ApplyModeRestart:
+		return ModeRestart
+	case provisioning.ApplyModeProvisioned:
+		return ModeProvisioned
+	case provisioning.ApplyModeUnknown:
+		return fallback
+	default: // an unrecognized future mode: fall back rather than guess wrong
+		return fallback
+	}
+}
 
 // ErrorInfo is the --json rendering of an error the Watcher reported —
 // mirroring the *conduiterr.ConduitError fields the rest of the CLI already

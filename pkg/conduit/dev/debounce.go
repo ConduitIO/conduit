@@ -79,20 +79,33 @@ func (d *debouncer) trigger() {
 //     pile of queued applies, and never a second apply running concurrently
 //     with the first for the same path.
 //
-// run returns when ctx is cancelled (invariant 7: tied to the serve
-// context), which is also how its apply goroutine (spawned when the debounce
-// timer fires) is guaranteed not to leak: it always completes apply(ctx) and
-// then either hands the result back on done or observes ctx.Done() instead,
-// never blocking forever on a send nobody will ever receive.
+// run returns when ctx is cancelled (invariant 7: tied to the serve context).
+// Crucially, on cancellation it does NOT return while an apply it started is
+// still in flight: an apply mutates engine + DB state (a pipeline restart or an
+// in-place processor swap), so it must complete before run returns and, above
+// it, Watcher.consume's wg.Wait unblocks and Watcher.Run returns — otherwise
+// the runtime would proceed to tear the engine and database down underneath a
+// still-running apply. The apply goroutine always signals done exactly once
+// when d.apply returns (done is buffered to 1 so that send never blocks), and
+// run drains it exactly once per apply — either via the normal <-done case or,
+// on shutdown, via the explicit wait below. That balance guarantees no leak and
+// no deadlock.
 func (d *debouncer) run(ctx context.Context) {
 	var timerC <-chan time.Time
 	applying := false
 	queued := false
-	done := make(chan struct{})
+	done := make(chan struct{}, 1)
 
 	for {
 		select {
 		case <-ctx.Done():
+			// Invariant 7 (graceful shutdown): wait out the in-flight apply so
+			// it never races the runtime's engine + DB teardown. ctx is already
+			// cancelled, so d.apply(ctx) returns promptly; we just don't return
+			// before it does.
+			if applying {
+				<-done
+			}
 			return
 
 		case <-d.triggerCh:
@@ -111,10 +124,9 @@ func (d *debouncer) run(ctx context.Context) {
 			applying = true
 			go func() {
 				d.apply(ctx)
-				select {
-				case done <- struct{}{}:
-				case <-ctx.Done():
-				}
+				// Never blocks: done is buffered to 1 and run drains exactly one
+				// signal per apply it starts (normal case or shutdown wait).
+				done <- struct{}{}
 			}()
 
 		case <-done:

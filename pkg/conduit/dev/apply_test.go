@@ -276,6 +276,39 @@ func TestApplyPipeline_Mode_Provisioned_WhenNotRunning(t *testing.T) {
 	is.Equal(lc.startCallCount(), 1)
 }
 
+// TestApplyPipeline_Mode_EngineOutcomeOverridesPlanGuess is the regression test
+// for the mislabeled-mode bug: a processor edit produces a live-eligible plan,
+// so the pre-apply guess is in_place — but the engine fell back to a restart
+// (the processor could not be swapped live, e.g. it runs parallel), reported via
+// Diff.AppliedMode. The event MUST report the engine's ground truth (restart),
+// not the plan-derived guess (in_place). Without honoring AppliedMode, dev would
+// tell the operator "applied in place, no restart" while the pipeline actually
+// restarted.
+func TestApplyPipeline_Mode_EngineOutcomeOverridesPlanGuess(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	planned := nonEmptyDiff("orders") // live-eligible: guess would be in_place
+	is.True(planned.LiveEligible())
+	applied := planned
+	applied.AppliedMode = provisioning.ApplyModeRestart // engine actually fell back to a restart
+	prov := &fakeProvisioner{
+		PlanFn: func(_ context.Context, _ config.Pipeline) (provisioning.Diff, error) { return planned, nil },
+		ApplyFn: func(_ context.Context, _ config.Pipeline, _ string, _ bool) (provisioning.Diff, error) {
+			return applied, nil
+		},
+	}
+	lc := &fakeLifecycle{}
+	statusFn := func(context.Context, string) (bool, error) { return true, nil } // running -> guess=in_place
+	w, buf := newTestWatcher(t, dir, prov, lc, statusFn)
+
+	desired := config.Enrich(config.Pipeline{ID: "orders"})
+	w.applyPipeline(context.Background(), "p.yaml", desired)
+
+	events := readEvents(t, buf)
+	is.Equal(len(events), 1)
+	is.Equal(events[0].Mode, ModeRestart) // engine's AppliedMode wins over the in_place guess
+}
+
 // --- ensure-running ---
 
 func TestEnsureRunning_NewFile_Starts(t *testing.T) {

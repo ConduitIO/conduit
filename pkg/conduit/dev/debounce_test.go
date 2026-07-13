@@ -169,3 +169,52 @@ func TestDebouncer_StopsOnContextCancel(t *testing.T) {
 		t.Fatal("debouncer.run did not return after context cancellation")
 	}
 }
+
+// TestDebouncer_ContextCancel_WaitsForInFlightApply is the regression test for
+// the shutdown race: run must NOT return while an apply it started is still
+// executing, because that apply mutates engine + DB state and Watcher.consume's
+// wg.Wait (which only tracks run, not the apply goroutine run spawns) would
+// otherwise unblock, Watcher.Run would return, and the runtime would tear the
+// engine and database down underneath the still-running apply. run owns the
+// apply goroutine's lifetime: on cancel it blocks until the apply returns.
+func TestDebouncer_ContextCancel_WaitsForInFlightApply(t *testing.T) {
+	clock := newFakeClock()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+
+	d := newDebouncer(clock, time.Second, func(context.Context) {
+		close(started)
+		<-release // hold the apply "in flight" until the test releases it
+		close(finished)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	runReturned := make(chan struct{})
+	go func() {
+		d.run(ctx)
+		close(runReturned)
+	}()
+
+	// Get an apply in flight, then cancel while it is still blocked.
+	d.trigger()
+	clock.awaitCall()
+	clock.fireLatest()
+	<-started
+	cancel()
+
+	// run must still be blocked on the in-flight apply — it has NOT returned.
+	select {
+	case <-runReturned:
+		t.Fatal("run returned while an apply was still in flight — shutdown race")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Let the apply finish; only now may run return.
+	close(release)
+	<-finished
+	select {
+	case <-runReturned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run did not return after the in-flight apply completed")
+	}
+}

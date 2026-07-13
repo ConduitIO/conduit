@@ -106,45 +106,22 @@ func TestRunDev_HotReload_EndToEnd(t *testing.T) {
 	linesBefore := countLines(t, outputPath)
 	is.NoErr(os.WriteFile(pipelinePath, []byte(pipelineYAML(outputPath, "50", "after")), 0o600))
 
-	// Wait for either the new tag to show up (a successful in-place apply)
-	// or a dev error to be logged for this pipeline (see the KNOWN ISSUE
-	// note below) — whichever happens first.
-	tagOrErr := waitForTagOrDevError(outputPath, "after", logs, "dev-e2e", 10*time.Second)
-	switch tagOrErr {
-	case outcomeTagSeen:
-		// The happy path this AC is actually about: applied in place, no
-		// restart, output reflects the new transform immediately.
-		is.Equal(startedCount(logs), 1) // no restart: still exactly the one startup Start
-		is.True(strings.Contains(logs.String(), `"mode":"in_place"`))
-	case outcomeDevError:
-		// KNOWN ISSUE (found by this integration test, not by PR1's own
-		// suite — PR1's in-place tests mock ProcessorService, so this never
-		// ran against the real one): pkg/processor.Service.Update refuses
-		// any update to a processor instance while instance.running is
-		// true (see pkg/processor/service.go:184), which is exactly the
-		// state of the processor applyInPlace's transactionalImport step
-		// hits on a genuinely running pipeline — the store commit inside
-		// ApplyPlanLive's in-place path fails with "processor already
-		// running" before ReconfigureProcessor is ever reached. Out of
-		// scope for this PR (do not touch the engine) — flagged in the PR
-		// description for a follow-up fix in pkg/processor/pkg/provisioning.
-		// What IS asserted here: the failed attempt did not disrupt the
-		// running pipeline (invariant — an invalid/failing apply never
-		// takes the pipeline down) and no restart occurred as a side effect
-		// of the failed in-place attempt.
-		t.Log("KNOWN ISSUE: in-place processor update failed against the real processor.Service " +
-			"(\"processor already running\") — see this test's comment; continuing to verify the pipeline stayed up")
-		is.Equal(startedCount(logs), 1) // the failed attempt did not restart the pipeline either
-	case outcomeNone:
-		t.Fatal("timed out waiting for either the new tag or a dev error for pipeline dev-e2e")
+	// The AC: a processor-only edit applies IN PLACE — the new tag shows up
+	// in the output with no pipeline restart. waitForTag only succeeds once
+	// records carrying the new transform reach the destination, which can
+	// only happen if the live swap actually took (ReconfigureProcessor ran
+	// against the real processor.Service, not a mock).
+	if err := waitForTag(outputPath, "after", 15*time.Second); err != nil {
+		t.Fatalf("in-place apply did not land the new tag: %v\n\n=== LOGS ===\n%s", err, logs.String())
 	}
-	is.NoErr(waitForLines(outputPath, linesBefore+1, 10*time.Second)) // kept producing output either way
+	is.Equal(startedCount(logs), 1)                                   // no restart: still exactly the one startup Start
+	is.True(strings.Contains(logs.String(), `"mode":"in_place"`))     // engine reported an in-place apply
+	is.NoErr(waitForLines(outputPath, linesBefore+1, 10*time.Second)) // kept producing output
 
 	// --- 2. source-setting edit: applies via a labeled restart ---
-	// (also carries the tag flip to "after" forward, so if step 1 hit the
-	// known issue above, this restart-class apply — which tears the
-	// processor down via StopAndWait before re-importing, sidestepping the
-	// running-instance guard — is what finally lands it.)
+	// Changing the generator's rate is a connector setting, not a processor
+	// setting, so it is restart-class: the engine tears the pipeline down and
+	// rebuilds it rather than swapping a node in place.
 	is.NoErr(os.WriteFile(pipelinePath, []byte(pipelineYAML(outputPath, "20", "after")), 0o600))
 
 	deadline := time.Now().Add(15 * time.Second)
@@ -272,33 +249,4 @@ func waitForTag(path, tag string, timeout time.Duration) error {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-type tagOrErrOutcome int
-
-const (
-	outcomeNone tagOrErrOutcome = iota
-	outcomeTagSeen
-	outcomeDevError
-)
-
-// waitForTagOrDevError polls for whichever comes first: the output file
-// containing tag, or a "dev: " Warn log line naming pipelineID (an
-// OutcomeError from the watcher — see apply.go's reportRawError). See the
-// KNOWN ISSUE note at this function's call site for why the caller needs to
-// tolerate both outcomes right now.
-func waitForTagOrDevError(path, tag string, logs *safeBuffer, pipelineID string, timeout time.Duration) tagOrErrOutcome {
-	deadline := time.Now().Add(timeout)
-	needle := `"tag":"` + tag + `"`
-	for time.Now().Before(deadline) {
-		if data, err := os.ReadFile(path); err == nil && strings.Contains(string(data), needle) {
-			return outcomeTagSeen
-		}
-		if strings.Contains(logs.String(), `"pipeline_id":"`+pipelineID+`"`) &&
-			strings.Contains(logs.String(), `"level":"warn"`) {
-			return outcomeDevError
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return outcomeNone
 }
