@@ -143,6 +143,47 @@ func TestConsume_EventToFileToPipeline(t *testing.T) {
 	}
 }
 
+// TestConsume_ChannelClose_TearsDownAndReturns proves consume returns (and does
+// not hang) when the fsnotify events channel closes while its context is still
+// alive. The per-path debouncer goroutines only exit on their context, so
+// consume must cancel a derived child context on the way out; without that,
+// wg.Wait would block forever on a still-running d.run and Watcher.Run would
+// never return, stalling shutdown.
+func TestConsume_ChannelClose_TearsDownAndReturns(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "orders.yaml", validPipelineYAML)
+
+	prov := &fakeProvisioner{
+		PlanFn: func(_ context.Context, desired config.Pipeline) (provisioning.Diff, error) {
+			return nonEmptyDiff(desired.ID), nil
+		},
+	}
+	w, err := New(prov, &fakeLifecycle{}, nil, Options{Path: dir, Debounce: 10 * time.Millisecond})
+	is.NoErr(err)
+	w.reporter = newReporter(&nopWriter{}, false)
+
+	ctx := context.Background() // never cancelled: teardown must come from the channel close, not ctx
+	events := make(chan fsnotify.Event, 1)
+	errs := make(chan error)
+	done := make(chan error, 1)
+	go func() { done <- w.consume(ctx, events, errs) }()
+
+	// Spawn a debouncer whose run goroutine only exits on the (child) context.
+	events <- fsnotify.Event{Name: path, Op: fsnotify.Write}
+	time.Sleep(50 * time.Millisecond)
+
+	// Closing events must tear the debouncer down and let consume return, even
+	// though the parent ctx is still alive.
+	close(events)
+	select {
+	case err := <-done:
+		is.NoErr(err) // a channel-close return is nil, not ctx.Err()
+	case <-time.After(5 * time.Second):
+		t.Fatal("consume did not return after events channel close — debouncer teardown hung")
+	}
+}
+
 // TestConsume_IrrelevantEvent_NeverApplies proves a non-matching file (wrong
 // extension) never triggers a debouncer/apply at all.
 func TestConsume_IrrelevantEvent_NeverApplies(t *testing.T) {

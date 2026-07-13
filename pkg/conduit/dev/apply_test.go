@@ -20,6 +20,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -179,6 +180,31 @@ func TestParseFile_OneBadDocumentDoesNotDropTheGoodOne(t *testing.T) {
 	for _, e := range events {
 		is.Equal(e.Outcome, OutcomeError)
 	}
+}
+
+// TestApplyFile_RecoversFromPanic pins the invariant that a bad edit never
+// crashes the server: applyFile runs on a plain goroutine (debounce.go), so a
+// panic anywhere in the parse/enrich/validate/apply chain must be contained and
+// reported as an error event, not propagated to kill the process (and with it
+// every running pipeline).
+func TestApplyFile_RecoversFromPanic(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "p.yaml", validPipelineYAML)
+	prov := &fakeProvisioner{
+		PlanFn: func(context.Context, config.Pipeline) (provisioning.Diff, error) { panic("boom in plan") },
+	}
+	w, buf := newTestWatcher(t, dir, prov, &fakeLifecycle{}, nil)
+
+	// Must return normally (recovered), not propagate the panic.
+	w.applyFile(context.Background(), path)
+
+	events := readEvents(t, buf)
+	is.True(len(events) >= 1)
+	last := events[len(events)-1]
+	is.Equal(last.Outcome, OutcomeError)
+	is.True(last.Error != nil)
+	is.True(strings.Contains(last.Error.Message, "panic")) // reported as a panic, not swallowed
 }
 
 func TestApplyPipeline_EmptyDiff_Skipped(t *testing.T) {

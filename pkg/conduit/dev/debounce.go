@@ -121,6 +121,14 @@ func (d *debouncer) run(ctx context.Context) {
 
 		case <-timerC:
 			timerC = nil
+			if ctx.Err() != nil {
+				// Shutting down: both ctx.Done and this timer can be ready at
+				// once and select may pick the timer. Don't kick off a fresh
+				// (possibly restart-class) apply during teardown — loop back so
+				// the ctx.Done case returns. (An aborted apply is recoverable
+				// from checkpoint on next start; not starting one is cleaner.)
+				continue
+			}
 			applying = true
 			go func() {
 				d.apply(ctx)

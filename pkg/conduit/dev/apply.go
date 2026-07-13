@@ -40,6 +40,20 @@ import (
 // exist here is, for all practical purposes, actually gone — see debounce.go
 // and the design doc's §4 "Debounce/coalesce".
 func (w *Watcher) applyFile(ctx context.Context, path string) {
+	// A dev apply runs arbitrary, rapidly-edited user YAML through the parser,
+	// enrich, validate, and the provisioner — and it runs on a plain goroutine
+	// (see debounce.go). An unrecovered panic there would crash the whole server
+	// and take every running pipeline down with it: the exact opposite of this
+	// package's invariant that a bad edit never touches a running pipeline. Contain
+	// it — report the panic as an error event for this file and keep the server
+	// (and every live pipeline) up. This is the last-resort backstop; the parse/
+	// validate paths are expected to return errors, not panic.
+	defer func() {
+		if r := recover(); r != nil {
+			w.reportRawError(ctx, path, "", cerrors.Errorf("dev: recovered from panic while applying %q: %v", path, r))
+		}
+	}()
+
 	info, err := os.Stat(path)
 	switch {
 	case err != nil && os.IsNotExist(err):

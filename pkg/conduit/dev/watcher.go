@@ -151,9 +151,18 @@ func (w *Watcher) Run(ctx context.Context) error {
 // exit before returning — so Run never returns while an apply could still
 // be in flight, and no goroutine leaks past a cancelled ctx.
 func (w *Watcher) consume(ctx context.Context, events <-chan fsnotify.Event, fsErrors <-chan error) error {
+	// Each debouncer goroutine (d.run) only exits when its context is cancelled.
+	// Derive a child context and cancel it before wg.Wait so the debouncers are
+	// always torn down no matter WHY consume returns — a parent-ctx cancel OR the
+	// events/fsErrors channels closing (e.g. fsnotify.Close). Without this, a
+	// channel-close return would leave d.run goroutines blocked forever and
+	// wg.Wait would hang, stalling shutdown. Defer order matters: cancel() is
+	// declared last so it runs first (LIFO), unblocking d.run before wg.Wait.
+	ctx, cancel := context.WithCancel(ctx)
 	debouncers := map[string]*debouncer{}
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	defer cancel()
 
 	for {
 		select {
@@ -184,7 +193,9 @@ func (w *Watcher) consume(ctx context.Context, events <-chan fsnotify.Event, fsE
 
 		case err, ok := <-fsErrors:
 			if !ok {
-				continue
+				// The error channel is closed (the watcher is going away); stop
+				// consuming rather than busy-spinning on a permanently-ready recv.
+				return nil
 			}
 			w.logger.Err(ctx, err).Msg("dev: file watcher error")
 		}
