@@ -19,6 +19,29 @@ generated-files toolchain, and proposes a single `make verify` entry point plus 
 pre-push hook so a contributor (or an agent) can answer "will this pass CI" before pushing,
 without adding a second toolchain to maintain.
 
+## Implementation status
+
+The drift fix and pre-push guard are **implemented in this PR** (the audit findings in Part 1 that
+touch dead code — the GoReleaser `ui` tag, the `localhost:4200` CORS default — are left as
+follow-ups, since they are inert today). Landed here:
+
+- **Version pin, single knob:** `MARKDOWNLINT_VERSION=0.18.1` and a shared `MARKDOWNLINT_GLOBS` in
+  the `Makefile`; `make markdown-lint` now runs `npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION)`.
+  `markdown-lint.yml` pins the action to its v20 commit SHA
+  (`992badcdf24e3b8eb7e87ff9287fe931bcb00c6e`) with a comment tying it to the Makefile knob.
+- **Dead-glob fix:** `!pkg/web/openapi/**` → `!pkg/http/openapi/**` in both the workflow and the
+  Makefile globs (the OpenAPI assets moved packages).
+- **`gitignore: true` (a finding this audit missed):** a new `.markdownlint-cli2.jsonc` makes
+  markdownlint respect `.gitignore`. Without it, a local `make markdown-lint` also lints gitignored
+  files that a fresh CI checkout never has — `STRATEGY.md` and every `.claude/worktrees/**` copy —
+  producing "you'll fail CI" noise for files CI never sees. With it, local scope equals CI scope
+  (verified: 58 tracked files, 0 errors; `STRATEGY.md` skipped; rules from `.markdownlint.yml` still
+  enforced via a positive-control test). CI is unaffected (nothing is gitignored in its checkout).
+- **`make verify`:** runs the CI-equivalent checks (lint via the `tools/go.mod`-installed binary by
+  explicit path, pinned markdown-lint, generated-files drift, `go test -race -short ./...`) after
+  `install-tools`, so ambient `PATH` state can't make it lie. Opt-in `scripts/hooks/pre-push` +
+  `make setup-hooks` wire it into `git push` for those who want it.
+
 ## Context
 
 ### Product surfaces as of v0.17 (per `CLAUDE.md`, `ROADMAP.md`)

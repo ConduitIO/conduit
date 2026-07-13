@@ -5,6 +5,17 @@
 # the correct version.
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
+# GOPATH_BIN is where `make install-tools` installs the tools/go.mod-pinned
+# binaries. `make verify` invokes them by explicit path so a differently-versioned
+# tool on PATH cannot shadow the one CI uses.
+GOPATH_BIN=$(shell go env GOPATH)/bin
+# MARKDOWNLINT_VERSION must match the markdownlint-cli2 version the CI action
+# resolves to (.github/workflows/markdown-lint.yml). Keep the two in sync — this
+# is the single knob that stops local/CI markdownlint drift.
+MARKDOWNLINT_VERSION=0.18.1
+# The \# escapes are required: an unescaped # starts a Make comment. markdownlint-cli2
+# reads a leading # in a glob as "exclude this path".
+MARKDOWNLINT_GLOBS="**/*.md" "\#LICENSE.md" "\#pkg/http/openapi/**" "\#.github/*.md" "\#pkg/scaffold/template/**"
 
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
@@ -83,4 +94,30 @@ check-go-version:
 
 .PHONY: markdown-lint
 markdown-lint:
-	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+	npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) $(MARKDOWNLINT_GLOBS)
+
+# verify runs the CI-equivalent checks locally, using the same tool-resolution
+# CI uses (tools/go.mod for Go tools, a pinned npx for markdownlint) rather than
+# trusting ambient PATH, so a green `make verify` predicts a green CI. It is a
+# fast pre-push gate, not a full CI replacement: it runs the unit subset
+# (-short, no docker), leaving the integration suite and flake-hunt to CI.
+.PHONY: verify
+verify: install-tools
+	@echo "==> lint"
+	@$(GOPATH_BIN)/golangci-lint run
+	@echo "==> markdown-lint"
+	@npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) $(MARKDOWNLINT_GLOBS)
+	@echo "==> validate-generated-files"
+	@$(MAKE) generate proto-generate
+	@git diff --exit-code --numstat
+	@echo "==> test (unit subset, -race -short, no docker)"
+	@go test -race -short ./...
+	@echo "verify: all checks passed"
+
+# setup-hooks opts this clone into the repo's git hooks (a pre-push hook that
+# runs `make verify`). Opt-in on purpose: a solo maintainer sometimes wants to
+# push a WIP branch without the full gate.
+.PHONY: setup-hooks
+setup-hooks:
+	git config core.hooksPath scripts/hooks
+	@echo "git hooks enabled (core.hooksPath=scripts/hooks); pre-push now runs 'make verify'"
