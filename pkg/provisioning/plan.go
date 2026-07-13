@@ -49,6 +49,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	json "github.com/goccy/go-json"
@@ -97,10 +98,70 @@ type Change struct {
 	Action      ChangeAction `json:"action"`
 	Effect      Effect       `json:"effect"`
 	ConfigPaths []string     `json:"configPaths,omitempty"`
+	// LiveSwappable reports whether this change can be applied to a *running*
+	// pipeline in place — without a stop/restart — because it touches no source
+	// position, ack/durability, or connection state. It is a strict subset of
+	// EffectInPlace: only a processor config update and a pipeline
+	// Name/Description-only update qualify (see liveSwappable). Additive field;
+	// consumers that predate it default to the safe interpretation (false =
+	// treat as restart-class). The apply path keys on Diff.LiveEligible, not on
+	// this field per-change, but it is surfaced so CLI/MCP/UI can show "this
+	// change applies live" vs "this change restarts the pipeline".
+	LiveSwappable bool `json:"liveSwappable"`
 	// Code is a stable, dotted identifier for this kind of change (e.g.
 	// "provisioning.connector.update"), namespaced the same way
 	// conduiterr.Code reasons are, for consistent agent/UI consumption.
 	Code string `json:"code"`
+}
+
+// liveSwappable reports whether this Change can be applied to a running pipeline
+// in place (via a ProcessorNode live swap, or an in-memory pipeline metadata
+// update) without restarting it. Only two kinds qualify, both free of source
+// position, ack/durability, and connection state:
+//
+//   - a processor config update (updateProcessorAction — including a plugin
+//     change, since ProcessorNode.Reconfigure rebuilds the processor), and
+//   - a pipeline update touching only Name and/or Description.
+//
+// Everything else forces a restart-class apply: connector create/update/delete
+// (position + open connection), the DLQ (a live destination with ack
+// semantics — the "dlq" config path disqualifies a pipeline update), processor
+// create/delete and pipeline membership changes (topology), and pipeline
+// delete. See the design doc's "Data-safety" and classification sections.
+func (c Change) liveSwappable() bool {
+	switch c.Resource {
+	case ResourceProcessor:
+		if c.Action != ChangeActionUpdate {
+			return false
+		}
+		// A Workers change alters the node topology (a single-worker
+		// ProcessorNode vs a parallel ParallelNode) — an in-place processor swap
+		// cannot make that change (ReconfigureProcessor only swaps the processor
+		// inside an existing node), so it must restart. Every other processor
+		// field (plugin, condition, settings) is a live swap.
+		for _, p := range c.ConfigPaths {
+			if p == configPathWorkers {
+				return false
+			}
+		}
+		return true
+	case ResourcePipeline:
+		if c.Action != ChangeActionUpdate {
+			return false
+		}
+		for _, p := range c.ConfigPaths {
+			if p != configPathName && p != configPathDescription {
+				return false
+			}
+		}
+		return true
+	case ResourceConnector:
+		// Connectors own source position, ack/durability, and an open plugin
+		// connection — never live-swappable (see the method doc).
+		return false
+	default:
+		return false
+	}
 }
 
 // Diff is Plan's result: every Change needed to reconcile the pipeline
@@ -115,6 +176,25 @@ type Diff struct {
 // Empty reports whether the Diff has no changes, i.e. the desired config
 // already matches the current state (an idempotent re-apply).
 func (d Diff) Empty() bool { return len(d.Changes) == 0 }
+
+// LiveEligible reports whether this whole diff can be applied to a running
+// pipeline in place — without a stop/restart — because it is non-empty and
+// *every* change in it is LiveSwappable. It is all-or-nothing on purpose: a diff
+// that mixes a processor tweak with a source change needs a restart for the
+// source anyway, so the whole apply takes the restart path. An empty diff is not
+// live-eligible because there is nothing to apply (it is handled as an idempotent
+// no-op upstream). See ApplyPlanLiveInPlace for how the apply path uses this.
+func (d Diff) LiveEligible() bool {
+	if d.Empty() {
+		return false
+	}
+	for _, c := range d.Changes {
+		if !c.LiveSwappable {
+			return false
+		}
+	}
+	return true
+}
 
 // computeHash returns a deterministic digest of PipelineID, Changes (in the
 // order actionsBuilder.Build produced them — the same order ApplyPlan would
@@ -189,6 +269,15 @@ func (s *Service) Plan(ctx context.Context, desired config.Pipeline) (Diff, erro
 		for i := range changes {
 			changes[i].Effect = EffectInPlace
 		}
+	}
+
+	// Classify each change for live in-place applicability. Derived from
+	// Resource/Action/ConfigPaths, so it is stable for a given desired config
+	// and folds into the hash consistently. Computed after the brand-new
+	// override above (which only touches Effect, not the fields liveSwappable
+	// reads).
+	for i := range changes {
+		changes[i].LiveSwappable = changes[i].liveSwappable()
 	}
 
 	d := Diff{PipelineID: desired.ID, Changes: changes}
@@ -433,6 +522,30 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, nil
 	}
 
+	// Live-eligible diff on a running pipeline: apply in place (swap the changed
+	// processor nodes + update name/description metadata) without a stop/restart.
+	// This is the payoff of the LiveSwappable classification — a processor tweak
+	// takes effect with no availability blip, no position replay, no record loss.
+	// applyInPlace returns swappedAll=false (err=nil) when a processor cannot be
+	// swapped live (e.g. it is parallelized): the config is already committed, so
+	// we fall through to the restart path below, which rebuilds every node from
+	// it, applying the whole diff uniformly.
+	if fresh.LiveEligible() {
+		oldConfig, err := s.Export(ctx, desired.ID)
+		if err != nil {
+			return fresh, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
+		}
+		swappedAll, err := s.applyInPlace(ctx, desired, oldConfig, fresh)
+		if err != nil {
+			return fresh, err
+		}
+		if swappedAll {
+			return fresh, nil
+		}
+		// Fall through to the restart path: the config is committed, so
+		// StopAndWait -> (idempotent) import -> Start rebuilds from it.
+	}
+
 	// Invariant 7 / Tier-1 safety: StopAndWait — not Stop — is the only
 	// primitive that proves the pipeline is fully drained and its positions
 	// are durably persisted before importPipeline runs against it. See
@@ -466,6 +579,84 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	}
 
 	return fresh, nil
+}
+
+// applyInPlace applies a live-eligible diff to a running pipeline without a
+// stop/restart. It commits the new config to the store (invariant 5), then swaps
+// each changed processor into the live node graph via the lifecycle service;
+// name/description changes take effect through the committed store instance and
+// need no node swap.
+//
+// It returns swappedAll=true when every change was applied in place. It returns
+// (false, nil) when a processor cannot be swapped live (e.g. it is parallelized):
+// the config is already committed, so the caller falls back to a restart that
+// rebuilds every node from it. On a genuine swap failure (the new processor fails
+// to open), it rolls back — restoring the old config and re-swapping any
+// already-swapped processors back — so the store and the live pipeline agree on
+// the old config and the pipeline keeps running unchanged, and returns the error.
+func (s *Service) applyInPlace(ctx context.Context, desired, oldConfig config.Pipeline, diff Diff) (bool, error) {
+	// Once we commit to an in-place apply it mutates live node state that must
+	// reach a consistent end, so detach from the caller's cancellation (keeping
+	// values). Otherwise a caller context cancelled mid-swap would abandon
+	// ProcessorNode.Reconfigure's wait while the Run goroutine still completes the
+	// swap — reporting a failure the apply actually landed — and would make the
+	// rollback's transactional import fail, skipping it. The work here is bounded
+	// (a config commit plus a few processor Opens). The apply is already
+	// authorized and lock-held (see ApplyPlanLive); the caller learns the outcome
+	// from the return value, not by cancelling.
+	ctx = context.WithoutCancel(ctx)
+
+	if err := s.transactionalImport(ctx, desired); err != nil {
+		return false, err
+	}
+
+	var swapped []string
+	for _, c := range diff.Changes {
+		if c.Resource != ResourceProcessor || c.Action != ChangeActionUpdate {
+			// The only other live-swappable change is a pipeline
+			// name/description update, applied by the store import above. Caveat:
+			// that updates the stored instance; a running pipeline's
+			// metric-label name (baked in at node-build time) reflects it only on
+			// the next restart. Cosmetic — not a data-path concern.
+			continue
+		}
+		err := s.lifecycleService.ReconfigureProcessor(ctx, desired.ID, c.ID)
+		switch {
+		case cerrors.Is(err, lifecycle.ErrProcessorNotLiveReconfigurable):
+			// Not swappable live. Signal a restart fallback; no rollback needed —
+			// the restart tears down and rebuilds every node from the committed
+			// config anyway.
+			return false, nil
+		case err != nil:
+			// The new processor failed to open; the old one is still running
+			// (open-before-teardown). Roll back so store and live agree on the
+			// old config, then surface the error.
+			s.rollbackInPlace(ctx, desired.ID, oldConfig, swapped)
+			return false, cerrors.Errorf("could not apply processor %q to running pipeline %q in place: %w", c.ID, desired.ID, err)
+		}
+		swapped = append(swapped, c.ID)
+	}
+	return true, nil
+}
+
+// rollbackInPlace best-effort undoes a partial in-place apply after a mid-diff
+// swap failure: it restores oldConfig to the store and re-swaps the
+// already-swapped processors back to it. Errors are logged, not returned — the
+// caller is already returning the original failure, and the pipeline is still
+// running its old processors (open-before-teardown), so the worst case is a
+// store/live mismatch that a restart reconciles.
+func (s *Service) rollbackInPlace(ctx context.Context, pipelineID string, oldConfig config.Pipeline, swapped []string) {
+	if err := s.transactionalImport(ctx, oldConfig); err != nil {
+		s.logger.Err(ctx, err).Str("pipeline_id", pipelineID).
+			Msg("could not restore previous config during in-place apply rollback")
+		return
+	}
+	for _, procID := range swapped {
+		if err := s.lifecycleService.ReconfigureProcessor(ctx, pipelineID, procID); err != nil {
+			s.logger.Err(ctx, err).Str("pipeline_id", pipelineID).Str("processor_id", procID).
+				Msg("could not re-swap processor to previous config during in-place apply rollback")
+		}
+	}
 }
 
 // isRunning reports whether the pipeline identified by id currently has
@@ -530,22 +721,37 @@ func isRunningStatus(status pipeline.Status) bool {
 // actionsBuilder.preparePipelineActions's own cmp.Equal check (same ignored
 // field: Status) so a Change's ConfigPaths can never claim a field changed
 // that the builder itself considered equal.
+// Pipeline-level Change.ConfigPaths names. Shared by diffPipelineFields (which
+// emits them) and Change.liveSwappable (which reads them to decide that only
+// name/description changes are live-swappable), so the producer and consumer
+// can never disagree on a spelling.
+const (
+	configPathName        = "name"
+	configPathDescription = "description"
+	configPathConnectors  = "connectors"
+	configPathProcessors  = "processors"
+	configPathDLQ         = "dlq"
+	// configPathWorkers is a processor-level path (see diffProcessorFields); a
+	// change to it is a node-topology change, not a live swap.
+	configPathWorkers = "workers"
+)
+
 func diffPipelineFields(oldCfg, newCfg config.Pipeline) []string {
 	var paths []string
 	if oldCfg.Name != newCfg.Name {
-		paths = append(paths, "name")
+		paths = append(paths, configPathName)
 	}
 	if oldCfg.Description != newCfg.Description {
-		paths = append(paths, "description")
+		paths = append(paths, configPathDescription)
 	}
 	if !equalConnectorIDs(oldCfg.Connectors, newCfg.Connectors) {
-		paths = append(paths, "connectors")
+		paths = append(paths, configPathConnectors)
 	}
 	if !equalProcessorIDs(oldCfg.Processors, newCfg.Processors) {
-		paths = append(paths, "processors")
+		paths = append(paths, configPathProcessors)
 	}
 	if !cmp.Equal(oldCfg.DLQ, newCfg.DLQ) {
-		paths = append(paths, "dlq")
+		paths = append(paths, configPathDLQ)
 	}
 	return paths
 }
@@ -581,7 +787,7 @@ func diffProcessorFields(oldCfg, newCfg config.Processor) []string {
 		paths = append(paths, "plugin")
 	}
 	if oldCfg.Workers != newCfg.Workers {
-		paths = append(paths, "workers")
+		paths = append(paths, configPathWorkers)
 	}
 	if oldCfg.Condition != newCfg.Condition {
 		paths = append(paths, "condition")

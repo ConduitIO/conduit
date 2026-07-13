@@ -120,6 +120,10 @@ type lifecycleService interface {
 	// lifecycle-poc(pkg/lifecycle-poc).Service.StopAndWait for why the
 	// Preview.PipelineArchV2 implementation always refuses.
 	StopAndWait(ctx context.Context, pipelineID string) error
+	// ReconfigureProcessor keeps this interface a superset of
+	// provisioning.LifecycleService (see StopAndWait above) — it is used by the
+	// live in-place apply path. See lifecycle.Service.ReconfigureProcessor.
+	ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error
 	Init(ctx context.Context) error
 }
 

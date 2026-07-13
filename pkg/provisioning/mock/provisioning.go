@@ -1033,6 +1033,44 @@ func (m *LifecycleService) EXPECT() *LifecycleServiceMockRecorder {
 	return m.recorder
 }
 
+// ReconfigureProcessor mocks base method.
+func (m *LifecycleService) ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReconfigureProcessor", ctx, pipelineID, processorID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReconfigureProcessor indicates an expected call of ReconfigureProcessor.
+func (mr *LifecycleServiceMockRecorder) ReconfigureProcessor(ctx, pipelineID, processorID any) *LifecycleServiceReconfigureProcessorCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReconfigureProcessor", reflect.TypeOf((*LifecycleService)(nil).ReconfigureProcessor), ctx, pipelineID, processorID)
+	return &LifecycleServiceReconfigureProcessorCall{Call: call}
+}
+
+// LifecycleServiceReconfigureProcessorCall wrap *gomock.Call
+type LifecycleServiceReconfigureProcessorCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *LifecycleServiceReconfigureProcessorCall) Return(arg0 error) *LifecycleServiceReconfigureProcessorCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *LifecycleServiceReconfigureProcessorCall) Do(f func(context.Context, string, string) error) *LifecycleServiceReconfigureProcessorCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *LifecycleServiceReconfigureProcessorCall) DoAndReturn(f func(context.Context, string, string) error) *LifecycleServiceReconfigureProcessorCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Start mocks base method.
 func (m *LifecycleService) Start(ctx context.Context, pipelineID string) error {
 	m.ctrl.T.Helper()
