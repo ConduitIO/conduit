@@ -659,7 +659,7 @@ Author: Meroxa, Inc.
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 
-## 4. MCP tool catalog (9)
+## 4. MCP tool catalog (11)
 
 | Name | Class | Description |
 | --- | --- | --- |
@@ -671,4 +671,6 @@ Author: Meroxa, Inc.
 | `lint` | read | Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/unknown fields, version fallback). Same engine as `conduit pipelines lint`. |
 | `scaffold_connector` | write (requires --allow-mutations) | Scaffolds a new Go connector plugin repository (source and/or destination). Same engine as `conduit connector new`. |
 | `scaffold_processor` | write (requires --allow-mutations) | Scaffolds a new Go (WASM) processor plugin repository. Same engine as `conduit processor new`. |
+| `start` | write (requires --allow-mutations) | Starts a pipeline registered in a running Conduit (transitions to Running). Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is already running (pipeline.running). Same engine as `conduit pipelines start`. |
+| `stop` | write (requires --allow-mutations) | Stops a running pipeline registered in a running Conduit — graceful drain by default, or immediate with force:true. Requires --api-address, like inspect; no offline fallback. Refused if the pipeline isn't running (pipeline.not_running). Same engine as `conduit pipelines stop`. |
 | `validate` | read | Offline, static validation of a pipeline configuration (errors only, no side effects). Same engine as `conduit pipelines validate`. |

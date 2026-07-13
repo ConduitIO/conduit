@@ -22,8 +22,8 @@
 
 ## MCP tools
 - Read: deploy, doctor, dry_run, inspect, lint, validate
-- Write (require --allow-mutations): apply, scaffold_connector, scaffold_processor
-(9 tools; full schemas in llms-full.txt)
+- Write (require --allow-mutations): apply, scaffold_connector, scaffold_processor, start, stop
+(11 tools; full schemas in llms-full.txt)
 
 ## Full detail
 - [llms-full.txt](llms-full.txt)
