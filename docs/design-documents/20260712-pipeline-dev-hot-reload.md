@@ -343,6 +343,72 @@ confirm that is acceptable dev semantics, which it is: the operator asked for th
 new transform to take effect now) and **3** under the interruptible-wait change
 (confirm the new `select` cannot drop or double-pull a message).
 
+## Data-safety: does the swap drop or DLQ records?
+
+Answered explicitly because it is the first question anyone bets their data on.
+
+**The swap drops zero events, and nothing reaches the DLQ because of a swap.**
+Three properties combine:
+
+1. **The swap is triggered by a control signal, not by consuming a data record.**
+   The node never pulls-and-discards a data record to perform the swap; a record
+   waiting in the inbound channel stays there until the node loops back and
+   receives it normally. This is a tested property, not an assumption — the
+   "interruptible wait never drops or double-pulls a data message" unit test is a
+   PR1 gate.
+2. **Backpressure holds everything in place during the swap.** The stream channels
+   are unbuffered (synchronous handoff), so while the node does
+   `Teardown`/`Open`, upstream `Send`s block → the source stops reading → no
+   position advances and nothing is produced-and-lost. Flow resumes exactly where
+   it paused.
+3. **Each record goes through exactly one config, in order.** Records already
+   forwarded used the old processor; records received after the switch use the new
+   one; ordering within the partition is preserved (invariant 4).
+
+**The DLQ is not involved.** The DLQ receives only records the processor _Nacks_
+(an error record, or a failure per the configured error policy). A swap carries no
+data record to reject, so a "swap → DLQ" path does not exist. If the _new_ config's
+logic errors on a record after the swap, that record is Nacked to the DLQ — but
+that is the new logic doing its normal job, not a swap artifact.
+
+**The one real exposure is a crash mid-swap** (`kill -9`): in-flight records since
+the last checkpoint are _reprocessed_ on restart (the at-least-once floor,
+invariant 3). That is possible **duplicates, never drops** — and duplicates do not
+go to the DLQ either; they simply flow again. The store commit is the source of
+truth, so restart rebuilds from either the old or new config, never a torn half.
+The targeted mid-swap fault test is the gate for this.
+
+### The non-buffering assumption, and the batching/windowing guard
+
+Every claim above rests on Conduit's current processor model being **synchronous
+and non-buffering**: `Process([]records) → []records`, one batch in / results out,
+with the node asserting `len(in) == len(out)` (`stream/processor.go:97`). No
+processor can retain a record across `Process` calls, so at the swap boundary the
+old processor's buffer is provably empty — there is nothing to flush.
+
+Conduit will eventually grow **batching/windowing processors** that hold records
+internally to emit later. When it does, an ungraceful `Teardown` at the swap
+boundary could lose (or, depending on how that feature acks inputs, permanently
+drop) buffered records. We do **not** build a flush-before-teardown mechanism now
+(YAGNI — no such processor exists), but we **guard against a silent regression**,
+as committed PR1 deliverables:
+
+- **An invariant comment at the swap enforcement site:** `// Invariant: hot-swap
+  is valid only for processors that hold no records across Process calls.
+  Batching/windowing processors must be restart-class until a flush-before-teardown
+  step exists.`
+- **A contract test pinning the current 1-in-1-out / non-buffering processor
+  model**, so that whoever later relaxes the `Process` contract to allow buffering
+  breaks a test and is _forced_ to confront the swap interaction rather than
+  discover it in production.
+- **A precondition recorded in Deferred follow-up (below)** and to be referenced
+  from the future batching design: it must resolve hot-swap safety
+  (restart-class opt-out, or a `Flush`/`Drain`-before-`Teardown` capability) before
+  merging. Batching couples buffering, acks, and the swap boundary in subtle ways
+  (if it acks inputs on buffer, teardown is a true drop; if it defers acks, it is
+  only at-least-once reprocessing) — that coupling is exactly why it must be its own
+  design, not hand-waved into this one.
+
 ## Testing
 
 - **Unit (stream):** processor swap at a boundary — old config applied to record N,
@@ -374,19 +440,85 @@ pipelines, stored state, and configs are byte-identical to what `run` produces. 
 additive `LiveSwappable` JSON field defaults false and is ignorable by old
 consumers.
 
-## PR plan
+## PR plan and acceptance criteria
 
-Mirrors the #2588 split:
+Mirrors the #2588 split: PR1 is the Tier-1 engine capability, PR2 the Tier-2 dev
+surface that consumes it.
 
-- **PR1 (Tier 1, engine):** the `ProcessorNode` live-swap primitive + interruptible
-  wait (`pkg/lifecycle/stream`), the `liveSwappable`/`LiveEligible` classification +
-  additive diff field (`pkg/provisioning`), and the `ApplyPlanLiveInPlace` apply
-  decision (in-place vs delegate-to-restart), with unit + property + the targeted
-  mid-swap fault test. Human sign-off + failure-mode analysis required; the fault
-  test gates merge.
-- **PR2 (Tier 2, surface):** `conduit run --dev` + the runtime watcher +
-  ensure-running + the `conduit pipelines dev` alias + `--json` output + docs
-  (CLI reference, `docs/operations`, llms.txt, changelog). Consumes PR1.
+### PR1 (Tier 1, engine) — live processor swap + classification + apply decision
+
+Scope: `pkg/lifecycle/stream` (the swap primitive), `pkg/provisioning` (the
+classification and the apply decision). Human (DeVaris) sign-off + failure-mode
+analysis required; **the mid-swap fault test gates merge.**
+
+Acceptance criteria (each testable):
+
+- [ ] `ProcessorNode` gains a swap capability that reconfigures its `Processor` at a
+      record boundary, driven from outside the node goroutine, via the chosen
+      mechanism (in-band control message preferred).
+- [ ] **Open-before-teardown:** on swap, the new processor is built and `Open`ed
+      first; the node switches only if `Open` succeeds, then `Teardown`s the old.
+      Test: `Open` failure → old processor still running, pipeline uninterrupted,
+      error returned to caller.
+- [ ] **Boundary correctness:** record N processed by old config, record N+1 by new;
+      `len(in)==len(out)` preserved. Table-driven test asserts the exact record→config
+      mapping across a swap.
+- [ ] **Interruptible wait:** a swap on an **idle** pipeline (no records flowing)
+      applies promptly, not "on next record." Test with a stalled source.
+- [ ] **No drop / no double-pull:** the swap never consumes or discards a data
+      record; a record queued at swap time is processed exactly once afterward.
+      Dedicated unit test (the data-safety gate).
+- [ ] **Backpressure:** during a swap the source pauses (no position advance); no
+      record lost. Integration test asserts continuous source position across a swap.
+- [ ] `Change.LiveSwappable` (additive JSON field, default false) and
+      `Diff.LiveEligible()` implemented; classification unit-tested for **every**
+      action type (create/update/delete × pipeline/connector/processor, plus
+      metadata-only vs membership pipeline update, plus DLQ change → not swappable).
+- [ ] `ApplyPlanLiveInPlace` (or the mode on `ApplyPlanLive`): all-swappable diff →
+      in-place; any restart-class change → delegates to the existing `ApplyPlanLive`
+      restart path unchanged. Tested both ways, plus the operator gate still fires.
+- [ ] **In-place rollback:** a mid-diff swap failure re-swaps already-applied changes
+      back to the old config and discards the store transaction; pipeline keeps
+      running its prior config throughout. Test injects a failure on the 2nd of 2
+      processor swaps.
+- [ ] **Batching guard (this PR):** the invariant comment at the swap site, and a
+      contract test pinning the 1-in-1-out / non-buffering processor model (see
+      Data-safety §).
+- [ ] **Targeted mid-swap fault test** (merge gate): cancel/kill during a swap under
+      load → assert no record loss beyond at-least-once, no torn config on restart,
+      correct position resume.
+- [ ] **Property test** (rapid): random processor-config swaps interleaved with record
+      flow preserve ordering and at-least-once.
+- [ ] Godoc on new exported symbols; invariant comments at enforcement sites; `go
+      build ./...`, `go test -race` on touched packages, `golangci-lint` all green.
+
+### PR2 (Tier 2, surface) — `conduit run --dev` + watcher + alias
+
+Consumes PR1. Acceptance criteria:
+
+- [ ] `conduit run --dev [--pipelines.path <dir>]` runs the engine and starts the
+      runtime-owned watcher after `ProvisionService.Init`, tied to the serve context
+      (Ctrl-C cancels it and drains — invariant 7).
+- [ ] Editing a **processor** config on a running pipeline applies **in place** (no
+      restart log; source position continuous; output reflects the new transform).
+      Integration test on a real generator→processor→file pipeline.
+- [ ] Editing a **source/destination** setting applies via a labeled graceful
+      **restart**; the output distinguishes in-place vs restart and says why.
+- [ ] **Ensure-running:** after a successful apply, a pipeline the config wants
+      running but that is stopped (prior failed apply, or a brand-new file) is
+      started; a `status: stopped` config is left stopped. Three regression tests.
+- [ ] Parse/validation error on save → pipeline untouched, `ConduitError` printed;
+      next good save recovers.
+- [ ] Debounce coalesces a save-storm to one apply; in-flight apply queues at most one
+      follow-up; atomic-save rename tolerated; deleted watched file → pipeline left
+      running + logged (not auto-deleted).
+- [ ] `--json` structured events for each apply (mode, diff, outcome, timing);
+      human-readable status line otherwise.
+- [ ] `conduit pipelines dev [dir]` alias invokes `run --dev` with dev defaults
+      (exit-on-error off), carrying no logic of its own.
+- [ ] Docs in the same PR: CLI reference, a `docs/operations` runbook entry, llms.txt
+      regeneration, changelog. `--json` + stable error codes on the new surface.
+- [ ] `go build`, `go test -race`, `golangci-lint` green.
 
 ## Related
 
@@ -398,3 +530,8 @@ Mirrors the #2588 split:
 - Community PR #2236 — validated demand; superseded.
 - **Deferred follow-up (Phase 2):** live source/destination connector-settings swap,
   behind the chaos harness.
+- **Precondition on the future batching/windowing processor work:** it must resolve
+  hot-swap safety before merge — either declare such processors restart-class for
+  live apply, or add a `Flush`/`Drain`-before-`Teardown` step — because the swap's
+  zero-drop guarantee assumes the current non-buffering `Process` contract (see
+  Data-safety §). PR1's contract test is the tripwire that will force this.
