@@ -1,0 +1,8 @@
+version: "2.2"
+pipelines:
+  - id: repair-demo
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator

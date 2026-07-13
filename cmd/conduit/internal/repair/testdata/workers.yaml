@@ -1,0 +1,12 @@
+version: "2.2"
+pipelines:
+  - id: repair-demo
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+    processors:
+      - id: pipe-proc
+        plugin: base64.decode
+        workers: -3

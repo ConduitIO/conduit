@@ -1,10 +1,14 @@
 # `conduit pipelines repair` + MCP `repair` — design/plan
 
-_Status: proposed (design/plan only — no implementation). Advances the Phase 1 execution
+_Status: implemented (v1 starter set — see §6). Advances the Phase 1 execution
 plan (`docs/design-documents/20260704-phase-1-execution-plan.md`) §3 (CLI verb parity) and §2
 (agent-native), which call for `conduit pipeline repair [--apply]` as a "thin applier of the
 structured `fix` field, sharing MCP `repair`'s engine so the human isn't a second-class citizen
-to the agent."_
+to the agent." Implementation: `cmd/conduit/internal/repair` (engine),
+`cmd/conduit/root/pipelines/repair.go` (CLI), `cmd/conduit/internal/mcp/tools_repair.go` (MCP).
+The store-vs-file boundary this doc's §11 reasoned through is now recorded as
+[ADR 20260713](../architecture-decision-records/20260713-repair-edits-file-not-store.md). See
+that PR's description for exactly which of the acceptance criteria below are met._
 
 > **The honest headline, up front.** The structured `Fix` field this feature applies **already
 > exists** in the codebase and already round-trips over gRPC and JSON. What does **not** exist is

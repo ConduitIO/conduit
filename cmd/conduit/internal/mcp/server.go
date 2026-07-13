@@ -38,6 +38,8 @@ const (
 	ToolStop              = "stop"
 	ToolScaffoldConnector = "scaffold_connector"
 	ToolScaffoldProcessor = "scaffold_processor"
+	ToolRepair            = "repair"
+	ToolRepairApply       = "repair_apply"
 )
 
 // Config configures NewServer.
@@ -93,18 +95,23 @@ type server struct {
 
 // NewServer builds the `conduit mcp` tool catalog over cfg.
 //
-// Read tools — validate, lint, dry_run, doctor, deploy, inspect — are always
-// registered; none of them mutate anything (deploy computes a Diff/hash but
-// never executes it; see deploy.go).
+// Read tools — validate, lint, dry_run, doctor, deploy, inspect, repair —
+// are always registered; none of them mutate anything (deploy computes a
+// Diff/hash but never executes it, see deploy.go; repair computes a plan
+// over CONTENT and returns proposed fixes, never touching a store or a
+// running pipeline, see cmd/conduit/internal/repair's doc).
 //
-// Write tools — apply, start, stop, scaffold_connector, scaffold_processor —
-// are registered only when cfg.AllowMutations is set (design doc §3,
-// AC-2/AC-3; start/stop added by 20260712-cli-pipeline-lifecycle-verbs.md
-// §4).
+// Write tools — apply, start, stop, scaffold_connector, scaffold_processor,
+// repair_apply — are registered only when cfg.AllowMutations is set (design
+// doc §3, AC-2/AC-3; start/stop added by
+// 20260712-cli-pipeline-lifecycle-verbs.md §4; repair_apply added by
+// 20260712-repair-command.md §5.2 — even when registered, it never applies
+// a data-path-adjacent fix; see tools_repair.go's doc).
 //
 // Every tool is a thin handler over the exact engine the matching CLI verb
 // calls (cmd/conduit/internal/validate, pkg/conduit/check via doctorcheck,
-// cmd/conduit/internal/deploy, pkg/scaffold, the API client) — see doc.go.
+// cmd/conduit/internal/deploy, cmd/conduit/internal/repair, pkg/scaffold,
+// the API client) — see doc.go.
 func NewServer(cfg Config) *sdkmcp.Server {
 	if cfg.newDeployService == nil {
 		cfg.newDeployService = deploy.NewService
@@ -120,11 +127,15 @@ func NewServer(cfg Config) *sdkmcp.Server {
 		Instructions: "Conduit pipeline tools. validate/lint/dry_run/deploy check and preview a pipeline " +
 			"configuration offline (content-in: pass the pipeline YAML as `config`, never a server file path). " +
 			"doctor checks whether the local machine/configuration is ready for `conduit run`. inspect reads a " +
-			"running pipeline's live status (requires the server to have been started with --api-address). If " +
-			"present, apply/start/stop/scaffold_connector/scaffold_processor mutate the local pipeline store, a " +
-			"running pipeline, or the filesystem — apply requires the hash from a prior deploy call and is " +
-			"refused on a stale hash or a running pipeline; start/stop require --api-address like inspect and " +
-			"are refused on an invalid transition (already running / not running); these tools only appear when " +
+			"running pipeline's live status (requires the server to have been started with --api-address). " +
+			"repair scans a configuration for machine-appliable fixes and returns them classified " +
+			"(safe/restart/data_path) with a plan hash; repair_apply, when present, applies the safe ones " +
+			"(or an explicit `select`) but NEVER a data_path fix — those require the human-only CLI --escalate " +
+			"path. If present, apply/start/stop/scaffold_connector/scaffold_processor/repair_apply mutate the " +
+			"local pipeline store, a running pipeline, or the filesystem — apply requires the hash from a prior " +
+			"deploy call and is refused on a stale hash or a running pipeline; start/stop require --api-address " +
+			"like inspect and are refused on an invalid transition (already running / not running); these tools " +
+			"(plus repair_apply) only appear when " +
 			"the operator started conduit mcp with --allow-mutations.",
 	})
 
@@ -134,6 +145,7 @@ func NewServer(cfg Config) *sdkmcp.Server {
 	sdkmcp.AddTool(srv, tool(ToolDoctor), s.doctor)
 	sdkmcp.AddTool(srv, tool(ToolDeploy), s.deploy)
 	sdkmcp.AddTool(srv, tool(ToolInspect), s.inspect)
+	sdkmcp.AddTool(srv, tool(ToolRepair), s.repair)
 
 	if cfg.AllowMutations {
 		sdkmcp.AddTool(srv, tool(ToolApply), s.apply)
@@ -141,6 +153,7 @@ func NewServer(cfg Config) *sdkmcp.Server {
 		sdkmcp.AddTool(srv, tool(ToolStop), s.stop)
 		sdkmcp.AddTool(srv, tool(ToolScaffoldConnector), s.scaffoldConnector)
 		sdkmcp.AddTool(srv, tool(ToolScaffoldProcessor), s.scaffoldProcessor)
+		sdkmcp.AddTool(srv, tool(ToolRepairApply), s.repairApply)
 	}
 
 	return srv

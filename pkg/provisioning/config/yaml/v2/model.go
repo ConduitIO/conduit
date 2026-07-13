@@ -55,11 +55,17 @@ var Changelog = internal.Changelog{
 			Field:      "pipelines.*.processors.*.type",
 			ChangeType: internal.FieldDeprecated,
 			Message:    "please use field 'plugin' (introduced in version 2.2)",
+			// RenamedTo makes this a repair fix-synthesis candidate (v1
+			// starter set item #1, design doc §6): "type" and "plugin" carry
+			// the exact same value, so the rename is semantics-preserving by
+			// definition.
+			RenamedTo: "plugin",
 		},
 		{
 			Field:      "pipelines.*.connectors.*.processors.*.type",
 			ChangeType: internal.FieldDeprecated,
 			Message:    "please use field 'plugin' (introduced in version 2.2)",
+			RenamedTo:  "plugin",
 		},
 	},
 }

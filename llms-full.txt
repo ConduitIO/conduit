@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (40)
+## 3. Error codes (46)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -622,6 +622,7 @@ Author: Meroxa, Inc.
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | common: unavailable |
 | `config.field_invalid` | InvalidArgument | config: field invalid |
+| `config.field_renamed` | InvalidArgument | CodeFieldRenamed is the stable code carried by a lint warning for a deprecated field that was mechanically renamed (the old key's value moves unchanged to a new key) — see pkg/provisioning/config/yaml/internal.Change.RenamedTo and (*configLinter).newWarning. It is distinct from the generic validate.CodeLintWarning so cmd/conduit/internal/repair's fix-producer scan (design doc 20260712-repair-command.md §6, item #1) can find exactly these findings without pattern-matching warning text. |
 | `config.field_required` | InvalidArgument | config: field required |
 | `config.field_too_long` | InvalidArgument | config: field too long |
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
@@ -651,6 +652,11 @@ Author: Meroxa, Inc.
 | `provisioning.pipeline_running` | FailedPrecondition | provisioning: pipeline running |
 | `provisioning.plan_stale` | FailedPrecondition | provisioning: plan stale |
 | `provisioning.standalone_unsafe` | FailedPrecondition | provisioning: standalone unsafe |
+| `repair.ambiguous_fix` | FailedPrecondition | CodeAmbiguousFix is raised when more than one candidate fix targets the same ConfigPath and the selection does not disambiguate — repair never silently picks one (design doc §9, failure mode 3, AC-20). |
+| `repair.data_path_fix_refused` | FailedPrecondition | CodeDataPathFixRefused is raised when a FixClassDataPath fix is selected for apply without the human-only Escalate path (design doc §4.2, the Tier-1 crux). The CLI surfaces this as a hard refusal (AC-14); MCP repair_apply — which never sets Escalate — surfaces it as a per-fix skip, never a fatal call (AC-15). |
+| `repair.fix_no_longer_applies` | FailedPrecondition | CodeFixNoLongerApplies is raised per-fix (not for the whole Apply call) when a selected fix's target field no longer matches what the fix was computed against — either hand-edited between Collect and Apply in a way the hash's per-fix granularity didn't already catch, or consumed by an earlier fix in the same Apply batch (design doc §9, failure mode 1 and AC-19). Other selected fixes in the same call still apply; this fix is skipped, not fatal to the run. |
+| `repair.no_fixes_available` | InvalidArgument | CodeNoFixesAvailable is raised when --apply (or repair_apply) is requested but the plan contains zero appliable fixes. A read-mode call with zero fixes is exit 0 ("already clean"), never this code (AC-21). |
+| `repair.plan_stale` | FailedPrecondition | CodePlanStale is raised by Apply when the caller-presented hash does not match the hash freshly recomputed from the current file bytes — the direct analogue of provisioning.CodePlanStale (see plan.go). The file changed since the plan was shown and approved. |
 | `scaffold.build_failed` | Internal | CodeBuildFailed is raised when the verified `go build ./...` step fails. Maps to gRPC Internal -> exitcode.Runtime (1), per this package's explicit exit-code routing ("verified go build failure -> 1"). |
 | `scaffold.destination_exists` | AlreadyExists | CodeDestinationExists is raised when the target directory already exists and --force was not given. Maps to gRPC AlreadyExists -> exitcode.Validation (2). |
 | `scaffold.generate_failed` | Internal | CodeGenerateFailed is raised when installing the code-gen tool or running it fails after files are already on disk (in the temp staging directory — see scaffold.go's atomic-rename discipline, so this never leaves a partial directory at the requested destination). Maps to gRPC Internal -> exitcode.Runtime (1). |
@@ -659,7 +665,7 @@ Author: Meroxa, Inc.
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 
-## 4. MCP tool catalog (11)
+## 4. MCP tool catalog (13)
 
 | Name | Class | Description |
 | --- | --- | --- |
@@ -669,6 +675,8 @@ Author: Meroxa, Inc.
 | `dry_run` | read | Everything validate checks, plus the fully-enriched pipeline graph `conduit run` would load and a builtin-plugin existence check. Same engine as `conduit pipelines dry-run`. |
 | `inspect` | read | Reports a running pipeline's live status, per-stage connector summary, and DLQ. Requires a running Conduit (conduit mcp --api-address). Same engine as `conduit pipelines inspect`. |
 | `lint` | read | Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/unknown fields, version fallback). Same engine as `conduit pipelines lint`. |
+| `repair` | read | Scans a pipeline configuration for findings that carry a structured, machine-appliable fix (a deprecated/renamed field, an unambiguous invalid status value, a negative processor workers count, an over-long description), classifies each fix's safety (safe / restart / data_path), and returns a plan hash. Mutates nothing. Same engine as `conduit pipelines repair`. |
+| `repair_apply` | write (requires --allow-mutations) | Applies the plan computed by repair — safe fixes only, unless select names others — only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). A data-path-adjacent fix (connector settings, a connector's own plugin/type, DLQ config, any id field) is NEVER applied by this tool, even if selected explicitly — it comes back in the result as a skipped fix; only the CLI's --escalate flag (human-only) can apply one. Same engine as `conduit pipelines repair --apply`. |
 | `scaffold_connector` | write (requires --allow-mutations) | Scaffolds a new Go connector plugin repository (source and/or destination). Same engine as `conduit connector new`. |
 | `scaffold_processor` | write (requires --allow-mutations) | Scaffolds a new Go (WASM) processor plugin repository. Same engine as `conduit processor new`. |
 | `start` | write (requires --allow-mutations) | Starts a pipeline registered in a running Conduit (transitions to Running). Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is already running (pipeline.running). Same engine as `conduit pipelines start`. |

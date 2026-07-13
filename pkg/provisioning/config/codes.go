@@ -27,6 +27,15 @@ var (
 	CodeFieldInvalid  = conduiterr.Register("config.field_invalid", codes.InvalidArgument)
 	CodeFieldTooLong  = conduiterr.Register("config.field_too_long", codes.InvalidArgument)
 	CodeIDDuplicate   = conduiterr.Register("config.id_duplicate", codes.InvalidArgument)
+	// CodeFieldRenamed is the stable code carried by a lint warning for a
+	// deprecated field that was mechanically renamed (the old key's value
+	// moves unchanged to a new key) — see
+	// pkg/provisioning/config/yaml/internal.Change.RenamedTo and
+	// (*configLinter).newWarning. It is distinct from the generic
+	// validate.CodeLintWarning so cmd/conduit/internal/repair's fix-producer
+	// scan (design doc 20260712-repair-command.md §6, item #1) can find
+	// exactly these findings without pattern-matching warning text.
+	CodeFieldRenamed = conduiterr.Register("config.field_renamed", codes.InvalidArgument)
 	// CodeParseError is raised when a pipeline config document can't be parsed
 	// at all (invalid YAML, unrecognized version). It exists for offline
 	// consumers (cmd/conduit/internal/validate) that need a stable code for
@@ -43,5 +52,22 @@ func fieldError(code conduiterr.Code, configPath, msg, suggestion string, sentin
 	e := conduiterr.Wrap(code, msg, sentinel)
 	e.ConfigPath = configPath
 	e.Suggestion = suggestion
+	return e
+}
+
+// fieldErrorWithFix is fieldError plus a structured, machine-appliable
+// conduiterr.Fix — the repair v1 starter set's producer sites (design doc
+// 20260712-repair-command.md §6, items #2-#4: /status, negative
+// processor/workers, over-long /description) use this instead of fieldError
+// so cmd/conduit/internal/repair can offer the fix without any additional
+// per-site wiring. fix.ConfigPath is always set to configPath by this
+// helper (callers pass a zero-value fix.ConfigPath) so the two can never
+// drift.
+func fieldErrorWithFix(code conduiterr.Code, configPath, msg, suggestion string, sentinel error, fix conduiterr.Fix) error {
+	e := conduiterr.Wrap(code, msg, sentinel)
+	e.ConfigPath = configPath
+	e.Suggestion = suggestion
+	fix.ConfigPath = configPath
+	e.Fix = &fix
 	return e
 }

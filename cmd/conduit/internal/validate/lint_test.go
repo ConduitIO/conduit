@@ -38,10 +38,19 @@ func TestRunWithOptions_Warnings_SurfacesLocatedWarning(t *testing.T) {
 
 	w := report.Files[0].Findings[0]
 	is.Equal(w.Severity, SeverityWarning)
-	is.Equal(w.Code, CodeLintWarning)
 	is.True(w.Line > 0)   // located by line...
 	is.True(w.Column > 0) // ...and column
 	is.True(w.Message != "")
+
+	// testdata/warning.yaml's processor uses the deprecated "type" field
+	// (processor 2.2 rename to "plugin") — a repair v1 starter set fix
+	// candidate (design doc 20260712-repair-command.md §6, item #1), so
+	// this warning carries the dedicated config.field_renamed code and a
+	// machine-appliable Fix rather than the generic CodeLintWarning.
+	is.Equal(w.Code, "config.field_renamed")
+	is.True(w.Fix != nil)
+	is.Equal(w.Fix.Op, "remove")
+	is.Equal(w.Fix.Value, "plugin")
 }
 
 // validate (Options{}) is errors-only: the same file lint flags a warning on

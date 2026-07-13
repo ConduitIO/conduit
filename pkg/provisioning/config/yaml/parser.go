@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
@@ -88,6 +89,15 @@ type Warning struct {
 	Column  int
 	Value   string
 	Message string
+	// Code is the warning's stable conduiterr code reason, set only for a
+	// rename-class warning (config.CodeFieldRenamed) — every other warning
+	// leaves this empty, and cmd/conduit/internal/validate.warningFinding
+	// falls back to its own generic CodeLintWarning in that case.
+	Code string
+	// Fix is a structured, machine-appliable fix for this warning, set only
+	// alongside a non-empty Code — see (*configLinter).newWarning's doc for
+	// what ConfigPath/Op/Value mean for a rename.
+	Fix *conduiterr.Fix
 }
 
 // ParseWithWarnings is Parse plus the advisory warnings the parser would
@@ -100,7 +110,7 @@ func (p *Parser) ParseWithWarnings(ctx context.Context, reader io.Reader) ([]con
 	warn = warn.Sort()
 	ws := make([]Warning, len(warn))
 	for i, w := range warn {
-		ws[i] = Warning{Field: w.field, Line: w.line, Column: w.column, Value: w.value, Message: w.message}
+		ws[i] = Warning{Field: w.field, Line: w.line, Column: w.column, Value: w.value, Message: w.message, Code: w.code, Fix: w.fix}
 	}
 	return configs.ToConfig(), ws, err
 }

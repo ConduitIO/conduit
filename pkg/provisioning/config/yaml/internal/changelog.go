@@ -34,6 +34,18 @@ type Change struct {
 	// message is the log message that will be printed if a file is detected
 	// that uses this field with an unsupported version.
 	Message string
+	// RenamedTo is the new field's key name, set only when this
+	// FieldDeprecated change is a pure rename (the old key's value moves,
+	// unchanged, to a new key) rather than a removal with no replacement.
+	// It is the repair fix-synthesis producer's signal (see
+	// cmd/conduit/internal/repair's doc and
+	// pkg/provisioning/config/yaml/linter.go's newWarning): a warning for a
+	// change with a non-empty RenamedTo carries a machine-appliable
+	// conduiterr.Fix; a plain deprecation (RenamedTo == "") never does,
+	// since there is no deterministic replacement value to write (design
+	// doc docs/design-documents/20260712-repair-command.md §6, "Selection
+	// rule: a fix ships in v1 only if its Value is deterministic").
+	RenamedTo string
 }
 
 // ChangeType defines the type of the change introduced in a specific version.

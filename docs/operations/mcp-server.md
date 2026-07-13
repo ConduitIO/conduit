@@ -32,16 +32,39 @@ conduit mcp --api-address localhost:8084
 | `doctor` | no | no | `conduit doctor` |
 | `deploy` | no (preview only) | no | `conduit pipelines deploy` |
 | `inspect` | no | no | `conduit pipelines inspect` (requires `--api-address`) |
+| `repair` | no (preview only) | no | `conduit pipelines repair` |
 | `apply` | yes | **yes** | `conduit pipelines apply` |
 | `start` | yes (running pipeline) | **yes** | `conduit pipelines start` (requires `--api-address`) |
 | `stop` | yes (running pipeline) | **yes** | `conduit pipelines stop` (requires `--api-address`) |
 | `scaffold_connector` | yes (filesystem) | **yes** | `conduit connector new` |
 | `scaffold_processor` | yes (filesystem) | **yes** | `conduit processor new` |
+| `repair_apply` | yes (the config content only — never the store or a running pipeline) | **yes** | `conduit pipelines repair --apply` |
 
-`validate`/`lint`/`dry_run`/`deploy`/`apply` take pipeline configuration as a `config` string
-(inline YAML content) — never a server-side file path. An agent naturally has content, not a path
-on the machine `conduit mcp` runs on; accepting a path would let an agent read/validate arbitrary
-files on that host.
+`validate`/`lint`/`dry_run`/`deploy`/`apply`/`repair`/`repair_apply` take pipeline configuration as
+a `config` string (inline YAML content) — never a server-side file path. An agent naturally has
+content, not a path on the machine `conduit mcp` runs on; accepting a path would let an agent
+read/validate arbitrary files on that host.
+
+### `repair` / `repair_apply`
+
+`repair` scans a pipeline configuration for findings that carry a structured, machine-appliable fix
+(a deprecated/renamed field, an unambiguous invalid `status` value, a negative processor
+`workers` count, an over-long `description` — see
+[`docs/design-documents/20260712-repair-command.md`](../design-documents/20260712-repair-command.md)
+§6 for the full v1 scope) and returns each proposed fix classified `safe` / `restart` / `data_path`,
+with a plan hash. It never mutates anything, including the config content itself — it only reads.
+
+`repair_apply` applies the plan `repair` computed — every `safe` fix by default, or the `select`-ed
+subset — only if `hash` still matches the freshly recomputed plan exactly. It **never applies a
+`data_path` fix**, even if one is named explicitly via `select`: that fix comes back in the result
+as a skipped entry with `repair.data_path_fix_refused`. There is **no `escalate` field** in this
+tool's input schema — the data-path override is reachable only from the CLI's `conduit pipelines
+repair --apply --escalate` flag, a human-only path, by design (mirrors `--allow-mutations` being
+process-set only, never a tool argument).
+
+Both tools are content-in/content-out only: `repair_apply` returns the repaired YAML in its result;
+it never writes to a file, the pipeline store, or a running pipeline. Getting the repaired
+configuration into a running engine is still `deploy`/`apply`'s job.
 
 Every tool result is a structured envelope: `{ok, summary, result, error}`. On a domain failure,
 `error` carries `{code, message, suggestion, fix}` — the same machine-actionable fields the CLI's
@@ -150,15 +173,21 @@ Rotating the shared token today means restarting `conduit mcp` with a new `--tok
 
 ## Known limitations (Wave 3)
 
-- **`repair` tool**: not built — the CLI `repair` verb doesn't exist yet. It will ship as an MCP
-  tool in the same PR as the CLI command (same-engine rule).
-- **`llms.txt` tool-catalog generation**: the full multi-source `llms.txt` generator (config
-  schema, connector list, error registry, and this tool catalog) is deferred; the tool catalog
-  itself is stable and documented here in the interim.
+- **`repair` scope is v1-narrow by design**: only the four fix classes in
+  [`docs/design-documents/20260712-repair-command.md`](../design-documents/20260712-repair-command.md)
+  §6 carry a machine-appliable fix today (a deprecated/renamed field, an unambiguous invalid
+  `status`, a negative processor `workers`, an over-long `description`); every other finding still
+  keeps its human `suggestion` with no `fix`. `repair`/`repair_apply` also only operate on a single
+  file containing exactly one v2-format pipeline document — the same scope deploy/apply already
+  impose.
+- **`llms.txt`/`llms-full.txt` generation**: `cmd/conduit/internal/llmsgen` (`go generate ./...`)
+  now generates both from source — config schema, connector list, the error registry (via AST
+  scan of every `conduiterr.Register` call, including `repair`'s new codes), and this tool catalog
+  (`mcp.Catalog()`, including `repair`/`repair_apply`) — with a CI drift guard. This is no longer a
+  gap.
 - **North-star E2E** (a scripted agent going zero → running pipeline using only MCP + `llms.txt`):
-  deferred pending the `llms.txt` generator. The live-server RPC path (#2588) has landed — `apply`
+  the `llms.txt` generator has landed; the live-server RPC path (#2588) has also landed — `apply`
   now reaches a genuinely running pipeline when a server is reachable, gated by the server's
   `--api.allow-live-restart-apply` operator flag (see
-  [`docs/operations/live-restart-apply.md`](live-restart-apply.md)) for restart-class changes — so
-  what remains for the north-star E2E is the `llms.txt` generator itself, not the apply-to-running
-  capability.
+  [`docs/operations/live-restart-apply.md`](live-restart-apply.md)) for restart-class changes. A
+  scripted end-to-end run proving this has not been executed as part of this change.

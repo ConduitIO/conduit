@@ -18,12 +18,12 @@
 (6 built-in connectors; full parameters in llms-full.txt)
 
 ## Error codes
-- 40 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
+- 46 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 
 ## MCP tools
-- Read: deploy, doctor, dry_run, inspect, lint, validate
-- Write (require --allow-mutations): apply, scaffold_connector, scaffold_processor, start, stop
-(11 tools; full schemas in llms-full.txt)
+- Read: deploy, doctor, dry_run, inspect, lint, repair, validate
+- Write (require --allow-mutations): apply, repair_apply, scaffold_connector, scaffold_processor, start, stop
+(13 tools; full schemas in llms-full.txt)
 
 ## Full detail
 - [llms-full.txt](llms-full.txt)

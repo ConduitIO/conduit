@@ -26,9 +26,9 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var readToolNames = []string{ToolValidate, ToolLint, ToolDryRun, ToolDoctor, ToolDeploy, ToolInspect}
+var readToolNames = []string{ToolValidate, ToolLint, ToolDryRun, ToolDoctor, ToolDeploy, ToolInspect, ToolRepair}
 
-var writeToolNames = []string{ToolApply, ToolStart, ToolStop, ToolScaffoldConnector, ToolScaffoldProcessor}
+var writeToolNames = []string{ToolApply, ToolStart, ToolStop, ToolScaffoldConnector, ToolScaffoldProcessor, ToolRepairApply}
 
 // TestNewServer_ReadToolsAlwaysRegistered is AC-1's catalog half: every read
 // tool is present regardless of AllowMutations.

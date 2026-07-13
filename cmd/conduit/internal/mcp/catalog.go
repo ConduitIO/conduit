@@ -88,6 +88,24 @@ var catalog = []ToolInfo{
 		Mutates:     true,
 	},
 	{
+		Name: ToolRepair,
+		Description: "Scans a pipeline configuration for findings that carry a structured, machine-appliable " +
+			"fix (a deprecated/renamed field, an unambiguous invalid status value, a negative processor " +
+			"workers count, an over-long description), classifies each fix's safety (safe / restart / " +
+			"data_path), and returns a plan hash. Mutates nothing. Same engine as `conduit pipelines repair`.",
+		Mutates: false,
+	},
+	{
+		Name: ToolRepairApply,
+		Description: "Applies the plan computed by repair — safe fixes only, unless select names others — " +
+			"only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing " +
+			"mutated). A data-path-adjacent fix (connector settings, a connector's own plugin/type, DLQ " +
+			"config, any id field) is NEVER applied by this tool, even if selected explicitly — it comes " +
+			"back in the result as a skipped fix; only the CLI's --escalate flag (human-only) can apply " +
+			"one. Same engine as `conduit pipelines repair --apply`.",
+		Mutates: true,
+	},
+	{
 		Name: ToolStart,
 		Description: "Starts a pipeline registered in a running Conduit (transitions to Running). " +
 			"Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is " +
