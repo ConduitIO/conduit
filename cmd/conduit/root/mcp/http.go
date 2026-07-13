@@ -15,14 +15,17 @@
 package mcp
 
 import (
+	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -36,7 +39,14 @@ const bearerPrefix = "Bearer "
 // transport that needs no auth (the agent owns that process); HTTP may be
 // reachable by anyone who can open a socket to it, so it never serves
 // without both checks passing.
-func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server) (*http.Server, error) {
+//
+// logger is used for the H-2/H-4 hardening additions (design doc
+// 20260712-mcp-http-transport.md, §Hardening plan): a startup line naming
+// the bound address and auth mode, a warning if the bind address is not
+// loopback-restricted, and (via newMCPHTTPHandler) a log line per rejected
+// auth attempt. Never pass anything derived from the token itself to logger
+// — see requireBearerToken's invariant comment (AC-8).
+func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server, logger log.CtxLogger) (*http.Server, error) {
 	if err := validateHTTPConfig(c.flags); err != nil {
 		return nil, err
 	}
@@ -51,11 +61,24 @@ func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server) (*http.Server, error) {
 		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, "could not load --tls-cert/--tls-key", err)
 	}
 
+	// H-4: TLS + a bearer token make a non-loopback bind *safe*, but a
+	// surprised operator exposing the MCP endpoint (a mutation-capable
+	// surface when --allow-mutations is set) to the network unintentionally
+	// is a real failure mode — surface it at startup instead of staying
+	// silent.
+	warnIfNonLoopback(logger, c.flags.HTTP)
+
 	// Bound the request body: a tool call carries a pipeline config (KBs), so a
 	// few MiB is generous. Without this an authenticated client could post an
 	// arbitrarily large body that is buffered/parsed in memory (a DoS vector,
 	// blast-radius-limited to token holders, but cheap to close).
-	handler := limitRequestBody(newMCPHTTPHandler(srv, token), maxRequestBodyBytes)
+	handler := limitRequestBody(newMCPHTTPHandler(srv, token, logger), maxRequestBodyBytes)
+
+	logger.Info(context.Background()).
+		Str("addr", c.flags.HTTP).
+		Str("auth", "bearer").
+		Bool("tls", true).
+		Msg("serving MCP over streamable HTTP")
 
 	return &http.Server{
 		Addr:      c.flags.HTTP,
@@ -65,7 +88,49 @@ func (c *MCPCommand) newHTTPServer(srv *sdkmcp.Server) (*http.Server, error) {
 		// request headers (a Slowloris-style attack) — required on any
 		// http.Server exposed beyond localhost.
 		ReadHeaderTimeout: 10 * time.Second,
+		// IdleTimeout (H-3) bounds how long a keep-alive connection may sit
+		// idle between requests. Streamable HTTP can hold a response open
+		// while streaming, so a blanket WriteTimeout would be wrong (it
+		// would sever a legitimately long-lived response); IdleTimeout only
+		// closes connections that are not in the middle of a request/
+		// response, which is safe and still closes out connection-
+		// exhaustion attempts that never send a next request.
+		IdleTimeout: idleTimeout,
 	}, nil
+}
+
+// idleTimeout bounds an idle (no in-flight request) keep-alive connection on
+// the --http listener (design doc H-3). 120s is generous for a legitimate
+// agent reusing a connection across tool calls while still reclaiming
+// connections an attacker opens and leaves idle.
+const idleTimeout = 120 * time.Second
+
+// warnIfNonLoopback logs a warning (design doc H-4) if addr — the --http
+// bind address — is not restricted to loopback. An empty host (e.g. ":8443")
+// binds all interfaces and counts as non-loopback. TLS and the bearer token
+// already make this safe; the warning exists so an operator who intended
+// `--http localhost:8443` and typo'd or defaulted to `--http :8443` notices
+// the wider exposure instead of discovering it later.
+func warnIfNonLoopback(logger log.CtxLogger, addr string) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// addr had no port (unusual for --http, but don't crash logging over
+		// it); fall back to treating the whole value as the host part.
+		host = addr
+	}
+
+	if host != "" {
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return
+		}
+		if host == "localhost" {
+			return
+		}
+	}
+
+	logger.Warn(context.Background()).
+		Str("addr", addr).
+		Msg("--http is bound to a non-loopback address; the MCP server will be reachable from the network (TLS + bearer token are still required, but confirm this exposure is intentional)")
 }
 
 // maxRequestBodyBytes bounds an HTTP MCP request body. 4 MiB is generous for a
@@ -132,19 +197,31 @@ func loadBearerToken(path string) (string, error) {
 // middleware. getServer always returns srv (a single, already-built server
 // instance is fine to hand back for every session — see
 // mcp.NewStreamableHTTPHandler's doc).
-func newMCPHTTPHandler(srv *sdkmcp.Server, token string) http.Handler {
+func newMCPHTTPHandler(srv *sdkmcp.Server, token string, logger log.CtxLogger) http.Handler {
 	mcpHandler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return srv }, nil)
-	return requireBearerToken(token, mcpHandler)
+	return requireBearerToken(token, mcpHandler, logger)
 }
 
 // requireBearerToken wraps next with constant-time bearer-token
 // authentication (design doc §5: "a bearer token, compared constant-time").
 // A missing/malformed Authorization header or a token that doesn't match is
-// rejected with 401 before next ever sees the request.
-func requireBearerToken(token string, next http.Handler) http.Handler {
+// rejected with 401 before next ever sees the request; the rejection is
+// logged (design doc H-2/AC-10) so brute-force/probing attempts against the
+// token are observable instead of invisible.
+func requireBearerToken(token string, next http.Handler, logger log.CtxLogger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := strings.CutPrefix(r.Header.Get("Authorization"), bearerPrefix)
 		if !ok || !constantTimeEqual(presented, token) {
+			// Invariant (AC-8): never log the presented credential or the
+			// configured token — only request metadata an operator needs to
+			// spot brute-forcing (method/path/remote addr), never the
+			// secret the log line exists to protect.
+			logger.Warn(r.Context()).
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Str("remote_addr", r.RemoteAddr).
+				Str("outcome", "unauthorized").
+				Msg("rejected MCP HTTP request: missing or invalid bearer token")
 			w.Header().Set("WWW-Authenticate", `Bearer realm="conduit-mcp"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
