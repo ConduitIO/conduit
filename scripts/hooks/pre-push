@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Opt-in pre-push hook: runs the CI-equivalent local checks before a push so a
+# failing PR is caught locally instead of on GitHub. Enable it once per clone
+# with `make setup-hooks` (sets core.hooksPath=scripts/hooks).
+#
+# This runs `make verify` (lint + pinned markdown-lint + generated-files drift +
+# the -short unit subset). To push a WIP branch without the gate, either skip the
+# hook for one push with `git push --no-verify`, or don't run `make setup-hooks`.
+set -euo pipefail
+
+echo "pre-push: running 'make verify' (skip once with 'git push --no-verify')"
+exec make verify
