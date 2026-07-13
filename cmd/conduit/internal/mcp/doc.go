@@ -25,10 +25,12 @@
 // # Read/write separation
 //
 // Read tools (validate, lint, dry_run, doctor, deploy, inspect) are always
-// registered by NewServer. Write tools (apply, scaffold_connector,
-// scaffold_processor) are registered only when Config.AllowMutations is set
-// — an operator/process-level flag on `conduit mcp`, never a tool argument
-// an agent could pass. See NewServer's doc and the design doc §3.
+// registered by NewServer. Write tools (apply, start, stop,
+// scaffold_connector, scaffold_processor) are registered only when
+// Config.AllowMutations is set — an operator/process-level flag on
+// `conduit mcp`, never a tool argument an agent could pass. See NewServer's
+// doc, the design doc §3, and 20260712-cli-pipeline-lifecycle-verbs.md §4 for
+// start/stop specifically.
 //
 // # Content-in, never a server path
 //

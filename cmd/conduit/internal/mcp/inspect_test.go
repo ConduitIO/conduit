@@ -25,13 +25,25 @@ import (
 )
 
 // fakeInspectClient is an inspectClient test double: canned
-// responses/errors, no gRPC dial.
+// responses/errors, no gRPC dial. Shared by the inspect and start/stop tool
+// tests, since they all go through the same client seam (inspect.go's doc).
 type fakeInspectClient struct {
 	pipeline   *apiv1.Pipeline
 	connectors []*apiv1.Connector
 	dlq        *apiv1.Pipeline_DLQ
 	err        error
 	closed     bool
+
+	// startErr/stopErr let start/stop tool tests exercise a transition
+	// failure independently of err (which also drives GetPipeline/
+	// ListConnectors/GetDLQ) — e.g. a successful StopPipeline whose read-back
+	// GetPipeline then fails.
+	startErr error
+	stopErr  error
+
+	startCalled bool
+	stopCalled  bool
+	stopForce   bool
 }
 
 func (f *fakeInspectClient) GetPipeline(context.Context, string) (*apiv1.Pipeline, error) {
@@ -53,6 +65,17 @@ func (f *fakeInspectClient) GetDLQ(context.Context, string) (*apiv1.Pipeline_DLQ
 		return nil, f.err
 	}
 	return f.dlq, nil
+}
+
+func (f *fakeInspectClient) StartPipeline(context.Context, string) error {
+	f.startCalled = true
+	return f.startErr
+}
+
+func (f *fakeInspectClient) StopPipeline(_ context.Context, _ string, force bool) error {
+	f.stopCalled = true
+	f.stopForce = force
+	return f.stopErr
 }
 
 func (f *fakeInspectClient) Close() error {

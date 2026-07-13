@@ -34,6 +34,8 @@ const (
 	ToolDeploy            = "deploy"
 	ToolInspect           = "inspect"
 	ToolApply             = "apply"
+	ToolStart             = "start"
+	ToolStop              = "stop"
 	ToolScaffoldConnector = "scaffold_connector"
 	ToolScaffoldProcessor = "scaffold_processor"
 )
@@ -95,8 +97,10 @@ type server struct {
 // registered; none of them mutate anything (deploy computes a Diff/hash but
 // never executes it; see deploy.go).
 //
-// Write tools — apply, scaffold_connector, scaffold_processor — are
-// registered only when cfg.AllowMutations is set (design doc §3, AC-2/AC-3).
+// Write tools — apply, start, stop, scaffold_connector, scaffold_processor —
+// are registered only when cfg.AllowMutations is set (design doc §3,
+// AC-2/AC-3; start/stop added by 20260712-cli-pipeline-lifecycle-verbs.md
+// §4).
 //
 // Every tool is a thin handler over the exact engine the matching CLI verb
 // calls (cmd/conduit/internal/validate, pkg/conduit/check via doctorcheck,
@@ -117,9 +121,11 @@ func NewServer(cfg Config) *sdkmcp.Server {
 			"configuration offline (content-in: pass the pipeline YAML as `config`, never a server file path). " +
 			"doctor checks whether the local machine/configuration is ready for `conduit run`. inspect reads a " +
 			"running pipeline's live status (requires the server to have been started with --api-address). If " +
-			"present, apply/scaffold_connector/scaffold_processor mutate the local pipeline store or filesystem " +
-			"— apply requires the hash from a prior deploy call and is refused on a stale hash or a running " +
-			"pipeline; these three tools only appear when the operator started conduit mcp with --allow-mutations.",
+			"present, apply/start/stop/scaffold_connector/scaffold_processor mutate the local pipeline store, a " +
+			"running pipeline, or the filesystem — apply requires the hash from a prior deploy call and is " +
+			"refused on a stale hash or a running pipeline; start/stop require --api-address like inspect and " +
+			"are refused on an invalid transition (already running / not running); these tools only appear when " +
+			"the operator started conduit mcp with --allow-mutations.",
 	})
 
 	sdkmcp.AddTool(srv, &sdkmcp.Tool{
@@ -161,6 +167,19 @@ func NewServer(cfg Config) *sdkmcp.Server {
 				"recomputed plan (a stale hash is refused, nothing mutated). Refuses to mutate a currently " +
 				"-running pipeline. Same engine as `conduit pipelines apply`.",
 		}, s.apply)
+		sdkmcp.AddTool(srv, &sdkmcp.Tool{
+			Name: ToolStart,
+			Description: "Starts a pipeline registered in a running Conduit (transitions to Running). " +
+				"Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is " +
+				"already running (pipeline.running). Same engine as `conduit pipelines start`.",
+		}, s.start)
+		sdkmcp.AddTool(srv, &sdkmcp.Tool{
+			Name: ToolStop,
+			Description: "Stops a running pipeline registered in a running Conduit — graceful drain by " +
+				"default, or immediate with force:true. Requires --api-address, like inspect; no offline " +
+				"fallback. Refused if the pipeline isn't running (pipeline.not_running). Same engine as " +
+				"`conduit pipelines stop`.",
+		}, s.stop)
 		sdkmcp.AddTool(srv, &sdkmcp.Tool{
 			Name:        ToolScaffoldConnector,
 			Description: "Scaffolds a new Go connector plugin repository (source and/or destination). Same engine as `conduit connector new`.",

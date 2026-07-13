@@ -25,16 +25,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// inspectClient is the narrow surface the inspect tool needs from a running
-// Conduit's gRPC API — the same three calls
-// cmd/conduit/root/pipelines/inspect.go makes (GetPipeline, ListConnectors+
-// GetConnector per connector, GetDLQ). Declaring it here (rather than
-// depending on *api.Client concretely) lets the tool be unit-tested against
-// a fake, without a live gRPC server.
+// inspectClient is the narrow surface the inspect/start/stop tools need from
+// a running Conduit's gRPC API — the same calls
+// cmd/conduit/root/pipelines/{inspect,start,stop}.go make (GetPipeline,
+// ListConnectors+GetConnector per connector, GetDLQ, StartPipeline,
+// StopPipeline). Declaring it here (rather than depending on *api.Client
+// concretely) lets every tool built on this seam be unit-tested against a
+// fake, without a live gRPC server.
+//
+// StartPipeline/StopPipeline were added alongside the start/stop tools
+// (design doc 20260712-cli-pipeline-lifecycle-verbs.md §2: "the MCP server's
+// existing API client seam ... extended with the two lifecycle methods") —
+// the name predates them but the seam is now shared by every tool that needs
+// a live server, not just inspect.
 type inspectClient interface {
 	GetPipeline(ctx context.Context, id string) (*apiv1.Pipeline, error)
 	ListConnectors(ctx context.Context, pipelineID string) ([]*apiv1.Connector, error)
 	GetDLQ(ctx context.Context, id string) (*apiv1.Pipeline_DLQ, error)
+	StartPipeline(ctx context.Context, id string) error
+	StopPipeline(ctx context.Context, id string, force bool) error
 	Close() error
 }
 
@@ -83,7 +92,37 @@ func (a *apiInspectClient) GetDLQ(ctx context.Context, id string) (*apiv1.Pipeli
 	return resp.Dlq, nil
 }
 
+func (a *apiInspectClient) StartPipeline(ctx context.Context, id string) error {
+	_, err := a.c.PipelineServiceClient.StartPipeline(ctx, &apiv1.StartPipelineRequest{Id: id})
+	return err
+}
+
+func (a *apiInspectClient) StopPipeline(ctx context.Context, id string, force bool) error {
+	_, err := a.c.PipelineServiceClient.StopPipeline(ctx, &apiv1.StopPipelineRequest{Id: id, Force: force})
+	return err
+}
+
 func (a *apiInspectClient) Close() error { return a.c.Close() }
+
+// apiAddressSuggestion is the remediation every tool on the inspectClient
+// seam (inspect, start, stop) attaches when Config.APIAddress is unset — kept
+// as one string so the three call sites can't drift.
+const apiAddressSuggestion = "restart conduit mcp with --api-address <host:port> pointing at a running `conduit run` instance"
+
+// requireAPIAddress returns a common.unavailable error when apiAddress is
+// empty — the shared "no live server configured" failure mode for every tool
+// built on the inspectClient seam. tool names the calling tool in the
+// message only (e.g. "inspect", "start", "stop"). Returns nil when
+// apiAddress is set, i.e. "no error, proceed".
+func requireAPIAddress(apiAddress, tool string) error {
+	if apiAddress != "" {
+		return nil
+	}
+	ce := conduiterr.New(conduiterr.CodeUnavailable,
+		fmt.Sprintf("conduit mcp was not started with --api-address; %s requires the gRPC address of a running Conduit", tool))
+	ce.Suggestion = apiAddressSuggestion
+	return ce
+}
 
 // InspectArgs is the inspect tool's input.
 type InspectArgs struct {
@@ -108,10 +147,7 @@ func (s *server) inspect(ctx context.Context, _ *sdkmcp.CallToolRequest, in Insp
 		ce := conduiterr.New(conduiterr.CodeInvalidArgument, "pipelineId is required")
 		return toolErr[InspectResult](ce)
 	}
-	if s.cfg.APIAddress == "" {
-		ce := conduiterr.New(conduiterr.CodeUnavailable,
-			"conduit mcp was not started with --api-address; inspect requires the gRPC address of a running Conduit")
-		ce.Suggestion = "restart conduit mcp with --api-address <host:port> pointing at a running `conduit run` instance"
+	if ce := requireAPIAddress(s.cfg.APIAddress, "inspect"); ce != nil {
 		return toolErr[InspectResult](ce)
 	}
 

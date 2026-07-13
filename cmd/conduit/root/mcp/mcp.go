@@ -61,11 +61,11 @@ type MCPFlags struct {
 	HTTP string `long:"http" usage:"serve the streamable-HTTP transport on this address INSTEAD OF stdio (EXPERIMENTAL; see docs/operations/mcp-server.md); requires --token-file and --tls-cert/--tls-key"`
 	// AllowMutations is a startup/process flag, deliberately not a tool
 	// argument — see cmd/conduit/internal/mcp.Config.AllowMutations's doc.
-	AllowMutations bool   `long:"allow-mutations" usage:"register the write tools (apply, scaffold_connector, scaffold_processor); an operator/process-level switch, never agent-settable"`
+	AllowMutations bool   `long:"allow-mutations" usage:"register the write tools (apply, start, stop, scaffold_connector, scaffold_processor); an operator/process-level switch, never agent-settable"`
 	TokenFile      string `long:"token-file" usage:"path to a file containing the bearer token --http requires (compared constant-time)"`
 	TLSCert        string `long:"tls-cert" usage:"TLS certificate file for --http"`
 	TLSKey         string `long:"tls-key" usage:"TLS key file for --http"`
-	APIAddress     string `long:"api-address" usage:"gRPC address of a running Conduit, dialed by the inspect tool"`
+	APIAddress     string `long:"api-address" usage:"gRPC address of a running Conduit, dialed by the inspect/start/stop tools"`
 }
 
 // MCPCommand implements `conduit mcp`: a long-running server, like `conduit
@@ -88,10 +88,10 @@ func (c *MCPCommand) Docs() ecdysis.Docs {
 		Short: "Run Conduit's MCP server, exposing pipeline operations to AI agents",
 		Long: `Registers Conduit's operations as MCP tools that are 1:1 with the CLI verbs and call the
 exact same engines — validate/lint/dry_run/deploy/doctor/inspect are always available (deploy only
-computes a diff + hash, never mutates); apply/scaffold_connector/scaffold_processor are additionally
-registered only when --allow-mutations is set, since those tools mutate the local pipeline store or
-filesystem. --allow-mutations is an operator/process-level flag, never something an agent can pass as
-a tool argument.
+computes a diff + hash, never mutates); apply/start/stop/scaffold_connector/scaffold_processor are
+additionally registered only when --allow-mutations is set, since those tools mutate the local
+pipeline store, a running pipeline, or the filesystem. --allow-mutations is an operator/process-level
+flag, never something an agent can pass as a tool argument.
 
 Serves stdio by default (the primary agent channel — no auth needed, since the agent owns the
 process). Pass --http <addr> to serve the streamable-HTTP transport INSTEAD OF stdio — this is a
@@ -102,7 +102,9 @@ unauthenticated HTTP). The HTTP transport is EXPERIMENTAL: no rate limiting, no 
 and a single shared token with no rotation short of a restart — see
 docs/operations/mcp-server.md.
 
-The inspect tool requires a running Conduit: pass --api-address to point it at one.`,
+The inspect, start, and stop tools all require a running Conduit: pass --api-address to point them at
+one. start/stop have no offline fallback the way apply does — starting or stopping a pipeline only
+has meaning against a live server.`,
 		Example: "conduit mcp\n" +
 			"conduit mcp --api-address localhost:8084\n" +
 			"conduit mcp --allow-mutations\n" +

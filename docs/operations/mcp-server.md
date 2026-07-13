@@ -33,6 +33,8 @@ conduit mcp --api-address localhost:8084
 | `deploy` | no (preview only) | no | `conduit pipelines deploy` |
 | `inspect` | no | no | `conduit pipelines inspect` (requires `--api-address`) |
 | `apply` | yes | **yes** | `conduit pipelines apply` |
+| `start` | yes (running pipeline) | **yes** | `conduit pipelines start` (requires `--api-address`) |
+| `stop` | yes (running pipeline) | **yes** | `conduit pipelines stop` (requires `--api-address`) |
 | `scaffold_connector` | yes (filesystem) | **yes** | `conduit connector new` |
 | `scaffold_processor` | yes (filesystem) | **yes** | `conduit processor new` |
 
@@ -71,6 +73,17 @@ operator gate that requires). Without a reachable server, they fall back to the 
 Badger-only structural gate and refuses outright to touch a running pipeline. Either way,
 `--allow-mutations` above is the orthogonal gate deciding whether the `apply` tool is registered at
 all; it says nothing about which transport a registered `apply` tool uses.
+
+ `start`/`stop` transition a pipeline by ID against a running Conduit server's `StartPipeline`/
+`StopPipeline` RPCs — the same engine `conduit pipelines start`/`stop` call. Unlike `deploy`/`apply`
+they have **no standalone fallback**: starting a pipeline means running its goroutines inside a live
+process, which only has meaning against a process that stays up, and stopping is meaningless with no
+server to stop anything on. Both tools refuse with `common.unavailable` if `--api-address` wasn't
+set at `conduit mcp` startup, exactly like `inspect`. `stop`'s `force` argument mirrors the CLI's
+`--force`: it skips the graceful drain (immediate stop) rather than waiting for in-flight records to
+finish, but is not a data-loss escape hatch — positions are crash-safe and delivery is at-least-once,
+so a forced stop behaves like a crash (recoverable), not silent loss. See
+[`docs/design-documents/20260712-cli-pipeline-lifecycle-verbs.md`](../design-documents/20260712-cli-pipeline-lifecycle-verbs.md).
 
 ## HTTP transport (EXPERIMENTAL)
 

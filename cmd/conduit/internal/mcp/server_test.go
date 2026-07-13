@@ -28,7 +28,7 @@ import (
 
 var readToolNames = []string{ToolValidate, ToolLint, ToolDryRun, ToolDoctor, ToolDeploy, ToolInspect}
 
-var writeToolNames = []string{ToolApply, ToolScaffoldConnector, ToolScaffoldProcessor}
+var writeToolNames = []string{ToolApply, ToolStart, ToolStop, ToolScaffoldConnector, ToolScaffoldProcessor}
 
 // TestNewServer_ReadToolsAlwaysRegistered is AC-1's catalog half: every read
 // tool is present regardless of AllowMutations.
@@ -94,6 +94,31 @@ func TestNewServer_WriteToolsGatedByAllowMutations(t *testing.T) {
 		_, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
 			Name:      ToolApply,
 			Arguments: map[string]any{"config": validPipelineYAML, "hash": "deadbeef"},
+		})
+		is.True(err != nil)
+	})
+
+	// AC-12: the same belt-and-suspenders assertion for start/stop
+	// specifically — the design doc calls this out as "the gate assertion"
+	// for the lifecycle tools, parity with apply above.
+	t.Run("calling start directly without allow-mutations fails at tool lookup, not tool execution", func(t *testing.T) {
+		srv := NewServer(Config{AllowMutations: false})
+		cs := connectTestClient(t, srv)
+
+		_, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+			Name:      ToolStart,
+			Arguments: map[string]any{"pipelineId": "orders"},
+		})
+		is.True(err != nil)
+	})
+
+	t.Run("calling stop directly without allow-mutations fails at tool lookup, not tool execution", func(t *testing.T) {
+		srv := NewServer(Config{AllowMutations: false})
+		cs := connectTestClient(t, srv)
+
+		_, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+			Name:      ToolStop,
+			Arguments: map[string]any{"pipelineId": "orders"},
 		})
 		is.True(err != nil)
 	})

@@ -141,3 +141,43 @@ func (mr *MockPipelineServiceMockRecorder) PlanPipeline(ctx, in any, opts ...any
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlanPipeline", reflect.TypeOf((*MockPipelineService)(nil).PlanPipeline), varargs...)
 }
+
+// StartPipeline mocks base method.
+func (m *MockPipelineService) StartPipeline(ctx context.Context, in *apiv1.StartPipelineRequest, opts ...grpc.CallOption) (*apiv1.StartPipelineResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartPipeline", varargs...)
+	ret0, _ := ret[0].(*apiv1.StartPipelineResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartPipeline indicates an expected call of StartPipeline.
+func (mr *MockPipelineServiceMockRecorder) StartPipeline(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartPipeline", reflect.TypeOf((*MockPipelineService)(nil).StartPipeline), varargs...)
+}
+
+// StopPipeline mocks base method.
+func (m *MockPipelineService) StopPipeline(ctx context.Context, in *apiv1.StopPipelineRequest, opts ...grpc.CallOption) (*apiv1.StopPipelineResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StopPipeline", varargs...)
+	ret0, _ := ret[0].(*apiv1.StopPipelineResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopPipeline indicates an expected call of StopPipeline.
+func (mr *MockPipelineServiceMockRecorder) StopPipeline(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopPipeline", reflect.TypeOf((*MockPipelineService)(nil).StopPipeline), varargs...)
+}
