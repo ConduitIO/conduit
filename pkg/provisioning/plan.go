@@ -164,6 +164,32 @@ func (c Change) liveSwappable() bool {
 	}
 }
 
+// ApplyMode reports how ApplyPlanLive actually applied a diff — the ground
+// truth of the path taken, as distinct from the pre-apply expectation a caller
+// can compute from Diff.LiveEligible() (which can be wrong: a live-eligible diff
+// falls back to a restart when a processor cannot be swapped live, e.g. it runs
+// parallel). Consumers that report the mode to a user (the `--dev` hot-reload
+// watcher) must use this, not the plan-derived guess, or they will mislabel a
+// fallback restart as an in-place swap.
+type ApplyMode string
+
+const (
+	// ApplyModeUnknown is the zero value: ApplyPlanLive did not run a mutating
+	// apply (an error/refusal return, or an idempotent empty diff), so no mode
+	// was determined. Callers fall back to their own labeling.
+	ApplyModeUnknown ApplyMode = ""
+	// ApplyModeProvisioned: the pipeline was not running, so the new config was
+	// imported without disrupting anything (no live pipeline to swap or restart).
+	ApplyModeProvisioned ApplyMode = "provisioned"
+	// ApplyModeInPlace: every change was swapped into the running pipeline's live
+	// node graph — no stop, no restart, no availability blip.
+	ApplyModeInPlace ApplyMode = "in_place"
+	// ApplyModeRestart: the change required a graceful drain-and-restart of the
+	// running pipeline — either a non-live-eligible diff, or a live-eligible one
+	// that fell back because a processor could not be swapped in place.
+	ApplyModeRestart ApplyMode = "restart"
+)
+
 // Diff is Plan's result: every Change needed to reconcile the pipeline
 // currently stored with the desired config, plus a Hash binding this exact
 // Diff — ApplyPlan refuses to run unless the caller presents this Hash.
@@ -171,6 +197,13 @@ type Diff struct {
 	PipelineID string   `json:"pipelineID"`
 	Changes    []Change `json:"changes"`
 	Hash       string   `json:"hash"`
+
+	// AppliedMode is the ground-truth path ApplyPlanLive took, set only on its
+	// successful mutating returns (ApplyModeUnknown otherwise). It is a runtime
+	// outcome, not part of the planned/persisted/transmitted diff, so it is
+	// deliberately excluded from JSON (and thus from the hash's hashable view,
+	// which lists its own fields, and from the wire proto). Plan never sets it.
+	AppliedMode ApplyMode `json:"-"`
 }
 
 // Empty reports whether the Diff has no changes, i.e. the desired config
@@ -519,6 +552,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		if err := s.transactionalImport(ctx, desired); err != nil {
 			return fresh, err
 		}
+		fresh.AppliedMode = ApplyModeProvisioned
 		return fresh, nil
 	}
 
@@ -540,10 +574,13 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 			return fresh, err
 		}
 		if swappedAll {
+			fresh.AppliedMode = ApplyModeInPlace
 			return fresh, nil
 		}
 		// Fall through to the restart path: the config is committed, so
-		// StopAndWait -> (idempotent) import -> Start rebuilds from it.
+		// StopAndWait -> (idempotent) import -> Start rebuilds from it. The
+		// reported mode is restart, not in_place — this is exactly the fallback
+		// AppliedMode exists to report honestly.
 	}
 
 	// Invariant 7 / Tier-1 safety: StopAndWait — not Stop — is the only
@@ -578,6 +615,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, cerrors.Errorf("pipeline %q was updated but failed to restart, it remains stopped with the new config: %w", desired.ID, err)
 	}
 
+	fresh.AppliedMode = ApplyModeRestart
 	return fresh, nil
 }
 

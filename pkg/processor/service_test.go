@@ -446,6 +446,48 @@ func TestService_UpdateWhileRunning_BypassesRunningGuard(t *testing.T) {
 	is.Equal(newConfig, reread.Config)
 }
 
+// TestService_MakeRunnableProcessorForReconfigure_BypassesRunningGuard is the
+// regression test for the SECOND running-guard that blocked live in-place
+// hot-reload. MakeRunnableProcessor refuses a RUNNING instance
+// (ErrProcessorRunning) and flips i.running — correct for a fresh pipeline
+// start, but wrong for the reconfigure swap, where the instance legitimately
+// stays running across an open-before-teardown node replacement. Fixing only
+// Update (guard #1, UpdateWhileRunning) was not enough: lifecycle.Reconfigure-
+// Processor then called MakeRunnableProcessor on the still-running instance and
+// got ErrProcessorRunning, so the swap never happened. This guard was invisible
+// to the existing suite because every in-place test mocked ProcessorService.
+// MakeRunnableProcessorForReconfigure must build the runnable WITHOUT the guard
+// and WITHOUT touching i.running (the caller owns the running lifetime).
+func TestService_MakeRunnableProcessorForReconfigure_BypassesRunningGuard(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+
+	procType := "processor-type"
+	p := proc_mock.NewProcessor(gomock.NewController(t))
+	p.EXPECT().Teardown(gomock.Any()).Return(nil).AnyTimes()
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
+	service := NewService(log.Nop(), db, registry)
+
+	inst, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
+	is.NoErr(err)
+	inst.running = true // as it is inside a running pipeline being reconfigured
+
+	// MakeRunnableProcessor refuses a running instance — the guard the fresh-
+	// start path relies on so two nodes never wrap the same instance.
+	_, err = service.MakeRunnableProcessor(ctx, inst)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrProcessorRunning))
+
+	// MakeRunnableProcessorForReconfigure builds the runnable anyway, for the
+	// live swap, and leaves i.running exactly as it was (the instance stays
+	// running across the swap; the caller does not re-enter the running state).
+	rp, err := service.MakeRunnableProcessorForReconfigure(ctx, inst)
+	is.NoErr(err)
+	is.True(rp != nil)
+	is.True(inst.running) // unchanged: the swap does not toggle the running flag
+}
+
 func TestService_Update_NonExistentProcessor(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()

@@ -73,7 +73,7 @@ func (s *Service) ReconfigureProcessor(ctx context.Context, pipelineID, processo
 	if err != nil {
 		return cerrors.Errorf("could not fetch processor %q for live reconfigure: %w", processorID, err)
 	}
-	runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
+	runnableProc, err := s.processors.MakeRunnableProcessorForReconfigure(ctx, instance)
 	if err != nil {
 		return cerrors.Errorf("could not build runnable processor %q for live reconfigure: %w", processorID, err)
 	}

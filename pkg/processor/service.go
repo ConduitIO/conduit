@@ -119,6 +119,26 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 	return newRunnableProcessor(p, cond, i), nil
 }
 
+// MakeRunnableProcessorForReconfigure builds a fresh RunnableProcessor for an
+// ALREADY-RUNNING processor instance, for the live in-place reconfigure swap
+// (lifecycle.ReconfigureProcessor). Unlike MakeRunnableProcessor it does not
+// refuse a running instance and does not flip the running flag: the instance
+// legitimately stays running across the swap, and the caller opens this new
+// runnable before tearing down the old one (open-before-teardown), so no record
+// is dropped. It dispenses a new plugin from the instance's current (already
+// updated) config, exactly as MakeRunnableProcessor does for a fresh start.
+func (s *Service) MakeRunnableProcessorForReconfigure(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
+	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
+	if err != nil {
+		return nil, err
+	}
+	cond, err := newProcessorCondition(i.Condition)
+	if err != nil {
+		return nil, cerrors.Errorf("invalid condition: %w", err)
+	}
+	return newRunnableProcessor(p, cond, i), nil
+}
+
 // Create will create a new processor instance.
 func (s *Service) Create(
 	ctx context.Context,
