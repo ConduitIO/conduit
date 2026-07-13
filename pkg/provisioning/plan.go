@@ -49,6 +49,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	json "github.com/goccy/go-json"
@@ -508,6 +509,30 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, nil
 	}
 
+	// Live-eligible diff on a running pipeline: apply in place (swap the changed
+	// processor nodes + update name/description metadata) without a stop/restart.
+	// This is the payoff of the LiveSwappable classification — a processor tweak
+	// takes effect with no availability blip, no position replay, no record loss.
+	// applyInPlace returns swappedAll=false (err=nil) when a processor cannot be
+	// swapped live (e.g. it is parallelized): the config is already committed, so
+	// we fall through to the restart path below, which rebuilds every node from
+	// it, applying the whole diff uniformly.
+	if fresh.LiveEligible() {
+		oldConfig, err := s.Export(ctx, desired.ID)
+		if err != nil {
+			return fresh, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
+		}
+		swappedAll, err := s.applyInPlace(ctx, desired, oldConfig, fresh)
+		if err != nil {
+			return fresh, err
+		}
+		if swappedAll {
+			return fresh, nil
+		}
+		// Fall through to the restart path: the config is committed, so
+		// StopAndWait -> (idempotent) import -> Start rebuilds from it.
+	}
+
 	// Invariant 7 / Tier-1 safety: StopAndWait — not Stop — is the only
 	// primitive that proves the pipeline is fully drained and its positions
 	// are durably persisted before importPipeline runs against it. See
@@ -541,6 +566,70 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	}
 
 	return fresh, nil
+}
+
+// applyInPlace applies a live-eligible diff to a running pipeline without a
+// stop/restart. It commits the new config to the store (invariant 5), then swaps
+// each changed processor into the live node graph via the lifecycle service;
+// name/description changes take effect through the committed store instance and
+// need no node swap.
+//
+// It returns swappedAll=true when every change was applied in place. It returns
+// (false, nil) when a processor cannot be swapped live (e.g. it is parallelized):
+// the config is already committed, so the caller falls back to a restart that
+// rebuilds every node from it. On a genuine swap failure (the new processor fails
+// to open), it rolls back — restoring the old config and re-swapping any
+// already-swapped processors back — so the store and the live pipeline agree on
+// the old config and the pipeline keeps running unchanged, and returns the error.
+func (s *Service) applyInPlace(ctx context.Context, desired, oldConfig config.Pipeline, diff Diff) (bool, error) {
+	if err := s.transactionalImport(ctx, desired); err != nil {
+		return false, err
+	}
+
+	var swapped []string
+	for _, c := range diff.Changes {
+		if c.Resource != ResourceProcessor || c.Action != ChangeActionUpdate {
+			// The only other live-swappable change is a pipeline
+			// name/description update, already applied by the store import above.
+			continue
+		}
+		err := s.lifecycleService.ReconfigureProcessor(ctx, desired.ID, c.ID)
+		switch {
+		case cerrors.Is(err, lifecycle.ErrProcessorNotLiveReconfigurable):
+			// Not swappable live. Signal a restart fallback; no rollback needed —
+			// the restart tears down and rebuilds every node from the committed
+			// config anyway.
+			return false, nil
+		case err != nil:
+			// The new processor failed to open; the old one is still running
+			// (open-before-teardown). Roll back so store and live agree on the
+			// old config, then surface the error.
+			s.rollbackInPlace(ctx, desired.ID, oldConfig, swapped)
+			return false, cerrors.Errorf("could not apply processor %q to running pipeline %q in place: %w", c.ID, desired.ID, err)
+		}
+		swapped = append(swapped, c.ID)
+	}
+	return true, nil
+}
+
+// rollbackInPlace best-effort undoes a partial in-place apply after a mid-diff
+// swap failure: it restores oldConfig to the store and re-swaps the
+// already-swapped processors back to it. Errors are logged, not returned — the
+// caller is already returning the original failure, and the pipeline is still
+// running its old processors (open-before-teardown), so the worst case is a
+// store/live mismatch that a restart reconciles.
+func (s *Service) rollbackInPlace(ctx context.Context, pipelineID string, oldConfig config.Pipeline, swapped []string) {
+	if err := s.transactionalImport(ctx, oldConfig); err != nil {
+		s.logger.Err(ctx, err).Str("pipeline_id", pipelineID).
+			Msg("could not restore previous config during in-place apply rollback")
+		return
+	}
+	for _, procID := range swapped {
+		if err := s.lifecycleService.ReconfigureProcessor(ctx, pipelineID, procID); err != nil {
+			s.logger.Err(ctx, err).Str("pipeline_id", pipelineID).Str("processor_id", procID).
+				Msg("could not re-swap processor to previous config during in-place apply rollback")
+		}
+	}
 }
 
 // isRunning reports whether the pipeline identified by id currently has
