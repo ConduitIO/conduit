@@ -31,8 +31,10 @@ import (
 	mcpengine "github.com/conduitio/conduit/cmd/conduit/internal/mcp"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/ecdysis"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -51,7 +53,12 @@ var (
 type MCPFlags struct {
 	conduit.Config
 
-	HTTP string `long:"http" usage:"also serve the streamable-HTTP transport on this address (in addition to stdio); requires --token-file and --tls-cert/--tls-key"`
+	// H-1 (design doc 20260712-mcp-http-transport.md, AC-11/SR-1): this usage
+	// string previously said HTTP is served "in addition to stdio" — false,
+	// since Execute serves HTTP-only in --http mode (a daemon has no
+	// attached stdin to also read stdio from). Keep this text in sync with
+	// Execute's actual branch.
+	HTTP string `long:"http" usage:"serve the streamable-HTTP transport on this address INSTEAD OF stdio (EXPERIMENTAL; see docs/operations/mcp-server.md); requires --token-file and --tls-cert/--tls-key"`
 	// AllowMutations is a startup/process flag, deliberately not a tool
 	// argument — see cmd/conduit/internal/mcp.Config.AllowMutations's doc.
 	AllowMutations bool   `long:"allow-mutations" usage:"register the write tools (apply, scaffold_connector, scaffold_processor); an operator/process-level switch, never agent-settable"`
@@ -87,9 +94,13 @@ filesystem. --allow-mutations is an operator/process-level flag, never something
 a tool argument.
 
 Serves stdio by default (the primary agent channel — no auth needed, since the agent owns the
-process). Pass --http <addr> to additionally serve the streamable-HTTP transport; --http requires
-both --token-file (a bearer token, compared constant-time) and --tls-cert/--tls-key — it refuses to
-start otherwise.
+process). Pass --http <addr> to serve the streamable-HTTP transport INSTEAD OF stdio — this is a
+network-daemon mode (systemd/container) with no attached stdin, so it does not also serve stdio;
+--http requires both --token-file (a bearer token, compared constant-time) and
+--tls-cert/--tls-key — it refuses to start with either missing (fail-closed: no plaintext, no
+unauthenticated HTTP). The HTTP transport is EXPERIMENTAL: no rate limiting, no per-agent tokens,
+and a single shared token with no rotation short of a restart — see
+docs/operations/mcp-server.md.
 
 The inspect tool requires a running Conduit: pass --api-address to point it at one.`,
 		Example: "conduit mcp\n" +
@@ -168,7 +179,7 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 		return srv.Run(ctx, &sdkmcp.StdioTransport{})
 	}
 
-	httpSrv, err := c.newHTTPServer(srv)
+	httpSrv, err := c.newHTTPServer(srv, c.httpLogger())
 	if err != nil {
 		return err
 	}
@@ -195,4 +206,25 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 	})
 
 	return grp.Wait()
+}
+
+// httpLogger builds the log.CtxLogger the --http path uses for its startup/
+// auth-event logging (design doc H-2/H-4). It mirrors
+// pkg/conduit/runtime.go's own newLogger construction (same log.level/
+// log.format config, same zerolog.ParseLevel/log.ParseFormat calls) rather
+// than importing it: MCPCommand does not build a conduit.Runtime, and
+// pulling in that dependency for two lines of zerolog setup would be a
+// heavier coupling than the duplication here. Malformed level/format values
+// fall back to zerolog's/log's zero values (InfoLevel, FormatCLI) rather
+// than failing --http startup over a logging config typo.
+func (c *MCPCommand) httpLogger() log.CtxLogger {
+	level, err := zerolog.ParseLevel(c.flags.Config.Log.Level)
+	if err != nil {
+		level = zerolog.InfoLevel
+	}
+	format, err := log.ParseFormat(c.flags.Config.Log.Format)
+	if err != nil {
+		format = log.FormatCLI
+	}
+	return log.InitLogger(level, format)
 }

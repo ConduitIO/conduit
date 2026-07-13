@@ -72,18 +72,27 @@ Badger-only structural gate and refuses outright to touch a running pipeline. Ei
 `--allow-mutations` above is the orthogonal gate deciding whether the `apply` tool is registered at
 all; it says nothing about which transport a registered `apply` tool uses.
 
-## HTTP transport
+## HTTP transport (EXPERIMENTAL)
 
-`--http <addr>` additionally serves the streamable-HTTP transport (in addition to stdio, not
-instead of it) — for a remote agent or a shared Conduit instance multiple agents connect to over
-the network.
+`--http <addr>` serves the streamable-HTTP transport **instead of** stdio — this is a
+network-daemon mode (systemd/container) with no attached stdin, so it does not also serve stdio.
+Use it for a remote agent, or a shared Conduit instance multiple agents connect to over the
+network.
+
+See [`docs/design-documents/20260712-mcp-http-transport.md`](../design-documents/20260712-mcp-http-transport.md)
+for the full threat model and hardening record. **This transport is experimental**: the
+fail-closed/auth/TLS fundamentals below are solid, but it is a single shared token with no
+rotation short of a restart, no per-agent identity, and no rate limiting — see "Not yet built"
+below before exposing it beyond a trusted network.
 
 HTTP refuses to start without **both**:
 
 - `--token-file <path>`: a file containing a bearer token. Every request's `Authorization: Bearer
   <token>` header is compared against it in constant time (`crypto/subtle.ConstantTimeCompare`).
+  The token is a **file path**, never an inline flag value — it never lands in `ps`/argv/shell
+  history. An empty (or whitespace-only) token file is refused at startup.
 - `--tls-cert <path>` / `--tls-key <path>`: a TLS certificate/key pair. HTTP is only ever served
-  over TLS — there is no plaintext HTTP path.
+  over TLS (`MinVersion: TLS1.2`) — there is no plaintext HTTP path.
 
 ```console
 $ conduit mcp --http :8443 \
@@ -93,7 +102,38 @@ $ conduit mcp --http :8443 \
 ```
 
 A request with a missing or incorrect bearer token is rejected with `401 Unauthorized` before it
-ever reaches the MCP protocol handler.
+ever reaches the MCP protocol handler — including `tools/list`, so an unauthenticated caller learns
+nothing about the catalog, not even whether `--allow-mutations` is on.
+
+### Operational behavior
+
+- **Startup log line:** on success, a structured `info` line names the bound address and auth mode
+  (`serving MCP over streamable HTTP`).
+- **Non-loopback bind warning:** if `--http` resolves to an address that is not restricted to
+  loopback (e.g. `:8443`, `0.0.0.0:8443`, or a public hostname), a `warn`-level log line calls out
+  the exposure at startup. TLS + the bearer token already make this safe; the warning exists so an
+  operator who meant `--http localhost:8443` notices if they typed (or defaulted to) something
+  wider.
+- **Auth-failure logging:** every rejected request logs `method`, `path`, `remote_addr`, and
+  `outcome=unauthorized` at `warn` level — so brute-force/probing attempts against the token are
+  observable. **The token itself, and whatever credential the caller presented, are never logged**
+  — only request metadata.
+- **Timeouts:** `ReadHeaderTimeout: 10s` (Slowloris guard) and `IdleTimeout: 120s` (bounds an idle
+  keep-alive connection). No blanket `WriteTimeout` — streamable HTTP can legitimately hold a
+  response open while streaming a tool result.
+- **Body cap:** requests are capped at 4 MiB (`http.MaxBytesReader`); an oversized body fails the
+  read instead of being buffered in full.
+- **Graceful shutdown:** on `SIGTERM`/context cancellation, in-flight requests drain via
+  `http.Server.Shutdown` within a 5s window before the process exits.
+
+### Not yet built (v0.18 candidates)
+
+- Rate limiting / lockout on repeated auth failures.
+- Per-agent tokens with revocation; optional mTLS (client-cert) auth.
+- Token hot-reload / rotation without a restart.
+- Cipher-suite pinning and a TLS 1.3 floor.
+
+Rotating the shared token today means restarting `conduit mcp` with a new `--token-file`.
 
 ## Known limitations (Wave 3)
 
