@@ -97,10 +97,57 @@ type Change struct {
 	Action      ChangeAction `json:"action"`
 	Effect      Effect       `json:"effect"`
 	ConfigPaths []string     `json:"configPaths,omitempty"`
+	// LiveSwappable reports whether this change can be applied to a *running*
+	// pipeline in place — without a stop/restart — because it touches no source
+	// position, ack/durability, or connection state. It is a strict subset of
+	// EffectInPlace: only a processor config update and a pipeline
+	// Name/Description-only update qualify (see liveSwappable). Additive field;
+	// consumers that predate it default to the safe interpretation (false =
+	// treat as restart-class). The apply path keys on Diff.LiveEligible, not on
+	// this field per-change, but it is surfaced so CLI/MCP/UI can show "this
+	// change applies live" vs "this change restarts the pipeline".
+	LiveSwappable bool `json:"liveSwappable"`
 	// Code is a stable, dotted identifier for this kind of change (e.g.
 	// "provisioning.connector.update"), namespaced the same way
 	// conduiterr.Code reasons are, for consistent agent/UI consumption.
 	Code string `json:"code"`
+}
+
+// liveSwappable reports whether this Change can be applied to a running pipeline
+// in place (via a ProcessorNode live swap, or an in-memory pipeline metadata
+// update) without restarting it. Only two kinds qualify, both free of source
+// position, ack/durability, and connection state:
+//
+//   - a processor config update (updateProcessorAction — including a plugin
+//     change, since ProcessorNode.Reconfigure rebuilds the processor), and
+//   - a pipeline update touching only Name and/or Description.
+//
+// Everything else forces a restart-class apply: connector create/update/delete
+// (position + open connection), the DLQ (a live destination with ack
+// semantics — the "dlq" config path disqualifies a pipeline update), processor
+// create/delete and pipeline membership changes (topology), and pipeline
+// delete. See the design doc's "Data-safety" and classification sections.
+func (c Change) liveSwappable() bool {
+	switch c.Resource {
+	case ResourceProcessor:
+		return c.Action == ChangeActionUpdate
+	case ResourcePipeline:
+		if c.Action != ChangeActionUpdate {
+			return false
+		}
+		for _, p := range c.ConfigPaths {
+			if p != configPathName && p != configPathDescription {
+				return false
+			}
+		}
+		return true
+	case ResourceConnector:
+		// Connectors own source position, ack/durability, and an open plugin
+		// connection — never live-swappable (see the method doc).
+		return false
+	default:
+		return false
+	}
 }
 
 // Diff is Plan's result: every Change needed to reconcile the pipeline
@@ -115,6 +162,25 @@ type Diff struct {
 // Empty reports whether the Diff has no changes, i.e. the desired config
 // already matches the current state (an idempotent re-apply).
 func (d Diff) Empty() bool { return len(d.Changes) == 0 }
+
+// LiveEligible reports whether this whole diff can be applied to a running
+// pipeline in place — without a stop/restart — because it is non-empty and
+// *every* change in it is LiveSwappable. It is all-or-nothing on purpose: a diff
+// that mixes a processor tweak with a source change needs a restart for the
+// source anyway, so the whole apply takes the restart path. An empty diff is not
+// live-eligible because there is nothing to apply (it is handled as an idempotent
+// no-op upstream). See ApplyPlanLiveInPlace for how the apply path uses this.
+func (d Diff) LiveEligible() bool {
+	if d.Empty() {
+		return false
+	}
+	for _, c := range d.Changes {
+		if !c.LiveSwappable {
+			return false
+		}
+	}
+	return true
+}
 
 // computeHash returns a deterministic digest of PipelineID, Changes (in the
 // order actionsBuilder.Build produced them — the same order ApplyPlan would
@@ -189,6 +255,15 @@ func (s *Service) Plan(ctx context.Context, desired config.Pipeline) (Diff, erro
 		for i := range changes {
 			changes[i].Effect = EffectInPlace
 		}
+	}
+
+	// Classify each change for live in-place applicability. Derived from
+	// Resource/Action/ConfigPaths, so it is stable for a given desired config
+	// and folds into the hash consistently. Computed after the brand-new
+	// override above (which only touches Effect, not the fields liveSwappable
+	// reads).
+	for i := range changes {
+		changes[i].LiveSwappable = changes[i].liveSwappable()
 	}
 
 	d := Diff{PipelineID: desired.ID, Changes: changes}
@@ -530,22 +605,34 @@ func isRunningStatus(status pipeline.Status) bool {
 // actionsBuilder.preparePipelineActions's own cmp.Equal check (same ignored
 // field: Status) so a Change's ConfigPaths can never claim a field changed
 // that the builder itself considered equal.
+// Pipeline-level Change.ConfigPaths names. Shared by diffPipelineFields (which
+// emits them) and Change.liveSwappable (which reads them to decide that only
+// name/description changes are live-swappable), so the producer and consumer
+// can never disagree on a spelling.
+const (
+	configPathName        = "name"
+	configPathDescription = "description"
+	configPathConnectors  = "connectors"
+	configPathProcessors  = "processors"
+	configPathDLQ         = "dlq"
+)
+
 func diffPipelineFields(oldCfg, newCfg config.Pipeline) []string {
 	var paths []string
 	if oldCfg.Name != newCfg.Name {
-		paths = append(paths, "name")
+		paths = append(paths, configPathName)
 	}
 	if oldCfg.Description != newCfg.Description {
-		paths = append(paths, "description")
+		paths = append(paths, configPathDescription)
 	}
 	if !equalConnectorIDs(oldCfg.Connectors, newCfg.Connectors) {
-		paths = append(paths, "connectors")
+		paths = append(paths, configPathConnectors)
 	}
 	if !equalProcessorIDs(oldCfg.Processors, newCfg.Processors) {
-		paths = append(paths, "processors")
+		paths = append(paths, configPathProcessors)
 	}
 	if !cmp.Equal(oldCfg.DLQ, newCfg.DLQ) {
-		paths = append(paths, "dlq")
+		paths = append(paths, configPathDLQ)
 	}
 	return paths
 }
