@@ -1,0 +1,7 @@
+## 3. Error codes (2)
+
+| Reason | gRPC status | Description |
+| --- | --- | --- |
+| `widget.not_found` | NotFound | Widget not found. |
+| `widget.pipe\|broken` | Internal | Contains a newline and a \| pipe. |
+

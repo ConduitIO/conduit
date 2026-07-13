@@ -1,0 +1,17 @@
+## 1. Pipeline configuration schema
+
+### Versions
+- 9.0
+- 9.9 (latest)
+
+### Widget
+
+| Field | YAML key | Go type | Required |
+| --- | --- | --- | --- |
+| ID | `id` | `string` | yes |
+| Count | `count` | `*int` | no |
+
+### Legacy v1 (8.1)
+
+v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pipelines: {<id>: {...}}`) instead of v2's ordered list, so processor and connector ordering within a v1 file is not deterministic. v1 has no `plugin`/`condition` processor fields and no top-level `dead-letter-queue` before 1.1. New pipelines should use v2.
+
