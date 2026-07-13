@@ -17,9 +17,12 @@ package yaml
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 	"github.com/conduitio/yaml/v3"
 )
@@ -60,7 +63,7 @@ func (cl *configLinter) DecoderHook(version string, warn *warnings) yaml.Decoder
 
 func (cl *configLinter) InspectNode(version string, path []string, node *yaml.Node) (warning, bool) {
 	if c, ok := cl.findChange(version, path); ok {
-		return cl.newWarning(path[len(path)-1], node, c.Message), true
+		return cl.newWarning(path, node, c), true
 	}
 	return warning{}, false
 }
@@ -90,14 +93,42 @@ func (cl *configLinter) findChange(version string, path []string) (internal.Chan
 	return internal.Change{}, false
 }
 
-func (cl *configLinter) newWarning(field string, node *yaml.Node, message string) warning {
-	return warning{
-		field:   field,
+// newWarning builds the warning for a changelog match at path (the full,
+// document-rooted traversal path the decoder hook reports — real slice
+// indices, not wildcards; see decode.go's triggerHook) against node (the
+// field's current value node).
+//
+// When c is a pure rename (RenamedTo != "", the repair v1 starter set's
+// item #1 — see internal.Change.RenamedTo's doc), the warning additionally
+// carries a machine-appliable conduiterr.Fix and the dedicated
+// config.CodeFieldRenamed code, so cmd/conduit/internal/repair can offer it
+// as a fix. The Fix is a deliberate, documented special case of the
+// {ConfigPath,Op,Value} shape (design doc §3.1's "compound Fix bundle"):
+// ConfigPath is the OLD field's full JSON pointer (path, joined), Op is
+// "remove" (the literal action against that path), and Value carries the
+// NEW field's key name rather than a value to set — repair's compound
+// registry (keyed on config.CodeFieldRenamed) reads Value as "the sibling
+// key to add", not as an add/set payload, and copies the old node's current
+// value into it. This keeps the wire Fix within the frozen three-op model
+// without inventing a fourth "rename" op or a []Fix field (see the design
+// doc's alternatives-considered §11).
+func (cl *configLinter) newWarning(path []string, node *yaml.Node, c internal.Change) warning {
+	w := warning{
+		field:   path[len(path)-1],
 		line:    node.Line,
 		column:  node.Column,
 		value:   node.Value,
-		message: message,
+		message: c.Message,
 	}
+	if c.RenamedTo != "" {
+		w.code = config.CodeFieldRenamed.Reason()
+		w.fix = &conduiterr.Fix{
+			ConfigPath: "/" + strings.Join(path, "/"),
+			Op:         "remove",
+			Value:      c.RenamedTo,
+		}
+	}
+	return w
 }
 
 type warnings []warning
@@ -121,6 +152,11 @@ type warning struct {
 	column  int
 	value   string
 	message string
+	// code and fix are set only for a rename-class warning (see newWarning);
+	// every other warning leaves both zero, exactly as before this field was
+	// added.
+	code string
+	fix  *conduiterr.Fix
 }
 
 func (w warning) Log(ctx context.Context, logger log.CtxLogger) {

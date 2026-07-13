@@ -20,8 +20,10 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/matryer/is"
@@ -142,4 +144,76 @@ func TestParser_WarningsExposure_DoesNotChangeRunBehavior(t *testing.T) {
 	is.Equal(warnings[0].Line, 5)
 	is.Equal(warnings[0].Column, 5)
 	is.Equal(warnings[0].Field, "unknownField")
+}
+
+// TestParseWithWarnings_RenamedField_CarriesFix is AC-1's golden test for
+// the repair v1 starter set's item #1 (design doc
+// 20260712-repair-command.md §6): a processor's deprecated "type" field
+// (2.2's rename to "plugin") produces a warning carrying
+// config.CodeFieldRenamed and a Fix whose ConfigPath is the full,
+// document-rooted JSON pointer to the old field (real slice indices, not
+// wildcards) and whose Value is the new field's key name.
+func TestParseWithWarnings_RenamedField_CarriesFix(t *testing.T) {
+	is := is.New(t)
+
+	const src = `version: "2.2"
+pipelines:
+  - id: p1
+    status: running
+    processors:
+      - id: proc1
+        type: base64.encode
+`
+	_, warns, err := NewParser(log.Nop()).ParseWithWarnings(context.Background(), strings.NewReader(src))
+	is.NoErr(err)
+
+	var found *Warning
+	for i := range warns {
+		if warns[i].Code == config.CodeFieldRenamed.Reason() {
+			found = &warns[i]
+		}
+	}
+	is.True(found != nil)
+	is.True(found.Fix != nil)
+	is.Equal(found.Fix.ConfigPath, "/pipelines/0/processors/0/type")
+	is.Equal(found.Fix.Op, "remove")
+	is.Equal(found.Fix.Value, "plugin")
+}
+
+// TestParseWithWarnings_RenamedField_SurvivesGRPCStatusRoundTrip is AC-2 for
+// item #1's producer: the rename Fix survives ConduitError -> gRPC
+// status.Status -> ConduitError, via the same conversion validate/lint
+// findings use for a coded error (findingFromError in
+// cmd/conduit/internal/validate wraps a Warning's Code/Fix into exactly
+// this shape when Code is set).
+func TestParseWithWarnings_RenamedField_SurvivesGRPCStatusRoundTrip(t *testing.T) {
+	is := is.New(t)
+
+	const src = `version: "2.2"
+pipelines:
+  - id: p1
+    status: running
+    processors:
+      - id: proc1
+        type: base64.encode
+`
+	_, warns, err := NewParser(log.Nop()).ParseWithWarnings(context.Background(), strings.NewReader(src))
+	is.NoErr(err)
+
+	var w Warning
+	for _, ww := range warns {
+		if ww.Code == config.CodeFieldRenamed.Reason() {
+			w = ww
+		}
+	}
+	is.True(w.Fix != nil)
+
+	code, ok := conduiterr.LookupCode(w.Code)
+	is.True(ok)
+	orig := conduiterr.New(code, w.Message)
+	orig.Fix = w.Fix
+
+	got := conduiterr.FromStatus(conduiterr.ToStatus(orig))
+	is.Equal(got.Fix, orig.Fix)
+	is.Equal(got.Code.Reason(), orig.Code.Reason())
 }

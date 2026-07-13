@@ -280,15 +280,25 @@ func findingFromError(e error) Finding {
 
 // warningFinding converts one parser Warning into an advisory (SeverityWarning)
 // Finding. Warnings locate by line/column in the source file rather than by a
-// config-path JSON pointer, and carry the fixed CodeLintWarning code (the
-// parser's warnings have no per-field conduiterr code of their own). A warning
-// never affects the exit code unless `lint --strict` is set.
+// config-path JSON pointer, and most carry the fixed CodeLintWarning code
+// (the parser's warnings mostly have no per-field conduiterr code of their
+// own) — except a rename-class warning (w.Code == config.CodeFieldRenamed,
+// repair v1 starter set item #1), which carries its own code and a
+// machine-appliable w.Fix straight through, so
+// cmd/conduit/internal/repair.Collect (which runs this engine with
+// Options.Warnings set) can find and offer it. A warning never affects the
+// exit code unless `lint --strict` is set.
 func warningFinding(w yaml.Warning) Finding {
+	code := CodeLintWarning
+	if w.Code != "" {
+		code = w.Code
+	}
 	return Finding{
 		Severity:   SeverityWarning,
-		Code:       CodeLintWarning,
+		Code:       code,
 		Message:    w.Message,
 		ConfigPath: w.Field,
+		Fix:        w.Fix,
 		Line:       w.Line,
 		Column:     w.Column,
 	}

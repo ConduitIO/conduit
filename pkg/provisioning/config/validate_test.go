@@ -430,3 +430,90 @@ func TestValidator_DuplicateID(t *testing.T) {
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrDuplicateID))
 }
+
+// TestValidate_RepairFixes_GoldenPerClass is AC-1 for the repair v1 starter
+// set's producers that live in this package (design doc
+// 20260712-repair-command.md §6, items #2-#4 — item #1 is the yaml
+// package's linter, tested there): for each error class, the producing
+// site emits a non-nil Fix with a correct ConfigPath, a valid Op, and a
+// Value that, applied, clears the finding.
+func TestValidate_RepairFixes_GoldenPerClass(t *testing.T) {
+	is := is.New(t)
+
+	t.Run("status: unambiguous normalization gets a fix", func(t *testing.T) {
+		cfg := Pipeline{ID: "p1", Status: " Running "}
+		err := Validate(cfg)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.True(ce.Fix != nil)
+		is.Equal(ce.Fix.ConfigPath, "/status")
+		is.Equal(ce.Fix.Op, "set")
+		is.Equal(ce.Fix.Value, "running")
+
+		// Applying it clears the finding.
+		fixed := cfg
+		fixed.Status = ce.Fix.Value
+		is.True(Validate(fixed) == nil || !cerrors.Is(Validate(fixed), ErrInvalidField))
+	})
+
+	t.Run("status: ambiguous value gets no fix", func(t *testing.T) {
+		cfg := Pipeline{ID: "p1", Status: "bogus"}
+		err := Validate(cfg)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.True(ce.Fix == nil) // no deterministic canonical target — honestly no fix
+	})
+
+	t.Run("processor workers: negative gets a fix to 1", func(t *testing.T) {
+		cfg := Pipeline{ID: "p1", Status: StatusRunning, Processors: []Processor{
+			{ID: "proc1", Plugin: "js", Workers: -5},
+		}}
+		err := Validate(cfg)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.True(ce.Fix != nil)
+		is.Equal(ce.Fix.ConfigPath, "/processors/0/workers")
+		is.Equal(ce.Fix.Op, "set")
+		is.Equal(ce.Fix.Value, "1")
+
+		fixed := cfg
+		fixed.Processors[0].Workers = 1
+		is.True(!cerrors.Is(Validate(fixed), ErrInvalidField))
+	})
+
+	t.Run("description: over-long gets a truncation fix", func(t *testing.T) {
+		long := strings.Repeat("d", pipeline.DescriptionLengthLimit+50)
+		cfg := Pipeline{ID: "p1", Status: StatusRunning, Description: long}
+		err := Validate(cfg)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.True(ce.Fix != nil)
+		is.Equal(ce.Fix.ConfigPath, "/description")
+		is.Equal(ce.Fix.Op, "set")
+		is.Equal(len(ce.Fix.Value), pipeline.DescriptionLengthLimit)
+		is.Equal(ce.Fix.Value, long[:pipeline.DescriptionLengthLimit])
+
+		fixed := cfg
+		fixed.Description = ce.Fix.Value
+		is.True(len(fixed.Description) <= pipeline.DescriptionLengthLimit)
+	})
+}
+
+// TestValidate_RepairFixes_SurviveGRPCStatusRoundTrip is AC-2: a real
+// producer's Fix survives ConduitError -> gRPC status.Status -> ConduitError
+// intact — extending conduiterr's own TestRoundTrip_AllFields (which uses a
+// synthetic Fix) to an actual producer in this codebase.
+func TestValidate_RepairFixes_SurviveGRPCStatusRoundTrip(t *testing.T) {
+	is := is.New(t)
+
+	cfg := Pipeline{ID: "p1", Status: " Running "}
+	err := Validate(cfg)
+	orig, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.True(orig.Fix != nil)
+
+	got := conduiterr.FromStatus(conduiterr.ToStatus(orig))
+	is.Equal(got.Fix, orig.Fix)
+	is.Equal(got.Code.Reason(), orig.Code.Reason())
+	is.Equal(got.ConfigPath, orig.ConfigPath)
+}

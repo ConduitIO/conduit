@@ -16,9 +16,11 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
 )
 
@@ -28,6 +30,11 @@ const (
 	TypeSource      = "source"
 	TypeDestination = "destination"
 )
+
+// fixOpSet is conduiterr.Fix.Op's "set" value — the only op this package's
+// v1 repair fix producers ever emit (§6 items #2-#4; item #1's rename is
+// produced by the yaml package's linter, not here).
+const fixOpSet = "set"
 
 // Validate validates config field values for a pipeline. Each error carries a
 // ConduitError code, a JSON-pointer configPath to the offending field, and a
@@ -48,18 +55,41 @@ func Validate(cfg Pipeline) error {
 			fmt.Sprintf("shorten \"name\" to at most %d characters", pipeline.NameLengthLimit), pipeline.ErrNameOverLimit))
 	}
 	if len(cfg.Description) > pipeline.DescriptionLengthLimit {
-		errs = append(errs, fieldError(CodeFieldTooLong, "/description", pipeline.ErrDescriptionOverLimit.Error(),
-			fmt.Sprintf("shorten \"description\" to at most %d characters", pipeline.DescriptionLengthLimit), pipeline.ErrDescriptionOverLimit))
+		// repair v1 starter set item #4 (design doc §6): truncation is lossy
+		// but deterministic and non-data-path, so it is a machine-appliable
+		// fix — always shown in the repair diff before apply, never silent
+		// (design doc's failure mode 6).
+		errs = append(errs, fieldErrorWithFix(CodeFieldTooLong, "/description", pipeline.ErrDescriptionOverLimit.Error(),
+			fmt.Sprintf("shorten \"description\" to at most %d characters", pipeline.DescriptionLengthLimit), pipeline.ErrDescriptionOverLimit,
+			conduiterr.Fix{Op: fixOpSet, Value: cfg.Description[:pipeline.DescriptionLengthLimit]}))
 	}
 	if cfg.Status != StatusRunning && cfg.Status != StatusStopped {
-		errs = append(errs, fieldError(CodeFieldInvalid, "/status", `"status" is invalid`,
-			fmt.Sprintf("set \"status\" to %q or %q", StatusRunning, StatusStopped), ErrInvalidField))
+		errs = append(errs, statusFieldError(cfg.Status))
 	}
 
 	errs = append(errs, validateConnectors(cfg.Connectors)...)
 	errs = append(errs, validateProcessors(cfg.Processors, "/processors")...)
 
 	return cerrors.Join(errs...)
+}
+
+// statusFieldError builds the /status config.field_invalid error. repair v1
+// starter set item #2 (design doc §6): the fix is offered only when the
+// invalid value unambiguously maps to a canonical enum member after
+// case/whitespace normalization (e.g. " Running " -> "running") — any other
+// value is ambiguous (there is no deterministic canonical target), so no Fix
+// is attached and repair reports "no machine-appliable fix for this
+// finding", exactly as the design doc requires.
+func statusFieldError(status string) error {
+	msg := `"status" is invalid`
+	suggestion := fmt.Sprintf("set \"status\" to %q or %q", StatusRunning, StatusStopped)
+
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if normalized == StatusRunning || normalized == StatusStopped {
+		return fieldErrorWithFix(CodeFieldInvalid, "/status", msg, suggestion, ErrInvalidField,
+			conduiterr.Fix{Op: fixOpSet, Value: normalized})
+	}
+	return fieldError(CodeFieldInvalid, "/status", msg, suggestion, ErrInvalidField)
 }
 
 // validateConnectors validates config field values for connectors. pathPrefix is
@@ -123,8 +153,16 @@ func validateProcessors(mp []Processor, pathPrefix string) []error {
 				fmt.Sprintf("set %s/%d.plugin (e.g. \"js\")", pathPrefix, i), ErrMandatoryField))
 		}
 		if cfg.Workers < 0 {
-			errs = append(errs, fieldError(CodeFieldInvalid, path+"/workers", fmt.Sprintf(`processor %q: "workers" can't be negative`, cfg.ID),
-				fmt.Sprintf("set %s/%d.workers to zero or a positive number", pathPrefix, i), ErrInvalidField))
+			// repair v1 starter set item #3 (design doc §6): 1 is the
+			// ordering-preserving default (workers>1 can reorder records
+			// within a key, invariant 4) — the safe direction to fix
+			// toward. Classified `restart` by the repair engine's
+			// classifier (not `safe`), since changing a processor's worker
+			// count would be an EffectRestart change if deployed to a
+			// running pipeline.
+			errs = append(errs, fieldErrorWithFix(CodeFieldInvalid, path+"/workers", fmt.Sprintf(`processor %q: "workers" can't be negative`, cfg.ID),
+				fmt.Sprintf("set %s/%d.workers to zero or a positive number", pathPrefix, i), ErrInvalidField,
+				conduiterr.Fix{Op: fixOpSet, Value: "1"}))
 		}
 		if ids[cfg.ID] {
 			errs = append(errs, fieldError(CodeIDDuplicate, path+"/id", fmt.Sprintf(`processor %q: "id" must be unique`, cfg.ID),

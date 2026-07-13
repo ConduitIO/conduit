@@ -1,0 +1,15 @@
+version: "2.2"
+pipelines:
+  - id: repair-demo
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+        processors:
+          - id: conn-proc
+            # deprecated field, should be renamed to "plugin"
+            type: base64.encode
+    processors:
+      - id: pipe-proc
+        type: base64.decode # trailing comment survives
