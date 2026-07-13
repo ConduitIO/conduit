@@ -478,7 +478,7 @@ func (a updateProcessorAction) String() string {
 // processors have no immutable-field classification (see
 // prepareProcessorActions — "all parts of a processor are updateable"), so
 // every processor change, including Plugin, runs through
-// processorService.Update rather than a delete+create pair.
+// processorService.UpdateWhileRunning rather than a delete+create pair.
 func (a updateProcessorAction) Describe() Change {
 	return Change{
 		Resource:    ResourceProcessor,
