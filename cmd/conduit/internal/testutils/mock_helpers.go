@@ -55,6 +55,46 @@ func MockGetPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.
 	}, nil).Times(1)
 }
 
+// MockGetPipelineWithStatus is like MockGetPipeline but lets the caller pick
+// the read-back status — used by the start/stop lifecycle command tests,
+// which need a Pipeline_State distinct from MockGetPipeline's hardcoded
+// STATUS_RUNNING (e.g. STATUS_STOPPED after a successful stop).
+func MockGetPipelineWithStatus(mockService *mock.MockPipelineService, pipelineID string, status apiv1.Pipeline_Status) {
+	mockService.EXPECT().GetPipeline(gomock.Any(), &apiv1.GetPipelineRequest{
+		Id: pipelineID,
+	}).Return(&apiv1.GetPipelineResponse{
+		Pipeline: &apiv1.Pipeline{
+			Id:    pipelineID,
+			State: &apiv1.Pipeline_State{Status: status},
+		},
+	}, nil).Times(1)
+}
+
+// MockStartPipeline sets up a StartPipeline expectation returning err (nil on
+// success).
+func MockStartPipeline(mockService *mock.MockPipelineService, pipelineID string, err error) {
+	var resp *apiv1.StartPipelineResponse
+	if err == nil {
+		resp = &apiv1.StartPipelineResponse{}
+	}
+	mockService.EXPECT().StartPipeline(gomock.Any(), &apiv1.StartPipelineRequest{
+		Id: pipelineID,
+	}).Return(resp, err).Times(1)
+}
+
+// MockStopPipeline sets up a StopPipeline expectation for the given force
+// value, returning err (nil on success).
+func MockStopPipeline(mockService *mock.MockPipelineService, pipelineID string, force bool, err error) {
+	var resp *apiv1.StopPipelineResponse
+	if err == nil {
+		resp = &apiv1.StopPipelineResponse{}
+	}
+	mockService.EXPECT().StopPipeline(gomock.Any(), &apiv1.StopPipelineRequest{
+		Id:    pipelineID,
+		Force: force,
+	}).Return(resp, err).Times(1)
+}
+
 // ProcessorService --------------------------------------------
 
 func MockGetProcessor(

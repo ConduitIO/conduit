@@ -39,6 +39,13 @@ type PipelineService interface {
 	GetDLQ(ctx context.Context, in *apiv1.GetDLQRequest, opts ...grpc.CallOption) (*apiv1.GetDLQResponse, error)
 	PlanPipeline(ctx context.Context, in *apiv1.PlanPipelineRequest, opts ...grpc.CallOption) (*apiv1.PlanPipelineResponse, error)
 	ApplyPipeline(ctx context.Context, in *apiv1.ApplyPipelineRequest, opts ...grpc.CallOption) (*apiv1.ApplyPipelineResponse, error)
+	// StartPipeline and StopPipeline back `conduit pipelines start|stop` (design
+	// doc 20260712-cli-pipeline-lifecycle-verbs.md): live lifecycle transitions
+	// against a running Conduit server, no offline/local-store path. The
+	// server-side RPCs, handlers, and lifecycle.Service.Start/Stop already
+	// shipped before this interface extension — this is CLI wiring only.
+	StartPipeline(ctx context.Context, in *apiv1.StartPipelineRequest, opts ...grpc.CallOption) (*apiv1.StartPipelineResponse, error)
+	StopPipeline(ctx context.Context, in *apiv1.StopPipelineRequest, opts ...grpc.CallOption) (*apiv1.StopPipelineResponse, error)
 }
 
 //go:generate mockgen -destination=mock/processor_service.go -package=mock . ProcessorService
