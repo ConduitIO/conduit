@@ -35,9 +35,12 @@ Two shapes were on the table for what "apply a fix" means:
 
 - `cmd/conduit/internal/repair.Collect`/`CollectContent` are pure reads: they run the existing
   offline `validate`/`lint` engine (`cmd/conduit/internal/validate`) and parse the file's own bytes
-  into a `*yaml.Node` tree purely to render a diff. Neither function imports
-  `pkg/provisioning`, `pkg/pipeline`, or any store/API client package — this is enforced
-  structurally by the import graph, not by convention or a runtime check.
+  into a `*yaml.Node` tree purely to render a diff. Neither function imports the
+  `pkg/provisioning` service, `pkg/pipeline`, or any store/API client package — the only
+  provisioning dependency is `pkg/provisioning/config` (a pure config/validation package, for the
+  `config.CodeFieldRenamed` constant), which touches no store or running pipeline. The
+  store/service boundary is enforced structurally by the import graph, not by convention or a
+  runtime check.
 - `repair.Apply` performs its edits on that same in-memory node tree and returns the repaired
   bytes. It does not write to disk itself (design doc §4.1: "Writing to disk is the caller's
   choice"): the CLI command atomically rewrites the source file (temp + rename) only after `Apply`

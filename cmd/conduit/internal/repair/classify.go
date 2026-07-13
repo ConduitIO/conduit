@@ -95,20 +95,39 @@ func classify(configPath string) FixClass {
 		return FixClassDataPath
 	}
 
-	// 2. v1 SAFE / RESTART allowlists (design doc §6, items #1-#4).
-	switch last := segs[len(segs)-1]; last {
-	case "status", "description", "type":
-		// "type" here is a processor's deprecated field (item #1's rename
-		// target) or the pipeline-level /status — /connectors/*/type was
-		// already classified data_path above and never reaches this
-		// switch.
-		return FixClassSafe
-	case "workers":
-		return FixClassRestart
+	// 2. v1 SAFE / RESTART allowlist, anchored to the path SHAPES the producers
+	//    emit (see classifyAllowlisted). Extracted so classify stays under the
+	//    cyclomatic limit and the anchored shapes live in one place.
+	if class, ok := classifyAllowlisted(segs); ok {
+		return class
 	}
 
-	// 3. Default-deny: an unrecognized ConfigPath is never safe.
+	// 3. Default-deny: an unrecognized ConfigPath shape is never safe.
 	return FixClassDataPath
+}
+
+// classifyAllowlisted matches the specific config-path SHAPES the v1 fix
+// producers emit (design doc §6, items #1-#4) — anchored on shape, NOT on bare
+// segment names. Anchoring is what keeps the classifier default-deny by
+// construction: a future field that merely ends in "status"/"description"/
+// "type"/"workers" in some other location returns ok=false and falls through to
+// data_path in classify. ok=false means "not an allowlisted shape."
+func classifyAllowlisted(segs []string) (FixClass, bool) {
+	n := len(segs)
+	last := segs[n-1]
+	switch {
+	case n == 1 && last == "status": // pipeline-level /status (item #2)
+		return FixClassSafe, true
+	case n == 1 && last == "description": // pipeline-level /description (item #4)
+		return FixClassSafe, true
+	case n >= 3 && segs[n-3] == "processors" && last == "type":
+		// A PROCESSOR's deprecated type->plugin rename (item #1). A connector's
+		// own /connectors/<idx>/type was already denied in classify.
+		return FixClassSafe, true
+	case n >= 3 && segs[n-3] == "processors" && last == "workers": // processor /workers (item #3)
+		return FixClassRestart, true
+	}
+	return FixClassDataPath, false
 }
 
 // pathSegments splits a JSON-pointer-shaped configPath into its non-empty

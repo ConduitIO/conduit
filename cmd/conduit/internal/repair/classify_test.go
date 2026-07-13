@@ -50,6 +50,15 @@ func TestClassify_TableTest(t *testing.T) {
 		// Default-deny: never seen before, must NOT be safe.
 		{"unrecognized field", "/some/made/up/field", FixClassDataPath},
 		{"empty path", "", FixClassDataPath},
+
+		// Anchored allowlist (review M1): a field ending in a safe/restart name
+		// but in a NON-producer location must fall through to default-deny, not
+		// be auto-classified safe/restart on the bare name.
+		{"status nested, not pipeline-level", "/pipelines/0/status", FixClassDataPath},
+		{"description nested, not pipeline-level", "/foo/description", FixClassDataPath},
+		{"workers under connectors not processors", "/connectors/0/workers", FixClassDataPath},
+		{"type not processor-anchored", "/schema/type", FixClassDataPath},
+		{"workers not processor-anchored", "/foo/bar/workers", FixClassDataPath},
 		{"root only", "/", FixClassDataPath},
 	}
 	for _, tc := range tests {

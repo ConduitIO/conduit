@@ -16,10 +16,12 @@ package repair
 
 import (
 	"bytes"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/yaml/v3"
 )
@@ -38,8 +40,24 @@ const yamlIndent = 2
 // marshal-from-struct round trip (which would strip comments; see doc.go and
 // the design doc's §10 schedule-risk note).
 func parseDoc(raw []byte) (*yaml.Node, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	var doc yaml.Node
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
+	if err := dec.Decode(&doc); err != nil {
+		return nil, cerrors.Errorf("could not parse pipeline config as YAML: %w", err)
+	}
+	// repair edits a SINGLE YAML document (doc.go's v1 scope). The encoder in
+	// marshalDoc re-emits only the first document, so on a multi-document
+	// ('---'-separated) file --apply would silently drop every document after the
+	// first — a config data-loss bug the pipeline-count guard in collect does not
+	// catch (a first document with one pipeline followed by pipeline-less
+	// documents passes it). Reject a multi-document file here rather than corrupt
+	// it. io.EOF from the second Decode is the single-document case.
+	if err := dec.Decode(new(yaml.Node)); err == nil {
+		ce := conduiterr.New(conduiterr.CodeInvalidArgument,
+			"repair requires a single YAML document per file; this file contains multiple '---'-separated documents")
+		ce.Suggestion = "split the file so each '---' document is its own file — repair edits one document and would otherwise drop the rest"
+		return nil, ce
+	} else if !cerrors.Is(err, io.EOF) {
 		return nil, cerrors.Errorf("could not parse pipeline config as YAML: %w", err)
 	}
 	return &doc, nil

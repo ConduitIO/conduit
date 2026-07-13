@@ -169,6 +169,34 @@ pipelines:
 	is.True(err != nil)
 }
 
+// TestCollect_RejectsMultiDocument is the regression test for review B1: a
+// multi-document ('---'-separated) file whose first document holds exactly one
+// pipeline and whose trailing documents contribute zero pipelines slips past the
+// pipeline-count guard (len(Pipelines)==1). Without the document-level check in
+// parseDoc, marshalDoc re-emits only the first document, so --apply would
+// silently drop the rest — config data loss. Collect must reject it.
+func TestCollect_RejectsMultiDocument(t *testing.T) {
+	is := is.New(t)
+
+	const src = `version: "2.2"
+pipelines:
+  - id: p1
+    status: RUNNING
+---
+version: "2.2"
+pipelines: []
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pipeline.yaml")
+	is.NoErr(os.WriteFile(path, []byte(src), 0o600))
+
+	_, err := Collect(context.Background(), path)
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.True(strings.Contains(ce.Message, "single YAML document"))
+}
+
 // TestCollect_UnparseableFile_SurfacesParseError is a regression test
 // (adversarial self-review finding): a file that fails to parse entirely
 // resolves to zero pipelines, which — before this fix — collect()
