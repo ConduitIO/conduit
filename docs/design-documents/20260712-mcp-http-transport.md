@@ -70,9 +70,9 @@ today.** The API config (`pkg/conduit/config.go:73-97`) exposes only `api.enable
 token fields. The API is served by a plain `http.Server` with `ListenAndServe` (no TLS) at
 `pkg/conduit/runtime.go:781` / `:864-885`. So the MCP HTTP transport is the **first TLS-terminating,
 first authenticated network surface in the codebase**. It cannot inherit an API TLS config that does
-not exist; if anything, the API should later borrow *this* transport's pattern.
+not exist; if anything, the API should later borrow _this_ transport's pattern.
 
-What the implementation **did** correctly reuse is the *authorization-gate pattern*, not a TLS stack:
+What the implementation **did** correctly reuse is the _authorization-gate pattern_, not a TLS stack:
 `--allow-mutations` and `--token-file`/TLS are **process-level flags set at startup, never agent-
 passable tool arguments** — the same shape as `--api.allow-live-restart-apply`
 (`config.go:83-96`, [`docs/operations/live-restart-apply.md`](../operations/live-restart-apply.md)).
@@ -107,7 +107,7 @@ appears.
 - **stdio unchanged and still default.** The common path (no `--http`) must be byte-for-byte the
   prior behavior; adding the flag must not regress it.
 - **One tool catalog.** HTTP and stdio serve the identical `*sdkmcp.Server`; the mutation gate
-  (`--allow-mutations`) decides *whether* a write tool is registered, orthogonal to *which* transport
+  (`--allow-mutations`) decides _whether_ a write tool is registered, orthogonal to _which_ transport
   serves it.
 - **No new heavyweight dependency.** TLS and bearer auth are `crypto/tls` + `crypto/subtle` +
   `net/http` from the standard library. (The go-sdk was already added by the MCP PR.)
@@ -134,7 +134,7 @@ This choice is already in the code (`http.go:136`). The doc ratifies it.
   refused, `http.go:113-127`), compared against `Authorization: Bearer <token>` in constant time.
 - The token is a **file path, not an inline flag value**, so the secret never lands in the process
   argv (visible in `ps`, shell history, container inspect). This is deliberate and must stay.
-- Auth is enforced by middleware wrapping the *entire* MCP handler, so **tool enumeration
+- Auth is enforced by middleware wrapping the _entire_ MCP handler, so **tool enumeration
   (`tools/list`) is authenticated too** — an unauthenticated caller learns nothing about the catalog,
   not even that `--allow-mutations` is on.
 - Non-agent-passable: there is no `ApplyPipelineRequest`-style field, no tool argument, and no
@@ -201,7 +201,7 @@ Each item names how it is verified. Items marked **[have]** are covered by exist
 
 - **AC-1 — stdio unchanged and still default. [have, partial]** `conduit mcp` with no `--http`
   serves stdio (`mcp.go:165-168`); an MCP client lists/calls the read tools identically to before.
-  *Add:* an explicit regression test asserting the no-`--http` path selects `StdioTransport` and
+  _Add:_ an explicit regression test asserting the no-`--http` path selects `StdioTransport` and
   never constructs an `http.Server`.
 - **AC-2 — fail-closed without token+TLS. [have]** `--http` set with any missing piece
   (nothing / token-only / TLS-only / cert-without-key / key-without-cert) refuses to start;
@@ -209,7 +209,7 @@ Each item names how it is verified. Items marked **[have]** are covered by exist
   `TestNewHTTPServer_RefusesWithoutTokenOrTLS`.
 - **AC-3 — TLS actually terminates. [have, partial]** With valid token+cert+key, `newHTTPServer`
   builds a server whose `TLSConfig` carries exactly one loaded certificate and `MinVersion >=
-  TLS1.2` (`TestNewHTTPServer_WithTokenAndTLS_Succeeds` checks the cert). *Add:* an end-to-end test
+  TLS1.2` (`TestNewHTTPServer_WithTokenAndTLS_Succeeds` checks the cert). _Add:_ an end-to-end test
   that a **plaintext** `http://` request to the `--http` port fails (no plaintext fallback), and that
   a TLS 1.1 client is refused.
 - **AC-4 — bearer auth: reject bad, admit good. [have]** No header → `401`; `Basic <token>` → `401`;
@@ -217,28 +217,28 @@ Each item names how it is verified. Items marked **[have]** are covered by exist
   `WWW-Authenticate`. `TestRequireBearerToken_AuthenticatesGoodRejectsBad`,
   `TestNewMCPHTTPHandler_EndToEndAuth`.
 - **AC-5 — auth guards enumeration. [have, implied → make explicit]** `tools/list` over HTTP without
-  a valid token → `401` (the middleware wraps the whole handler). *Add:* an explicit test issuing a
+  a valid token → `401` (the middleware wraps the whole handler). _Add:_ an explicit test issuing a
   `tools/list` JSON-RPC with no token and asserting `401` (not an empty catalog, not a `200`).
 - **AC-6 — empty token file refused. [gap]** A `--token-file` that is empty or whitespace-only
-  refuses to start. Logic exists (`loadBearerToken`); *add* the direct test.
+  refuses to start. Logic exists (`loadBearerToken`); _add_ the direct test.
 - **AC-7 — `--allow-mutations` still gates writes over HTTP. [gap]** With `--http` **and**
   `--allow-mutations`, `apply`/`scaffold_*` appear in the HTTP catalog; with `--http` and **no**
   `--allow-mutations`, they are absent over HTTP exactly as over stdio. Asserts the gate is transport
-  -independent. *Add* this test (currently only the stdio gate is directly tested).
+  -independent. _Add_ this test (currently only the stdio gate is directly tested).
 - **AC-8 — token never logged. [gap]** With `--http` up and `log.level=trace`, neither the token nor
-  any `Authorization` header value appears in server logs on success or on a `401`. *Add* a test
+  any `Authorization` header value appears in server logs on success or on a `401`. _Add_ a test
   scanning captured log output for the token string.
-- **AC-9 — token not in argv. [have by construction]** The token is passed as a *file path*; assert
+- **AC-9 — token not in argv. [have by construction]** The token is passed as a _file path_; assert
   no flag accepts an inline token value. (Design invariant; enforced by the flag set, no runtime
   test needed, but stated so a future flag addition doesn't violate it.)
 - **AC-10 — auth failures are observable. [gap]** A `401` emits a log line (method, remote addr,
-  outcome) so brute-force attempts are detectable. *Add* the log emission and its test. (See
+  outcome) so brute-force attempts are detectable. _Add_ the log emission and its test. (See
   Hardening H-2.)
 - **AC-11 — help text matches behavior. [gap — see self-review SR-1]** The `--http` usage/Docs text
-  must not claim a co-served stdio that the implementation does not provide. *Fix the text*, then a
+  must not claim a co-served stdio that the implementation does not provide. _Fix the text_, then a
   doc test / manual check confirms consistency.
 - **AC-12 — graceful shutdown. [gap]** On SIGTERM/ctx-cancel while serving HTTP, in-flight requests
-  drain within the 5s `Shutdown` window and the process exits 0. *Add* a test driving cancel against
+  drain within the 5s `Shutdown` window and the process exits 0. _Add_ a test driving cancel against
   a live listener.
 
 ## Threat model
@@ -246,41 +246,41 @@ Each item names how it is verified. Items marked **[have]** are covered by exist
 Surface class: **network-exposed, authenticated, potentially mutation-capable.** Highest-risk surface
 in the product. Threats and current posture:
 
-- **Auth bypass.** *Posture: mitigated.* Middleware wraps the entire MCP handler; there is no route
+- **Auth bypass.** _Posture: mitigated._ Middleware wraps the entire MCP handler; there is no route
   that skips it, no unauthenticated health/metadata path on the `--http` server. Residual: any future
   addition of a second route on this server must go through the same middleware — noted as an
-  invariant, not enforced by a linter. *Action: keep the handler composition single-entry.*
-- **Plaintext / TLS downgrade.** *Posture: mitigated.* No `ListenAndServe` path exists for `--http`;
+  invariant, not enforced by a linter. _Action: keep the handler composition single-entry._
+- **Plaintext / TLS downgrade.** _Posture: mitigated._ No `ListenAndServe` path exists for `--http`;
   only `ListenAndServeTLS`. `MinVersion: TLS1.2` blocks 1.0/1.1. Residual: cipher-suite selection is
   the Go default (reasonable); we do not pin suites. Acceptable.
-- **Token in logs / error messages / argv.** *Posture: mostly mitigated, one gap.* Token is a file
+- **Token in logs / error messages / argv.** _Posture: mostly mitigated, one gap._ Token is a file
   path (not argv), and no current code logs it. **Gap: there is no test guaranteeing it stays out of
   logs** (AC-8), and no structured audit line on auth events (AC-10). A careless future log statement
-  could leak it. *Action: add AC-8/AC-10 tests + a redaction-conscious auth log.*
-- **Unauthenticated tool enumeration.** *Posture: mitigated.* `tools/list` requires the token (AC-5).
+  could leak it. _Action: add AC-8/AC-10 tests + a redaction-conscious auth log._
+- **Unauthenticated tool enumeration.** _Posture: mitigated._ `tools/list` requires the token (AC-5).
   An unauthenticated attacker cannot even discover whether mutations are enabled.
-- **Brute-force / credential stuffing on the token.** *Posture: partial.* Constant-time compare
-  prevents a timing oracle on token *content*. **Gaps:** (a) no rate limiting or lockout — an
+- **Brute-force / credential stuffing on the token.** _Posture: partial._ Constant-time compare
+  prevents a timing oracle on token _content_. **Gaps:** (a) no rate limiting or lockout — an
   attacker can try tokens as fast as the network allows; (b) no logging, so attempts are invisible
-  (AC-10); (c) `constantTimeEqual` short-circuits on length mismatch, leaving a *length* timing
+  (AC-10); (c) `constantTimeEqual` short-circuits on length mismatch, leaving a _length_ timing
   oracle (an attacker could learn the token's length). The length oracle is low-value against a
   high-entropy token and is a deliberate, documented trade-off (`http.go:156-165`), but it is a
-  residual. *Action: add auth-failure logging now (H-2); rate limiting is v0.18 (H-5).*
-- **DoS — body flood.** *Posture: mitigated.* 4 MiB `MaxBytesReader` cap. Blast radius limited to
+  residual. _Action: add auth-failure logging now (H-2); rate limiting is v0.18 (H-5)._
+- **DoS — body flood.** _Posture: mitigated._ 4 MiB `MaxBytesReader` cap. Blast radius limited to
   token holders.
-- **DoS — slow clients / connection exhaustion.** *Posture: partial.* `ReadHeaderTimeout` blocks
+- **DoS — slow clients / connection exhaustion.** _Posture: partial._ `ReadHeaderTimeout` blocks
   Slowloris on headers. **Gap: no `IdleTimeout` and no `ReadTimeout`/`WriteTimeout`**, so an
   authenticated (or handshaking) client could hold connections open. Streamable HTTP uses long-lived
   responses, so a blanket `WriteTimeout` is wrong, but an `IdleTimeout` is safe and should be set
   (H-3).
-- **Mutation via the network by an unauthorized principal.** *Posture: mitigated by composition.*
+- **Mutation via the network by an unauthorized principal.** _Posture: mitigated by composition._
   Writes require both a valid token (network auth) **and** operator-set `--allow-mutations` (process
   gate) **and**, for a running pipeline, `--api.allow-live-restart-apply` (the live-apply gate).
   Three independent process-level gates, none agent-passable.
-- **Binding to a public interface unintentionally.** *Posture: gap.* `--http :8443` binds all
-  interfaces; nothing warns when the address is non-loopback. TLS+token make this *safe*, but a
-  surprised operator is a real failure mode. *Action: log a warning on non-loopback bind (H-4).*
-- **Compromised/stolen token → full catalog access.** *Posture: accepted for v0.17.* A single shared
+- **Binding to a public interface unintentionally.** _Posture: gap._ `--http :8443` binds all
+  interfaces; nothing warns when the address is non-loopback. TLS+token make this _safe_, but a
+  surprised operator is a real failure mode. _Action: log a warning on non-loopback bind (H-4)._
+- **Compromised/stolen token → full catalog access.** _Posture: accepted for v0.17._ A single shared
   token means one leak grants everything the catalog exposes, with no per-client revocation short of
   rotating (restart). This is the strongest argument for the "experimental" caveat. v0.18: per-agent
   tokens / revocation (H-6).
@@ -294,7 +294,7 @@ Must-fix before the v0.17 stable cut (small, high-value, no new deps):
   the flag usage and `Docs.Long` to state HTTP mode does **not** co-serve stdio (the daemon has no
   attached stdin). Text-only change.
 - **H-2 (AC-10): auth-event logging.** Emit a structured log line on `401` (method, remote addr,
-  outcome) and on server start ("serving MCP over HTTPS on <addr>, auth: bearer"), being careful to
+  outcome) and on server start ("serving MCP over HTTPS on {addr}, auth: bearer"), being careful to
   never log the token itself (AC-8 guards this).
 - **H-3: set `IdleTimeout`.** Add `IdleTimeout` (e.g. 120s) to bound idle connections without
   breaking streamable responses.
@@ -369,7 +369,7 @@ Reasoning:
   not a redesign — so "defer the whole feature to v0.18" buys little and costs the §2 deliverable.
 - **The deep items genuinely are v0.18.** Per-agent identity, mTLS, rotation, and rate limiting are
   real work with design questions of their own and no demonstrated v0.17 demand (stdio covers the
-  default local-agent case). Deferring *those* is right; deferring the whole transport is not.
+  default local-agent case). Deferring _those_ is right; deferring the whole transport is not.
 
 Net: v0.17 ships `--http` as an **experimental remote transport** with the fail-closed guarantees it
 already has plus H-1..H-4; v0.18 graduates it to stable once H-5..H-8 and field feedback land. This
@@ -383,19 +383,19 @@ operations are unchanged and remain the real protection for writes.
   (`mcp.go:54`) and `Docs.Long` (`mcp.go:90-92`) both say HTTP is served "in addition to stdio," but
   `Execute`'s own comment and code (`mcp.go:176-181`) deliberately serve **HTTP only** in `--http`
   mode (a daemon has no stdin; co-running stdio would EOF immediately and could tear down the
-  errgroup). The behavior is *right*; the docs are *wrong*. Captured as H-1/AC-11 — must fix before
+  errgroup). The behavior is _right_; the docs are _wrong_. Captured as H-1/AC-11 — must fix before
   the cut. This is the kind of mismatch that makes an operator think a channel is available when it
   isn't.
 - **SR-2: is the fail-closed gate truly before any listener binds?** Yes — `Execute` calls
   `newHTTPServer` (which calls `validateHTTPConfig`, `loadBearerToken`, `LoadX509KeyPair`) and returns
-  the error *before* the errgroup that calls `ListenAndServeTLS` (`mcp.go:171-197`). A misconfigured
+  the error _before_ the errgroup that calls `ListenAndServeTLS` (`mcp.go:171-197`). A misconfigured
   server never opens a socket. Verified by `TestNewHTTPServer_RefusesWithoutTokenOrTLS`.
 - **SR-3: can an agent flip any gate over the wire?** No. Token, TLS, `--allow-mutations`, and
   `--api.allow-live-restart-apply` are all process flags read at startup; none has a corresponding
   request/tool field. Confirmed against `config.go` and the tool signatures — same invariant as
   live-restart-apply, which is the pattern being mirrored.
 - **SR-4: does the length short-circuit in `constantTimeEqual` leak the token?** It leaks the token's
-  *length* via timing, not its content. Documented and deliberate (`http.go:156-165`). Against a
+  _length_ via timing, not its content. Documented and deliberate (`http.go:156-165`). Against a
   high-entropy token this is negligible; flagged in the threat model as a residual, not a blocker.
 - **SR-5: is enumeration really authenticated, or does the SDK expose an unauthenticated
   metadata/health route?** The bearer middleware wraps the single `NewStreamableHTTPHandler`, and the
@@ -403,15 +403,15 @@ operations are unchanged and remain the real protection for writes.
   (unlike the main API, which has `health_server.go`, but that is a different, unauthenticated
   surface not served here). AC-5 makes this an explicit test rather than an implicit property.
 - **SR-6: did I claim any gate is live that isn't?** No. Per CLAUDE.md's process-maturity honesty
-  rule: the fail-closed/auth/TLS behavior *is* implemented and tested today; the audit logging, rate
+  rule: the fail-closed/auth/TLS behavior _is_ implemented and tested today; the audit logging, rate
   limiting, idle timeout, non-loopback warning, and several ACs are **gaps I am flagging as
   not-yet-present**, not claiming as done. This doc is a hardening plan precisely because those are
   missing.
 - **SR-7: is "reuse the API's TLS" satisfied?** It cannot be — the API has no TLS/auth
   (`config.go:73-97`, `runtime.go:781`). I verified this rather than assuming a shared stack exists.
-  The reused pattern is the process-level non-agent-passable *gate* (live-restart-apply), which is the
+  The reused pattern is the process-level non-agent-passable _gate_ (live-restart-apply), which is the
   correct thing to mirror; the TLS/bearer plumbing is necessarily new (stdlib), and the API is a
-  future *consumer* of this pattern, not its source.
+  future _consumer_ of this pattern, not its source.
 
 ## Related
 
