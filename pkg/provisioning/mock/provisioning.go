@@ -907,41 +907,41 @@ func (c *ProcessorServiceMakeRunnableProcessorCall) DoAndReturn(f func(context.C
 	return c
 }
 
-// Update mocks base method.
-func (m *ProcessorService) Update(ctx context.Context, id, plugin string, cfg processor.Config) (*processor.Instance, error) {
+// UpdateWhileRunning mocks base method.
+func (m *ProcessorService) UpdateWhileRunning(ctx context.Context, id, plugin string, cfg processor.Config) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, plugin, cfg)
+	ret := m.ctrl.Call(m, "UpdateWhileRunning", ctx, id, plugin, cfg)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Update indicates an expected call of Update.
-func (mr *ProcessorServiceMockRecorder) Update(ctx, id, plugin, cfg any) *ProcessorServiceUpdateCall {
+// UpdateWhileRunning indicates an expected call of UpdateWhileRunning.
+func (mr *ProcessorServiceMockRecorder) UpdateWhileRunning(ctx, id, plugin, cfg any) *ProcessorServiceUpdateWhileRunningCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorService)(nil).Update), ctx, id, plugin, cfg)
-	return &ProcessorServiceUpdateCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWhileRunning", reflect.TypeOf((*ProcessorService)(nil).UpdateWhileRunning), ctx, id, plugin, cfg)
+	return &ProcessorServiceUpdateWhileRunningCall{Call: call}
 }
 
-// ProcessorServiceUpdateCall wrap *gomock.Call
-type ProcessorServiceUpdateCall struct {
+// ProcessorServiceUpdateWhileRunningCall wrap *gomock.Call
+type ProcessorServiceUpdateWhileRunningCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ProcessorServiceUpdateCall) Return(arg0 *processor.Instance, arg1 error) *ProcessorServiceUpdateCall {
+func (c *ProcessorServiceUpdateWhileRunningCall) Return(arg0 *processor.Instance, arg1 error) *ProcessorServiceUpdateWhileRunningCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ProcessorServiceUpdateCall) Do(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorServiceUpdateCall {
+func (c *ProcessorServiceUpdateWhileRunningCall) Do(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorServiceUpdateWhileRunningCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ProcessorServiceUpdateCall) DoAndReturn(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorServiceUpdateCall {
+func (c *ProcessorServiceUpdateWhileRunningCall) DoAndReturn(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorServiceUpdateWhileRunningCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

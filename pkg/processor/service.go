@@ -177,12 +177,37 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, cfg Conf
 	if err != nil {
 		return nil, err
 	}
-	if plugin == "" {
-		return nil, cerrors.Errorf("could not update processor instance (ID: %s): plugin name is empty", id)
-	}
 
+	// A running processor's stored config must not be changed out from under its
+	// live node — that would leave the node and the store divergent. Ordinary
+	// callers (the orchestrator / HTTP+gRPC API) are refused here; the sole
+	// exception is provisioning's live in-place reconfigure, which uses
+	// UpdateWhileRunning and immediately swaps the node to match.
 	if instance.running {
 		return nil, cerrors.Errorf("could not update processor instance (ID: %s): %w", id, ErrProcessorRunning)
+	}
+
+	return s.updateConfig(ctx, instance, plugin, cfg)
+}
+
+// UpdateWhileRunning updates a processor's stored config WITHOUT Update's
+// running-instance guard. It exists solely for provisioning's live in-place
+// reconfigure path (provisioning.applyInPlace -> lifecycle.ReconfigureProcessor):
+// updating a running processor's stored config is safe ONLY when the caller
+// immediately swaps the live node to the new config, so this method must never be
+// called except paired with that swap. Every other caller uses Update, which
+// refuses a running instance.
+func (s *Service) UpdateWhileRunning(ctx context.Context, id string, plugin string, cfg Config) (*Instance, error) {
+	instance, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.updateConfig(ctx, instance, plugin, cfg)
+}
+
+func (s *Service) updateConfig(ctx context.Context, instance *Instance, plugin string, cfg Config) (*Instance, error) {
+	if plugin == "" {
+		return nil, cerrors.Errorf("could not update processor instance (ID: %s): plugin name is empty", instance.ID)
 	}
 
 	if instance.Plugin != plugin {
@@ -195,8 +220,7 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, cfg Conf
 	instance.UpdatedAt = time.Now()
 
 	// persist instance
-	err = s.store.Set(ctx, instance.ID, instance)
-	if err != nil {
+	if err := s.store.Set(ctx, instance.ID, instance); err != nil {
 		return nil, err
 	}
 

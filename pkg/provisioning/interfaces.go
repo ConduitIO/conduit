@@ -63,7 +63,12 @@ type ProcessorService interface {
 		condition string,
 	) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
-	Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
+	// UpdateWhileRunning updates a processor's stored config without the
+	// running-instance guard Update enforces — provisioning applies processor
+	// updates either on a stopped pipeline or as a live in-place reconfigure that
+	// immediately swaps the node, so the guard (meant for direct API callers who
+	// do not swap) must not block it. See processor.Service.UpdateWhileRunning.
+	UpdateWhileRunning(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
 

@@ -577,7 +577,7 @@ func TestUpdateProcessorAction(t *testing.T) {
 			}
 
 			connSrv := mock.NewProcessorService(ctrl)
-			connSrv.EXPECT().Update(ctx, haveCfg.ID, haveCfg.Plugin, wantCfg).Return(instance, nil)
+			connSrv.EXPECT().UpdateWhileRunning(ctx, haveCfg.ID, haveCfg.Plugin, wantCfg).Return(instance, nil)
 
 			a := updateProcessorAction{
 				oldConfig:        tc.oldConfig,

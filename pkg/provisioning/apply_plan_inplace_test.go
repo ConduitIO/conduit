@@ -63,7 +63,7 @@ func TestApplyPlanLive_ProcessorUpdate_AppliesInPlace_NoRestart(t *testing.T) {
 	old, desired := processorUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
 
-	procSrv.EXPECT().Update(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		Return(&processor.Instance{ID: "p1:proc:1"}, nil)
 	lifecycleSrv.EXPECT().ReconfigureProcessor(gomock.Any(), "p1", "p1:proc:1").Return(nil)
 
@@ -92,7 +92,7 @@ func TestApplyPlanLive_ProcessorUpdate_InPlace_CompletesDespiteCallerCancel(t *t
 
 	// The forward import runs on the detached context; cancel the caller context
 	// as a side-effect to prove the rest of the apply proceeds regardless.
-	procSrv.EXPECT().Update(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		DoAndReturn(func(importCtx context.Context, _, _ string, _ processor.Config) (*processor.Instance, error) {
 			cancel()
 			is.NoErr(importCtx.Err()) // detached: not cancelled by the caller
@@ -127,7 +127,7 @@ func TestApplyPlanLive_ProcessorUpdate_NotLiveReconfigurable_FallsBackToRestart(
 	// procSrv.Update is called by applyInPlace's import and again by the restart
 	// path's import (the stateless mock Export keeps returning old, so both
 	// imports recompute the same action — in production the second is a no-op).
-	procSrv.EXPECT().Update(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		Return(&processor.Instance{ID: "p1:proc:1"}, nil).Times(2)
 	lifecycleSrv.EXPECT().ReconfigureProcessor(gomock.Any(), "p1", "p1:proc:1").
 		Return(lifecycle.ErrProcessorNotLiveReconfigurable)
@@ -168,7 +168,7 @@ func TestApplyPlanLive_ProcessorUpdate_OpenFails_RollsBack(t *testing.T) {
 	// returning old) that diffs old-vs-old = empty, so no second Update is
 	// recorded here — in production, where the store reflects the forward import,
 	// the rollback re-imports old and reverses it.
-	procSrv.EXPECT().Update(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		Return(&processor.Instance{ID: "p1:proc:1"}, nil)
 	openErr := cerrors.New("new processor failed to open")
 	lifecycleSrv.EXPECT().ReconfigureProcessor(gomock.Any(), "p1", "p1:proc:1").Return(openErr)
