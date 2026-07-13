@@ -198,3 +198,130 @@ func TestProcessorNode_Reconfigure_ContextCancelled(t *testing.T) {
 	err := n.Reconfigure(ctx, mock.NewProcessor(ctrl))
 	is.True(cerrors.Is(err, context.Canceled))
 }
+
+// teardownSpy is a Processor that records whether it was torn down via the plain
+// Teardown (which, for the real RunnableProcessor, clears the shared Instance's
+// running flag) or via TeardownForReconfigure (which does not). It lets the swap
+// tests below assert that applyPendingSwap never uses the running-clearing
+// Teardown on a processor that is being swapped while its instance stays running.
+type teardownSpy struct {
+	openErr error
+
+	mu            sync.Mutex
+	teardownCalls int
+	reconfigCalls int
+}
+
+func (s *teardownSpy) Open(context.Context) error { return s.openErr }
+
+func (s *teardownSpy) Process(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+	out := make([]sdk.ProcessedRecord, len(recs))
+	for i, r := range recs {
+		out[i] = sdk.SingleRecord(r)
+	}
+	return out
+}
+
+func (s *teardownSpy) Teardown(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.teardownCalls++
+	return nil
+}
+
+func (s *teardownSpy) TeardownForReconfigure(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconfigCalls++
+	return nil
+}
+
+func (s *teardownSpy) counts() (teardown, reconfig int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.teardownCalls, s.reconfigCalls
+}
+
+// TestProcessorNode_Reconfigure_SuccessfulSwap_UsesReconfigureTeardown proves the
+// swap tears the OLD processor down via TeardownForReconfigure (not the running
+// -clearing Teardown), and that a real pipeline STOP still uses the plain Teardown
+// on the node's current processor. This is the wiring half of the shared-instance
+// running-flag regression (the processor-package half lives in
+// TestReconfigureSwap_KeepsInstanceRunning_GuardsStayArmed).
+func TestProcessorNode_Reconfigure_SuccessfulSwap_UsesReconfigureTeardown(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	old := &teardownSpy{}
+	newp := &teardownSpy{}
+	n := &ProcessorNode{Name: "test", Processor: old, ProcessorTimer: noop.Timer{}}
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		is.NoErr(n.Run(ctx))
+	}()
+
+	is.NoErr(n.Reconfigure(ctx, newp)) // blocks until the swap is applied
+
+	oldTd, oldRc := old.counts()
+	is.Equal(oldTd, 0) // the running-clearing Teardown must NOT run on a swap
+	is.Equal(oldRc, 1) // the old processor was torn down via TeardownForReconfigure
+
+	close(in)
+	wg.Wait()
+
+	newTd, newRc := newp.counts()
+	is.Equal(newTd, 1) // a real stop uses the plain, running-clearing Teardown
+	is.Equal(newRc, 0)
+
+	_, ok := <-out
+	is.Equal(false, ok)
+}
+
+// TestProcessorNode_Reconfigure_OpenFailure_UsesReconfigureTeardown proves that
+// when the NEW processor fails to open, its best-effort cleanup also uses
+// TeardownForReconfigure — the old processor (sharing the instance) keeps running,
+// so its running flag must not be cleared by tearing down the failed new one.
+func TestProcessorNode_Reconfigure_OpenFailure_UsesReconfigureTeardown(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	old := &teardownSpy{}
+	newp := &teardownSpy{openErr: cerrors.New("bad new config")}
+	n := &ProcessorNode{Name: "test", Processor: old, ProcessorTimer: noop.Timer{}}
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		is.NoErr(n.Run(ctx))
+	}()
+
+	err := n.Reconfigure(ctx, newp)
+	is.True(err != nil) // open failed, swap rejected
+
+	newTd, newRc := newp.counts()
+	is.Equal(newTd, 0) // failed-new cleanup must not use the running-clearing Teardown
+	is.Equal(newRc, 1) // it used TeardownForReconfigure
+
+	oldTd, oldRc := old.counts()
+	is.Equal(oldTd, 0) // old kept running, untouched by the failed swap
+	is.Equal(oldRc, 0)
+
+	close(in)
+	wg.Wait()
+
+	oldTd2, _ := old.counts()
+	is.Equal(oldTd2, 1) // stop tears the still-current old processor down fully
+
+	_, ok := <-out
+	is.Equal(false, ok)
+}

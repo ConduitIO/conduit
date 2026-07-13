@@ -145,3 +145,17 @@ func (p *RunnableProcessor) Teardown(ctx context.Context) error {
 	p.running = false
 	return err
 }
+
+// TeardownForReconfigure tears down the processor plugin WITHOUT clearing the
+// shared Instance.running flag. It exists for the live in-place reconfigure swap
+// (ProcessorNode.applyPendingSwap), where a RunnableProcessor is torn down but
+// the underlying Instance stays running via the other runnable in the swap: on
+// success the new runnable takes over; on a failed open the old runnable keeps
+// running. Because both runnables embed the SAME *Instance, the plain Teardown's
+// `running = false` would wrongly mark the still-running instance stopped —
+// disarming the Update/Delete running-guards (service.go) for the rest of the
+// pipeline's life. Only a real pipeline stop, which tears down the node's
+// current processor via the plain Teardown, may clear running.
+func (p *RunnableProcessor) TeardownForReconfigure(ctx context.Context) error {
+	return p.proc.Teardown(ctx)
+}

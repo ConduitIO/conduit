@@ -282,7 +282,11 @@ func (n *ProcessorNode) applyPendingSwap(ctx context.Context) {
 		// Keep the current processor running; report the failure. Best-effort
 		// teardown of the failed new processor (Open may have partially
 		// initialized it, e.g. started a WASM module), mirroring Run's defer.
-		if tdErr := p.newProcessor.Teardown(ctx); tdErr != nil {
+		// reconfigureTeardown, not Teardown: the current (old) processor and this
+		// failed new one share the same processor.Instance, so clearing the
+		// instance's running flag here would mark the STILL-running old processor
+		// stopped. See teardownForReconfigure.
+		if tdErr := teardownForReconfigure(ctx, p.newProcessor); tdErr != nil {
 			n.logger.Warn(ctx).Err(tdErr).Msg("could not tear down new processor after failed live-reconfigure open")
 		}
 		p.done <- cerrors.Errorf("could not open new processor for live reconfigure, keeping current processor: %w", err)
@@ -291,12 +295,35 @@ func (n *ProcessorNode) applyPendingSwap(ctx context.Context) {
 
 	old := n.Processor
 	n.Processor = p.newProcessor
-	if tdErr := old.Teardown(ctx); tdErr != nil {
+	// reconfigureTeardown, not Teardown: old and the new (now-live) processor
+	// share the same processor.Instance, which stays running via the new one.
+	// A plain Teardown here would clear that shared instance's running flag,
+	// wrongly marking the live processor stopped and disarming the Update/Delete
+	// guards. Only a real pipeline stop clears running (via the node's normal
+	// Teardown of its current processor).
+	if tdErr := teardownForReconfigure(ctx, old); tdErr != nil {
 		// The swap already succeeded; a teardown error on the old processor is
 		// logged, not surfaced as a swap failure.
 		n.logger.Warn(ctx).Err(tdErr).Msg("could not tear down previous processor after live reconfigure")
 	}
 	p.done <- nil
+}
+
+// teardownForReconfigure tears down proc during a live swap without clearing the
+// running state of a shared processor Instance. The built-in RunnableProcessor
+// embeds a single *Instance shared across the runnables of a swap, so tearing one
+// down with the plain Teardown would clear the instance's running flag even though
+// the instance stays running via the swap's other runnable. A Processor that needs
+// this distinction implements TeardownForReconfigure; any other implementation
+// (e.g. a test mock) falls back to the plain Teardown, which is correct for
+// processors that don't share instance state across a swap.
+func teardownForReconfigure(ctx context.Context, proc Processor) error {
+	if rp, ok := proc.(interface {
+		TeardownForReconfigure(context.Context) error
+	}); ok {
+		return rp.TeardownForReconfigure(ctx)
+	}
+	return proc.Teardown(ctx)
 }
 
 // handleSingleRecord handles a sdk.SingleRecord by checking the position,
