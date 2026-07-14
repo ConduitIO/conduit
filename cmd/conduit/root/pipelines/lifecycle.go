@@ -95,7 +95,7 @@ func readLifecycleResult(ctx context.Context, client *api.Client, id, action str
 // single Pipeline_STATUS_STOPPED (pkg/http/api/toproto/pipeline.go
 // PipelineStatus). State.stopped_reason now distinguishes them directly on the
 // wire; switching this label to read it (instead of inferring from the action)
-// is a tracked follow-up. Until then: a successful "stop" action's read-back can
+// is a tracked follow-up (issue #2630). Until then: a successful "stop" action's read-back can
 // only ever be StatusUserStopped (StatusSystemStopped is set exclusively during
 // server-startup reconciliation of pipelines that were running before a restart,
 // pkg/pipeline/service.go, never by a StopPipeline RPC succeeding), so inferring
