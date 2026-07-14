@@ -892,8 +892,11 @@ func wsCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
 			return true
 		}
 		// Same-origin: Origin's host:port equals the request Host. This is
-		// gorilla's own default and must hold regardless of the allowlist.
-		if u, err := url.Parse(origin); err == nil && strings.EqualFold(u.Host, r.Host) {
+		// gorilla's own default and must hold regardless of the allowlist. The
+		// u.Host != "" guard is defense-in-depth: r.Host is never empty at a real
+		// handler (Go rejects HTTP/1.1 without Host), but this ensures an
+		// unparseable/host-less Origin can never match an empty Host.
+		if u, err := url.Parse(origin); err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host) {
 			return true
 		}
 		return originAllowed(origin, allowedOrigins)
