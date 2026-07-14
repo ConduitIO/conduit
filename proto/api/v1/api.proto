@@ -59,6 +59,22 @@ message Pipeline {
     Status status = 1;
     // Error message when pipeline status is STATUS_DEGRADED.
     string error = 2;
+
+    // StoppedReason distinguishes how a STATUS_STOPPED pipeline came to be
+    // stopped. It is only meaningful when status == STATUS_STOPPED;
+    // STOPPED_REASON_UNSPECIFIED otherwise (and for older servers that don't set
+    // it). Additive: existing clients that read only `status`/`error` are
+    // unaffected.
+    enum StoppedReason {
+      STOPPED_REASON_UNSPECIFIED = 0;
+      // An operator or API call stopped the pipeline (also the initial state of
+      // a created-but-never-started pipeline).
+      STOPPED_REASON_USER = 1;
+      // Conduit stopped the pipeline itself — a graceful engine shutdown, or a
+      // pipeline that was running before a restart and has not been resumed.
+      STOPPED_REASON_SYSTEM = 2;
+    }
+    StoppedReason stopped_reason = 3;
   }
   message Config {
     string name = 1;

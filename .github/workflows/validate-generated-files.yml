@@ -21,6 +21,6 @@ jobs:
           BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
-          make install-tools generate proto-generate
+          make install-tools proto-generate generate
           git diff
           git diff --exit-code --numstat

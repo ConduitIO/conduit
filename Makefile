@@ -116,7 +116,7 @@ verify: install-tools
 	@echo "==> markdown-lint"
 	@npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) $(MARKDOWNLINT_GLOBS)
 	@echo "==> validate-generated-files"
-	@$(MAKE) generate proto-generate
+	@$(MAKE) proto-generate generate
 	@git diff --exit-code --numstat
 	@echo "==> test (unit subset, -race -short, no docker)"
 	@go test -race -short ./...

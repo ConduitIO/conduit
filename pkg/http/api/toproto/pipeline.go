@@ -24,8 +24,9 @@ func Pipeline(in *pipeline.Instance) *apiv1.Pipeline {
 	return &apiv1.Pipeline{
 		Id: in.ID,
 		State: &apiv1.Pipeline_State{
-			Status: PipelineStatus(in.GetStatus()),
-			Error:  in.Error,
+			Status:        PipelineStatus(in.GetStatus()),
+			Error:         in.Error,
+			StoppedReason: PipelineStoppedReason(in.GetStatus()),
 		},
 		Config:       PipelineConfig(in.Config),
 		CreatedAt:    timestamppb.New(in.CreatedAt),
@@ -56,6 +57,26 @@ func PipelineStatus(in pipeline.Status) apiv1.Pipeline_Status {
 		return apiv1.Pipeline_STATUS_RECOVERING
 	}
 	return apiv1.Pipeline_STATUS_UNSPECIFIED
+}
+
+// PipelineStoppedReason maps the engine status to the additive wire
+// stopped-reason. The wire Status enum collapses user- and system-stopped into a
+// single STATUS_STOPPED (see PipelineStatus); this recovers the distinction
+// without changing that enum. It is USER/SYSTEM only for the two stopped states
+// (a created-but-never-started pipeline is StatusUserStopped, so it reports
+// USER); every non-stopped status reports UNSPECIFIED so a running/degraded/
+// recovering pipeline never carries a stale reason.
+func PipelineStoppedReason(in pipeline.Status) apiv1.Pipeline_State_StoppedReason {
+	switch in {
+	case pipeline.StatusUserStopped:
+		return apiv1.Pipeline_State_STOPPED_REASON_USER
+	case pipeline.StatusSystemStopped:
+		return apiv1.Pipeline_State_STOPPED_REASON_SYSTEM
+	case pipeline.StatusRunning, pipeline.StatusDegraded, pipeline.StatusRecovering:
+		return apiv1.Pipeline_State_STOPPED_REASON_UNSPECIFIED
+	default:
+		return apiv1.Pipeline_State_STOPPED_REASON_UNSPECIFIED
+	}
 }
 
 func PipelineDLQ(in pipeline.DLQ) *apiv1.Pipeline_DLQ {
