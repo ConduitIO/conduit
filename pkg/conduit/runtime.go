@@ -25,7 +25,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
-	"strings"
+	"slices"
 	"sync"
 	"time"
 
@@ -774,10 +774,25 @@ func (r *Runtime) serveHTTPAPI(
 		return nil, cerrors.Errorf("failed to register readyz handler: %w", err)
 	}
 
+	allowedOrigins := r.Config.API.HTTP.CORS.AllowedOrigins
+	if slices.Contains(allowedOrigins, "*") {
+		// The API has no authentication. A wildcard CORS origin therefore lets any
+		// web page reach it; combined with a non-loopback bind, that is
+		// network-wide unauthenticated read and control. Warn loudly, louder still
+		// when the bind is not loopback.
+		w := r.logger.Warn(ctx)
+		if isLoopbackBind(r.Config.API.HTTP.Address) {
+			w.Msg("CORS is configured with wildcard '*': any web origin may call the unauthenticated HTTP API and websocket streams. Prefer exact origins outside local development.")
+		} else {
+			w.Str(log.ServerAddressField, r.Config.API.HTTP.Address).
+				Msg("CORS wildcard '*' with a non-loopback bind and no API authentication: any website in any browser on this network can read and control this Conduit instance. Use exact origins, bind to loopback, or front it with an authenticating proxy.")
+		}
+	}
 	handler := grpcutil.WithWebsockets(
 		ctx,
-		grpcutil.WithDefaultGatewayMiddleware(allowCORS(gwmux, "http://localhost:4200")),
+		grpcutil.WithDefaultGatewayMiddleware(allowCORS(gwmux, allowedOrigins)),
 		r.logger,
+		wsCheckOrigin(allowedOrigins),
 	)
 
 	addr, err := r.serveHTTP(
@@ -797,26 +812,84 @@ func (r *Runtime) serveHTTPAPI(
 	return addr, nil
 }
 
-func preflightHandler(w http.ResponseWriter) {
-	headers := []string{"Content-Type", "Accept"}
-	w.Header().Set("Access-Control-Allow-Headers", strings.Join(headers, ","))
-	methods := []string{"GET", "HEAD", "POST", "PUT", "DELETE"}
-	w.Header().Set("Access-Control-Allow-Methods", strings.Join(methods, ","))
+func preflightHandler(w http.ResponseWriter, r *http.Request) {
+	// The origin is already known-allowed by allowCORS before this runs. Reflect
+	// the browser's requested headers (rather than a fixed list) so a UI setting a
+	// correlation header (x-request-id, read by the gateway) or, in future, an
+	// Authorization header is not blocked by an out-of-date allowlist. Fall back to
+	// the historical minimal set when the browser requests nothing specific.
+	reqHeaders := r.Header.Get("Access-Control-Request-Headers")
+	if reqHeaders == "" {
+		reqHeaders = "Content-Type,Accept"
+	}
+	w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+	w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,DELETE")
+	// Let the browser cache the preflight so it doesn't re-issue OPTIONS before
+	// every API/stream call.
+	w.Header().Set("Access-Control-Max-Age", "600")
 }
 
-// allowCORS allows Cross Origin Resource Sharing from any origin.
-// Don't do this without consideration in production systems.
-func allowCORS(h http.Handler, origin string) http.Handler {
+// originAllowed reports whether origin is permitted by the configured allowlist:
+// true if the list contains the wildcard "*" or the exact origin. It is the
+// single origin-decision shared by allowCORS (HTTP) and the websocket CheckOrigin,
+// so the two surfaces can never diverge.
+func originAllowed(origin string, allowedOrigins []string) bool {
+	for _, a := range allowedOrigins {
+		if a == "*" || a == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// allowCORS enables Cross-Origin Resource Sharing for the browser origins in
+// allowedOrigins (exact match, or all when the list contains "*"). It reflects the
+// matched origin (never a literal "*") and sets Vary: Origin so a shared cache
+// can't serve one origin's headers to another. It sets no Access-Control-Allow-
+// Credentials: the API is unauthenticated, and reflecting the origin keeps this
+// forward-safe if auth is ever added. An empty allowlist denies all cross-origin
+// requests (the secure default); same-origin requests are unaffected either way.
+func allowCORS(h http.Handler, allowedOrigins []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Origin") == origin {
+		origin := r.Header.Get("Origin")
+		if origin != "" && originAllowed(origin, allowedOrigins) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			if r.Method == "OPTIONS" && r.Header.Get("Access-Control-Request-Method") != "" {
-				preflightHandler(w)
+			w.Header().Add("Vary", "Origin")
+			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+				preflightHandler(w, r)
 				return
 			}
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// wsCheckOrigin builds the websocket upgrader's origin guard from the same
+// allowlist as allowCORS. HTTP CORS middleware never runs on a websocket-upgrade
+// request (webSocketProxy intercepts it first), so the upgrader needs its own
+// check or gorilla's default would reject every cross-origin stream. A request
+// with no Origin header (curl / CLI / non-browser) is allowed, matching gorilla's
+// own same-origin default.
+func wsCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		return origin == "" || originAllowed(origin, allowedOrigins)
+	}
+}
+
+// isLoopbackBind reports whether addr binds only the loopback interface. An empty
+// host (":8080"), "0.0.0.0", or "::" binds all interfaces and is NOT loopback.
+func isLoopbackBind(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	switch host {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Runtime) serveGRPC(

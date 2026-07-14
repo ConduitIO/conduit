@@ -120,6 +120,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("db.sqlite.table", c.Cfg.DB.SQLite.Table)
 	flags.SetDefault("api.enabled", c.Cfg.API.Enabled)
 	flags.SetDefault("api.http.address", c.Cfg.API.HTTP.Address)
+	flags.SetDefault("api.http.cors.allowed-origins", c.Cfg.API.HTTP.CORS.AllowedOrigins)
 	flags.SetDefault("api.grpc.address", c.Cfg.API.GRPC.Address)
 	flags.SetDefault("api.allow-live-restart-apply", c.Cfg.API.AllowLiveRestartApply)
 	flags.SetDefault("log.level", c.Cfg.Log.Level)

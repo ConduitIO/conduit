@@ -38,6 +38,42 @@ func TestConfig_Validate(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "valid CORS origins (exact, wildcard, port)",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.CORS.AllowedOrigins = []string{"http://localhost:5173", "https://ui.example.com", "*"}
+				return c
+			},
+			want: nil,
+		},
+		{
+			name: "invalid CORS origin (trailing slash)",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.CORS.AllowedOrigins = []string{"http://localhost:5173/"}
+				return c
+			},
+			want: invalidConfigFieldErr("api.http.cors.allowed-origins"),
+		},
+		{
+			name: "invalid CORS origin (no scheme)",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.CORS.AllowedOrigins = []string{"localhost:5173"}
+				return c
+			},
+			want: invalidConfigFieldErr("api.http.cors.allowed-origins"),
+		},
+		{
+			name: "invalid CORS origin (has path)",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.CORS.AllowedOrigins = []string{"http://localhost:5173/app"}
+				return c
+			},
+			want: invalidConfigFieldErr("api.http.cors.allowed-origins"),
+		},
+		{
 			name: "invalid DB type (empty)",
 			setupConfig: func(c Config) Config {
 				c.DB.Type = ""
