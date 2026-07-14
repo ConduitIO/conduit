@@ -18,8 +18,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
 )
 
@@ -140,8 +143,11 @@ func TestWSCheckOrigin(t *testing.T) {
 	allowed := []string{"http://localhost:5173"}
 	check := wsCheckOrigin(allowed)
 
+	// host is the request Host, so "http://<host>" is a same-origin request.
+	const host = "conduit.internal:8080"
 	newReq := func(origin string) *http.Request {
 		r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/connectors/x/inspect", nil)
+		r.Host = host
 		if origin != "" {
 			r.Header.Set("Origin", origin)
 		}
@@ -154,8 +160,12 @@ func TestWSCheckOrigin(t *testing.T) {
 		want   bool
 	}{
 		{"no origin (curl/CLI) allowed", "", true},
-		{"allowed origin", "http://localhost:5173", true},
-		{"disallowed origin rejected", "http://evil.example", false},
+		{"allowed cross-origin", "http://localhost:5173", true},
+		{"disallowed cross-origin rejected", "http://evil.example", false},
+		// Same-origin must be allowed even though it is NOT in the (empty of
+		// this host) allowlist — browsers send Origin on same-origin WS too, and
+		// this is the embedded UI's case. Regression guard for the same-origin bug.
+		{"same-origin allowed regardless of allowlist", "http://" + host, true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -164,8 +174,8 @@ func TestWSCheckOrigin(t *testing.T) {
 		})
 	}
 
-	// The HTTP and WS surfaces must never diverge: wsCheckOrigin agrees with
-	// originAllowed for any present Origin.
+	// For a cross-origin request, wsCheckOrigin agrees with originAllowed, so the
+	// HTTP and WS surfaces never diverge on the allowlist decision.
 	is.New(t).Equal(check(newReq("http://localhost:5173")), originAllowed("http://localhost:5173", allowed))
 }
 
@@ -177,12 +187,49 @@ func TestWSCheckOrigin_WildcardAllowsAny(t *testing.T) {
 	is.True(check(r))
 }
 
+// TestBuildAPIHandler_WSOriginWired proves the runtime wiring itself, not just
+// the pieces: buildAPIHandler must apply wsCheckOrigin from the allowlist to the
+// websocket upgrade path. A regression that passed nil (or omitted wsCheckOrigin)
+// here would pass every other unit test but is caught by a real cross-origin
+// upgrade being refused with 403 while an allowlisted one succeeds.
+func TestBuildAPIHandler_WSOriginWired(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	// The inner (non-websocket) handler streams a line the proxy relays once a WS
+	// upgrade succeeds.
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, err := w.Write([]byte("hi\n"))
+		is.NoErr(err)
+	})
+	h := buildAPIHandler(ctx, inner, []string{"http://allowed.example"}, log.Nop())
+	s := httptest.NewServer(h)
+	defer s.Close()
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Disallowed cross-origin upgrade -> refused with 403 (proves wsCheckOrigin
+	// is wired into the upgrader by buildAPIHandler).
+	_, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {"http://evil.example"}})
+	is.True(err != nil)
+	if resp != nil {
+		is.Equal(resp.StatusCode, http.StatusForbidden)
+		resp.Body.Close()
+	}
+
+	// Allowlisted cross-origin upgrade -> succeeds.
+	ws, resp2, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {"http://allowed.example"}})
+	is.NoErr(err)
+	defer ws.Close()
+	defer resp2.Body.Close()
+}
+
 func TestIsLoopbackBind(t *testing.T) {
 	testCases := []struct {
 		addr string
 		want bool
 	}{
 		{"127.0.0.1:8080", true},
+		{"127.0.0.2:8080", true}, // all of 127.0.0.0/8 is loopback
 		{"localhost:8080", true},
 		{"[::1]:8080", true},
 		{":8080", false},        // all interfaces
