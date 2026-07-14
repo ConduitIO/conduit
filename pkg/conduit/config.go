@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -79,11 +80,13 @@ type Config struct {
 			// API and open the websocket-proxied streaming RPCs. Default: empty
 			// (deny all cross-origin — the same-origin embedded UI needs none).
 			// Entries are matched exactly (canonical scheme://host[:port], no
-			// trailing slash). "*" allows any origin: with no API authentication
-			// and a non-loopback bind, that is unauthenticated network-wide read
-			// and control — use only in trusted local development.
+			// trailing slash). "*" allows any origin, but — because the API is
+			// unauthenticated — it is REFUSED at startup on a non-loopback bind
+			// (that would be network-wide unauthenticated read/control); it is
+			// permitted only on a loopback bind for local development. A network
+			// deployment must list exact origins.
 			CORS struct {
-				AllowedOrigins []string `long:"api.http.cors.allowed-origins" mapstructure:"allowed-origins" usage:"allowed browser CORS origins for the HTTP API and websocket streams; repeatable; exact scheme://host[:port] (no trailing slash). '*' allows any origin — with no API auth and a non-loopback bind this is unauthenticated network-wide read/control; local dev only"`
+				AllowedOrigins []string `long:"api.http.cors.allowed-origins" mapstructure:"allowed-origins" usage:"allowed browser CORS origins for the HTTP API and websocket streams; repeatable; exact scheme://host[:port] (no trailing slash). '*' allows any origin but is refused on a non-loopback bind (unauthenticated network-wide access); use exact origins for network deployments"`
 			} `mapstructure:"cors"`
 		}
 		GRPC struct {
@@ -285,6 +288,15 @@ func (c Config) validateAPIConfig() error {
 		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return invalidConfigFieldErr("api.http.cors.allowed-origins")
 		}
+	}
+	// The API is unauthenticated, so a wildcard CORS origin lets any web page read
+	// and control this instance. On a non-loopback (network-reachable) bind that
+	// is unauthenticated, network-wide exposure of live record data — refuse it at
+	// startup rather than only warn. "*" stays allowed on a loopback bind for
+	// local development; a network deployment must list exact origins (or bind
+	// loopback behind an authenticating proxy).
+	if slices.Contains(c.API.HTTP.CORS.AllowedOrigins, "*") && !isLoopbackBind(c.API.HTTP.Address) {
+		return invalidConfigFieldErr("api.http.cors.allowed-origins")
 	}
 	return nil
 }

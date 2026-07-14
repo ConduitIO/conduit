@@ -38,10 +38,41 @@ func TestConfig_Validate(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "valid CORS origins (exact, wildcard, port)",
+			name: "valid CORS origins (exact, wildcard on loopback, port)",
 			setupConfig: func(c Config) Config {
 				c.API.Enabled = true
+				c.API.HTTP.Address = "127.0.0.1:8080" // "*" is only valid on a loopback bind
 				c.API.HTTP.CORS.AllowedOrigins = []string{"http://localhost:5173", "https://ui.example.com", "*"}
+				return c
+			},
+			want: nil,
+		},
+		{
+			name: "CORS wildcard refused on non-loopback bind",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.Address = "0.0.0.0:8080" // all interfaces
+				c.API.HTTP.CORS.AllowedOrigins = []string{"*"}
+				return c
+			},
+			want: invalidConfigFieldErr("api.http.cors.allowed-origins"),
+		},
+		{
+			name: "CORS wildcard allowed on loopback bind",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.Address = "localhost:8080"
+				c.API.HTTP.CORS.AllowedOrigins = []string{"*"}
+				return c
+			},
+			want: nil,
+		},
+		{
+			name: "exact CORS origins allowed on non-loopback bind",
+			setupConfig: func(c Config) Config {
+				c.API.Enabled = true
+				c.API.HTTP.Address = "0.0.0.0:9090"
+				c.API.HTTP.CORS.AllowedOrigins = []string{"https://ui.example.com"}
 				return c
 			},
 			want: nil,
