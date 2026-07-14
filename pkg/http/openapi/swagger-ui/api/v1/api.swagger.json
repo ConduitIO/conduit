@@ -1671,6 +1671,9 @@
         "error": {
           "type": "string",
           "description": "Error message when pipeline status is STATUS_DEGRADED."
+        },
+        "stoppedReason": {
+          "$ref": "#/definitions/StateStoppedReason"
         }
       }
     },
@@ -1732,6 +1735,16 @@
           "type": "string"
         }
       }
+    },
+    "StateStoppedReason": {
+      "type": "string",
+      "enum": [
+        "STOPPED_REASON_UNSPECIFIED",
+        "STOPPED_REASON_USER",
+        "STOPPED_REASON_SYSTEM"
+      ],
+      "default": "STOPPED_REASON_UNSPECIFIED",
+      "description": "StoppedReason distinguishes how a STATUS_STOPPED pipeline came to be\nstopped. It is only meaningful when status == STATUS_STOPPED;\nSTOPPED_REASON_UNSPECIFIED otherwise (and for older servers that don't set\nit). Additive: existing clients that read only `status`/`error` are\nunaffected.\n\n - STOPPED_REASON_USER: An operator or API call stopped the pipeline (also the initial state of\na created-but-never-started pipeline).\n - STOPPED_REASON_SYSTEM: Conduit stopped the pipeline itself — a graceful engine shutdown, or a\npipeline that was running before a restart and has not been resumed."
     },
     "apiv1Connector": {
       "type": "object",

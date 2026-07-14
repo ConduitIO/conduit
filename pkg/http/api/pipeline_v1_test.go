@@ -57,7 +57,8 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 		Pipeline: &apiv1.Pipeline{
 			Id: pl.ID,
 			State: &apiv1.Pipeline_State{
-				Status: apiv1.Pipeline_STATUS_STOPPED,
+				Status:        apiv1.Pipeline_STATUS_STOPPED,
+				StoppedReason: apiv1.Pipeline_State_STOPPED_REASON_SYSTEM,
 			},
 			Config: &apiv1.Pipeline_Config{
 				Name:        config.Name,
