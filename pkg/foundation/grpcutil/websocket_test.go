@@ -39,7 +39,7 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 		_, err := w.Write([]byte(msg))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), nil))
 	defer s.Close()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", s.URL, nil)
@@ -55,6 +55,44 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 	is.Equal(msg, string(bytes))
 }
 
+// TestWebSocket_CheckOrigin_Wired proves the checkOrigin passed to
+// newWebSocketProxy actually gates the upgrade: a disallowed Origin is rejected
+// with 403, an allowed one (and none at all) upgrades. This is the wiring the
+// CORS allowlist relies on — a websocket upgrade never passes through the HTTP
+// CORS middleware, so without this guard gorilla's default would still reject
+// every cross-origin stream.
+func TestWebSocket_CheckOrigin_Wired(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, err := w.Write([]byte("hi\n"))
+		is.NoErr(err)
+	})
+	const allow = "http://allowed.example"
+	check := func(r *http.Request) bool {
+		o := r.Header.Get("Origin")
+		return o == "" || o == allow
+	}
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), check))
+	defer s.Close()
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Disallowed origin -> handshake refused with 403.
+	_, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {"http://evil.example"}})
+	is.True(err != nil)
+	if resp != nil {
+		is.Equal(resp.StatusCode, http.StatusForbidden)
+		resp.Body.Close()
+	}
+
+	// Allowed origin -> upgrades.
+	ws, resp2, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {allow}})
+	is.NoErr(err)
+	defer ws.Close()
+	defer resp2.Body.Close()
+}
+
 func TestWebSocket_Read_Single(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -64,7 +102,7 @@ func TestWebSocket_Read_Single(t *testing.T) {
 		_, err := w.Write([]byte("hi there\n"))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), nil))
 	defer s.Close()
 
 	// Convert http to ws
@@ -100,7 +138,7 @@ func TestWebSocket_Read_Multiple(t *testing.T) {
 		_, err = w.Write([]byte("second message\n"))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), nil))
 	defer s.Close()
 
 	// Convert http to ws
@@ -138,7 +176,7 @@ func TestWebSocket_Read_ClientClosed(t *testing.T) {
 		defer close(handlerDone)
 		<-r.Context().Done()
 	})
-	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), nil))
 	defer s.Close()
 
 	// Convert http to ws
@@ -168,7 +206,7 @@ func TestWebSocket_ContextCancelled(t *testing.T) {
 		defer close(handlerDone)
 		<-r.Context().Done()
 	})
-	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop(), nil))
 	defer s.Close()
 
 	// Convert http to ws

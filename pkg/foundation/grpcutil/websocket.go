@@ -76,15 +76,22 @@ type webSocketProxy struct {
 	pingPeriod time.Duration
 }
 
-func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.CtxLogger) *webSocketProxy {
+func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.CtxLogger, checkOrigin func(*http.Request) bool) *webSocketProxy {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	// A websocket upgrade never passes through the HTTP CORS middleware, so the
+	// origin allowlist must be enforced here or gorilla's same-origin default
+	// would reject every cross-origin stream. nil keeps that default.
+	if checkOrigin != nil {
+		upgrader.CheckOrigin = checkOrigin
+	}
 	proxy := &webSocketProxy{
-		handler: handler,
-		done:    ctx.Done(),
-		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		},
+		handler:    handler,
+		done:       ctx.Done(),
+		logger:     logger.WithComponent("grpcutil.webSocketProxy"),
+		upgrader:   upgrader,
 		writeWait:  defaultWriteWait,
 		pongWait:   defaultPongWait,
 		pingPeriod: (defaultPongWait * 9) / 10,

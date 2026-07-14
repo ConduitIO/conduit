@@ -109,8 +109,13 @@ func WithHTTPEndpointHeader(h http.Handler) http.Handler {
 	})
 }
 
-func WithWebsockets(ctx context.Context, h http.Handler, l log.CtxLogger) http.Handler {
-	return newWebSocketProxy(ctx, h, l)
+// WithWebsockets wraps h so that websocket-upgrade requests are proxied to the
+// underlying streaming handler. checkOrigin guards the upgrade against
+// cross-origin requests (a websocket upgrade bypasses any HTTP CORS middleware,
+// so it needs its own origin check); pass nil to keep gorilla's same-origin
+// default.
+func WithWebsockets(ctx context.Context, h http.Handler, l log.CtxLogger, checkOrigin func(*http.Request) bool) http.Handler {
+	return newWebSocketProxy(ctx, h, l, checkOrigin)
 }
 
 func extractEndpoint(r *http.Request) string {

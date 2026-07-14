@@ -15,8 +15,10 @@
 package conduit
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -74,6 +76,18 @@ type Config struct {
 		Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
 		HTTP    struct {
 			Address string `long:"api.http.address" usage:"address for serving the HTTP API"`
+			// CORS.AllowedOrigins controls which browser origins may call the HTTP
+			// API and open the websocket-proxied streaming RPCs. Default: empty
+			// (deny all cross-origin — the same-origin embedded UI needs none).
+			// Entries are matched exactly (canonical scheme://host[:port], no
+			// trailing slash). "*" allows any origin, but — because the API is
+			// unauthenticated — it is REFUSED at startup on a non-loopback bind
+			// (that would be network-wide unauthenticated read/control); it is
+			// permitted only on a loopback bind for local development. A network
+			// deployment must list exact origins.
+			CORS struct {
+				AllowedOrigins []string `long:"api.http.cors.allowed-origins" mapstructure:"allowed-origins" usage:"allowed browser CORS origins for the HTTP API and websocket streams; repeatable; exact scheme://host[:port] (no trailing slash). '*' allows any origin but is refused on a non-loopback bind (unauthenticated network-wide access); use exact origins for network deployments"`
+			} `mapstructure:"cors"`
 		}
 		GRPC struct {
 			// This is the address where the gRPC API will be served which is shared as a global flag
@@ -252,6 +266,41 @@ func (c Config) validateDBConfig() error {
 	return nil
 }
 
+func (c Config) validateAPIConfig() error {
+	if !c.API.Enabled {
+		return nil
+	}
+	if c.API.GRPC.Address == "" {
+		return requiredConfigFieldErr("api.grpc.address")
+	}
+	if c.API.HTTP.Address == "" {
+		return requiredConfigFieldErr("api.http.address")
+	}
+	// Each CORS origin must be a canonical scheme://host[:port] with no path or
+	// trailing slash (a browser's Origin header never carries one, so a
+	// mismatched entry would silently fail CORS at runtime). "*" is the allow-any
+	// wildcard.
+	for _, o := range c.API.HTTP.CORS.AllowedOrigins {
+		if o == "*" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			return invalidConfigFieldErr("api.http.cors.allowed-origins")
+		}
+	}
+	// The API is unauthenticated, so a wildcard CORS origin lets any web page read
+	// and control this instance. On a non-loopback (network-reachable) bind that
+	// is unauthenticated, network-wide exposure of live record data — refuse it at
+	// startup rather than only warn. "*" stays allowed on a loopback bind for
+	// local development; a network deployment must list exact origins (or bind
+	// loopback behind an authenticating proxy).
+	if slices.Contains(c.API.HTTP.CORS.AllowedOrigins, "*") && !isLoopbackBind(c.API.HTTP.Address) {
+		return invalidConfigFieldErr("api.http.cors.allowed-origins")
+	}
+	return nil
+}
+
 func (c Config) validateSchemaRegistryConfig() error {
 	switch c.SchemaRegistry.Type {
 	case SchemaRegistryTypeConfluent:
@@ -322,13 +371,8 @@ func (c Config) Validate() error {
 		return err
 	}
 
-	if c.API.Enabled {
-		if c.API.GRPC.Address == "" {
-			return requiredConfigFieldErr("api.grpc.address")
-		}
-		if c.API.HTTP.Address == "" {
-			return requiredConfigFieldErr("api.http.address")
-		}
+	if err := c.validateAPIConfig(); err != nil {
+		return err
 	}
 
 	if c.Log.Level == "" {
