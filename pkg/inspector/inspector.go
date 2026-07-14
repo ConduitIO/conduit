@@ -35,6 +35,17 @@ type Session struct {
 
 	id          string
 	componentID string
+	// droppedRecords counts records dropped for this session because C was full.
+	// Written by Inspector.Send under the Inspector lock; read lock-free by
+	// Dropped(), so it must be atomic.
+	droppedRecords atomic.Int64
+}
+
+// Dropped returns the number of records dropped for this session because its
+// buffer C was full. It is a monotonic per-session count (the process-wide,
+// component-aggregated view is the conduit_inspector_dropped_records metric).
+func (s *Session) Dropped() int64 {
+	return s.droppedRecords.Load()
 }
 
 // Inspector is attached to an inspectable pipeline component
@@ -106,6 +117,13 @@ func (i *Inspector) Send(ctx context.Context, batch []opencdc.Record) {
 			select {
 			case s.C <- rClone:
 			default:
+				// The session's consumer is too slow; drop the record (the
+				// inspector is a side-channel, so this never affects pipeline
+				// delivery). Meter it per-session (Dropped()) and per-component
+				// (the metric) so a slow inspection is observable instead of
+				// silent — see the conduit_inspector_dropped_records metric.
+				s.droppedRecords.Add(1)
+				measure.InspectorDroppedRecordsCounter.WithValues(s.componentID).Inc()
 				i.logger.
 					Warn(ctx).
 					Str(log.InspectorSessionID, s.id).

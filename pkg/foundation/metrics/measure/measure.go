@@ -57,6 +57,12 @@ var (
 		"Number of inspector sessions by ID of pipeline component (connector or processor)",
 		[]string{"component_id"},
 	)
+	InspectorDroppedRecordsCounter = metrics.NewLabeledCounter(
+		"conduit_inspector_dropped_records",
+		"Number of records dropped by inspector sessions because the session buffer was full, "+
+			"by ID of pipeline component (summed across all sessions on that component).",
+		[]string{"component_id"},
+	)
 
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
 		"Number of bytes a connector processed by pipeline name, plugin and type (source, destination).",
