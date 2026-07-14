@@ -144,6 +144,49 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 	_, got, err := cchan.ChanOut[opencdc.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 	is.True(!got)
+
+	is.Equal(s.Dropped(), int64(1)) // exactly the one record past the buffer was dropped
+}
+
+// TestInspector_Dropped_PerSession proves drops are counted per session, not per
+// Send: with two sessions on the same inspector, only the never-drained session
+// drops records; the one drained after every Send never fills, so it drops
+// nothing. Draining synchronously (not via a background goroutine) keeps the test
+// deterministic — no scheduling race that could make the "fast" session drop.
+func TestInspector_Dropped_PerSession(t *testing.T) {
+	is := is.New(t)
+
+	bufferSize := 5
+	underTest := New(log.Nop(), bufferSize)
+	slow := underTest.NewSession(context.Background(), "test-id") // never drained
+	fast := underTest.NewSession(context.Background(), "test-id") // drained each Send
+
+	const sent = 20 // well past bufferSize
+	for i := 0; i < sent; i++ {
+		underTest.Send(context.Background(), []opencdc.Record{
+			{Position: opencdc.Position(fmt.Sprintf("test-pos-%v", i))},
+		})
+		<-fast.C // keep fast empty so it never drops
+	}
+
+	is.Equal(slow.Dropped(), int64(sent-bufferSize)) // slow kept only bufferSize, dropped the rest
+	is.Equal(fast.Dropped(), int64(0))               // fast was drained, dropped nothing
+}
+
+// TestInspector_Dropped_NoDropWhenRoom proves a session with buffer room drops
+// nothing.
+func TestInspector_Dropped_NoDropWhenRoom(t *testing.T) {
+	is := is.New(t)
+
+	underTest := New(log.Nop(), 10)
+	s := underTest.NewSession(context.Background(), "test-id")
+
+	for i := 0; i < 5; i++ { // fewer than the buffer size
+		underTest.Send(context.Background(), []opencdc.Record{
+			{Position: opencdc.Position(fmt.Sprintf("test-pos-%v", i))},
+		})
+	}
+	is.Equal(s.Dropped(), int64(0))
 }
 
 func assertGotRecord(is *is.I, s *Session, recWant opencdc.Record) {

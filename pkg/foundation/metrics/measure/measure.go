@@ -57,6 +57,15 @@ var (
 		"Number of inspector sessions by ID of pipeline component (connector or processor)",
 		[]string{"component_id"},
 	)
+	// _total suffix per Prometheus counter convention; this is a new metric with
+	// no consumer yet, so the name is fixed correctly now rather than matching the
+	// repo's older, suffix-less counters.
+	InspectorDroppedRecordsCounter = metrics.NewLabeledCounter(
+		"conduit_inspector_dropped_records_total",
+		"Number of records dropped by inspector sessions because the session buffer was full, "+
+			"by ID of pipeline component (summed across all sessions on that component).",
+		[]string{"component_id"},
+	)
 
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
 		"Number of bytes a connector processed by pipeline name, plugin and type (source, destination).",
