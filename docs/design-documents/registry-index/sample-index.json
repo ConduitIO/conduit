@@ -1,0 +1,150 @@
+{
+  "payload": {
+    "schemaVersion": 1,
+    "index": {
+      "version": 42,
+      "timestamp": "2026-07-14T09:00:00Z"
+    },
+    "connectors": [
+      {
+        "name": "postgres",
+        "displayName": "PostgreSQL",
+        "description": "CDC source and batch/upsert destination for PostgreSQL.",
+        "repository": "https://github.com/ConduitIO/conduit-connector-postgres",
+        "publisher": {
+          "expectedOIDCIssuer": "https://token.actions.githubusercontent.com",
+          "expectedIdentityPattern": "^https://github\\.com/ConduitIO/conduit-connector-postgres/\\.github/workflows/publish\\.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "versions": [
+          {
+            "version": "0.14.0",
+            "releasedAt": "2026-05-01T10:00:00Z",
+            "minConduitVersion": "0.14.0",
+            "minProtocolVersion": "0.14.0",
+            "artifacts": [
+              {
+                "os": "linux",
+                "arch": "amd64",
+                "kind": "standalone",
+                "url": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.0/conduit-connector-postgres_0.14.0_linux_amd64.tar.gz",
+                "sha256": "ebcbe0806724edc36fdfcc6ec50163d9afa674e0dae166b3bcab499cdfd30bc6",
+                "size": 14328912,
+                "signature": {
+                  "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.0/conduit-connector-postgres_0.14.0_linux_amd64.tar.gz.sigstore.json",
+                  "rekorLogIndex": 118442017
+                }
+              },
+              {
+                "os": "darwin",
+                "arch": "arm64",
+                "kind": "standalone",
+                "url": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.0/conduit-connector-postgres_0.14.0_darwin_arm64.tar.gz",
+                "sha256": "39249e7b36c76f8a3fb526755b949e463f52602a790b058f44e777c701658bb4",
+                "size": 13890220,
+                "signature": {
+                  "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.0/conduit-connector-postgres_0.14.0_darwin_arm64.tar.gz.sigstore.json",
+                  "rekorLogIndex": 118442018
+                }
+              }
+            ],
+            "slsaProvenance": {
+              "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.0/multiple.intoto.jsonl",
+              "predicateType": "https://slsa.dev/provenance/v1"
+            },
+            "deprecated": false,
+            "yanked": {
+              "reason": "0.14.0 contains a regression that drops the WAL replication slot on graceful shutdown, causing position loss on restart. Fixed in 0.14.1. See ConduitIO/conduit-connector-postgres#412.",
+              "yankedAt": "2026-05-03T16:20:00Z"
+            }
+          },
+          {
+            "version": "0.14.1",
+            "releasedAt": "2026-05-03T18:00:00Z",
+            "minConduitVersion": "0.14.0",
+            "minProtocolVersion": "0.14.0",
+            "artifacts": [
+              {
+                "os": "linux",
+                "arch": "amd64",
+                "kind": "standalone",
+                "url": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.1/conduit-connector-postgres_0.14.1_linux_amd64.tar.gz",
+                "sha256": "588ae325bdef8543e5ad8c30b8da83a714aceedf4d9b07478eaa22f2fd70113e",
+                "size": 14331500,
+                "signature": {
+                  "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.1/conduit-connector-postgres_0.14.1_linux_amd64.tar.gz.sigstore.json",
+                  "rekorLogIndex": 118501273
+                }
+              },
+              {
+                "os": "darwin",
+                "arch": "arm64",
+                "kind": "standalone",
+                "url": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.1/conduit-connector-postgres_0.14.1_darwin_arm64.tar.gz",
+                "sha256": "2ba79aa910ad07c87bb211c1a41fb5f36d86185292e9ddbfafc76e567374fe44",
+                "size": 13893710,
+                "signature": {
+                  "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.1/conduit-connector-postgres_0.14.1_darwin_arm64.tar.gz.sigstore.json",
+                  "rekorLogIndex": 118501274
+                }
+              }
+            ],
+            "slsaProvenance": {
+              "bundleURL": "https://conduit.gateway.scarf.sh/conduitio/conduit-connector-postgres/releases/download/v0.14.1/multiple.intoto.jsonl",
+              "predicateType": "https://slsa.dev/provenance/v1"
+            },
+            "deprecated": false
+          }
+        ]
+      },
+      {
+        "name": "example-vector-sink",
+        "displayName": "Example Vector Sink",
+        "description": "Community connector for an example vector database destination.",
+        "repository": "https://github.com/example-org/conduit-connector-example-vector-sink",
+        "publisher": {
+          "expectedOIDCIssuer": "https://token.actions.githubusercontent.com",
+          "expectedIdentityPattern": "^https://github\\.com/example-org/conduit-connector-example-vector-sink/\\.github/workflows/publish\\.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "revoked": {
+            "reason": "The example-org/conduit-connector-example-vector-sink repository's OIDC trust relationship was compromised via a leaked GITHUB_TOKEN with workflow-write scope on 2026-06-20, allowing an attacker to modify the publish workflow and produce validly-signed artifacts under this identity. All versions are revoked pending re-registration under a rotated identity. See the registry security advisory GHSA-xxxx-xxxx-xxxx.",
+            "revokedAt": "2026-06-21T04:00:00Z"
+          }
+        },
+        "versions": [
+          {
+            "version": "0.3.0",
+            "releasedAt": "2026-06-10T12:00:00Z",
+            "minConduitVersion": "0.13.0",
+            "minProtocolVersion": "0.13.0",
+            "artifacts": [
+              {
+                "os": "linux",
+                "arch": "amd64",
+                "kind": "standalone",
+                "url": "https://conduit.gateway.scarf.sh/example-org/conduit-connector-example-vector-sink/releases/download/v0.3.0/conduit-connector-example-vector-sink_0.3.0_linux_amd64.tar.gz",
+                "sha256": "151479c591ee074d28ff7b9bd020d6264eceaaa0541fc093806c925d5f6e7b22",
+                "size": 9821440,
+                "signature": {
+                  "bundleURL": "https://conduit.gateway.scarf.sh/example-org/conduit-connector-example-vector-sink/releases/download/v0.3.0/conduit-connector-example-vector-sink_0.3.0_linux_amd64.tar.gz.sigstore.json",
+                  "rekorLogIndex": 117220981
+                }
+              }
+            ],
+            "slsaProvenance": {
+              "bundleURL": "https://conduit.gateway.scarf.sh/example-org/conduit-connector-example-vector-sink/releases/download/v0.3.0/multiple.intoto.jsonl",
+              "predicateType": "https://slsa.dev/provenance/v1"
+            },
+            "deprecated": false
+          }
+        ]
+      }
+    ]
+  },
+  "signatures": [
+    {
+      "role": "root",
+      "keyId": "sha256:6a1c1f0e9d3b5a7c9e1f3d5b7a9c1e3f5d7b9a1c3e5f7d9b1a3c5e7f9d1b3a5c",
+      "algorithm": "ed25519",
+      "signature": "MEUCIQDN6placeholder8SIGNATURE8bytes8OVER8canonicalizedJCS8payload8AAAA=="
+    }
+  ]
+}
