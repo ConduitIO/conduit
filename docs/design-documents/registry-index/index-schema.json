@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.conduit.io/registry/index/v1/index.schema.json",
+  "title": "Conduit connector registry index (schemaVersion 1)",
+  "description": "Top-level envelope for the signed, freeze-protected connector registry index. See docs/design-documents/20260713-connector-registry-mvp.md (Decisions 1-2) and r1-spec.md for the trust model this schema encodes. IMPORTANT: this schema validates the on-disk/served JSON shape (for index-CI linting and fixture testing). It does NOT describe verification order — see r1-spec.md §(a) for the required 'verify canonical bytes, then parse' sequence a client must follow; that sequence cannot be expressed in JSON Schema alone.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "signatures"],
+  "properties": {
+    "payload": { "$ref": "#/$defs/payload" },
+    "signatures": {
+      "type": "array",
+      "description": "Detached signature(s) over the JCS-canonicalized bytes of `payload` (see r1-spec.md §(a)). Array shape is forward-compatible with threshold/multi-key signing (the named v2 escalation to full TUF); MVP populates exactly one entry, signed by the single registry root key.",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/signature" }
+    }
+  },
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "description": "The signed payload. Every field a client trusts (urls, sha256, expectedIdentity*, versions, revocations, the monotonic counter, the timestamp) MUST live in here, not in the outer envelope -- anything outside `payload` is unauthenticated and must never be trusted for a security decision (see r1-spec.md §(a) for why schemaVersion itself is inside payload, not a sibling of it).",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "index", "connectors"],
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Payload schema version. A client refuses (ERR_SCHEMA_TOO_NEW, ‘upgrade Conduit’) any schemaVersion greater than the highest it was built to understand. New fields must be additive within a schemaVersion; a breaking change bumps this integer and follows announce -> warn -> remove (minimum two minor Conduit versions), per repo convention."
+        },
+        "index": {
+          "type": "object",
+          "description": "Freeze/rollback-protection metadata (TUF-lite §2). Both fields are inside the signed payload so a compromised origin/CDN cannot forge freshness independent of the root key.",
+          "additionalProperties": false,
+          "required": ["version", "timestamp"],
+          "properties": {
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Monotonically increasing counter, incremented on every signed rebuild of the index (content change OR heartbeat re-sign -- see r1-spec.md §(b) and OPEN QUESTIONS). A client refuses (ERR_INDEX_STALE) any fetched index whose version is lower than the highest it has previously observed and verified."
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC 3339 UTC timestamp of this signed build. A client refuses (ERR_INDEX_STALE, distinct from ERR_INDEX_UNREACHABLE) an index whose timestamp is older than now-minus-max-staleness. Max-staleness value is an open question (see r1-spec.md)."
+            }
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "description": "One entry per registered connector name. Names are unique within the index (index-CI enforces this; JSON Schema alone cannot express cross-array uniqueness on a subfield, see r1-spec.md).",
+          "items": { "$ref": "#/$defs/connector" }
+        }
+      }
+    },
+
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "algorithm", "signature", "role"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["root", "freshness"],
+          "description": "The signing authority. `root` authorizes content (connectors/publishers/versions/revocations) and is reviewer-gated. `freshness` is a separate, narrowly-scoped key a scheduled job uses unattended: a client accepts a freshness-only signature ONLY when the payload's `connectors[]` subtree is byte-identical to what it last verified under a `root` signature (i.e. it may only extend `index.timestamp`/bump `index.version`), else it requires a `root` signature. Separating these closes the root-key-double-duty hole (see r1-spec.md §(a)/OQ3 resolution): the root key is never used unattended nightly."
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identifier for the public key used, e.g. a SHA-256 fingerprint of the SPKI-encoded public key (\"sha256:<hex>\"). Trust anchors (root and freshness public keys) are compiled into the conduit binary at release and fixed at build time -- never updated at runtime (see r1-spec.md OQ1/OQ2 resolution)."
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["ed25519", "ecdsa-p256-sha256"],
+          "description": "Signature algorithm. ed25519 is RECOMMENDED (small keys/signatures, no parameter-choice footguns). ecdsa-p256-sha256 listed as an HSM-compatibility fallback. Final choice is an open question (see r1-spec.md)."
+        },
+        "signature": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "minLength": 1,
+          "description": "Signature bytes (base64-standard), computed over the JCS-canonicalized (RFC 8785) UTF-8 bytes of the sibling `payload` object."
+        }
+      }
+    },
+
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "publisher", "versions"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "description": "Unique registry name, e.g. \"postgres\". Resolution by `install` is exact-match only (no fuzzy/nearest-match) -- see Decision 3."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-friendly name for the web UI. Not used in any trust decision."
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description for the web UI / `list`. Not used in any trust decision."
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "description": "Source repository URL, for the web UI and human review context. Not itself a trust input -- the trust input is `publisher.expectedIdentityPattern`, which independently encodes (and pins) the repo + workflow path."
+        },
+        "publisher": { "$ref": "#/$defs/publisher" },
+        "versions": {
+          "type": "array",
+          "description": "Published versions for this connector, newest-first by convention (not schema-enforced). Entries are append-only once published: index-CI must reject a PR that mutates any field of an already-present version other than `deprecated`, `yanked`, or `yanked.reason`/`yanked.yankedAt` (see r1-spec.md §(d)).",
+          "items": { "$ref": "#/$defs/connectorVersion" }
+        }
+      }
+    },
+
+    "publisher": {
+      "type": "object",
+      "description": "Per-name identity pinning (Decision 1) -- the actual root-of-trust decision for this connector name. Changing expectedOIDCIssuer or expectedIdentityPattern for an already-registered name requires the same human-reviewed path as first registration (see r1-spec.md §(d)).",
+      "additionalProperties": false,
+      "required": ["expectedOIDCIssuer", "expectedIdentityPattern"],
+      "properties": {
+        "expectedOIDCIssuer": {
+          "type": "string",
+          "format": "uri",
+          "description": "OIDC issuer URL a valid signing identity must present, e.g. \"https://token.actions.githubusercontent.com\" for GitHub Actions keyless signing. Maps to `cosign verify --certificate-oidc-issuer`.",
+          "examples": ["https://token.actions.githubusercontent.com"]
+        },
+        "expectedIdentityPattern": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\^.*\\$$",
+          "description": "MUST be a fully-anchored (^...$) regular expression matching the certificate SAN / workflow identity (repo + workflow path + ref/tag pattern), e.g. \"^https://github\\\\.com/ConduitIO/conduit-connector-postgres/\\\\.github/workflows/publish\\\\.yml@refs/tags/v[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\". Maps to `cosign verify --certificate-identity-regexp`. Anchoring is enforced here at the schema level (pattern requires a leading ^ and trailing $) specifically to close a partial-match impersonation bypass -- see r1-spec.md §(c) and OPEN QUESTIONS.",
+          "examples": [
+            "^https://github\\.com/ConduitIO/conduit-connector-postgres/\\.github/workflows/publish\\.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+          ]
+        },
+        "revoked": {
+          "$ref": "#/$defs/revocation",
+          "description": "If present, this publisher identity is revoked: ALL versions under this connector name are considered compromised regardless of individual `yanked` status. `conduit connectors audit` flags every installed version of this name. Set only via the human-reviewed registration path (§1); never auto-mergeable (see r1-spec.md OPEN QUESTIONS on the yank/revoke authorization path)."
+        }
+      }
+    },
+
+    "revocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable reason, surfaced verbatim by `install` (on refusal) and `conduit connectors audit` (on flag)."
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the revocation was recorded. Additive/optional, for audit/UI ordering."
+        },
+        "revokedBy": {
+          "type": "string",
+          "description": "Optional chain-of-custody: the reviewer/identity that recorded this revocation, for the audit trail."
+        }
+      }
+    },
+
+    "yankReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable yank reason, surfaced verbatim by `install` (on refusal) and `conduit connectors audit` (on flag)."
+        },
+        "yankedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the version was yanked. Additive/optional field."
+        },
+        "yankedBy": {
+          "type": "string",
+          "description": "Optional chain-of-custody: the reviewer/identity that recorded this yank, for the audit trail."
+        }
+      }
+    },
+
+    "connectorVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "minConduitVersion", "minProtocolVersion", "artifacts"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+          "description": "Semver version string of this connector release, e.g. \"0.14.0\". Immutable once published (append-only; see `connectors[].versions` description)."
+        },
+        "releasedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this version was published to the index. Used for web UI ordering and audit context; not itself a trust input."
+        },
+        "minConduitVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Minimum Conduit engine version this connector version requires. `install` refuses (naming required vs. running) an incompatible selection; resolution without an explicit `@version` always prefers a compatible version."
+        },
+        "minProtocolVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Minimum conduit-connector-protocol version this connector version requires."
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One entry per (os, arch) build for this version. `signature` is per-artifact (not per-version) because a cosign blob signature is over one specific artifact's digest -- see r1-spec.md OPEN QUESTIONS for the divergence from the design doc's literal field grouping and why.",
+          "items": { "$ref": "#/$defs/artifact" }
+        },
+        "slsaProvenance": {
+          "$ref": "#/$defs/provenanceRef",
+          "description": "OPTIONAL single multi-subject SLSA provenance attestation covering every artifact in this version (the common goreleaser + slsa-github-generator shape: one provenance file, multiple `subject` entries, one per artifact digest). If the eventual publish Action instead emits one attestation per artifact, this moves inside each artifact entry instead (see artifact.slsaProvenance and r1-spec.md OPEN QUESTIONS) -- both are declared in this schema and a client/index-CI MUST accept either shape until the maintainer picks one."
+        },
+        "deprecated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Soft signal: still installable, but flagged (e.g. superseded, unmaintained). No structured reason field per the design doc's terse `deprecated?`; use `description`/release notes in the connector repo for detail."
+        },
+        "yanked": {
+          "$ref": "#/$defs/yankReason",
+          "description": "If present, this specific version is yanked (e.g. bad build, discovered vulnerability, accidental publish). `install` refuses selecting it (naming the reason); `conduit connectors audit` flags it if already installed. Does not affect sibling versions of the same connector."
+        }
+      }
+    },
+
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch", "kind", "url", "sha256", "size", "signature"],
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": ["linux", "darwin", "windows"],
+          "description": "GOOS value. Enum reflects Conduit's actual supported build targets, not an invented registry-specific taxonomy."
+        },
+        "arch": {
+          "type": "string",
+          "enum": ["amd64", "arm64"],
+          "description": "GOARCH value."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["standalone", "wasm"],
+          "description": "Artifact kind. `standalone` is the only kind installable in the MVP; `wasm` is reserved so the v0.19 WASM-connector distribution work (go/no-go item) slots in without a breaking index change. `install` must refuse an unrecognized-but-schema-valid future kind gracefully, not crash."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Scarf-gatewayed download URL. This value is INSIDE the signed payload (so a compromised index can't redirect it), but the URL is not by itself sufficient for trust: the digest is always recomputed from the actual received bytes after following redirects, so a compromised/misbehaving gateway can only cause a failed verification (denial of service), never a successful wrong-artifact install (see Decision 3, Failure modes)."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Expected SHA-256 of the artifact bytes. This is CORRUPTION detection (integrity against a bad download), not the trust boundary -- the trust boundary is `signature` verified against the connector's pinned identity. Once index-signing (this document) is verified, this field becomes trustworthy too, and the sha256 check and the signature check converge on the same fact by design (belt-and-suspenders)."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expected artifact size in bytes."
+        },
+        "signature": {
+          "$ref": "#/$defs/signatureRef",
+          "description": "Reference to the cosign signature bundle covering THIS artifact's own digest. Required -- an artifact with no signature reference cannot appear in a normally-published version (an actually-unsigned artifact is handled entirely client-side via `--allow-unsigned`, never by omitting this field in the index)."
+        },
+        "slsaProvenance": {
+          "$ref": "#/$defs/provenanceRef",
+          "description": "OPTIONAL per-artifact SLSA provenance, used only if the publish Action emits one attestation per artifact rather than one per version. Mutually preferred over the version-level `slsaProvenance` when both could apply; see r1-spec.md OPEN QUESTIONS."
+        }
+      }
+    },
+
+    "signatureRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundleURL"],
+      "properties": {
+        "bundleURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the Sigstore bundle (cosign `.sigstore`/`.bundle` JSON) for this artifact -- certificate chain + signature + Rekor inclusion proof/SET, sufficient for OFFLINE verification (no live Fulcio/Rekor query required at install time). Maps to `cosign verify --bundle <fetched-file> --certificate-identity-regexp ... --certificate-oidc-issuer ...`."
+        },
+        "rekorLogIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "OPTIONAL Rekor transparency-log index, for human cross-reference (e.g. `rekor-cli get --log-index`) and audit tooling. Not required for verification if the bundle embeds the inclusion proof."
+        }
+      }
+    },
+
+    "provenanceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundleURL", "predicateType"],
+      "properties": {
+        "bundleURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the SLSA provenance attestation bundle (in-toto statement + Sigstore bundle), verifiable offline the same way as `signatureRef.bundleURL`. Maps to `cosign verify-attestation --bundle <fetched-file> --type <predicateType> --certificate-identity-regexp ... --certificate-oidc-issuer ...`."
+        },
+        "predicateType": {
+          "type": "string",
+          "format": "uri",
+          "description": "in-toto predicate type, e.g. \"https://slsa.dev/provenance/v1\". A client must reject a predicate type it does not recognize rather than skip the check.",
+          "examples": ["https://slsa.dev/provenance/v1"]
+        }
+      }
+    }
+  }
+}
