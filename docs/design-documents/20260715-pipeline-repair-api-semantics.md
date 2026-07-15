@@ -140,7 +140,7 @@ For the recommended path (restart via `StartPipeline`):
   and the UI shows it. The UI must not imply "repaired"; it shows "restarting…" then the real polled
   status.
 - **Unservable persisted position — the honest gap in C.** Some degradations are not fixable by
-  restart *or* config: a pipeline whose committed source position is no longer servable (Kafka
+  restart _or_ config: a pipeline whose committed source position is no longer servable (Kafka
   retention expired past the offset, a dropped CDC replication slot) will re-degrade on every
   restart, and for some connectors there is no config knob to move past it. Under path C, **this
   class has no in-product remedy in v0.18** — recovery requires deleting/recreating the pipeline
