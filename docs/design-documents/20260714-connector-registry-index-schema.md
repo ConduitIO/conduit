@@ -169,21 +169,30 @@ literal bytes as served. Rationale:
 
 Concretely, the signing/verification procedure:
 
-1. **Sign side (index build, CI holding the root key):** build `payload` as a Go struct → marshal
-   to JSON → parse that JSON into a generic `map[string]any` (or equivalent) → apply JCS
-   canonicalization → sign the resulting UTF-8 bytes with the root key → assemble
-   `{payload, signatures: [{keyId, algorithm, signature}]}` and serve _that_ JSON (any
-   serialization of the outer document is fine — only `payload`'s canonical form is
-   signature-relevant, and it gets re-canonicalized on the verify side anyway).
+1. **Sign side (index build):** build `payload` as a Go struct → marshal to JSON → parse that JSON
+   into a generic `map[string]any` (or equivalent) → apply JCS canonicalization → sign the resulting
+   UTF-8 bytes → assemble `{payload, signatures: [{role, keyId, algorithm, signature}, ...]}` and
+   serve _that_ JSON. A **content** rebuild (any change to `connectors[]`) is signed by the
+   reviewer-gated **root** key (`role: "root"`); a **heartbeat** rebuild (only `index.timestamp`/
+   `index.version` change, `connectors[]` byte-identical) is signed by the unattended **freshness**
+   key (`role: "freshness"`). During a root-key rotation, both the old and new root keys sign
+   (two `role: "root"` entries). Only `payload`'s canonical form is signature-relevant.
 2. **Verify side (`install`/`audit`):**
-   a. Parse the outer document generically enough to extract the `payload` sub-object as a raw
-      JSON value and the `signatures` array — **do not** unmarshal `payload` into any
-      schema-version-specific typed struct yet.
+   a. Parse the outer document generically to extract the `payload` sub-object as a raw JSON value
+      and the `signatures` array — **do not** unmarshal `payload` into a schema-version-specific
+      typed struct yet. The parser **must reject any object containing a duplicate key at any
+      nesting level** (last-key-wins parsing is a producer/verifier differential that JCS does not
+      close — see the duplicate-key note in Resolved decisions), before and independent of JCS.
    b. Canonicalize the extracted `payload` value with the same JCS implementation.
-   c. For each entry in `signatures[]`, resolve `keyId` against the client's local trust-anchor
-      set (see OPEN QUESTIONS — bootstrap/rotation) and verify `signature` over the canonical
-      bytes from (b). **Refuse (`ERR_INDEX_INTEGRITY`) if no signature verifies against a
-      currently-trusted key.**
+   c. For each entry in `signatures[]`, resolve `keyId` against the client's **build-time-fixed**
+      trust-anchor set (root + freshness public keys compiled into the binary; never updated at
+      runtime — Resolved decisions OQ1/OQ2) and verify `signature` over the canonical bytes from
+      (b). **Accept the index if a `role: "root"` signature verifies; accept a `role: "freshness"`-
+      only index ONLY when its `connectors[]` is byte-identical to what was last verified under a
+      `root` signature** (a freshness signature may extend freshness, never authorize content).
+      Refuse `ERR_INDEX_INTEGRITY` if no signature verifies against a currently-trusted key; refuse
+      **`ERR_TRUST_ANCHOR_EXPIRED`** ("upgrade Conduit") if the only signatures present are by keys
+      this (old) binary was not built to trust — never fall back to a stale cache.
    d. Only after (c) succeeds, unmarshal the canonical `payload` bytes into the typed struct
       selected by the now-trusted `payload.schemaVersion`, and proceed to the freeze/rollback and
       identity-pinning checks below.
@@ -225,19 +234,19 @@ doc's failure-modes list, which explicitly wants "stale/frozen" distinguished fr
          refuse ERR_INDEX_STALE  (distinct from ERR_INDEX_UNREACHABLE and ERR_INDEX_ROLLBACK)
      ```
 
-   - `maxStaleness` is a client-side policy value (a sane built-in default, overridable by
-     operator config, similar in spirit to `install.allowUnsigned`), **not** a field in the index
-     itself — the index can't be trusted to declare its own acceptable staleness. Concrete value:
-     **open question**, see below.
+   - `maxStaleness` is a client-side policy value (**default 7 days**, operator-overridable, similar
+     in spirit to `install.allowUnsigned`), **not** a field in the index itself — the index can't be
+     trusted to declare its own acceptable staleness. The nightly freshness re-sign (well inside 7
+     days) keeps a quiet-period index fresh without false refusals.
 
 3. **Both checks are required**, not either/or: rollback protection alone doesn't stop a frozen
    index that was never rolled back (it's the highest version the attacker has ever served, just
    old); staleness alone doesn't stop a rollback to a recent-enough-to-pass-freshness older version
-   if the attacker can still get a validly-signed old build within the staleness window (e.g. they
-   captured a signed build from 2 hours ago and the window is 24h) — hence needing the monotonic
-   counter _and_ the timestamp, matching TUF's timestamp+snapshot role split in spirit even though
-   TUF-lite doesn't split them into separate signed roles (see OPEN QUESTIONS on the "heartbeat"
-   tension this bundling creates).
+   if the attacker can still get a validly-signed old build within the staleness window — hence
+   needing the monotonic counter _and_ the timestamp. Freshness is signed by a **separate freshness
+   key** (not the root key), which is exactly TUF's timestamp-role separation applied here: the
+   root key never signs unattended nightly, and because a heartbeat re-sign **bumps
+   `index.version`**, a same-version-newer-timestamp replay is impossible.
 
 ---
 
@@ -313,13 +322,16 @@ A PR is in this bucket if it does _any_ of:
 - Adds a new entry to `connectors[]` (a brand-new `name`), or
 - Modifies an existing connector's `publisher.expectedOIDCIssuer` or
   `publisher.expectedIdentityPattern` (an org move, workflow rename, key/identity change), or
-- Adds or removes `publisher.revoked` (see §e — revocation is treated as trust-root-adjacent, not
-  a routine content update, until the OPEN QUESTION on yank/revoke authorization below is
-  resolved).
+- Adds or removes `publisher.revoked` (see §e — revocation is trust-root-adjacent, human-reviewed
+  via a dedicated notified/paged queue, never auto-merged; Resolved decisions OQ9).
 
 Index-CI's job on this class of PR is to **route it to human review and block auto-merge** — it is
 not expected to _approve_ the identity itself (that's the human judgment call: "is this really the
-maintainer of `postgres`"). It should still run the mechanical checks in bucket B where applicable
+maintainer of `postgres`"). On a registration/identity change it additionally **lints
+`expectedIdentityPattern` for tightness**: reject a pattern whose literal (non-metachar) prefix
+doesn't contain the pinned `github.com/<owner>/<repo>/`, and reject inline regex flags (`(?m)`,
+`(?s)`) that could weaken `^`/`$` semantics under Go's RE2 — schema-level anchoring alone doesn't
+stop an overly-broad `^.*$`. It should still run the mechanical checks in bucket B where applicable
 (e.g. if the PR also adds a first version under the new identity).
 
 **B. Version bump from an already-pinned identity (auto-mergeable once CI passes):**
@@ -342,6 +354,10 @@ than accepting the PR's assertions:
    A vs. B routing security-relevant, not just organizational: re-deriving against the
    already-committed identity is what prevents a version-bump-shaped PR from also being a
    backdoor identity change).
+   Also run the **§c step 7 provenance binding**: parse the SLSA attestation and confirm its
+   `subject[].digest.sha256` includes the re-fetched artifact's digest, and that
+   `builder.id`/`invocation.configSource.uri` bind to the pinned identity — so a provenance/artifact
+   mismatch is blocked **at merge**, not only at every individual client's install.
 4. **Confirm append-only:** the PR does not modify any field of an already-present `versions[]`
    entry other than `deprecated`, `yanked`/`yanked.reason`/`yanked.yankedAt` (see §e). This isn't
    explicit in the design doc's field list but follows necessarily from "tamper-evident" — without
@@ -420,30 +436,19 @@ These are flagged rather than guessed, per the design doc's own bar ("a design d
 enumerate failure modes is not done") and this task's explicit instruction not to paper over
 ambiguity. Roughly ordered by how load-bearing they are.
 
-1. **Root key bootstrap.** How does a client obtain and initially trust the registry root public
-   key(s) at all? Options: compiled into the `conduit` binary at release time (simple, but ties
-   root-key rotation to a Conduit release cadence — a rotated key doesn't take effect for any
-   client until they upgrade); fetched once from a well-known URL and TOFU-pinned locally
-   (avoids the release coupling, but reintroduces a first-fetch trust problem the schema itself
-   can't solve). This is the actual foundation everything else in §a assumes an answer to, and the
-   design doc doesn't specify it. **Needs a decision before R-1 can be considered truly "frozen."**
+1. **Root key bootstrap. — RESOLVED (see Resolved decisions OQ1):** root public key(s) are compiled
+   into the `conduit` binary at release; trust anchors are fixed at build time and never updated at
+   runtime.
 
-2. **Root key rotation mechanics.** Given (1), how does a client learn a _new_ key is now also
-   trusted, and retire an old one, without reintroducing a bootstrap-trust problem on every
-   rotation? A workable pattern: the _old_ key co-signs a rotation statement naming the new
-   `keyId`, during an overlap window where the client trusts either; `signatures[]` is already
-   shaped to carry multiple entries for exactly this. But the rotation-statement format, storage
-   location, and overlap-window length aren't specified here and should be.
+2. **Root key rotation mechanics. — RESOLVED (see Resolved decisions OQ2):** server-side dual
+   signing (old + new key over the same index) for a retention window tracking the supported-version
+   policy; there is **no** runtime-fetched rotation statement (that would let a compromised old key
+   rotate to an attacker key); anchor exhaustion → `ERR_TRUST_ANCHOR_EXPIRED` (fail closed).
 
-3. **Max-staleness value, and the heartbeat-resign tension.** No concrete duration is set. More
-   importantly: because §b's timestamp freshness is bundled into the _same_ root-key signature as
-   everything else (TUF-lite, not full TUF's separately-rotated timestamp role), keeping the index
-   "fresh" during a quiet period (no connector changes for weeks) requires **periodically
-   re-signing the index solely to refresh its timestamp**, or every client eventually refuses all
-   installs as stale even though nothing is wrong. Two sub-questions: (a) what's the re-sign
-   cadence (nightly? weekly?) relative to the staleness window (must be comfortably shorter); (b)
-   does a no-op heartbeat rebuild bump `index.version`, and if it does _not_, is a
-   same-version-newer-timestamp replay a rollback-check gap worth closing explicitly?
+3. **Max-staleness value + heartbeat tension. — RESOLVED (see Resolved decisions OQ3):**
+   `maxStaleness` = 7 days (operator-overridable). Freshness is signed by a **separate freshness
+   key**, not the root key (so the root key is never used unattended). The nightly heartbeat re-sign
+   **bumps `index.version`**, so a same-version-newer-timestamp replay is impossible.
 
 4. **TUF-lite → full TUF trigger.** The design doc names full TUF as "the v2 escalation" without a
    concrete trigger. Worth pinning down even loosely (e.g. "N registered publishers," "a real
@@ -480,14 +485,10 @@ ambiguity. Roughly ordered by how load-bearing they are.
    reusable Action), or is this pinned per-connector like `publisher.*`? If it's global, does it
    belong in the schema at all, or is it a client-side constant?
 
-9. **Yank/revoke authorization path.** Who can set `yanked` on a version or `publisher.revoked`,
-   and through what review path? This draft's §d treats both as routed like registration-class
-   changes (human-reviewed, never auto-merged) as the conservative default, but that means a
-   publisher can't self-service-yank their own broken release without going through the same human
-   gate as a brand-new identity registration — possibly too slow for "I just shipped a data-loss
-   bug, pull it now." A faster self-service yank path needs its own authorization story (how does
-   index-CI know a yank request really comes from the connector's own pinned identity, not
-   someone else's index-repo PR access?) that isn't designed here.
+9. **Yank/revoke authorization path. — RESOLVED (see Resolved decisions OQ9):** MVP routes both
+   `yanked` and `publisher.revoked` through human review (never auto-merged), with a dedicated
+   notified/paged review queue and a client-side emergency denylist (shipped via a Conduit hotfix,
+   root-key trust tier) as the fast-path backstop. A full self-service yank path is a follow-up.
 
 10. **Connector delisting.** Can a `name` be removed from `connectors[]` entirely, and if so,
     under what review bar (this draft assumes it should be at least as sensitive as identity
@@ -499,22 +500,28 @@ ambiguity. Roughly ordered by how load-bearing they are.
     distinguish "pruned, presumed fine" from "genuinely can't verify anymore"? Left as `UNKNOWN`
     in §e pending a decision.
 
-12. **Signature algorithm choice and root-key custody.** `ed25519` is recommended in the schema
-    (§ schema `signature.algorithm`) with `ecdsa-p256-sha256` as an HSM-compatibility fallback, but
-    the actual choice, and whether the root key lives as a bare GitHub Environment secret vs.
-    something with hardware backing, is unresolved.
+12. **Signature algorithm + root-key custody. — RESOLVED (see Resolved decisions OQ12):** ed25519
+    for both root and freshness keys; root key in a reviewer-gated GitHub Environment, freshness key
+    in a separate unattended-usable Environment, plus a sealed offline root-key backup for loss.
+    HSM/KMS backing and threshold root signing are named v2 hardenings.
 
 ---
 
-## Summary of what's frozen vs. open
+## Summary of what's frozen vs. deferred
 
-**Frozen by this draft (subject to review):** the envelope shape (`payload` + `signatures[]`,
-schemaVersion inside the signed payload), the freeze/rollback fields and two-distinct-error-code
-check, the per-name identity-pinning field shapes and their anchoring requirement, the
-registration-vs-version-bump PR routing rule and the five concrete things index-CI re-verifies, the
-embedded (non-flattened) revocation representation, and the `audit` consumption logic.
+**Frozen by this doc:** the envelope shape (`payload` + `signatures[]` with a required `role`,
+schemaVersion inside the signed payload), verify-before-parse with parse-time duplicate-key
+rejection, the freeze/rollback fields and their distinct error codes (`ERR_INDEX_ROLLBACK` /
+`ERR_INDEX_STALE` / `ERR_TRUST_ANCHOR_EXPIRED`), the **root-vs-freshness key split** and its client
+acceptance rule, **build-time-fixed trust anchors** with server-side co-signature rotation, the
+per-name identity-pinning field shapes + anchoring + pattern-tightness checklist, the
+registration-vs-version-bump PR routing and index-CI re-verification (including the SLSA
+subject-digest/`builder.id` binding), the embedded (non-flattened) revocation representation, and
+the `audit` consumption logic. Concrete values: `maxStaleness` = 7 days, ed25519, human-reviewed
+yank/revoke with a denylist backstop.
 
-**Not frozen — needs a maintainer decision before this can be called done:** root key bootstrap and
-rotation (OQ 1–2), the max-staleness value and heartbeat-resign cadence (OQ 3), the
-per-artifact-vs-per-version signature/provenance shape (OQ 6, blocked on epic step 4 anyway), and
-the yank/revoke authorization path (OQ 9).
+**Deferred refinements (do NOT block freezing the MVP schema):** the specific Go JCS library (OQ5,
+an R-3 implementation detail), the per-artifact-vs-per-version signature/provenance shape (OQ6,
+determined by the publish Action in epic step 4), the exact `builder.id` matching rule (OQ8, global
+constant vs per-connector — the binding requirement itself is frozen in §c/§d), the TUF-lite→full-TUF
+trigger (OQ4), connector delisting (OQ10), and version-entry pruning (OQ11).

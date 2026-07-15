@@ -156,7 +156,11 @@
         "revokedAt": {
           "type": "string",
           "format": "date-time",
-          "description": "When the revocation was recorded. Additive/optional field, not in the original design doc text but included for audit/UI ordering; drop if the maintainer prefers a leaner shape."
+          "description": "When the revocation was recorded. Additive/optional, for audit/UI ordering."
+        },
+        "revokedBy": {
+          "type": "string",
+          "description": "Optional chain-of-custody: the reviewer/identity that recorded this revocation, for the audit trail."
         }
       }
     },
@@ -175,6 +179,10 @@
           "type": "string",
           "format": "date-time",
           "description": "When the version was yanked. Additive/optional field."
+        },
+        "yankedBy": {
+          "type": "string",
+          "description": "Optional chain-of-custody: the reviewer/identity that recorded this yank, for the audit trail."
         }
       }
     },
@@ -249,7 +257,7 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "Scarf-gatewayed download URL. Outside the trust boundary by design -- the digest is always recomputed from the actual received bytes after following redirects; a compromised/misbehaving gateway can only cause a failed verification (denial of service), never a successful wrong-artifact install (see Decision 3, Failure modes)."
+          "description": "Scarf-gatewayed download URL. This value is INSIDE the signed payload (so a compromised index can't redirect it), but the URL is not by itself sufficient for trust: the digest is always recomputed from the actual received bytes after following redirects, so a compromised/misbehaving gateway can only cause a failed verification (denial of service), never a successful wrong-artifact install (see Decision 3, Failure modes)."
         },
         "sha256": {
           "type": "string",
