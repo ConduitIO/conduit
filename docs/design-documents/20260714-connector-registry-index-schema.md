@@ -190,9 +190,11 @@ Concretely, the signing/verification procedure:
       (b). **Accept the index if a `role: "root"` signature verifies; accept a `role: "freshness"`-
       only index ONLY when its `connectors[]` is byte-identical to what was last verified under a
       `root` signature** (a freshness signature may extend freshness, never authorize content).
-      Refuse `ERR_INDEX_INTEGRITY` if no signature verifies against a currently-trusted key; refuse
-      **`ERR_TRUST_ANCHOR_EXPIRED`** ("upgrade Conduit") if the only signatures present are by keys
-      this (old) binary was not built to trust — never fall back to a stale cache.
+      Distinguish the two failure codes by _where_ verification fails: refuse
+      **`ERR_TRUST_ANCHOR_EXPIRED`** ("upgrade Conduit") when **no `keyId` in `signatures[]` matches
+      any compiled-in anchor at all** (an unrecognized key — the upgrade-lag case), and never fall
+      back to a stale cache; refuse `ERR_INDEX_INTEGRITY` when a `keyId` **is** recognized but the
+      cryptographic verification itself fails (tampering/corruption).
    d. Only after (c) succeeds, unmarshal the canonical `payload` bytes into the typed struct
       selected by the now-trusted `payload.schemaVersion`, and proceed to the freeze/rollback and
       identity-pinning checks below.
