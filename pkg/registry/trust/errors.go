@@ -40,4 +40,17 @@ var (
 	// validly-signed attestation existed, but it does not actually attest
 	// to this artifact having been built by the pinned identity's pipeline.
 	ErrProvenanceInvalid = cerrors.New("trust: provenance attestation failed subject-digest or builder binding")
+	// ErrIdentityPatternTooLoose means the pinned
+	// Publisher.ExpectedIdentityPattern itself failed
+	// ValidateIdentityPattern's tightness rules (unanchored, an inline flag
+	// that could weaken anchoring, or no literal owner/repo prefix). This is
+	// checked defensively at verify time (VerifyArtifact), NOT only by the
+	// index-CI registration checklist that is supposed to reject such a
+	// pattern before it is ever signed into an index: a signature-verified
+	// index is not proof its pinned pattern is tight, and a too-loose
+	// pattern (e.g. "^.*$") would let ANY identity's signature satisfy the
+	// pin. Distinct from ErrIdentityMismatch (a tight pattern that a
+	// signature's identity fails to match) — this fires before the pattern
+	// is ever handed to the signature/attestation matcher at all.
+	ErrIdentityPatternTooLoose = cerrors.New("trust: pinned identity pattern fails defensive tightness validation")
 )

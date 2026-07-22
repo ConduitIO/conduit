@@ -18,6 +18,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/conduitio/conduit/pkg/registry/trust"
@@ -144,7 +145,31 @@ func (v *TrustedVerifier) VerifyIndex(_ context.Context, raw []byte) (*index.Ver
 // and subject-digest/builder-ID binding. Any failure refuses with the
 // specific code from pkg/registry/trust; success in every step returns
 // VerifyResult{Signed: true, VerifiedIdentity: <the actual signing SAN>}.
+//
+// Invariant: the pinned identity.IdentityPattern is defensively
+// re-validated for tightness (trust.ValidateIdentityPattern) before it is
+// ever used to accept a signature or attestation. identity.IdentityPattern
+// comes from Publisher.ExpectedIdentityPattern in an index that has already
+// passed index-signature verification (VerifyIndex) — but a valid signature
+// over the index only proves the index wasn't tampered with in transit, not
+// that its pinned pattern is tight. Tightness is otherwise enforced solely
+// by a manual reviewer checklist in index-CI (which does not exist yet as
+// of this PR) — a single point of failure a compromised or careless
+// publisher registration could slip past. Without this check, a
+// signature-verified index entry with e.g. ExpectedIdentityPattern:
+// "^.*$" would let ANY identity's valid signature satisfy the pin,
+// silently collapsing identity pinning to "any signature at all". Refusing
+// here, before VerifyArtifactSignature/VerifyAttestationEnvelope ever
+// consult the pattern, is defense-in-depth: it holds even when index-CI's
+// checklist is bypassed, missing, or wrong.
 func (v *TrustedVerifier) VerifyArtifact(ctx context.Context, ref ArtifactRef, identity trust.PinnedIdentity) (VerifyResult, error) {
+	if err := trust.ValidateIdentityPattern(identity.IdentityPattern); err != nil {
+		return VerifyResult{}, conduiterr.Wrap(trust.CodeIdentityPatternTooLoose,
+			"pinned identity pattern failed defensive tightness validation at verify time — refusing to use it "+
+				"to accept a signature",
+			cerrors.Errorf("%w: %v", trust.ErrIdentityPatternTooLoose, err))
+	}
+
 	verifiedIdentity, err := trust.VerifyArtifactSignature(ctx, ref.Digest[:], ref.SignatureBundle, identity)
 	if err != nil {
 		return VerifyResult{}, err
