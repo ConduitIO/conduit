@@ -33,6 +33,7 @@ func (c *ConnectorsCommand) SubCommands() []ecdysis.Command {
 		&ListCommand{},
 		&DescribeCommand{},
 		newNewCommand(),
+		&InstallCommand{},
 	}
 }
 
