@@ -31,21 +31,13 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/registry"
-	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/conduitio/ecdysis"
 )
 
-// defaultTrustAnchors are this build's compiled-in Conduit registry
-// root/freshness public keys (index.TrustAnchors, passed to
-// registry.TrustedVerifier below). Empty as of this PR: the bootstrap
-// ceremony that generates real root/freshness key material and go:embeds it
-// here (plan-v2 §9) is separate infrastructure work, explicitly out of
-// PR-2's scope (see this PR's description). An empty value means every real
-// index this build fetches fails closed with registry.trust_anchor_expired
-// — the correct, intentional state for a build that predates that
-// ceremony, not a bug and not a silent bypass. Tests override this via
-// SetDefaultTrustAnchorsForTest (export_test.go).
-var defaultTrustAnchors index.TrustAnchors
+// defaultTrustAnchors (this build's compiled-in registry root/freshness public
+// keys) and anchorLoadErr now live in anchors.go, populated from the embedded
+// PEMs at init. Tests override the anchors via SetDefaultTrustAnchorsForTest
+// (export_test.go).
 
 // unsignedInstallEnvVar is the non-interactive escape hatch for
 // --allow-unsigned (plan-v2 §5/§6): BOTH this env var AND the flag must be
