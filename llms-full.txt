@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (75)
+## 3. Error codes (76)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -662,6 +662,7 @@ Author: Meroxa, Inc.
 | `registry.corrupt_download` | DataLoss | CodeCorruptDownload is raised when the received-bytes sha256 does not match the index's declared sha256 — DataLoss, matching gRPC's literal "unrecoverable data loss or corruption" semantics for a digest mismatch; a retry is a fresh download attempt, not a recovery of the same lost bytes. |
 | `registry.download_failed` | Unavailable | CodeDownloadFailed is raised on a non-2xx artifact download, a redirect loop, or a connection reset. |
 | `registry.identity_mismatch` | PermissionDenied | CodeIdentityMismatch is raised when a signature verifies but for a different certificate identity than the one pinned (trust.ErrIdentityMismatch). |
+| `registry.identity_pattern_too_loose` | PermissionDenied | CodeIdentityPatternTooLoose is raised when a connector's pinned Publisher.ExpectedIdentityPattern fails ValidateIdentityPattern's tightness rules at verify time (trust.ErrIdentityPatternTooLoose) — defense-in-depth against a signature-verified index whose pinned pattern is dangerously loose (e.g. unanchored, or "^.*$"), which would otherwise let an arbitrary signing identity satisfy the pin. |
 | `registry.identity_revoked` | PermissionDenied | CodeIdentityRevoked is raised when a connector's publisher carries `revoked` — every version under that name is refused regardless of individual yanked status. audit's REVOKED_PUBLISHER finding (PR-4) reuses this code verbatim. |
 | `registry.incompatible_version` | FailedPrecondition | CodeIncompatibleVersion is raised when an explicit @version pin is below the running Conduit's min-versions, or (see ManifestKey) when a version string fails to parse as semver at all. |
 | `registry.index_integrity` | DataLoss | CodeIndexIntegrity is raised when a recognized keyId's cryptographic verification fails (tampering/corruption) — and, per this package's duplicate-key walker, also when parse-time duplicate-key rejection fires: R-1 frames duplicate-key resolution ambiguity as itself a "signature-bypass primitive" (a producer/verifier parser differential), which is the same integrity concern this code names, not a separate condition. See duplicatekey.go's doc comment. |
