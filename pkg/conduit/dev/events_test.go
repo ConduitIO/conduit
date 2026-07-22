@@ -112,10 +112,19 @@ func TestReporter_JSON_RoundTrips(t *testing.T) {
 	is.Equal(strings.Count(buf.String(), "\n"), 1)
 }
 
+// devExampleTestCode is registered once at package-init, not inside the test
+// body. conduiterr.Register panics on a duplicate reason and MUST be called
+// only from a package-level var initializer (see its godoc); registering inside
+// the test re-ran it on every `-count>1` iteration, panicking with
+// "duplicate code reason dev_test.example" on the second run and crashing the
+// whole package's test binary. That is exactly the process-global-state flake
+// the scheduled `-count=3` flake-hunt job catches. Match the pattern the other
+// exitcode_test.go files already use.
+var devExampleTestCode = conduiterr.Register("dev_test.example", 0)
+
 func TestErrorInfoFromErr_ConduitError_PreservesFields(t *testing.T) {
 	is := is.New(t)
-	code := conduiterr.Register("dev_test.example", 0)
-	ce := conduiterr.New(code, "boom")
+	ce := conduiterr.New(devExampleTestCode, "boom")
 	ce.ConfigPath = "/pipelines/0/id"
 	ce.Suggestion = "fix it"
 
