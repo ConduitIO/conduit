@@ -17,7 +17,6 @@ package repair
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -256,51 +255,9 @@ func TestApply_AmbiguousFix(t *testing.T) {
 	is.Equal(ce, CodeAmbiguousFix.Reason())
 }
 
-// TestWriteFileAtomic_ReplacesContentWholesale is AC-11: WriteFileAtomic
-// never leaves a torn file — the original bytes are intact right up until
-// the moment the new bytes are fully in place.
-func TestWriteFileAtomic_ReplacesContentWholesale(t *testing.T) {
-	is := is.New(t)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "pipeline.yaml")
-	is.NoErr(os.WriteFile(path, []byte("original"), 0o600))
-
-	is.NoErr(WriteFileAtomic(path, []byte("repaired"), 0o600))
-
-	got, err := os.ReadFile(path)
-	is.NoErr(err)
-	is.Equal(string(got), "repaired")
-
-	// No leftover temp file in the directory.
-	entries, err := os.ReadDir(dir)
-	is.NoErr(err)
-	is.Equal(len(entries), 1)
-	is.Equal(entries[0].Name(), "pipeline.yaml")
-}
-
-// TestWriteFileAtomic_FailureLeavesOriginalIntact simulates a crash mid
-// -write (an unwritable target directory for the temp file) and asserts the
-// original file is untouched — AC-11's "the original file is intact"
-// half.
-func TestWriteFileAtomic_FailureLeavesOriginalIntact(t *testing.T) {
-	is := is.New(t)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "pipeline.yaml")
-	is.NoErr(os.WriteFile(path, []byte("original"), 0o600))
-
-	// Make the directory read-only so CreateTemp in the same dir fails —
-	// simulates a write failure between "compute the repaired bytes" and
-	// "make them durable".
-	is.NoErr(os.Chmod(dir, 0o500))
-	defer func() { _ = os.Chmod(dir, 0o700) }() // t.TempDir() cleanup needs write back
-
-	err := WriteFileAtomic(path, []byte("repaired"), 0o600)
-	is.True(err != nil)
-
-	is.NoErr(os.Chmod(dir, 0o700))
-	got, err := os.ReadFile(path)
-	is.NoErr(err)
-	is.Equal(string(got), "original")
-}
+// The atomic-write behavior formerly tested here as WriteFileAtomic moved to
+// pkg/foundation/atomicfile (see atomicfile_test.go's
+// TestWriteFile_ReplacesContentWholesale /
+// TestWriteFile_FailureLeavesOriginalIntact) once a second real call site —
+// the connector registry's install manifest — justified promoting it out of
+// this package.

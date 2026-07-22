@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/repair"
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
+	"github.com/conduitio/conduit/pkg/foundation/atomicfile"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
@@ -187,7 +188,7 @@ func (c *RepairCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 		if info, statErr := os.Stat(c.args.Path); statErr == nil {
 			perm = info.Mode().Perm()
 		}
-		if err := repair.WriteFileAtomic(c.args.Path, []byte(res.Content), perm); err != nil {
+		if err := atomicfile.WriteFile(c.args.Path, []byte(res.Content), perm); err != nil {
 			return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInternal, "could not write the repaired pipeline config file", err)
 		}
 	}
