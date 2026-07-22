@@ -34,8 +34,9 @@ import (
 
 // DefaultIndexURL is the well-known registry index URL Install fetches from
 // when the caller does not set InstallOptions.IndexFile (plan-v2 §8: the
-// same GitHub Pages deployment that serves the human-facing site).
-const DefaultIndexURL = "https://registry.conduit.io/index.json"
+// same GitHub Pages deployment that serves the human-facing site). Served by
+// the conduit-connector-registry Pages deploy on the conduitdata.io domain.
+const DefaultIndexURL = "https://registry.conduitdata.io/index.json"
 
 // MaxBundleBytes caps a fetched signature/provenance bundle fetch (P0-2
 // item 1, plan-v2 §2.4): a Sigstore bundle with a cert chain and Rekor
