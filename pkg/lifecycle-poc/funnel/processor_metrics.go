@@ -42,8 +42,13 @@ func (m ProcessorMetricsImpl) Observe(recordsNum int, start time.Time) {
 	}()
 }
 
-func NewProcessorMetrics(pipelineName, plugin string) ProcessorMetricsImpl {
+// NewProcessorMetrics builds the shared processor latency metric for one
+// processor instance. componentID is the processor's instance ID (same ID
+// space as the topology nodes and the conduit_inspector_* metrics), recorded
+// via the component_id label so per-node dashboards can attribute latency to
+// a specific processor instance.
+func NewProcessorMetrics(pipelineName, plugin, componentID string) ProcessorMetricsImpl {
 	return ProcessorMetricsImpl{
-		timer: measure.ProcessorExecutionDurationTimer.WithValues(pipelineName, plugin),
+		timer: measure.ProcessorExecutionDurationTimer.WithValues(pipelineName, plugin, componentID),
 	}
 }

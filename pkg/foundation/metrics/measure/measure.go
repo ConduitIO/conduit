@@ -25,6 +25,13 @@ const (
 	labelPipelineName = "pipeline_name"
 	labelType         = "type"
 	labelPlugin       = "plugin"
+	// labelComponentID is the ID of the pipeline component (connector or
+	// processor) a metric belongs to. It uses the same ID space as the
+	// topology nodes and as the existing conduit_inspector_sessions /
+	// conduit_inspector_dropped_records_total metrics (see
+	// pkg/inspector.Inspector.NewSession), so per-node dashboards can join
+	// across all of these metrics on this label.
+	labelComponentID = "component_id"
 )
 
 // Any changes in metrics defined below should also be reflected in the metrics documentation.
@@ -55,7 +62,7 @@ var (
 	InspectorsGauge = metrics.NewLabeledGauge(
 		"conduit_inspector_sessions",
 		"Number of inspector sessions by ID of pipeline component (connector or processor)",
-		[]string{"component_id"},
+		[]string{labelComponentID},
 	)
 	// _total suffix per Prometheus counter convention; this is a new metric with
 	// no consumer yet, so the name is fixed correctly now rather than matching the
@@ -64,12 +71,19 @@ var (
 		"conduit_inspector_dropped_records_total",
 		"Number of records dropped by inspector sessions because the session buffer was full, "+
 			"by ID of pipeline component (summed across all sessions on that component).",
-		[]string{"component_id"},
+		[]string{labelComponentID},
 	)
 
+	// ConnectorBytesHistogram carries a component_id label in addition to the
+	// original pipeline_name/plugin/type labels (added for P7, additive: no
+	// existing label was removed). component_id is the connector's instance
+	// ID, letting the UI attribute throughput to a specific node. Scraping
+	// dashboards that only key on the original three labels keep working
+	// unchanged (Prometheus aggregates across component_id values unless a
+	// query explicitly groups by it); per-node granularity is opt-in.
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
-		"Number of bytes a connector processed by pipeline name, plugin and type (source, destination).",
-		[]string{labelPipelineName, labelPlugin, labelType},
+		"Number of bytes a connector processed by pipeline name, plugin, type (source, destination) and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
@@ -84,14 +98,17 @@ var (
 		[]string{labelPipelineName},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
+	// ConnectorExecutionDurationTimer carries a component_id label in addition
+	// to the original labels, see the comment on ConnectorBytesHistogram for
+	// the additive-contract rationale (same for both metrics below).
 	ConnectorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_connector_execution_duration_seconds",
-		"Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination).",
-		[]string{labelPipelineName, labelPlugin, labelType},
+		"Amount of time spent reading or writing records per pipeline, plugin, connector type (source, destination) and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 	ProcessorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_processor_execution_duration_seconds",
-		"Amount of time spent on processing records per pipeline and processor.",
-		[]string{labelPipelineName, "processor"},
+		"Amount of time spent on processing records per pipeline, processor and component ID.",
+		[]string{labelPipelineName, "processor", labelComponentID},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
 	DLQExecutionDurationTimer = metrics.NewLabeledTimer("conduit_dlq_execution_duration_seconds",

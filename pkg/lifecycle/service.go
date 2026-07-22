@@ -611,7 +611,7 @@ func (s *Service) buildProcessorNode(
 	return &stream.ProcessorNode{
 		Name:           proc.ID,
 		Processor:      proc,
-		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin),
+		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin, proc.ID),
 	}
 }
 
@@ -737,6 +737,7 @@ func (s *Service) buildMetricsNode(
 				pl.Config.Name,
 				conn.Plugin,
 				strings.ToLower(conn.Type.String()),
+				conn.ID,
 			),
 		),
 	}
@@ -781,6 +782,7 @@ func (s *Service) buildDestinationNodes(
 				pl.Config.Name,
 				instance.Plugin,
 				strings.ToLower(instance.Type.String()),
+				instance.ID,
 			),
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)

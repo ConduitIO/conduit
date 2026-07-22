@@ -590,7 +590,7 @@ func (s *Service) buildProcessorTasks(
 				instance.ID,
 				runnableProc,
 				logger,
-				s.newProcessorMetrics(pl.Config.Name, instance.Plugin),
+				s.newProcessorMetrics(pl.Config.Name, instance.Plugin, instance.ID),
 			),
 		)
 	}
@@ -812,15 +812,16 @@ func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.I
 		pipelineName,
 		instance.Plugin,
 		instance.Type,
+		instance.ID,
 	)
 }
 
-func (s *Service) newProcessorMetrics(pipelineName, plugin string) funnel.ProcessorMetrics {
+func (s *Service) newProcessorMetrics(pipelineName, plugin, componentID string) funnel.ProcessorMetrics {
 	if s.metricsDisabled {
 		return &funnel.NoOpProcessorMetrics{}
 	}
 
-	return funnel.NewProcessorMetrics(pipelineName, plugin)
+	return funnel.NewProcessorMetrics(pipelineName, plugin, componentID)
 }
 
 func (s *Service) newDLQMetrics(pipelineName string, plugin string) funnel.ConnectorMetrics {

@@ -24,16 +24,32 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | `conduit_pipelines`                            | Gauge     | Number of pipelines by status.                                                                                 |
     | `conduit_connectors`                           | Gauge     | Number of connectors by type (source, destination).                                                            |
     | `conduit_processors`                           | Gauge     | Number of processors by name and type.                                                                         |
-    | `conduit_connector_bytes`                      | Histogram | Number of bytes* a connector processed by pipeline name, plugin and type (source, destination).                |
+    | `conduit_connector_bytes`                      | Histogram | Number of bytes* a connector processed by pipeline name, plugin, type (source, destination) and component ID.  |
     | `conduit_dlq_bytes`                            | Histogram | Number of bytes* a DLQ connector processed per pipeline and plugin.                                            |
     | `conduit_pipeline_execution_duration_seconds`  | Histogram | Amount of time records spent in a pipeline.                                                                    |
-    | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination). |
-    | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline and processor.                                         |
+    | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin, connector type (source, destination) and component ID. |
+    | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline, processor and component ID.                           |
     | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
     | `conduit_inspector_sessions`                   | Gauge     | Number of inspector sessions by ID of pipeline component (connector or processor)                              |
 
   *We calculate bytes based on the JSON representation of the record payload
   and key.
+
+  **`component_id` label (added in P7):** `conduit_connector_bytes`,
+  `conduit_connector_execution_duration_seconds` and
+  `conduit_processor_execution_duration_seconds` carry a `component_id` label
+  holding the connector or processor **instance ID** — the same ID space used
+  by the topology nodes and by `conduit_inspector_sessions` /
+  `conduit_inspector_dropped_records_total`. This is an additive change: no
+  existing label was removed, so dashboards/queries that only aggregate on the
+  pre-existing labels (`pipeline_name`, `plugin`, `type`/`processor`) keep
+  working unchanged. Per-node attribution (e.g. a fleet UI's per-node
+  throughput view) is opt-in — group or filter by `component_id` to get it.
+  Because a new label starts a new Prometheus series, upgrading Conduit resets
+  the counters/histograms these three metrics contribute to (the old series
+  stop being written, new ones carrying `component_id` start from zero); this
+  does not affect any other metric and has no effect on pipeline state or
+  data.
 
 - **Go runtime metrics**: The default metrics exposed by Prometheus' official Go
   package, [client_golang](https://pkg.go.dev/github.com/prometheus/client_golang).
