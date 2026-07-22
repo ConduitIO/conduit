@@ -145,9 +145,13 @@ type Config struct {
 		// of flag/TTY/env var — the mitigation for "a prompt-injected agent
 		// convinces an operator to run a suggested command": once set, it
 		// cannot be talked around by anything short of editing this config
-		// and restarting. Defaults to true (the flag itself is still gated
-		// by TTY-confirm/env-var/never-from-MCP) — an operator who wants to
-		// forbid the escape hatch entirely sets this to false explicitly.
+		// and restarting. Defaults to false as of DeVaris's Tier-1 posture
+		// decision: the escape-hatch CAPABILITY itself is off unless an
+		// operator explicitly opts in (install.allowUnsigned: true) — the
+		// flag still exists and is still gated by TTY-confirm/env-var/
+		// never-from-MCP on top of that, but now requires an explicit,
+		// affirmative operator choice before any of those gates are even
+		// reachable.
 		AllowUnsigned bool `long:"install.allow-unsigned" mapstructure:"allow-unsigned" usage:"operator policy: permit --allow-unsigned connector installs at all (false hard-disables regardless of flag/TTY/env var)"`
 		// MaxStaleness overrides index.DefaultMaxStaleness (7 days) — how
 		// old a cryptographically-verified index's timestamp may be before
@@ -252,7 +256,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
 	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
 
-	cfg.Install.AllowUnsigned = true
+	cfg.Install.AllowUnsigned = false
 	cfg.Install.MaxStaleness = index.DefaultMaxStaleness
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")

@@ -29,3 +29,10 @@ func SetDefaultTrustAnchorsForTest(anchors index.TrustAnchors) (restore func()) 
 	defaultTrustAnchors = anchors
 	return func() { defaultTrustAnchors = prev }
 }
+
+// UnsignedInstallEnvVarForTest exposes unsignedInstallEnvVar (the
+// --allow-unsigned non-interactive escape-hatch env var name) to
+// install_test.go, so the CLI-level operator-policy test doesn't hardcode a
+// second copy of the literal that could silently drift from the real
+// constant.
+const UnsignedInstallEnvVarForTest = unsignedInstallEnvVar

@@ -49,14 +49,29 @@ type TrustedVerifier struct {
 	// RequireProvenance, if true, refuses an artifact whose index entry has
 	// no slsaProvenance reference at all (ArtifactRef.ProvenanceBundle is
 	// empty) rather than treating "no provenance to check" as vacuously
-	// satisfied. Defaults to false (provenance is verified and bound
-	// whenever present, but its absence alone does not refuse) — FLAGGED in
-	// this PR's description as a genuine scope ambiguity: the frozen index
-	// schema marks slsaProvenance optional (omitempty) at the version
-	// level, but P1-2 says builder-ID binding is "enforced from day one, no
-	// soft period" for provenance that IS present. This field lets an
-	// operator (or a future default change) require it unconditionally
-	// without a redesign.
+	// satisfied.
+	//
+	// Resolved to true in this build's one production call site
+	// (cmd/conduit/root/connectors/install.go) per DeVaris's Tier-1 posture
+	// decision: a "verified" artifact always includes the L3 SLSA build
+	// attestation, so signature-only (no-provenance) artifacts are refused
+	// with trust.CodeProvenanceInvalid. This resolves the scope ambiguity
+	// this field was originally added to flag (the frozen index schema
+	// marks slsaProvenance optional/omitempty at the version level, while
+	// P1-2 requires builder-ID binding "from day one, no soft period" for
+	// provenance that IS present) — the ambiguity is now closed: absence is
+	// no longer treated as vacuously satisfied anywhere provenance is
+	// required.
+	//
+	// The zero value remains false (provenance verified-and-bound whenever
+	// present, but absence alone does not refuse) so existing unit/e2e
+	// tests that construct a bare TrustedVerifier{} to exercise unrelated
+	// checks (index integrity, identity pinning, rollback, staleness) are
+	// unaffected — every test exercising the artifact-verification success
+	// path now sets this explicitly to match production. A hard requirement
+	// downstream of this default: the seed-connector bootstrap (plan-v2 §9)
+	// must produce L3 provenance for all 6 seed connectors, or none of them
+	// will install once production trust anchors land.
 	RequireProvenance bool
 	// LockTimeout bounds how long VerifyIndex waits to acquire the
 	// index-state lock (see acquireIndexStateLock). Zero uses

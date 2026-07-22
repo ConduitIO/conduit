@@ -104,7 +104,10 @@ type InstallArgs struct {
 // registry.TrustedVerifier for BOTH IndexVerifier and ArtifactVerifier —
 // every real invocation of this command now verifies the index signature
 // and the artifact's signature + SLSA provenance against the connector's
-// pinned identity before installing anything. defaultTrustAnchors (this
+// pinned identity before installing anything. RequireProvenance is set to
+// true here (Tier-1 posture decision): a validly-signed artifact with NO
+// SLSA provenance attestation is refused, not installed — "verified" means
+// signature AND provenance, never signature alone. defaultTrustAnchors (this
 // file) is EMPTY as of this PR — the bootstrap ceremony that generates and
 // embeds real Conduit registry root/freshness keys (plan-v2 §9) is separate
 // infrastructure work, out of this PR's scope — so every real index this
@@ -205,6 +208,12 @@ func (c *InstallCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcom
 		Anchors:      defaultTrustAnchors,
 		StatePath:    registry.IndexStatePath(c.Cfg.Connectors.Path),
 		MaxStaleness: c.Cfg.Install.MaxStaleness,
+		// RequireProvenance: true (Tier-1 posture decision) — a "verified"
+		// artifact always includes the L3 SLSA build attestation; a
+		// validly-signed artifact with no provenance now refuses with
+		// trust.CodeProvenanceInvalid rather than installing. See
+		// TrustedVerifier.RequireProvenance's doc comment.
+		RequireProvenance: true,
 	}
 
 	tty := isInteractiveTTY()

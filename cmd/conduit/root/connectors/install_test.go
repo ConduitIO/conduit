@@ -378,6 +378,44 @@ func TestInstall_DryRun_JSON(t *testing.T) {
 	}
 }
 
+// TestInstall_AllowUnsignedFlag_OperatorDisabledByDefault_Refuses is the
+// CLI-level regression test for DeVaris's Tier-1 posture decision: with a
+// fresh (default) config, install.allow-unsigned is false, so --allow-unsigned
+// refuses with the operator-disabled code — even with the non-interactive
+// escape-hatch env var set, which is otherwise sufficient on its own once an
+// operator has opted in. policy.Decide checks OperatorPolicy first and
+// refuses unconditionally when it's false, before EnvVarSet/TTY/confirmation
+// are ever consulted (see pkg/registry/policy/gate.go and, for the
+// TTY-specific case this CLI test process can't fake, TestAllowUnsigned_
+// OperatorPolicyDisabled_Refuses in pkg/registry/allowunsigned_test.go, which
+// asserts the identical refusal with TTY: true).
+func TestInstall_AllowUnsignedFlag_OperatorDisabledByDefault_Refuses(t *testing.T) {
+	indexPath := newFixtureIndexFile(t, "widget", "1.0.0")
+	connectorsPath := t.TempDir()
+
+	t.Setenv(connectors.UnsignedInstallEnvVarForTest, "I_UNDERSTAND")
+
+	out, err := runInstall(t,
+		"widget",
+		"--connectors.path="+connectorsPath,
+		"--index-file="+indexPath,
+		"--allow-unsigned",
+		"--json",
+	)
+	require.Error(t, err)
+
+	var res cecdysis.Result
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.NotNil(t, res.Error)
+	assert.Equal(t, "registry.unsigned_install_disabled_by_policy", res.Error.Code)
+
+	entries, rerr := os.ReadDir(connectorsPath)
+	require.NoError(t, rerr)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "conduit-connector-")
+	}
+}
+
 func TestInstall_UnknownConnector_JSON(t *testing.T) {
 	indexPath := newFixtureIndexFile(t, "widget", "1.0.0")
 	connectorsPath := t.TempDir()

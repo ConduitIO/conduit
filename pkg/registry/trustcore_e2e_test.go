@@ -74,7 +74,12 @@ const (
 	e2ePattern    = `^https://github\.com/ExampleOrg/example-connector/\.github/workflows/publish\.yml@refs/tags/v.*$`
 )
 
-// entityArtifactVerifier — see file doc comment.
+// entityArtifactVerifier — see file doc comment. requireProvenance mirrors
+// TrustedVerifier.RequireProvenance; tests below set it to true wherever
+// they mean to exercise this build's real production default
+// (cmd/conduit/root/connectors/install.go), so it defaults to false
+// (matching TrustedVerifier's own zero value) only where a test explicitly
+// wants the old, no-longer-production, permissive behavior.
 type entityArtifactVerifier struct {
 	signatureEntity   verify.SignedEntity // nil => no signature at all (models ErrUnsigned)
 	provenanceEntity  verify.SignedEntity // nil => no provenance bundle present
@@ -216,6 +221,13 @@ func newVirtualCAWithRoot(t *testing.T) (*ca.VirtualSigstore, root.TrustedMateri
 // simplification): a correctly signed artifact with correctly bound SLSA
 // provenance, against a correctly signed index, installs successfully end
 // to end and records the verified identity in the manifest.
+//
+// requireProvenance is deliberately set to true here, matching this build's
+// real production default (cmd/conduit/root/connectors/install.go, per
+// DeVaris's Tier-1 posture decision that a "verified" artifact always
+// includes L3 provenance): this proves the happy path genuinely still
+// installs under the now-mandatory-provenance default, not just under the
+// old permissive one.
 func TestE2E_HappyPath_ValidSignatureAndProvenance_Installs(t *testing.T) {
 	f := newE2EFixture(t, "example-connector", "1.0.0", 1, time.Now())
 	vca, tm := newVirtualCAWithRoot(t)
@@ -234,7 +246,7 @@ func TestE2E_HappyPath_ValidSignatureAndProvenance_Installs(t *testing.T) {
 	provEntity, err := vca.Attest(e2ePublisher, e2eOIDCIssuer, provBody)
 	require.NoError(t, err)
 
-	av := &entityArtifactVerifier{signatureEntity: sigEntity, provenanceEntity: provEntity, trustedRoot: tm}
+	av := &entityArtifactVerifier{signatureEntity: sigEntity, provenanceEntity: provEntity, trustedRoot: tm, requireProvenance: true}
 
 	res, err := registry.Install(context.Background(), f.opts(av, "example-connector"))
 	require.NoError(t, err)
@@ -247,6 +259,30 @@ func TestE2E_HappyPath_ValidSignatureAndProvenance_Installs(t *testing.T) {
 	assert.True(t, entry.Signed)
 	assert.False(t, entry.AllowUnsigned)
 	assert.NotEmpty(t, entry.VerifiedIdentity)
+}
+
+// TestE2E_SignedButNoProvenance_RequireProvenanceRefuses is the regression
+// test for the Tier-1 posture flip (RequireProvenance: false -> true,
+// matching cmd/conduit/root/connectors/install.go's real production
+// wiring): a validly-signed artifact with NO SLSA provenance attestation at
+// all — the exact shape that installed successfully under the OLD default
+// — must now be refused with trust.CodeProvenanceInvalid through the real
+// Install pipeline, never silently treated as "no provenance to check".
+func TestE2E_SignedButNoProvenance_RequireProvenanceRefuses(t *testing.T) {
+	f := newE2EFixture(t, "example-connector", "1.0.0", 1, time.Now())
+	vca, tm := newVirtualCAWithRoot(t)
+
+	sigEntity, err := vca.Sign(e2ePublisher, e2eOIDCIssuer, f.archiveBytes)
+	require.NoError(t, err)
+
+	av := &entityArtifactVerifier{signatureEntity: sigEntity, provenanceEntity: nil, trustedRoot: tm, requireProvenance: true}
+
+	_, err = registry.Install(context.Background(), f.opts(av, "example-connector"))
+	require.Error(t, err)
+	ce, ok := conduiterr.Get(err)
+	require.True(t, ok)
+	assert.Equal(t, trust.CodeProvenanceInvalid, ce.Code)
+	assertNoInstalledBinary(t, f.connectorsPath)
 }
 
 // TestE2E_Unsigned_Refuses proves CodeUnsigned fires through the real
@@ -272,7 +308,7 @@ func TestE2E_IdentityMismatch_Refuses(t *testing.T) {
 
 	sigEntity, err := vca.Sign(e2eAttacker, e2eOIDCIssuer, f.archiveBytes)
 	require.NoError(t, err)
-	av := &entityArtifactVerifier{signatureEntity: sigEntity, trustedRoot: tm}
+	av := &entityArtifactVerifier{signatureEntity: sigEntity, trustedRoot: tm, requireProvenance: true}
 
 	_, err = registry.Install(context.Background(), f.opts(av, "example-connector"))
 	require.Error(t, err)
@@ -306,7 +342,7 @@ func TestE2E_ProvenanceSubjectMismatch_Refuses(t *testing.T) {
 	provEntity, err := vca.Attest(e2ePublisher, e2eOIDCIssuer, provBody)
 	require.NoError(t, err)
 
-	av := &entityArtifactVerifier{signatureEntity: sigEntity, provenanceEntity: provEntity, trustedRoot: tm}
+	av := &entityArtifactVerifier{signatureEntity: sigEntity, provenanceEntity: provEntity, trustedRoot: tm, requireProvenance: true}
 
 	_, err = registry.Install(context.Background(), f.opts(av, "example-connector"))
 	require.Error(t, err)
