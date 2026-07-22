@@ -136,6 +136,9 @@ func (c *BundleCommand) Args(args []string) error {
 func (c *BundleCommand) ResultCommand() string { return "connectors.bundle" }
 
 func (c *BundleCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, error) {
+	if err := guardTrustAnchors(); err != nil {
+		return cecdysis.Outcome{}, err
+	}
 	verifier := &registry.TrustedVerifier{
 		Anchors:           defaultTrustAnchors,
 		StatePath:         registry.IndexStatePath(c.Cfg.Connectors.Path),

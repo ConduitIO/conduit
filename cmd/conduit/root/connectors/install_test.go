@@ -49,6 +49,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
@@ -302,6 +303,29 @@ func TestInstall_UnsignedIndexFailsClosedAtTrustAnchor(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	require.NotNil(t, res.Error)
 	assert.Equal(t, "registry.trust_anchor_expired", res.Error.Code)
+}
+
+// TestInstall_BrokenAnchorEmbed_ReportsTrustAnchorsUnavailable proves the
+// louder operator message: on a build whose embedded anchors failed to load,
+// install refuses up front with the distinct, machine-actionable
+// registry.trust_anchors_unavailable ("reinstall conduit") rather than a
+// generic expired-anchor. Verification never proceeds — it can only fail
+// closed here, never open.
+func TestInstall_BrokenAnchorEmbed_ReportsTrustAnchorsUnavailable(t *testing.T) {
+	restore := connectors.SetAnchorLoadErrForTest(cerrors.New("simulated stripped/corrupt anchor embed"))
+	t.Cleanup(restore)
+
+	out, err := runInstall(t,
+		"widget",
+		"--connectors.path="+t.TempDir(),
+		"--json",
+	)
+	require.Error(t, err)
+
+	var res cecdysis.Result
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.NotNil(t, res.Error)
+	assert.Equal(t, "registry.trust_anchors_unavailable", res.Error.Code)
 }
 
 // TestInstall_DryRun_JSON proves --dry-run resolves and reports without
