@@ -18,12 +18,19 @@
 //
 // Decide is the ONLY function in this codebase permitted to return "skip
 // verification". No other call site may short-circuit pkg/registry/trust
-// directly. This is enforced structurally where possible (Decide's Context
-// is a plain value with no way to construct an "allowed" result except by
-// calling Decide) and, from PR-2 (once the flag/CLI/MCP wiring that would
-// give the enforcement something real to gate exists), by a depguard rule
-// restricting which package may import trust's sentinel-skip path and an
-// unexported decision-result type only Decide can construct.
+// directly.
+//
+// In this PR (PR-0), that is a convention, not a guarantee: Decide returns a
+// plain (bool, error), so nothing in the type system stops a caller from
+// writing "allowed := true" and skipping Decide entirely. There is no
+// structural enforcement yet.
+//
+// Structural enforcement lands in PR-2 (once the flag/CLI/MCP wiring that
+// would give it something real to gate exists), via an unexported
+// decision-result type that only Decide can construct, plus a depguard rule
+// in .golangci.yml restricting which package may import trust's
+// sentinel-skip path. Until PR-2 merges, treat "Decide is the only skip
+// point" as a rule contributors must follow, not one the compiler enforces.
 //
 // # What ships now vs. later (PR-0 vs PR-2)
 //

@@ -15,6 +15,7 @@
 package boundedfetch_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -117,4 +118,47 @@ func TestReadFile_MissingFile(t *testing.T) {
 	is := is.New(t)
 	_, err := boundedfetch.ReadFile(filepath.Join(t.TempDir(), "missing.json"), 10)
 	is.True(err != nil)
+}
+
+// FuzzReadFile exercises the io.LimitReader-plus-one-byte cap check with
+// arbitrary content and cap sizes. ReadFile has negligible parse surface (no
+// untrusted decoding, just a byte-count comparison), so this fuzz target
+// isn't hunting for a parser crash — it pins down the two properties that
+// matter: the read never panics, and the ErrTooLarge/success boundary falls
+// exactly at maxBytes regardless of what bytes are on either side of it.
+func FuzzReadFile(f *testing.F) {
+	f.Add([]byte(""), int64(0))
+	f.Add([]byte("hello"), int64(10))
+	f.Add([]byte(strings.Repeat("a", 10)), int64(10))
+	f.Add([]byte(strings.Repeat("a", 11)), int64(10))
+	f.Add([]byte{0x00, 0xff, 0x00}, int64(1))
+
+	f.Fuzz(func(t *testing.T, data []byte, maxBytes int64) {
+		if maxBytes < 0 || maxBytes > 1<<40 {
+			// Out of the range any real caller passes (registry caps are
+			// small, fixed constants); avoids int64 overflow in maxBytes+1
+			// and giant temp-file writes that would just slow the fuzzer
+			// down without exercising new behavior.
+			t.Skip("maxBytes outside realistic caller range")
+		}
+
+		path := filepath.Join(t.TempDir(), "fuzz-input")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("test setup: writing fixture file: %v", err)
+		}
+
+		got, err := boundedfetch.ReadFile(path, maxBytes)
+		if int64(len(data)) > maxBytes {
+			if !cerrors.Is(err, boundedfetch.ErrTooLarge) {
+				t.Fatalf("data len %d > maxBytes %d: want ErrTooLarge, got %v", len(data), maxBytes, err)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("data len %d <= maxBytes %d: unexpected error: %v", len(data), maxBytes, err)
+		}
+		if !bytes.Equal(got, data) {
+			t.Fatalf("returned data does not match written fixture: got %d bytes, want %d bytes", len(got), len(data))
+		}
+	})
 }
