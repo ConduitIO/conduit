@@ -21,7 +21,6 @@ import (
 	"strconv"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/validate"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/yaml/v3"
@@ -96,8 +95,8 @@ type ApplyInput struct {
 // applied/skipped report. Writing REPAIRED content to disk is the caller's
 // choice (design doc §4.1) — Apply itself performs no file writes (AC-6):
 // the CLI command atomically writes Content back to ApplyInput.Path (see
-// WriteFileAtomic) only after Apply returns success; the MCP repair_apply
-// tool returns Content directly and writes nothing.
+// pkg/foundation/atomicfile.WriteFile) only after Apply returns success;
+// the MCP repair_apply tool returns Content directly and writes nothing.
 type Result struct {
 	Path    string       `json:"path,omitempty"`
 	Content string       `json:"content"`
@@ -405,45 +404,6 @@ func revalidate(ctx context.Context, applied []AppliedFix, newRaw []byte) error 
 			return conduiterr.New(conduiterr.CodeInternal,
 				"repair: the fix applied at "+a.ConfigPath+" did not clear its finding on re-validation; nothing was written")
 		}
-	}
-	return nil
-}
-
-// WriteFileAtomic writes content to path via a temp file in the same
-// directory plus rename — Invariant 5's "torn writes on crash must be
-// impossible" applied to a config file: a crash between the temp write and
-// the rename leaves the original path untouched (AC-11); a crash after the
-// rename leaves the new content, fully written, never a half-written file.
-// This is the CLI repair command's write step (see ApplyInput/Result's
-// doc — Apply itself never writes to disk); MCP repair_apply never calls
-// this at all.
-func WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".repair-*.tmp")
-	if err != nil {
-		return cerrors.Errorf("could not create a temp file to write %q atomically: %w", path, err)
-	}
-	tmpPath := tmp.Name()
-	// Always attempt to remove the temp file; once Rename succeeds below
-	// this is a no-op (the path no longer exists under tmpPath).
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if _, err := tmp.Write(content); err != nil {
-		_ = tmp.Close()
-		return cerrors.Errorf("could not write to temp file for %q: %w", path, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return cerrors.Errorf("could not sync temp file for %q: %w", path, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return cerrors.Errorf("could not close temp file for %q: %w", path, err)
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return cerrors.Errorf("could not set permissions on temp file for %q: %w", path, err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return cerrors.Errorf("could not atomically replace %q: %w", path, err)
 	}
 	return nil
 }

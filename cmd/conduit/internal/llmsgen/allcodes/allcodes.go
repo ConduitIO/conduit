@@ -64,6 +64,10 @@ import (
 	_ "github.com/conduitio/conduit/pkg/processor"
 	_ "github.com/conduitio/conduit/pkg/provisioning"
 	_ "github.com/conduitio/conduit/pkg/provisioning/config"
+	_ "github.com/conduitio/conduit/pkg/registry"
+	_ "github.com/conduitio/conduit/pkg/registry/index"
+	_ "github.com/conduitio/conduit/pkg/registry/policy"
+	_ "github.com/conduitio/conduit/pkg/registry/trust"
 	_ "github.com/conduitio/conduit/pkg/scaffold"
 )
 
