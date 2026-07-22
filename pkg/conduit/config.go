@@ -29,6 +29,7 @@ import (
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
 )
@@ -137,6 +138,27 @@ type Config struct {
 		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
 	}
 
+	Install struct {
+		// AllowUnsigned is the operator policy gate for `conduit connectors
+		// install --allow-unsigned` (Tier-1 security control, plan-v2 §6).
+		// false hard-disables the entire --allow-unsigned path regardless
+		// of flag/TTY/env var — the mitigation for "a prompt-injected agent
+		// convinces an operator to run a suggested command": once set, it
+		// cannot be talked around by anything short of editing this config
+		// and restarting. Defaults to false as of DeVaris's Tier-1 posture
+		// decision: the escape-hatch CAPABILITY itself is off unless an
+		// operator explicitly opts in (install.allowUnsigned: true) — the
+		// flag still exists and is still gated by TTY-confirm/env-var/
+		// never-from-MCP on top of that, but now requires an explicit,
+		// affirmative operator choice before any of those gates are even
+		// reachable.
+		AllowUnsigned bool `long:"install.allow-unsigned" mapstructure:"allow-unsigned" usage:"operator policy: permit --allow-unsigned connector installs at all (false hard-disables regardless of flag/TTY/env var)"`
+		// MaxStaleness overrides index.DefaultMaxStaleness (7 days) — how
+		// old a cryptographically-verified index's timestamp may be before
+		// install/audit refuse it as stale.
+		MaxStaleness time.Duration `long:"install.max-staleness" mapstructure:"max-staleness" usage:"maximum age of a verified registry index before it is considered stale"`
+	}
+
 	Processors struct {
 		Path string `long:"processors.path" usage:"path to standalone processors' directory"`
 	}
@@ -233,6 +255,9 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
 	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
+
+	cfg.Install.AllowUnsigned = false
+	cfg.Install.MaxStaleness = index.DefaultMaxStaleness
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
 

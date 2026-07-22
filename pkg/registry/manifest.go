@@ -44,13 +44,16 @@ type Manifest struct {
 
 // ManifestEntry is one installed connector version.
 //
-// Signed/VerifiedIdentity/AllowUnsigned are present from PR-0/PR-1 even
-// though only FailClosedVerifier exists yet: every entry a normal PR-1
-// build can produce has Signed: false, VerifiedIdentity: "",
-// AllowUnsigned: false — and PR-1 cannot, by construction (see
-// FailClosedVerifier in verify.go), produce ANY entry at all in a normal
-// build, since VerifyArtifact always refuses. PR-2 does not touch this
-// schema or write a migration.
+// Signed/VerifiedIdentity/AllowUnsigned were present from PR-0/PR-1 even
+// though only FailClosedVerifier existed then (every entry a PR-1 build
+// could produce had Signed: false, VerifiedIdentity: "", AllowUnsigned:
+// false, and PR-1 could not, by construction, produce ANY entry at all in a
+// normal build). As of PR-2 (the real trust core), these fields carry their
+// intended meaning: Signed/VerifiedIdentity reflect a real
+// signature/provenance verification outcome, and AllowUnsigned is true only
+// for an install that went through the full policy.Decide gate (plan-v2
+// §6) — see pkg/registry/policy and install.go's unsignedInstallGate. No
+// schema change, no migration: the field shapes are unchanged from PR-0.
 type ManifestEntry struct {
 	Name         string `json:"name"`
 	Version      string `json:"version"`

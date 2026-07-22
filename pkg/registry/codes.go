@@ -58,9 +58,13 @@ var (
 	// more than one candidate executable, a path-traversal entry, or a
 	// symlink entry.
 	CodeArchiveInvalid = conduiterr.Register("registry.archive_invalid", codes.Internal)
-	// CodeVerificationUnavailable is raised by FailClosedVerifier —
-	// expected on every install attempt until PR-2 wires in the real trust
-	// core.
+	// CodeVerificationUnavailable is raised by FailClosedVerifier — no
+	// longer this package's production wiring as of PR-2 (see
+	// TrustedVerifier), but still the correct, intentional behavior for any
+	// caller that explicitly constructs Install with FailClosedVerifier
+	// (e.g. a build with the trust core deliberately disabled), and for the
+	// structural belt-and-suspenders refusal if a future ArtifactVerifier
+	// implementation ever returns success without actually signing.
 	CodeVerificationUnavailable = conduiterr.Register("registry.verification_unavailable", codes.Unimplemented)
 	// CodeConnectorNotInstalled is raised on an uninstall/manifest lookup
 	// miss.

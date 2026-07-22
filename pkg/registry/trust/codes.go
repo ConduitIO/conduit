@@ -47,4 +47,11 @@ var (
 	// subject-digest match or builder.id/configSource.uri binding fails
 	// (trust.ErrProvenanceInvalid).
 	CodeProvenanceInvalid = conduiterr.Register("registry.provenance_invalid", codes.PermissionDenied)
+	// CodeIdentityPatternTooLoose is raised when a connector's pinned
+	// Publisher.ExpectedIdentityPattern fails ValidateIdentityPattern's
+	// tightness rules at verify time (trust.ErrIdentityPatternTooLoose) —
+	// defense-in-depth against a signature-verified index whose pinned
+	// pattern is dangerously loose (e.g. unanchored, or "^.*$"), which would
+	// otherwise let an arbitrary signing identity satisfy the pin.
+	CodeIdentityPatternTooLoose = conduiterr.Register("registry.identity_pattern_too_loose", codes.PermissionDenied)
 )

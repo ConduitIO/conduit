@@ -51,3 +51,28 @@ func stagingRootPath(connectorsPath string) string {
 func locksDirPath(connectorsPath string) string {
 	return filepath.Join(registryDir(connectorsPath), "locks")
 }
+
+// indexStatePath returns <connectorsPath>/.registry/index-state.json — the
+// persisted rollback high-water mark (index.State) TrustedVerifier.VerifyIndex
+// reads/writes. Lives alongside manifest.json/audit.jsonl under the same
+// .registry convention (PR-0/PR-1 already established this — plan-v2's
+// illustrative "<basePath>/registry/state.json" is superseded here for
+// consistency with the rest of this package's on-disk layout, flagged in
+// this PR's description).
+func indexStatePath(connectorsPath string) string {
+	return filepath.Join(registryDir(connectorsPath), "index-state.json")
+}
+
+// IndexStatePath is indexStatePath, exported for
+// cmd/conduit/root/connectors/install.go — the one production call site
+// that constructs a TrustedVerifier and must agree with Install's own
+// internal path convention without duplicating it.
+func IndexStatePath(connectorsPath string) string { return indexStatePath(connectorsPath) }
+
+// unsignedInstallsLogPath returns
+// <connectorsPath>/.registry/unsigned-installs.log — the append-only audit
+// trail policy.AppendUnsignedInstallEvent writes to (plan-v2 §6, §13 P2
+// nit). Same directory-convention note as indexStatePath.
+func unsignedInstallsLogPath(connectorsPath string) string {
+	return filepath.Join(registryDir(connectorsPath), "unsigned-installs.log")
+}
