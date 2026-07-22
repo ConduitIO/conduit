@@ -350,17 +350,40 @@ Recorded here per §7 and AC #7, as a release-engineering fact rather than a cla
   (env/flag/config-file, default `true`) gates whether `pkg/conduit/ui.go`'s `uiMiddleware` ever
   looks at a request; the embedded assets are always compiled in via `pkg/web/ui`'s `go:embed`.
   Disabling removes the surface, not the binary size.
-- **Binary-size delta:** `95,850,034` → `96,131,538` bytes (`go build` of `cmd/conduit`, same
-  ldflags, macOS/arm64) — **+281,504 bytes (+275 KiB, +0.29%)** for the embedded SPA (source maps
-  stripped before embedding; with them the dist/ payload is ~6x larger for zero runtime benefit).
+- **Binary-size delta (original, UI-1/2/3):** `95,850,034` → `96,131,538` bytes (`go build` of
+  `cmd/conduit`, same ldflags, macOS/arm64) — **+281,504 bytes (+275 KiB, +0.29%)** for the
+  embedded SPA (source maps stripped before embedding; with them the dist/ payload is ~6x larger
+  for zero runtime benefit).
+- **Binary-size delta (re-embed, UI-4/5/6 — full UI):** re-measured after re-embedding
+  `conduit-ui@f386207` (fleet, detail/topology, record flow, metrics, operate — see below), same
+  method (`go build ./cmd/conduit`, macOS/arm64), on top of P7 (#2641):
+  - no-UI baseline (P7 parent commit, `779da66`): `95,817,042` bytes
+  - UI-7 with the old embed (UI-1/2/3, `5e7ad69`): `96,131,650` bytes (+314,608 / +307 KiB /
+    +0.328% vs no-UI)
+  - UI-7 with the re-embed (UI-4/5/6, `f386207`): `96,181,186` bytes (+364,144 / +356 KiB /
+    +0.380% vs no-UI)
+  - **delta attributable to the re-embed alone: +49,536 bytes (+48.4 KiB, +0.052%)** — the three
+    new feature slices (record flow, metrics badges, operate controls) added proportionally less
+    than the original UI-1/2/3 baseline; gzip'd JS payload is 335 KiB vs the previous ~296 KiB
+    uncompressed.
 - **Mux ordering:** implemented as an explicit reserved-path check
   (`pkg/conduit/ui.go:isReservedAPIPath`) run before the UI handler ever sees a request, rather
   than relying on grpc-gateway `ServeMux`'s first-registration-match ordering — functionally
   equivalent to "mount the SPA last," but testable without a live gRPC backend. Covered by the
   route-collision test in `pkg/conduit/ui_test.go`.
-- **Embedded `conduit-ui` commit:** `5e7ad691b2c1627e1f61b84cf1fcd366673f6900` (`conduit-ui`
-  `main`, includes UI-1/UI-2/UI-3 and a UI-4 streaming-hardening prereq; UI-4's live-flow UI itself,
-  UI-5, UI-6 are not yet merged there). This is a bootstrap pin — `make ui` re-embeds after each
+- **Path normalization hardening:** `isReservedAPIPath` now runs `path.Clean` on the request path
+  before the reserved-prefix check. `uiMiddleware` is installed directly as the `http.Server`
+  Handler (not behind an `http.ServeMux`), and net/http does not itself collapse duplicate
+  leading slashes or resolve `.`/`..` segments in `r.URL.Path` — that normalization is
+  `ServeMux`-specific. Without cleaning first, a request to `//v1/pipelines` would fail the
+  literal `/v1`-prefix check and be misrouted to the SPA fallback instead of the reserved API
+  path. Closed with `TestUIMiddleware_PathNormalization_NotBypassed` and additional
+  `TestIsReservedAPIPath` cases in `pkg/conduit/ui_test.go` (`//v1/pipelines`, `/v1/../v1/pipelines`,
+  etc.) — this was the one open question flagged in review.
+- **Embedded `conduit-ui` commit:** `f3862074354b7ce5ae204270319d8029c8b86f81` (`conduit-ui`
+  `main`, includes UI-1 through UI-6 — fleet view, pipeline detail + topology, live record flow,
+  per-node metrics badges, and start/stop operate controls). Supersedes the bootstrap pin
+  `5e7ad691b2c1627e1f61b84cf1fcd366673f6900` (UI-1/2/3 only). `make ui` re-embeds after each
   later slice lands, each its own reviewed commit to `pkg/web/ui/dist/`.
 
 ## Related

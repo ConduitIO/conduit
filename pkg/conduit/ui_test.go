@@ -46,6 +46,17 @@ func TestIsReservedAPIPath(t *testing.T) {
 		{"/pipelines/123", false},
 		{"/fleet", false},
 		{"/assets/main.js", false},
+		// path.Clean normalization: net/http does not collapse duplicate
+		// slashes or resolve dot-segments in r.URL.Path on its own (that's
+		// ServeMux-specific behavior), and uiMiddleware sits directly on the
+		// raw http.Server. Without normalizing first, these would slip past
+		// the literal prefix check and be misrouted to the SPA.
+		{"//v1/pipelines", true},
+		{"//v1", true},
+		{"/v1/../v1/pipelines", true},
+		{"/v1/../secret", false}, // resolves clear of /v1 - correctly not reserved
+		{"//openapi/", true},
+		{"//healthz", true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -183,6 +194,51 @@ func TestUIMiddleware_NonGET_FallsThroughToAPI(t *testing.T) {
 	is.Equal(got.status, http.StatusNotFound) // stub's default for "/"
 	is.True(strings.Contains(got.contentType, "json"))
 	is.Equal(reached, []string{"/"})
+}
+
+// TestUIMiddleware_PathNormalization_NotBypassed proves the robustness fix
+// closing the review's open question: net/http does not clean r.URL.Path
+// (no collapsing of duplicate slashes, no dot-segment resolution) before
+// uiMiddleware sees a request, since uiMiddleware is installed directly as
+// the http.Server's Handler rather than behind an http.ServeMux (see
+// runtime.go). A request like "//v1/pipelines" therefore arrives with a
+// literal double leading slash. Before path.Clean was added to
+// isReservedAPIPath, this failed the "/v1"-prefix check and fell through to
+// the SPA fallback instead of the reserved API path. This test proves the
+// fix: every one of these variants must still reach the API handler (JSON,
+// never SPA HTML) exactly like its canonical form does.
+func TestUIMiddleware_PathNormalization_NotBypassed(t *testing.T) {
+	is := is.New(t)
+	var reached []string
+	inner := stubAPIHandler(&reached)
+	wrapped := uiMiddleware(context.Background(), inner, true, log.Nop())
+
+	bypassAttempts := []string{
+		"//v1/pipelines",
+		"//v1/does-not-exist",
+		"/v1/../v1/pipelines",
+		"//openapi/",
+		"//healthz",
+	}
+	for _, p := range bypassAttempts {
+		t.Run(p, func(t *testing.T) {
+			reached = nil
+			got := doGet(t, wrapped, http.MethodGet, p)
+			is.True(!strings.Contains(got.body, "<html")) // never the SPA
+			is.True(len(reached) == 1)                    // reached the API handler, not short-circuited to the UI
+		})
+	}
+
+	// A dot-segment path that resolves clear of every reserved prefix is the
+	// converse case: it correctly falls through to the SPA, same as any
+	// other unclaimed client-side route.
+	t.Run("/v1/../fleet", func(t *testing.T) {
+		reached = nil
+		got := doGet(t, wrapped, http.MethodGet, "/v1/../fleet")
+		is.Equal(got.status, http.StatusOK)
+		is.True(strings.Contains(got.contentType, "text/html"))
+		is.True(len(reached) == 0)
+	})
 }
 
 // TestUIMiddleware_Disabled_LeavesEverythingToTheAPIHandler is the disable

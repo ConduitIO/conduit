@@ -17,6 +17,7 @@ package conduit
 import (
 	"context"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -51,7 +52,17 @@ var reservedAPIPaths = []string{
 // isReservedAPIPath reports whether p is, or is nested under, one of
 // reservedAPIPaths (exact match or a "/"-bounded prefix, so "/v1" matches
 // but "/v1foo" does not).
+//
+// p is normalized with path.Clean first. uiMiddleware is installed directly
+// as the http.Server's Handler (see runtime.go), not behind an
+// http.ServeMux — net/http itself never collapses duplicate leading slashes
+// or resolves "." / ".." segments in r.URL.Path (that normalization is
+// ServeMux-specific). Without cleaning, a request to "//v1/pipelines" would
+// fail the literal "/v1"-prefix check (it starts with "//", not "/v1") and
+// be misrouted to the SPA fallback instead of the reserved API path. See
+// TestUIMiddleware_PathNormalization_NotBypassed in ui_test.go.
 func isReservedAPIPath(p string) bool {
+	p = path.Clean(p)
 	for _, prefix := range reservedAPIPaths {
 		if p == prefix || strings.HasPrefix(p, prefix+"/") {
 			return true
