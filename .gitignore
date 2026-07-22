@@ -35,6 +35,12 @@ conduit.db
 .DS_Store
 
 dist/
+# pkg/web/ui/dist/ is a deliberate exception: it's the built conduit-ui SPA,
+# embedded via go:embed (pkg/web/ui) and committed so the binary is
+# reproducible without a Node toolchain at conduit build time. Reproduce it
+# with `make ui` (see the Makefile target's comment for the pinned commit).
+!pkg/web/ui/dist/
+!pkg/web/ui/dist/**
 
 # Examples
 /examples/processors/file_destination.txt

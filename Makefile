@@ -55,6 +55,37 @@ lint:
 run:
 	go run ./cmd/conduit/main.go
 
+# ui reproduces pkg/web/ui/dist/ from a checkout of the separate conduit-ui
+# repo (https://github.com/ConduitIO/conduit-ui), so it is a deliberate,
+# reviewed re-embed step, not part of the default build. Usage:
+#   make ui UI_REPO=/path/to/conduit-ui
+# or, to clone a specific ref fresh:
+#   make ui UI_REF=<commit-or-tag>
+# UI_REF/UI_REPO default to a fresh clone of main — always pass UI_REF (or a
+# checked-out UI_REPO) when re-embedding for a release, so the pin is
+# intentional and recorded in the commit message, not "whatever main was."
+UI_REPO ?=
+UI_REF ?= main
+.PHONY: ui
+ui:
+	@set -e; \
+	if [ -n "$(UI_REPO)" ]; then \
+		src="$(UI_REPO)"; \
+		echo "==> using existing checkout at $$src"; \
+	else \
+		src=$$(mktemp -d); \
+		echo "==> cloning conduit-ui@$(UI_REF) into $$src"; \
+		git clone --quiet --depth 1 --branch $(UI_REF) https://github.com/ConduitIO/conduit-ui "$$src"; \
+	fi; \
+	( cd "$$src" && npm ci && npm run build ); \
+	rm -rf pkg/web/ui/dist; \
+	mkdir -p pkg/web/ui/dist; \
+	cp -R "$$src"/dist/. pkg/web/ui/dist/; \
+	find pkg/web/ui/dist -name '*.map' -delete; \
+	commit=$$(cd "$$src" && git rev-parse HEAD); \
+	echo "==> embedded conduit-ui@$$commit into pkg/web/ui/dist (source maps stripped)"; \
+	echo "    record this commit in the PR/commit message that updates dist/"
+
 .PHONY: proto-generate
 proto-generate:
 	cd proto && buf generate

@@ -791,6 +791,10 @@ func (r *Runtime) serveHTTPAPI(
 		}
 	}
 	handler := buildAPIHandler(ctx, gwmux, allowedOrigins, r.logger)
+	// UI-7: mount the embedded built-in UI at "/", last, so it can never
+	// shadow any route above (see pkg/conduit/ui.go and
+	// docs/design-documents/20260713-greenfield-built-in-ui.md §7).
+	handler = uiMiddleware(ctx, handler, r.Config.API.HTTP.UI.Enabled, r.logger)
 
 	addr, err := r.serveHTTP(
 		ctx,

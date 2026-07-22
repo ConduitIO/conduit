@@ -27,7 +27,13 @@
   - `processor` - Code regarding processors, including processor store, processor service, running processor instances.
   - `provisioning` - Exposes a provisioning service that can be used to provision Conduit resources.
   - `schemaregistry` - Code regarding the schema registry.
-  - `web` - Everything related to Conduit APIs or hosted pages like the UI or Swagger.
+  - `web` - Everything related to Conduit's hosted pages. Currently `web/ui`: the
+      `go:embed`-ded, built-in web UI (observe + operate) served at `/` by `conduit run`,
+      gated by `api.http.ui.enabled`. See
+      `docs/design-documents/20260713-greenfield-built-in-ui.md` §7 and `pkg/conduit/ui.go`
+      for the routing/disable contract. The Swagger UI (`pkg/http/openapi`) predates this
+      convention and hasn't been moved here — don't invent a second location for a future
+      hosted page; extend `web` instead.
 
 Other folders that don't contain Go code:
 
@@ -35,4 +41,8 @@ Other folders that don't contain Go code:
 - `proto` - Protobuf files (e.g. gRPC API definition).
 - `scripts` - Contains scripts that are useful for development.
 - `test` - Contains configurations needed for integration tests.
-- `ui` - A subproject containing the web UI for Conduit.
+
+Note: there is no `ui/` subproject in this repository. The web UI's source lives in the
+separate [`ConduitIO/conduit-ui`](https://github.com/ConduitIO/conduit-ui) repo (a greenfield
+rebuild — see the design doc above); this repo only holds its _built_ output, embedded under
+`pkg/web/ui/dist/` and reproduced with `make ui`.
