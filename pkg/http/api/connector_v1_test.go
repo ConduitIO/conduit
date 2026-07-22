@@ -67,7 +67,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				},
 				Config: &apiv1.Connector_Config{
 					Name:     source.Config.Name,
-					Settings: source.Config.Settings,
+					Settings: wantRedactedSettings(source.Config.Settings),
 				},
 				Type:         apiv1.Connector_Type(source.Type),
 				Plugin:       source.Plugin,
@@ -86,7 +86,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				},
 				Config: &apiv1.Connector_Config{
 					Name:     destination.Config.Name,
-					Settings: destination.Config.Settings,
+					Settings: wantRedactedSettings(destination.Config.Settings),
 				},
 				Type:         apiv1.Connector_Type(destination.Type),
 				Plugin:       destination.Plugin,
@@ -141,7 +141,7 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 				},
 				Config: &apiv1.Connector_Config{
 					Name:     source.Config.Name,
-					Settings: source.Config.Settings,
+					Settings: wantRedactedSettings(source.Config.Settings),
 				},
 				Type:         apiv1.Connector_Type(source.Type),
 				Plugin:       source.Plugin,
@@ -180,6 +180,14 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 
 	csMock.EXPECT().Create(ctx, source.Type, source.Plugin, source.PipelineID, source.Config).Return(source, nil).Times(1)
 
+	// reqConfig is the unredacted config the client sends in the request; the
+	// API never redacts inbound Config, only what it hands back (see want,
+	// below).
+	reqConfig := &apiv1.Connector_Config{
+		Name:     source.Config.Name,
+		Settings: source.Config.Settings,
+	}
+
 	now := time.Now()
 	want := &apiv1.CreateConnectorResponse{Connector: &apiv1.Connector{
 		Id: source.ID,
@@ -188,7 +196,7 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 		},
 		Config: &apiv1.Connector_Config{
 			Name:     source.Config.Name,
-			Settings: source.Config.Settings,
+			Settings: wantRedactedSettings(source.Config.Settings),
 		},
 		Type:         apiv1.Connector_Type(source.Type),
 		Plugin:       source.Plugin,
@@ -204,7 +212,7 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 			Type:       want.Connector.Type,
 			Plugin:     want.Connector.Plugin,
 			PipelineId: want.Connector.PipelineId,
-			Config:     want.Connector.Config,
+			Config:     reqConfig,
 		},
 	)
 
@@ -364,7 +372,7 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 		},
 		Config: &apiv1.Connector_Config{
 			Name:     source.Config.Name,
-			Settings: source.Config.Settings,
+			Settings: wantRedactedSettings(source.Config.Settings),
 		},
 		Type:         apiv1.Connector_Type(source.Type),
 		Plugin:       source.Plugin,
@@ -410,6 +418,14 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 
 	csMock.EXPECT().Update(ctx, before.ID, after.Plugin, after.Config).Return(after, nil).Times(1)
 
+	// reqConfig is the unredacted config the client sends in the request; the
+	// API never redacts inbound Config, only what it hands back (see want,
+	// below).
+	reqConfig := &apiv1.Connector_Config{
+		Name:     after.Config.Name,
+		Settings: after.Config.Settings,
+	}
+
 	now := time.Now()
 	want := &apiv1.UpdateConnectorResponse{Connector: &apiv1.Connector{
 		Id: after.ID,
@@ -418,7 +434,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 		},
 		Config: &apiv1.Connector_Config{
 			Name:     after.Config.Name,
-			Settings: after.Config.Settings,
+			Settings: wantRedactedSettings(after.Config.Settings),
 		},
 		Type:         apiv1.Connector_Type(after.Type),
 		Plugin:       after.Plugin,
@@ -432,7 +448,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 		ctx,
 		&apiv1.UpdateConnectorRequest{
 			Id:     want.Connector.Id,
-			Config: want.Connector.Config,
+			Config: reqConfig,
 			Plugin: want.Connector.Plugin,
 		},
 	)

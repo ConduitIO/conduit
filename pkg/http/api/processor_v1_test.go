@@ -87,7 +87,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Id:     prs[0].ID,
 				Plugin: prs[0].Plugin,
 				Config: &apiv1.Processor_Config{
-					Settings: prs[0].Config.Settings,
+					Settings: wantRedactedSettings(prs[0].Config.Settings),
 				},
 				Parent: &apiv1.Processor_Parent{
 					Id:   prs[0].Parent.ID,
@@ -101,7 +101,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Id:     prs[1].ID,
 				Plugin: prs[1].Plugin,
 				Config: &apiv1.Processor_Config{
-					Settings: prs[1].Config.Settings,
+					Settings: wantRedactedSettings(prs[1].Config.Settings),
 				},
 				Parent: &apiv1.Processor_Parent{
 					Id:   prs[1].Parent.ID,
@@ -195,7 +195,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:     prs[0].ID,
 				Plugin: prs[0].Plugin,
 				Config: &apiv1.Processor_Config{
-					Settings: prs[0].Config.Settings,
+					Settings: wantRedactedSettings(prs[0].Config.Settings),
 				},
 				Parent: &apiv1.Processor_Parent{
 					Id:   prs[0].Parent.ID,
@@ -209,7 +209,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:     prs[2].ID,
 				Plugin: prs[2].Plugin,
 				Config: &apiv1.Processor_Config{
-					Settings: prs[2].Config.Settings,
+					Settings: wantRedactedSettings(prs[2].Config.Settings),
 				},
 				Parent: &apiv1.Processor_Parent{
 					Id:   prs[2].Parent.ID,
@@ -222,7 +222,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:     prs[3].ID,
 				Plugin: prs[3].Plugin,
 				Config: &apiv1.Processor_Config{
-					Settings: prs[3].Config.Settings,
+					Settings: wantRedactedSettings(prs[3].Config.Settings),
 				},
 				Parent: &apiv1.Processor_Parent{
 					Id:   prs[3].Parent.ID,
@@ -269,11 +269,18 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	}
 	psMock.EXPECT().Create(ctx, pr.Plugin, pr.Parent, config, pr.Condition).Return(pr, nil).Times(1)
 
+	// reqConfig is the unredacted config the client sends in the request; the
+	// API never redacts inbound Config, only what it hands back (see want,
+	// below).
+	reqConfig := &apiv1.Processor_Config{
+		Settings: pr.Config.Settings,
+	}
+
 	want := &apiv1.CreateProcessorResponse{Processor: &apiv1.Processor{
 		Id:     pr.ID,
 		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
-			Settings: pr.Config.Settings,
+			Settings: wantRedactedSettings(pr.Config.Settings),
 		},
 		Parent: &apiv1.Processor_Parent{
 			Id:   pr.Parent.ID,
@@ -289,7 +296,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		&apiv1.CreateProcessorRequest{
 			Plugin:    want.Processor.Plugin,
 			Parent:    want.Processor.Parent,
-			Config:    want.Processor.Config,
+			Config:    reqConfig,
 			Condition: want.Processor.Condition,
 		},
 	)
@@ -327,7 +334,7 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 		Id:     pr.ID,
 		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
-			Settings: pr.Config.Settings,
+			Settings: wantRedactedSettings(pr.Config.Settings),
 		},
 		Parent: &apiv1.Processor_Parent{
 			Id:   pr.Parent.ID,
@@ -374,11 +381,18 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	}
 	psMock.EXPECT().Update(ctx, pr.ID, pr.Plugin, config).Return(pr, nil).Times(1)
 
+	// reqConfig is the unredacted config the client sends in the request; the
+	// API never redacts inbound Config, only what it hands back (see want,
+	// below).
+	reqConfig := &apiv1.Processor_Config{
+		Settings: pr.Config.Settings,
+	}
+
 	want := &apiv1.UpdateProcessorResponse{Processor: &apiv1.Processor{
 		Id:     pr.ID,
 		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
-			Settings: pr.Config.Settings,
+			Settings: wantRedactedSettings(pr.Config.Settings),
 		},
 		Parent: &apiv1.Processor_Parent{
 			Id:   pr.Parent.ID,
@@ -393,7 +407,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		&apiv1.UpdateProcessorRequest{
 			Id:     want.Processor.Id,
 			Plugin: want.Processor.Plugin,
-			Config: want.Processor.Config,
+			Config: reqConfig,
 		},
 	)
 

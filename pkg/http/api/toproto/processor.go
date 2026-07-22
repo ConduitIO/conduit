@@ -39,9 +39,17 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 	}
 }
 
+// ProcessorConfig converts a processor.Config to its wire representation.
+//
+// Invariant (secret redaction): Settings can contain credentials (e.g. an
+// HTTP processor's Authorization header, an API key for a third-party
+// enrichment call). Since conduit-commons has no per-parameter secret marker
+// yet, every value is redacted to "***" (deny-by-default) — see
+// redactSettings for the full rationale. Keys stay visible; only values are
+// masked.
 func ProcessorConfig(in processor.Config) *apiv1.Processor_Config {
 	return &apiv1.Processor_Config{
-		Settings: in.Settings,
+		Settings: redactSettings(in.Settings),
 		Workers:  int32(in.Workers), //nolint:gosec // no risk of overflow
 	}
 }
