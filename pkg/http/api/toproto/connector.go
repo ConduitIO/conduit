@@ -49,10 +49,17 @@ func Connector(in *connector.Instance) *apiv1.Connector {
 	return apiConnector
 }
 
+// ConnectorConfig converts a connector.Config to its wire representation.
+//
+// Invariant (secret redaction): Settings routinely contains credentials
+// (DB passwords, SASL creds, access keys). Since conduit-commons has no
+// per-parameter secret marker yet, every value is redacted to "***"
+// (deny-by-default) — see redactSettings for the full rationale. Keys stay
+// visible; only values are masked.
 func ConnectorConfig(in connector.Config) *apiv1.Connector_Config {
 	return &apiv1.Connector_Config{
 		Name:     in.Name,
-		Settings: in.Settings,
+		Settings: redactSettings(in.Settings),
 	}
 }
 

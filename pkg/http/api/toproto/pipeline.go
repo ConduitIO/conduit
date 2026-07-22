@@ -79,10 +79,17 @@ func PipelineStoppedReason(in pipeline.Status) apiv1.Pipeline_State_StoppedReaso
 	}
 }
 
+// PipelineDLQ converts a pipeline.DLQ to its wire representation.
+//
+// Invariant (secret redaction): Settings routinely contains credentials for
+// the DLQ destination plugin. Since conduit-commons has no per-parameter
+// secret marker yet, every value is redacted to "***" (deny-by-default) —
+// see redactSettings for the full rationale. Keys stay visible; only values
+// are masked.
 func PipelineDLQ(in pipeline.DLQ) *apiv1.Pipeline_DLQ {
 	return &apiv1.Pipeline_DLQ{
 		Plugin:   in.Plugin,
-		Settings: in.Settings,
+		Settings: redactSettings(in.Settings),
 		//nolint:gosec // no risk of overflow, existing pipeline that's already been validated
 		WindowSize: uint64(in.WindowSize),
 		//nolint:gosec // no risk of overflow, existing pipeline that's already been validated
