@@ -122,6 +122,9 @@ type auditResult struct {
 }
 
 func (c *AuditCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, error) {
+	if err := guardTrustAnchors(); err != nil {
+		return cecdysis.Outcome{}, err
+	}
 	maxStaleness := c.flags.MaxStaleness
 	if maxStaleness == 0 {
 		maxStaleness = c.Cfg.Install.MaxStaleness

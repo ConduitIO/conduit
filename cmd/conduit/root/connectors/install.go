@@ -216,6 +216,9 @@ func (c *InstallCommand) Args(args []string) error {
 func (c *InstallCommand) ResultCommand() string { return "connectors.install" }
 
 func (c *InstallCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, error) {
+	if err := guardTrustAnchors(); err != nil {
+		return cecdysis.Outcome{}, err
+	}
 	verifier := &registry.TrustedVerifier{
 		Anchors:      defaultTrustAnchors,
 		StatePath:    registry.IndexStatePath(c.Cfg.Connectors.Path),

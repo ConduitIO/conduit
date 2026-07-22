@@ -83,4 +83,14 @@ var (
 	// CodeDownloadFailed is raised on a non-2xx artifact download, a
 	// redirect loop, or a connection reset.
 	CodeDownloadFailed = conduiterr.Register("registry.download_failed", codes.Unavailable)
+	// CodeTrustAnchorsUnavailable is raised when this conduit build's
+	// compiled-in registry trust anchors could not be loaded (the embedded
+	// public keys are missing or unparseable) — a build/release defect, not a
+	// normal expired-anchor condition. It is codes.Internal (not the user's
+	// input to fix) and machine-signals "reinstall a release build of
+	// conduit," never "retry". Distinct from index.CodeTrustAnchorExpired,
+	// which means the build HAS anchors but the fetched index was signed by a
+	// key not among them. Verification never proceeds when this is raised —
+	// it can only make installs fail closed, never open.
+	CodeTrustAnchorsUnavailable = conduiterr.Register("registry.trust_anchors_unavailable", codes.Internal)
 )

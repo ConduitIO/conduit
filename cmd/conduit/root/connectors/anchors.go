@@ -22,6 +22,8 @@ import (
 	"io/fs"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/registry"
 	"github.com/conduitio/conduit/pkg/registry/index"
 )
 
@@ -45,25 +47,45 @@ const (
 // registry.TrustedVerifier by install/audit/bundle.
 //
 // It is populated by init() from the embedded PEM files. If those files are
-// absent (a build that predates the bootstrap ceremony) or fail to parse,
-// init leaves this zero — and every real index then fails closed with
-// registry.trust_anchor_expired, the correct pre-bootstrap behavior. A
-// corrupt embedded key can never ship silently: TestEmbeddedTrustAnchorsParse
-// is a CI guard that the real embedded files parse into a non-empty anchor
-// set. We deliberately do NOT distinguish "missing/corrupt build" from
-// "expired anchor" in the CLI error: both fail closed, the distinction adds
-// control-flow risk, and the parse-guard test already prevents shipping a
-// broken embed. Tests override the anchors via SetDefaultTrustAnchorsForTest
-// (export_test.go).
+// absent or fail to parse, init leaves this zero and records errAnchorLoad —
+// install/audit/bundle then refuse up front with a clear
+// registry.trust_anchors_unavailable rather than letting the operator chase a
+// generic trust_anchor_expired. A corrupt embedded key can never ship
+// silently: TestEmbeddedTrustAnchorsParse is a CI guard that the real embedded
+// files parse into the expected anchor set. Tests override the anchors via
+// SetDefaultTrustAnchorsForTest (export_test.go).
 var defaultTrustAnchors index.TrustAnchors
 
+// errAnchorLoad records a failure to load the embedded anchor PEMs. Non-nil
+// only on a broken/anchor-stripped build (never in a normal release, where the
+// two PEMs are embedded and CI-verified). It NEVER permits skipping
+// verification — see guardTrustAnchors. Parsing happens here, not in a way
+// that could panic the binary, so unrelated commands (e.g. `conduit run`) are
+// unaffected by a bad embed.
+var errAnchorLoad error
+
 func init() {
-	// On error (e.g. a build that predates the bootstrap ceremony, so the PEM
-	// files are absent) leave defaultTrustAnchors zero => fail closed, never
-	// fail open, and never panic an unrelated command like `conduit run`.
-	if anchors, err := loadEmbeddedTrustAnchors(trustAnchorFS); err == nil {
-		defaultTrustAnchors = anchors
+	anchors, err := loadEmbeddedTrustAnchors(trustAnchorFS)
+	if err != nil {
+		errAnchorLoad = err
+		return // leave defaultTrustAnchors zero => fail closed, never fail open
 	}
+	defaultTrustAnchors = anchors
+}
+
+// guardTrustAnchors returns a clear, machine-actionable error when this build's
+// embedded trust anchors could not be loaded. install/audit/bundle call it
+// before constructing the verifier so a broken build reports
+// registry.trust_anchors_unavailable ("reinstall conduit") instead of a
+// generic expired-anchor message. A load failure can only block — it never
+// lets an unverified install through.
+func guardTrustAnchors() error {
+	if errAnchorLoad != nil {
+		return conduiterr.Wrap(registry.CodeTrustAnchorsUnavailable,
+			"this conduit build has no usable registry trust anchors (a build/release defect — reinstall a release build of conduit); connector installation cannot verify indexes without them",
+			errAnchorLoad)
+	}
+	return nil
 }
 
 // loadEmbeddedTrustAnchors reads the root and freshness anchor PEMs from fsys

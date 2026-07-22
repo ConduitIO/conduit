@@ -26,6 +26,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/registry"
 	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/matryer/is"
 )
@@ -163,4 +166,22 @@ func TestEmbeddedTrustAnchorsParse(t *testing.T) {
 	_, freshPinned := anchors.Freshness[prodFreshnessKeyID]
 	is.True(rootPinned)  // the embedded root key must be exactly the ceremony-minted one
 	is.True(freshPinned) // the embedded freshness key must be exactly the ceremony-minted one
+}
+
+func TestGuardTrustAnchors(t *testing.T) {
+	is := is.New(t)
+
+	// Normal (release) build: anchors loaded, no error, guard passes.
+	is.NoErr(guardTrustAnchors())
+
+	// Broken/anchor-stripped build: guard returns a distinct, coded refusal.
+	prev := errAnchorLoad
+	errAnchorLoad = cerrors.New("simulated missing embed")
+	defer func() { errAnchorLoad = prev }()
+
+	err := guardTrustAnchors()
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, registry.CodeTrustAnchorsUnavailable) // machine-actionable "reinstall conduit", not a generic expired-anchor
 }

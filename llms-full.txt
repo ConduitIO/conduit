@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (76)
+## 3. Error codes (77)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -676,6 +676,7 @@ Author: Meroxa, Inc.
 | `registry.provenance_invalid` | PermissionDenied | CodeProvenanceInvalid is raised when the SLSA provenance's subject-digest match or builder.id/configSource.uri binding fails (trust.ErrProvenanceInvalid). |
 | `registry.schema_too_new` | FailedPrecondition | CodeSchemaTooNew is raised when payload.schemaVersion exceeds the highest this build was compiled to understand. |
 | `registry.trust_anchor_expired` | FailedPrecondition | CodeTrustAnchorExpired is raised when no keyId in signatures[] matches any of this build's compiled-in trust anchors at all — the "upgrade Conduit" case, distinct from CodeIndexIntegrity's "recognized key, verification failed". |
+| `registry.trust_anchors_unavailable` | Internal | CodeTrustAnchorsUnavailable is raised when this conduit build's compiled-in registry trust anchors could not be loaded (the embedded public keys are missing or unparseable) — a build/release defect, not a normal expired-anchor condition. It is codes.Internal (not the user's input to fix) and machine-signals "reinstall a release build of conduit," never "retry". Distinct from index.CodeTrustAnchorExpired, which means the build HAS anchors but the fetched index was signed by a key not among them. Verification never proceeds when this is raised — it can only make installs fail closed, never open. |
 | `registry.unsigned` | PermissionDenied | CodeUnsigned is raised when there is no valid signature for the pinned identity at all (trust.ErrUnsigned). |
 | `registry.unsigned_install_disabled_by_policy` | PermissionDenied | CodeUnsignedInstallDisabledByPolicy is raised when operator policy (install.allowUnsigned: false) hard-disables the gate regardless of flag/TTY/env var. |
 | `registry.unsigned_install_non_interactive` | PermissionDenied | CodeUnsignedInstallNonInteractive is raised when --allow-unsigned was requested in a non-interactive context (no TTY, CI=true, or MCP-originated) without the escape-hatch env var also set, or when an interactive typed confirmation was not given. |

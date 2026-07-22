@@ -16,18 +16,27 @@ package connectors
 
 import "github.com/conduitio/conduit/pkg/registry/index"
 
-// SetDefaultTrustAnchorsForTest overrides defaultTrustAnchors (the compiled-
-// in Conduit registry root/freshness keys — empty in this build, pending the
-// bootstrap ceremony, plan-v2 §9) for install_test.go's happy-path CLI
-// tests, which need to verify against a locally-generated, test-only
-// signing key rather than production anchors that don't exist yet. Restores
-// the previous value via the returned func, following the same pattern as
+// SetDefaultTrustAnchorsForTest overrides defaultTrustAnchors (the compiled-in
+// Conduit registry root/freshness keys) for install_test.go's happy-path CLI
+// tests, which need to verify against a locally-generated, test-only signing
+// key rather than the embedded production anchors. Restores the previous value
+// via the returned func, following the same pattern as
 // pkg/registry/export_test.go's SetChaosHookForTest. Being a _test.go file,
 // none of this compiles into a production build.
 func SetDefaultTrustAnchorsForTest(anchors index.TrustAnchors) (restore func()) {
 	prev := defaultTrustAnchors
 	defaultTrustAnchors = anchors
 	return func() { defaultTrustAnchors = prev }
+}
+
+// SetAnchorLoadErrForTest forces the "embedded anchors failed to load" state
+// (a broken/anchor-stripped build) so the CLI's trust_anchors_unavailable
+// refusal can be exercised end to end without actually corrupting the embed.
+// Restores the previous value via the returned func.
+func SetAnchorLoadErrForTest(err error) (restore func()) {
+	prev := errAnchorLoad
+	errAnchorLoad = err
+	return func() { errAnchorLoad = prev }
 }
 
 // UnsignedInstallEnvVarForTest exposes unsignedInstallEnvVar (the
