@@ -56,6 +56,13 @@ linters:
         PolicyBypass:
           files:
             - "!**/pkg/registry/install.go"
+            # bundle.go is the second (and, as of PR-4, only other)
+            # sanctioned call site: it calls policy.DecideStaleBundle for
+            # the --allow-stale-bundle gate (plan-v2/step5 §7 step 3,
+            # gated exactly like --allow-unsigned per DeVaris's
+            # ratification) the same way install.go calls policy.Decide for
+            # --allow-unsigned.
+            - "!**/pkg/registry/bundle.go"
             - "!**/pkg/registry/policy/**"
             # Test files may import policy to assert against its exported
             # Code*/Decision types (the "confirms wiring" test pattern,

@@ -157,6 +157,12 @@ type Config struct {
 		// old a cryptographically-verified index's timestamp may be before
 		// install/audit refuse it as stale.
 		MaxStaleness time.Duration `long:"install.max-staleness" mapstructure:"max-staleness" usage:"maximum age of a verified registry index before it is considered stale"`
+		// AllowStaleBundle is the operator policy gate for `conduit
+		// connectors install --bundle --allow-stale-bundle` (PR-4,
+		// plan-v2/step5 §7 step 3), gated identically to AllowUnsigned above
+		// per DeVaris's ratification: false hard-disables the entire
+		// --allow-stale-bundle path regardless of flag/TTY/env var.
+		AllowStaleBundle bool `long:"install.allow-stale-bundle" mapstructure:"allow-stale-bundle" usage:"operator policy: permit --allow-stale-bundle offline connector installs at all (false hard-disables regardless of flag/TTY/env var)"`
 	}
 
 	Processors struct {
@@ -258,6 +264,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.Install.AllowUnsigned = false
 	cfg.Install.MaxStaleness = index.DefaultMaxStaleness
+	cfg.Install.AllowStaleBundle = false
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
 

@@ -18,6 +18,12 @@ import (
 	"github.com/conduitio/ecdysis"
 )
 
+// envPrefix is the shared ecdysis.Config.EnvPrefix every command in this
+// package that reads conduit.Config uses (e.g. CONDUIT_CONNECTORS_PATH) —
+// pulled out once so goconst doesn't flag five separate string literals
+// across install.go/uninstall.go/audit.go/bundle.go/list.go.
+const envPrefix = "CONDUIT"
+
 var (
 	_ ecdysis.CommandWithDocs        = (*ConnectorsCommand)(nil)
 	_ ecdysis.CommandWithSubCommands = (*ConnectorsCommand)(nil)
@@ -34,6 +40,9 @@ func (c *ConnectorsCommand) SubCommands() []ecdysis.Command {
 		&DescribeCommand{},
 		newNewCommand(),
 		&InstallCommand{},
+		&UninstallCommand{},
+		&AuditCommand{},
+		&BundleCommand{},
 	}
 }
 
