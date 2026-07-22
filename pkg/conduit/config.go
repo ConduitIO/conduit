@@ -88,6 +88,20 @@ type Config struct {
 			CORS struct {
 				AllowedOrigins []string `long:"api.http.cors.allowed-origins" mapstructure:"allowed-origins" usage:"allowed browser CORS origins for the HTTP API and websocket streams; repeatable; exact scheme://host[:port] (no trailing slash). '*' allows any origin but is refused on a non-loopback bind (unauthenticated network-wide access); use exact origins for network deployments"`
 			} `mapstructure:"cors"`
+			// UI gates the embedded built-in web UI (see
+			// docs/design-documents/20260713-greenfield-built-in-ui.md §7).
+			// The assets are always compiled into the binary via go:embed
+			// (pkg/web/ui) — this only gates whether the "/" route is
+			// registered, the same route-disable precedent
+			// pkg/http/openapi's swagger UI uses (embed unconditionally,
+			// gate the route). Disabling does not shrink the binary; it
+			// only removes the surface. Default: enabled. The SPA is
+			// mounted last, after every existing route (/v1/*, /openapi/*,
+			// /healthz, /readyz, /metrics), so it can never shadow them —
+			// see pkg/conduit/ui.go and its route-collision test.
+			UI struct {
+				Enabled bool `long:"api.http.ui.enabled" mapstructure:"enabled" usage:"serve the built-in web UI at '/' (observe + operate); the SPA is always embedded in the binary, this only gates the route — disabling removes the surface, not the binary size"`
+			} `mapstructure:"ui"`
 		}
 		GRPC struct {
 			// This is the address where the gRPC API will be served which is shared as a global flag
@@ -210,6 +224,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
+	cfg.API.HTTP.UI.Enabled = true
 	cfg.API.GRPC.Address = ":8084"
 
 	cfg.Log.NewLogger = newLogger

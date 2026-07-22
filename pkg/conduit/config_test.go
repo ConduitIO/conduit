@@ -24,6 +24,16 @@ import (
 	"github.com/matryer/is"
 )
 
+// TestDefaultConfig_UIEnabledByDefault locks in the design doc's stated
+// default (docs/design-documents/20260713-greenfield-built-in-ui.md §7:
+// "observe on by default"): a fresh config serves the embedded UI unless an
+// operator opts out.
+func TestDefaultConfig_UIEnabledByDefault(t *testing.T) {
+	is := is.New(t)
+	cfg := DefaultConfigWithBasePath(t.TempDir())
+	is.True(cfg.API.HTTP.UI.Enabled)
+}
+
 func TestConfig_Validate(t *testing.T) {
 	testCases := []struct {
 		name        string

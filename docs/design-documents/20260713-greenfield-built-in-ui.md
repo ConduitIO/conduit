@@ -341,6 +341,28 @@ UI epic (`conduit-ui` + embed in `conduit`), with **user-testable** ACs:
 Degraded-path richness (transition timestamp, `Recovering` affordance) rides with #2/#3; **repair
 diff-apply (#4b) and DLQ view are gated on prerequisites P5/P6** and descope cleanly if those slip.
 
+## UI-7 implementation notes (embed + serve)
+
+Recorded here per §7 and AC #7, as a release-engineering fact rather than a claim:
+
+- **Disable mechanism chosen: route-disable, not a build tag** (the swagger-ui precedent —
+  `pkg/http/openapi` embeds unconditionally and only the route matters). `api.http.ui.enabled`
+  (env/flag/config-file, default `true`) gates whether `pkg/conduit/ui.go`'s `uiMiddleware` ever
+  looks at a request; the embedded assets are always compiled in via `pkg/web/ui`'s `go:embed`.
+  Disabling removes the surface, not the binary size.
+- **Binary-size delta:** `95,850,034` → `96,131,538` bytes (`go build` of `cmd/conduit`, same
+  ldflags, macOS/arm64) — **+281,504 bytes (+275 KiB, +0.29%)** for the embedded SPA (source maps
+  stripped before embedding; with them the dist/ payload is ~6x larger for zero runtime benefit).
+- **Mux ordering:** implemented as an explicit reserved-path check
+  (`pkg/conduit/ui.go:isReservedAPIPath`) run before the UI handler ever sees a request, rather
+  than relying on grpc-gateway `ServeMux`'s first-registration-match ordering — functionally
+  equivalent to "mount the SPA last," but testable without a live gRPC backend. Covered by the
+  route-collision test in `pkg/conduit/ui_test.go`.
+- **Embedded `conduit-ui` commit:** `5e7ad691b2c1627e1f61b84cf1fcd366673f6900` (`conduit-ui`
+  `main`, includes UI-1/UI-2/UI-3 and a UI-4 streaming-hardening prereq; UI-4's live-flow UI itself,
+  UI-5, UI-6 are not yet merged there). This is a bootstrap pin — `make ui` re-embeds after each
+  later slice lands, each its own reviewed commit to `pkg/web/ui/dist/`.
+
 ## Related
 
 - Phase 1 Execution Plan (v2): `docs/design-documents/20260704-phase-1-execution-plan.md` (§6, §7).
