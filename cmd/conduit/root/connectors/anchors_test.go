@@ -134,11 +134,22 @@ func TestLoadEmbeddedTrustAnchors_MissingRoleFailsClosed(t *testing.T) {
 	is.True(err != nil) // both roles are required; a half-populated anchor set is an error, not a partial success
 }
 
+// Production trust-anchor keyIds minted by the bootstrap ceremony (Gate 2,
+// ConduitIO/conduit-connector-registry root-keygen run 29950357295). Pinned
+// here so an accidental or malicious swap of the embedded PEMs fails CI: a
+// key change is deliberate (rotation) and must update these constants in the
+// same, reviewed PR — never a silent substitution.
+const (
+	prodRootKeyID      = "sha256:d657c2717760931c3771ec151e88fc143642b5c73ce79a3665fbf0f37f009795"
+	prodFreshnessKeyID = "sha256:50bfd2c15ecf3cfa41a220a6a5ab9711309751bbb84688fa574cd05d6b9cf783"
+)
+
 // TestEmbeddedTrustAnchorsParse is the CI guard against shipping a build with a
-// missing or corrupt embedded anchor set. It SKIPS on a build that predates the
-// bootstrap ceremony (the real PEM files not yet committed) and becomes a hard
-// assertion the moment they are — a corrupt/empty embedded key then fails CI
-// here rather than silently degrading every install to fail-closed.
+// missing, corrupt, or swapped embedded anchor set. It SKIPS on a build that
+// predates the bootstrap ceremony (the real PEM files not yet committed) and is
+// a hard assertion once they are — a corrupt/empty/unexpected embedded key
+// fails CI here rather than silently degrading every install to fail-closed (or
+// worse, trusting an unexpected key).
 func TestEmbeddedTrustAnchorsParse(t *testing.T) {
 	is := is.New(t)
 	anchors, err := loadEmbeddedTrustAnchors(trustAnchorFS)
@@ -147,4 +158,9 @@ func TestEmbeddedTrustAnchorsParse(t *testing.T) {
 	}
 	is.True(len(anchors.Roots) > 0)     // at least one root key
 	is.True(len(anchors.Freshness) > 0) // at least one freshness key
+
+	_, rootPinned := anchors.Roots[prodRootKeyID]
+	_, freshPinned := anchors.Freshness[prodFreshnessKeyID]
+	is.True(rootPinned)  // the embedded root key must be exactly the ceremony-minted one
+	is.True(freshPinned) // the embedded freshness key must be exactly the ceremony-minted one
 }
