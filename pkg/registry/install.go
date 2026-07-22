@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/registry/boundedfetch"
 	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/registry/policy"
 	"github.com/conduitio/conduit/pkg/registry/trust"
 )
 
@@ -103,6 +104,41 @@ type InstallOptions struct {
 	// for a different host than the one running `install` is out of
 	// scope).
 	GOOS, GOArch string
+
+	// AllowUnsigned requests skipping SIGNATURE/PROVENANCE verification
+	// only — the sha256 corruption check (CheckCorruption) ALWAYS still
+	// runs regardless of this flag; see downloadVerifyAndInstall. Subject
+	// to policy.Decide's full gate (plan-v2 §6): setting this true does
+	// NOT by itself skip verification — Install is the only call site of
+	// policy.Decide in this codebase (enforced by the PolicyBypass
+	// depguard rule in .golangci.yml), and Decide can still refuse
+	// (CodeUnsignedInstallNonInteractive/CodeUnsignedInstallDisabledByPolicy)
+	// depending on TTY/CIEnv/IsMCP/OperatorAllowUnsigned/EnvVarSet/
+	// TypedConfirmation below.
+	AllowUnsigned bool
+	// TTY, CIEnv, IsMCP, EnvVarSet, and TypedConfirmation are the primitive
+	// signals policy.Context needs, collected by the CLI/MCP layer (which
+	// never imports pkg/registry/policy directly — see the PolicyBypass
+	// depguard rule) and passed through here. Only consulted when
+	// AllowUnsigned is true.
+	TTY               bool
+	CIEnv             bool
+	IsMCP             bool
+	EnvVarSet         bool
+	TypedConfirmation bool
+	// OperatorAllowUnsigned is the operator's install.allow-unsigned config
+	// value (read once at CLI startup, never re-read per request) — false
+	// hard-disables the AllowUnsigned path regardless of every other field
+	// above. Named distinctly from AllowUnsigned (the per-invocation
+	// request) so the two are never confused: AllowUnsigned is "the caller
+	// is asking for this," OperatorAllowUnsigned is "the operator permits
+	// asking at all."
+	OperatorAllowUnsigned bool
+
+	// UnsignedInstallsLogPath overrides the default
+	// <ConnectorsPath>/.registry/unsigned-installs.log destination for the
+	// append-only unsigned-install audit trail — a test seam.
+	UnsignedInstallsLogPath string
 }
 
 func (o *InstallOptions) validate() error {
@@ -399,19 +435,28 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 		ArtifactFile: finalName, Digest: "sha256:" + digestHex, Size: dl.Size,
 		InstalledAt: now, InstalledBy: opts.InstalledBy,
 		SourceIndexVersion: verified.Payload.Index.Version, Source: InstallSourceIndex,
-		Signed: verifyResult.Signed, VerifiedIdentity: verifyResult.VerifiedIdentity, AllowUnsigned: false,
+		Signed: verifyResult.Signed, VerifiedIdentity: verifyResult.VerifiedIdentity, AllowUnsigned: !verifyResult.Signed,
 	}, nil
 }
 
-// runVerificationGate is step 6b: fetch the signature/provenance bundles
-// (bounded, P0-2) and hand the corruption-checked, in-memory digest — never
-// a path — to ArtifactVerifier.
+// runVerificationGate is step 6b/7: normally, fetch the signature/provenance
+// bundles (bounded, P0-2) and hand the corruption-checked, in-memory digest
+// — never a path — to ArtifactVerifier. If opts.AllowUnsigned is set,
+// policy.Decide runs INSTEAD (plan-v2 §4 step 7: "Decide runs before step
+// 6b/6c would otherwise execute... skip step 6 entirely") — Install
+// (this file) is the ONLY call site of policy.Decide in this codebase,
+// enforced by the PolicyBypass depguard rule in .golangci.yml.
 //
-// Invariant (fail-closed by construction): with the production
-// FailClosedVerifier, VerifyArtifact ALWAYS returns
-// ErrVerificationNotConfigured — nothing past this function executes in a
-// normal build.
+// Invariant (fail-closed by construction, PR-1): with the production
+// FailClosedVerifier and AllowUnsigned unset, VerifyArtifact ALWAYS returns
+// ErrVerificationNotConfigured. With the real TrustedVerifier (PR-2), a
+// non-Signed success without going through the AllowUnsigned+policy.Decide
+// path is a programming error refused below, never silently installed.
 func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadResult, resolved *ResolvedVersion, artifact *index.Artifact) (VerifyResult, error) {
+	if opts.AllowUnsigned {
+		return unsignedInstallGate(opts, dl, resolved)
+	}
+
 	ref, err := fetchArtifactRef(ctx, opts, dl.Digest, resolved.Version, artifact)
 	if err != nil {
 		return VerifyResult{}, err
@@ -425,17 +470,68 @@ func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadRe
 	if err != nil {
 		return VerifyResult{}, err
 	}
-	// Second, structural belt-and-suspenders check (plan-v2 §2.2): this PR
-	// has no --allow-unsigned wiring at all (that lands in PR-2), so any
-	// non-error VerifyResult that isn't Signed would mean some future
-	// ArtifactVerifier implementation returned success without actually
-	// authorizing the artifact — refuse rather than silently install.
+	// Second, structural belt-and-suspenders check (plan-v2 §2.2): without
+	// AllowUnsigned (handled above via the ONLY sanctioned skip path,
+	// policy.Decide), any non-error VerifyResult that isn't Signed would
+	// mean some ArtifactVerifier implementation returned success without
+	// actually authorizing the artifact — refuse rather than silently
+	// install.
 	if !verifyResult.Signed {
 		return VerifyResult{}, conduiterr.New(CodeVerificationUnavailable,
 			"artifact verifier returned success without signing the artifact — refusing to install "+
-				"(no --allow-unsigned path exists in this build)")
+				"(this install did not request --allow-unsigned)")
 	}
 	return verifyResult, nil
+}
+
+// unsignedInstallGate is the ONLY code path in this codebase that calls
+// policy.Decide (plan-v2 §6/P1-3, enforced by the PolicyBypass depguard
+// rule in .golangci.yml). On an allowed decision, it appends the mandatory
+// durable audit-log entry (policy.AppendUnsignedInstallEvent) BEFORE
+// returning success — plan-v2 §5's table requires every successful
+// unsigned install to be logged, no exceptions — and returns
+// VerifyResult{Signed: false}, which downloadVerifyAndInstall records
+// verbatim into the manifest's Signed/AllowUnsigned fields.
+func unsignedInstallGate(opts InstallOptions, dl DownloadResult, resolved *ResolvedVersion) (VerifyResult, error) {
+	dec, err := policy.Decide(policy.Context{
+		TTY:               opts.TTY,
+		CIEnv:             opts.CIEnv,
+		IsMCP:             opts.IsMCP,
+		OperatorPolicy:    opts.OperatorAllowUnsigned,
+		EnvVarSet:         opts.EnvVarSet,
+		TypedConfirmation: opts.TypedConfirmation,
+	})
+	if err != nil {
+		return VerifyResult{}, err
+	}
+	if !dec.Allowed() {
+		// Unreachable in practice (Decide returns a non-nil err whenever
+		// Allowed() is false) — fail closed anyway rather than trust that
+		// invariant blindly across a future policy.Decide change.
+		return VerifyResult{}, conduiterr.New(policy.CodeUnsignedInstallNonInteractive,
+			"unsigned connector installation was not approved")
+	}
+
+	auditContext := "non-interactive-env"
+	if opts.TTY && !opts.CIEnv && !opts.IsMCP {
+		auditContext = "tty"
+	}
+	logPath := opts.UnsignedInstallsLogPath
+	if logPath == "" {
+		logPath = unsignedInstallsLogPath(opts.ConnectorsPath)
+	}
+	if err := policy.AppendUnsignedInstallEvent(logPath, policy.UnsignedInstallEvent{
+		Connector:      resolved.Connector.Name,
+		Version:        resolved.Version.Version,
+		ResolvedDigest: fmt.Sprintf("sha256:%x", dl.Digest),
+		Operator:       opts.InstalledBy,
+		Timestamp:      time.Now().UTC(),
+		Context:        auditContext,
+	}); err != nil {
+		return VerifyResult{}, conduiterr.Wrap(conduiterr.CodeInternal, "could not append unsigned-install audit log entry", err)
+	}
+
+	return VerifyResult{Signed: false, VerifiedIdentity: ""}, nil
 }
 
 // extractAndGuard is step 7: extract the single candidate binary, then

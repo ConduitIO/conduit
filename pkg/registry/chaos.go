@@ -32,6 +32,17 @@ const (
 	chaosPointExtractComplete       = "extract-complete"
 	chaosPointPrerenameFDOpened     = "prerename-fd-opened"
 	chaosPointPostRenamePreManifest = "post-rename-pre-manifest"
+	// chaosPointIndexStateBeforeWrite fires in TrustedVerifier.VerifyIndex
+	// (trustverifier.go) immediately before index.SaveState persists the
+	// new rollback high-water mark — PR-2's own kill-mid-write chaos point
+	// (plan-v2 §15.3), analogous in style to the four install-pipeline
+	// points above: injected between "computed what to write" and "make it
+	// durable", not literally mid-syscall (the durability primitive itself,
+	// pkg/foundation/atomicfile.WriteFile's temp+rename, is what actually
+	// provides the no-torn-file guarantee; this point proves a kill here
+	// leaves the OLD index-state.json — or none — completely intact, and
+	// that a subsequent VerifyIndex call still works correctly afterward).
+	chaosPointIndexStateBeforeWrite = "index-state-before-write"
 )
 
 func fireChaos(point string) {

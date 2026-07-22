@@ -20,17 +20,16 @@
 // verification". No other call site may short-circuit pkg/registry/trust
 // directly.
 //
-// In this PR (PR-0), that is a convention, not a guarantee: Decide returns a
-// plain (bool, error), so nothing in the type system stops a caller from
-// writing "allowed := true" and skipping Decide entirely. There is no
-// structural enforcement yet.
-//
-// Structural enforcement lands in PR-2 (once the flag/CLI/MCP wiring that
-// would give it something real to gate exists), via an unexported
-// decision-result type that only Decide can construct, plus a depguard rule
-// in .golangci.yml restricting which package may import trust's
-// sentinel-skip path. Until PR-2 merges, treat "Decide is the only skip
-// point" as a rule contributors must follow, not one the compiler enforces.
+// Structural enforcement (PR-2): Decide returns a Decision — an opaque
+// struct whose only field is unexported, so no package outside policy can
+// construct a Decision reporting Allowed() == true without actually calling
+// Decide. This is a compiler-enforced guarantee, not a naming convention: a
+// caller cannot write "allowed := true" and skip Decide's logic, because
+// there is no accessible zero-cost way to fabricate an "allowed" Decision.
+// On top of that, a depguard rule in .golangci.yml restricts which files
+// may import this package at all (only pkg/registry/install.go and this
+// package's own files/tests) — the two together mean "Decide is the only
+// skip point" is enforced structurally, not just documented.
 //
 // # What ships now vs. later (PR-0 vs PR-2)
 //

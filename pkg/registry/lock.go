@@ -73,6 +73,35 @@ func ManifestLockPath(connectorsPath string) string {
 	return filepath.Join(locksDirPath(connectorsPath), ".manifest.lock")
 }
 
+// indexStateLockPath returns the short-held global lock file guarding
+// index-state.json's read-modify-write critical section
+// (TrustedVerifier.VerifyIndex's LoadState -> CheckRollback/CheckStaleness
+// -> SaveState sequence) — colocated with statePath itself (suffixed
+// ".lock") rather than under locksDirPath, since TrustedVerifier only knows
+// StatePath, not ConnectorsPath.
+//
+// Required for the same reason as ManifestLockPath: index verification runs
+// BEFORE the per-target lock is ever acquired (it is step 1-3 of Install,
+// ahead of AcquireTargetLock at step 4), so two concurrent installs of
+// DIFFERENT connector names — which never contend on separate
+// TargetLocks — still race on this one shared file. Without it, a
+// lost-update race (read N, verify version N+2, write; a concurrent
+// verify of N+1 reads the same stale N, passes its own rollback check
+// against N, and overwrites with N+1) could non-monotonically regress the
+// persisted rollback high-water mark — a real anti-replay weakening found
+// during this PR's adversarial self-review, not a hypothetical.
+func indexStateLockPath(statePath string) string {
+	return statePath + ".lock"
+}
+
+// acquireIndexStateLock acquires the lock guarding statePath's
+// read-modify-write critical section — see indexStateLockPath's doc
+// comment for why this is required in addition to (never instead of)
+// AcquireTargetLock.
+func acquireIndexStateLock(statePath string, timeout time.Duration) (*flock.Flock, error) {
+	return acquireLock(indexStateLockPath(statePath), timeout)
+}
+
 // AcquireTargetLock acquires the per-connector-name install lock,
 // serializing the FULL pipeline (download through manifest write) for two
 // concurrent installs of the SAME connector name. Callers must Unlock the

@@ -14,7 +14,14 @@
 
 package index
 
-import "crypto/ed25519"
+import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+)
 
 // TrustAnchors holds the build-time-fixed root and freshness public keys
 // compiled into the conduit binary (R-1 OQ1/OQ2 resolution: trust anchors
@@ -40,4 +47,20 @@ type TrustAnchors struct {
 	// index.version over byte-identical connectors[]; it never authorizes
 	// content on its own (R-1 OQ3).
 	Freshness map[string]ed25519.PublicKey
+}
+
+// KeyID returns the anchor keyId this package uses for an ed25519 public key:
+// "sha256:<hex fingerprint of the SPKI-encoded public key>" (see TrustAnchors'
+// doc comment). Both the index-build/signing tooling (a sibling repo, per
+// plan-v2 §7) and this package's tests must derive keyIds identically — this
+// is that single shared derivation, exported so test fixtures and (via the
+// pinned module import, plan-v2 §2.5) index-CI tooling never hand-roll their
+// own and risk drifting from what Verify actually expects.
+func KeyID(pub ed25519.PublicKey) (string, error) {
+	spki, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return "", cerrors.Errorf("could not marshal ed25519 public key to SPKI: %w", err)
+	}
+	sum := sha256.Sum256(spki)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }

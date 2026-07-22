@@ -50,8 +50,8 @@ func TestDecide_FullContextMatrix(t *testing.T) {
 								is := is.New(t)
 								wantAllowed, wantCode := expected(ctx)
 
-								gotAllowed, err := policy.Decide(ctx)
-								is.Equal(gotAllowed, wantAllowed)
+								dec, err := policy.Decide(ctx)
+								is.Equal(dec.Allowed(), wantAllowed)
 
 								if wantAllowed {
 									is.NoErr(err)
@@ -158,8 +158,8 @@ func TestDecide_NamedScenarios(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			allowed, err := policy.Decide(tt.ctx)
-			is.Equal(allowed, tt.wantAllowed)
+			dec, err := policy.Decide(tt.ctx)
+			is.Equal(dec.Allowed(), tt.wantAllowed)
 			if tt.wantAllowed {
 				is.NoErr(err)
 				return

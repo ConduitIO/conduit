@@ -31,4 +31,5 @@ const (
 	ChaosPointExtractComplete       = chaosPointExtractComplete
 	ChaosPointPrerenameFDOpened     = chaosPointPrerenameFDOpened
 	ChaosPointPostRenamePreManifest = chaosPointPostRenamePreManifest
+	ChaosPointIndexStateBeforeWrite = chaosPointIndexStateBeforeWrite
 )

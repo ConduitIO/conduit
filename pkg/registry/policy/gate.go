@@ -50,6 +50,24 @@ type Context struct {
 	TypedConfirmation bool
 }
 
+// Decision is the opaque result of Decide (PR-2, plan-v2 §6/P1-3
+// structural enforcement): the ONLY way code can prove "unsigned install is
+// allowed" was actually decided BY Decide, never synthesized elsewhere.
+// Decision's zero value reports Allowed() == false; the allowed field is
+// unexported, so no package other than policy can construct a
+// Decision{allowed: true} literal — this is a compiler-enforced guarantee,
+// not a documentation convention, on top of the depguard rule in
+// .golangci.yml restricting which files may even import this package.
+type Decision struct {
+	allowed bool
+}
+
+// Allowed reports whether Decide determined the unsigned-install path may
+// proceed. The only way to obtain a Decision with Allowed() == true is a
+// call to Decide that itself returned (Decision, nil) — see Decide's doc
+// comment for exactly which Context shapes produce that outcome.
+func (d Decision) Allowed() bool { return d.allowed }
+
 // Decide is the ONLY function in this codebase permitted to return "skip
 // verification" for connector installation (see package doc). It implements
 // plan-v2 §6's behavioral matrix exactly:
@@ -69,31 +87,31 @@ type Context struct {
 // path here uses CodeUnsignedInstallNonInteractive, meaning "this
 // particular attempt didn't clear the gate, but a different context
 // (interactively, or with the env var) might".
-func Decide(ctx Context) (allowed bool, err error) {
+func Decide(ctx Context) (Decision, error) {
 	if !ctx.OperatorPolicy {
-		return false, conduiterr.New(CodeUnsignedInstallDisabledByPolicy,
+		return Decision{}, conduiterr.New(CodeUnsignedInstallDisabledByPolicy,
 			"unsigned connector installation is disabled by operator policy (install.allowUnsigned: false)")
 	}
 
 	if ctx.IsMCP {
-		return false, conduiterr.New(CodeUnsignedInstallNonInteractive,
+		return Decision{}, conduiterr.New(CodeUnsignedInstallNonInteractive,
 			"unsigned connector installation is never permitted from the MCP tool")
 	}
 
 	nonInteractive := !ctx.TTY || ctx.CIEnv
 	if nonInteractive {
 		if ctx.EnvVarSet {
-			return true, nil
+			return Decision{allowed: true}, nil
 		}
-		return false, conduiterr.New(CodeUnsignedInstallNonInteractive,
+		return Decision{}, conduiterr.New(CodeUnsignedInstallNonInteractive,
 			"unsigned connector installation requires an interactive TTY confirmation, or "+
 				"CONDUIT_ALLOW_UNSIGNED_INSTALL=I_UNDERSTAND set in a non-interactive context")
 	}
 
 	// Interactive: TTY, not CI, not MCP.
 	if ctx.TypedConfirmation {
-		return true, nil
+		return Decision{allowed: true}, nil
 	}
-	return false, conduiterr.New(CodeUnsignedInstallNonInteractive,
+	return Decision{}, conduiterr.New(CodeUnsignedInstallNonInteractive,
 		"unsigned connector installation was not confirmed")
 }
