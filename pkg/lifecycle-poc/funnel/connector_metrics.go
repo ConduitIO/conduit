@@ -37,17 +37,24 @@ type ConnectorMetricsImpl struct {
 	histogram metrics.RecordBytesHistogram
 }
 
-func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Type) ConnectorMetricsImpl {
+// NewConnectorMetrics builds the shared connector throughput/latency metrics
+// for one connector instance. componentID is the connector's instance ID
+// (same ID space as the topology nodes and the conduit_inspector_* metrics),
+// recorded via the component_id label so per-node dashboards can attribute
+// throughput to a specific connector instance.
+func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Type, componentID string) ConnectorMetricsImpl {
 	timer := measure.ConnectorExecutionDurationTimer.WithValues(
 		pipelineName,
 		pluginName,
 		strings.ToLower(connType.String()),
+		componentID,
 	)
 
 	histogram := measure.ConnectorBytesHistogram.WithValues(
 		pipelineName,
 		pluginName,
 		strings.ToLower(connType.String()),
+		componentID,
 	)
 
 	return ConnectorMetricsImpl{
