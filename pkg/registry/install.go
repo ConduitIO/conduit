@@ -16,6 +16,7 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"os"
@@ -41,9 +42,9 @@ const DefaultIndexURL = "https://registry.conduit.io/index.json"
 // inclusion proof is normally a few KB; 1 MiB is generous headroom.
 const MaxBundleBytes int64 = 1 * 1024 * 1024
 
-// InstallSourceIndex is the only InstallOptions/ManifestEntry Source value
-// this PR produces. "offline-bundle" is PR-4's scope (offline/air-gapped
-// installs from a locally bundled index snapshot).
+// InstallSourceIndex is the InstallOptions/ManifestEntry Source value for a
+// normal, online install. InstallSourceOfflineBundle (bundle.go, PR-4) is
+// the other.
 const InstallSourceIndex = "index"
 
 // InstallOptions is Install's full configuration.
@@ -360,6 +361,12 @@ func installResolved(ctx context.Context, opts InstallOptions, verified *index.V
 // installResolved, since they're identical regardless of how the entry was
 // produced).
 func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified *index.VerifiedIndex, resolved *ResolvedVersion, artifact *index.Artifact) (ManifestEntry, error) {
+	// Best-effort, non-blocking cache housekeeping (step5 §5): sweep any
+	// orphaned ".tmp-populate-*" directory left by a crash mid-CachePopulate
+	// on a PRIOR install. Never fails or slows this install over a stale
+	// temp directory — errors are swallowed inside CacheSweepTmp itself.
+	CacheSweepTmp(opts.ConnectorsPath, cacheTmpMaxAge)
+
 	// 5. Staging directory: a private (0700), uniquely-named SUBDIRECTORY
 	// of ConnectorsPath — never the OS temp dir. This is required, not
 	// just tidy, so the final os.Rename below is a same-filesystem,
@@ -387,16 +394,31 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 	}
 
 	archivePath := filepath.Join(stagingDir, "artifact.tar.gz")
-	dl, err := Download(ctx, opts.httpClient(), artifact.URL, archivePath, artifact.Size)
+	dl, fromCache, err := stageArtifact(ctx, opts, artifact, archivePath)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
-	fireChaos(chaosPointDownloadComplete)
 
 	// 6a. Corruption check — integrity, not trust (corruption.go). Run
-	// FIRST and SEPARATELY from the verification gate below.
+	// FIRST and SEPARATELY from the verification gate below. Run
+	// unconditionally regardless of fromCache: a cache hit still proves
+	// nothing about the bytes' trustworthiness on its own (see stageArtifact's
+	// doc comment) — it only short-circuits the network fetch.
 	if err := CheckCorruption(dl.Digest, artifact.SHA256); err != nil {
 		return ManifestEntry{}, err
+	}
+
+	// Populate the cache only on a genuine download — a cache hit re-writing
+	// its own already-verified-by-digest bytes back to itself would be a
+	// pointless extra write, and CachePopulate's own digest recheck would
+	// trivially pass anyway.
+	if !fromCache {
+		if data, rerr := os.ReadFile(archivePath); rerr == nil {
+			// Best-effort: the cache is purely an optimization (step5 §5) —
+			// a populate failure must never fail an otherwise-successful
+			// install.
+			_ = CachePopulate(opts.ConnectorsPath, normalizeDigestHex(artifact.SHA256), data, artifact.URL)
+		}
 	}
 
 	verifyResult, err := runVerificationGate(ctx, opts, dl, resolved, artifact)
@@ -404,21 +426,72 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 		return ManifestEntry{}, err
 	}
 
-	binaryPath, err := extractAndGuard(archivePath, stagingDir)
+	return finalizeArtifactInstall(finalizeInstallOptions{
+		connectorsPath:     opts.ConnectorsPath,
+		stagingDir:         stagingDir,
+		archivePath:        archivePath,
+		name:               resolved.Connector.Name,
+		version:            resolved.Version.Version,
+		os:                 artifact.OS,
+		arch:               artifact.Arch,
+		digest:             dl.Digest,
+		size:               dl.Size,
+		installedBy:        opts.InstalledBy,
+		sourceIndexVersion: verified.Payload.Index.Version,
+		source:             InstallSourceIndex,
+		verifyResult:       verifyResult,
+	})
+}
+
+// finalizeInstallOptions is finalizeArtifactInstall's input: everything
+// needed to extract, atomically install, and build the ManifestEntry for an
+// archive whose bytes have ALREADY passed the corruption check and the full
+// verification gate.
+type finalizeInstallOptions struct {
+	connectorsPath string
+	stagingDir     string
+	archivePath    string
+
+	name, version, os, arch string
+	digest                  [32]byte
+	size                    int64
+	installedBy             string
+
+	sourceIndexVersion int64
+	// source is "index" (InstallSourceIndex) or "offline-bundle"
+	// (InstallSourceOfflineBundle, bundle.go).
+	source string
+	// bundleIndexVersion is set only when source == InstallSourceOfflineBundle.
+	bundleIndexVersion int64
+
+	verifyResult VerifyResult
+}
+
+// finalizeArtifactInstall is steps 7-9's shared tail: extract the single
+// candidate binary, atomically rename it into connectorsPath, and build the
+// ManifestEntry to record — used by BOTH the online install pipeline
+// (downloadVerifyAndInstall, above) and the offline bundle-install path
+// (bundle.go's InstallFromBundle), so the two paths can never diverge on
+// the extract/rename/manifest-shape discipline. Manifest write + audit
+// event (steps 8-9's remaining parts) stay with each caller, since
+// InstallFromBundle's is otherwise identical to installResolved's but for
+// the ManifestEntry.Source/BundleIndexVersion fields.
+func finalizeArtifactInstall(o finalizeInstallOptions) (ManifestEntry, error) {
+	binaryPath, err := extractAndGuard(o.archivePath, o.stagingDir)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
 
-	finalName := fmt.Sprintf("conduit-connector-%s_%s", resolved.Connector.Name, resolved.Version.Version)
-	finalPath := filepath.Join(opts.ConnectorsPath, finalName)
+	finalName := fmt.Sprintf("conduit-connector-%s_%s", o.name, o.version)
+	finalPath := filepath.Join(o.connectorsPath, finalName)
 
 	// Invariant 5 (atomic state/checkpoint writes): os.Rename within one
 	// filesystem is a single atomic syscall — there is no OS-observable
 	// "mid-rename" state. A crash before it returns leaves the OLD binary
 	// (if any) untouched at finalPath; a crash after leaves the NEW binary
 	// fully present. This is exactly why staging must share a filesystem
-	// with ConnectorsPath (see the MkdirTemp call above) — the guarantee
-	// does not hold across devices (EXDEV).
+	// with connectorsPath — the guarantee does not hold across devices
+	// (EXDEV).
 	if err := os.Rename(binaryPath, finalPath); err != nil {
 		return ManifestEntry{}, conduiterr.Wrap(CodeArchiveInvalid, fmt.Sprintf("could not install %q", finalName), err)
 	}
@@ -428,15 +501,50 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 	fireChaos(chaosPointPostRenamePreManifest)
 
 	now := time.Now().UTC()
-	digestHex := fmt.Sprintf("%x", dl.Digest)
 	return ManifestEntry{
-		Name: resolved.Connector.Name, Version: resolved.Version.Version,
-		Kind: StandaloneArtifactKind, OS: artifact.OS, Arch: artifact.Arch,
-		ArtifactFile: finalName, Digest: "sha256:" + digestHex, Size: dl.Size,
-		InstalledAt: now, InstalledBy: opts.InstalledBy,
-		SourceIndexVersion: verified.Payload.Index.Version, Source: InstallSourceIndex,
-		Signed: verifyResult.Signed, VerifiedIdentity: verifyResult.VerifiedIdentity, AllowUnsigned: !verifyResult.Signed,
+		Name: o.name, Version: o.version,
+		Kind: StandaloneArtifactKind, OS: o.os, Arch: o.arch,
+		ArtifactFile: finalName, Digest: fmt.Sprintf("sha256:%x", o.digest), Size: o.size,
+		InstalledAt: now, InstalledBy: o.installedBy,
+		SourceIndexVersion: o.sourceIndexVersion, Source: o.source, BundleIndexVersion: o.bundleIndexVersion,
+		Signed: o.verifyResult.Signed, VerifiedIdentity: o.verifyResult.VerifiedIdentity, AllowUnsigned: !o.verifyResult.Signed,
 	}, nil
+}
+
+// stageArtifact is step 5/6a's download half: write the artifact's bytes to
+// archivePath, preferring an already-cached copy over the network when one
+// is available (step5 §5's local cache), and reports whether the bytes came
+// from the cache.
+//
+// The cache is keyed by the index's DECLARED digest (artifact.SHA256) —
+// known before any bytes are fetched — so a cache check can run before the
+// network is ever touched. A cache hit is never treated as a trust
+// decision: the caller still runs CheckCorruption and the full verification
+// gate against the returned DownloadResult exactly as it would for a fresh
+// download; this function only ever decides where the BYTES come from.
+func stageArtifact(ctx context.Context, opts InstallOptions, artifact *index.Artifact, archivePath string) (DownloadResult, bool, error) {
+	digestHex := normalizeDigestHex(artifact.SHA256)
+	if digestHex != "" {
+		if cached, hit, cacheErr := CacheLookup(opts.ConnectorsPath, digestHex); cacheErr == nil && hit {
+			if werr := os.WriteFile(archivePath, cached, 0o600); werr == nil {
+				sum := sha256.Sum256(cached)
+				var digest [32]byte
+				copy(digest[:], sum[:])
+				return DownloadResult{Path: archivePath, Digest: digest, Size: int64(len(cached))}, true, nil
+			}
+			// Could not stage the cached bytes into this install's staging
+			// directory (e.g. disk pressure) — fall through to a fresh
+			// download rather than failing the install over a cache-layer
+			// problem.
+		}
+	}
+
+	dl, err := Download(ctx, opts.httpClient(), artifact.URL, archivePath, artifact.Size)
+	if err != nil {
+		return DownloadResult{}, false, err
+	}
+	fireChaos(chaosPointDownloadComplete)
+	return dl, false, nil
 }
 
 // runVerificationGate is step 6b/7: normally, fetch the signature/provenance

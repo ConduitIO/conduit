@@ -76,6 +76,20 @@ type InstallFlags struct {
 	LockTimeout time.Duration `long:"lock-timeout" usage:"max time to wait to acquire the per-connector install lock"`
 	DryRun      bool          `long:"dry-run" usage:"resolve and select a platform artifact; report what would be installed without downloading or writing anything"`
 
+	// Bundle installs fully offline from a tarball produced by `conduit
+	// connectors bundle` (PR-4, plan-v2/step5 §7 Phase B) — NO network call
+	// of any kind is made when this is set; everything is re-verified from
+	// the bundle's own contents. When set, <name>[@version] positional args
+	// are ignored (the bundle already names its own connector/version).
+	Bundle string `long:"bundle" usage:"install fully offline from a bundle tarball produced by 'conduit connectors bundle' (ignores the positional <name>[@version] argument)"`
+	// AllowStaleBundle tolerates a bundled index snapshot older than
+	// --max-staleness — gated identically to --allow-unsigned (plan-v2/
+	// step5 §7 step 3, ratified by DeVaris): requires interactive
+	// confirmation or the non-interactive env var escape hatch, and may be
+	// hard-disabled entirely by operator policy (install.allow-stale-bundle).
+	// Only ever consulted with --bundle.
+	AllowStaleBundle bool `long:"allow-stale-bundle" usage:"tolerate a --bundle whose snapshot is older than --max-staleness — requires interactive confirmation or an explicit non-interactive escape hatch; may be disabled entirely by operator policy (install.allow-stale-bundle)"`
+
 	// AllowUnsigned requests skipping signature/provenance verification —
 	// the sha256 corruption check always still runs regardless. Has NO
 	// default value that could be silently true, and is not itself
@@ -175,7 +189,7 @@ func (c *InstallCommand) Flags() []ecdysis.Flag {
 func (c *InstallCommand) Config() ecdysis.Config {
 	path := filepath.Dir(c.flags.ConduitCfg.Path)
 	return ecdysis.Config{
-		EnvPrefix:     "CONDUIT",
+		EnvPrefix:     envPrefix,
 		Parsed:        &c.Cfg,
 		Path:          c.flags.ConduitCfg.Path,
 		DefaultValues: conduit.DefaultConfigWithBasePath(path),
@@ -183,13 +197,19 @@ func (c *InstallCommand) Config() ecdysis.Config {
 }
 
 // Args parses "<name>[@version]" — split on the FIRST "@" only, so a
-// version constraint is never mistaken for part of the name.
+// version constraint is never mistaken for part of the name. With --bundle
+// set, the positional argument is optional and ignored if given (the
+// bundle already names its own connector/version) — but Args runs before
+// Flags parsing order is guaranteed relative to it in every ecdysis
+// command, so the actual "was --bundle set" check happens defensively in
+// ExecuteWithResult instead of here; this method only accepts the
+// zero-or-one-argument shape unconditionally.
 func (c *InstallCommand) Args(args []string) error {
-	if len(args) == 0 {
-		return cerrors.Errorf("requires a connector name, optionally with @version (e.g. postgres or postgres@0.14.1)")
-	}
 	if len(args) > 1 {
 		return cerrors.Errorf("too many arguments")
+	}
+	if len(args) == 0 {
+		return nil // valid for --bundle; ExecuteWithResult rejects it otherwise
 	}
 
 	name, version, _ := strings.Cut(args[0], "@")
@@ -214,6 +234,13 @@ func (c *InstallCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcom
 		// trust.CodeProvenanceInvalid rather than installing. See
 		// TrustedVerifier.RequireProvenance's doc comment.
 		RequireProvenance: true,
+	}
+
+	if c.flags.Bundle != "" {
+		return c.executeFromBundle(ctx, verifier)
+	}
+	if c.args.Name == "" {
+		return cecdysis.Outcome{}, cerrors.Errorf("requires a connector name, optionally with @version (e.g. postgres or postgres@0.14.1), or --bundle <path>")
 	}
 
 	tty := isInteractiveTTY()
@@ -279,6 +306,62 @@ func (c *InstallCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcom
 	}
 
 	return cecdysis.Outcome{OK: true, Result: result}, nil
+}
+
+// executeFromBundle is `conduit connectors install --bundle <path>`
+// (plan-v2/step5 §7 Phase B): fully offline, no network call of any kind —
+// see pkg/registry/bundle.go's InstallFromBundle for the verification
+// details. Shares this file's own TrustedVerifier wiring (verifier) rather
+// than constructing a second, divergent one.
+func (c *InstallCommand) executeFromBundle(ctx context.Context, verifier *registry.TrustedVerifier) (cecdysis.Outcome, error) {
+	tty := isInteractiveTTY()
+	ciEnv := os.Getenv("CI") != ""
+	envVarSet := os.Getenv(registry.StaleBundleEnvVar) == "I_UNDERSTAND"
+
+	typedConfirmation := false
+	if c.flags.AllowStaleBundle && tty && !ciEnv {
+		var err error
+		typedConfirmation, err = confirmStaleBundle(os.Stdin, os.Stdout, c.flags.Bundle)
+		if err != nil {
+			return cecdysis.Outcome{}, cerrors.Errorf("could not read confirmation: %w", err)
+		}
+	}
+
+	result, err := registry.InstallFromBundle(ctx, registry.InstallBundleOptions{
+		BundlePath:     c.flags.Bundle,
+		ConnectorsPath: c.Cfg.Connectors.Path,
+		Verifier:       verifier,
+		InstalledBy:    installedByUser(),
+		LockTimeout:    c.flags.LockTimeout,
+
+		RunningConduitVersion:  conduit.Version(false),
+		RunningProtocolVersion: runningProtocolVersion(),
+
+		AllowStaleBundle:         c.flags.AllowStaleBundle,
+		TTY:                      tty,
+		CIEnv:                    ciEnv,
+		IsMCP:                    false,
+		EnvVarSet:                envVarSet,
+		TypedConfirmation:        typedConfirmation,
+		OperatorAllowStaleBundle: c.Cfg.Install.AllowStaleBundle,
+	})
+	if err != nil {
+		return cecdysis.Outcome{}, err
+	}
+	return cecdysis.Outcome{OK: true, Result: result}, nil
+}
+
+// confirmStaleBundle is the typed re-confirmation prompt for
+// --allow-stale-bundle, mirroring confirmUnsignedInstall's exact-match
+// (never y/N) convention.
+func confirmStaleBundle(in *os.File, out *os.File, bundlePath string) (bool, error) {
+	fmt.Fprintf(out, "Type the bundle path (%s) to confirm installing a STALE offline bundle — its index "+
+		"snapshot is older than the configured maximum staleness: ", bundlePath)
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() {
+		return false, scanner.Err()
+	}
+	return strings.TrimSpace(scanner.Text()) == bundlePath, nil
 }
 
 // isInteractiveTTY reports whether BOTH stdin and stdout are attached to a

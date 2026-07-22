@@ -33,3 +33,11 @@ const (
 	ChaosPointPostRenamePreManifest = chaosPointPostRenamePreManifest
 	ChaosPointIndexStateBeforeWrite = chaosPointIndexStateBeforeWrite
 )
+
+// CacheMetaForTest exposes cacheMetaFor (cache.go) to the external
+// registry_test package, so cache_test.go can assert on a populated
+// entry's meta.json contents directly instead of re-parsing the file
+// itself.
+func CacheMetaForTest(connectorsPath, digestHex string) (CacheMeta, error) {
+	return cacheMetaFor(connectorsPath, digestHex)
+}

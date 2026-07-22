@@ -30,7 +30,7 @@ import (
 // Signed: false, VerifiedIdentity: "", AllowUnsigned: false (see
 // manifest.go's ManifestEntry doc — the same reasoning applies here).
 type AuditEvent struct {
-	Event            string    `json:"event"` // "connector_install" in this PR; more added by later PRs
+	Event            string    `json:"event"` // "connector_install" or "connector_uninstall" (PR-4)
 	Connector        string    `json:"connector"`
 	Version          string    `json:"version"`
 	Digest           string    `json:"digest"` // "sha256:<hex>"
@@ -39,6 +39,10 @@ type AuditEvent struct {
 	Signed           bool      `json:"signed"`
 	VerifiedIdentity string    `json:"verifiedIdentity"`
 	AllowUnsigned    bool      `json:"allowUnsigned"`
+	// Forced is set on an "connector_uninstall" event when --force overrode
+	// an in-use refusal (PR-4, step5 §2 step 8). Always false/omitted for
+	// "connector_install" events.
+	Forced bool `json:"forced,omitempty"`
 }
 
 // AppendAuditEvent appends ev as one JSON line to path, creating the file

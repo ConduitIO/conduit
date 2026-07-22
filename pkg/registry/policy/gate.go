@@ -87,6 +87,70 @@ func (d Decision) Allowed() bool { return d.allowed }
 // path here uses CodeUnsignedInstallNonInteractive, meaning "this
 // particular attempt didn't clear the gate, but a different context
 // (interactively, or with the env var) might".
+// StaleBundleContext is every input DecideStaleBundle's pure logic needs —
+// the offline-install analogue of Context, gated "exactly like
+// --allow-unsigned" per DeVaris's ratification (plan-v2/step5 §7 step 3,
+// §9 decision item 2): TTY/operator-policy gated, forbiddable, never
+// silently flippable. A distinct type from Context (rather than reusing it)
+// so the two gates' fields are never confused at a call site — in
+// particular OperatorAllowStaleBundle is a different operator policy knob
+// (install.allowStaleBundle) than OperatorPolicy's install.allowUnsigned.
+type StaleBundleContext struct {
+	// TTY, CIEnv, IsMCP, EnvVarSet, TypedConfirmation mirror Context's
+	// fields exactly (see Context's doc comment) — the only difference is
+	// which env var/config knob they represent (CONDUIT_ALLOW_STALE_BUNDLE
+	// and install.allowStaleBundle, collected by the CLI layer, never by
+	// this package).
+	TTY               bool
+	CIEnv             bool
+	IsMCP             bool
+	EnvVarSet         bool
+	TypedConfirmation bool
+	// OperatorAllowStaleBundle is the operator's install.allowStaleBundle
+	// config value. false hard-disables the whole gate regardless of
+	// flag/TTY/env var — checked first, exactly as Context.OperatorPolicy
+	// is for the unsigned-install gate.
+	OperatorAllowStaleBundle bool
+}
+
+// DecideStaleBundle is the offline-bundle-staleness analogue of Decide,
+// implementing the identical behavioral shape (operator policy checked
+// first and wins outright; MCP never gets an escape hatch; non-interactive
+// requires the env var; interactive requires a typed confirmation) but
+// returning a human-readable reason string instead of a registered error
+// code: unlike Decide, this decision deliberately does NOT mint its own
+// conduiterr codes for "why not allowed" — the single sanctioned caller
+// (pkg/registry/bundle.go) already has the one canonical code this feature
+// needs (registry.CodeBundleStale, plan-v2 §4) and attaches reason as that
+// error's message, rather than this package inventing parallel codes
+// step5/plan-v2 never asked for.
+//
+// Every allowed outcome is still routed through this function, and only
+// this function ever produces Decision{allowed: true} for the stale-bundle
+// path — the same structural guarantee Decide provides, via Decision's
+// unexported field.
+func DecideStaleBundle(ctx StaleBundleContext) (dec Decision, reason string) {
+	if !ctx.OperatorAllowStaleBundle {
+		return Decision{}, "stale-bundle installs are disabled by operator policy (install.allowStaleBundle: false)"
+	}
+	if ctx.IsMCP {
+		return Decision{}, "stale-bundle installs are never permitted from the MCP tool"
+	}
+
+	nonInteractive := !ctx.TTY || ctx.CIEnv
+	if nonInteractive {
+		if ctx.EnvVarSet {
+			return Decision{allowed: true}, ""
+		}
+		return Decision{}, "requires an interactive TTY confirmation, or CONDUIT_ALLOW_STALE_BUNDLE=I_UNDERSTAND set in a non-interactive context"
+	}
+
+	if ctx.TypedConfirmation {
+		return Decision{allowed: true}, ""
+	}
+	return Decision{}, "stale bundle installation was not confirmed"
+}
+
 func Decide(ctx Context) (Decision, error) {
 	if !ctx.OperatorPolicy {
 		return Decision{}, conduiterr.New(CodeUnsignedInstallDisabledByPolicy,

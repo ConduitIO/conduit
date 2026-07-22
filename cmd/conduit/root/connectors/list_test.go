@@ -16,12 +16,21 @@ package connectors
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	json "github.com/goccy/go-json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/registry"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
@@ -172,4 +181,61 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	output := strings.TrimSpace(cmd.Render(result))
 	is.True(len(output) == 0)
+}
+
+// --- --installed mode (PR-4) ---
+
+func writeListInstalledManifestFixture(t *testing.T, connectorsPath, name, version string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(connectorsPath, ".registry"), 0o755))
+	artifactFile := name + "_" + version
+	require.NoError(t, os.WriteFile(filepath.Join(connectorsPath, artifactFile), []byte("bytes"), 0o755))
+
+	manifest := map[string]any{
+		"schemaVersion": 1,
+		"installs": map[string]any{
+			name + "@" + version: map[string]any{
+				"name": name, "version": version, "kind": "standalone",
+				"os": "linux", "arch": "amd64", "artifactFile": artifactFile,
+				"digest":      "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				"installedAt": time.Now().UTC().Format(time.RFC3339), "source": "index", "signed": true,
+			},
+		},
+	}
+	data, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(connectorsPath, ".registry", "manifest.json"), data, 0o644))
+}
+
+func TestListCommand_Installed_ReturnsManifestRows(t *testing.T) {
+	connectorsPath := t.TempDir()
+	writeListInstalledManifestFixture(t, connectorsPath, "postgres", "0.14.1")
+
+	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
+	cfg.Connectors.Path = connectorsPath
+
+	cmd := &ListCommand{
+		flags: ListFlags{Installed: true, IndexFile: filepath.Join(t.TempDir(), "does-not-exist.json")},
+		Cfg:   cfg,
+	}
+
+	// client is nil and must never be touched by the --installed path.
+	result, err := cmd.ExecuteWithClientResult(context.Background(), nil)
+	require.NoError(t, err)
+
+	res, ok := result.(*registry.ListInstalledResult)
+	require.True(t, ok)
+	require.Len(t, res.Installed, 1)
+	assert.Equal(t, "postgres", res.Installed[0].Name)
+	assert.True(t, res.IndexUnreachable)
+
+	rendered := cmd.Render(result)
+	assert.Contains(t, rendered, "postgres")
+	assert.Contains(t, rendered, "PLUGIN ARTIFACTS")
+}
+
+func TestListCommand_Installed_MutuallyExclusiveWithPipelineID(t *testing.T) {
+	cmd := &ListCommand{flags: ListFlags{Installed: true, PipelineID: "pipe1"}}
+	_, err := cmd.ExecuteWithClientResult(context.Background(), nil)
+	require.Error(t, err)
 }
