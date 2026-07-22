@@ -59,8 +59,8 @@ _Goal: an unmistakable signal that Conduit is active, maintained, and shipping._
       model, local-state-only
 - [ ] Begin CNCF Sandbox application process
 - [ ] Revive Discord; monthly community call on a public calendar
-- [ ] Hold the monthly release train (cadence over scope) — _v0.15.0 is the first; next cadence
-      release due ~2026-08_
+- [ ] Hold the monthly release train (cadence over scope) — _v0.15, v0.16, v0.17 shipped; v0.18
+      nightly in progress — cadence held 3+ months_
 
 **Definition of done:** zero untriaged issues, v0.15.0 stable shipped, roadmap and governance
 published.
@@ -81,34 +81,37 @@ and for their agents._
 
 ### The 5-minute wow
 
-- [ ] `brew install conduit` / `curl | sh` / single-binary downloads for all platforms
-- [ ] `conduit init` — scaffolds a working pipeline (e.g., Postgres CDC → file/S3) with zero
+- [ ] `brew install conduit` / `curl | sh` / single-binary downloads for all platforms —
+      _partial: binary + deb/rpm shipped; brew referenced; no curl|sh installer_
+- [x] `conduit init` — scaffolds a working pipeline (e.g., Postgres CDC → file/S3) with zero
       manual config
 - [ ] `conduit init --template <name>` — template gallery of one-command recipes
 - [ ] Refreshed built-in UI (a rebuild, not a polish — see below): live record flow, per-stage
-      inspection, pipeline graph
+      inspection, pipeline graph — _partial: `conduit-ui` rebuild in progress; not yet embedded in
+      engine binary_
 
 ### CLI as product
 
-- [ ] `conduit pipeline validate | lint | dry-run`
-- [ ] `conduit doctor` — environment and config diagnostics
-- [ ] Hot-reload of pipeline configs in dev mode
-- [ ] `conduit pipeline dev` — local dev loop with record inspector
-- [ ] `--json` structured output on every command
-- [ ] Deterministic, machine-actionable errors: error code + failing config path + suggested fix
+- [x] `conduit pipeline validate | lint | dry-run`
+- [x] `conduit doctor` — environment and config diagnostics
+- [x] Hot-reload of pipeline configs in dev mode
+- [x] `conduit pipeline dev` — local dev loop with record inspector
+- [x] `--json` structured output on every command
+- [x] Deterministic, machine-actionable errors: error code + failing config path + suggested fix
 
 ### Agent-native (a Phase 1 priority)
 
-- [ ] Official Conduit MCP server: agents can scaffold, validate, deploy, inspect, and repair
+- [x] Official Conduit MCP server: agents can scaffold, validate, deploy, inspect, and repair
       pipelines
-- [ ] `llms.txt` + single-page condensed documentation dump for LLM context
+- [x] `llms.txt` + single-page condensed documentation dump for LLM context
 - [ ] `conduit generate "<natural language>"` — AI-assisted pipeline generation from plain English
 
 ### Plugin scaffolding
 
 - [ ] `conduit connector new --lang go|python|rust|ts` — full repo: SDK wiring, tests, CI,
-      release workflow, acceptance-test harness
-- [ ] `conduit processor new` — same treatment
+      release workflow, acceptance-test harness — _partial: Go complete; python blocked, rust/ts
+      not built_
+- [x] `conduit processor new` — same treatment
 - [ ] Target: **first working custom connector in under 30 minutes**
 
 ### WASM everywhere
@@ -117,7 +120,7 @@ and for their agents._
       artifact, no gRPC sidecar
 - [ ] WASI Preview 2 / component model adoption
 - [ ] Language SDK rollout, in priority order:
-  - [ ] **Go** — reference SDK (exists; keep current with protocol)
+  - [x] **Go** — reference SDK (exists; keep current with protocol)
   - [ ] **Python** — gRPC standalone path first (WASM fast-follow); first `libconduit` binding
   - [ ] **Rust** — full WASM component-model path; proves the WASM connector architecture
   - [ ] **TypeScript** — WASM via componentize-js
@@ -138,12 +141,13 @@ and for their agents._
 
 ### Deployment fundamentals (12-factor citizenship — the universal answer)
 
-- [ ] Env-var configuration for all engine settings
-- [ ] `/healthz` and `/readyz` endpoints; Prometheus metrics endpoint
-- [ ] Graceful SIGTERM drain (checkpoint, then exit) — see data-integrity invariants
-- [ ] Official minimal container image; docker-compose quickstart
-- [ ] systemd unit file for VM deployments
-- [ ] `conduit run --pipelines <dir>` — run a directory of pipeline configs (GitOps-friendly)
+- [x] Env-var configuration for all engine settings
+- [x] `/healthz` and `/readyz` endpoints; Prometheus metrics endpoint
+- [x] Graceful SIGTERM drain (checkpoint, then exit) — see data-integrity invariants
+- [ ] Official minimal container image; docker-compose quickstart — _partial: Dockerfile shipped;
+      no docker-compose quickstart_
+- [x] systemd unit file for VM deployments
+- [x] `conduit run --pipelines <dir>` — run a directory of pipeline configs (GitOps-friendly)
 - [ ] `deploy/` directory with documented examples: docker-compose, systemd, ECS task definition,
       Nomad job spec (examples, not supported products — promoted only on demand)
 
@@ -155,7 +159,8 @@ and for their agents._
 
 ### Embedded v1
 
-- [ ] Stable, documented Go library API for embedding Conduit in applications
+- [ ] Stable, documented Go library API for embedding Conduit in applications — _partial:
+      embedding surface exists; stability/docs guarantee TBD_
 - [ ] C ABI shared library (`libconduit`) as the base for cross-language bindings
 - [ ] Python and Node.js bindings (Java/Ruby to follow on demand)
 
