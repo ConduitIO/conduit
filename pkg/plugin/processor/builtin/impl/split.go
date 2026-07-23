@@ -43,7 +43,7 @@ type splitConfig struct {
 	// returns an error. This also means you can only split on fields in
 	// structured data under `.Key` and `.Payload`.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduitdata.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 }
 
