@@ -485,7 +485,24 @@ so it doesn't need a breaking redesign when B3 is picked up in Phase 2.
    (not `MustRegister`) returns a `prometheus.AlreadyRegisteredError`; `conduit.New` must surface
    this as a coded, actionable error at construction time — fail fast — rather than panicking. This
    is one of the concrete things AC-2 fixes relative to today's `MustRegister` call.
-8. **`Run` fails before it can signal readiness.** Two related host-visible cases, both required to
+8. **Lifecycle misuse by the host: `Run` called twice, `Stop`/`Run` on a nil/zero `Handle`,
+   duplicate builder pipeline IDs.** These are programmer errors, not runtime conditions, and the
+   design deliberately **does not mint new error codes for them** — inventing a `CodeRunTwice` /
+   `CodeNilHandle` would be speculative taxonomy growth for cases a correct host never hits.
+   Instead:
+   - **`Engine.Run` invoked twice on the same `Engine`**, and **`Handle.Stop`/method calls on a nil
+     or zero-value `Handle`**, return the **existing** `conduiterr.CodeInvalidArgument` (a coded,
+     actionable error naming the misuse) — never a panic, never a new code.
+   - **Duplicate pipeline `id` in the B2 builder** keeps its own guard: `.Build()` rejects two
+     pipelines sharing an `id` at build time, the same way `conduit pipeline validate` rejects it,
+     surfaced as a `ConduitError` (again `CodeInvalidArgument`, reusing the existing code the
+     validator already emits for this class — not a builder-specific new code). This is the one
+     guard worth naming explicitly because a fluent builder makes an accidental duplicate easy to
+     write; the other two are plain single-`Engine` contract violations.
+
+   Regression test: each misuse returns the coded error (not a panic), asserted under `-race` for
+   the concurrent-`Run` case.
+9. **`Run` fails before it can signal readiness.** Two related host-visible cases, both required to
    resolve as a prompt, clear **error** — never a hang, and never a silent start-then-crash that
    looks unrelated: (a) an already-canceled `context.Context` passed to `Run` (host bug) — handled
    by the `ctx.Err()` guard added at `Runtime.Run`'s entry (AC-5 point 6); (b) a config valid enough
@@ -524,7 +541,10 @@ live until Phase 1/2 per the Process maturity table, and are not claimed here):
   `prometheus.DefaultRegisterer`, for a full `New → Run → Import → Stop` cycle.
 - **Stop idempotency test** (failure mode 3): concurrent `Stop` calls under `-race`, asserting a
   single consistent result and no panic.
-- **Run-fails-before-Ready test** (failure mode 8, AC-4): `Run` invoked against a config guaranteed
+- **Lifecycle-misuse test** (failure mode 8): `Run` called twice, `Stop` on a nil/zero `Handle`,
+  and a builder with duplicate pipeline IDs each return `conduiterr.CodeInvalidArgument` (no new
+  code, no panic); the concurrent-`Run` case runs under `-race`.
+- **Run-fails-before-Ready test** (failure mode 9, AC-4): `Run` invoked against a config guaranteed
   to fail during startup — e.g. a connector-utils/gRPC/HTTP address already bound — must return
   `h.runErr` promptly rather than hang; a companion case passes an already-canceled
   `context.Context` and asserts the same fail-fast behavior via the AC-5 point 6 guard.
