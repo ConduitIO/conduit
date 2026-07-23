@@ -1,0 +1,84 @@
+networks:
+  templates-e2e:
+
+services:
+  # templates-postgres backs the postgres-s3 and postgres-cdc-kafka vendored
+  # pipeline templates' end-to-end tests (cmd/conduit/root/pipelines/
+  # template_gallery_e2e_integration_test.go). Deliberately a SEPARATE
+  # container/port from test/compose-postgres.yaml's pg-0 (which other
+  # integration tests already depend on) rather than reusing it, so this
+  # workstream can enable logical replication (wal_level=logical, needed by
+  # the postgres-cdc-kafka template's forced cdcMode=logrepl) without
+  # changing behavior for any other existing integration test.
+  templates-postgres:
+    image: postgres:17
+    ports:
+      - "5442:5432"
+    environment:
+      - POSTGRES_USER=conduituser
+      - POSTGRES_PASSWORD=conduitpass
+      - POSTGRES_DB=conduitdb
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
+    networks:
+      - templates-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conduituser -d conduitdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # templates-kafka is a single-node KRaft (no zookeeper) broker, reachable
+  # from the HOST (where `go test` runs) on localhost:9095 via the EXTERNAL
+  # listener, and from other containers on this compose network via the
+  # PLAINTEXT listener — same cp-kafka image version already used by
+  # test/compose-schemaregistry.yaml, kept as its own service rather than
+  # reused since that file's kafka has no host-published port.
+  templates-kafka:
+    image: confluentinc/cp-kafka:7.9.1
+    ports:
+      - "9095:9095"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9095
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://templates-kafka:9092,EXTERNAL://localhost:9095
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@templates-kafka:9093"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "ciWLoCK0S9GsIQ1eeJ2Fpg=="
+    networks:
+      - templates-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # templates-minio backs the postgres-s3 template's end-to-end test. The
+  # Go test creates its bucket itself (via the AWS SDK, path-style, against
+  # localhost:9110) rather than a separate `mc mb` init container — simpler
+  # than teaching `docker compose up --wait` about a one-shot job-style
+  # service, and it's what the test needs to control anyway to assert
+  # against known object keys.
+  templates-minio:
+    image: minio/minio:latest
+    ports:
+      - "9110:9000"
+    environment:
+      MINIO_ROOT_USER: conduitminio
+      MINIO_ROOT_PASSWORD: conduitminiosecret
+    command: server /data
+    networks:
+      - templates-e2e
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

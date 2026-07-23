@@ -1,0 +1,27 @@
+version: "2.2"
+pipelines:
+  - id: generator-log
+    description: >
+      Vendored template "generator-log": generates synthetic structured
+      records and logs each one to stdout. Scaffolded by
+      `conduit pipelines init --template generator-log`. No external
+      infrastructure required — run `conduit run` immediately after
+      scaffolding. See README.md in this template's directory for the config
+      reference and delivery-semantics notes.
+    status: running
+    name: generator-log
+    connectors:
+      - id: generator-log-source
+        type: source
+        plugin: "builtin:generator"
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          rate: "1"
+      - id: generator-log-destination
+        type: destination
+        plugin: "builtin:log"
+        settings:
+          level: info

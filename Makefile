@@ -43,6 +43,24 @@ test-integration:
 		docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml down; \
 		exit $$ret
 
+# test-integration-templates runs the vendored pipeline template gallery's
+# end-to-end tests for the two infra-dependent templates (postgres-s3,
+# postgres-cdc-kafka — see cmd/conduit/root/pipelines/
+# template_gallery_e2e_integration_test.go). Deliberately its own target and
+# compose file (test/compose-templates.yaml), not folded into
+# test-integration: this workstream's Postgres needs logical replication
+# enabled (wal_level=logical), which test-integration's shared Postgres
+# container must not be changed to support, since other integration tests
+# depend on its current config. The two infra-FREE templates
+# (generator-log, generator-file) are covered by plain `make test`/
+# `make test-integration` already — see template_gallery_e2e_test.go.
+.PHONY: test-integration-templates
+test-integration-templates:
+	docker compose -f test/compose-templates.yaml up --quiet-pull -d --wait
+	go test $(GOTEST_FLAGS) -race --tags=templates_e2e ./cmd/conduit/root/pipelines/...; ret=$$?; \
+		docker compose -f test/compose-templates.yaml down; \
+		exit $$ret
+
 .PHONY: fmt
 fmt:
 	gofumpt -l -w .
