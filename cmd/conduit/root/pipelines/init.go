@@ -253,38 +253,6 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 	}, nil
 }
 
-// checkDestination is the fix for this command's former silent-overwrite
-// bug: writeFile used to open with os.O_CREATE|os.O_WRONLY|os.O_TRUNC with no
-// existence check at all, so a second `pipelines init` into the same path
-// silently clobbered a hand-edited pipeline file. This refuses with a coded,
-// actionable error unless --force is set.
-//
-// --dry-run never reaches writeFile (ExecuteWithResult skips it), so it has
-// nothing destructive to guard against; it is exempt from this check
-// entirely so it can preview a pipeline even when a file already sits at the
-// destination.
-func (c *InitCommand) checkDestination() error {
-	if c.flags.Force || c.flags.DryRun {
-		return nil
-	}
-
-	_, err := os.Stat(c.configFilePath)
-	switch {
-	case err == nil:
-		ce := conduiterr.New(CodeDestinationExists, fmt.Sprintf("pipeline file %q already exists", c.configFilePath))
-		ce.ConfigPath = c.configFilePath
-		ce.Suggestion = fmt.Sprintf(
-			"pass --force to overwrite %q, choose a different pipeline name, or a different --pipelines.path",
-			c.configFilePath,
-		)
-		return ce
-	case os.IsNotExist(err):
-		return nil
-	default:
-		return conduiterr.Wrap(conduiterr.CodeInternal, fmt.Sprintf("could not check destination %q", c.configFilePath), err)
-	}
-}
-
 // renderPipeline executes the embedded pipeline.tmpl against pipeline and
 // returns the rendered YAML as a string, without touching the filesystem —
 // the shared rendering path for both a real write (writeFile) and --dry-run
@@ -304,18 +272,42 @@ func (c *InitCommand) renderPipeline(pipeline pipelineTemplate) (string, error) 
 }
 
 // writeFile writes the already-rendered pipeline config to c.configFilePath.
-// checkDestination is the sole existence gate; by the time writeFile runs,
-// either the destination didn't exist, or --force explicitly authorized the
-// overwrite, so O_TRUNC here is safe.
+//
+// Invariant: never silently overwrite an existing pipeline file — this
+// command's original bug was os.OpenFile with O_CREATE|O_WRONLY|O_TRUNC and
+// no existence check at all, so a second `pipelines init` into the same path
+// silently clobbered a hand-edited pipeline. Without --force, the file is
+// opened with O_EXCL instead of O_TRUNC: the existence check and the write
+// are a single atomic syscall, so there is no TOCTOU window between "check
+// if it exists" and "write" the way a separate os.Stat followed by an open
+// would have (e.g. another `pipelines init` run, or anything else, creating
+// the file in between). --force switches to O_TRUNC, explicitly authorizing
+// the overwrite. Only called when !DryRun (see ExecuteWithResult) — --dry-run
+// never reaches here, so it has nothing to protect and never hits this
+// check at all.
 func (c *InitCommand) writeFile(renderedConfig string) error {
-	output, err := os.OpenFile(c.configFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	flags := os.O_CREATE | os.O_WRONLY | os.O_EXCL
+	if c.flags.Force {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+
+	output, err := os.OpenFile(c.configFilePath, flags, 0o600)
 	if err != nil {
-		return cerrors.Errorf("failed to open %q: %w", c.configFilePath, err)
+		if !c.flags.Force && os.IsExist(err) {
+			ce := conduiterr.New(CodeDestinationExists, fmt.Sprintf("pipeline file %q already exists", c.configFilePath))
+			ce.ConfigPath = c.configFilePath
+			ce.Suggestion = fmt.Sprintf(
+				"pass --force to overwrite %q, choose a different pipeline name, or a different --pipelines.path",
+				c.configFilePath,
+			)
+			return ce
+		}
+		return conduiterr.Wrap(conduiterr.CodeInternal, fmt.Sprintf("could not open %q", c.configFilePath), err)
 	}
 	defer output.Close()
 
 	if _, err := output.WriteString(renderedConfig); err != nil {
-		return cerrors.Errorf("failed writing pipeline config: %w", err)
+		return conduiterr.Wrap(conduiterr.CodeInternal, "failed writing pipeline config", err)
 	}
 	return nil
 }
@@ -368,23 +360,17 @@ func (c *InitCommand) setSourceAndDestinationConnector() {
 	}
 }
 
-// ExecuteWithResult resolves the pipeline's source/destination/name, refuses
-// (via checkDestination) rather than silently clobbering an existing
-// pipeline file, then renders and — unless --dry-run — writes the pipeline
-// config. A non-nil error here is always a HARD command failure (unknown
-// connector, destination-exists-without-force, an I/O failure); this
-// command has no "domain finding" outcome distinct from success, so OK is
-// always true when err is nil.
+// ExecuteWithResult resolves the pipeline's source/destination/name, renders
+// the pipeline config, and — unless --dry-run — writes it, refusing (via
+// writeFile) rather than silently clobbering an existing pipeline file. A
+// non-nil error here is always a HARD command failure (unknown connector,
+// destination-exists-without-force, an I/O failure); this command has no
+// "domain finding" outcome distinct from success, so OK is always true when
+// err is nil.
 func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, error) {
 	c.setSourceAndDestinationConnector()
 	c.pipelineName = c.getPipelineName()
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
-
-	// Invariant: never silently overwrite an existing pipeline file (this
-	// command's original bug). See checkDestination's doc.
-	if err := c.checkDestination(); err != nil {
-		return cecdysis.Outcome{}, err
-	}
 
 	pipeline, err := c.buildTemplatePipeline()
 	if err != nil {
@@ -400,9 +386,11 @@ func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, er
 
 	written := false
 	if !c.flags.DryRun {
+		// Invariant: never silently overwrite an existing pipeline file
+		// (this command's original bug) — see writeFile's doc for the
+		// atomic, TOCTOU-safe existence check.
 		if err := c.writeFile(rendered); err != nil {
-			return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInternal,
-				fmt.Sprintf("could not write pipeline file %q", c.configFilePath), err)
+			return cecdysis.Outcome{}, err
 		}
 		written = true
 	}
