@@ -2,13 +2,19 @@
 
 ## Summary
 
+**Status: pending ratification (PR #2646 open).** This ADR is not yet binding — an ADR takes effect
+only once merged. Until then the direction below is proposed, not in force; treat every "primary"/
+"NO-GO"/"effective" statement in this document as _pending ratification (PR #2646 open)_, not as a
+settled decision. The 2026-07-04 ADR it supersedes remains the ADR of record until this one merges.
+
 This supersedes [20260704-wasm-component-model](20260704-wasm-component-model.md), which adopted the
 WASI Preview 2 **component model** as Conduit's _primary_ any-language plugin architecture. Verified
 research in 2026 shows the component model is not achievable on a pure-Go / no-CGO runtime for the
-foreseeable future. Therefore, effective now: **gRPC standalone (HashiCorp go-plugin) is the primary
-any-language plugin architecture for both connectors and processors.** WASM processors continue on
-core WASM + WASI Preview 1 (Go/TinyGo). WASM connectors are deferred (NO-GO) behind explicit flip
-conditions; v0.19 ships only the WIT-interface RFC to lock the future design.
+foreseeable future. Therefore, on ratification (pending — PR #2646 open): **gRPC standalone
+(HashiCorp go-plugin) becomes the primary any-language plugin architecture for both connectors and
+processors.** WASM processors continue on core WASM + WASI Preview 1 (Go/TinyGo). WASM connectors are
+deferred (NO-GO) behind explicit flip conditions; v0.19 ships only the WIT-interface RFC to lock the
+future design.
 
 ## Context
 
@@ -73,7 +79,8 @@ host, that streaming model stays on gRPC.
 
 ## Related
 
-- [20260704-wasm-component-model](20260704-wasm-component-model.md) — **superseded by this ADR**
+- [20260704-wasm-component-model](20260704-wasm-component-model.md) — **to be superseded by this ADR
+  on ratification** (pending — PR #2646 open; remains the ADR of record until this one merges)
 - `docs/design-documents/20260722-rust-connector-sdk.md` — the gRPC-standalone Rust SDK (the practical
   any-language path this ADR endorses)
 - `ROADMAP.md` — Phase 1 "WASM everywhere" (to be reframed per Consequences)
