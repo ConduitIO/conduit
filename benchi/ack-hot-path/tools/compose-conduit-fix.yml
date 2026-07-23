@@ -1,0 +1,22 @@
+# Fix: conduit built from this branch (fix/source-ack-persist-ordering,
+# Approach A — ack-follows-durable-flush). Build with, from the repo root:
+#
+#   docker build -t conduit-bench:fix-source-ack .
+#
+# See ../README.md for the full reproduction steps.
+services:
+  conduit:
+    image: conduit-bench:fix-source-ack
+    container_name: benchi-conduit
+    networks:
+      - benchi
+    ports:
+      - '8080:8080'
+    environment:
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - ../pipeline.yml:/app/pipelines/pipeline.yml
+
+networks:
+  benchi:
+    external: true

@@ -62,7 +62,7 @@ type childProcess struct {
 
 	mu     sync.Mutex
 	lines  []string
-	stderr bytes.Buffer
+	stderr syncBuffer
 
 	readerDone chan struct{}
 
@@ -155,13 +155,21 @@ func (c *childProcess) linesSnapshot() []string {
 	return append([]string(nil), c.lines...)
 }
 
-// ackCount returns how many distinct "ACK <n>" progress lines have been
-// observed so far - i.e. how many positions the chaosPlugin has durably
-// committed upstream.
-func (c *childProcess) ackCount() int {
+// readCount returns how many distinct "READ <pos>" progress lines have been
+// observed so far - i.e. how many records chaosPlugin.produceLoop has sent
+// down the stream. Used for kill-timing (waitForReadCount): unlike ACK
+// progress, READ progress is paced directly by chaosPlugin.paceMS and is
+// unaffected by connector.Persister's debounce, so it remains a reliable
+// proxy for "at least N*paceMS of wall-clock time has elapsed" under
+// Approach A (see produceLoop's doc comment in upstream.go).
+func (c *childProcess) readCount() int {
+	return c.progressCount("READ ")
+}
+
+func (c *childProcess) progressCount(prefix string) int {
 	n := 0
 	for _, l := range c.linesSnapshot() {
-		if strings.HasPrefix(l, "ACK ") {
+		if strings.HasPrefix(l, prefix) {
 			n++
 		}
 	}
@@ -180,29 +188,60 @@ func (c *childProcess) line(prefix string) (string, bool) {
 }
 
 func (c *childProcess) diagnostics() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return fmt.Sprintf("stdout lines: %v\nstderr: %s", c.lines, c.stderr.String())
+	// stderr is its own syncBuffer (self-synchronizing, see its doc), not
+	// guarded by c.mu - c.mu only ever protected lines. Reading it while the
+	// child is still alive (e.g. from waitExit's timeout branch) races
+	// against os/exec's internal io.Copy goroutine, which keeps writing to
+	// it for as long as the child process keeps producing stderr output.
+	return fmt.Sprintf("stdout lines: %v\nstderr: %s", c.linesSnapshot(), c.stderr.String())
 }
 
-// waitForAckCount blocks (polling, not sleeping a fixed duration) until at
-// least n ACK lines have been observed, or fails the test after a generous
+// syncBuffer is a bytes.Buffer safe for concurrent Write (from os/exec's
+// internal stderr-copying goroutine, for as long as the child process is
+// alive) and String (from a test goroutine building a diagnostics message,
+// e.g. on a waitExit timeout while the child - and that copy goroutine - are
+// still running). A plain bytes.Buffer is not safe for this: os/exec.Cmd.Wait
+// only guarantees the copy goroutine has stopped once the process has
+// exited, which is exactly the case a timeout means never happened.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// waitForReadCount blocks (polling, not sleeping a fixed duration) until at
+// least n READ lines have been observed, or fails the test after a generous
 // timeout. Because the child's own pacing (chaosPlugin.paceMS) enforces a
-// MINIMUM real delay between acks via time.Sleep, waiting for n acks always
+// MINIMUM real delay between reads via time.Sleep, waiting for n reads always
 // means at least n*paceMS of wall-clock time has genuinely elapsed - slower
 // CI scheduling can only add delay, never let this return early. That is
-// what makes waitForAckCount a safe way to guarantee "at least this much
-// time has passed since the first ack" without a fragile fixed sleep.
-func (c *childProcess) waitForAckCount(t *testing.T, n int, timeout time.Duration) {
+// what makes this a safe way to guarantee "at least this much time has
+// passed since the first read" without a fragile fixed sleep. Unlike ack
+// progress, read progress stays reliable for this purpose even under
+// Approach A's deferred-ack timing (docs/design-documents/
+// 20260723-source-ack-persist-ordering-fix.md), which is why
+// sigkill_test.go's kill-timing uses this signal, not ack progress.
+func (c *childProcess) waitForReadCount(t *testing.T, n int, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if c.ackCount() >= n {
+		if c.readCount() >= n {
 			return
 		}
 		time.Sleep(time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d acks (saw %d)\n%s", n, c.ackCount(), c.diagnostics())
+	t.Fatalf("timed out waiting for %d reads (saw %d)\n%s", n, c.readCount(), c.diagnostics())
 }
 
 // sigkill sends SIGKILL (not SIGTERM, not context cancellation) and reaps

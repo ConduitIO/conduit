@@ -202,6 +202,16 @@ func (p *chaosPlugin) Run(ctx context.Context, stream pconnector.SourceRunStream
 // producing is independent of committing, exactly like a real source
 // connector's read loop runs concurrently with (and ahead of) acks arriving
 // for records it already sent.
+//
+// It prints a "READ <pos>" progress line right after each successful send —
+// deliberately NOT gated on any ack/commit/flush behavior, unlike "ACK" lines
+// (see ackLoop). Approach A (docs/design-documents/
+// 20260723-source-ack-persist-ordering-fix.md) defers the plugin's ack
+// visibility behind connector.Persister's debounce, so "ACK" progress no
+// longer tracks wall-clock-since-start at a fine grain for a fast burst — it
+// can arrive in one lump once a flush fires. "READ" progress does not have
+// that problem: production is paced by paceMS exactly as before this fix, so
+// harness.go's kill-timing waits on READ lines, not ACK lines.
 func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start uint64) {
 	pos := start
 	for {
@@ -214,6 +224,7 @@ func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start
 		if err := server.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}}); err != nil {
 			return // stream closed (process exiting, or Teardown ran)
 		}
+		printProgress("READ", pos)
 
 		if p.paceMS > 0 {
 			time.Sleep(time.Duration(p.paceMS) * time.Millisecond)

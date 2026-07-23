@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -254,11 +255,196 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	}
 }
 
-func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
+// TestSource_Ack_DeferredUntilDurablyFlushed is the sev-0 fix's core unit-level
+// regression test (Approach A, docs/design-documents/
+// 20260723-source-ack-persist-ordering-fix.md): the plugin must NOT observe
+// an ack before the resulting position has been durably flushed by the
+// persister, and MUST observe it once the flush completes. This pins
+// invariant 1 at the pkg/connector level, independent of the chaos harness's
+// subprocess/SIGKILL mechanics (tests/chaos).
+func TestSource_Ack_DeferredUntilDurablyFlushed(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
 	logger := log.Nop()
 	db := &inmemory.DB{}
+	// A high bundle-count threshold means the ack below stays batched (not
+	// auto-flushed) until the fake clock is advanced past the delay
+	// threshold - giving this test explicit, deterministic control over
+	// when the durable flush (and therefore the deferred ack) happens.
+	persister := NewPersister(logger, db, DefaultPersisterDelayThreshold, 100)
+	clk := newFakeClock()
+	persister.clock = clk
+
+	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("test-pos")}))
+
+	serverStream := stream.Server()
+	recvDone := make(chan struct{})
+	var recvErr error
+	go func() {
+		defer close(recvDone)
+		_, recvErr = serverStream.Recv()
+	}()
+
+	select {
+	case <-recvDone:
+		t.Fatal("invariant 1 violated: plugin observed the ack before the position was durably flushed")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: nothing delivered yet, the batch is still sitting in the
+		// persister waiting for the delay threshold (or a forced Flush).
+	}
+
+	// Advancing the fake clock past the delay threshold triggers the flush
+	// synchronously firing any due timers (see fakeClock.Advance's doc in
+	// persister_test.go) - the resulting durable write's callback
+	// (onPersistFlushed) is what sends the deferred ack.
+	clk.Advance(DefaultPersisterDelayThreshold + time.Millisecond)
+
+	select {
+	case <-recvDone:
+		is.NoErr(recvErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("plugin never observed the ack after the flush completed")
+	}
+}
+
+// TestSource_OnPersistFlushed_OutOfOrderCompletionStillDeliversInOrder pins
+// onPersistFlushed's core safety property directly (see its doc comment):
+// connector.Persister's flush callbacks can complete out of order relative to
+// the Ack calls that registered them (a later-registered flush's transaction
+// can finish before an earlier one still in flight). Regardless of which
+// order the callbacks fire in, the plugin must see every position exactly
+// once, strictly in the order Ack originally queued them (invariant 4) -
+// never a gap, never a double-send.
+func TestSource_OnPersistFlushed_OutOfOrderCompletionStillDeliversInOrder(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	is.NoErr(src.Open(ctx))
+
+	// Seed three pending acks directly (bypassing Ack/Persist, which would
+	// race an automatic flush given newTestSource's bundleCountThreshold=1)
+	// to precisely control the seq each carries.
+	src.ackMu.Lock()
+	src.pendingAcks = []pendingAck{
+		{seq: 1, positions: []opencdc.Position{opencdc.Position("pos-1")}},
+		{seq: 2, positions: []opencdc.Position{opencdc.Position("pos-2")}},
+		{seq: 3, positions: []opencdc.Position{opencdc.Position("pos-3")}},
+	}
+	src.nextAckSeq = 3
+	src.ackMu.Unlock()
+
+	// Simulate the highest seq's flush completing FIRST (out of order): this
+	// must drain and send all three, in order. onPersistFlushed sends
+	// synchronously (that's what lets Persister.WaitPendingWrites prove the
+	// send happened, see its doc), so it must run concurrently with the
+	// Recv calls below rather than before them, or it would block forever
+	// waiting for a reader on the first send.
+	go src.onPersistFlushed(3, nil)
+
+	serverStream := stream.Server()
+	for _, want := range []opencdc.Position{opencdc.Position("pos-1"), opencdc.Position("pos-2"), opencdc.Position("pos-3")} {
+		resp, err := serverStream.Recv()
+		is.NoErr(err)
+		is.Equal(resp.AckPositions, []opencdc.Position{want})
+	}
+
+	// The earlier-registered flushes' callbacks arriving late must be safe
+	// no-ops: nothing left to send, no double-send.
+	src.onPersistFlushed(1, nil)
+	src.onPersistFlushed(2, nil)
+
+	src.ackMu.Lock()
+	remaining := len(src.pendingAcks)
+	durableSeq := src.durableAckSeq
+	src.ackMu.Unlock()
+	is.Equal(remaining, 0)
+	is.Equal(durableSeq, uint64(3))
+}
+
+// TestSource_Teardown_SendsPendingDeferredAckBeforeReturning pins invariant 7
+// (graceful shutdown must not drop the final ack) at the pkg/connector level:
+// Teardown must not return until any ack still pending at the time it was
+// called has actually been sent to the plugin. Without this, StopAndWait's
+// existing WaitPersisted call (which runs strictly after node/connector
+// teardown) would have nothing left to wait for - see Teardown's doc comment.
+func TestSource_Teardown_SendsPendingDeferredAckBeforeReturning(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	// A long delay threshold and high bundle-count threshold mean the ack
+	// below would NOT be auto-flushed for the lifetime of this test - the
+	// only thing that can flush it is Teardown's own forced Flush call.
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	persister := NewPersister(logger, db, time.Hour, 100)
+
+	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("final-pos")}))
+
+	serverStream := stream.Server()
+	recvDone := make(chan opencdc.Position)
+	go func() {
+		resp, err := serverStream.Recv()
+		is.NoErr(err)
+		recvDone <- resp.AckPositions[0]
+	}()
+
+	is.NoErr(src.Teardown(ctx))
+
+	// Teardown already returned by this point - the ack must already have
+	// been delivered, not merely "eventually" delivered on some later,
+	// unrelated event.
+	select {
+	case pos := <-recvDone:
+		is.Equal(pos, opencdc.Position("final-pos"))
+	default:
+		t.Fatal("Teardown returned without the pending deferred ack having been sent")
+	}
+}
+
+func newTestSource(ctx context.Context, t testing.TB, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	// bundleCountThreshold=1 means every Persist call hits the threshold and
+	// triggers an immediate (though still asynchronous) flush - tests using
+	// this helper don't exercise the debounce window itself. Tests that do
+	// (e.g. TestSource_Ack_DeferredUntilDurablyFlushed) build their own
+	// persister via newTestSourceWithPersister instead.
 	persister := NewPersister(logger, db, DefaultPersisterDelayThreshold, 1)
+	return newTestSourceWithPersister(ctx, t, ctrl, persister)
+}
+
+func newTestSourceWithPersister(ctx context.Context, t testing.TB, ctrl *gomock.Controller, persister *Persister) (*Source, *mock.SourcePlugin) {
+	is := is.New(t)
+	logger := log.Nop()
 
 	instance := &Instance{
 		ID:   "test-connector-id",
