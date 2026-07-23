@@ -33,13 +33,12 @@ import (
 // invocation now actually installs verified artifacts.
 type TrustedVerifier struct {
 	// Anchors are this build's compiled-in Conduit registry root/freshness
-	// public keys (index.TrustAnchors). No production key material is
-	// embedded as of this PR — see anchors.go's doc comment: the bootstrap
-	// ceremony that generates and go:embeds real keys (plan-v2 §9) is
-	// separate infrastructure work, out of this PR's scope. An empty
-	// Anchors value means every real index fails closed with
-	// CodeTrustAnchorExpired — the correct, fail-closed behavior until that
-	// ceremony lands, NOT a silent bypass.
+	// public keys (index.TrustAnchors). A released build embeds the real
+	// ceremony anchors (cmd/conduit/root/connectors/anchors.go go:embeds the
+	// public PEMs) and verifies the served signed index against them. An empty
+	// Anchors value (a custom/stripped build with no embedded anchors) means
+	// every real index fails closed with CodeTrustAnchorExpired — the correct
+	// fail-closed behavior, NOT a silent bypass.
 	Anchors index.TrustAnchors
 	// StatePath is where the persisted index rollback high-water mark lives
 	// (index.LoadState/SaveState) — see indexStatePath.
