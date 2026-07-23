@@ -518,6 +518,26 @@ func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.Stats
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
+	// Tier-1-caution guard (embed workstream plan §11 task 6): if ctx is
+	// already canceled before Run does any work, return immediately instead
+	// of spinning up profiling, the tomb, and every service. This is not
+	// merely an optimization: empirically, without this guard, Run panics
+	// ("tomb.Go called after all goroutines terminated") when handed an
+	// already-canceled context — tomb.WithContext's own cancellation-watcher
+	// goroutine kills the tomb (and lets it finish) before initServices's
+	// later t.Go calls (e.g. serveGRPC) run, so those calls hit an
+	// already-dead tomb. `conduit run` never calls Run with an
+	// already-canceled context (a live process's context is only canceled by
+	// a signal that arrives after Run is already executing), so this is
+	// inert on the CLI path; it matters for the embed calling convention
+	// (Engine.Run), where a host can legitimately pass an already-canceled or
+	// already-expired ctx (e.g. one derived from an expired request
+	// deadline). This does not touch registerCleanup/the tomb's drain
+	// mechanics — it is a pure early return before either is constructed.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	cleanup, err := r.initProfiling(ctx)
 	if err != nil {
 		return err

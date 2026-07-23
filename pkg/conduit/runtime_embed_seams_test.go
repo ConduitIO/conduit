@@ -15,7 +15,9 @@
 package conduit_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	promclient "github.com/prometheus/client_golang/prometheus"
@@ -65,4 +67,33 @@ func TestNewRuntime_CLIDefaultsUnchanged(t *testing.T) {
 		}
 	}
 	is.True(foundConduitMetric) // conduit_info must be registered in the default registry on the CLI path
+}
+
+// TestRun_AlreadyCanceledContext proves AC-4/Task 6: Run resolves promptly
+// (never blocks indefinitely) when handed an already-canceled context,
+// returning ctx.Err() without spinning up the tomb or any service.
+func TestRun_AlreadyCanceledContext(t *testing.T) {
+	is := is.New(t)
+
+	cfg := conduit.DefaultConfig()
+	cfg.DB.Type = conduit.DBTypeInMemory
+	cfg.API.Enabled = false
+	cfg.Pipelines.Path = t.TempDir()
+
+	r, err := conduit.NewRuntime(cfg)
+	is.NoErr(err)
+	defer r.DB.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled before Run is ever called
+
+	done := make(chan error, 1)
+	go func() { done <- r.Run(ctx) }()
+
+	select {
+	case err := <-done:
+		is.True(err != nil) // Run must report the canceled context, not silently succeed
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return promptly for an already-canceled context")
+	}
 }

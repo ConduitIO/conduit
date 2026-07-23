@@ -114,6 +114,34 @@ func TestRun_FailsBeforeReady(t *testing.T) {
 	is.True(h == nil)
 }
 
+// TestRun_AlreadyCanceledContext proves AC-4's second resolution path: Run
+// returns promptly (never blocking) when handed an already-canceled context.
+func TestRun_AlreadyCanceledContext(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	type result struct {
+		h   *conduit.Handle
+		err error
+	}
+	resC := make(chan result, 1)
+	go func() {
+		h, err := e.Run(ctx)
+		resC <- result{h, err}
+	}()
+
+	select {
+	case res := <-resC:
+		is.True(res.err != nil)
+		is.True(res.h == nil)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return promptly for an already-canceled context")
+	}
+}
+
 // TestRun_CalledTwice_ReturnsCodedError proves the must-fix decision: a
 // second Run call returns the existing conduiterr.CodeInvalidArgument, not a
 // new speculative code.
