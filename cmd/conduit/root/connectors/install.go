@@ -113,16 +113,16 @@ type InstallArgs struct {
 // pinned identity before installing anything. RequireProvenance is set to
 // true here (Tier-1 posture decision): a validly-signed artifact with NO
 // SLSA provenance attestation is refused, not installed — "verified" means
-// signature AND provenance, never signature alone. defaultTrustAnchors (this
-// file) is EMPTY as of this PR — the bootstrap ceremony that generates and
-// embeds real Conduit registry root/freshness keys (plan-v2 §9) is separate
-// infrastructure work, out of this PR's scope — so every real index this
-// build fetches fails closed with registry.CodeTrustAnchorExpired
-// ("registry.trust_anchor_expired") until that ceremony lands. This is the
-// correct, intentional, fail-closed state of a build that predates the
-// ceremony, not a bug and not a silent bypass: there is no flag, no config
-// value, and no environment variable that lets an index verify without a
-// recognized signature. The one deliberate, heavily-gated exception is
+// signature AND provenance, never signature alone. defaultTrustAnchors (see
+// anchors.go) is populated from the go:embed'd ceremony root/freshness public
+// keys, so a released build verifies the served signed index at
+// registry.conduitdata.io against them. A build with no embedded anchors (a
+// custom or stripped build) fails every real index closed with
+// registry.CodeTrustAnchorExpired ("registry.trust_anchor_expired") — the
+// correct, intentional fail-closed state, not a bug and not a silent bypass:
+// there is no flag, no config value, and no environment variable that lets an
+// index verify without a recognized signature. The one deliberate,
+// heavily-gated exception is
 // --allow-unsigned, which skips ONLY the per-artifact signature/provenance
 // check (never the sha256 corruption check, never index verification) and
 // is itself refused unless policy.Decide's full gate — interactive typed
