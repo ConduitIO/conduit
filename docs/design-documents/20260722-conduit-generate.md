@@ -19,12 +19,21 @@ This doc satisfies that bar and adds the harder bar the v0.19 DX review raised o
 schema-valid is not the same as _correct_ — a pipeline can validate and confidently do the wrong
 thing — so the committed eval set also asserts semantic intent match, not just `validate` pass.
 
-**Status: design only. No code in this PR**, per CLAUDE.md's design-doc-before-code rule (this
-touches a public contract — CLI surface, error codes, and a new provider config surface — and is
-a multi-day build). Tier 2 (features/CLI) for the command itself; the provider-selection and
-never-auto-apply boundary get the Tier-1 level of scrutiny in review because they are the
-prompt-injection defense, even though `generate` never itself touches a running pipeline or the
-data path.
+**Status: design doc + eval harness only for v0.19. The command implementation is deferred to a
+later release.** This is a maintainer decision recorded here **now** — not one deferred to a
+mid-implementation checkpoint — because the v0.19 build slot went to the Python connector SDK
+(honoring the Go → Python → Rust → TS SDK sequencing), leaving no capacity to build `generate`
+this cycle. What v0.19 ships is this design doc plus the committed eval-harness fixtures and
+replay scaffolding (§10) — the stable, reviewable spec of the bar `generate` must clear — so that
+when the command is built (v0.20+), the acceptance target and the provider/prompt-injection
+boundary are already settled and the build is a straight execution against a frozen contract. No
+provider adapters, CLI wiring, or MCP tool land in v0.19.
+
+This is a design-doc-before-code decision per CLAUDE.md (this touches a public contract — CLI
+surface, error codes, and a new provider config surface — and is a multi-day build). Tier 2
+(features/CLI) for the command itself; the provider-selection and never-auto-apply boundary get
+the Tier-1 level of scrutiny in review because they are the prompt-injection defense, even though
+`generate` never itself touches a running pipeline or the data path.
 
 ## Context
 
@@ -38,7 +47,11 @@ data path.
   source of connector/schema truth.
 - **`validate.Run` / `validate.RunWithOptions`** (`cmd/conduit/internal/validate/engine.go:46,89`)
   return a `Report` (`report.go:89`) of per-file `Finding`s with `Code`/`ConfigPath`/`Suggestion`/
-  `Fix`. This is the _only_ schema gate `generate` uses — no parallel validator.
+  `Fix`. This is the _only_ schema gate `generate` uses — no parallel validator. **Both signatures
+  take a `path string` and resolve the config from disk — there is no in-memory
+  (`[]byte`/`io.Reader`) entry point today.** That has a direct design consequence `generate` must
+  resolve (see Decision §3, "the disk seam"): a candidate held only in memory cannot be handed to
+  `validate` without either a new in-memory seam or writing it to disk first.
 - **`deploy`/`apply`** (`cmd/conduit/internal/deploy/`, `docs/design-documents/20260708-cli-pipeline-deploy-apply.md`)
   already implement diff-first, plan-hash-bound deployment with its own Tier-1 discipline on a
   running pipeline. `generate` never reimplements this — it hands a file to it.
@@ -64,11 +77,19 @@ data path.
 - **An interactive confirm already exists, and it's the anti-pattern `generate` must not copy.**
   `pipelines deploy --apply` prompts via `confirm()` (`cmd/conduit/root/pipelines/deploy.go:198-212`),
   which reads a line from `cmd.InOrStdin()` **unconditionally — no isatty gate on stdin or stdout
-  at all**. That means `echo y | conduit pipelines deploy --apply pipeline.yaml` (no `--yes` flag)
-  reads the piped `y` as an affirmative answer in a fully non-interactive invocation. That shape is
-  tolerable for `deploy` only because `--yes` is its documented explicit-bypass path and the
-  confirm is a convenience layered on top of it, not the sole safety boundary. `generate` has no
-  `--yes` and its confirm _is_ the sole safety boundary (§4), so it cannot inherit this shape:
+  at all**. Be precise about where the hole actually is: `confirm()` treats **EOF / empty input as
+  a decline** (the safe default — see its own doc comment), so a bare non-interactive invocation
+  with _no_ stdin (`conduit ... < /dev/null`, or a closed pipe) already declines safely. The real
+  exploitable shape is therefore not "non-TTY" in general but specifically **a piped affirmative
+  line**: `printf 'y\n' | conduit pipelines deploy --apply pipeline.yaml` (no `--yes` flag) feeds a
+  literal `y\n` that `confirm()` reads as an affirmative answer in a fully non-interactive
+  invocation. That shape is tolerable for `deploy` only because `--yes` is its documented
+  explicit-bypass path and the confirm is a convenience layered on top of it, not the sole safety
+  boundary. The mitigation `generate` adopts is an **isatty gate on both stdin and stdout before
+  the read**: with the gate, a piped `y\n` never reaches a confirmation read at all, because a pipe
+  is not a TTY, so the exact `printf 'y\n' |` bypass is structurally impossible. `generate` has no
+  `--yes` and its confirm _is_ the sole safety boundary (§4), so it cannot inherit `deploy`'s
+  ungated shape:
   `generate` MUST isatty-gate **both** stdin and stdout before ever attempting to read a
   confirmation response, and MUST NOT call, or structurally mirror, `deploy.confirm()`'s
   unconditional-read pattern. `connector new`'s `--yes` flag comment ("interactive confirmation is
@@ -97,8 +118,12 @@ threshold.
 `llms.txt` (the grounding) and the MCP server (a template for tool-shaped output) landed in
 v0.17–v0.18. `generate` was correctly sequenced to need both — see the phase-1 execution plan's
 own note that it "needs MCP surface + templates + llms.txt as grounding." This doc is written
-ahead of the v0.19 cut so the harder review (provider trust boundary, prompt-injection defense,
-eval harness design) happens before implementation starts, not mid-PR.
+ahead of the (deferred) build so the harder review (provider trust boundary, prompt-injection
+defense, eval harness design) happens before implementation starts, not mid-PR. In v0.19 the
+design doc and eval harness land; the command build is deferred to v0.20+ because the v0.19 build
+slot went to the Python connector SDK (see Status). The dependencies above are all already
+shipped, so nothing blocks the build technically — the deferral is a capacity decision, not a
+sequencing one.
 
 ## Goals / Non-goals
 
@@ -210,7 +235,12 @@ favoritism the roadmap forbids for brokers. Resolution is deterministic, in this
 **Model selection.** Each provider adapter has a documented recommended default model, overridable
 by `--model`/`generate.model`. Exact model IDs are a code-level constant, not pinned in this doc —
 naming a specific model here would date the document the moment providers rev their lineup; the
-adapter's own tests pin what they're tested against.
+adapter's own tests pin what they're tested against. The one default recorded here, because it was
+an explicit maintainer decision and not merely a code detail: **the `anthropic` adapter defaults to
+Claude Sonnet 5** (approved) — the frontier model best matched to structured multi-field YAML
+synthesis under a grounded prompt at a sane cost/latency point for this use. It remains overridable
+via `--model`/`generate.model`; the code-level constant is where the exact API model ID lives so a
+provider lineup rev is a one-line adapter change, not a doc edit.
 
 **Per-call timeout.** Each `Complete` call runs under a default per-attempt context deadline
 (proposed default 30s, overridable via `--provider-timeout`/`generate.provider_timeout`), so a
@@ -301,11 +331,52 @@ postgres, s3" is exactly the kind of feedback that both fixes hallucinated names
 consumer of the closest-match utility (§7). Exhausting retries surfaces a terminal error naming the
 **last** attempt's specific failure — never a generic "generation failed" with no detail (§8).
 
-**Nothing between steps 1–5 touches disk or the pipeline store.** The candidate lives in memory
-until step 6's preview; if the user declines to write it (`--out` not given and TTY confirm says
-no), nothing is left behind. This mirrors `repair`'s "the mutation is a text edit, reviewable as a
-diff" safety property — here the "mutation" is a brand-new file, which is strictly less risky than
-`repair`'s in-place edit, but the write-only-after-review discipline is identical.
+**The retry feedback must be bounded, not passed through raw.** The loop re-feeds
+`validate.Report` (and parse/semantic-mismatch) text into the next prompt, and that text is
+partly derived from the model's own prior output (finding messages quote the offending
+`ConfigPath`, connector IDs, and values the previous candidate contained). Left unbounded this is
+two distinct hazards: (a) prompt growth — a candidate with dozens of findings could balloon each
+retry's `System`/context payload, and (b) a channel by which model-originated text (including any
+injected instruction the first candidate echoed) re-enters the next prompt. The design therefore
+requires the feedback to be **constructed from structured fields, not concatenated report prose,
+and hard-bounded**: cap the number of findings fed back per retry (proposed: the first N by
+severity, N small — e.g. 10), render each from the finding's typed fields (`Code`, `ConfigPath`,
+`Suggestion`) rather than free-form text, truncate any single value echoed back to a fixed length,
+and never inline the candidate's full raw text into the retry prompt. The feedback's job is to
+name _what_ to fix in Conduit's own vocabulary (error code + config path + valid alternatives),
+not to relay an unbounded, model-influenced blob back into the model. This bound is a testable
+requirement (see Testing, "retry loop"), not a soft guideline.
+
+**The disk seam — a design decision this doc must resolve, not assume away.** `validate.Run`/
+`RunWithOptions` take a **file path** and read the config from disk (Context); there is no
+in-memory entry point today. So the tidy claim "nothing before the preview ever touches disk"
+**cannot** hold at the same time as "the candidate passes `validate` before preview" — validating
+the candidate requires it to exist as a file the validator can open. The two are in direct tension
+and the design has to pick one of two resolutions, not paper over it:
+
+1. **Add an in-memory seam to `validate`** — a `validate.RunBytes(ctx, name string, src []byte,
+   opts Options)` (or `RunReader`) that runs the identical checks on an in-memory source without a
+   disk read. Preferred: it keeps "nothing touches disk until the user chooses to write" _true_,
+   and it's a small, well-scoped additive change to `validate` (the existing path-based `Run`
+   becomes a thin wrapper that reads the file then calls `RunBytes`). It does mean touching the
+   `validate` package, so it's a public-surface addition that ships with its own tests.
+2. **Temp-file lifecycle with crash-safe cleanup** — write the candidate to a private temp file
+   (`0600`, in the OS temp dir or a `conduit`-owned scratch dir), validate the path, then remove
+   it, with cleanup wired to `defer` **and** a signal handler so a `SIGINT`/`SIGTERM` mid-validate
+   does not leave a stray candidate on disk. Simpler in that it touches no existing package, but it
+   reintroduces a real on-disk artifact (a partial/unreviewed candidate) that has to be cleaned up
+   on every exit path including crash — exactly the lifecycle bug class the first option avoids.
+
+**This doc chooses option 1** (the `RunBytes` seam) as the design intent, and the implementation
+PR must land that seam rather than silently choosing the temp-file shortcut; if option 1 proves
+infeasible against `validate`'s internals at build time, option 2's crash-cleanup contract is the
+required fallback and must be called out explicitly in that PR. Either way, the honest statement
+of the invariant is: **no candidate is written to a user-visible location until step 6's preview
+and (for `--out`) an explicit write** — validation may need a transient in-memory buffer or a
+self-cleaning temp file, but never leaves an unreviewed candidate where a user or another process
+would find it. This mirrors `repair`'s "the mutation is a text edit, reviewable
+as a diff" safety property — the durable, user-facing "mutation" is a brand-new file the user
+chose to write, strictly less risky than `repair`'s in-place edit.
 
 ### 4. The never-auto-apply boundary — the security-critical decision
 
@@ -776,7 +847,10 @@ today.
 - **Retry loop**: a fake provider returning invalid/mismatched candidates on purpose asserts the
   loop retries exactly `--max-retries` times, feeds back the specific failure each time, and
   terminates with the _last_ attempt's detail attached (never silently discarded, never an infinite
-  loop).
+  loop). **Also asserts the feedback is bounded** (§3): given a candidate producing many findings,
+  the retry prompt caps the number fed back, renders them from typed finding fields rather than raw
+  report prose, truncates over-long echoed values, and never inlines the candidate's full raw text
+  — so retry-prompt size stays bounded regardless of how bad a candidate is.
 - **Closest-match utility**: table test over known-connector-name typos, asserting a suggestion is
   offered above the similarity floor and withheld below it (never suggesting an unrelated name).
 - **The never-auto-apply boundary (the load-bearing security test)**: an explicit test asserts that
