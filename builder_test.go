@@ -15,6 +15,7 @@
 package conduit_test
 
 import (
+	"strings"
 	"testing"
 
 	conduit "github.com/conduitio/conduit"
@@ -249,4 +250,133 @@ func TestPipelineBuilder_NestedBuilderReuse_SnapshotsAtAttachTime(t *testing.T) 
 	src.WithName("mutated-after-attach")
 
 	is.Equal(got.Connectors[0].Name, "")
+}
+
+// TestPipelineBuilder_NestedBuilderReuse_AcrossPipelines proves the second
+// half of the documented snapshot-at-attach contract: reusing a
+// *ConnectorBuilder across two separate pipelines (mutating it between
+// attach calls) produces two independent PipelineConfig values, each
+// holding only the state as of its own attach call — never a later
+// mutation, and never a mutation made "for" a different pipeline.
+func TestPipelineBuilder_NestedBuilderReuse_AcrossPipelines(t *testing.T) {
+	is := is.New(t)
+
+	src := conduit.NewSourceConnector("src", "builtin:generator")
+
+	p1, err := conduit.NewPipeline("p1").WithConnector(src).Build()
+	is.NoErr(err)
+	is.Equal(p1.Connectors[0].Name, "")
+
+	src.WithName("renamed")
+
+	p2, err := conduit.NewPipeline("p2").WithConnector(src).Build()
+	is.NoErr(err)
+	is.Equal(p2.Connectors[0].Name, "renamed")
+
+	// p1 must remain exactly as it was built, unaffected by the mutation
+	// and by p2's later, independent snapshot.
+	is.Equal(p1.Connectors[0].Name, "")
+}
+
+// TestPipelineBuilder_Build_NilConnector proves the DX fix: WithConnector(nil)
+// never panics. It is recorded as a conduiterr.CodeInvalidArgument error and
+// surfaced from the next Build call, exactly like a validation failure —
+// no new error code is minted (see Run/Stop misuse in conduit.go for the
+// precedent this follows).
+func TestPipelineBuilder_Build_NilConnector(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.NewPipeline("p1").
+		WithConnector(nil).
+		Build()
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestPipelineBuilder_Build_NilProcessor mirrors the nil-connector case for
+// a pipeline-scoped processor.
+func TestPipelineBuilder_Build_NilProcessor(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.NewPipeline("p1").
+		WithProcessor(nil).
+		Build()
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestPipelineBuilder_Build_NilDLQ mirrors the nil-connector case for
+// WithDLQ.
+func TestPipelineBuilder_Build_NilDLQ(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.NewPipeline("p1").
+		WithDLQ(nil).
+		Build()
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestConnectorBuilder_WithProcessor_NilProcessor proves the nested case: a
+// nil processor passed to a *ConnectorBuilder's own WithProcessor is
+// recorded there and still surfaces from the top-level PipelineBuilder's
+// Build call once the connector is attached — the error is not lost when
+// crossing from ConnectorBuilder into PipelineBuilder.
+func TestConnectorBuilder_WithProcessor_NilProcessor(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.NewPipeline("p1").
+		WithConnector(
+			conduit.NewSourceConnector("src", "builtin:generator").WithProcessor(nil),
+		).
+		Build()
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestPipelineBuilder_Build_NilPipelineBuilder proves Build on a nil
+// *PipelineBuilder is a coded error, not a nil-pointer panic — the same
+// defensive pattern B1 already applies to Handle.Stop on a nil *Handle.
+func TestPipelineBuilder_Build_NilPipelineBuilder(t *testing.T) {
+	is := is.New(t)
+
+	var b *conduit.PipelineBuilder
+	_, err := b.Build()
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestPipelineBuilder_Build_MultipleNilArgs_JoinsErrors proves multiple
+// nil-argument misuses in one chain are all surfaced from a single Build
+// call (joined via cerrors.Join, the same as Validate's own multi-error
+// pipeline-config failures), not just the first one.
+func TestPipelineBuilder_Build_MultipleNilArgs_JoinsErrors(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.NewPipeline("p1").
+		WithConnector(nil).
+		WithProcessor(nil).
+		WithDLQ(nil).
+		Build()
+	is.True(err != nil)
+
+	msg := err.Error()
+	for _, want := range []string{"WithConnector", "WithProcessor", "WithDLQ"} {
+		is.True(strings.Contains(msg, want))
+	}
 }

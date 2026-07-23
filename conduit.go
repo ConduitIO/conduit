@@ -359,6 +359,31 @@ func (e *Engine) Import(ctx context.Context, cfg PipelineConfig) error {
 	return e.runtime.ProvisionService.Import(ctx, cfg)
 }
 
+// ImportPipeline builds b and imports the result in one call — the common
+// case for a host that constructs its pipeline with NewPipeline instead of
+// parsing YAML. It is exactly:
+//
+//	cfg, err := b.Build()
+//	if err != nil {
+//		return err
+//	}
+//	return e.Import(ctx, cfg)
+//
+// b.Build()'s error (a coded *conduiterr.ConduitError — missing id/plugin/
+// type, a duplicate connector/processor id, a nil nested builder passed to
+// one of PipelineBuilder's With... methods, ...) is returned as-is, before
+// Import is ever called; Import's own enrichment/validation still runs
+// against the built PipelineConfig exactly as it would for any other
+// caller of Import. This is the one call an embedder needs for the common
+// "define a pipeline in code, run it" path — see the package Example.
+func (e *Engine) ImportPipeline(ctx context.Context, b *PipelineBuilder) error {
+	cfg, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return e.Import(ctx, cfg)
+}
+
 // StartPipeline starts a previously imported/provisioned pipeline by ID,
 // delegating to the orchestrator unchanged.
 func (e *Engine) StartPipeline(ctx context.Context, pipelineID string) error {

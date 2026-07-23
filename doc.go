@@ -33,9 +33,16 @@
 // produces the exact same PipelineConfig a YAML parse of the equivalent
 // document produces — see builder.go and this package's round-trip tests
 // (TestPipelineBuilder_RoundTrip, TestPipelineBuilder_RoundTrip_Fixtures) for
-// the property this is verified against. The C-ABI/language-binding surface
-// (libconduit proper, "B3") remains a later workstream; see
-// docs/design-documents/20260722-embed-libconduit-v1.md.
+// the property this is verified against. Engine.ImportPipeline builds and
+// imports in one call, so the common case never needs a separate
+// provisioning/config import:
+//
+//	err = e.ImportPipeline(ctx, conduit.NewPipeline("hello").
+//		WithConnector(conduit.NewSourceConnector("src", "builtin:generator")).
+//		WithConnector(conduit.NewDestinationConnector("dst", "builtin:log")))
+//
+// The C-ABI/language-binding surface (libconduit proper, "B3") remains a
+// later workstream; see docs/design-documents/20260722-embed-libconduit-v1.md.
 //
 // # Why this exists, not pkg/conduit directly
 //
@@ -91,13 +98,15 @@
 //
 // # Package boundary / deprecation policy
 //
-// This package's exported API (Options, Engine, Handle, PipelineConfig, New)
-// is a public contract, versioned like the connector protocol, pipeline
-// config schema, and error codes: a breaking change is announced (CHANGELOG +
-// a `Deprecated:` godoc comment) in one monthly release, kept working with a
-// warning for at least one more minor release, and removed no earlier than
-// the third minor release after announcement. PipelineConfig extends this
-// policy by name to provisioning/config.{Pipeline,Connector,Processor,DLQ} —
+// This package's exported API (Options, Engine, Handle, PipelineConfig, New,
+// NewPipeline/PipelineBuilder and its ConnectorBuilder/ProcessorBuilder/
+// DLQBuilder companions) is a public contract, versioned like the connector
+// protocol, pipeline config schema, and error codes: a breaking change is
+// announced (CHANGELOG + a `Deprecated:` godoc comment) in one monthly
+// release, kept working with a warning for at least one more minor release,
+// and removed no earlier than the third minor release after announcement.
+// PipelineConfig extends this policy by name to
+// provisioning/config.{Pipeline,Connector,Processor,DLQ} —
 // all four are constrained by the single doc comment above
 // provisioning/config.Pipeline in that package's parser.go (Connector,
 // Processor, and DLQ have no separate per-type comment of their own; they are

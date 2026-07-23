@@ -15,6 +15,8 @@
 package conduit
 
 import (
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	provisioningconfig "github.com/conduitio/conduit/pkg/provisioning/config"
 )
 
@@ -39,28 +41,56 @@ const (
 // PipelineBuilder builds a PipelineConfig field by field, producing exactly
 // the struct a YAML parse of the equivalent pipeline document produces — see
 // PipelineConfig's doc for why that identity matters. Obtain one with
-// NewPipeline; chain With... calls; terminate with Build.
+// NewPipeline; chain With... calls; terminate with Build (or pass the
+// builder directly to Engine.ImportPipeline, which calls Build for you).
 //
-// # Not safe for concurrent or repeated use
+// # Single-owner, write-once, snapshot-at-attach
 //
 // A PipelineBuilder — and the ConnectorBuilder/ProcessorBuilder/DLQBuilder
-// below — is a single-owner, write-once value: build it inline, attach it
-// to its parent (WithConnector/WithProcessor/WithDLQ), and let it go. Each
-// With... method on the parent snapshots the child's state at the moment
-// it's attached, so a nested builder is safe to construct as a chained
-// expression passed directly as an argument, but mutating it *after*
-// attaching it does not retroactively change the pipeline it was already
-// attached to. None of these types are safe for concurrent use from
-// multiple goroutines.
+// below — is a single-owner, write-once value, and none of these types are
+// safe for concurrent use from multiple goroutines. The critical rule to
+// know before reusing one: every With... method that takes a nested builder
+// (PipelineBuilder.WithConnector/WithProcessor/WithDLQ,
+// ConnectorBuilder.WithProcessor) snapshots that child's state at the exact
+// moment it's attached — it does not keep a live reference to it. Building
+// the nested value inline, as an argument to the parent's With... call
+// (the pattern every example in this package uses), is always safe. Holding
+// onto a nested builder variable and reusing or mutating it afterward is
+// where the footgun lives:
+//
+//	src := conduit.NewSourceConnector("src", "builtin:generator")
+//
+//	p1, err := conduit.NewPipeline("p1").WithConnector(src).Build()
+//	// p1's "src" connector has no Name set.
+//
+//	src.WithName("renamed") // mutates src — but p1 was already snapshotted.
+//
+//	p2, err := conduit.NewPipeline("p2").WithConnector(src).Build()
+//	// p2's "src" connector DOES have Name "renamed" — this is p2's own,
+//	// independent snapshot, taken at p2's WithConnector call, which is
+//	// after the mutation above.
+//	//
+//	// p1 is completely unaffected by any of this: it already holds its own
+//	// snapshot from before src.WithName was ever called.
+//
+// In other words: reusing a *ConnectorBuilder/*ProcessorBuilder/*DLQBuilder
+// across two pipelines is allowed and produces two independent, correctly
+// isolated PipelineConfig values — but each pipeline only ever sees the
+// nested builder's state as of its own attach call, never a later mutation,
+// and never a mutation made for a different pipeline. If that ordering
+// dependency is ever a surprise, the fix is the same one every example in
+// this package already follows: construct nested builders inline, don't
+// hold onto them.
 //
 // Passing a nil *ConnectorBuilder/*ProcessorBuilder/*DLQBuilder to a With...
-// method panics on the nil pointer dereference inside it, the same as any
-// other Go API that dereferences a caller-supplied pointer — there is no
-// nil guard here, matching the normal, unavoidable-in-practice pattern of
-// constructing a nested builder inline as the With... call's argument
-// (e.g. WithConnector(NewSourceConnector(...))), which can never be nil.
+// method never panics: it records a conduiterr.CodeInvalidArgument error
+// (the same code Run/Stop misuse already uses, see conduit.go — no new code
+// minted) that surfaces from the next Build call, alongside any other
+// accumulated or validation errors. The pipeline being built is otherwise
+// unaffected by the nil argument (no zero-value entry is appended).
 type PipelineBuilder struct {
 	pipeline provisioningconfig.Pipeline
+	errs     []error
 }
 
 // NewPipeline starts a PipelineBuilder for a pipeline with the given id. id
@@ -91,16 +121,31 @@ func (b *PipelineBuilder) WithStatus(status string) *PipelineBuilder {
 }
 
 // WithConnector appends a connector built by NewSourceConnector or
-// NewDestinationConnector. Call order is preserved.
+// NewDestinationConnector. Call order is preserved. A nil c is recorded as
+// a Build-time error rather than panicking — see PipelineBuilder's doc.
 func (b *PipelineBuilder) WithConnector(c *ConnectorBuilder) *PipelineBuilder {
-	b.pipeline.Connectors = append(b.pipeline.Connectors, c.build())
+	if c == nil {
+		b.errs = append(b.errs, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: WithConnector called with a nil *ConnectorBuilder"))
+		return b
+	}
+	conn, errs := c.build()
+	b.errs = append(b.errs, errs...)
+	b.pipeline.Connectors = append(b.pipeline.Connectors, conn)
 	return b
 }
 
 // WithProcessor appends a pipeline-scoped processor — one that runs on every
 // connector's records, as opposed to a processor scoped to a single
-// connector via ConnectorBuilder.WithProcessor. Call order is preserved.
+// connector via ConnectorBuilder.WithProcessor. Call order is preserved. A
+// nil p is recorded as a Build-time error rather than panicking — see
+// PipelineBuilder's doc.
 func (b *PipelineBuilder) WithProcessor(p *ProcessorBuilder) *PipelineBuilder {
+	if p == nil {
+		b.errs = append(b.errs, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: WithProcessor called with a nil *ProcessorBuilder"))
+		return b
+	}
 	b.pipeline.Processors = append(b.pipeline.Processors, p.build())
 	return b
 }
@@ -110,8 +155,15 @@ func (b *PipelineBuilder) WithProcessor(p *ProcessorBuilder) *PipelineBuilder {
 // dead-letter-queue block — and Engine.Import's enrichment fills in
 // Conduit's default DLQ plugin/settings/window at import time, exactly as it
 // does for a parsed YAML pipeline that also omits the block. Calling
-// WithDLQ a second time replaces the previous value rather than merging.
+// WithDLQ a second time replaces the previous value rather than merging. A
+// nil d is recorded as a Build-time error rather than panicking — see
+// PipelineBuilder's doc.
 func (b *PipelineBuilder) WithDLQ(d *DLQBuilder) *PipelineBuilder {
+	if d == nil {
+		b.errs = append(b.errs, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: WithDLQ called with a nil *DLQBuilder"))
+		return b
+	}
 	b.pipeline.DLQ = d.build()
 	return b
 }
@@ -123,20 +175,31 @@ func (b *PipelineBuilder) WithDLQ(d *DLQBuilder) *PipelineBuilder {
 // validate` runs on a parsed YAML document — so a Build-time error catches
 // the same class of mistake the CLI would catch (missing id/plugin/type,
 // an out-of-range name/description, a negative worker count, a duplicate
-// connector/processor id, ...). The returned PipelineConfig, however, is the
-// raw, unenriched value this builder constructed: final namespaced IDs and
-// injected DLQ defaults are Engine.Import's job at import time, not
-// Build's — which is what keeps a hand-built PipelineConfig
-// indistinguishable from a parsed one, the property this package's
-// round-trip tests assert.
+// connector/processor id, ...). Any nil-nested-builder misuse recorded by a
+// With... method (see PipelineBuilder's doc) is joined into the same
+// returned error, so a single Build call surfaces everything wrong at once.
+// The returned PipelineConfig, however, is the raw, unenriched value this
+// builder constructed: final namespaced IDs and injected DLQ defaults are
+// Engine.Import's job at import time, not Build's — which is what keeps a
+// hand-built PipelineConfig indistinguishable from a parsed one, the
+// property this package's round-trip tests assert.
 //
 // A validation failure is returned as the same coded, config-path-scoped
 // *conduiterr.ConduitError provisioning/config.Validate already produces for
-// the CLI and API — never a panic, and never a new error code minted by
-// this package.
+// the CLI and API; a nil-nested-builder misuse is a
+// conduiterr.CodeInvalidArgument error (see PipelineBuilder's doc) — Build
+// never panics and never returns an uncoded error. Calling Build on a nil
+// *PipelineBuilder itself is likewise reported as a coded error rather than
+// a nil-pointer panic.
 func (b *PipelineBuilder) Build() (PipelineConfig, error) {
+	if b == nil {
+		return PipelineConfig{}, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: Build called on a nil *PipelineBuilder")
+	}
+
 	enriched := provisioningconfig.Enrich(b.pipeline)
-	if err := provisioningconfig.Validate(enriched); err != nil {
+	errs := append(append([]error{}, b.errs...), provisioningconfig.Validate(enriched))
+	if err := cerrors.Join(errs...); err != nil {
 		return PipelineConfig{}, err
 	}
 	return b.pipeline, nil
@@ -148,6 +211,7 @@ func (b *PipelineBuilder) Build() (PipelineConfig, error) {
 // constructor, so a connector's type can never be left empty or misspelled.
 type ConnectorBuilder struct {
 	connector provisioningconfig.Connector
+	errs      []error
 }
 
 func newConnector(connType, id, plugin string) *ConnectorBuilder {
@@ -198,14 +262,25 @@ func (c *ConnectorBuilder) WithSettings(settings map[string]string) *ConnectorBu
 }
 
 // WithProcessor appends a processor scoped to this connector only. Call
-// order is preserved.
+// order is preserved. A nil p is recorded as a Build-time error (surfaced
+// once this connector is attached to a PipelineBuilder and Build is called)
+// rather than panicking — see PipelineBuilder's doc.
 func (c *ConnectorBuilder) WithProcessor(p *ProcessorBuilder) *ConnectorBuilder {
+	if p == nil {
+		c.errs = append(c.errs, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: WithProcessor called with a nil *ProcessorBuilder"))
+		return c
+	}
 	c.connector.Processors = append(c.connector.Processors, p.build())
 	return c
 }
 
-func (c *ConnectorBuilder) build() provisioningconfig.Connector {
-	return c.connector
+// build returns the connector this builder has accumulated so far, plus any
+// errors recorded by a nil-argument misuse (see WithProcessor). The caller
+// (PipelineBuilder.WithConnector) is responsible for folding errs into its
+// own accumulated errors so Build surfaces them.
+func (c *ConnectorBuilder) build() (conn provisioningconfig.Connector, errs []error) {
+	return c.connector, c.errs
 }
 
 // ProcessorBuilder builds one processor. The same ProcessorBuilder type
