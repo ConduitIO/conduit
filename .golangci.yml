@@ -46,6 +46,46 @@ linters:
               desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead.
             - pkg: encoding/json
               desc: github.com/goccy/go-json is preferred for performance reasons.
+        # P1-3 / plan-v2 §6: policy.Decide is the ONLY function permitted to
+        # return "skip artifact verification" for a connector install. This
+        # rule is the structural half of that guarantee (the other half is
+        # policy.Decision's unexported field, pkg/registry/policy/gate.go) —
+        # restricting which files may even import the package means no new
+        # call site can be added that calls policy.Decide without a
+        # deliberate, reviewable change to this file too.
+        PolicyBypass:
+          files:
+            - "!**/pkg/registry/install.go"
+            # bundle.go is the second (and, as of PR-4, only other)
+            # sanctioned call site: it calls policy.DecideStaleBundle for
+            # the --allow-stale-bundle gate (plan-v2/step5 §7 step 3,
+            # gated exactly like --allow-unsigned per DeVaris's
+            # ratification) the same way install.go calls policy.Decide for
+            # --allow-unsigned.
+            - "!**/pkg/registry/bundle.go"
+            - "!**/pkg/registry/policy/**"
+            # Test files may import policy to assert against its exported
+            # Code*/Decision types (the "confirms wiring" test pattern,
+            # plan-v2 §11.2) without calling Decide themselves — that
+            # narrower invariant (only install.go calls Decide) is enforced
+            # by Decision's unexported field (gate.go), not by this rule;
+            # this rule's job is production call sites only.
+            - "!**/*_test.go"
+            # allcodes.go blank-imports every codes.go-declaring package
+            # (including this one) solely for conduiterr.Register's
+            # init-time side effect, for the llms.txt error-code generator
+            # (D5, 20260712-llms-txt-generation.md) — it never calls
+            # Decide or references any exported symbol.
+            - "!**/cmd/conduit/internal/llmsgen/allcodes/allcodes.go"
+          deny:
+            - pkg: github.com/conduitio/conduit/pkg/registry/policy
+              desc: >-
+                policy.Decide is the ONLY function permitted to skip connector
+                artifact verification (plan-v2 §6/P1-3). Only
+                pkg/registry/install.go may call it — the CLI/MCP layers pass
+                primitive signals (TTY, CI env, confirmation, allow-unsigned
+                flag) through registry.InstallOptions instead of importing
+                this package directly.
     forbidigo:
       # Needed for the pconnector.*Request field-access pattern below: without
       # analyze-types, forbidigo only has literal source text to match against,

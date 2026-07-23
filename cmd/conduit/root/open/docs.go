@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/browser"
 )
 
-const ConduitDocsURL = "https://conduit.io/docs"
+const ConduitDocsURL = "https://conduitdata.io/docs"
 
 var (
 	_ ecdysis.CommandWithDocs    = (*DocsCommand)(nil)
