@@ -1,10 +1,10 @@
 # Partition-claims protocol RFC (seam for hot-pipeline parallelism)
 
-**Status:** Draft, awaiting DeVaris Tier-1 sign-off (targeted week 1 of v0.19, Workstream 5). This
-is a protocol **proposal**, not an accepted change: no `.proto` file in `conduit-connector-protocol`
-is touched by this document, and nothing described below should be read as decided until sign-off
-lands. Three open questions in [Risk, confidence, and open questions](#risk-confidence-and-open-questions)
-are explicitly unresolved and must be decided at sign-off, not assumed.
+**Status:** Accepted (DeVaris Tier-1 sign-off, 2026-07-23; v0.19, Workstream 5). This is a protocol
+**proposal**, not an implemented change: no `.proto` file in `conduit-connector-protocol` is touched by
+this document — it defines the agreed seam shape for a future additive change. The three questions the
+draft left open are now resolved; see [Resolved at
+sign-off](#resolved-at-sign-off-devaris-2026-07-23).
 
 ## Summary
 
@@ -419,28 +419,31 @@ pinned module versions this repo depends on (cited by file:line, spot-checked wh
 doc, not carried over from memory) and against the existing `v1`→`v2` precedent. The softer parts —
 whether `epoch`/fencing is the right level of detail for a protocol seam with no consumer yet, and
 whether `MODE_EXTERNALLY_MANAGED` belongs in the wire protocol at all versus being a documentation
-convention — are genuinely open, below.
+convention — were resolved at sign-off, below.
 
-**Open question — resolve at sign-off (1). Fencing-token scope.** Is specifying
-`PartitionClaim.epoch` now (above) the right level of detail for a seam with zero consumers, or
-should this RFC say less — reserve a field number and leave the fencing _mechanism_ entirely to the
-Phase 3 scheduler design doc, rather than committing to "monotonically increasing generation number"
-as the shape today? **Not decided by this document.**
+### Resolved at sign-off (DeVaris, 2026-07-23)
 
-**Open question — resolve at sign-off (2). `MODE_EXTERNALLY_MANAGED` — in the wire protocol or
-docs-only?** Kafka doesn't need Conduit's claim mechanism at all — is it worth a protocol-level enum
-value now, or should this just be documentation guidance ("Kafka-kind sources report
-`MODE_UNSPECIFIED` and rely on their own external partitioning"), keeping the wire vocabulary
-smaller? **Not decided by this document.**
+The three questions the draft left open were decided at Tier-1 sign-off as follows. They are
+recorded here as the accepted disposition of this RFC.
 
-**Open question — resolve at sign-off (3). Does accepting this RFC pre-authorize extending the
-state layer's locked scope?** `CLAUDE.md`'s state-layer scope is currently locked to "dedup, lookup
-tables, simple windows... nothing else without explicit maintainer sign-off." [Deferred forward
-dependencies](#deferred-forward-dependencies-this-rfc-creates) above flags that per-unit checkpoint
-storage is a real future requirement this RFC creates a dependency on. Does accepting this RFC
-constitute pre-authorization to eventually extend that locked scope for per-unit checkpoints, or does
-that need its own separate sign-off when Phase 3 arrives? **This RFC assumes the latter (deferred,
-separately gated) but that assumption itself is not decided until DeVaris confirms it at sign-off.**
+**Resolved (1). Fencing-token scope — reserve the field, defer the mechanism.** `PartitionClaim.epoch`
+stays in the wire shape as **reserved space for forward-compatibility** (claiming the field number now
+so no breaking proto change is needed later), but this RFC does **not** commit to the enforcement
+semantics — the fencing _mechanism_ (what mints epochs, how staleness is rejected, liveness/reassignment
+timing) is deferred in full to the Phase 3 scheduler design doc. Until that doc lands, `epoch` is inert
+reserved wire space, not a safety mechanism, exactly as [Deferred forward
+dependencies](#deferred-forward-dependencies-this-rfc-creates) states.
+
+**Resolved (2). `MODE_EXTERNALLY_MANAGED` — wire-level enum, not docs-only.** It stays a
+protocol-level enum value. The engine/scheduler must be able to _read_ a source's declared mode to know
+it must never attempt its own claim assignment for a Kafka-kind source; documentation guidance alone
+cannot be enforced at the seam. The wire vocabulary carries the opt-out.
+
+**Resolved (3). No pre-authorization of state-layer scope.** Accepting this RFC does **not**
+pre-authorize extending `CLAUDE.md`'s locked state-layer scope (dedup, lookup tables, simple windows).
+The per-unit checkpoint storage this RFC creates a forward dependency on is **deferred and separately
+gated** — it requires its own explicit maintainer sign-off when Phase 3 arrives. The ratchet stays
+tight; this seam does not widen it.
 
 ## Acceptance criteria
 
