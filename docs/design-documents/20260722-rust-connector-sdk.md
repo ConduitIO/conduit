@@ -20,11 +20,12 @@ binary." Under that plan, Rust connector scaffolding was headed toward "RFC + re
 implementation, not a supported `--lang rust` scaffold path a user should build production
 connectors against" (`conduit-v019-plans/v019-execution-plan.md`, Workstream 4, NO-GO branch).
 
-DeVaris's call, which this document executes: give Rust the same production tier Python already
-has planned, using the mechanism that already works — gRPC-standalone — so
-`conduit connector new --lang rust` scaffolds something that actually runs, rather than an RFC a
-user can't ship. The Rust WASM reference component (proving the WIT interface, on the
-experimental wasmtime branch) is unaffected and continues as separate, non-production spec work;
+The direction this document proposes (pending acceptance — this is an open design PR, not a
+ratified decision): give Rust the same production tier Python already has planned, using the
+mechanism that already works — gRPC-standalone — so `conduit connector new --lang rust` scaffolds
+something that actually runs, rather than an RFC a user can't ship. The Rust WASM reference
+component (proving the WIT interface, on the experimental wasmtime branch) is unaffected and
+continues as separate, non-production spec work;
 this SDK does not touch it and is not a substitute for it. **Consequences** covers the doc
 updates (ROADMAP.md, the DX doc, the v0.19 plan) this decision requires once accepted.
 
@@ -853,6 +854,18 @@ owns:
   guessing).
 
 ## Phased plan
+
+**Build-deferral trigger (when Phase 0 may start).** This document is design/planning only and is
+not itself a decision to start building — it is pending acceptance, and even once accepted the
+_build_ is deliberately deferred behind the SDK sequencing (Go → Python → Rust → TS). The trigger to
+begin Phase 0 is a **tagged release of the Python connector SDK (`conduit-connector-sdk-python`) —
+an actual published version tag, not a merge to `main` and not the acceptance of the Python design
+doc.** "Python ships" means a user can `pip install` a tagged version, not that Python's code has
+landed on a branch. Rust's build does not start on a Python merge, a green Python CI run, or a
+Python design-doc sign-off; it starts when Python has a real, installable tagged release. This keeps
+the org from carrying two half-built new SDKs at once and honors the committed language order rather
+than racing Rust ahead of the Python tier it is defined to match. Nothing in Phases 0–3 below is
+authorized to begin before that trigger fires.
 
 ### Phase 0 — protocol groundwork (the part with no existing precedent to copy)
 
