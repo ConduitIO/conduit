@@ -1,0 +1,18 @@
+version: "2.2"
+pipelines:
+  - id: orders-unknown-plugin
+    status: running
+    connectors:
+      - id: mystery-source
+        type: source
+        plugin: standalone:some-custom-plugin
+      - id: kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          topic: orders
+        processors:
+          - id: amount-filter
+            plugin: filter
+            settings:
+              expression: "amount > 100"

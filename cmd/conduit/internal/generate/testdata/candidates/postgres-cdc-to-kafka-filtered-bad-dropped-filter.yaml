@@ -1,0 +1,15 @@
+version: "2.2"
+pipelines:
+  - id: orders-to-kafka-no-filter
+    status: running
+    connectors:
+      - id: pg-source
+        type: source
+        plugin: builtin:postgres
+        settings:
+          table: orders
+      - id: kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          topic: orders

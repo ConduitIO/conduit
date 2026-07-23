@@ -1,0 +1,12 @@
+version: "2.2"
+pipelines:
+  - id: smoketest
+    status: running
+    name: smoketest
+    connectors:
+      - id: gen-source
+        type: source
+        plugin: builtin:generator
+      - id: log-dest
+        type: destination
+        plugin: builtin:log
