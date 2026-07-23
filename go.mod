@@ -3,7 +3,6 @@ module github.com/conduitio/conduit
 go 1.25.8
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.11-20260416204259-4836b6d55230.1
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
@@ -27,7 +26,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gammazero/deque v1.2.1
 	github.com/goccy/go-json v0.10.6
-	github.com/gofrs/flock v0.12.1
+	github.com/gofrs/flock v0.13.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
