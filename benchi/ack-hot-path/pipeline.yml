@@ -1,0 +1,33 @@
+version: "2.2"
+pipelines:
+  - id: ack-hot-path
+    status: running
+    name: ack-hot-path
+    description: >
+      Reference pipeline for the Source.Ack persist-ordering fix (Approach A,
+      docs/design-documents/20260723-source-ack-persist-ordering-fix.md).
+      Generator source -> log destination, deliberately with no external
+      infrastructure in the loop, so the measured throughput isolates the
+      engine's own record/ack hot path (Source.Read -> Source.Ack ->
+      Persister.Persist -> deferred plugin-ack) rather than any downstream
+      I/O latency.
+    connectors:
+      - id: ack-hot-path:generator-src
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          # No rate limit: the generator produces as fast as the pipeline can
+          # read+ack, so throughput is bounded by the engine's own hot path,
+          # not by an artificial pacing knob.
+      - id: ack-hot-path:log-dest
+        type: destination
+        plugin: builtin:log
+        settings:
+          # error, not a no-op level: the connector-log destination has no
+          # "off" setting, so this is the quietest valid level, minimizing
+          # (not eliminating) logging overhead in the measurement.
+          level: error
