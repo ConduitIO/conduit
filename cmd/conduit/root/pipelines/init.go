@@ -15,26 +15,28 @@
 package pipelines
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"text/template"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/ecdysis"
 )
 
 var (
+	_ cecdysis.CommandWithResult = (*InitCommand)(nil)
 	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
 	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
 	_ ecdysis.CommandWithArgs    = (*InitCommand)(nil)
-	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
 
 	//go:embed pipeline.tmpl
 	pipelineCfgTmpl string
@@ -54,6 +56,35 @@ type InitFlags struct {
 	Source        string `long:"source" usage:"Source connector (any of the built-in connectors)." default:"generator"`
 	Destination   string `long:"destination" usage:"Destination connector (any of the built-in connectors)." default:"log"`
 	PipelinesPath string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
+	Force         bool   `long:"force" usage:"Overwrite the pipeline file if one already exists at the destination path."`
+	DryRun        bool   `long:"dry-run" usage:"Print the pipeline configuration that would be written, without writing it."`
+}
+
+// InitResult is `pipelines init`'s --json result payload (cecdysis.Outcome.Result).
+type InitResult struct {
+	// Path is the pipeline YAML file's resolved destination path.
+	Path string `json:"path"`
+	// PipelineName is the resolved pipeline name (from the positional
+	// argument, or derived from Source/Destination, or the demo name).
+	PipelineName string `json:"pipelineName"`
+	Source       string `json:"source"`
+	Destination  string `json:"destination"`
+	// DryRun reports whether this run wrote nothing (--dry-run).
+	DryRun bool `json:"dryRun"`
+	// Forced reports whether --force was set (informational; true even if
+	// no existing file needed overwriting).
+	Forced bool `json:"forced"`
+	// Config is the rendered pipeline YAML — the literal bytes written to
+	// Path, or (under --dry-run) the bytes that would have been written.
+	Config string `json:"config"`
+}
+
+// InitSummary is `pipelines init`'s --json summary payload
+// (cecdysis.Outcome.Summary).
+type InitSummary struct {
+	// Written reports whether a file was actually written to disk. False
+	// only under --dry-run.
+	Written bool `json:"written"`
 }
 
 type InitCommand struct {
@@ -92,15 +123,23 @@ func (c *InitCommand) Usage() string { return "init [PIPELINE_NAME]" }
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Initialize a pipeline with the chosen connectors via flags, or a demo pipeline if no flags are specified.",
-		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
+		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
-a simple and runnable demo-pipeline is fully configured.`,
+a simple and runnable demo-pipeline is fully configured.
+
+Refuses to overwrite an existing pipeline file at the destination path unless --force is set.
+--dry-run prints the pipeline configuration that would be written without touching the filesystem
+(and is exempt from the --force check, since it never writes).`,
 		Example: "conduit pipelines init\n" +
 			"conduit pipelines init --source generator --destination s3 \n" +
 			"conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
-			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines",
+			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines\n" +
+			"conduit pipelines init --force\n" +
+			"conduit pipelines init --dry-run --json",
 	}
 }
+
+func (c *InitCommand) ResultCommand() string { return "pipelines.init" }
 
 func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
 	src := c.flags.Source
@@ -214,29 +253,62 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 	}, nil
 }
 
-func (c *InitCommand) getOutput() *os.File {
-	output, err := os.OpenFile(c.configFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", c.configFilePath, err)
-	}
-
-	return output
-}
-
-func (c *InitCommand) write(pipeline pipelineTemplate) error {
+// renderPipeline executes the embedded pipeline.tmpl against pipeline and
+// returns the rendered YAML as a string, without touching the filesystem —
+// the shared rendering path for both a real write (writeFile) and --dry-run
+// (which renders but never writes).
+func (c *InitCommand) renderPipeline(pipeline pipelineTemplate) (string, error) {
 	t, err := template.New("").Funcs(funcMap).Option("missingkey=zero").Parse(pipelineCfgTmpl)
 	if err != nil {
-		return cerrors.Errorf("failed parsing template: %w", err)
+		return "", cerrors.Errorf("failed parsing template: %w", err)
 	}
 
-	output := c.getOutput()
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, pipeline); err != nil {
+		return "", cerrors.Errorf("failed executing template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// writeFile writes the already-rendered pipeline config to c.configFilePath.
+//
+// Invariant: never silently overwrite an existing pipeline file — this
+// command's original bug was os.OpenFile with O_CREATE|O_WRONLY|O_TRUNC and
+// no existence check at all, so a second `pipelines init` into the same path
+// silently clobbered a hand-edited pipeline. Without --force, the file is
+// opened with O_EXCL instead of O_TRUNC: the existence check and the write
+// are a single atomic syscall, so there is no TOCTOU window between "check
+// if it exists" and "write" the way a separate os.Stat followed by an open
+// would have (e.g. another `pipelines init` run, or anything else, creating
+// the file in between). --force switches to O_TRUNC, explicitly authorizing
+// the overwrite. Only called when !DryRun (see ExecuteWithResult) — --dry-run
+// never reaches here, so it has nothing to protect and never hits this
+// check at all.
+func (c *InitCommand) writeFile(renderedConfig string) error {
+	flags := os.O_CREATE | os.O_WRONLY | os.O_EXCL
+	if c.flags.Force {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+
+	output, err := os.OpenFile(c.configFilePath, flags, 0o600)
+	if err != nil {
+		if !c.flags.Force && os.IsExist(err) {
+			ce := conduiterr.New(CodeDestinationExists, fmt.Sprintf("pipeline file %q already exists", c.configFilePath))
+			ce.ConfigPath = c.configFilePath
+			ce.Suggestion = fmt.Sprintf(
+				"pass --force to overwrite %q, choose a different pipeline name, or a different --pipelines.path",
+				c.configFilePath,
+			)
+			return ce
+		}
+		return conduiterr.Wrap(conduiterr.CodeInternal, fmt.Sprintf("could not open %q", c.configFilePath), err)
+	}
 	defer output.Close()
 
-	err = t.Execute(output, pipeline)
-	if err != nil {
-		return cerrors.Errorf("failed executing template: %w", err)
+	if _, err := output.WriteString(renderedConfig); err != nil {
+		return conduiterr.Wrap(conduiterr.CodeInternal, "failed writing pipeline config", err)
 	}
-
 	return nil
 }
 
@@ -288,22 +360,68 @@ func (c *InitCommand) setSourceAndDestinationConnector() {
 	}
 }
 
-func (c *InitCommand) Execute(_ context.Context) error {
+// ExecuteWithResult resolves the pipeline's source/destination/name, renders
+// the pipeline config, and — unless --dry-run — writes it, refusing (via
+// writeFile) rather than silently clobbering an existing pipeline file. A
+// non-nil error here is always a HARD command failure (unknown connector,
+// destination-exists-without-force, an I/O failure); this command has no
+// "domain finding" outcome distinct from success, so OK is always true when
+// err is nil.
+func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, error) {
 	c.setSourceAndDestinationConnector()
 	c.pipelineName = c.getPipelineName()
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
 
 	pipeline, err := c.buildTemplatePipeline()
 	if err != nil {
-		return err
+		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInvalidArgument,
+			"could not build the pipeline configuration", err)
 	}
 
-	if err := c.write(pipeline); err != nil {
-		return cerrors.Errorf("could not write pipeline: %w", err)
+	rendered, err := c.renderPipeline(pipeline)
+	if err != nil {
+		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInternal,
+			"could not render the pipeline configuration", err)
 	}
 
-	fmt.Printf("Your pipeline has been initialized and created at %q.\n"+
-		"To run the pipeline, simply run `conduit run`.\n", c.configFilePath)
+	written := false
+	if !c.flags.DryRun {
+		// Invariant: never silently overwrite an existing pipeline file
+		// (this command's original bug) — see writeFile's doc for the
+		// atomic, TOCTOU-safe existence check.
+		if err := c.writeFile(rendered); err != nil {
+			return cecdysis.Outcome{}, err
+		}
+		written = true
+	}
 
-	return nil
+	return cecdysis.Outcome{
+		OK:      true,
+		Summary: InitSummary{Written: written},
+		Result: InitResult{
+			Path:         c.configFilePath,
+			PipelineName: c.pipelineName,
+			Source:       c.sourceConnector,
+			Destination:  c.destinationConnector,
+			DryRun:       c.flags.DryRun,
+			Forced:       c.flags.Force,
+			Config:       rendered,
+		},
+	}, nil
+}
+
+// Render returns the human-readable rendering of a successful init run: the
+// original "your pipeline has been initialized" message when a file was
+// written, or the rendered config plus a "nothing was written" notice under
+// --dry-run.
+func (c *InitCommand) Render(outcome cecdysis.Outcome) string {
+	result, _ := outcome.Result.(InitResult)
+
+	if result.DryRun {
+		return fmt.Sprintf("Dry run: the following pipeline configuration would be written to %q "+
+			"(nothing was written):\n\n%s", result.Path, result.Config)
+	}
+
+	return fmt.Sprintf("Your pipeline has been initialized and created at %q.\n"+
+		"To run the pipeline, simply run `conduit run`.\n", result.Path)
 }

@@ -57,6 +57,7 @@ import (
 	// equivalently named file) in the engine — TestAllCodesComplete in
 	// ../llmsgen fails the build if it drifts.
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/deploy"
+	_ "github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	_ "github.com/conduitio/conduit/pkg/connector"
 	_ "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	_ "github.com/conduitio/conduit/pkg/orchestrator"
