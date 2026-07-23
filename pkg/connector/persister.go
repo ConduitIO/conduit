@@ -228,6 +228,56 @@ func (p *Persister) WaitPendingWrites() {
 	p.callbackWg.Wait()
 }
 
+// WaitPendingWritesContext behaves like WaitPendingWrites, but returns early
+// — without waiting for the flush/callbacks to actually finish — if ctx is
+// canceled or timeout elapses, whichever comes first. It returns nil if the
+// wait completed normally, or the triggering error (ctx.Err() or
+// context.DeadlineExceeded) if it did not.
+//
+// This exists for a caller like Source.Teardown that must not hang
+// indefinitely on a stuck or slow flush (e.g. a disk stall or a badger
+// compaction pause) during graceful shutdown: before Approach A
+// (docs/design-documents/20260723-source-ack-persist-ordering-fix.md),
+// Teardown never waited on the persister at all, so this wait is new
+// exposure, not a pre-existing one — an unbounded wait here would trade the
+// sev-0 ack-before-persist bug for a possible-hang-on-graceful-shutdown bug,
+// which is not an improvement. A bounded, forced-teardown fallback is safe:
+// the SIGKILL chaos suite (tests/chaos) already proves the crash path never
+// produces a gap, so a caller proceeding with teardown without the deferred
+// ack having been confirmed sent is at worst a benign duplicate on the next
+// run (the position may not be durably flushed yet, so a restart simply
+// re-delivers it), never a gap — see Source.Teardown's doc comment for the
+// full failure-mode entry this covers.
+//
+// Note on the timeout/cancel path: the background goroutine wrapping
+// WaitPendingWrites is not itself abortable (sync.WaitGroup has no cancel),
+// so it keeps running until the underlying flush actually finishes, even
+// after this function has returned early. That goroutine is only leaked for
+// as long as the stuck flush is; if the flush eventually completes (the
+// common case — a slow disk, not a dead one), the goroutine exits normally.
+// A genuinely permanently-stuck flush would leak it permanently, but at that
+// point the process has a much bigger problem than one goroutine, and no
+// caller-side timeout can fix a store that will never respond.
+func (p *Persister) WaitPendingWritesContext(ctx context.Context, timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.WaitPendingWrites()
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return context.DeadlineExceeded
+	}
+}
+
 // Flush will trigger a goroutine that persists any in-memory data to the store.
 // To wait for the changes to be actually persisted you need to call Wait.
 func (p *Persister) Flush(ctx context.Context) {

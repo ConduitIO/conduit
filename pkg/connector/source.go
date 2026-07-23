@@ -28,6 +28,18 @@ import (
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
+// DefaultTeardownFlushTimeout bounds how long Source.Teardown will wait
+// (Persister.WaitPendingWritesContext) for the final forced flush and its
+// deferred ack (Approach A, docs/design-documents/
+// 20260723-source-ack-persist-ordering-fix.md) before proceeding with
+// teardown regardless. Deliberately shorter than a typical Kubernetes
+// terminationGracePeriodSeconds (commonly 30s): if this wait itself took the
+// full grace period, a slow flush could cause the process to be SIGKILLed
+// before Teardown's own bounded-wait fallback ever got to run, which would
+// be strictly worse than proceeding early. See Teardown's doc comment for
+// the failure mode this bound exists for.
+const DefaultTeardownFlushTimeout = 10 * time.Second
+
 type Source struct {
 	Instance *Instance
 
@@ -76,6 +88,12 @@ type Source struct {
 	// ever advances (see onPersistFlushed) even if flush confirmations
 	// arrive out of order.
 	durableAckSeq uint64
+
+	// teardownFlushTimeout overrides DefaultTeardownFlushTimeout for
+	// Teardown's bounded flush wait. Zero (the production default — this
+	// field is only ever set by tests) means "use
+	// DefaultTeardownFlushTimeout"; see Teardown.
+	teardownFlushTimeout time.Duration
 }
 
 // pendingAck is one Source.Ack call's positions, queued until the resulting
@@ -211,6 +229,23 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 // unblocking (stopStream's other job, for a source blocked waiting for a
 // record that will never come) is deliberately delayed until after the
 // flush instead.
+//
+// Failure mode: graceful shutdown racing a stuck/slow flush. Before this
+// fix, Teardown never touched the persister at all, so a wait here is new
+// exposure: an unbounded wait would let a stalled disk or a badger
+// compaction pause hang graceful shutdown indefinitely, trading the sev-0
+// ack-before-persist bug for a possible-hang-on-shutdown bug. The wait below
+// is therefore bounded (Persister.WaitPendingWritesContext, honoring both
+// ctx and DefaultTeardownFlushTimeout) — on timeout or ctx cancellation,
+// Teardown logs a warning and proceeds with teardown anyway rather than
+// blocking forever. That fallback is safe, not merely convenient: the
+// SIGKILL chaos suite (tests/chaos, TestSIGKILL_PruningUpstream_NoGap /
+// TestSIGKILL_DurableUpstream_NoGap) already proves the crash path never
+// produces a gap, so a forced teardown here — before the deferred ack was
+// confirmed sent — degrades to exactly that same, already-proven-safe
+// outcome: at worst a benign duplicate on the next run (the position may
+// not have reached disk yet, so a restart simply re-delivers it), never a
+// gap.
 func (s *Source) Teardown(ctx context.Context) error {
 	s.Instance.Lock()
 	if s.plugin == nil {
@@ -227,8 +262,24 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// the stop flag, see worker.go's Stop) already guarantees no new Ack
 	// call can start once a Teardown has begun, so this window introduces
 	// no new concurrent-Ack risk.
+	timeout := s.teardownFlushTimeout
+	if timeout <= 0 {
+		timeout = DefaultTeardownFlushTimeout
+	}
 	s.Instance.persister.Flush(ctx)
-	s.Instance.persister.WaitPendingWrites()
+	if err := s.Instance.persister.WaitPendingWritesContext(ctx, timeout); err != nil {
+		// Bounded-wait fallback (see doc comment above): proceed with
+		// teardown rather than hang. The deferred ack for whatever is still
+		// in flight may not have been sent, but the position is either
+		// already durable (benign duplicate) or not yet durable (the
+		// plugin was never told to commit past it either, so nothing is
+		// lost) — never a gap, by the same reasoning the SIGKILL chaos
+		// suite already establishes for a hard crash, which this bounded
+		// wait is strictly safer than.
+		s.Instance.logger.Warn(ctx).Err(err).
+			Dur("timeout", timeout).
+			Msg("timed out waiting for the final flush/deferred ack before tearing down source connector plugin; proceeding with teardown anyway (safe: at worst a benign duplicate on restart, never a gap — see Teardown's doc comment)")
+	}
 
 	s.Instance.Lock()
 	if s.plugin == nil {
