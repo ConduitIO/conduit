@@ -243,13 +243,102 @@ func TestNew_StoreAlreadyOpen_ReturnsCodedError(t *testing.T) {
 
 	e1, err := conduit.New(context.Background(), opts)
 	is.NoErr(err)
-	_ = e1
+	defer func() { is.NoErr(e1.Close(context.Background())) }()
 
 	_, err = conduit.New(context.Background(), opts)
 	is.True(err != nil)
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeUnavailable)
+}
+
+// TestClose_NoRun_ReleasesDB proves Engine.Close's first lifecycle-contract
+// case: New followed directly by Close (Run never called) releases the
+// database New opened eagerly. It uses a BadgerDB path (a real OS-level file
+// lock, unlike the in-memory store other tests default to) and proves release
+// the same way TestNew_StoreAlreadyOpen_ReturnsCodedError proves the leak: a
+// second Engine constructed at the same path only succeeds if the first
+// Engine's DB was actually closed, not merely garbage-collected.
+func TestClose_NoRun_ReleasesDB(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	opts := conduit.Options{
+		PipelinesDir: t.TempDir(),
+		DB:           conduit.DBOptions{Type: "badger"},
+	}
+	opts.DB.Badger.Path = dir
+
+	e1, err := conduit.New(ctx, opts)
+	is.NoErr(err)
+
+	is.NoErr(e1.Close(ctx)) // no Run was ever called
+
+	e2, err := conduit.New(ctx, opts)
+	is.NoErr(err) // would fail with CodeUnavailable if e1's DB were still holding the lock
+	is.NoErr(e2.Close(ctx))
+}
+
+// TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB proves Engine.Close's
+// second lifecycle-contract case: Run reaching pkgconduit.Runtime.Run's
+// already-done-context guard (a pre-canceled ctx) returns before
+// registerCleanup is ever registered, so the runtime's own cleanup path never
+// closes the database — Close is the only release path left, and it must
+// still work. started flipping true on the Run call (not on success) must not
+// block Close.
+func TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	opts := conduit.Options{
+		PipelinesDir: t.TempDir(),
+		DB:           conduit.DBOptions{Type: "badger"},
+	}
+	opts.DB.Badger.Path = dir
+
+	e1, err := conduit.New(ctx, opts)
+	is.NoErr(err)
+
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel() // already canceled before Run is ever called
+
+	h, err := e1.Run(canceledCtx)
+	is.True(err != nil) // guard trips: Run must fail, not hang or succeed
+	is.True(h == nil)
+
+	is.NoErr(e1.Close(ctx)) // must still release the DB despite the failed Run
+
+	e2, err := conduit.New(ctx, opts)
+	is.NoErr(err) // would fail with CodeUnavailable if e1's DB leaked
+	is.NoErr(e2.Close(ctx))
+}
+
+// TestClose_DoubleCloseIsSafe proves Close's idempotency guarantee: calling it
+// twice returns the same (nil) result both times, with no panic and no
+// double-close error surfacing to the caller.
+func TestClose_DoubleCloseIsSafe(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	is.NoErr(e.Close(context.Background()))
+	is.NoErr(e.Close(context.Background()))
+}
+
+// TestClose_AfterSuccessfulStop_IsSafe proves Close's third lifecycle-contract
+// case: calling Close after a normal Run->Stop cycle (where Stop's drain
+// already closed the database via Runtime's own cleanup path) is safe and
+// returns nil, not a double-close error.
+func TestClose_AfterSuccessfulStop_IsSafe(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	h, err := e.Run(context.Background())
+	is.NoErr(err)
+	is.NoErr(h.Stop(context.Background()))
+
+	is.NoErr(e.Close(context.Background()))
 }
 
 // TestNew_MetricNameCollision_ReturnsCodedError proves failure mode 7: two

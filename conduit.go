@@ -117,6 +117,34 @@ type APIOptions struct {
 
 // Engine is a constructed, not-yet-running Conduit instance. Obtain one with
 // New; start it with Run.
+//
+// # Lifecycle contract
+//
+// New eagerly opens Options.DB (see New's doc) — that resource exists from
+// New onward, independent of whether Run is ever called or succeeds. Close
+// releases it, and is the only supported release path outside of a normal
+// Run→Stop cycle. Concretely:
+//
+//   - New → Close (Run never called): Close releases the database opened by
+//     New. Required if the embedder decides not to run the engine after all
+//     (e.g. it was constructed speculatively, or a later precondition check
+//     failed) — otherwise the DB handle (a Badger file lock, a Postgres pool,
+//     a SQLite handle) leaks for the process lifetime.
+//   - New → Run (fails before Ready, including the already-done-context
+//     guard) → Close: started still flips true on the Run call (see below),
+//     but the database was never handed to Runtime's own cleanup path
+//     (registerCleanup), so Close is still required to release it.
+//   - New → Run (succeeds) → Stop → Close: Stop's drain already closed the
+//     database via Runtime's cleanup path. Close is safe to call anyway — it
+//     is idempotent with that path, not merely with itself — and returns nil.
+//   - Close is safe to call more than once from the same or different
+//     goroutines; every call after the first observes the same result.
+//
+// started flips to true the moment Run is *called*, not when it succeeds: a
+// failed Run permanently retires this Engine for running (a second Run
+// attempt — even after a failure — returns the same
+// conduiterr.CodeInvalidArgument "called more than once" error Run's own doc
+// describes). Close is unaffected by started and may be called in any state.
 type Engine struct {
 	runtime *pkgconduit.Runtime
 	started atomic.Bool
@@ -131,6 +159,10 @@ type Engine struct {
 // Every failure is returned as an error — a *conduiterr.ConduitError where
 // classifiable — never an os.Exit and never a panic on a caller-supplied
 // misconfiguration.
+//
+// New's eagerly-opened database is a resource an embedder must release: call
+// Engine.Close when the returned Engine is no longer needed, whether or not
+// Run was ever called — see Engine's "Lifecycle contract" doc.
 func New(ctx context.Context, opts Options) (*Engine, error) {
 	logger := opts.Logger
 	if logger == nil {
@@ -178,6 +210,30 @@ func New(ctx context.Context, opts Options) (*Engine, error) {
 	}
 
 	return &Engine{runtime: rt}, nil
+}
+
+// Close releases resources New acquired eagerly — currently, the configured
+// database.DB — regardless of whether Run was ever called on this Engine.
+// See Engine's "Lifecycle contract" doc for the states Close must cover.
+//
+// Close is idempotent: it is safe to call more than once, from any goroutine,
+// and safe to call after a successful Run→Stop cycle (where the database was
+// already released via Runtime's own cleanup path) — every call after the
+// first returns the same result. It delegates to Runtime.CloseDB, whose
+// sync.Once is what actually makes double-release across both paths safe;
+// Close itself does not need a separate guard.
+//
+// Close does not stop a running Engine — an Engine with Run in flight must be
+// stopped via Handle.Stop first (Invariant 7: that is the graceful-drain
+// path). Calling Close while Run is running closes the database out from
+// under the running pipelines, which is a caller error, not something Close
+// detects or prevents.
+//
+// ctx is accepted for interface symmetry with Stop and for future resources
+// that may need a bounded release; the current database.DB.Close call is not
+// itself context-aware.
+func (e *Engine) Close(_ context.Context) error {
+	return e.runtime.CloseDB()
 }
 
 // Handle is returned by Engine.Run once the engine has successfully started.

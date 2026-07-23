@@ -117,6 +117,28 @@ type Runtime struct {
 	// (WithMetricsRegisterer set) it is a fresh, per-Runtime instance
 	// registered only into the supplied registerer — see configureEmbeddedMetrics.
 	metricsGrpcStatsHandler *promgrpc.StatsHandler
+
+	// closeDBOnce/closeDBErr make CloseDB idempotent regardless of which of
+	// its (potentially multiple) callers gets there first — see CloseDB's doc.
+	closeDBOnce sync.Once
+	closeDBErr  error
+}
+
+// CloseDB closes r.DB exactly once, no matter how many times or from how many
+// call sites it is invoked, and returns the same error to every caller.
+//
+// This exists because r.DB is closed from two independent paths that must
+// never race or double-close the same handle: registerCleanupV1/V2's
+// tomb-driven drain (the normal `conduit run`/Handle.Stop shutdown path) and,
+// for the embed API, Engine.Close's resource-release path, which must run
+// regardless of whether Run was ever called or reached registerCleanup (see
+// the root conduit package's Engine.Close doc). Routing both through this one
+// sync.Once means neither path needs to know whether the other already ran.
+func (r *Runtime) CloseDB() error {
+	r.closeDBOnce.Do(func() {
+		r.closeDBErr = r.DB.Close()
+	})
+	return r.closeDBErr
 }
 
 // runtimeOptions holds the optional embed-only seams threaded through
@@ -498,9 +520,16 @@ func configureMetrics() *promgrpc.StatsHandler {
 // MustRegister (which panics) so a metric-name collision on a registerer the
 // caller reused across engines surfaces as a coded error from New, per
 // invariant: New never panics on a caller-supplied misconfiguration.
+//
+// Known limitation, accepted for v1 and tracked as
+// https://github.com/ConduitIO/conduit/issues/2669: metrics.Register(reg)
+// below runs before either registerer.Register call below is known to
+// succeed, so a failed Register (e.g. the name collision this function
+// itself guards against) still leaks reg into pkg/foundation/metrics'
+// process-global bookkeeping — it is never unregistered on this error path.
 func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, error) {
 	reg := prometheus.NewRegistry(nil)
-	metrics.Register(reg) // documented cross-talk limitation, see WithMetricsRegisterer's doc
+	metrics.Register(reg) // documented cross-talk limitation, see WithMetricsRegisterer's doc; leak-on-failure tracked as issue #2669
 	if err := registerer.Register(reg); err != nil {
 		wrapped := cerrors.Errorf("failed to register conduit metrics collector: %w", err)
 		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
@@ -532,10 +561,24 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	// inert on the CLI path; it matters for the embed calling convention
 	// (Engine.Run), where a host can legitimately pass an already-canceled or
 	// already-expired ctx (e.g. one derived from an expired request
-	// deadline). This does not touch registerCleanup/the tomb's drain
-	// mechanics — it is a pure early return before either is constructed.
+	// deadline) — a documented, designed-for input, not caller misuse. This
+	// does not touch registerCleanup/the tomb's drain mechanics — it is a
+	// pure early return before either is constructed; the DB opened by
+	// NewRuntime is still live afterward, which is exactly why the embed
+	// API's Engine.Close exists as a resource-release path independent of
+	// whether Run got this far (see the root conduit package's Engine.Close
+	// doc).
+	//
+	// The error is returned through conduiterr.CodeInvalidArgument (not a
+	// bare context.Canceled/DeadlineExceeded) so it satisfies New/Run's
+	// documented promise of a *conduiterr.ConduitError where classifiable.
+	// Reusing CodeInvalidArgument rather than minting a new code matches this
+	// package's existing convention for embed-lifecycle-contract errors (see
+	// the root conduit package's Engine.Run/Handle.Stop docs for the same
+	// reasoning applied to a double Run call and a Stop timeout).
 	if err := ctx.Err(); err != nil {
-		return err
+		wrapped := cerrors.Errorf("conduit: Run called with an already-done context: %w", err)
+		return conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
 
 	cleanup, err := r.initProfiling(ctx)
@@ -689,7 +732,7 @@ func (r *Runtime) registerCleanupV1(t *tomb.Tomb) {
 		err := ls.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
-			return r.DB.Close()
+			return r.CloseDB()
 		})
 		return err
 	})
@@ -744,13 +787,23 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 
 		t.Go(func() error {
 			r.connectorPersister.Wait()
-			return r.DB.Close()
+			return r.CloseDB()
 		})
 
 		return nil
 	})
 }
 
+// newHTTPMetricsHandler builds the handler served at /metrics (see
+// serveHTTPAPI).
+//
+// Known limitation, accepted for v1 and tracked as
+// https://github.com/ConduitIO/conduit/issues/2670: promhttp.Handler() always
+// serves promclient.DefaultGatherer, not the Registerer/Gatherer an embedder
+// supplied via WithMetricsRegisterer/configureEmbeddedMetrics. An embedded
+// Runtime with Options.API.Enabled and a custom MetricsRegisterer therefore
+// gets a /metrics route that does not reflect what was actually registered
+// into that registerer.
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
 	return promhttp.Handler()
 }

@@ -71,7 +71,8 @@ func TestNewRuntime_CLIDefaultsUnchanged(t *testing.T) {
 
 // TestRun_AlreadyCanceledContext proves AC-4/Task 6: Run resolves promptly
 // (never blocks indefinitely) when handed an already-canceled context,
-// returning ctx.Err() without spinning up the tomb or any service.
+// returning a conduiterr.CodeInvalidArgument-coded error wrapping ctx.Err()
+// without spinning up the tomb or any service.
 func TestRun_AlreadyCanceledContext(t *testing.T) {
 	is := is.New(t)
 

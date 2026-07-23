@@ -20,12 +20,15 @@
 // # Scope (v1 / "B1")
 //
 // This package covers the engine lifecycle only: New constructs an Engine from
-// Options; Engine.Run starts it and returns a *Handle once it is ready to
-// accept work; Handle.Stop drains and shuts it down. Engine.Import lets a host
-// create or update a pipeline from a PipelineConfig value built in code — the
-// pipelines-in-code builder (NewPipeline/PipelineBuilder) and the C-ABI/
-// language-binding surface (libconduit proper) are later workstreams; see
-// docs/design-documents/20260722-embed-libconduit-v1.md.
+// Options (and eagerly opens its database — see New's and Engine.Close's doc);
+// Engine.Run starts it and returns a *Handle once it is ready to accept work;
+// Handle.Stop drains and shuts it down; Engine.Close releases the resources
+// New acquired, whether or not Run was ever called — see Engine's "Lifecycle
+// contract" doc for the exact New/Run/Stop/Close state matrix. Engine.Import
+// lets a host create or update a pipeline from a PipelineConfig value built in
+// code — the pipelines-in-code builder (NewPipeline/PipelineBuilder) and the
+// C-ABI/language-binding surface (libconduit proper) are later workstreams;
+// see docs/design-documents/20260722-embed-libconduit-v1.md.
 //
 // # Why this exists, not pkg/conduit directly
 //
@@ -70,6 +73,15 @@
 // as a follow-up; see pkg/conduit.WithMetricsRegisterer's doc and
 // TestTwoEngines_MetricsCrossTalk_KnownLimitation.
 //
+// Two sharper instances of the same root cause are tracked separately, also
+// accepted for v1: a failed metrics registration during New still leaks a
+// registry into pkg/foundation/metrics' process-global bookkeeping
+// (https://github.com/ConduitIO/conduit/issues/2669, see
+// pkg/conduit.configureEmbeddedMetrics' doc), and the HTTP /metrics route
+// serves promclient.DefaultGatherer rather than a host-supplied
+// MetricsRegisterer (https://github.com/ConduitIO/conduit/issues/2670, see
+// pkg/conduit.(*Runtime).newHTTPMetricsHandler's doc).
+//
 // # Package boundary / deprecation policy
 //
 // This package's exported API (Options, Engine, Handle, PipelineConfig, New)
@@ -79,5 +91,8 @@
 // warning for at least one more minor release, and removed no earlier than
 // the third minor release after announcement. PipelineConfig extends this
 // policy by name to provisioning/config.{Pipeline,Connector,Processor,DLQ} —
-// see that package's parser.go doc comment.
+// all four are constrained by the single doc comment above
+// provisioning/config.Pipeline in that package's parser.go (Connector,
+// Processor, and DLQ have no separate per-type comment of their own; they are
+// covered by name in that one shared comment, not individually annotated).
 package conduit
