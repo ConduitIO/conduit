@@ -364,11 +364,15 @@ codes lands there).
 ## How this maps into the roadmap (no new phase; makes existing threads cohesive)
 
 - **Phase 1:** Go+Python scaffolding, the `conduit connector test` local loop, the
-  real Go embedding API + pipelines-in-code builder, `libconduit` + Python/Node
-  bindings, the first AI `generate`. (These already live in Phase 1 as separate
-  bullets — this doc makes them one coherent workstream with shared acceptance.)
+  real Go embedding API + pipelines-in-code builder (B1/B2), the first AI
+  `generate`. (These already live in Phase 1 as separate bullets — this doc makes
+  them one coherent workstream with shared acceptance.)
 - **Phase 2:** the connector fleet rides the same multi-language SDK + acceptance
-  contract; AI generation extends to `--from-openapi` at scale.
+  contract; AI generation extends to `--from-openapi` at scale; **`libconduit`
+  (the C-ABI shared library) + Python/Node bindings (B3)** — moved out of this
+  doc's original Phase-1 framing once `20260722-embed-libconduit-v1.md` scoped B1/B2
+  to v0.19 (Phase 1) and deferred B3 to Phase 2 explicitly (its AC-8); see
+  `20260723-libconduit-c-abi-bindings.md` for the design-ahead C-ABI/bindings shape.
 - **Phase 3:** Rust/TS WASM connectors graduate; `conduit connector generate
   --from-openapi` hardens; more bindings on demand.
 
