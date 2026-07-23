@@ -197,7 +197,10 @@ func (v *TrustedVerifier) VerifyArtifact(ctx context.Context, ref ArtifactRef, i
 		return VerifyResult{Signed: true, VerifiedIdentity: verifiedIdentity}, nil
 	}
 
-	statement, err := trust.VerifyAttestationEnvelope(ctx, ref.ProvenanceBundle, identity)
+	// The provenance is signed by the isolated SLSA builder (ExpectedBuilderID),
+	// NOT the connector's own identity — verify it against the builder identity,
+	// then bind predicate.builder.id to ExpectedBuilderID below.
+	statement, err := trust.VerifyAttestationEnvelope(ctx, ref.ProvenanceBundle, trust.BuilderPinnedIdentity())
 	if err != nil {
 		return VerifyResult{}, err
 	}
