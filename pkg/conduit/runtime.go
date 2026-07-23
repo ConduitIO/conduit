@@ -109,6 +109,98 @@ type Runtime struct {
 	procSchemaService  *procutils.SchemaService
 
 	logger log.CtxLogger
+
+	// metricsGrpcStatsHandler is this Runtime's grpc stats handler, used by
+	// serveGRPCAPI/startConnectorUtils. On the CLI path (no WithMetricsRegisterer
+	// option) it is the process-wide singleton configureMetrics() returns,
+	// exactly as before this field existed. On the embed path
+	// (WithMetricsRegisterer set) it is a fresh, per-Runtime instance
+	// registered only into the supplied registerer — see configureEmbeddedMetrics.
+	metricsGrpcStatsHandler *promgrpc.StatsHandler
+
+	// closeDBOnce/closeDBErr make CloseDB idempotent regardless of which of
+	// its (potentially multiple) callers gets there first — see CloseDB's doc.
+	closeDBOnce sync.Once
+	closeDBErr  error
+}
+
+// CloseDB closes r.DB exactly once, no matter how many times or from how many
+// call sites it is invoked, and returns the same error to every caller.
+//
+// This exists because r.DB is closed from two independent paths that must
+// never race or double-close the same handle: registerCleanupV1/V2's
+// tomb-driven drain (the normal `conduit run`/Handle.Stop shutdown path) and,
+// for the embed API, Engine.Close's resource-release path, which must run
+// regardless of whether Run was ever called or reached registerCleanup (see
+// the root conduit package's Engine.Close doc). Routing both through this one
+// sync.Once means neither path needs to know whether the other already ran.
+func (r *Runtime) CloseDB() error {
+	r.closeDBOnce.Do(func() {
+		r.closeDBErr = r.DB.Close()
+	})
+	return r.closeDBErr
+}
+
+// runtimeOptions holds the optional embed-only seams threaded through
+// NewRuntime via functional RuntimeOptions. The zero value matches
+// `conduit run`'s exact behavior — every field here is additive: leaving it
+// unset preserves what NewRuntime always did (AC-5: the seam is inert unless
+// an embed option is passed; see TestNewRuntime_CLIDefaultsUnchanged).
+type runtimeOptions struct {
+	logger            *log.CtxLogger
+	metricsRegisterer promclient.Registerer
+	dialCtx           context.Context
+}
+
+// RuntimeOption configures an embed-only seam on NewRuntime. See WithLogger,
+// WithMetricsRegisterer, WithDialContext.
+type RuntimeOption func(*runtimeOptions)
+
+// WithLogger supplies a pre-built log.CtxLogger, bypassing cfg.Log.NewLogger
+// and log.GetWriter's os.Stdout default entirely. It also suppresses the
+// process-global zerolog.DefaultContextLogger assignment NewRuntime otherwise
+// makes: that global is process-wide and would cross-talk between two
+// embedded Runtimes constructed with different loggers (see
+// TestTwoEngines_LoggerIsolated) — the supplied logger is still attached
+// directly to this Runtime and everything it constructs; only the ambient/
+// fallback global is skipped. `conduit run` never passes this option, so its
+// behavior (including the global assignment) is unchanged.
+func WithLogger(logger log.CtxLogger) RuntimeOption {
+	return func(o *runtimeOptions) { o.logger = &logger }
+}
+
+// WithMetricsRegisterer supplies a Prometheus registerer that receives this
+// Runtime's metric families instead of the package-level configureMetrics()
+// path (which registers into promclient.DefaultRegisterer behind a
+// process-wide sync.Once, and is a no-op after the first call in the
+// process). A Runtime constructed with this option gets its own
+// foundation/metrics/prometheus.Registry and *promgrpc.StatsHandler,
+// registered only into the supplied registerer — never
+// promclient.DefaultRegisterer. `conduit run` never passes this option.
+//
+// Known limitation (documented, not fixed by this seam): pkg/foundation/metrics
+// keeps process-global metric *definitions* (metrics.go's `global` slices) —
+// a metric created via metrics.NewCounter et al. (e.g. everything in
+// pkg/foundation/metrics/measure) fans out to every registry ever passed to
+// metrics.Register, including a second embedded Runtime's. Two concurrently
+// running embedded engines will therefore observe each other's metric
+// *values* even though each has its own isolated Registerer/Registry
+// *object*. See TestTwoEngines_MetricsCrossTalk_KnownLimitation — fixing this
+// is tracked as a follow-up, not this workstream (see the embed design doc's
+// Non-goals).
+func WithMetricsRegisterer(reg promclient.Registerer) RuntimeOption {
+	return func(o *runtimeOptions) { o.metricsRegisterer = reg }
+}
+
+// WithDialContext supplies the context.Context OpenStore's Postgres/SQLite
+// dial uses instead of context.Background(), so a caller-supplied deadline or
+// cancellation aborts a slow/unreachable database dial promptly instead of
+// blocking indefinitely. It has no effect on the Badger/InMemory DB types
+// (they never dial a remote/blocking connection). It is not retained beyond
+// NewRuntime's own call — Runtime.Run's context is independent and must be
+// supplied fresh to Run (do not store a ctx across calls).
+func WithDialContext(ctx context.Context) RuntimeOption {
+	return func(o *runtimeOptions) { o.dialCtx = ctx }
 }
 
 // lifecycleService is an interface that we use temporarily to allow for
@@ -130,25 +222,60 @@ type lifecycleService interface {
 	Init(ctx context.Context) error
 }
 
-// NewRuntime sets up a Runtime instance and primes it for start.
-func NewRuntime(cfg Config) (*Runtime, error) {
+// NewRuntime sets up a Runtime instance and primes it for start. opts are
+// additive, embed-only seams (see RuntimeOption); called with none, behavior
+// is byte-for-byte what NewRuntime did before opts existed — this is what
+// `conduit run` (via Entrypoint.Serve) always does.
+func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	logger := cfg.Log.NewLogger(cfg.Log.Level, cfg.Log.Format)
+	var ro runtimeOptions
+	for _, opt := range opts {
+		opt(&ro)
+	}
+
+	var logger log.CtxLogger
+	if ro.logger != nil {
+		// Embed path (AC-5.1): use the pre-built logger as-is instead of
+		// cfg.Log.NewLogger/log.GetWriter's os.Stdout default.
+		logger = *ro.logger
+	} else {
+		logger = cfg.Log.NewLogger(cfg.Log.Level, cfg.Log.Format)
+	}
 	logger.Logger = logger.
 		Hook(ctxutil.MessageIDLogCtxHook{}).
 		Hook(ctxutil.RequestIDLogCtxHook{}).
 		Hook(ctxutil.FilepathLogCtxHook{})
-	zerolog.DefaultContextLogger = &logger.Logger
+	if ro.logger == nil {
+		// CLI path only (AC-5.3): an embed-supplied logger must never become
+		// the ambient global fallback — see WithLogger's doc.
+		zerolog.DefaultContextLogger = &logger.Logger
+	}
 
-	db, err := OpenStore(cfg, logger)
+	dialCtx := context.Background()
+	if ro.dialCtx != nil {
+		// AC-5.4: let an embedder bound/cancel the store dial.
+		dialCtx = ro.dialCtx
+	}
+
+	db, err := OpenStore(dialCtx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	configureMetrics()
+	var statsHandler *promgrpc.StatsHandler
+	if ro.metricsRegisterer != nil {
+		// Embed path (AC-5.2): isolated per-Runtime metrics, never the
+		// process-global promclient.DefaultRegisterer.
+		statsHandler, err = configureEmbeddedMetrics(ro.metricsRegisterer)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		statsHandler = configureMetrics()
+	}
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
@@ -164,7 +291,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPersister: connectorPersister,
 
-		logger: logger,
+		logger:                  logger,
+		metricsGrpcStatsHandler: statsHandler,
 	}
 
 	err = createServices(r)
@@ -184,6 +312,10 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 // reachability the same way `conduit run` would, instead of reimplementing
 // or drifting from it.
 //
+// ctx bounds the Postgres/SQLite dial only (AC-5.4) — canceling it aborts a
+// slow/unreachable dial instead of blocking indefinitely. It has no effect on
+// Badger/InMemory (neither dials). ctx is not retained past this call.
+//
 // logger is a required parameter (not derived internally from cfg.Log) so a
 // caller that only wants to probe reachability — doctor runs before any
 // Runtime exists — can supply a throwaway logger (e.g. log.Nop()) instead of
@@ -192,7 +324,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 // The returned database.DB is opened but not pinged; callers that only want
 // to validate config (not actually dial/open anything) should not call this.
 // A caller that opens a store here is responsible for calling Close on it.
-func OpenStore(cfg Config, logger log.CtxLogger) (database.DB, error) {
+func OpenStore(ctx context.Context, cfg Config, logger log.CtxLogger) (database.DB, error) {
 	if cfg.DB.Driver != nil {
 		return cfg.DB.Driver, nil
 	}
@@ -203,12 +335,12 @@ func OpenStore(cfg Config, logger log.CtxLogger) (database.DB, error) {
 	case DBTypeBadger:
 		db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
 	case DBTypePostgres:
-		db, err = postgres.New(context.Background(), logger.Logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
+		db, err = postgres.New(ctx, logger.Logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
 	case DBTypeInMemory:
 		db = &inmemory.DB{}
 		logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
 	case DBTypeSQLite:
-		db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
+		db, err = sqlite.New(ctx, logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 	default:
 		// An unsupported DB type is a config/validation problem, not an
 		// environment one. It stays exit 1 (the runtime default for an
@@ -376,10 +508,79 @@ func configureMetrics() *promgrpc.StatsHandler {
 	return metricsGrpcStatsHandler
 }
 
+// configureEmbeddedMetrics is configureMetrics' embed-path counterpart (see
+// WithMetricsRegisterer): it builds a fresh, per-Runtime
+// foundation/metrics/prometheus.Registry and *promgrpc.StatsHandler and
+// registers both only into registerer — never promclient.DefaultRegisterer,
+// and never behind the CLI path's process-wide metricsConfigureOnce (each
+// call here produces an independent StatsHandler instance, so two embedded
+// Runtimes never share one).
+//
+// It uses registerer.Register (which returns an error) rather than
+// MustRegister (which panics) so a metric-name collision on a registerer the
+// caller reused across engines surfaces as a coded error from New, per
+// invariant: New never panics on a caller-supplied misconfiguration.
+//
+// Known limitation, accepted for v1 and tracked as
+// https://github.com/ConduitIO/conduit/issues/2669: metrics.Register(reg)
+// below runs before either registerer.Register call below is known to
+// succeed, so a failed Register (e.g. the name collision this function
+// itself guards against) still leaks reg into pkg/foundation/metrics'
+// process-global bookkeeping — it is never unregistered on this error path.
+func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, error) {
+	reg := prometheus.NewRegistry(nil)
+	metrics.Register(reg) // documented cross-talk limitation, see WithMetricsRegisterer's doc; leak-on-failure tracked as issue #2669
+	if err := registerer.Register(reg); err != nil {
+		wrapped := cerrors.Errorf("failed to register conduit metrics collector: %w", err)
+		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+	}
+
+	statsHandler := promgrpc.ServerStatsHandler()
+	if err := registerer.Register(statsHandler); err != nil {
+		wrapped := cerrors.Errorf("failed to register grpc stats collector: %w", err)
+		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+	}
+	return statsHandler, nil
+}
+
 // Run initializes all of Conduit's underlying services and starts the GRPC and
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
+	// Tier-1-caution guard (embed workstream plan §11 task 6): if ctx is
+	// already canceled before Run does any work, return immediately instead
+	// of spinning up profiling, the tomb, and every service. This is not
+	// merely an optimization: empirically, without this guard, Run panics
+	// ("tomb.Go called after all goroutines terminated") when handed an
+	// already-canceled context — tomb.WithContext's own cancellation-watcher
+	// goroutine kills the tomb (and lets it finish) before initServices's
+	// later t.Go calls (e.g. serveGRPC) run, so those calls hit an
+	// already-dead tomb. `conduit run` never calls Run with an
+	// already-canceled context (a live process's context is only canceled by
+	// a signal that arrives after Run is already executing), so this is
+	// inert on the CLI path; it matters for the embed calling convention
+	// (Engine.Run), where a host can legitimately pass an already-canceled or
+	// already-expired ctx (e.g. one derived from an expired request
+	// deadline) — a documented, designed-for input, not caller misuse. This
+	// does not touch registerCleanup/the tomb's drain mechanics — it is a
+	// pure early return before either is constructed; the DB opened by
+	// NewRuntime is still live afterward, which is exactly why the embed
+	// API's Engine.Close exists as a resource-release path independent of
+	// whether Run got this far (see the root conduit package's Engine.Close
+	// doc).
+	//
+	// The error is returned through conduiterr.CodeInvalidArgument (not a
+	// bare context.Canceled/DeadlineExceeded) so it satisfies New/Run's
+	// documented promise of a *conduiterr.ConduitError where classifiable.
+	// Reusing CodeInvalidArgument rather than minting a new code matches this
+	// package's existing convention for embed-lifecycle-contract errors (see
+	// the root conduit package's Engine.Run/Handle.Stop docs for the same
+	// reasoning applied to a double Run call and a Stop timeout).
+	if err := ctx.Err(); err != nil {
+		wrapped := cerrors.Errorf("conduit: Run called with an already-done context: %w", err)
+		return conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+	}
+
 	cleanup, err := r.initProfiling(ctx)
 	if err != nil {
 		return err
@@ -531,7 +732,7 @@ func (r *Runtime) registerCleanupV1(t *tomb.Tomb) {
 		err := ls.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
-			return r.DB.Close()
+			return r.CloseDB()
 		})
 		return err
 	})
@@ -586,13 +787,23 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 
 		t.Go(func() error {
 			r.connectorPersister.Wait()
-			return r.DB.Close()
+			return r.CloseDB()
 		})
 
 		return nil
 	})
 }
 
+// newHTTPMetricsHandler builds the handler served at /metrics (see
+// serveHTTPAPI).
+//
+// Known limitation, accepted for v1 and tracked as
+// https://github.com/ConduitIO/conduit/issues/2670: promhttp.Handler() always
+// serves promclient.DefaultGatherer, not the Registerer/Gatherer an embedder
+// supplied via WithMetricsRegisterer/configureEmbeddedMetrics. An embedded
+// Runtime with Options.API.Enabled and a custom MetricsRegisterer therefore
+// gets a /metrics route that does not reflect what was actually registered
+// into that registerer.
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
 	return promhttp.Handler()
 }
@@ -603,7 +814,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(metricsGrpcStatsHandler),
+		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
 
@@ -656,7 +867,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(metricsGrpcStatsHandler),
+		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)

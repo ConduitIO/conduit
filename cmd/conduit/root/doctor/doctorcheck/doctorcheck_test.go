@@ -215,7 +215,7 @@ func TestDefaultChecks_StoreReachable_PreexistingDBDirNotDeleted(t *testing.T) {
 	cfg.DB.Badger.Path = filepath.Join(t.TempDir(), "conduit.db")
 
 	// Open and close it once first, simulating a real prior `conduit run`.
-	db, err := conduit.OpenStore(cfg, log.Nop())
+	db, err := conduit.OpenStore(context.Background(), cfg, log.Nop())
 	is.NoErr(err)
 	is.NoErr(db.Close())
 
