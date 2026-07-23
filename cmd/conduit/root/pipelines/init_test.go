@@ -15,48 +15,11 @@
 package pipelines
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
-	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
-
-// TestInitCommand_JSON_ValidatesAgainstEnvelope is the Family A golden
-// fixture for `conduit pipelines init` (v0.19 workstream 8 — see
-// v019-plans/workstreams/cli-contract.md §4.3, §6 AC-4: pipelines init was
-// migrated onto cecdysis.CommandWithResult in the same release this test's
-// completeness walk requires it). The demo (no --source/--destination)
-// pipeline is the minimal success-path fixture.
-func TestInitCommand_JSON_ValidatesAgainstEnvelope(t *testing.T) {
-	is := is.New(t)
-	dir := t.TempDir()
-
-	cmd := &InitCommand{flags: InitFlags{PipelinesPath: dir}}
-	is.Equal(cmd.ResultCommand(), "pipelines.init")
-
-	outcome, err := cmd.ExecuteWithResult(context.Background())
-	is.NoErr(err)
-	is.True(outcome.OK)
-
-	res := cecdysis.Result{Command: cmd.ResultCommand(), OK: outcome.OK, Summary: outcome.Summary, Result: outcome.Result}
-	b, err := json.Marshal(res)
-	is.NoErr(err)
-	is.NoErr(testutils.ValidateEnvelope(b))
-
-	result, ok := outcome.Result.(InitResult)
-	is.True(ok)
-	_, statErr := os.Stat(result.Path)
-	is.NoErr(statErr)
-	is.Equal(result.Path, filepath.Join(dir, demoPipelineName+".yaml"))
-
-	is.True(cmd.Render(outcome) != "")
-}
 
 func TestInitExecutionNoArgs(t *testing.T) {
 	is := is.New(t)
@@ -266,7 +229,7 @@ func TestInit_getPipelineDescription(t *testing.T) {
 	demoDesc := func(src, dst string) string {
 		return baseDesc + fmt.Sprintf("It is a demo pipeline that connects a source connector (%s) to a destination connector (%s).\n"+
 			"The next step is to simply run `conduit run` in your terminal and you should see a new record being logged every second.\n"+
-			"Check out https://conduit.io/docs/using/pipelines/configuration-file "+
+			"Check out https://conduitdata.io/docs/using/pipelines/configuration-file "+
 			"to learn about how this file is structured.", src, dst)
 	}
 

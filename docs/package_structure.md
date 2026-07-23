@@ -37,7 +37,7 @@
 
 Other folders that don't contain Go code:
 
-- `docs` - Documentation regarding Conduit that's specific to this repository (more documentation can be found at [Conduit.io/docs](https://conduit.io/docs)).
+- `docs` - Documentation regarding Conduit that's specific to this repository (more documentation can be found at [Conduit.io/docs](https://conduitdata.io/docs)).
 - `proto` - Protobuf files (e.g. gRPC API definition).
 - `scripts` - Contains scripts that are useful for development.
 - `test` - Contains configurations needed for integration tests.

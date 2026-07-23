@@ -83,7 +83,7 @@ release:
 nfpms:
   - license: Apache-2.0
     maintainer: Conduit Developers <conduit-dev@meroxa.io>
-    homepage: https://conduit.io/
+    homepage: https://conduitdata.io/
     description: "Conduit streams data between data stores. Kafka Connect replacement. No JVM required."
     section: utils
     formats:

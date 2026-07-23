@@ -41,7 +41,7 @@ func NewExcludeProcessor(log.CtxLogger) *ExcludeProcessor {
 type excludeConfig struct {
 	// Fields is a comma separated list of target fields which should be excluded.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduitdata.io/docs/using/processors/referencing-fields).
 	Fields []string `json:"fields" validate:"required"`
 }
 

@@ -50,7 +50,7 @@ outputs the original record plus N clones (for a total of N+1 records). Each clo
 is identical to the original, except the metadata field ` + "`clone.index`" + ` is
 set to the clone's index (0 for the original, 1 to N for the clones).
 
-**Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)
+**Important:** Add a [condition](https://conduitdata.io/docs/using/processors/conditions)
 to this processor if you only want to clone some records.
 
 **Important:** This processor currently only works using the pipeline architecture

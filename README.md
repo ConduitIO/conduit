@@ -11,7 +11,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Twitter](https://img.shields.io/static/v1?label=X/Twitter&message=Follow&color=1DA1F2&logo=twitter&logoColor=white)](https://x.com/ConduitIO)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
-[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduit.io/docs/getting-started)
+[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduitdata.io/docs/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
 
 ## Overview
@@ -55,7 +55,7 @@ conduit quickstart
 
 Sample records flow to your console within seconds. State is in-memory and nothing
 is written to your working directory; press Ctrl-C to stop. For a full walkthrough,
-see <https://conduit.io/docs/getting-started>.
+see <https://conduitdata.io/docs/getting-started>.
 
 ## Installation guide
 
@@ -225,7 +225,7 @@ The full example in our case would be:
 ## Connectors
 
 For the full list of available connectors, see
-the [Connector List](https://conduit.io/docs/using/connectors/list). If
+the [Connector List](https://conduitdata.io/docs/using/connectors/list). If
 there's a connector that you're looking for that isn't available in Conduit,
 please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
@@ -270,16 +270,16 @@ it out based on some criteria.
 
 Conduit provides a number of built-in processors, which can be used to
 manipulate fields, send requests to HTTP endpoints, and more,
-check [built-in processors](https://conduit.io/docs/using/processors/builtin/)
+check [built-in processors](https://conduitdata.io/docs/using/processors/builtin/)
 for the list of built-in processors and documentations.
 
 Conduit also provides the ability to write your
-own [standalone processor](https://conduit.io/docs/developing/processors/building),
-or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/using/processors/builtin/custom.javascript)
+own [standalone processor](https://conduitdata.io/docs/developing/processors/building),
+or you can use the built-in processor [`custom.javascript`](https://conduitdata.io/docs/using/processors/builtin/custom.javascript)
 to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
-the [Processors documentation](https://conduit.io/docs/using/processors/getting-started).
+the [Processors documentation](https://conduitdata.io/docs/using/processors/getting-started).
 
 ## API
 
@@ -363,18 +363,18 @@ follow-ups — see
 ## Documentation
 
 To learn more about how to use Conduit
-visit [Conduit.io/docs](https://conduit.io/docs).
+visit [Conduit.io/docs](https://conduitdata.io/docs).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-- [Pipeline Semantics](https://conduit.io/docs/core-concepts/pipeline-semantics) explains the internals of how
+- [Pipeline Semantics](https://conduitdata.io/docs/core-concepts/pipeline-semantics) explains the internals of how
   a Conduit pipeline works.
-- [Pipeline Configuration Files](https://conduit.io/docs/using/pipelines/configuration-file)
+- [Pipeline Configuration Files](https://conduitdata.io/docs/using/pipelines/configuration-file)
   explains how you can define pipelines using YAML files.
-- [Processors](https://conduit.io/docs/using/processors/getting-started) contains examples and more information about
+- [Processors](https://conduitdata.io/docs/using/processors/getting-started) contains examples and more information about
   Conduit processors.
-- [Conduit Architecture](https://conduit.io/docs/core-concepts/architecture)
+- [Conduit Architecture](https://conduitdata.io/docs/core-concepts/architecture)
   will give you a high-level overview of Conduit.
 - [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.

@@ -2,7 +2,7 @@
   "specification": {
     "name": "clone",
     "summary": "Clone records.",
-    "description": "Clone all records N times. For each input record, the processor\noutputs the original record plus N clones (for a total of N+1 records). Each clone\nis identical to the original, except the metadata field `clone.index` is\nset to the clone's index (0 for the original, 1 to N for the clones).\n\n**Important:** Add a [condition](https://conduit.io/docs/using/processors/conditions)\nto this processor if you only want to clone some records.\n\n**Important:** This processor currently only works using the pipeline architecture\nv2, which can be enabled using the flag `--preview.pipeline-arch-v2`.\nUsing it without the flag will result in an error.",
+    "description": "Clone all records N times. For each input record, the processor\noutputs the original record plus N clones (for a total of N+1 records). Each clone\nis identical to the original, except the metadata field `clone.index` is\nset to the clone's index (0 for the original, 1 to N for the clones).\n\n**Important:** Add a [condition](https://conduitdata.io/docs/using/processors/conditions)\nto this processor if you only want to clone some records.\n\n**Important:** This processor currently only works using the pipeline architecture\nv2, which can be enabled using the flag `--preview.pipeline-arch-v2`.\nUsing it without the flag will result in an error.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
