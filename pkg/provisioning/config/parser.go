@@ -19,6 +19,14 @@ import (
 	"io"
 )
 
+// Pipeline's shape is constrained by the root github.com/conduitio/conduit package's PipelineConfig,
+// a type alias (not a copy) of this exact struct (AC-3/AC-7 of the embed workstream,
+// docs/design-documents/20260722-embed-libconduit-v1.md). A field added, removed, or renamed here
+// changes PipelineConfig identically and is therefore subject to that package's deprecation policy
+// (announce in one release, warn for at least one more, remove no earlier than the third minor
+// release after announcement) — the same discipline already applied to the connector protocol,
+// pipeline config schema, and error codes. Connector, Processor, and DLQ below are constrained the
+// same way.
 type Pipeline struct {
 	ID          string
 	Status      string

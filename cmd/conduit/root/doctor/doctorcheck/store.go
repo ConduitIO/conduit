@@ -66,7 +66,7 @@ func (c storeReachableCheck) Run(ctx context.Context) check.CheckResult {
 		}
 	}
 
-	db, err := conduit.OpenStore(c.cfg, c.logger)
+	db, err := conduit.OpenStore(ctx, c.cfg, c.logger)
 	if err != nil {
 		return check.CheckResult{
 			Status:     check.StatusFail,
