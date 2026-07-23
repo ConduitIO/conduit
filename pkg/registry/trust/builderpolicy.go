@@ -14,6 +14,8 @@
 
 package trust
 
+import "regexp"
+
 // ExpectedBuilderID is the single, global expected SLSA predicate.builder.id
 // value (plan-v2 §9 / P1-2 — no per-connector policy: every connector name
 // is meant to publish through the SAME shared build pipeline, whether
@@ -38,3 +40,28 @@ package trust
 // and must go through the same human-reviewed rigor as an identity change
 // (R-1 §d), not a routine dependency bump.
 const ExpectedBuilderID = "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0"
+
+// gitHubActionsOIDCIssuer is the OIDC issuer for GitHub Actions keyless
+// signing — the issuer of both the connector's artifact-signing cert and the
+// SLSA builder's provenance-signing cert.
+const gitHubActionsOIDCIssuer = "https://token.actions.githubusercontent.com"
+
+// BuilderPinnedIdentity is the certificate identity the SLSA provenance
+// attestation must be signed by: the isolated slsa-github-generator reusable
+// workflow (ExpectedBuilderID), via GitHub Actions OIDC.
+//
+// This is deliberately DISTINCT from the connector's own pinned identity
+// (Publisher.ExpectedIdentityPattern), which signs the ARTIFACT. Under SLSA
+// L3 the provenance is produced by the non-forgeable, isolated builder and is
+// therefore signed by the BUILDER's identity — not the connector's workflow.
+// Verifying the attestation against the connector identity (as an earlier
+// wiring did) always fails with CodeIdentityMismatch on a genuine L3
+// provenance. CheckProvenanceBinding then independently binds
+// predicate.builder.id to ExpectedBuilderID (belt-and-suspenders over this
+// cert-identity check).
+func BuilderPinnedIdentity() PinnedIdentity {
+	return PinnedIdentity{
+		OIDCIssuer:      gitHubActionsOIDCIssuer,
+		IdentityPattern: "^" + regexp.QuoteMeta(ExpectedBuilderID) + "$",
+	}
+}
