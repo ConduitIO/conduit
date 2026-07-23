@@ -1,0 +1,56 @@
+# benchi config for the Source.Ack persist-ordering sev-0 fix (Approach A,
+# docs/design-documents/20260723-source-ack-persist-ordering-fix.md).
+#
+# Compares record throughput between origin/main (ack-before-persist, the
+# bug) and this branch (ack-follows-durable-flush, the fix) on the same
+# reference pipeline: a generator source -> log destination with no external
+# infrastructure, isolating the engine's own record/ack hot path. See
+# ./README.md for why this run is committed but was NOT executed in the
+# session that authored it (no Docker daemon in that sandbox), and for the
+# exact commands to run it.
+#
+# No infrastructure section: this pipeline has no external dependency (the
+# generator source and log destination both run entirely inside the conduit
+# process), which is deliberate — it isolates the engine hot path this fix
+# touches from any downstream I/O latency.
+
+tools:
+  conduit-main:
+    compose: ./tools/compose-conduit-main.yml
+  conduit-fix:
+    compose: ./tools/compose-conduit-fix.yml
+
+metrics:
+  conduit:
+    collector: conduit
+    tools:
+      - conduit-main
+      - conduit-fix
+    settings:
+      url: http://localhost:8080/metrics
+      pipelines:
+        - "ack-hot-path"
+  docker:
+    collector: docker
+    settings:
+      containers:
+        - "benchi-conduit"
+
+tests:
+  - name: ack-hot-path
+    # 60s steady-state after the pipeline has had time to ramp up; benchi's
+    # aggregation already trims the first/last samples (see the top-level
+    # README.md's "trimmed mean" note), so this does not need its own
+    # separate warm-up step.
+    duration: 60s
+
+    steps:
+      pre-infrastructure:
+      post-infrastructure:
+      pre-tool:
+      post-tool:
+      pre-test:
+      during:
+      post-test:
+      pre-cleanup:
+      post-cleanup:

@@ -1,0 +1,23 @@
+# Baseline: conduit built from origin/main (pre-fix ack-before-persist
+# ordering). Build with, from the repo root:
+#
+#   git worktree add /tmp/conduit-main origin/main
+#   docker build -t conduit-bench:main /tmp/conduit-main
+#
+# See ../README.md for the full reproduction steps.
+services:
+  conduit:
+    image: conduit-bench:main
+    container_name: benchi-conduit
+    networks:
+      - benchi
+    ports:
+      - '8080:8080'
+    environment:
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - ../pipeline.yml:/app/pipelines/pipeline.yml
+
+networks:
+  benchi:
+    external: true

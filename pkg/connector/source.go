@@ -28,6 +28,18 @@ import (
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
+// DefaultTeardownFlushTimeout bounds how long Source.Teardown will wait
+// (Persister.WaitPendingWritesContext) for the final forced flush and its
+// deferred ack (Approach A, docs/design-documents/
+// 20260723-source-ack-persist-ordering-fix.md) before proceeding with
+// teardown regardless. Deliberately shorter than a typical Kubernetes
+// terminationGracePeriodSeconds (commonly 30s): if this wait itself took the
+// full grace period, a slow flush could cause the process to be SIGKILLed
+// before Teardown's own bounded-wait fallback ever got to run, which would
+// be strictly worse than proceeding early. See Teardown's doc comment for
+// the failure mode this bound exists for.
+const DefaultTeardownFlushTimeout = 10 * time.Second
+
 type Source struct {
 	Instance *Instance
 
@@ -47,6 +59,49 @@ type Source struct {
 
 	// wg tracks the number of in flight calls to the connectorPlugin.
 	wg sync.WaitGroup
+
+	// ackMu guards pendingAcks, nextAckSeq and durableAckSeq below. It is
+	// deliberately separate from Instance's RWMutex: onPersistFlushed runs
+	// asynchronously (invoked from connector.Persister's flush callback,
+	// see persister.go's callbackWg) and must be able to send the deferred
+	// plugin-ack — which needs preparePluginCall's Instance.RLock — without
+	// itself holding a lock that could be held by a concurrent caller
+	// blocked waiting on this same flush (see Teardown, which forces and
+	// awaits a flush without holding Instance's lock for exactly this
+	// reason).
+	ackMu sync.Mutex
+	// pendingAcks is a FIFO queue, in the exact order Ack was called, of
+	// positions whose durable persistence has been requested but not yet
+	// confirmed. See Ack and onPersistFlushed.
+	pendingAcks []pendingAck
+	// nextAckSeq is a purely engine-internal, monotonically increasing
+	// counter assigned to each Ack call — NOT derived from the opaque
+	// connector Position bytes, which Source cannot generically parse or
+	// compare (a Position's structure, e.g. per-partition offsets, is
+	// entirely connector-defined). It is what lets onPersistFlushed
+	// determine, without understanding Position's contents, which queued
+	// acks a given durable flush covers, while still preserving invariant 4
+	// (per-partition — here, per-connector — ordering): acks are always
+	// delivered to the plugin in the exact order Ack assigned them a seq.
+	nextAckSeq uint64
+	// durableAckSeq is the highest seq confirmed durable so far. It only
+	// ever advances (see onPersistFlushed) even if flush confirmations
+	// arrive out of order.
+	durableAckSeq uint64
+
+	// teardownFlushTimeout overrides DefaultTeardownFlushTimeout for
+	// Teardown's bounded flush wait. Zero (the production default — this
+	// field is only ever set by tests) means "use
+	// DefaultTeardownFlushTimeout"; see Teardown.
+	teardownFlushTimeout time.Duration
+}
+
+// pendingAck is one Source.Ack call's positions, queued until the resulting
+// state write is confirmed durably flushed by the persister. See the
+// Source.ackMu field doc.
+type pendingAck struct {
+	seq       uint64
+	positions []opencdc.Position
 }
 
 type SourceState struct {
@@ -147,22 +202,113 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 	return resp.LastPosition, nil
 }
 
+// Teardown closes the source's stream and plugin. Invariant 7 (graceful
+// shutdown must not drop the final ack): before actually tearing the plugin
+// down, this forces any position write still sitting in the persister's
+// debounce batch to flush now, and waits for that flush's deferred plugin-ack
+// (Ack/onPersistFlushed, Approach A) to actually be SENT — while the stream
+// is still fully open in both directions. Without this, a graceful shutdown
+// could tear down the plugin between "position flushed" and "plugin acked"
+// (lifecycle.Service.StopAndWait's own WaitPersisted call happens only after
+// the pipeline's nodes — including this Teardown — have already run),
+// silently dropping the final ack even though the crash-path ordering fix
+// prevents the equivalent data-loss bug on a kill -9. See
+// docs/design-documents/20260723-source-ack-persist-ordering-fix.md,
+// "Graceful shutdown (invariant 7)".
+//
+// Critically, this flush-and-wait must happen BEFORE stopStream, not after:
+// stopStream cancels the one context shared by both directions of the
+// plugin stream (see run's context.WithCancel and, for the in-memory
+// transport, pkg/plugin/connector/builtin/stream.go's inMemoryStream — a
+// real gRPC stream's client context works the same way). A deferred ack's
+// stream.Send racing an already-canceled context resolves to ctx.Err() far
+// more often than an actual send (a permanently-ready select case beats one
+// that depends on a concurrent receiver), so sending after stopStream would
+// silently and near-deterministically drop the final ack instead of
+// delivering it — the exact bug this reordering exists to avoid. Read
+// unblocking (stopStream's other job, for a source blocked waiting for a
+// record that will never come) is deliberately delayed until after the
+// flush instead.
+//
+// Failure mode: graceful shutdown racing a stuck/slow flush. Before this
+// fix, Teardown never touched the persister at all, so a wait here is new
+// exposure: an unbounded wait would let a stalled disk or a badger
+// compaction pause hang graceful shutdown indefinitely, trading the sev-0
+// ack-before-persist bug for a possible-hang-on-shutdown bug. The wait below
+// is therefore bounded (Persister.WaitPendingWritesContext, honoring both
+// ctx and DefaultTeardownFlushTimeout) — on timeout or ctx cancellation,
+// Teardown logs a warning and proceeds with teardown anyway rather than
+// blocking forever. That fallback is safe, not merely convenient: the
+// SIGKILL chaos suite (tests/chaos, TestSIGKILL_PruningUpstream_NoGap /
+// TestSIGKILL_DurableUpstream_NoGap) already proves the crash path never
+// produces a gap, so a forced teardown here — before the deferred ack was
+// confirmed sent — degrades to exactly that same, already-proven-safe
+// outcome: at worst a benign duplicate on the next run (the position may
+// not have reached disk yet, so a restart simply re-delivers it), never a
+// gap.
 func (s *Source) Teardown(ctx context.Context) error {
-	// lock source as we are about to mutate the plugin field
+	s.Instance.Lock()
+	if s.plugin == nil {
+		s.Instance.Unlock()
+		return plugin.ErrPluginNotRunning
+	}
+	s.Instance.Unlock()
+
+	// Deliberately not holding s.Instance's lock across this wait:
+	// onPersistFlushed's deferred ack needs preparePluginCall's
+	// Instance.RLock to succeed while s.plugin is still considered running
+	// (checked again below), which would deadlock against an exclusive
+	// lock held here. funnel.Worker's own stop sequencing (processingLock +
+	// the stop flag, see worker.go's Stop) already guarantees no new Ack
+	// call can start once a Teardown has begun, so this window introduces
+	// no new concurrent-Ack risk.
+	timeout := s.teardownFlushTimeout
+	if timeout <= 0 {
+		timeout = DefaultTeardownFlushTimeout
+	}
+	s.Instance.persister.Flush(ctx)
+	if err := s.Instance.persister.WaitPendingWritesContext(ctx, timeout); err != nil {
+		// Bounded-wait fallback (see doc comment above): proceed with
+		// teardown rather than hang. The deferred ack for whatever is still
+		// in flight may not have been sent, but the position is either
+		// already durable (benign duplicate) or not yet durable (the
+		// plugin was never told to commit past it either, so nothing is
+		// lost) — never a gap, by the same reasoning the SIGKILL chaos
+		// suite already establishes for a hard crash, which this bounded
+		// wait is strictly safer than.
+		s.Instance.logger.Warn(ctx).Err(err).
+			Dur("timeout", timeout).
+			Msg("timed out waiting for the final flush/deferred ack before tearing down source connector plugin; proceeding with teardown anyway (safe: at worst a benign duplicate on restart, never a gap — see Teardown's doc comment)")
+	}
+
+	s.Instance.Lock()
+	if s.plugin == nil {
+		// Another Teardown call already finished while this one was
+		// unlocked above. Should not happen given funnel.Worker's own
+		// teardownMu serialization, but Teardown is a public method on an
+		// exported type and must stay safe if ever called concurrently.
+		s.Instance.Unlock()
+		return plugin.ErrPluginNotRunning
+	}
+
+	s.Instance.logger.Debug(ctx).Msg("closing stream")
+	// close stream — only now that every deferred ack pending at the start
+	// of this call has already been sent (see doc comment above).
+	if s.stopStream != nil {
+		s.stopStream()
+	}
+	s.Instance.Unlock()
+
+	// wait for any calls to the plugin to stop running (e.g. Stop, or a Read
+	// that was blocked waiting for a record that will never come, now
+	// unblocked by the stopStream call above)
+	s.wg.Wait()
+
 	s.Instance.Lock()
 	defer s.Instance.Unlock()
 	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
-
-	s.Instance.logger.Debug(ctx).Msg("closing stream")
-	// close stream
-	if s.stopStream != nil {
-		s.stopStream()
-	}
-
-	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Read)
-	s.wg.Wait()
 
 	s.Instance.logger.Debug(ctx).Msg("tearing down source connector plugin")
 	_, err := s.plugin.Teardown(ctx, pconnector.SourceTeardownRequest{})
@@ -204,6 +350,32 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 	return resp.Records, nil
 }
 
+// Ack acknowledges that the records at the given positions were fully
+// processed downstream (or routed to the DLQ, from the caller's point of
+// view — see funnel.Worker.Ack/Nack). It does not send the ack to the plugin
+// synchronously.
+//
+// Invariant 1: ack only after the resulting position is durably persisted.
+// The plugin ack (stream.Send, driven from onPersistFlushed) is deferred
+// until the persister confirms this exact call's resulting state write has
+// been durably flushed. This is Approach A from
+// docs/design-documents/20260723-source-ack-persist-ordering-fix.md: a
+// plugin's own upstream commit — e.g. a Postgres replication slot's
+// confirmed_flush_lsn advance, which frees WAL for recycling — must never be
+// triggered before Conduit's own crash-recoverable record of that position
+// exists on disk, or a crash in between loses the position while the
+// upstream has already discarded the data (sev-0, see
+// docs/postmortems/20260723-source-ack-persist-ordering.md). Do not
+// reintroduce a synchronous stream.Send here without re-reading that design
+// doc.
+//
+// The persister's debounce/batching (persister.go's DefaultPersisterDelayThreshold
+// / DefaultPersisterBundleCountThreshold) is unchanged by this — durability
+// still lands on the same schedule it always did. What changes is that the
+// plugin only learns about it once it's true, which delays a pruning
+// upstream's WAL/log retention release by up to one debounce interval —
+// bounded, tunable, and the entire trade this fix makes (see the design
+// doc's Decision section).
 func (s *Source) Ack(ctx context.Context, p []opencdc.Position) error {
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
@@ -215,26 +387,119 @@ func (s *Source) Ack(ctx context.Context, p []opencdc.Position) error {
 		return cerrors.Errorf("source stream not open: %w", connectorPlugin.ErrStreamNotOpen)
 	}
 
-	err = s.stream.Send(pconnector.SourceRunRequest{AckPositions: p})
-	if err != nil {
-		return err
-	}
-
 	// lock as we are updating the state and leave it locked so the persister
 	// can safely prepare the connector before it stores it
 	s.Instance.Lock()
 	defer s.Instance.Unlock()
 	s.Instance.State = SourceState{Position: p[len(p)-1]}
+
+	// Invariant 4 (per-partition/per-connector ordering): queue this ack
+	// under the same lock used to update state and register the persist
+	// call, so pendingAcks is always populated in exactly the order Ack is
+	// called — see the seq field doc for why a purely-internal counter,
+	// not the opaque Position, is what onPersistFlushed uses to know what
+	// it may safely release to the plugin.
+	s.ackMu.Lock()
+	s.nextAckSeq++
+	seq := s.nextAckSeq
+	s.pendingAcks = append(s.pendingAcks, pendingAck{seq: seq, positions: p})
+	s.ackMu.Unlock()
+
 	err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
-		if err != nil {
-			s.errs <- err
-		}
+		s.onPersistFlushed(seq, err)
 	})
 	if err != nil {
 		return cerrors.Errorf("failed to persist source connector: %w", err)
 	}
 
 	return nil
+}
+
+// onPersistFlushed is invoked by connector.Persister once the state write
+// registered by the Ack call that produced sequence number seq has either
+// been durably committed (err == nil) or failed (err != nil). It is called
+// from within a goroutine that persister.go's flushNow's callbackWg tracks,
+// so any deferred plugin-ack this method sends is awaited by
+// Persister.WaitPendingWrites — see that method's doc for why that matters
+// for graceful shutdown (invariant 7).
+//
+// seq need not be the exact Ack call whose PersistCallback the persister
+// happened to retain (Persister.Persist's batch map keeps only the LAST
+// callback registered for a connector before a flush runs, see persister.go)
+// — since Source.Ack always writes the connector's cumulative, monotonically
+// advancing SourceState.Position, whichever flush actually lands durably
+// necessarily covers every seq up to (and including) the one it was
+// registered for. Flush confirmations can also arrive out of order (case:
+// a later-registered flush's transaction happens to finish before an
+// earlier one still in flight); durableAckSeq only ever advances forward
+// and pendingAcks is drained from its head up to whatever the current
+// durableAckSeq permits, so out-of-order arrival can only make this method
+// a safe no-op for a seq already covered by a previous call — never a
+// double-send and never a gap.
+func (s *Source) onPersistFlushed(seq uint64, err error) {
+	if err != nil {
+		// Durability failed: propagate so the runtime can fail the
+		// connector/pipeline, exactly as before this fix. Invariant 1: never
+		// ack the plugin for a write that did not durably land — the queued
+		// positions stay queued; there is nothing safe to send, and this
+		// connector is on its way down regardless.
+		s.errs <- err
+		return
+	}
+
+	var toSend [][]opencdc.Position
+	s.ackMu.Lock()
+	if seq > s.durableAckSeq {
+		s.durableAckSeq = seq
+	}
+	i := 0
+	for ; i < len(s.pendingAcks) && s.pendingAcks[i].seq <= s.durableAckSeq; i++ {
+		toSend = append(toSend, s.pendingAcks[i].positions)
+	}
+	s.pendingAcks = s.pendingAcks[i:]
+	s.ackMu.Unlock()
+
+	for _, positions := range toSend {
+		s.sendDeferredAck(positions)
+	}
+}
+
+// sendDeferredAck sends one previously-queued Ack call's positions to the
+// plugin now that the resulting position is known durable. Unlike Ack's own
+// (pre-Approach-A) synchronous send, a failure here is never escalated via
+// errs, on purpose: the position this ack refers to is already durable
+// (that's precisely why onPersistFlushed called this), so failing to
+// deliver the message itself is always a benign, already-safe no-op, never a
+// data-integrity problem — the plugin will learn about it on the next ack it
+// does receive (see the design doc's failure-mode analysis, "crash between
+// flush-complete and plugin-ack"). This is not merely a style choice: Teardown
+// deliberately cancels the stream's context (stopStream) before forcing the
+// final flush that can trigger this exact call, specifically so any
+// still-batched position gets flushed and acked while the plugin is still
+// considered "running" for preparePluginCall's purposes — which means a
+// perfectly expected send here is one racing an already-canceled context,
+// returning context.Canceled (not io.EOF; see
+// pkg/plugin/connector/builtin/stream.go's inMemoryStreamClient.Send and
+// equivalents), not a real transport fault. Escalating that via the
+// unbuffered errs channel (as a genuine send failure was before this fix)
+// would risk this goroutine blocking forever the moment nothing is left
+// reading errs during teardown — a self-inflicted deadlock, not a
+// correctness improvement.
+func (s *Source) sendDeferredAck(positions []opencdc.Position) {
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		// Plugin already torn down; benign, see doc comment above.
+		return
+	}
+	if s.stream == nil {
+		return
+	}
+
+	if sendErr := s.stream.Send(pconnector.SourceRunRequest{AckPositions: positions}); sendErr != nil {
+		s.Instance.logger.Debug(context.Background()).Err(sendErr).
+			Msg("failed to send deferred ack to source connector plugin; position is already durable, tolerating as benign (see sendDeferredAck's doc comment)")
+	}
 }
 
 func (s *Source) OnDelete(ctx context.Context) (err error) {
