@@ -380,3 +380,112 @@ func TestPipelineBuilder_Build_MultipleNilArgs_JoinsErrors(t *testing.T) {
 		is.True(strings.Contains(msg, want))
 	}
 }
+
+// --- Reference-type snapshot isolation ---------------------------------
+//
+// PipelineBuilder's doc promises attaching a nested builder "does not keep a
+// live reference" to it. That promise is only automatic for scalar fields
+// (string, int) — a struct copy of a Settings map or a Processors/Connectors
+// slice copies the map/slice *header*, not the underlying storage, so
+// without an explicit deep copy in each build(), a Settings map is still
+// shared between the builder and every snapshot already taken from it. The
+// tests below reproduce review's exact scenarios: mutating a builder's
+// Settings via WithSetting/WithSettings after it was attached, and mutating
+// a nested Processor's Settings after it was placed inside a Connector's
+// Processors slice and that Connector attached to a pipeline. Each of these
+// fails without the deep-copy fix in builder.go's build() methods and
+// passes with it.
+
+// TestConnectorBuilder_SnapshotIsolation_WithSetting reproduces the review's
+// exact repro: WithSetting on a *ConnectorBuilder after it has already been
+// attached (and built) must not change the already-built pipeline's
+// connector Settings.
+func TestConnectorBuilder_SnapshotIsolation_WithSetting(t *testing.T) {
+	is := is.New(t)
+
+	cb := conduit.NewSourceConnector("src", "builtin:generator").WithSetting("k", "v1")
+	p1, err := conduit.NewPipeline("p1").WithConnector(cb).Build()
+	is.NoErr(err)
+	is.Equal(p1.Connectors[0].Settings["k"], "v1")
+
+	// Mutating cb's Settings map in place after attach must not leak into
+	// the already-built p1 — without a deep copy in ConnectorBuilder.build(),
+	// p1.Connectors[0].Settings is the exact same map object as cb's, so this
+	// write would be visible there too.
+	cb.WithSetting("k", "v2")
+
+	is.Equal(p1.Connectors[0].Settings["k"], "v1")
+}
+
+// TestConnectorBuilder_SnapshotIsolation_WithSettings mirrors the above for
+// the bulk WithSettings entry point, which funnels through the same
+// WithSetting call per key but is worth covering directly since it's a
+// distinct public API surface.
+func TestConnectorBuilder_SnapshotIsolation_WithSettings(t *testing.T) {
+	is := is.New(t)
+
+	cb := conduit.NewSourceConnector("src", "builtin:generator").WithSettings(map[string]string{"k": "v1"})
+	p1, err := conduit.NewPipeline("p1").WithConnector(cb).Build()
+	is.NoErr(err)
+	is.Equal(p1.Connectors[0].Settings["k"], "v1")
+
+	cb.WithSettings(map[string]string{"k": "v2"})
+
+	is.Equal(p1.Connectors[0].Settings["k"], "v1")
+}
+
+// TestConnectorBuilder_SnapshotIsolation_NestedProcessorSettings covers the
+// doubly-nested case flagged in review: a *ProcessorBuilder attached to a
+// *ConnectorBuilder (ConnectorBuilder.WithProcessor), with that connector in
+// turn attached to a pipeline. The processor now lives inside the
+// connector's Processors slice, one level deeper than the top-level
+// Settings case above — proving the deep copy in ConnectorBuilder.build()
+// reaches into slice elements' own Settings maps, not just the connector's
+// own Settings.
+func TestConnectorBuilder_SnapshotIsolation_NestedProcessorSettings(t *testing.T) {
+	is := is.New(t)
+
+	proc := conduit.NewProcessor("mask", "builtin:field.mask").WithSetting("k", "v1")
+	cb := conduit.NewSourceConnector("src", "builtin:generator").WithProcessor(proc)
+	p1, err := conduit.NewPipeline("p1").WithConnector(cb).Build()
+	is.NoErr(err)
+	is.Equal(p1.Connectors[0].Processors[0].Settings["k"], "v1")
+
+	// Mutating the nested processor builder after both attach calls
+	// (WithProcessor into cb, then cb into p1) must not reach the
+	// already-built p1's connector's processor Settings.
+	proc.WithSetting("k", "v2")
+
+	is.Equal(p1.Connectors[0].Processors[0].Settings["k"], "v1")
+}
+
+// TestProcessorBuilder_SnapshotIsolation_WithSetting covers a pipeline-scoped
+// processor (PipelineBuilder.WithProcessor) — the same aliasing risk as the
+// connector case, one type over.
+func TestProcessorBuilder_SnapshotIsolation_WithSetting(t *testing.T) {
+	is := is.New(t)
+
+	proc := conduit.NewProcessor("mask", "builtin:field.mask").WithSetting("k", "v1")
+	p1, err := conduit.NewPipeline("p1").WithProcessor(proc).Build()
+	is.NoErr(err)
+	is.Equal(p1.Processors[0].Settings["k"], "v1")
+
+	proc.WithSetting("k", "v2")
+
+	is.Equal(p1.Processors[0].Settings["k"], "v1")
+}
+
+// TestDLQBuilder_SnapshotIsolation_WithSetting covers DLQBuilder, the last of
+// the three Settings-bearing builders named in review.
+func TestDLQBuilder_SnapshotIsolation_WithSetting(t *testing.T) {
+	is := is.New(t)
+
+	dlq := conduit.NewDLQ("builtin:log").WithSetting("k", "v1")
+	p1, err := conduit.NewPipeline("p1").WithDLQ(dlq).Build()
+	is.NoErr(err)
+	is.Equal(p1.DLQ.Settings["k"], "v1")
+
+	dlq.WithSetting("k", "v2")
+
+	is.Equal(p1.DLQ.Settings["k"], "v1")
+}

@@ -82,6 +82,14 @@ const (
 // this package already follows: construct nested builders inline, don't
 // hold onto them.
 //
+// The snapshot is a deep copy, not just a struct copy: Settings maps and
+// nested Processors/Connectors slices are independently cloned at attach
+// time too, not just scalar fields like Name. Mutating a builder's Settings
+// (WithSetting/WithSettings) or appending to it (WithProcessor) after
+// attaching it elsewhere never reaches back into an already-built
+// PipelineConfig or an already-attached parent builder.
+//
+
 // Passing a nil *ConnectorBuilder/*ProcessorBuilder/*DLQBuilder to a With...
 // method never panics: it records a conduiterr.CodeInvalidArgument error
 // (the same code Run/Stop misuse already uses, see conduit.go — no new code
@@ -279,8 +287,22 @@ func (c *ConnectorBuilder) WithProcessor(p *ProcessorBuilder) *ConnectorBuilder 
 // errors recorded by a nil-argument misuse (see WithProcessor). The caller
 // (PipelineBuilder.WithConnector) is responsible for folding errs into its
 // own accumulated errors so Build surfaces them.
+//
+// The returned Connector is a deep copy of c.connector: Settings is a
+// distinct map and Processors a distinct slice (each with its own cloned
+// Settings map), never sharing backing storage with c.connector. Without
+// this, a struct copy of c.connector would copy the map/slice headers only —
+// leaving the returned snapshot aliased to c.connector's storage, so a later
+// c.WithSetting/WithSettings/WithProcessor call on this same builder would
+// silently mutate every pipeline this connector was already attached to.
+// That would falsify the snapshot-at-attach guarantee documented on
+// PipelineBuilder. See TestConnectorBuilder_SnapshotIsolation_Settings and
+// TestConnectorBuilder_SnapshotIsolation_Processors.
 func (c *ConnectorBuilder) build() (conn provisioningconfig.Connector, errs []error) {
-	return c.connector, c.errs
+	conn = c.connector
+	conn.Settings = cloneSettings(c.connector.Settings)
+	conn.Processors = cloneProcessors(c.connector.Processors)
+	return conn, c.errs
 }
 
 // ProcessorBuilder builds one processor. The same ProcessorBuilder type
@@ -338,8 +360,16 @@ func (p *ProcessorBuilder) WithCondition(condition string) *ProcessorBuilder {
 	return p
 }
 
+// build returns a deep copy of the processor this builder has accumulated —
+// Settings is a distinct map, never sharing storage with p.processor. Without
+// this, a later p.WithSetting/WithSettings call on this same builder would
+// silently mutate every pipeline/connector this processor was already
+// attached to, falsifying the snapshot-at-attach guarantee documented on
+// PipelineBuilder. See TestProcessorBuilder_SnapshotIsolation_Settings.
 func (p *ProcessorBuilder) build() provisioningconfig.Processor {
-	return p.processor
+	proc := p.processor
+	proc.Settings = cloneSettings(p.processor.Settings)
+	return proc
 }
 
 // DLQBuilder builds a pipeline's dead-letter-queue configuration. Obtain one
@@ -397,6 +427,53 @@ func (d *DLQBuilder) WithWindowNackThreshold(threshold int) *DLQBuilder {
 	return d
 }
 
+// build returns a deep copy of the DLQ config this builder has accumulated —
+// Settings is a distinct map and WindowSize/WindowNackThreshold are distinct
+// *int allocations, never sharing storage with d.dlq. Without the Settings
+// copy, a later d.WithSetting/WithSettings call on this same builder would
+// silently mutate every pipeline this DLQ was already attached to via
+// WithDLQ, falsifying the snapshot-at-attach guarantee documented on
+// PipelineBuilder. See TestDLQBuilder_SnapshotIsolation_Settings.
 func (d *DLQBuilder) build() provisioningconfig.DLQ {
-	return d.dlq
+	dlq := d.dlq
+	dlq.Settings = cloneSettings(d.dlq.Settings)
+	if d.dlq.WindowSize != nil {
+		v := *d.dlq.WindowSize
+		dlq.WindowSize = &v
+	}
+	if d.dlq.WindowNackThreshold != nil {
+		v := *d.dlq.WindowNackThreshold
+		dlq.WindowNackThreshold = &v
+	}
+	return dlq
+}
+
+// cloneSettings returns an independent copy of settings — mutating the
+// result never affects settings, and vice versa. Preserves nilness (a nil
+// map clones to nil, not an empty map) so it can be used unconditionally in
+// every build() without changing a builder's nil-vs-empty-map semantics.
+func cloneSettings(settings map[string]string) map[string]string {
+	if settings == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(settings))
+	for k, v := range settings {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+// cloneProcessors returns an independent deep copy of procs: a distinct
+// slice, and each element's Settings map is itself independently cloned (see
+// cloneSettings). Preserves nilness.
+func cloneProcessors(procs []provisioningconfig.Processor) []provisioningconfig.Processor {
+	if procs == nil {
+		return nil
+	}
+	cloned := make([]provisioningconfig.Processor, len(procs))
+	for i, p := range procs {
+		p.Settings = cloneSettings(p.Settings)
+		cloned[i] = p
+	}
+	return cloned
 }
