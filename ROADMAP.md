@@ -109,8 +109,8 @@ and for their agents._
 ### Plugin scaffolding
 
 - [ ] `conduit connector new --lang go|python|rust|ts` — full repo: SDK wiring, tests, CI,
-      release workflow, acceptance-test harness — _partial: Go complete; python blocked, rust/ts
-      not built_
+      release workflow, acceptance-test harness — _partial: Go complete; Python is the v0.19 SDK
+      build (ahead of Rust); Rust deferred until Python's tagged release; TS not built_
 - [x] `conduit processor new` — same treatment
 - [ ] Target: **first working custom connector in under 30 minutes**
 
@@ -119,17 +119,21 @@ and for their agents._
 - [ ] WASM **connectors** (today: WASM processors only) — in-process, sandboxed, single portable
       artifact, no gRPC sidecar
 - [ ] WASI Preview 2 / component model adoption
-- [ ] Language SDK rollout, in priority order:
+- [ ] Language SDK rollout, in priority order (Go → Python → Rust → TS):
   - [x] **Go** — reference SDK (exists; keep current with protocol)
-  - [ ] **Python** — gRPC standalone path first (WASM fast-follow); first `libconduit` binding
-  - [ ] **Rust** — full WASM component-model path; proves the WASM connector architecture
+  - [ ] **Python** — gRPC standalone path first (WASM fast-follow); first `libconduit` binding.
+        _Now the v0.19 connector-SDK build (it took v0.19's SDK slot, ahead of Rust)._
+  - [ ] **Rust** — full WASM component-model path; proves the WASM connector architecture.
+        _SDK build deferred until Python's **tagged release** (not a merge to main), honoring the
+        Go → Python → Rust → TS order._
   - [ ] **TypeScript** — WASM via componentize-js
   - [ ] Java: served via the Kafka Connect wrapper short-term; native SDK is a Phase 3+ decision
   - [ ] C# / Ruby: demand-driven only — not speculatively built
 
 ### Connector registry
 
-- [ ] Public registry: `conduit connectors install <name>` pulls signed binaries/WASM artifacts
+- [x] Public registry (signed): `conduit connectors install`/`uninstall`/`audit`/`bundle` — shipped
+      in v0.18 with a signed registry and seed connectors; issue #2625 should close
 - [ ] Community publishing via GitHub Action + signing
 - [ ] Registry web UI with search, verified badges, download stats
 
