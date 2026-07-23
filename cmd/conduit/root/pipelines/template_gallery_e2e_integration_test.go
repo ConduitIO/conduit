@@ -88,6 +88,49 @@ const (
 	templatesE2EKafkaBrokers = "localhost:9095"
 )
 
+// postgresSourceURLPlaceholder is the literal value of the postgres-s3 and
+// postgres-cdc-kafka templates' source `url:` setting as scaffolded — the
+// same string conduit-connector-postgres's source config reads at runtime
+// (source/config.go's URL field, tagged json:"url"). Both templates ALSO
+// show this same string in an explanatory comment directly above the
+// setting (see templates/postgres-s3/pipeline.yaml and
+// templates/postgres-cdc-kafka/pipeline.yaml), so it appears twice in the
+// scaffolded file: once in a comment, once as the actual value.
+const postgresSourceURLPlaceholder = "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+// patchPostgresSourceURL replaces the postgres source connector's
+// RUNTIME-EFFECTIVE `url:` setting with dsn, and fails the test if it can't
+// prove that setting (not just some matching string anywhere in the file)
+// actually changed.
+//
+// Why this isn't a plain strings.Replace(edited, postgresSourceURLPlaceholder, dsn, 1):
+// both templates repeat postgresSourceURLPlaceholder in an example comment
+// immediately above the real `url:` line. A bare, count-1 replace matches
+// whichever occurrence comes first in the file — the comment — and leaves
+// the actual setting the connector reads untouched. The connector then
+// dials the placeholder host/port/user/db, the pipeline never produces a
+// row, and the original `is.True(edited != original)` guard passed anyway
+// because the comment text did change. Anchoring on the `url: ` key prefix
+// disambiguates the two occurrences and targets only the real setting.
+func patchPostgresSourceURL(t *testing.T, edited, dsn string) string {
+	t.Helper()
+	placeholderSetting := "url: " + postgresSourceURLPlaceholder
+	if strings.Count(edited, placeholderSetting) != 1 {
+		t.Fatalf("expected exactly one %q settings line in the scaffolded template, found %d — "+
+			"template YAML shape changed, update this test's patching logic",
+			placeholderSetting, strings.Count(edited, placeholderSetting))
+	}
+	effectiveSetting := "url: " + dsn
+	edited = strings.Replace(edited, placeholderSetting, effectiveSetting, 1)
+	if !strings.Contains(edited, effectiveSetting) {
+		t.Fatalf("runtime-effective postgres source `url:` setting was not patched to %q", dsn)
+	}
+	if strings.Contains(edited, placeholderSetting) {
+		t.Fatalf("placeholder postgres source `url:` setting is still present after patching")
+	}
+	return edited
+}
+
 // pathStyleS3Client returns an S3 client this TEST fully controls (path
 // style, talking directly to MinIO) for setup (bucket creation) and
 // verification — deliberately separate from whatever client the pipeline's
@@ -158,8 +201,7 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	original, err := os.ReadFile(pipelinePath)
 	is.NoErr(err)
 	edited := string(original)
-	edited = strings.Replace(edited,
-		"postgres://user:password@localhost:5432/dbname?sslmode=disable", templatesE2EPostgresURL, 1)
+	edited = patchPostgresSourceURL(t, edited, templatesE2EPostgresURL)
 	edited = strings.Replace(edited, "your-access-key-id", templatesE2EMinioKey, 1)
 	edited = strings.Replace(edited, "your-secret-access-key", templatesE2EMinioSecret, 1)
 	edited = strings.Replace(edited, "your-bucket-name", bucket, 1)
@@ -267,8 +309,7 @@ func TestTemplateGalleryE2E_Integration_PostgresCDCKafka(t *testing.T) {
 	original, err := os.ReadFile(pipelinePath)
 	is.NoErr(err)
 	edited := string(original)
-	edited = strings.Replace(edited,
-		"postgres://user:password@localhost:5432/dbname?sslmode=disable", templatesE2EPostgresURL, 1)
+	edited = patchPostgresSourceURL(t, edited, templatesE2EPostgresURL)
 	edited = strings.Replace(edited, "servers: localhost:9092", "servers: "+templatesE2EKafkaBrokers, 1)
 	edited = strings.Replace(edited, "topic: postgres-cdc", "topic: "+topic, 1)
 	is.True(edited != string(original))
