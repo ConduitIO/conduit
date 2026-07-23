@@ -24,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -67,6 +68,13 @@ func TestStopCommandExecuteWithClient_Graceful(t *testing.T) {
 	is.Equal(lr.Action, "stop")
 	is.Equal(lr.Force, false)
 	is.Equal(lr.Status, "UserStopped")
+
+	// Family B negative check (v0.19 workstream 8 — cli-contract.md §4.6):
+	// this command's --json output must never accidentally start
+	// conforming to Family A's envelope shape.
+	b, err := cecdysis.MarshalJSON(result)
+	is.NoErr(err)
+	is.True(!testutils.MatchesEnvelope(b))
 
 	out := cmd.Render(result)
 	is.True(strings.Contains(out, "Pipeline orders  [stopped]"))

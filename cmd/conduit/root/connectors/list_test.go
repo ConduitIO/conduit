@@ -28,6 +28,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/registry"
@@ -109,6 +110,13 @@ func TestListCommandExecuteWithClient_NoFlags(t *testing.T) {
 
 	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
+
+	// Family B negative check (v0.19 workstream 8 — cli-contract.md §4.6):
+	// this command's --json output must never accidentally start
+	// conforming to Family A's envelope shape.
+	b, err := cecdysis.MarshalJSON(result)
+	is.NoErr(err)
+	is.True(!testutils.MatchesEnvelope(b))
 
 	output := cmd.Render(result)
 	is.Equal(output, ""+

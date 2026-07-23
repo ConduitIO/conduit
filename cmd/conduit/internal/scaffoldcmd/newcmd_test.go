@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/pkg/scaffold"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
@@ -144,4 +145,38 @@ func TestResultMarshalsToTheDocumentedEnvelope(t *testing.T) {
 	step, ok := steps[0].(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, step, "durationMs")
+}
+
+// TestResultMarshalsToTheDocumentedEnvelope_FamilyA is the Family A golden
+// fixture for both `conduit connector new` and `conduit processor new`
+// (v0.19 workstream 8 — cli-contract.md §6 AC-3): both concrete commands
+// (cmd/conduit/root/connectors.NewCommand, cmd/conduit/root/processors.NewCommand)
+// delegate their ExecuteWithResult/Render entirely to this shared
+// scaffoldcmd.NewCommand, so proving this type's envelope conformance once,
+// here, covers both leaves the completeness walk
+// (cmd/conduit/cli/schema_golden_test.go) classifies as Family A. A real
+// end-to-end run needs network access and a Go toolchain (template clone +
+// go build) — out of scope for a unit test, per this file's own
+// TestNewCommand_Render precedent (a synthetic scaffold.Result, not a real
+// scaffold.Generate call).
+func TestResultMarshalsToTheDocumentedEnvelope_FamilyA(t *testing.T) {
+	res := scaffold.Result{
+		Kind:        scaffold.KindConnector,
+		Module:      "github.com/devaris/conduit-connector-s3",
+		Path:        "./conduit-connector-s3",
+		TemplateRef: "abc123",
+		SDKVersion:  "v0.14.1",
+		Steps:       []scaffold.StepResult{{Name: scaffold.StepBuild, OK: true, DurationMS: 5}},
+		ElapsedMS:   10,
+		NextSteps:   []string{"cd conduit-connector-s3"},
+	}
+	envelope := cecdysis.Result{
+		Command: "connector.new",
+		OK:      true,
+		Summary: map[string]any{"stepsTotal": 1, "stepsFailed": 0},
+		Result:  res,
+	}
+	b, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	assert.NoError(t, testutils.ValidateEnvelope(b))
 }

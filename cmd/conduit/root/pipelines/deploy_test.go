@@ -20,11 +20,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/deploy"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
+	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 
@@ -109,6 +112,14 @@ func TestDeployCommand_RendersPlan_NoSideEffects(t *testing.T) {
 
 	rendered := cmd.Render(outcome)
 	is.True(rendered != "")
+
+	// Family A golden fixture (v0.19 workstream 8 — cli-contract.md §6 AC-3):
+	// the envelope assembled from this real Outcome must validate against
+	// the shared schema; see cmd/conduit/cli/schema_golden_test.go.
+	res := cecdysis.Result{Command: cmd.ResultCommand(), OK: outcome.OK, Summary: outcome.Summary, Result: outcome.Result}
+	b, err := json.Marshal(res)
+	is.NoErr(err)
+	is.NoErr(testutils.ValidateEnvelope(b))
 }
 
 // TestDeployCommand_InvalidFile_HardFailure is the regression test for

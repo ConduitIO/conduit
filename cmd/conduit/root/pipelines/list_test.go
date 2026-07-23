@@ -112,4 +112,11 @@ func TestListCommandExecuteWithClient_JSON(t *testing.T) {
 	b, err := protojson.Marshal(resp)
 	is.NoErr(err)
 	is.True(strings.Contains(string(b), `"id":"1"`))
+
+	// Family B negative check (v0.19 workstream 8 — cli-contract.md §4.6):
+	// this command's --json output must never accidentally start
+	// conforming to Family A's envelope shape; see
+	// cmd/conduit/cli/schema_golden_test.go's completeness walk, which
+	// classifies this command as Family B by interface.
+	is.True(!testutils.MatchesEnvelope(b))
 }

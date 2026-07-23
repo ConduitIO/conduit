@@ -46,6 +46,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.70.1
 	github.com/rs/zerolog v1.35.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
 	github.com/sashabaranov/go-openai v1.41.2
 	github.com/sigstore/sigstore-go v1.2.2
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8
@@ -289,7 +290,6 @@ require (
 	github.com/samber/slog-common v0.21.0 // indirect
 	github.com/samber/slog-zerolog/v2 v2.9.2 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.1.0 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.28.0 // indirect
 	github.com/sassoftware/relic v7.2.1+incompatible // indirect

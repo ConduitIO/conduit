@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
 	"github.com/conduitio/ecdysis"
 )
@@ -81,6 +82,11 @@ func TestUninstall_NoPipelinesProvisioned_Succeeds(t *testing.T) {
 		"--json",
 	)
 	require.NoError(t, err)
+
+	// Family A golden fixture (v0.19 workstream 8 — cli-contract.md §6
+	// AC-3): uninstall's real --json output must validate against the
+	// shared envelope schema; see cmd/conduit/cli/schema_golden_test.go.
+	assert.NoError(t, testutils.ValidateEnvelope([]byte(out)))
 
 	var res cecdysis.Result
 	require.NoError(t, json.Unmarshal([]byte(out), &res))

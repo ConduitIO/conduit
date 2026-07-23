@@ -113,6 +113,48 @@ Fold this into the shared offline `CommandWithResult` decorator so it is structu
 Under `--json`, commands MUST NOT stream human progress/`✓` lines (they would
 precede/corrupt the single JSON object) — capture progress in `result.steps[]`.
 
+## 6. Two families, not one (v0.19 workstream 8 addendum)
+
+Verifying the repo for the shared CLI contract schema-golden test (v0.19 workstream 8; see
+`v019-plans/workstreams/cli-contract.md`) surfaced a correction to this doc's original framing:
+there are **two distinct, both-deliberate `--json` shapes** in production, not one universal
+envelope.
+
+- **Family A — the envelope** (§1, above): `cecdysis.CommandWithResult`. Used by one-shot
+  check/action commands: `doctor`, `pipelines validate|lint|dry-run|repair|apply|deploy|init`,
+  `connectors audit|bundle|install|uninstall|new`, `processors new`, `init`. Validated against
+  the one committed schema at `cmd/conduit/cecdysis/testdata/envelope.schema.json`.
+- **Family B — client-result passthrough**: `cecdysis.CommandWithExecuteWithClientResult`.
+  `--json` is the **raw result value** — a proto message via `protojson` (matching the HTTP
+  API's JSON shape) or a composite Go struct via go-json — never wrapped in the envelope. Used
+  by read/query commands: `pipelines list|describe|inspect|start|stop`,
+  `connectors list|describe`, `processors list|describe`, `connectorplugins list|describe`,
+  `processorplugins list|describe`. This is confirmed correct, intentional, load-bearing
+  behavior (see `cmd/conduit/root/pipelines/list_test.go`'s own doc comment), not a bug or a
+  migration backlog item — scripts and the MCP layer already consume this shape.
+
+Forcing one schema across both was considered and rejected: Family B's payloads are
+heterogeneous proto/API messages whose shape is dictated by the gRPC/HTTP API contract, not this
+CLI layer. Migrating Family B onto the envelope is a breaking change to already-consumed output
+and is out of scope for v0.19 (open question for a future roadmap decision).
+
+`cmd/conduit/cli/schema_golden_test.go`'s completeness walk enforces this: it recursively walks
+`(&root.RootCommand{}).SubCommands()` and classifies every leaf as Family A, Family B, or a
+named exception (below) — a leaf that registers a `--json` flag but is neither classified nor
+excepted fails the build. This also means any future `--json` surface (`generate`,
+`pipelines init --template`, the embed CLI) is covered automatically the moment it registers in
+the command tree.
+
+### The one documented exception
+
+`quickstart --json` (`cmd/conduit/root/quickstart/quickstart.go`) means "emit logs and records
+as JSON instead of human-readable text" — a streaming log-format toggle predating this
+convention, not the envelope. This is a known, pre-existing violation of §3's flag vocabulary,
+left deliberately unfixed for v0.19: `quickstart` is a long-running interactive demo command,
+structurally unlike the one-shot commands this contract targets, and renaming its `--json` flag
+is a separate, larger discussion (tracked in `cli-contract.md` §12). It is a named exception in
+`schema_golden_test.go`'s `familyExceptions` map, not a silent omission.
+
 ## Related
 
 - Execution plan §3 (CLI as product), §2 (MCP wraps these 1:1).

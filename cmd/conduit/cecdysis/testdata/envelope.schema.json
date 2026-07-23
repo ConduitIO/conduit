@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://conduit.io/schemas/cli/envelope.schema.json",
+  "title": "Conduit CLI --json envelope (Family A)",
+  "description": "The shared --json envelope every cecdysis.CommandWithResult command emits (cmd/conduit/cecdysis/result.go's Result struct; docs/design-documents/20260707-cli-output-conventions.md §1). This is the ONE committed schema for Family A. Family B commands (cecdysis.CommandWithExecuteWithClientResult) emit raw protojson/go-json passthrough instead and must NEVER validate against this schema — see docs/architecture-decision-records or v019 plans/workstreams/cli-contract.md §4.2 for why the two families are both deliberate and why forcing one schema across both was rejected. cmd/conduit/cli/schema_golden_test.go's completeness walk and each Family A/B command's own test file (see cmd/conduit/internal/testutils/envelope.go's ValidateEnvelope/MatchesEnvelope) are what enforce conformance to this file.",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable dotted discriminator, e.g. \"pipelines.validate\"."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "The run's domain verdict (not \"did the command execute\"). A validation run that finds problems is ok:false with error:null."
+    },
+    "summary": {
+      "description": "Command-specific counts/rollup payload. Any JSON value, including null."
+    },
+    "result": {
+      "description": "Command-specific detail payload. Any JSON value, including null."
+    },
+    "error": {
+      "description": "Null on success; set only on a HARD command failure (never for domain findings, which belong in ok:false + summary/result).",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "suggestion": { "type": "string" },
+            "configPath": { "type": "string" },
+            "fix": {}
+          },
+          "required": ["message"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": ["command", "ok", "summary", "result", "error"],
+  "additionalProperties": false
+}
