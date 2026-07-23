@@ -63,12 +63,15 @@ The credible external claim today is _"broad coverage, log-based like Debezium o
 not _"at parity."_ Claiming parity to an Oracle or SQL Server shop would burn credibility, which is
 the opposite of what this epic exists to rebuild.
 
-**Positioning note.** One asset the matrix above doesn't capture: Conduit's embeddability
-(`libconduit` and language bindings, `conduit run`) already subsumes the standalone-process use case
-that Debezium Server / Debezium Engine exist to serve (run CDC without a Kafka Connect cluster,
-embedded in your own process or as a lightweight standalone binary). That's a real, already-shipped
-differentiator worth stating on the `vs Debezium` comparison page (DBZ-0) — it doesn't require any
-new engineering to claim.
+**Positioning note (locked claim, not an open question).** One asset the matrix above doesn't
+capture: Conduit already covers the exact standalone-process use case **Debezium Server** and
+**Debezium Engine** exist to serve — running CDC without a Kafka Connect cluster, either as a
+lightweight standalone binary or embedded in your own process. This is a settled `vs Debezium`
+comparison-page claim, not a question to resolve later: `conduit run` ships that standalone binary
+today, and the embedding path is `libconduit` (the Go embedding surface works today; the stable,
+semver-committed API is the embed-v1 productization of that same already-working path). State it
+plainly on the DBZ-0 page — it names both Debezium products directly and it requires no new
+engineering to claim, because the capability already ships.
 
 **Fix-in-passing.** The `conduitio-labs/conduit-connector-sql-server` README has a copy-paste bug —
 it labels itself "DB2" in at least one section. If DBZ-0's comparison page cites connector docs as
