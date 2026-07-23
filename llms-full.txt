@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (77)
+## 3. Error codes (78)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -644,6 +644,7 @@ Author: Meroxa, Inc.
 | `pipeline.name_missing` | InvalidArgument | CodePipelineNameMissing is raised when a pipeline config is missing the required name field. |
 | `pipeline.not_running` | FailedPrecondition | CodePipelineNotRunning is raised when an operation requires the pipeline to be running, but it is currently stopped. |
 | `pipeline.running` | FailedPrecondition | CodePipelineRunning is raised when an operation requires the pipeline to be stopped, but it is currently running. |
+| `pipelines.init_destination_exists` | AlreadyExists | pipelines: init destination exists |
 | `processor.instance_not_found` | NotFound | CodeProcessorNotFound is raised when a referenced processor instance cannot be located. |
 | `processor.plugin_not_found` | NotFound | CodeProcessorPluginNotFound is raised when a referenced processor plugin cannot be located. |
 | `provisioning.live_apply_unauthorized` | FailedPrecondition | provisioning: live apply unauthorized |
