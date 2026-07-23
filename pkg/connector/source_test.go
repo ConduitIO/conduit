@@ -15,10 +15,13 @@
 package connector
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -27,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
 
@@ -428,6 +432,161 @@ func TestSource_Teardown_SendsPendingDeferredAckBeforeReturning(t *testing.T) {
 	default:
 		t.Fatal("Teardown returned without the pending deferred ack having been sent")
 	}
+}
+
+// blockingDB wraps a real database.DB and makes NewTransaction block until
+// unblock is closed (or ctx is done), whichever happens first. It exists to
+// deterministically simulate a stuck/slow persister flush (e.g. a stalled
+// disk or a badger compaction pause) for
+// TestSource_Teardown_BoundedWaitOnStuckFlush, without relying on a real
+// sleep racing against the assertion.
+type blockingDB struct {
+	database.DB
+	unblock chan struct{}
+}
+
+func (b *blockingDB) NewTransaction(ctx context.Context, update bool) (database.Transaction, context.Context, error) {
+	select {
+	case <-b.unblock:
+	case <-ctx.Done():
+		return nil, ctx, ctx.Err()
+	}
+	return b.DB.NewTransaction(ctx, update)
+}
+
+// TestSource_Teardown_BoundedWaitOnStuckFlush is the regression test for the
+// bounded-Teardown fix (source.go's Teardown, persister.go's
+// WaitPendingWritesContext): a stuck/slow persister flush must not hang
+// graceful shutdown. Before that fix, Teardown had no bound at all on this
+// wait, so a stalled disk (or a badger compaction pause) mid-flush would
+// have hung Teardown indefinitely - trading the sev-0 ack-before-persist bug
+// for a hang-on-shutdown bug. See Teardown's doc comment, "Failure mode:
+// graceful shutdown racing a stuck/slow flush", and
+// docs/design-documents/20260723-source-ack-persist-ordering-fix.md.
+//
+// blockingDB below never unblocks the in-flight flush until this test
+// itself is done asserting, which is what makes "Teardown returned quickly"
+// proof of the bounded-wait fallback firing rather than a coincidence: the
+// only other way Teardown could return here is the underlying flush
+// actually completing, and it structurally cannot until this test closes
+// the channel.
+func TestSource_Teardown_BoundedWaitOnStuckFlush(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	var logBuf bytes.Buffer
+	logger := log.New(zerolog.New(&logBuf))
+
+	unblock := make(chan struct{})
+	// Let the stuck flush actually finish once the test is done asserting,
+	// so its background goroutine (persister.go's flushNow) doesn't leak
+	// past this test.
+	defer close(unblock)
+
+	db := &blockingDB{DB: &inmemory.DB{}, unblock: unblock}
+	// A long delay threshold and high bundle-count threshold mean the ack
+	// below is never auto-flushed - the only flush is Teardown's own forced
+	// Flush call, which blockingDB then stalls forever (for the lifetime of
+	// this test), simulating a stuck store.
+	persister := NewPersister(logger, db, time.Hour, 100)
+
+	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	// newTestSourceWithPersister wires up its own Nop logger on the
+	// Instance; replace it so this test can observe the bounded-wait
+	// warning Teardown logs on timeout.
+	src.Instance.logger = logger
+	// Short override so this test doesn't have to wait
+	// DefaultTeardownFlushTimeout (10s) for the bounded-wait fallback to
+	// kick in - see the teardownFlushTimeout field doc.
+	const shortTimeout = 30 * time.Millisecond
+	src.teardownFlushTimeout = shortTimeout
+
+	_ = expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("stuck-pos")}))
+
+	start := time.Now()
+	err := src.Teardown(ctx)
+	elapsed := time.Since(start)
+
+	is.NoErr(err) // Teardown itself must not fail just because the flush wait timed out
+	// Comfortably below DefaultTeardownFlushTimeout (10s, let alone "forever"):
+	// proves Teardown returned via the bounded-wait fallback, not by
+	// coincidentally winning a race against the still-blocked flush.
+	is.True(elapsed < 2*time.Second)
+
+	is.True(strings.Contains(logBuf.String(), "timed out waiting for the final flush"))
+}
+
+// TestSource_Teardown_FastFlushCompletesWithinBoundedTimeout is the
+// fast-path complement to TestSource_Teardown_BoundedWaitOnStuckFlush: the
+// same short teardownFlushTimeout override must not truncate a normal,
+// quickly-completing flush. Teardown must wait for it and deliver the
+// deferred ack, and must NOT log the bounded-wait timeout warning - proving
+// the bound only ever fires on an actually-stuck flush, never as a false
+// positive against a healthy one.
+func TestSource_Teardown_FastFlushCompletesWithinBoundedTimeout(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	var logBuf bytes.Buffer
+	logger := log.New(zerolog.New(&logBuf))
+
+	db := &inmemory.DB{}
+	// Long delay/high bundle-count thresholds mean the ack below is only
+	// flushed by Teardown's own forced Flush call - but, unlike the
+	// stuck-flush test above, this store is not blocked, so that flush
+	// completes almost immediately.
+	persister := NewPersister(logger, db, time.Hour, 100)
+
+	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	src.Instance.logger = logger
+	// Same short override as the stuck-flush test, to prove it's the
+	// stuck-ness (not the timeout value) that determines which path fires.
+	src.teardownFlushTimeout = 200 * time.Millisecond
+
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("fast-pos")}))
+
+	serverStream := stream.Server()
+	recvDone := make(chan opencdc.Position, 1)
+	go func() {
+		resp, err := serverStream.Recv()
+		is.NoErr(err)
+		recvDone <- resp.AckPositions[0]
+	}()
+
+	is.NoErr(src.Teardown(ctx))
+
+	// Teardown already returned by this point - the ack must already have
+	// been delivered (same invariant-7 property as
+	// TestSource_Teardown_SendsPendingDeferredAckBeforeReturning), not
+	// merely "eventually" delivered on some later, unrelated event.
+	select {
+	case pos := <-recvDone:
+		is.Equal(pos, opencdc.Position("fast-pos"))
+	default:
+		t.Fatal("Teardown returned without the pending deferred ack having been sent")
+	}
+
+	is.True(!strings.Contains(logBuf.String(), "timed out waiting"))
 }
 
 func newTestSource(ctx context.Context, t testing.TB, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
