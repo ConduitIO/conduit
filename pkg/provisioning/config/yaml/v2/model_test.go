@@ -129,3 +129,29 @@ func TestConfiguration_JSON(t *testing.T) {
 
 	is.Equal(string(got), want)
 }
+
+// TestToConfig_EmptySettingsNormalizedToNil is a regression test for a bug
+// the root github.com/conduitio/conduit package's pipeline-builder
+// round-trip property test caught: Connector/Processor/DLQ.ToConfig used to
+// copy Settings as-is, so a non-nil-but-empty map (produced whenever
+// FromConfig's output is marshaled to YAML and reparsed — yaml.v3 has no
+// way to marshal a nil map as an omitted key without an explicit omitempty
+// tag, which this wire format has never carried on Settings) round-tripped
+// into config.{Connector,Processor,DLQ}.Settings as map[string]string{}
+// instead of nil, even though the caller-visible input (either a truly
+// nil-Settings config.Pipeline, or a YAML document that omits the settings
+// key) never had explicit empty-map intent. ToConfig now normalizes an
+// empty Settings map to nil, mirroring the empty-slice-to-nil
+// normalization connectorsToConfig/processorsToConfig already apply.
+func TestToConfig_EmptySettingsNormalizedToNil(t *testing.T) {
+	is := is.New(t)
+
+	c := Connector{ID: "con1", Type: "source", Plugin: "builtin:s3", Settings: map[string]string{}}
+	is.True(c.ToConfig().Settings == nil)
+
+	p := Processor{ID: "proc1", Plugin: "js", Settings: map[string]string{}}
+	is.True(p.ToConfig().Settings == nil)
+
+	d := DLQ{Plugin: "builtin:log", Settings: map[string]string{}}
+	is.True(d.ToConfig().Settings == nil)
+}

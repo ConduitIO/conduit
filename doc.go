@@ -17,18 +17,25 @@
 // touching os.Exit, a global logger, or the process-wide default Prometheus
 // registry.
 //
-// # Scope (v1 / "B1")
+// # Scope (v1 / "B1" + "B2")
 //
-// This package covers the engine lifecycle only: New constructs an Engine from
+// This package covers the engine lifecycle: New constructs an Engine from
 // Options (and eagerly opens its database — see New's and Engine.Close's doc);
 // Engine.Run starts it and returns a *Handle once it is ready to accept work;
 // Handle.Stop drains and shuts it down; Engine.Close releases the resources
 // New acquired, whether or not Run was ever called — see Engine's "Lifecycle
 // contract" doc for the exact New/Run/Stop/Close state matrix. Engine.Import
-// lets a host create or update a pipeline from a PipelineConfig value built in
-// code — the pipelines-in-code builder (NewPipeline/PipelineBuilder) and the
-// C-ABI/language-binding surface (libconduit proper) are later workstreams;
-// see docs/design-documents/20260722-embed-libconduit-v1.md.
+// lets a host create or update a pipeline from a PipelineConfig value.
+//
+// PipelineConfig values don't have to come from YAML: NewPipeline starts a
+// fluent, pipelines-in-code builder (PipelineBuilder, with
+// ConnectorBuilder/ProcessorBuilder/DLQBuilder for nested entities) that
+// produces the exact same PipelineConfig a YAML parse of the equivalent
+// document produces — see builder.go and this package's round-trip tests
+// (TestPipelineBuilder_RoundTrip, TestPipelineBuilder_RoundTrip_Fixtures) for
+// the property this is verified against. The C-ABI/language-binding surface
+// (libconduit proper, "B3") remains a later workstream; see
+// docs/design-documents/20260722-embed-libconduit-v1.md.
 //
 // # Why this exists, not pkg/conduit directly
 //

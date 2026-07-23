@@ -163,7 +163,7 @@ func (c Connector) ToConfig() config.Connector {
 		Type:       c.Type,
 		Plugin:     c.Plugin,
 		Name:       c.Name,
-		Settings:   c.Settings,
+		Settings:   settingsToConfig(c.Settings),
 		Processors: c.processorsToConfig(),
 	}
 }
@@ -189,7 +189,7 @@ func (p Processor) ToConfig() config.Processor {
 	return config.Processor{
 		ID:        p.ID,
 		Plugin:    plugin,
-		Settings:  p.Settings,
+		Settings:  settingsToConfig(p.Settings),
 		Workers:   p.Workers,
 		Condition: p.Condition,
 	}
@@ -198,8 +198,29 @@ func (p Processor) ToConfig() config.Processor {
 func (p DLQ) ToConfig() config.DLQ {
 	return config.DLQ{
 		Plugin:              p.Plugin,
-		Settings:            p.Settings,
+		Settings:            settingsToConfig(p.Settings),
 		WindowSize:          p.WindowSize,
 		WindowNackThreshold: p.WindowNackThreshold,
 	}
+}
+
+// settingsToConfig normalizes an empty (possibly non-nil) settings map to
+// nil, mirroring connectorsToConfig/processorsToConfig's existing
+// empty-slice-to-nil normalization just above. Without this, a Settings
+// field with no entries round-trips inconsistently depending on how it got
+// that way: a YAML document that spells the key as `settings: {}` decodes
+// to a non-nil empty map, one that omits the key entirely decodes to nil,
+// and FromConfig+yaml.Marshal (the config.Pipeline -> Configuration -> YAML
+// text path exercised by the root github.com/conduitio/conduit package's
+// pipeline builder — see its round-trip tests, which caught this) always
+// emits `settings: {}` for a nil Go map: yaml.v3 has no way to marshal a
+// nil map as an omitted key without an explicit omitempty tag, which the
+// wire format has never carried on this field. Normalizing both to nil
+// here — the same as the slice fields already do — makes ToConfig's output
+// independent of which of those three textual spellings produced it.
+func settingsToConfig(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
