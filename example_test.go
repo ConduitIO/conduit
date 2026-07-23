@@ -33,6 +33,13 @@ import (
 // budget assertion — deliberately separate from the human-facing "15 minutes
 // to a running pipeline" doc claim, which is a UX statement, not something a
 // test can measure; see the embed workstream plan §12 open question 1).
+//
+// New below does not open anything (B1 DX-hardening fix: the database opens
+// lazily, on this very Run call — see New's and Engine's "Lifecycle contract"
+// doc); Run's own success-then-Stop path already releases it via Runtime's
+// cleanup, which is why this example never calls Engine.Close explicitly —
+// see Close's doc for when it would still be needed (e.g. if Run below had
+// failed, or if the engine were discarded before ever being run).
 func helloPipeline(ctx context.Context, dir string) error {
 	e, err := conduit.New(ctx, conduit.Options{
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),

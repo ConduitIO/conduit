@@ -17,6 +17,8 @@ package conduit_test
 import (
 	"context"
 	"net"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
@@ -229,9 +231,15 @@ func TestStop_DeadlineExceeded(t *testing.T) {
 // engines opening the same BadgerDB path in one process surface the
 // existing coded CodeUnavailable path (OpenStore's own tagging), not a
 // generic OS error or a panic.
+//
+// B1 DX-hardening (lazy DB open): New no longer opens anything, so the
+// contention has to be forced by actually running e1 first — the store only
+// opens (and the lock is only held) once ensureRuntime runs, on Run or
+// Import, not on New. See Engine's "Lifecycle contract" doc.
 func TestNew_StoreAlreadyOpen_ReturnsCodedError(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
+	ctx := context.Background()
 
 	opts := conduit.Options{
 		PipelinesDir: t.TempDir(),
@@ -241,25 +249,33 @@ func TestNew_StoreAlreadyOpen_ReturnsCodedError(t *testing.T) {
 	}
 	opts.DB.Badger.Path = dir
 
-	e1, err := conduit.New(context.Background(), opts)
+	e1, err := conduit.New(ctx, opts)
 	is.NoErr(err)
-	defer func() { is.NoErr(e1.Close(context.Background())) }()
+	h1, err := e1.Run(ctx) // actually opens the Badger store, holding its file lock
+	is.NoErr(err)
+	defer func() {
+		is.NoErr(h1.Stop(ctx))
+		is.NoErr(e1.Close(ctx))
+	}()
 
-	_, err = conduit.New(context.Background(), opts)
+	e2, err := conduit.New(ctx, opts)
+	is.NoErr(err) // New only validates Options; still opens nothing
+
+	_, err = e2.Run(ctx)
 	is.True(err != nil)
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeUnavailable)
 }
 
-// TestClose_NoRun_ReleasesDB proves Engine.Close's first lifecycle-contract
-// case: New followed directly by Close (Run never called) releases the
-// database New opened eagerly. It uses a BadgerDB path (a real OS-level file
-// lock, unlike the in-memory store other tests default to) and proves release
-// the same way TestNew_StoreAlreadyOpen_ReturnsCodedError proves the leak: a
-// second Engine constructed at the same path only succeeds if the first
-// Engine's DB was actually closed, not merely garbage-collected.
-func TestClose_NoRun_ReleasesDB(t *testing.T) {
+// TestClose_NoRun_IsNoOp proves Engine.Close's first lifecycle-contract case
+// under lazy DB open: New alone opens nothing, so Close on a never-Run,
+// never-Imported Engine is a safe no-op — proven here the same way
+// TestNew_StoreAlreadyOpen_ReturnsCodedError proves contention: a second
+// Engine at the same BadgerDB path opens (via Run) without contention, which
+// would fail with CodeUnavailable if e1 had actually opened (and leaked) the
+// store instead.
+func TestClose_NoRun_IsNoOp(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
 	ctx := context.Background()
@@ -273,20 +289,23 @@ func TestClose_NoRun_ReleasesDB(t *testing.T) {
 	e1, err := conduit.New(ctx, opts)
 	is.NoErr(err)
 
-	is.NoErr(e1.Close(ctx)) // no Run was ever called
+	is.NoErr(e1.Close(ctx)) // no Run/Import was ever called; nothing to release
 
 	e2, err := conduit.New(ctx, opts)
-	is.NoErr(err) // would fail with CodeUnavailable if e1's DB were still holding the lock
+	is.NoErr(err)
+	h2, err := e2.Run(ctx) // would fail with CodeUnavailable if e1 had opened (and leaked) the store
+	is.NoErr(err)
+	is.NoErr(h2.Stop(ctx))
 	is.NoErr(e2.Close(ctx))
 }
 
 // TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB proves Engine.Close's
-// second lifecycle-contract case: Run reaching pkgconduit.Runtime.Run's
-// already-done-context guard (a pre-canceled ctx) returns before
-// registerCleanup is ever registered, so the runtime's own cleanup path never
-// closes the database — Close is the only release path left, and it must
-// still work. started flipping true on the Run call (not on success) must not
-// block Close.
+// second lifecycle-contract case: Run's ensureRuntime call opens the database
+// before pkgconduit.Runtime.Run's already-done-context guard (a pre-canceled
+// ctx) trips and returns, before registerCleanup is ever registered — so the
+// runtime's own cleanup path never closes the database. Close is the only
+// release path left, and it must still work. started flipping true on the Run
+// call (not on success) must not block Close.
 func TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -315,12 +334,30 @@ func TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB(t *testing.T) {
 	is.NoErr(e2.Close(ctx))
 }
 
-// TestClose_DoubleCloseIsSafe proves Close's idempotency guarantee: calling it
-// twice returns the same (nil) result both times, with no panic and no
-// double-close error surfacing to the caller.
+// TestClose_DoubleCloseIsSafe proves Close's idempotency guarantee on an
+// Engine that never opened anything (lazy DB open: New/Close alone, no
+// Run/Import — see Engine's "Lifecycle contract" doc): calling it twice
+// returns the same (nil) no-op result both times, with no panic.
 func TestClose_DoubleCloseIsSafe(t *testing.T) {
 	is := is.New(t)
 	e := newTestEngine(t, conduit.Options{})
+
+	is.NoErr(e.Close(context.Background()))
+	is.NoErr(e.Close(context.Background()))
+}
+
+// TestClose_DoubleCloseAfterRunIsSafe proves the same idempotency guarantee
+// on the path that actually exercises #2667's Runtime.CloseDB double-release
+// safety: an Engine that did open a database (via Run) and already released
+// it once (via Stop's own cleanup path) still returns the same nil result on
+// a second, third, ... Close call, rather than a double-close error.
+func TestClose_DoubleCloseAfterRunIsSafe(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	h, err := e.Run(context.Background())
+	is.NoErr(err)
+	is.NoErr(h.Stop(context.Background()))
 
 	is.NoErr(e.Close(context.Background()))
 	is.NoErr(e.Close(context.Background()))
@@ -341,25 +378,26 @@ func TestClose_AfterSuccessfulStop_IsSafe(t *testing.T) {
 	is.NoErr(e.Close(context.Background()))
 }
 
-// TestNew_MetricNameCollision_ReturnsCodedError proves failure mode 7: two
+// TestRun_MetricNameCollision_ReturnsCodedError proves failure mode 7: two
 // engines sharing one prometheus.Registerer collide on Conduit's metric
-// names, surfacing a coded error from New rather than MustRegister's panic.
-func TestNew_MetricNameCollision_ReturnsCodedError(t *testing.T) {
+// names, surfacing a coded error rather than MustRegister's panic.
+//
+// B1 DX-hardening (lazy DB open): metrics registration happens inside
+// ensureRuntime, which New no longer calls — so the collision only manifests
+// once the second engine actually runs, not at New. This was
+// TestNew_MetricNameCollision_ReturnsCodedError before the lazy-open change;
+// renamed to match where the failure now surfaces.
+func TestRun_MetricNameCollision_ReturnsCodedError(t *testing.T) {
 	is := is.New(t)
 	reg := promclient.NewRegistry()
 
-	_, err := conduit.New(context.Background(), conduit.Options{
-		PipelinesDir:      t.TempDir(),
-		DB:                conduit.DBOptions{Type: "inmemory"},
-		MetricsRegisterer: reg,
-	})
+	e1 := newTestEngine(t, conduit.Options{MetricsRegisterer: reg})
+	h1, err := e1.Run(context.Background())
 	is.NoErr(err)
+	defer func() { _ = h1.Stop(context.Background()) }()
 
-	_, err = conduit.New(context.Background(), conduit.Options{
-		PipelinesDir:      t.TempDir(),
-		DB:                conduit.DBOptions{Type: "inmemory"},
-		MetricsRegisterer: reg,
-	})
+	e2 := newTestEngine(t, conduit.Options{MetricsRegisterer: reg})
+	_, err = e2.Run(context.Background())
 	is.True(err != nil)
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
@@ -412,4 +450,104 @@ func TestImport_RoundTripsThroughRunningEngine(t *testing.T) {
 	is.NoErr(err)
 
 	is.NoErr(h.Stop(context.Background()))
+}
+
+// TestNew_EmptyPipelinesDir_NeverScansCWD is the regression test for the B1
+// DX-hardening bug: leaving Options.PipelinesDir empty used to fall through
+// to pkgconduit.DefaultConfig's CLI-oriented cwd/pipelines default, so an
+// embed caller who never asked for file provisioning could still have
+// whatever happened to be sitting in its process's working directory
+// provisioned. This plants a real, valid pipeline YAML at cwd/pipelines and
+// proves Run with an empty PipelinesDir never provisions it — StartPipeline
+// on its ID must return a not-found error, not succeed.
+func TestNew_EmptyPipelinesDir_NeverScansCWD(t *testing.T) {
+	is := is.New(t)
+
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	pipelinesDir := filepath.Join(cwd, "pipelines")
+	is.NoErr(os.MkdirAll(pipelinesDir, 0o755))
+	pipelineYAML := `
+version: 2.2
+pipelines:
+  - id: should-not-be-provisioned
+    status: stopped
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: raw
+          recordCount: "1"
+      - id: dst
+        type: destination
+        plugin: builtin:log
+`
+	is.NoErr(os.WriteFile(filepath.Join(pipelinesDir, "test.yaml"), []byte(pipelineYAML), 0o600))
+
+	ctx := context.Background()
+	// conduit.New directly, not newTestEngine: that helper backfills an empty
+	// PipelinesDir with t.TempDir(), which would defeat the exact case this
+	// test exists to cover.
+	e, err := conduit.New(ctx, conduit.Options{
+		DB: conduit.DBOptions{Type: "inmemory"},
+		// PipelinesDir deliberately left empty.
+	})
+	is.NoErr(err)
+
+	h, err := e.Run(ctx)
+	is.NoErr(err) // Disabled provisioning must not fail Run, and must not surface even a swallowed log as an error
+	defer func() { _ = h.Stop(ctx) }()
+
+	err = e.StartPipeline(ctx, "should-not-be-provisioned")
+	is.True(err != nil) // the pipeline sitting in cwd/pipelines must never have been provisioned
+}
+
+// TestNew_NonexistentCustomPipelinesDir_FailsFast proves a side effect of
+// this fix worth pinning down explicitly: unlike an empty PipelinesDir (fully
+// Disabled, see TestNew_EmptyPipelinesDir_NeverScansCWD), a *configured*
+// PipelinesDir that doesn't exist at all fails Config.Validate() — and
+// therefore New itself — immediately, rather than deferring to Run. New's
+// own doc promises "every failure returned as an error"; a missing directory
+// is exactly the kind of caller-supplied misconfiguration that should never
+// need a Run round-trip to discover. (This particular Validate error is a
+// plain wrapped error, not a *conduiterr.ConduitError — pkg/conduit.Config's
+// requiredConfigFieldErr/invalidConfigFieldErr predate the conduiterr
+// convention — so this only asserts non-nil, not a code.)
+func TestNew_NonexistentCustomPipelinesDir_FailsFast(t *testing.T) {
+	is := is.New(t)
+
+	_, err := conduit.New(context.Background(), conduit.Options{
+		DB:           conduit.DBOptions{Type: "inmemory"},
+		PipelinesDir: filepath.Join(t.TempDir(), "does-not-exist"),
+	})
+	is.True(err != nil)
+}
+
+// TestRun_MalformedPipelinesDir_ReturnsError is the regression test for the
+// other half of the B1 DX-hardening bug: when Options.PipelinesDir IS
+// configured, exists (so Config.Validate() passes — see
+// TestNew_NonexistentCustomPipelinesDir_FailsFast for the case it doesn't),
+// but genuinely fails to *provision* (here, a syntactically invalid pipeline
+// YAML file, discovered only once ProvisionService.Init actually parses it),
+// Run must surface that failure as a returned error — not only the swallowed
+// ERROR log `conduit run`'s own default (Config.Pipelines.ExitOnDegraded ==
+// false) produces for the identical failure.
+func TestRun_MalformedPipelinesDir_ReturnsError(t *testing.T) {
+	is := is.New(t)
+
+	dir := t.TempDir()
+	malformedYAML := "pipelines:\n  - id: pipeline1\n                      status: running\n"
+	is.NoErr(os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(malformedYAML), 0o600))
+
+	e := newTestEngine(t, conduit.Options{PipelinesDir: dir})
+
+	h, err := e.Run(context.Background())
+	is.True(err != nil) // must fail, not return a healthy Handle over a swallowed log
+	is.True(h == nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
 }

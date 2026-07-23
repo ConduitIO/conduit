@@ -96,6 +96,20 @@ type Runtime struct {
 	// Ready will be closed when Runtime has successfully started
 	Ready chan struct{}
 
+	// ProvisioningErr is set (once, before Ready closes) if
+	// ProvisionService.Init returned a non-nil error during initServices —
+	// regardless of Config.Pipelines.ExitOnDegraded. It is purely additive:
+	// `conduit run`'s own behavior (log the error via cerrors.ForEach, and
+	// only fail startup when ExitOnDegraded is set) is completely unchanged
+	// and never reads this field. It exists so the root embed package
+	// (github.com/conduitio/conduit) can tell a genuine file-provisioning
+	// failure apart from a healthy Ready and surface it as a returned error
+	// from Engine.Run, instead of the CLI's swallowed-log default — see that
+	// package's Run doc and the B1 DX-hardening fix it documents. nil means
+	// either provisioning is Config.Pipelines.Disabled, or it ran and found
+	// no errors.
+	ProvisioningErr error
+
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
@@ -1324,17 +1338,32 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
 	}
 
-	err = r.ProvisionService.Init(ctx)
-	if err != nil {
-		cerrors.ForEach(err, func(err error) {
-			r.logger.Err(ctx, err).Msg("provisioning failed")
-		})
-		if r.Config.Pipelines.ExitOnDegraded {
-			r.logger.Warn(ctx).
-				Err(err).
-				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
-			err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
-			return err
+	if r.Config.Pipelines.Disabled {
+		// Embed-only: Options.PipelinesDir was left empty (see the root
+		// conduit package's New doc) — file provisioning is off, not merely
+		// pointed at an empty/missing path, so Path is never stat'd or
+		// scanned. `conduit run` never sets Disabled (see its field doc), so
+		// this branch is unreachable on the CLI path.
+		r.logger.Debug(ctx).Msg("file-based pipeline provisioning is disabled, skipping")
+	} else {
+		err = r.ProvisionService.Init(ctx)
+		if err != nil {
+			// Additive (see ProvisioningErr's doc): recorded regardless of
+			// ExitOnDegraded, purely for the embed API to read after Ready
+			// closes. Does not change what's logged or when initServices
+			// itself fails below — that remains exactly `conduit run`'s
+			// existing behavior.
+			r.ProvisioningErr = err
+			cerrors.ForEach(err, func(err error) {
+				r.logger.Err(ctx, err).Msg("provisioning failed")
+			})
+			if r.Config.Pipelines.ExitOnDegraded {
+				r.logger.Warn(ctx).
+					Err(err).
+					Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
+				err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
+				return err
+			}
 		}
 	}
 
