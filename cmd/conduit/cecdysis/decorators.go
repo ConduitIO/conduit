@@ -155,6 +155,18 @@ func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, 
 	return nil
 }
 
+// MarshalJSON renders result exactly as CommandWithExecuteWithClientResultDecorator's
+// --json path would (proto messages via protojson, matching the HTTP API's JSON
+// shape; everything else via indented go-json). Exported so Family B command
+// tests across cmd/conduit/root/* can assert on the exact bytes their command's
+// --json flag would produce — e.g. to prove those bytes do NOT conform to the
+// Family A envelope schema (see cmd/conduit/internal/testutils/envelope.go and
+// cmd/conduit/cli/schema_golden_test.go) — without re-deriving this marshaling
+// choice ad hoc per test.
+func MarshalJSON(result any) ([]byte, error) {
+	return marshalJSON(result)
+}
+
 // marshalJSON renders a result as indented JSON. Proto messages use protojson so
 // the output matches the HTTP API's JSON shape; everything else uses go-json.
 func marshalJSON(result any) ([]byte, error) {

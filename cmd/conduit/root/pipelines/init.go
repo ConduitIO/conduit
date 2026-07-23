@@ -24,6 +24,7 @@ import (
 	"text/template"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
@@ -31,10 +32,10 @@ import (
 )
 
 var (
+	_ cecdysis.CommandWithResult = (*InitCommand)(nil)
 	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
 	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
 	_ ecdysis.CommandWithArgs    = (*InitCommand)(nil)
-	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
 
 	//go:embed pipeline.tmpl
 	pipelineCfgTmpl string
@@ -288,22 +289,45 @@ func (c *InitCommand) setSourceAndDestinationConnector() {
 	}
 }
 
-func (c *InitCommand) Execute(_ context.Context) error {
+// InitResult is Outcome.Result's concrete shape for `conduit pipelines init`.
+type InitResult struct {
+	Path         string `json:"path"`
+	PipelineName string `json:"pipelineName"`
+}
+
+// ResultCommand returns the --json envelope's stable dotted discriminator.
+func (c *InitCommand) ResultCommand() string { return "pipelines.init" }
+
+// ExecuteWithResult scaffolds a pipeline configuration file and returns the
+// shared cecdysis.Outcome envelope. A non-nil error return is a HARD command
+// failure (e.g. an unknown connector name, or an unwritable path) — there are
+// no domain findings for this command; every successful run is OK:true.
+func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, error) {
 	c.setSourceAndDestinationConnector()
 	c.pipelineName = c.getPipelineName()
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
 
 	pipeline, err := c.buildTemplatePipeline()
 	if err != nil {
-		return err
+		return cecdysis.Outcome{}, err
 	}
 
 	if err := c.write(pipeline); err != nil {
-		return cerrors.Errorf("could not write pipeline: %w", err)
+		return cecdysis.Outcome{}, cerrors.Errorf("could not write pipeline: %w", err)
 	}
 
-	fmt.Printf("Your pipeline has been initialized and created at %q.\n"+
-		"To run the pipeline, simply run `conduit run`.\n", c.configFilePath)
+	return cecdysis.Outcome{
+		OK:     true,
+		Result: InitResult{Path: c.configFilePath, PipelineName: c.pipelineName},
+	}, nil
+}
 
-	return nil
+// Render returns the human-readable rendering of a successful `conduit
+// pipelines init` run — the same text the command printed directly before
+// this command was migrated onto cecdysis.CommandWithResult (see
+// cli-contract.md §7's backward-compat mitigation: only --json is new).
+func (c *InitCommand) Render(outcome cecdysis.Outcome) string {
+	result, _ := outcome.Result.(InitResult)
+	return fmt.Sprintf("Your pipeline has been initialized and created at %q.\n"+
+		"To run the pipeline, simply run `conduit run`.\n", result.Path)
 }

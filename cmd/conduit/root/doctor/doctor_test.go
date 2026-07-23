@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/cmd/conduit/root/doctor"
 	"github.com/conduitio/conduit/cmd/conduit/root/doctor/doctorcheck"
 	"github.com/conduitio/ecdysis"
@@ -96,6 +97,11 @@ func TestDoctor_AllGood_JSON_ExitCode0(t *testing.T) {
 	if hasCode {
 		is.Equal(code, 0) // an explicit annotation, if any, must be OK
 	}
+
+	// Family A golden fixture (v0.19 workstream 8 — cli-contract.md §6 AC-3):
+	// doctor's real --json output must validate against the shared envelope
+	// schema; see cmd/conduit/cli/schema_golden_test.go's completeness walk.
+	is.NoErr(testutils.ValidateEnvelope([]byte(out)))
 
 	var got cecdysis.Result
 	is.NoErr(json.Unmarshal([]byte(out), &got))

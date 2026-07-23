@@ -31,7 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
+	"github.com/conduitio/conduit/pkg/registry"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -99,4 +101,32 @@ func TestInstall_BundleFlag_MissingFile(t *testing.T) {
 func TestInstall_NoNameNoBundle_HardError(t *testing.T) {
 	_, err := runInstall(t, "--json")
 	require.Error(t, err)
+}
+
+// TestBundleResult_MarshalsToTheDocumentedEnvelope is the Family A golden
+// fixture for `conduit connectors bundle` (v0.19 workstream 8 —
+// cli-contract.md §6 AC-3). A genuine end-to-end success run needs a fully
+// signed artifact+provenance bundle fixture that doesn't exist in this test
+// package yet (every existing fixture here is deliberately fail-closed — see
+// newFixtureIndexFile's doc — proving the refusal path, not the success
+// path); building one is tracked as follow-up, mirroring
+// scaffoldcmd/newcmd_test.go's TestResultMarshalsToTheDocumentedEnvelope,
+// which takes the same approach for the same reason (network + real
+// artifacts). This proves the real registry.BundleResult type, wrapped in
+// the real envelope construction BundleCommand.ExecuteWithResult performs,
+// marshals to a schema-conformant shape.
+func TestBundleResult_MarshalsToTheDocumentedEnvelope(t *testing.T) {
+	result := &registry.BundleResult{
+		Name:       "widget",
+		Version:    "1.0.0",
+		OS:         "linux",
+		Arch:       "amd64",
+		OutputPath: "widget-1.0.0-linux-amd64.bundle.tar.gz",
+		Digest:     "sha256:deadbeef",
+		Size:       1024,
+	}
+	res := cecdysis.Result{Command: "connectors.bundle", OK: true, Result: result}
+	b, err := json.Marshal(res)
+	require.NoError(t, err)
+	assert.NoError(t, testutils.ValidateEnvelope(b))
 }

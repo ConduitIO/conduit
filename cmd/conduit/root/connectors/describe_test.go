@@ -140,4 +140,9 @@ func TestDescribeCommand_JSONConsistency(t *testing.T) {
 	out := string(b)
 	is.True(strings.Contains(out, `"TYPE_SOURCE"`)) // protojson enum name, not the integer 1
 	is.True(strings.Contains(out, `"connector"`))
+
+	// Family B negative check (v0.19 workstream 8 — cli-contract.md §4.6):
+	// this command's --json output must never accidentally start
+	// conforming to Family A's envelope shape.
+	is.True(!testutils.MatchesEnvelope(b))
 }

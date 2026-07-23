@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -60,6 +61,11 @@ func TestValidateCommand_ValidFile_JSON(t *testing.T) {
 	err := cmd.Execute()
 	is.NoErr(err)
 	is.Equal(exitcode.ExitCode(err), exitcode.OK)
+
+	// Family A golden fixture (v0.19 workstream 8 — cli-contract.md §6 AC-3):
+	// validate's real --json output must validate against the shared
+	// envelope schema; see cmd/conduit/cli/schema_golden_test.go.
+	is.NoErr(testutils.ValidateEnvelope(out.Bytes()))
 
 	var got cecdysis.Result
 	is.NoErr(json.Unmarshal(out.Bytes(), &got))

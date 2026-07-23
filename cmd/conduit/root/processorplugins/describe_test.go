@@ -21,6 +21,7 @@ import (
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/matryer/is"
@@ -106,6 +107,13 @@ func TestDescribeCommand_ExecuteWithClient(t *testing.T) {
 
 	result, err := cmd.ExecuteWithClientResult(ctx, client)
 	is.NoErr(err)
+
+	// Family B negative check (v0.19 workstream 8 — cli-contract.md §4.6):
+	// this command's --json output must never accidentally start
+	// conforming to Family A's envelope shape.
+	b, err := cecdysis.MarshalJSON(result)
+	is.NoErr(err)
+	is.True(!testutils.MatchesEnvelope(b))
 
 	output := cmd.Render(result)
 
