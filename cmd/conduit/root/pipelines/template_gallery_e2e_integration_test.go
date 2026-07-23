@@ -214,6 +214,30 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	is.NoErr(os.Setenv("AWS_ENDPOINT_URL", templatesE2EMinioURL))
 	defer os.Unsetenv("AWS_ENDPOINT_URL")
 
+	// --- disable aws-sdk-go-v2's default flexible-checksum trailer ---
+	// conduit-connector-s3's writer builds its client via plain
+	// config.LoadDefaultConfig + s3.NewFromConfig (destination/writer/s3.go)
+	// with no override for checksum behavior. Since aws-sdk-go-v2 v1.30 /
+	// config v1.27 (2024), the DEFAULT RequestChecksumCalculation is
+	// "when_supported": PutObject unconditionally computes a trailing CRC32
+	// checksum and sends the body with aws-chunked transfer encoding, a
+	// framing that this compose file's `minio/minio:latest` image cannot
+	// parse — MinIO responds 400 "MalformedXML: The XML you provided was
+	// not well-formed", the destination nacks, and no object ever lands
+	// (reproduced in CI: this test was failing with exactly that PutObject
+	// error before this change, even though the postgres source side —
+	// same connect/patch logic as postgres-cdc-kafka's already-green test —
+	// worked correctly). config.LoadDefaultConfig resolves
+	// RequestChecksumCalculation from the AWS_REQUEST_CHECKSUM_CALCULATION
+	// env var (env_config.go's setRequestChecksumCalculationFromEnvVal), so
+	// setting it (and its response-side counterpart) to "when_required"
+	// here reaches the connector's client the same way AWS_ENDPOINT_URL
+	// does above, without needing a code change in conduit-connector-s3.
+	is.NoErr(os.Setenv("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"))
+	defer os.Unsetenv("AWS_REQUEST_CHECKSUM_CALCULATION")
+	is.NoErr(os.Setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))
+	defer os.Unsetenv("AWS_RESPONSE_CHECKSUM_VALIDATION")
+
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = filepath.Join(tmp, "conduit.db")
 	cfg.API.Enabled = false
