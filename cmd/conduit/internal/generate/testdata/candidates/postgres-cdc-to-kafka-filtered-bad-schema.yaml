@@ -1,0 +1,16 @@
+version: "2.2"
+pipelines:
+  - id: orders-to-kafka
+    status: bogus-status
+    connectors:
+      - id: pg-source
+        type: bogus-type
+        plugin: builtin:postgres
+      - id: kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        processors:
+          - id: amount-filter
+            plugin: filter
+            settings:
+              expression: "amount > 100"

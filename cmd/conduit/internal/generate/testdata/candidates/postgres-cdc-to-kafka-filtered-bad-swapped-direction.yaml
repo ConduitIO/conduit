@@ -1,0 +1,20 @@
+version: "2.2"
+pipelines:
+  - id: orders-swapped
+    status: running
+    connectors:
+      - id: kafka-source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          topic: orders
+      - id: pg-dest
+        type: destination
+        plugin: builtin:postgres
+        settings:
+          table: orders
+        processors:
+          - id: amount-filter
+            plugin: filter
+            settings:
+              expression: "amount > 100"

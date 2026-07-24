@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -58,6 +59,12 @@ type InitFlags struct {
 	PipelinesPath string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
 	Force         bool   `long:"force" usage:"Overwrite the pipeline file if one already exists at the destination path."`
 	DryRun        bool   `long:"dry-run" usage:"Print the pipeline configuration that would be written, without writing it."`
+	// Template scaffolds from the embedded, vendored pipeline template
+	// gallery (template_gallery.go) instead of --source/--destination. The
+	// literal value "list" (templateListSentinel) switches into enumeration
+	// mode instead of scaffolding. Mutually exclusive with
+	// --source/--destination — see checkTemplateFlagsExclusive.
+	Template string `long:"template" usage:"Scaffold from a named vendored pipeline template ('list' to enumerate). Mutually exclusive with --source/--destination."`
 }
 
 // InitResult is `pipelines init`'s --json result payload (cecdysis.Outcome.Result).
@@ -77,6 +84,10 @@ type InitResult struct {
 	// Config is the rendered pipeline YAML — the literal bytes written to
 	// Path, or (under --dry-run) the bytes that would have been written.
 	Config string `json:"config"`
+	// Template is the vendored template name this pipeline was scaffolded
+	// from (see --template), or empty when scaffolded via the generic
+	// --source/--destination path.
+	Template string `json:"template,omitempty"`
 }
 
 // InitSummary is `pipelines init`'s --json summary payload
@@ -122,10 +133,15 @@ func (c *InitCommand) Usage() string { return "init [PIPELINE_NAME]" }
 
 func (c *InitCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Initialize a pipeline with the chosen connectors via flags, or a demo pipeline if no flags are specified.",
+		Short: "Initialize a pipeline with the chosen connectors via flags, a vendored template, or a demo pipeline.",
 		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
 a simple and runnable demo-pipeline is fully configured.
+
+--template <name> scaffolds from the embedded, vendored pipeline template gallery instead — a small,
+permanently-maintained set of named, runnable pipelines (run 'conduit pipelines init --template list --json'
+to enumerate them). --template is mutually exclusive with --source/--destination: a named template already
+is a specific source+destination+settings triple, so mixing them is rejected as ambiguous.
 
 Refuses to overwrite an existing pipeline file at the destination path unless --force is set.
 --dry-run prints the pipeline configuration that would be written without touching the filesystem
@@ -135,7 +151,10 @@ Refuses to overwrite an existing pipeline file at the destination path unless --
 			"conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
 			"conduit pipelines init file-to-pg --source file --destination postgres --pipelines.path ./my-pipelines\n" +
 			"conduit pipelines init --force\n" +
-			"conduit pipelines init --dry-run --json",
+			"conduit pipelines init --dry-run --json\n" +
+			"conduit pipelines init --template list --json\n" +
+			"conduit pipelines init --template generator-log\n" +
+			"conduit pipelines init --template postgres-cdc-kafka --pipelines.path ./my-pipelines",
 	}
 }
 
@@ -326,6 +345,18 @@ func (c *InitCommand) getPipelineName() string {
 	return fmt.Sprintf("%s-to-%s", c.sourceConnector, c.destinationConnector)
 }
 
+// getPipelineNameForTemplate returns the desired pipeline name for the
+// --template scaffold path: the positional pipeline-name argument if the
+// user gave one, otherwise the template's own canonical name (e.g.
+// "generator-log") — never demoPipelineName, which is only the generic
+// --source/--destination path's fallback for "neither flag was set".
+func (c *InitCommand) getPipelineNameForTemplate(tmpl GalleryTemplate) string {
+	if c.args.pipelineName != "" {
+		return c.args.pipelineName
+	}
+	return tmpl.Name
+}
+
 func (c *InitCommand) isDemoPipeline() bool {
 	return c.flags.Source == "" && c.flags.Destination == ""
 }
@@ -367,7 +398,27 @@ func (c *InitCommand) setSourceAndDestinationConnector() {
 // destination-exists-without-force, an I/O failure); this command has no
 // "domain finding" outcome distinct from success, so OK is always true when
 // err is nil.
-func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, error) {
+func (c *InitCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, error) {
+	// --template (including its "list" sentinel) is mutually exclusive with
+	// --source/--destination: a named template is already a specific
+	// source+destination+settings triple, so combining them is rejected as
+	// ambiguous rather than silently picking a winner
+	// (docs/design-documents/20260723-templates-gallery.md §7).
+	if c.flags.Template != "" {
+		if c.flags.Source != "" || c.flags.Destination != "" {
+			return cecdysis.Outcome{}, conduiterr.New(CodeTemplateFlagsExclusive,
+				"--template is mutually exclusive with --source/--destination: a named template already "+
+					"determines the source, destination, and settings")
+		}
+	}
+
+	if c.flags.Template == templateListSentinel {
+		return c.executeTemplateList(), nil
+	}
+	if c.flags.Template != "" {
+		return c.executeTemplateScaffold(ctx)
+	}
+
 	c.setSourceAndDestinationConnector()
 	c.pipelineName = c.getPipelineName()
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
@@ -410,11 +461,94 @@ func (c *InitCommand) ExecuteWithResult(_ context.Context) (cecdysis.Outcome, er
 	}, nil
 }
 
+// executeTemplateList implements `--template list`: enumerates the embedded
+// catalog, sorted by name, with no filesystem writes. Never fails — an
+// empty (impossible, since mustBuildGalleryCatalog validates a non-empty
+// catalog at package init) catalog would simply list nothing.
+func (c *InitCommand) executeTemplateList() cecdysis.Outcome {
+	names := galleryTemplateNames()
+	entries := make([]TemplateListEntry, 0, len(names))
+	for _, name := range names {
+		t, _ := lookupGalleryTemplate(name) // name came from the catalog itself
+		entries = append(entries, TemplateListEntry{
+			Name:              t.Name,
+			Description:       t.Description,
+			Source:            t.Source,
+			Destination:       t.Destination,
+			DeliverySemantics: t.DeliverySemantics,
+		})
+	}
+
+	return cecdysis.Outcome{
+		OK:      true,
+		Summary: TemplateListSummary{Count: len(entries)},
+		Result:  TemplateListResult{Templates: entries},
+	}
+}
+
+// executeTemplateScaffold implements `--template <name>` (name not the
+// "list" sentinel): resolves the named template, refuses up front if its
+// pinned settings no longer match this build's connector parameter shape
+// (validateGalleryTemplateSettings —
+// docs/design-documents/20260723-templates-gallery.md §7's version-mismatch
+// mitigation), then writes (or, under --dry-run, only renders) its literal
+// embedded YAML — reusing writeFile's existing --force/O_EXCL handling so
+// an existing destination file is refused exactly the same way the generic
+// scaffold path refuses one
+// (docs/design-documents/20260723-templates-gallery.md §6 AC-7).
+func (c *InitCommand) executeTemplateScaffold(ctx context.Context) (cecdysis.Outcome, error) {
+	tmpl, ok := lookupGalleryTemplate(c.flags.Template)
+	if !ok {
+		ce := conduiterr.New(CodeUnknownTemplate, fmt.Sprintf("unknown template %q", c.flags.Template))
+		ce.Suggestion = fmt.Sprintf(
+			"valid templates: %s (run `conduit pipelines init --template list --json` to enumerate them with descriptions)",
+			strings.Join(galleryTemplateNames(), ", "),
+		)
+		return cecdysis.Outcome{}, ce
+	}
+
+	if err := validateGalleryTemplateSettings(ctx, tmpl); err != nil {
+		return cecdysis.Outcome{}, err
+	}
+
+	c.sourceConnector = tmpl.Source
+	c.destinationConnector = tmpl.Destination
+	c.pipelineName = c.getPipelineNameForTemplate(tmpl)
+	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("%s.yaml", c.pipelineName))
+
+	written := false
+	if !c.flags.DryRun {
+		if err := c.writeFile(tmpl.YAML); err != nil {
+			return cecdysis.Outcome{}, err
+		}
+		written = true
+	}
+
+	return cecdysis.Outcome{
+		OK:      true,
+		Summary: InitSummary{Written: written},
+		Result: InitResult{
+			Path:         c.configFilePath,
+			PipelineName: c.pipelineName,
+			Source:       c.sourceConnector,
+			Destination:  c.destinationConnector,
+			DryRun:       c.flags.DryRun,
+			Forced:       c.flags.Force,
+			Config:       tmpl.YAML,
+			Template:     tmpl.Name,
+		},
+	}, nil
+}
+
 // Render returns the human-readable rendering of a successful init run: the
 // original "your pipeline has been initialized" message when a file was
 // written, or the rendered config plus a "nothing was written" notice under
 // --dry-run.
 func (c *InitCommand) Render(outcome cecdysis.Outcome) string {
+	if list, ok := outcome.Result.(TemplateListResult); ok {
+		return renderTemplateList(list)
+	}
+
 	result, _ := outcome.Result.(InitResult)
 
 	if result.DryRun {

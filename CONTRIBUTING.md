@@ -45,6 +45,41 @@ and that all the tests still run successfully.
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
 
+## Adding a vendored pipeline template
+
+`conduit pipelines init --template <name>` scaffolds a runnable pipeline from a small,
+permanently-maintained, embedded gallery (`cmd/conduit/root/pipelines/templates/`,
+`cmd/conduit/root/pipelines/template_gallery.go`) — this is the vendoring model the project
+intends to keep long-term (cargo-new / rustup-init style), not a stopgap ahead of a future
+connector/template registry. Adding a template is a normal Tier-2 PR: one reviewer approval,
+green CI, docs in the same PR — it is **not** the registry's signed-publish flow (there is no
+`conduit templates publish`, and this contribution path has nothing to do with registry trust or
+signing).
+
+To propose a new template:
+
+1. **Use only built-in connectors.** Every source/destination the template configures must be a
+   key in `builtin.DefaultBuiltinConnectors` (`pkg/plugin/connector/builtin/registry.go`) — a
+   template requiring a manual connector download reintroduces exactly the cliff this gallery
+   exists to avoid, and `TestValidateGalleryCatalog_RejectsNonBuiltinConnector`-style checks will
+   fail the build if it doesn't.
+2. **Add a directory** under `cmd/conduit/root/pipelines/templates/<name>/` with a `pipeline.yaml`
+   (the literal, fully-rendered pipeline config — this is embedded via `go:embed` and is the exact
+   bytes `init` writes to disk) and a `README.md` covering: a config reference table, a
+   delivery-semantics note (state only what the underlying connectors actually guarantee — see
+   CLAUDE.md's Invariant 3, at-least-once is the floor), and a runnable example.
+3. **Register it** in `galleryCatalogSpec()` (`template_gallery.go`) with a one-line
+   `Description` and `DeliverySemantics` string (surfaced by `--template list --json`). The name
+   must never be `list` — that value is reserved to mean "enumerate the catalog".
+4. **Add an end-to-end test**, not just a parse check: spin up whatever infra the template needs
+   (reuse `test/compose-templates.yaml`'s pattern if it needs its own containers), scaffold the
+   template for real, run it against the real engine, and assert records actually land at the
+   destination.
+5. Reviewer checklist (Tier 2): built-in connectors only (1), README sections present and
+   accurate against what the new CI job actually asserts (2), catalog entry registered (3), and a
+   green end-to-end test that asserts on destination-side data (4) — "the YAML parses" alone is
+   not sufficient for merge.
+
 ### Quick steps to contribute
 
 1. Fork the project

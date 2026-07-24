@@ -1,0 +1,11 @@
+version: "2.2"
+pipelines:
+  - id: wrong-connectors
+    status: running
+    connectors:
+      - id: gen-source
+        type: source
+        plugin: builtin:generator
+      - id: log-dest
+        type: destination
+        plugin: builtin:log

@@ -6,6 +6,9 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
+	github.com/aws/aws-sdk-go-v2/config v1.32.20
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.19
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.6.0
 	github.com/conduitio/conduit-connector-file v0.10.3
@@ -34,6 +37,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/in-toto/attestation v1.2.0
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.19.1
 	github.com/matryer/is v1.4.1
@@ -55,6 +59,7 @@ require (
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/twmb/franz-go v1.19.5
 	github.com/twmb/franz-go/pkg/sr v1.8.0
 	github.com/twmb/go-cache v1.3.0
 	go.uber.org/mock v0.6.0
@@ -97,8 +102,6 @@ require (
 	github.com/ashanbrown/makezero v1.2.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.9 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.11 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.32.20 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.19 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.25 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.25 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.25 // indirect
@@ -107,7 +110,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.18 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.25 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.25 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.1.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.2 // indirect
@@ -218,7 +220,6 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20211028175153-1c139d1cc84b // indirect
 	github.com/jgautheron/goconst v1.7.1 // indirect
@@ -327,7 +328,6 @@ require (
 	github.com/tommy-muehle/go-mnd/v2 v2.5.1 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/twmb/franz-go v1.19.5 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect

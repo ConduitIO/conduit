@@ -118,21 +118,34 @@ func conduitInfoValue(t *testing.T, reg *promclient.Registry) float64 {
 // process-global metric *definitions* (metrics.go's `global` slices), so a
 // metric like measure.ConduitInfo fans its value out to every registry ever
 // passed to metrics.Register — including a second, fully independent
-// embedded engine's registry. Constructing engine B (with its own,
-// never-shared MetricsRegisterer) still bumps engine A's already-gathered
-// "conduit_info" value. This is asserted as PRESENT, not fixed — see
+// embedded engine's registry. Running engine B (with its own, never-shared
+// MetricsRegisterer) still bumps engine A's already-gathered "conduit_info"
+// value. This is asserted as PRESENT, not fixed — see
 // pkg/conduit.WithMetricsRegisterer's doc and this package's doc.go. A future
 // fix to pkg/foundation/metrics must consciously update this test.
+//
+// B1 DX-hardening (lazy DB open): metrics registration happens inside
+// ensureRuntime (first Run or Import), which New no longer triggers — so both
+// engines below must actually Run for the cross-talk to manifest; merely
+// constructing them (as this test did before the lazy-open change) no longer
+// registers or increments anything.
 func TestTwoEngines_MetricsCrossTalk_KnownLimitation(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	regA := promclient.NewRegistry()
-	newTestEngine(t, conduit.Options{MetricsRegisterer: regA})
+	eA := newTestEngine(t, conduit.Options{MetricsRegisterer: regA})
+	hA, err := eA.Run(ctx)
+	is.NoErr(err)
+	defer func() { _ = hA.Stop(ctx) }()
 	beforeA := conduitInfoValue(t, regA)
 
 	regB := promclient.NewRegistry()
-	newTestEngine(t, conduit.Options{MetricsRegisterer: regB})
+	eB := newTestEngine(t, conduit.Options{MetricsRegisterer: regB})
+	hB, err := eB.Run(ctx)
+	is.NoErr(err)
+	defer func() { _ = hB.Stop(ctx) }()
 	afterA := conduitInfoValue(t, regA)
 
-	is.True(afterA > beforeA) // engine B's construction leaked into engine A's registry
+	is.True(afterA > beforeA) // engine B's Run leaked into engine A's registry
 }

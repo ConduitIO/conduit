@@ -1,0 +1,36 @@
+version: "2.2"
+pipelines:
+  - id: postgres-cdc-kafka
+    description: >
+      Vendored template "postgres-cdc-kafka": streams Postgres change data
+      capture (logical replication, no initial snapshot) to a Kafka topic.
+      Scaffolded by `conduit pipelines init --template postgres-cdc-kafka`.
+      Fill in the placeholder connection values below before running
+      `conduit run`. See README.md in this template's directory for the
+      config reference and delivery-semantics notes.
+    status: running
+    name: postgres-cdc-kafka
+    connectors:
+      - id: postgres-cdc-kafka-source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          # Postgres connection string, e.g.
+          # postgres://user:password@localhost:5432/dbname?sslmode=disable
+          url: postgres://user:password@localhost:5432/dbname?sslmode=disable
+          # Comma-separated table names, or "*" for all tables.
+          tables: my_table
+          # No initial snapshot: this template is CDC-only, streaming
+          # changes as they happen.
+          snapshotMode: never
+          # Force logical replication rather than "auto" (which would
+          # silently fall back to long-polling if logical replication isn't
+          # available) — see README.md's delivery-semantics note.
+          cdcMode: logrepl
+      - id: postgres-cdc-kafka-destination
+        type: destination
+        plugin: "builtin:kafka"
+        settings:
+          servers: localhost:9092
+          topic: postgres-cdc
+          acks: all
