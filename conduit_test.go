@@ -299,6 +299,57 @@ func TestClose_NoRun_IsNoOp(t *testing.T) {
 	is.NoErr(e2.Close(ctx))
 }
 
+// TestRun_AfterClose_WithNoPriorOpen_ReturnsCodedError is the regression test
+// for the review-flagged use-after-close gap: ensureRuntime never checked the
+// closed flag, so calling Run or Import for the first time on an Engine after
+// Close had already been called (with no prior Run/Import) silently opened a
+// fresh runtime — and a fresh database — that the caller believed was already
+// released. Proves both that the call fails with the existing
+// conduiterr.CodeInvalidArgument (see ensureRuntime's doc: deliberately not a
+// new code) and, via the same no-leak proof TestClose_NoRun_IsNoOp uses, that
+// no database was actually opened: a second Engine at the same BadgerDB path
+// opens without contention, which would fail with CodeUnavailable if Run had
+// gone ahead and opened (and held the file lock on) e1's store.
+func TestRun_AfterClose_WithNoPriorOpen_ReturnsCodedError(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	opts := conduit.Options{
+		PipelinesDir: t.TempDir(),
+		DB:           conduit.DBOptions{Type: "badger"},
+	}
+	opts.DB.Badger.Path = dir
+
+	e1, err := conduit.New(ctx, opts)
+	is.NoErr(err)
+
+	is.NoErr(e1.Close(ctx)) // Close before Run/Import ever ran: nothing to release yet
+
+	_, err = e1.Run(ctx)
+	is.True(err != nil) // must not silently open a fresh runtime after Close
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+
+	err = e1.Import(ctx, conduit.PipelineConfig{})
+	is.True(err != nil) // Import must be guarded identically to Run
+	ce, ok = conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+
+	// No-leak proof: a second Engine at the identical BadgerDB path must open
+	// without contention. If Run (or Import) above had gone ahead and opened
+	// e1's database despite Close, this would instead fail with
+	// conduiterr.CodeUnavailable (see TestNew_StoreAlreadyOpen_ReturnsCodedError).
+	e2, err := conduit.New(ctx, opts)
+	is.NoErr(err)
+	h2, err := e2.Run(ctx)
+	is.NoErr(err)
+	is.NoErr(h2.Stop(ctx))
+	is.NoErr(e2.Close(ctx))
+}
+
 // TestClose_AfterRunHitsAlreadyDoneContextGuard_ReleasesDB proves Engine.Close's
 // second lifecycle-contract case: Run's ensureRuntime call opens the database
 // before pkgconduit.Runtime.Run's already-done-context guard (a pre-canceled

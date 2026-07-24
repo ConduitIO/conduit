@@ -155,6 +155,11 @@ type APIOptions struct {
 //     is idempotent with that path, not merely with itself — and returns nil.
 //   - Close is safe to call more than once from the same or different
 //     goroutines; every call after the first observes the same result.
+//   - New → Close → Run or Import (no prior Run/Import call — ensureRuntime
+//     never ran before Close): ensureRuntime checks the closed flag before
+//     ever opening anything, so this never silently opens a fresh runtime the
+//     caller believed was already released. It returns a coded error
+//     (conduiterr.CodeInvalidArgument) instead.
 //
 // Safety net: if an Engine that DID open resources (Run or Import actually
 // ran) is garbage-collected without Close ever being called, a
@@ -212,9 +217,35 @@ type Engine struct {
 // pkgconduit.WithDialContext); once the runtime exists (or has permanently
 // failed to), a later call's ctx has no effect. ctx is not retained beyond
 // this call in either case.
+//
+// Known limitation: only the first caller's ctx bounds the dial — a
+// concurrent second caller (e.g. Import racing Run) has no independent
+// timeout of its own. If that first caller's ctx is short-lived and gets
+// canceled, the second caller's dial observes that same cancellation even
+// though its own ctx may still have time left. This is accepted for v1: the
+// alternative (bounding the dial by whichever caller's ctx is most
+// permissive, or racing the dial per caller) adds real complexity for a
+// narrow window that only matters when two callers race the very first
+// Run/Import on an Engine.
+//
+// Once Close has been called, ensureRuntime never opens a runtime — even if
+// Run or Import is called for the first time afterward, with no prior open —
+// so a caller cannot resurrect resources it already believed were released.
+// It returns the same conduiterr.CodeInvalidArgument used elsewhere in this
+// package for caller-misuse states (double Run, nil-Handle Stop) rather than
+// minting a new code for this one.
 func (e *Engine) ensureRuntime(ctx context.Context) (*pkgconduit.Runtime, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if e.closed {
+		// Guards against Run/Import being called after Close with no prior
+		// ensureRuntime call: without this check, a caller that already
+		// believes its Engine's resources are released would silently open a
+		// brand new runtime (and database) here instead of getting an error.
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument,
+			"conduit: Run/Import called on an Engine after Close")
+	}
 
 	if e.initDone {
 		return e.runtime, e.initErr
