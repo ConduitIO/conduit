@@ -2,8 +2,12 @@
 
 ## Summary
 
-This is the gating design doc for v0.20 Workstream 8 (`v020-execution-plan.md`, "AI-pipeline
-components"): a **new subsystem**, in **new dedicated repos**, that turns Conduit into the data
+This is the gating design doc for v0.20 Workstream 8 ("AI-pipeline components," per the
+maintainer's internal v0.20 planning notes — a working-directory planning document, not a file in
+this repository; the public commitment is `ROADMAP.md`'s Phase 2 "The AI data pipeline" section
+and its tracking issue/milestone). Every "v0.20 plan" reference below points at those internal
+notes, not an in-tree file — treat `ROADMAP.md` as the citable, in-repo source of record for scope.
+This doc is a **new subsystem**, in **new dedicated repos**, that turns Conduit into the data
 layer for RAG applications. The canonical pipeline is **CDC → chunk → embed → vector store** —
 already-shipped Postgres CDC feeding two new processor types (chunking, embedding) and a new
 family of vector-store destinations (pgvector first; Qdrant, Pinecone, Turbopuffer fast-follow per
@@ -27,11 +31,14 @@ Pinecone and Turbopuffer (`ROADMAP.md` line 207) are named in the roadmap but **
 this doc and for v0.20** — no design work is done on them here; a future connector repo follows the
 same pattern once pgvector and Qdrant have proven it out.
 
-**Embedding-provider decision (the `generate`-level-rigor item):** three pluggable adapters —
-**OpenAI**, **Voyage AI**, and **local via Ollama** — resolved the same deterministic way
-`conduit generate`'s provider resolution works (explicit flag/config → env → auto-detect exactly
-one candidate → refuse on zero or ambiguous), with the same zero-new-dependency discipline. Detail
-in Decision §2.
+**Embedding-provider decision (the `generate`-level-rigor item):** four pluggable adapters —
+**OpenAI**, **Voyage AI**, **Cohere**, and **local via Ollama** — resolved the same deterministic
+way `conduit generate`'s provider resolution works (explicit flag/config → env → auto-detect
+exactly one candidate → refuse on zero or ambiguous), with the same zero-new-dependency discipline.
+Cohere and OpenAI are already shipped as **built-in** embedding processors today
+(`cohere.embed`, `openai.embeddings`) — this doc reconciles with both explicitly rather than
+silently shipping a third, differently-sandboxed implementation; see Decision §2's Reconciliation
+note.
 
 **The load-bearing engineering call this doc makes, stated up front:** embedding calls need
 outbound HTTP, but the only processor runtime `conduit-processor-sdk` ships today is WASI Preview 1
@@ -49,12 +56,19 @@ is called out as its own review item in Open Questions.
 
 - **`conduit-processor-sdk` is WASM/WASI-P1-only for standalone processors, and built-in-only for
   anything needing full Go stdlib.** `pkg/plugin/processor/standalone/registry.go` runs guest
-  modules under `wazero` + `wasi_snapshot_preview1` — WASI Preview 1 has no sockets API. The two
-  processors that need outbound HTTP today (`pkg/plugin/processor/builtin/impl/openai`,
-  `.../ollama`) are **built-in** — compiled directly into the Conduit binary, with full `net/http`
-  access — precisely because WASM standalone gives them no path to the network. That is the same
-  wall an embedding processor hits, and CLAUDE.md's "new dedicated repos" call (v0.20 plan, WS8)
-  rules out the built-in escape hatch for this subsystem.
+  modules under `wazero` + `wasi_snapshot_preview1` — WASI Preview 1 has no sockets API. The
+  processors that need outbound HTTP today — `pkg/plugin/processor/builtin/impl/openai`
+  (`openai.textgen`, `openai.embeddings`), `.../ollama`, and `.../cohere` (`cohere.embed`,
+  `cohere.rerank`, `cohere.command`) — are all **built-in**: compiled directly into the Conduit
+  binary, with full `net/http` access, precisely because WASM standalone gives them no path to the
+  network. **Two of these are shipped, working embedding processors** — `cohere.embed` (batching via
+  `MaxTextsPerRequest`, sub-batched within one `Process` call, `jpillora/backoff` retry) and
+  `openai.embeddings` — and this doc reconciles with both explicitly rather than proposing a third,
+  differently-sandboxed embedding implementation in ignorance of them (Decision §2's Reconciliation
+  note). The network-access wall is the same one the new embedding processor hits, and CLAUDE.md's
+  "new dedicated repos" call (v0.20 plan, WS8) rules out the built-in escape hatch for the new
+  subsystem specifically — it does not retroactively change anything about the two built-ins
+  already shipped.
 - **A host-mediated capability channel already exists and is precedent, not a new mechanism.**
   `pprocutils.SchemaService` (`conduit-processor-sdk/pprocutils`, wired through
   `pkg/plugin/processor/standalone/host_module.go`) lets a WASM guest processor issue a
@@ -118,7 +132,9 @@ sign-off) before any Phase C implementation.
 - Ship a **chunking processor** (`conduit-processor-ai`) implementing document-splitting
   strategies for RAG: fixed-size, sentence-boundary, and recursive/structural splitting.
 - Ship an **embedding processor** (`conduit-processor-ai`) with a **pluggable provider** (OpenAI,
-  Voyage, local-via-Ollama), batching, rate-limit handling, and per-record token-cost metadata.
+  Voyage, Cohere, local-via-Ollama), within-call batching, rate-limit handling, and per-record
+  token-cost metadata — reconciled explicitly with the two shipped built-in embedding processors
+  (`cohere.embed`, `openai.embeddings`), not shipped in ignorance of them.
 - Ship a **pgvector destination** (`conduit-connector-pgvector`) with upsert semantics, metadata
   mapping, and dimension validation at pipeline start.
 - Name and scope (not build) the Qdrant fast-follow (`conduit-connector-qdrant`).
@@ -170,36 +186,65 @@ frozen by this doc):
 ```go
 // Illustrative shape — the exact signature is an implementation-time decision.
 // The load-bearing properties this doc DOES fix: the host performs the I/O, the
-// guest never gets a socket, and every call is bound by an explicit allowlist +
-// timeout + response-size cap the *pipeline config* sets, never the guest.
+// guest never gets a socket, every call is bound by an explicit allowlist +
+// timeout + response-size cap the *pipeline config* sets (never the guest), and
+// the allowlist is enforced against the *resolved, dialed IP* (see below) — not
+// just the request's hostname string.
 type HTTPService interface {
     Do(ctx context.Context, req HTTPRequest) (HTTPResponse, error)
 }
 
 type HTTPRequest struct {
     Method  string
-    URL     string // validated against the pipeline's configured allowlist before dispatch
+    URL     string // hostname validated against the pipeline's allowlist; the
+                    // resolved IP is validated again at dial time (see below)
     Headers map[string]string
     Body    []byte
 }
 ```
 
-**Why this is the right shape, not a workaround:**
+**Load-bearing properties this doc fixes (not left to implementation discretion):**
 
-- **The guest never gets a raw socket.** The host (full Go, `net/http`) performs the actual
-  request; the guest only ever sees a request/response pair over the same command channel that
-  already carries schema-lookup calls. This is a strictly _smaller_ new surface than granting WASI
-  sockets, and it keeps every other processor's sandbox boundary completely unchanged.
-- **The allowlist is pipeline config, not processor config** — the host validates the destination
-  host against a list the pipeline author (not the processor, not the model, not any
-  provider-returned redirect) set at deploy time. A processor cannot request a URL outside the
-  allowlist; the call fails closed (`ai.embedding_host_not_allowed`, §9) rather than silently
-  following a redirect or a provider-returned URL. This is the SSRF mitigation — see Failure Modes
-  §5.
-- **Bounded by construction:** a per-call timeout and a maximum response-body size are host-enforced
-  parameters (not guest-requestable), so a slow or malicious response cannot hang a `Process` call
-  indefinitely or exhaust host memory reading an unbounded body.
-- **This is core-engine-adjacent, not core-engine-owned.** The new capability lives in
+1. **The guest never gets a raw socket.** The host (full Go, `net/http`) performs the actual
+   request; the guest only ever sees a request/response pair over the same command channel that
+   already carries schema-lookup calls. This is a strictly _smaller_ new surface than granting WASI
+   sockets, and it keeps every other processor's sandbox boundary completely unchanged.
+2. **The allowlist is pipeline config, not processor config** — the host validates the destination
+   host against a list the pipeline author (not the processor, not the model, not any
+   provider-returned redirect) set at deploy time. A processor cannot request a URL outside the
+   allowlist; the call fails closed (`ai.embedding_host_not_allowed`, §9) rather than silently
+   following a redirect or a provider-returned URL.
+3. **The allowlist is enforced against the resolved IP at dial time, not just the hostname string —
+   this is the DNS-rebinding defense and it is load-bearing, not an implementation nicety.** A
+   hostname-only allowlist (check `req.URL.Host` against a list of allowed strings, then let the
+   standard `net/http` transport resolve and dial) is the textbook way host-based HTTP allowlists
+   get bypassed: an allowlisted hostname (e.g. `api.openai.com`, or a pipeline-configured private
+   embedding endpoint) can resolve to a private/link-local/loopback address at request time — either
+   because DNS legitimately changes between validation and dial (a TOCTOU race), or because an
+   attacker who influences the allowlisted hostname's DNS record (a classic DNS-rebinding attack)
+   deliberately re-points it at `169.254.169.254` (cloud-metadata endpoints), `127.0.0.1`, or an
+   internal service address after the hostname check passes. The mitigation this doc requires: the
+   host's `HTTPService` implementation must use a custom dialer (a `net.Dialer.Control` hook or
+   equivalent) that inspects the **actual resolved IP** immediately before connecting on **every**
+   call — not just the first — and refuses to dial if that IP falls in a private, link-local,
+   loopback, or otherwise reserved range (RFC 1918, `169.254.0.0/16`, `127.0.0.0/8`, `::1`, etc.),
+   unless that exact IP is itself explicitly present in the pipeline's allowlist (for the legitimate
+   local-Ollama case, where the allowlist target _is_ `localhost`/a private address by design — see
+   below). Hostname-string matching alone is **not** an acceptable implementation of this capability;
+   an implementation that only checks the string is a failure to meet this design, not an
+   acceptable simplification of it.
+4. **The local-Ollama exception is explicit, not a loophole.** Ollama's own allowlist entry
+   necessarily targets `localhost`/`127.0.0.1`/a private address, since that's what "local" means —
+   this is the one case where the resolved-IP check in (3) must allow a loopback/private target,
+   because the pipeline author explicitly configured it. The distinction that keeps this from
+   reopening the SSRF hole: an operator explicitly allowlisting `127.0.0.1:11434` for their own
+   configured local Ollama server is a deliberate, reviewed pipeline-config decision; a hostname that
+   was allowlisted as `api.some-embedding-vendor.com` silently re-resolving to `127.0.0.1` at dial
+   time is not, and (3)'s per-call resolved-IP check is exactly what tells the two apart.
+5. **Bounded by construction:** a per-call timeout and a maximum response-body size are host-enforced
+   parameters (not guest-requestable), so a slow or malicious response cannot hang a `Process` call
+   indefinitely or exhaust host memory reading an unbounded body.
+6. **This is core-engine-adjacent, not core-engine-owned.** The new capability lives in
   `conduit-processor-sdk`'s `pprocutils` package and its host-side wiring in
   `pkg/plugin/processor/standalone/host_module.go` — a small, additive change to an existing,
   already-reviewed capability-broker pattern, not a new plugin transport or protocol rev. It still
@@ -209,10 +254,10 @@ type HTTPRequest struct {
 
 ### 2. Embedding-provider decision — held to `generate`'s bar
 
-**Providers:** `openai`, `voyage`, `ollama` (local). Resolution mirrors `generate`'s exactly:
-explicit (`--provider` / pipeline config) → env (`CONDUIT_EMBED_PROVIDER`) → auto-detect exactly
-one resolvable candidate (checked in the same fixed order: `ANTHROPIC`-equivalent hosted keys
-first for reporting purposes only, then Ollama reachability) → refuse on zero or ambiguous
+**Providers:** `openai`, `voyage`, `cohere`, `ollama` (local). Resolution mirrors `generate`'s
+exactly: explicit (`--provider` / pipeline config) → env (`CONDUIT_EMBED_PROVIDER`) → auto-detect
+exactly one resolvable candidate (checked in the same fixed order: `ANTHROPIC`-equivalent hosted
+keys first for reporting purposes only, then Ollama reachability) → refuse on zero or ambiguous
 candidates with a coded, actionable error. No hardcoded default vendor, for the same
 broker-neutrality reason `generate` gives.
 
@@ -220,22 +265,56 @@ broker-neutrality reason `generate` gives.
 | --- | --- | --- | --- |
 | `openai` | Host-side call to OpenAI's Embeddings API (`POST /v1/embeddings`), reusing the **same already-vendored** `github.com/sashabaranov/go-openai` client the `openai` built-in processor and `generate`'s OpenAI adapter already use. | Zero new (in this new repo's own module — but the same dependency already proven elsewhere in the org). | Reuses a maintained client already trusted for the equivalent completions API; adding a second OpenAI HTTP client would be the YAGNI violation. |
 | `voyage` | Host-side, hand-rolled `net/http` JSON client against Voyage's Embeddings API (`POST /v1/embeddings`, `Authorization: Bearer` header) — no official Go SDK exists, and none is needed for one JSON-in/JSON-out endpoint. | Zero new beyond stdlib. | Mirrors `generate`'s Anthropic adapter precedent exactly: a simple single-endpoint JSON API doesn't justify a dependency. |
+| `cohere` | Host-side call to Cohere's Embed API, reusing the **same already-vendored** `github.com/cohere-ai/cohere-go/v2` client the shipped `cohere.embed`/`cohere.rerank`/`cohere.command` built-ins already use. | Zero new to the org (fresh `go.mod` entry for this new repo, but the same SDK already trusted and maintained against elsewhere in the org). | Same reasoning as the `openai` row — reuse the vendor's own maintained client rather than hand-rolling a second one; see Decision §2's Reconciliation note below for why Cohere is included at all. |
 | `ollama` (local) | Host-side, hand-rolled `net/http` JSON client against a local Ollama server's `/api/embeddings` endpoint (e.g. `nomic-embed-text`), **the same shape as the existing `ollama` built-in processor's hand-rolled client** — copy the precedent, don't fork a second one. | Zero new beyond stdlib. | Identical justification to `generate`'s Ollama adapter: this is the zero-API-key, 5-minute-wow local path, and the tree already has a working precedent for exactly this shape. |
 
-**Why these three, and why no in-WASM local model runtime.** A fourth option — running a local
+**Why these four, and why no in-WASM local model runtime.** A fifth option — running a local
 embedding model directly inside the WASM guest (an ONNX/GGML runtime compiled to WASI) — is
 rejected: it would pull a heavy runtime dependency into `conduit-processor-ai`'s own module, is
 unproven under wazero's WASI-P1-only support, and duplicates work Ollama already does well. Ollama
 already is Conduit's established "local, zero-key" precedent (`generate`'s Decision §1); reusing it
 here is the same choice generate made, made consistently.
 
-**Batching.** Each provider's embeddings endpoint accepts a batch of input texts in one call
-(OpenAI, Voyage) or one call per text (Ollama's `/api/embeddings` today takes a single input) — the
-processor batches N chunked-text records into as few host-side HTTP calls as the provider's batch
-API supports, reducing per-record HTTP round-trip overhead and, for token-priced providers,
-per-request overhead. Batch size is a config knob (default proposed: 96, OpenAI's practical batch
-ceiling for typical embedding models — an implementation-time constant, not frozen here) bounded so
-a single batch's request body stays under the host's response-size/time budget (§1).
+**Reconciliation with the shipped built-in embedding processors (why Cohere is on this list, and
+what happens to `cohere.embed`/`openai.embeddings`).** Two working, shipped built-in embedding
+processors already exist and are not addressed by inventing this subsystem in a vacuum:
+`pkg/plugin/processor/builtin/impl/cohere/embed.go` (`cohere.embed` — batching via
+`MaxTextsPerRequest`, sub-batched within a single `Process` call, `jpillora/backoff`-based retry)
+and `pkg/plugin/processor/builtin/impl/openai/embeddings.go` (`openai.embeddings` — per-record, via
+the same `openaiCaller` pattern `openai.textgen` uses). This doc does not ship a third,
+differently-sandboxed embedding implementation without accounting for the two that exist:
+
+- **Both are kept as-is, unchanged, in v0.20.** Nothing in this doc removes, deprecates, or
+  silently duplicates either — a pipeline running the stock Conduit binary with no external
+  processor installed keeps exactly the embedding capability it has today.
+- **`conduit-processor-ai`'s embedding processor is the forward path, not a same-release
+  replacement.** What it adds over the two built-ins: one shared multi-provider interface across
+  four vendors (vs. one vendor each, single-purpose), the standalone/WASM sandboxing this whole
+  subsystem is built around (vs. compiled into the core binary, growing its dependency surface with
+  every vendor SDK), and integration with the chunking processor and vector destinations as one
+  designed pipeline (vs. two independently-shipped point processors with no chunking/upsert story of
+  their own). **Cohere is included as a provider precisely because of this reconciliation** —
+  `cohere.embed`'s existence is itself evidence Cohere is a real, used embedding vendor for Conduit
+  users, and omitting it from the new subsystem's provider list while keeping OpenAI would have been
+  an unexplained regression for existing Cohere users migrating to the new path.
+- **Deprecating the two built-ins is explicitly out of scope for this doc and this release.**
+  Whether and when `cohere.embed`/`openai.embeddings` are deprecated in favor of
+  `conduit-processor-ai` is a separate decision this doc does not make here — it would need its own
+  deprecation-policy documentation (announce → warn → remove, CLAUDE.md's two-minor-version
+  minimum) once the new processors have shipped and proven out, not a same-PR removal. This is
+  flagged as an explicit open question for DeVaris (below), not silently resolved by this doc.
+
+**Batching — strictly within a single `Process(records)` call (§4, §7 depend on this).** Each
+provider's embeddings endpoint accepts a batch of input texts in one call (OpenAI, Voyage, Cohere)
+or one call per text (Ollama's `/api/embeddings` today takes a single input) — the processor
+sub-batches the records **the engine handed it in the one `Process` call it is servicing** into as
+few host-side HTTP calls as the provider's per-request input limit allows, exactly matching the
+shipped `cohere.embed` built-in's own behavior (`for i := 0; i < len(records); i +=
+p.config.MaxTextsPerRequest`) rather than a new accumulation model. Sub-batch size is a config knob
+(default proposed: 96, mirroring `cohere.embed`'s own default and OpenAI's practical ceiling for
+typical embedding models — an implementation-time constant, not frozen here) bounded so a single
+sub-batch's request body stays under the host's response-size/time budget (§1). See §4 for why
+cross-call accumulation is rejected outright, not merely deferred.
 
 **Rate-limit handling.** A 429 (or provider-specific rate-limit signal) triggers host-side
 exponential backoff honoring a `Retry-After` header when present, bounded by a max-retry count
@@ -288,8 +367,16 @@ provider call.
 
 - **Input:** chunked records (from the chunking processor, or any upstream processor emitting
   compatible chunk records — the two are pipeline-composed, not hard-wired to each other).
-- **Batching:** accumulates records up to the configured batch size or a max-wait duration
-  (bounded — never unbounded, §7), then issues one host-mediated HTTP call per batch per §2.
+- **Batching is strictly within a single `Process(records) -> records` call — never across calls.**
+  The processor does **not** accumulate records across separate `Process` invocations waiting for a
+  batch to fill; it sub-batches whatever records the engine handed it **in the one call it is
+  currently servicing** into as many host-mediated HTTP calls as the provider's per-request input
+  limit requires (§2's batching decision), and returns only once every record from that call has
+  been embedded (or definitively failed). This is not a simplification of a richer design — it is
+  the chosen, safe answer, argued in full in §2 and §7, and it exactly matches the shipped
+  `cohere.embed` built-in's existing behavior (sub-batch within one `Process` call via
+  `MaxTextsPerRequest`, `pkg/plugin/processor/builtin/impl/cohere/embed.go`) rather than inventing a
+  new, riskier accumulation model.
 - **Partial-batch failure handling (the invariant-1/3 case):** if a batch call fails entirely, no
   record in that batch is embedded or acked — the whole `Process` call returns an error for that
   batch, which (per the synchronous `Process(records) -> records` semantics) means the engine does
@@ -373,28 +460,36 @@ embedding provider can process them must never cause Conduit to (a) ack source r
 are durably embedded and upserted, or (b) buffer unboundedly in memory, or (c) silently drop
 records to keep up.
 
-This holds by construction, not by a new mechanism this doc invents:
+This holds by construction, not by a new mechanism this doc invents — and it depends on the
+within-call-only batching scope decision in §4 being held exactly as stated:
 
-- **The processor's `Process` call is synchronous.** The embedding processor's batching logic
-  accumulates up to a **bounded** number of records (the configured batch size) before issuing a
-  call; it does not accept records 1002 while still holding 1000 unembedded ones in an unbounded
-  internal queue. Once a batch is full (or a bounded max-wait elapses), `Process` is called, and the
-  call blocks the pipeline's forward progress until it returns — this is the engine's existing
-  backpressure mechanism, inherited for free, not a new one built here.
+- **The processor's `Process` call is synchronous, and batching never crosses a `Process`
+  boundary (§4).** The embedding processor sub-batches only the records the engine handed it in the
+  call currently executing; it never holds some of those records back across a _second_ `Process`
+  invocation waiting for more input to arrive from elsewhere. This is the property that makes the
+  rest of this section true: if batching instead accumulated **across** calls (e.g. a "wait up to
+  N ms across possibly-multiple `Process` calls for a full batch" design), a record could sit
+  buffered inside the guest between two separate engine calls with no engine-visible in-flight
+  marker — a crash in that window is a real, unaddressed invariant-1/2 gap, because the engine has
+  no way to know a "completed" `Process` call actually left work outstanding inside the guest. This
+  doc deliberately does not take that risk: sub-batching stays inside one call, full stop.
 - **No early ack.** Because acking is the engine's job after the full pipeline stage completes for a
-  record, and the embedding processor's `Process` call does not return until the batch is embedded
-  (or definitively failed, §4), a slow provider means the **source** slows down (backpressure
-  propagates upstream through the existing synchronous pipeline), not that records get acked while
-  still waiting to be embedded.
+  record, and the embedding processor's `Process` call does not return until every record from that
+  call is embedded (or definitively failed, §4), a slow provider means the **source** slows down
+  (backpressure propagates upstream through the existing synchronous pipeline, the engine's own
+  batch-size/flush-interval configuration for how many records reach one `Process` call in the first
+  place — an existing, already-reviewed mechanism this doc does not change), not that records get
+  acked while still waiting to be embedded.
 - **The cost signal is surfaced, not silently accrued.** Every embedded record's `tokens_used`
   metadata (§2) is available to `conduit pipeline inspect` and the pipeline's metrics endpoint (§9),
   so a pipeline that is accumulating cost faster than expected is observable in near-real-time, not
   discovered at the end of a billing cycle.
-- **Bounded batch size is a hard config ceiling**, not an adaptive/unbounded buffer — this is the
-  concrete mechanism that keeps "backpressure" from silently becoming "unbounded memory growth" if a
-  provider goes slow rather than fully down. A provider that is up but slow causes the batch
-  interval to stretch (bounded max-wait, still bounded queue depth), not the queue to grow past its
-  configured cap.
+- **The provider-request sub-batch size is a hard config ceiling**, not an adaptive/unbounded
+  buffer — the concrete mechanism that keeps "backpressure" from silently becoming "unbounded memory
+  growth" if a provider goes slow rather than fully down. A provider that is up but slow causes each
+  sub-batch's host-mediated call to take longer (stretching that one `Process` call's duration,
+  which is the engine's own existing backpressure signal), never a queue that grows past what the
+  engine already handed this processor for the call in progress.
 
 ### 8. The RAG-sync template — a registry-backed template, not a vendored one
 
@@ -508,14 +603,23 @@ Per CLAUDE.md's "think in failure modes first," mapped to the invariants:
    size and synchronous `Process` semantics mean a slow provider backpressures the source rather
    than silently dropping records or growing memory unboundedly; the cost signal is observable via
    metadata/metrics, not silently accrued.
-5. **The new HTTP host capability as an SSRF/egress-abuse vector (invariant-adjacent: this is a new
-   security boundary, not a data-loss one, but it sits in the same record-processing code path).** A
-   compromised or misconfigured processor config could attempt to point the "embedding provider" URL
-   at an internal service. Mitigated by the host-enforced, pipeline-config-level allowlist (§1) —
-   the processor cannot request a URL outside what the pipeline author configured, and the host
-   rejects (not silently redirects away from) an out-of-allowlist request. Redirects returned by an
-   allowlisted server to a non-allowlisted target are **not followed** by the host client — treated
-   as a failed call, not silently resolved, closing the classic SSRF-via-redirect gap.
+5. **The new HTTP host capability as an SSRF/egress-abuse vector, including DNS rebinding
+   (invariant-adjacent: this is a new security boundary, not a data-loss one, but it sits in the
+   same record-processing code path).** A compromised or misconfigured processor config could
+   attempt to point the "embedding provider" URL at an internal service; separately, an allowlisted
+   hostname could re-resolve to a private/link-local/loopback address between validation and dial
+   (DNS rebinding, or an ordinary TOCTOU DNS change) — the standard way host-based HTTP allowlists
+   get bypassed, since a string-only allowlist check has already passed by the time the actual
+   connection is made. Mitigated by the host-enforced, pipeline-config-level allowlist (§1) **plus
+   the resolved-IP check at dial time (§1, load-bearing property 3)** — the processor cannot request
+   a URL outside what the pipeline author configured, and, independently, the host refuses to dial
+   any resolved address in a private/link-local/loopback/reserved range unless that exact IP is
+   itself an allowlisted target (the local-Ollama case). The host rejects (not silently redirects
+   away from) an out-of-allowlist request, and redirects returned by an allowlisted server to a
+   non-allowlisted target are **not followed** by the host client — treated as a failed call, not
+   silently resolved. Hostname-string matching alone would leave the DNS-rebinding variant of this
+   failure mode open; §1 states plainly that it is not an acceptable implementation of this
+   capability.
 6. **Metadata mapping mismatch** (a configured metadata field doesn't exist on the record, or a type
    mismatch between record metadata and the destination's JSONB expectations). Per invariant 6
    (schema handling never silently mangles data): a missing configured field is a coded config-time
@@ -609,7 +713,16 @@ Per CLAUDE.md's "think in failure modes first," mapped to the invariants:
   allowlist enforcement (reject out-of-allowlist URLs, reject followed redirects to
   out-of-allowlist targets), timeout enforcement, and response-size-cap enforcement — this is the
   security-critical test set for §1, analogous in spirit to `generate`'s "never-auto-apply boundary"
-  load-bearing test.
+  load-bearing test. **The DNS-rebinding case is its own required test, not covered by the
+  hostname-allowlist tests above**: a fake resolver returns an allowlisted hostname's IP as public
+  on the first lookup and as a private/loopback/link-local address on a second lookup (simulating a
+  rebind between validation and dial, or simply a hostname that resolves straight to a private
+  range), and the test asserts the dial is refused at the resolved-IP check regardless of the
+  hostname string having passed the allowlist — proving the check happens at dial time against the
+  actual address, not once against the string. A companion test asserts the local-Ollama allowlist
+  exception (an explicitly allowlisted `127.0.0.1`/private target) is **not** blocked by this same
+  check, so the private-range refusal is IP-explicit-allowlist-aware, not a blanket ban that would
+  break the zero-key local path.
 - **End-to-end RAG-sync template**: CI job (docker-compose Postgres + pgvector) running the full
   Postgres CDC → chunk → embed → pgvector pipeline, asserting records land in the vector table with
   the expected dimension and metadata — behind the WS0 chaos-CI gate and WS6 DBZ-2 suite per the
@@ -648,11 +761,19 @@ Per CLAUDE.md's "think in failure modes first," mapped to the invariants:
    for provider swaps (Upgrade/rollback)** given `conduit pipeline replay` is itself a Phase-2 item
    not yet shipped — confirm whether this doc should instead describe a documented manual full
    snapshot re-run as the interim answer.
+7. **Deprecation timeline for the shipped built-in embedding processors (Decision §2's
+   Reconciliation note).** This doc keeps `cohere.embed`/`openai.embeddings` unchanged in v0.20 and
+   explicitly does not decide whether/when they're deprecated in favor of `conduit-processor-ai`.
+   Confirm whether that's the right call for this release, or whether a deprecation notice (not a
+   removal — CLAUDE.md's announce → warn → remove, two-minor-version minimum) should start now that
+   the new subsystem's provider list supersedes both built-ins' functionality.
 
 ## Related
 
-- `v020-execution-plan.md`, Workstream 8 — the committed scope, acceptance criteria, and Phase A/C
-  sequencing (behind WS0 + WS6) this doc satisfies.
+- The maintainer's internal v0.20 planning notes, Workstream 8 (a working-directory planning
+  document, **not checked into this repository** — cited here for provenance only; do not expect a
+  resolvable in-tree path) — the committed scope, acceptance criteria, and Phase A/C sequencing
+  (behind WS0 + WS6) this doc satisfies. `ROADMAP.md` below is the in-repo source of record.
 - `ROADMAP.md`, Phase 2 "The AI data pipeline" — the roadmap line items (chunking/embedding
   processors, pgvector/Qdrant/Pinecone/Turbopuffer destinations, the `postgres-pgvector-rag`
   template name) this doc scopes into an implementable design.
