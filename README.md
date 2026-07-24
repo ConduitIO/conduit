@@ -41,6 +41,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [Connectors](#connectors)
 - [Processors](#processors)
 - [API](#api)
+- [Embed Conduit in your Go app](#embed-conduit-in-your-go-app)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 
@@ -230,6 +231,10 @@ there's a connector that you're looking for that isn't available in Conduit,
 please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
 
+The quickest way to add a connector is the signed connector registry:
+`conduit connectors install <name>` — see the
+[registry install guide](https://conduitdata.io/docs/using/connectors/installing).
+
 Conduit loads standalone connectors at startup. The connector binaries need to
 be placed in the `connectors` directory relative to the Conduit binary so
 Conduit can find them. Alternatively, the path to the standalone connectors can
@@ -299,6 +304,34 @@ API please have a look at the [API documentation](https://www.conduit.io/api),
 or run Conduit and navigate to `http://localhost:8080/openapi` to open
 a [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to
 try it out.
+
+## Embed Conduit in your Go app
+
+You can run a full Conduit engine in-process, inside your own Go application, and
+drive its lifecycle with ordinary function calls — no subprocess, no socket. The
+engine that powers the CLI is the one you embed.
+
+```sh
+go get github.com/conduitio/conduit
+```
+
+```go
+e, _ := conduit.New(ctx, conduit.Options{DB: conduit.DBOptions{Type: "badger"}})
+h, _ := e.Run(ctx)
+defer h.Stop(ctx)
+
+_ = e.ImportPipeline(ctx, conduit.NewPipeline("hello").
+    WithConnector(conduit.NewSourceConnector("src", "builtin:generator")).
+    WithConnector(conduit.NewDestinationConnector("dst", "builtin:log")))
+_ = e.StartPipeline(ctx, "hello")
+```
+
+The exported API (`Options`, `Engine`, `Handle`, `New`, and the pipelines-in-code
+builder) is a semver-committed, frozen import path. See the
+[Embedding Conduit (Go) guide](https://conduitdata.io/docs/developing/embedding-go)
+for the full lifecycle, options (logger/metrics injection, storage), deployment and
+state considerations, and known limitations. Non-Go bindings (Python, Node) are
+planned as gRPC client libraries — see the [roadmap](ROADMAP.md).
 
 ## Exit codes
 
