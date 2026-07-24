@@ -1,0 +1,66 @@
+name: chaos suite
+
+# v0.20 Workstream 0 (prerequisite): promotes the CLAUDE.md Process-maturity
+# row "Chaos suite (tests/chaos) nightly" from "by Phase 2" to live, ahead of
+# schedule, because two new data-path surfaces (DBZ-3, AI-pipeline) land this
+# cycle and must be born behind a chaos gate rather than added to it later.
+#
+# tests/chaos (doc.go) carries no build tag - it's driven entirely by an
+# in-process badger DB and an in-process synthetic upstream (upstream.go), so
+# it needs no docker-compose infra and already runs as part of `go test ./...`
+# in test.yml's `test` job today. This workflow exists anyway, as its own
+# named check, for two reasons: (1) a dedicated, obviously-named required
+# check that branch protection can point at directly, instead of the gate
+# being an invisible line item inside a much broader `test` job; (2) repeated
+# runs (-count=3) for flake-safety - these tests spawn and SIGKILL real child
+# processes and time a crash window against wall-clock reads
+# (waitForReadCount, see harness.go), so extra repetitions catch scheduling-
+# sensitive flakiness the PR-gating `test` job's single pass would not.
+#
+# Scope actually covered here: only the no-infra subset in tests/chaos (the
+# SIGKILL crash-safety + FIFO-ack tests from the sev-0 fix). There is no
+# docker-compose wiring in this workflow because nothing in tests/chaos
+# currently needs one - if a future chaos scenario needs real infra (e.g. a
+# Postgres replication-slot chaos test), it needs its own job here modeled on
+# test.yml's template-gallery-e2e job (bring up compose infra, run, tear
+# down), and this comment block should be updated to say so.
+
+on:
+  schedule:
+    # Nightly, off-peak. Offset from trigger-nightly.yml (0:00) and
+    # flake-hunt.yml (3:30) so the three scheduled workflows don't contend
+    # for runners at the same time.
+    - cron: '45 4 * * *'
+  pull_request:
+    # Path-scoped so DBZ-3/AI-pipeline PRs (and any other data-path change)
+    # hit this gate, without forcing every docs/CLI/UI PR to pay for it.
+    # Adjust this list if new data-path packages land outside these trees.
+    paths:
+      - 'pkg/connector/**'
+      - 'pkg/pipeline/**'
+      - 'pkg/lifecycle/**'
+      - 'pkg/lifecycle-poc/**'
+      - 'tests/chaos/**'
+  workflow_dispatch:
+
+jobs:
+  chaos:
+    name: tests/chaos (race, x3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run chaos suite (repeated x3, shuffled, race detector)
+        # -count=3 catches flakiness independent of shuffled subtest
+        # ordering, matching flake-hunt.yml's rationale; -race is kept on
+        # here even though it roughly doubles runtime (a full pass is ~30s
+        # unraced, ~30s raced empirically) because this suite spawns
+        # concurrent producer/ack goroutines (chaosPlugin.produceLoop/
+        # ackLoop in upstream.go) that a data race would otherwise let slip
+        # through silently.
+        run: go test -race -v -count=3 -shuffle=on ./tests/chaos/...
