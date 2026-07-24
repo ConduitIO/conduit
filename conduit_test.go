@@ -25,6 +25,7 @@ import (
 	"time"
 
 	conduit "github.com/conduitio/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	provisioningconfig "github.com/conduitio/conduit/pkg/provisioning/config"
 	promclient "github.com/prometheus/client_golang/prometheus"
@@ -501,6 +502,59 @@ func TestImport_RoundTripsThroughRunningEngine(t *testing.T) {
 	is.NoErr(err)
 
 	is.NoErr(h.Stop(context.Background()))
+}
+
+// TestImportPipeline_RoundTripsThroughRunningEngine mirrors
+// TestImport_RoundTripsThroughRunningEngine, but defines the pipeline with
+// NewPipeline and imports it via the single-call ImportPipeline instead of
+// Build-then-Import — proving ImportPipeline is a real, working shortcut
+// against the actual provisioning path, not just a unit-tested Build+Import
+// pairing.
+func TestImportPipeline_RoundTripsThroughRunningEngine(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	h, err := e.Run(context.Background())
+	is.NoErr(err)
+
+	ctx := context.Background()
+	const pipelineID = "hello-pipeline"
+
+	err = e.ImportPipeline(ctx, conduit.NewPipeline(pipelineID).
+		WithStatus(conduit.StatusStopped).
+		WithName("hello").
+		WithConnector(
+			conduit.NewSourceConnector("src", "builtin:generator").
+				WithSetting("format.type", "raw").
+				WithSetting("recordCount", "1"),
+		).
+		WithConnector(conduit.NewDestinationConnector("dst", "builtin:log")),
+	)
+	is.NoErr(err)
+
+	err = e.StartPipeline(ctx, pipelineID)
+	is.NoErr(err)
+
+	err = e.StopPipeline(ctx, pipelineID, false)
+	is.NoErr(err)
+
+	is.NoErr(h.Stop(context.Background()))
+}
+
+// TestImportPipeline_PropagatesBuildError proves ImportPipeline surfaces a
+// Build failure directly, without ever calling Import — a malformed builder
+// (here, a nil nested processor) must not reach the provisioning service at
+// all.
+func TestImportPipeline_PropagatesBuildError(t *testing.T) {
+	is := is.New(t)
+	e := newTestEngine(t, conduit.Options{})
+
+	err := e.ImportPipeline(context.Background(), conduit.NewPipeline("bad").WithProcessor(nil))
+	is.True(err != nil)
+
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
 }
 
 // TestNew_EmptyPipelinesDir_NeverScansCWD is the regression test for the B1

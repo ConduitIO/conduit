@@ -23,15 +23,17 @@ import (
 	"time"
 
 	conduit "github.com/conduitio/conduit"
-	provisioningconfig "github.com/conduitio/conduit/pkg/provisioning/config"
 )
 
-// helloPipeline runs the full New->Run->Import->Stop lifecycle with a single
-// generator->log pipeline, entirely in-memory. It is the shared logic behind
-// Example_helloPipeline (compiled+run by `go test`, checked against captured
-// Output) and TestExampleHelloPipeline_WithinBudget (a CI-timed wall-clock
-// budget assertion — deliberately separate from the human-facing "15 minutes
-// to a running pipeline" doc claim, which is a UX statement, not something a
+// helloPipeline runs the full New->Run->ImportPipeline->Stop lifecycle with
+// a single generator->log pipeline, entirely in-memory, defining the
+// pipeline in code via NewPipeline/ImportPipeline rather than parsing YAML —
+// the common case that needs no provisioning/config import at all. It is
+// the shared logic behind Example_helloPipeline (compiled+run by
+// `go test`, checked against captured Output) and
+// TestExampleHelloPipeline_WithinBudget (a CI-timed wall-clock budget
+// assertion — deliberately separate from the human-facing "15 minutes to a
+// running pipeline" doc claim, which is a UX statement, not something a
 // test can measure; see the embed workstream plan §12 open question 1).
 //
 // New below does not open anything (B1 DX-hardening fix: the database opens
@@ -55,26 +57,15 @@ func helloPipeline(ctx context.Context, dir string) error {
 		return err
 	}
 
-	err = e.Import(ctx, conduit.PipelineConfig{
-		ID:   "hello-pipeline",
-		Name: "hello-pipeline",
-		Connectors: []provisioningconfig.Connector{
-			{
-				ID:     "src",
-				Type:   "source",
-				Plugin: "builtin:generator",
-				Settings: map[string]string{
-					"format.type": "raw",
-					"recordCount": "5",
-				},
-			},
-			{
-				ID:     "dst",
-				Type:   "destination",
-				Plugin: "builtin:log",
-			},
-		},
-	})
+	err = e.ImportPipeline(ctx, conduit.NewPipeline("hello-pipeline").
+		WithName("hello-pipeline").
+		WithConnector(
+			conduit.NewSourceConnector("src", "builtin:generator").
+				WithSetting("format.type", "raw").
+				WithSetting("recordCount", "5"),
+		).
+		WithConnector(conduit.NewDestinationConnector("dst", "builtin:log")),
+	)
 	if err != nil {
 		_ = h.Stop(ctx)
 		return err
@@ -95,9 +86,10 @@ func helloPipeline(ctx context.Context, dir string) error {
 }
 
 // Example_helloPipeline demonstrates the three-call embed lifecycle
-// (New -> Run -> Stop) plus Import, end to end: an in-memory database, a
-// generator source, and a log destination. This is the literal example a
-// `go get github.com/conduitio/conduit` embedder copies first.
+// (New -> Run -> Stop) plus ImportPipeline, end to end: an in-memory
+// database, a generator source, and a log destination — the pipeline
+// defined with NewPipeline, not parsed from YAML. This is the literal
+// example a `go get github.com/conduitio/conduit` embedder copies first.
 func Example_helloPipeline() {
 	ctx := context.Background()
 	dir, err := os.MkdirTemp("", "conduit-embed-example-*")

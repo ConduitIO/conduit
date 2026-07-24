@@ -17,9 +17,9 @@
 // touching os.Exit, a global logger, or the process-wide default Prometheus
 // registry.
 //
-// # Scope (v1 / "B1", DX-hardened)
+// # Scope (v1 / "B1" DX-hardened + "B2")
 //
-// This package covers the engine lifecycle only: New validates Options and
+// This package covers the engine lifecycle: New validates Options and
 // constructs an Engine, but opens nothing — the database (and every service
 // built on it) is opened lazily, on whichever of Engine.Run or Engine.Import
 // is called first (see ensureRuntime, and Engine's "Lifecycle contract" doc).
@@ -28,10 +28,25 @@
 // was actually opened, whether or not Run was ever called, and is a safe
 // no-op if nothing was — see Engine's "Lifecycle contract" doc for the exact
 // New/Run/Import/Stop/Close state matrix. Engine.Import lets a host create or
-// update a pipeline from a PipelineConfig value built in code — the
-// pipelines-in-code builder (NewPipeline/PipelineBuilder) and the
-// C-ABI/language-binding surface (libconduit proper) are later workstreams;
-// see docs/design-documents/20260722-embed-libconduit-v1.md.
+// update a pipeline from a PipelineConfig value.
+//
+// PipelineConfig values don't have to come from YAML: NewPipeline starts a
+// fluent, pipelines-in-code builder (PipelineBuilder, with
+// ConnectorBuilder/ProcessorBuilder/DLQBuilder for nested entities) that
+// produces the exact same PipelineConfig a YAML parse of the equivalent
+// document produces — see builder.go and this package's round-trip tests
+// (TestPipelineBuilder_RoundTrip, TestPipelineBuilder_RoundTrip_Fixtures) for
+// the property this is verified against. Engine.ImportPipeline builds and
+// imports in one call, so the common case never needs a separate
+// provisioning/config import:
+//
+//	err = e.ImportPipeline(ctx, conduit.NewPipeline("hello").
+//		WithConnector(conduit.NewSourceConnector("src", "builtin:generator")).
+//		WithConnector(conduit.NewDestinationConnector("dst", "builtin:log")))
+//
+// Language bindings (Python, Node) are a later workstream, delivered as gRPC
+// client libraries rather than a C ABI — see
+// docs/design-documents/20260724-embed-grpc-client-libraries.md.
 //
 // The database open was eager in the original B1 merge; a DX audit (zero
 // external adoption yet, so the right time to fix a frozen-contract mistake)
@@ -97,13 +112,15 @@
 //
 // # Package boundary / deprecation policy
 //
-// This package's exported API (Options, Engine, Handle, PipelineConfig, New)
-// is a public contract, versioned like the connector protocol, pipeline
-// config schema, and error codes: a breaking change is announced (CHANGELOG +
-// a `Deprecated:` godoc comment) in one monthly release, kept working with a
-// warning for at least one more minor release, and removed no earlier than
-// the third minor release after announcement. PipelineConfig extends this
-// policy by name to provisioning/config.{Pipeline,Connector,Processor,DLQ} —
+// This package's exported API (Options, Engine, Handle, PipelineConfig, New,
+// NewPipeline/PipelineBuilder and its ConnectorBuilder/ProcessorBuilder/
+// DLQBuilder companions) is a public contract, versioned like the connector
+// protocol, pipeline config schema, and error codes: a breaking change is
+// announced (CHANGELOG + a `Deprecated:` godoc comment) in one monthly
+// release, kept working with a warning for at least one more minor release,
+// and removed no earlier than the third minor release after announcement.
+// PipelineConfig extends this policy by name to
+// provisioning/config.{Pipeline,Connector,Processor,DLQ} —
 // all four are constrained by the single doc comment above
 // provisioning/config.Pipeline in that package's parser.go (Connector,
 // Processor, and DLQ have no separate per-type comment of their own; they are
