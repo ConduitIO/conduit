@@ -163,10 +163,16 @@ and for their agents._
 
 ### Embedded v1
 
-- [ ] Stable, documented Go library API for embedding Conduit in applications — _partial:
-      embedding surface exists; stability/docs guarantee TBD_
-- [ ] C ABI shared library (`libconduit`) as the base for cross-language bindings
-- [ ] Python and Node.js bindings (Java/Ruby to follow on demand)
+- [x] Stable, documented Go library API for embedding Conduit in applications — shipped: the root
+      `github.com/conduitio/conduit` package (`New`/`Run`/`Stop`/`Close`/`Import` plus a
+      pipelines-in-code builder) on a semver-committed, frozen import path, with an
+      [embedding guide](https://conduitdata.io/docs/developing/embedding-go)
+- [ ] Non-Go embed bindings as **gRPC client libraries** over the control-plane API, Python first then
+      Node — the same client code targets a local subprocess or a remote, already-deployed engine. The
+      data path never crosses the host boundary, so a C-ABI `libconduit` is a demand-gated escape hatch
+      only, not the base for bindings — see
+      [ADR 20260724](docs/architecture-decision-records/20260724-embed-bindings-via-grpc.md)
+- [ ] Python client library (v0.20 anchor); Node.js to follow (Java/Ruby on demand)
 
 ## Phase 2 — Kafka Connect Migration, Connector Coverage & AI Pipelines (Months 3–8)
 
