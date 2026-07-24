@@ -10,7 +10,7 @@ conduit run
 
 > **S3-compatible stores (MinIO, Ceph, …):** the current `s3` connector hits a
 > `MalformedXML` 400 against non-AWS S3 because of aws-sdk-go-v2's default request
-> checksum. Until [conduit-connector-s3#963](https://github.com/ConduitIO/conduit-connector-s3/issues/963)
+> checksum. Until [issue #963](https://github.com/ConduitIO/conduit-connector-s3/issues/963)
 > is fixed, set `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` (and
 > `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required`) in the Conduit environment.
 > Real AWS S3 is unaffected.
