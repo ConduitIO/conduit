@@ -172,7 +172,23 @@ type Config struct {
 	Pipelines struct {
 		Path           string `long:"pipelines.path" usage:"path to a pipelines' directory or a pipeline configuration file"`
 		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" mapstructure:"exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
-		ErrorRecovery  struct {
+
+		// Disabled turns off file-based pipeline provisioning entirely:
+		// initServices never calls ProvisionService.Init, so Path is never
+		// stat'd or scanned. It deliberately has no `long`/`mapstructure`
+		// tag — it is not a CLI flag, `conduit run` never sets it, and
+		// DefaultConfig leaves it at its zero value (false) — so this field
+		// cannot regress the CLI's cwd/pipelines default-scanning behavior.
+		// It exists only for the root embed package
+		// (github.com/conduitio/conduit), whose New sets it when
+		// Options.PipelinesDir is left empty: an embed-only "no file
+		// provisioning" intent that must not be expressible by silently
+		// inheriting this Config's DefaultConfig-populated Path
+		// (cwd/pipelines) — that default is CLI-oriented, not something a
+		// pure-embed/Import-driven caller ever asked for. See initServices.
+		Disabled bool
+
+		ErrorRecovery struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
 			MinDelay time.Duration `long:"pipelines.error-recovery.min-delay" mapstructure:"min-delay" usage:"minimum delay before restart"`
 			// MaxDelay is the maximum delay before restart: Default: 10 minutes

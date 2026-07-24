@@ -17,18 +17,29 @@
 // touching os.Exit, a global logger, or the process-wide default Prometheus
 // registry.
 //
-// # Scope (v1 / "B1")
+// # Scope (v1 / "B1", DX-hardened)
 //
-// This package covers the engine lifecycle only: New constructs an Engine from
-// Options (and eagerly opens its database — see New's and Engine.Close's doc);
-// Engine.Run starts it and returns a *Handle once it is ready to accept work;
-// Handle.Stop drains and shuts it down; Engine.Close releases the resources
-// New acquired, whether or not Run was ever called — see Engine's "Lifecycle
-// contract" doc for the exact New/Run/Stop/Close state matrix. Engine.Import
-// lets a host create or update a pipeline from a PipelineConfig value built in
-// code — the pipelines-in-code builder (NewPipeline/PipelineBuilder) and the
+// This package covers the engine lifecycle only: New validates Options and
+// constructs an Engine, but opens nothing — the database (and every service
+// built on it) is opened lazily, on whichever of Engine.Run or Engine.Import
+// is called first (see ensureRuntime, and Engine's "Lifecycle contract" doc).
+// Run starts the engine and returns a *Handle once it is ready to accept
+// work; Handle.Stop drains and shuts it down; Engine.Close releases whatever
+// was actually opened, whether or not Run was ever called, and is a safe
+// no-op if nothing was — see Engine's "Lifecycle contract" doc for the exact
+// New/Run/Import/Stop/Close state matrix. Engine.Import lets a host create or
+// update a pipeline from a PipelineConfig value built in code — the
+// pipelines-in-code builder (NewPipeline/PipelineBuilder) and the
 // C-ABI/language-binding surface (libconduit proper) are later workstreams;
 // see docs/design-documents/20260722-embed-libconduit-v1.md.
+//
+// The database open was eager in the original B1 merge; a DX audit (zero
+// external adoption yet, so the right time to fix a frozen-contract mistake)
+// found this made a New'd-and-discarded Engine leak a Badger file lock or a
+// Postgres/SQLite pool unless Close was called even when the caller never ran
+// anything. It is lazy as of this fast-follow — see New's doc and
+// engineLeakCheckFinalizer for the GC-time safety net that remains for any
+// discard-without-Close path this doesn't otherwise catch.
 //
 // # Why this exists, not pkg/conduit directly
 //
@@ -74,8 +85,10 @@
 // TestTwoEngines_MetricsCrossTalk_KnownLimitation.
 //
 // Two sharper instances of the same root cause are tracked separately, also
-// accepted for v1: a failed metrics registration during New still leaks a
-// registry into pkg/foundation/metrics' process-global bookkeeping
+// accepted for v1: a failed metrics registration during ensureRuntime (first
+// Run or Import, not New — see this package's lazy-open fast-follow above)
+// still leaks a registry into pkg/foundation/metrics' process-global
+// bookkeeping
 // (https://github.com/ConduitIO/conduit/issues/2669, see
 // pkg/conduit.configureEmbeddedMetrics' doc), and the HTTP /metrics route
 // serves promclient.DefaultGatherer rather than a host-supplied
