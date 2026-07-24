@@ -55,7 +55,10 @@ experience at every lifecycle stage._
 - **Go** — the reference SDK. Native in-process for built-ins; gRPC for standalone.
   Every other SDK is measured against its acceptance suite.
 - **Python** — gRPC-standalone first (the fastest path to the huge Python data/AI
-  audience), WASM fast-follow. First `libconduit` consumer on the author side.
+  audience), WASM fast-follow. First embed-client-library consumer on the author
+  side (gRPC over the control-plane API, per
+  `docs/design-documents/20260724-embed-grpc-client-libraries.md` — not the
+  C-ABI `libconduit` this bullet originally named).
 - **Rust** — the WASM component-model reference; proves the in-process WASM
   connector path before it's a supported product.
 - **TypeScript** — WASM via `componentize-js`.
@@ -275,24 +278,37 @@ supported, both go through the same provisioning path.
 
 ### B3. Embedding from any language
 
-- **`libconduit`** — a C ABI shared library exposing the B1 lifecycle surface, the
-  base for bindings.
+**Superseded 2026-07-24:** this section originally specified `libconduit`, a C-ABI shared
+library, as the binding mechanism. Per
+[`docs/architecture-decision-records/20260724-embed-bindings-via-grpc.md`](../architecture-decision-records/20260724-embed-bindings-via-grpc.md),
+embed bindings are **gRPC client libraries** over the existing control-plane API
+(`proto/api/v1/api.proto`) plus a new external-connector engine feature — not a C-ABI. See
+[`docs/design-documents/20260724-embed-grpc-client-libraries.md`](20260724-embed-grpc-client-libraries.md)
+for the full design. The bullets below are kept for history; read the linked ADR/design doc for
+the current plan.
+
+- ~~**`libconduit`** — a C ABI shared library exposing the B1 lifecycle surface, the
+  base for bindings.~~ Replaced by a gRPC client library driving the control-plane API.
 - **Bindings**, in priority order: Python and Node.js first (the embedder audience
-  overlap with the AI/data and app-dev worlds), Java/Ruby on demand.
+  overlap with the AI/data and app-dev worlds), Java/Ruby on demand. (Unchanged.)
 - Each binding exposes the **same lifecycle verbs and the pipelines-in-code
-  builder** idiomatic to the language — not a thin, awkward FFI passthrough.
+  builder** idiomatic to the language — not a thin, mechanical transliteration. (Unchanged.)
 
 **Acceptance criteria:**
 
 - **Measured:** first embedded, running pipeline from a copy-paste doc example
   **< 15 minutes** per supported language, CI-timed.
-- The C ABI documents ownership and threading; ASAN/race tests on the bindings.
-- The same `ConduitError` codes cross the ABI (as a structured payload, not a bare
-  string) so a Python/Node embedder gets actionable errors.
+- ~~The C ABI documents ownership and threading; ASAN/race tests on the bindings.~~ No ABI —
+  the gRPC client library documents connection/retry semantics; race detector on the Go engine
+  side only, standard client-library testing on the binding side.
+- The same `ConduitError` codes cross the boundary (as a structured payload via
+  `google.rpc.Status`/`ErrorInfo`, not a bare string) so a Python/Node embedder gets actionable
+  errors.
 
-**Edge cases:** binding lifetime/threading bugs → documented ownership + ASAN gate;
-a language without good CGO/FFI ergonomics → evaluated before committing (don't ship
-an awful binding to hit a checkbox).
+**Edge cases:** engine subprocess/service unreachable, version mismatch between client library and
+engine, external-connector host-reachability (see the gRPC design doc's Failure modes); a language
+without good gRPC ergonomics → evaluated before committing (don't ship an awful binding to hit a
+checkbox).
 
 ---
 
@@ -305,8 +321,8 @@ The same stages, optimized for **both** personas, sharing one mental model:
 | **Scaffold** | `connector/processor new --lang` (or AI generate) | `conduit init --project` + embed template per language |
 | **Develop** | hot-reload + record inspector | pipelines-in-code with IDE autocomplete |
 | **Test** | `conduit connector test` (acceptance + integration, golden fixtures) | in-process test harness; assert records land |
-| **Debug** | `ConduitError` codes + inspector | same `ConduitError` codes across the ABI |
-| **Ship / embed** | signed registry publish | semver-stable `libconduit` + bindings |
+| **Debug** | `ConduitError` codes + inspector | same `ConduitError` codes across the gRPC boundary |
+| **Ship / embed** | signed registry publish | semver-stable gRPC client library per language (not `libconduit`) |
 | **Operate** | delivery-semantics documented per connector | lifecycle verbs + health/metrics from the host |
 
 The shared spine: **one acceptance contract, one config artifact, one error model,
@@ -368,11 +384,15 @@ codes lands there).
   `generate`. (These already live in Phase 1 as separate bullets — this doc makes
   them one coherent workstream with shared acceptance.)
 - **Phase 2:** the connector fleet rides the same multi-language SDK + acceptance
-  contract; AI generation extends to `--from-openapi` at scale; **`libconduit`
-  (the C-ABI shared library) + Python/Node bindings (B3)** — moved out of this
-  doc's original Phase-1 framing once `20260722-embed-libconduit-v1.md` scoped B1/B2
-  to v0.19 (Phase 1) and deferred B3 to Phase 2 explicitly (its AC-8); see
-  `20260723-libconduit-c-abi-bindings.md` for the design-ahead C-ABI/bindings shape.
+  contract; AI generation extends to `--from-openapi` at scale. **Python/Node embed
+  client libraries (B3)** are no longer necessarily Phase-2-gated: per
+  `docs/architecture-decision-records/20260724-embed-bindings-via-grpc.md` and
+  `docs/design-documents/20260724-embed-grpc-client-libraries.md` (superseding the
+  `libconduit` C-ABI framing this bullet previously pointed at), Slice 1 (a Python
+  client library over the already-merged control-plane API) needs **no core
+  changes** and is release-target TBD (v0.19 fast-follow or v0.20 — open question
+  in that doc); only Slice 2 (the external-connector engine feature) is new
+  engine-side work that needs its own phase placement at implementation time.
 - **Phase 3:** Rust/TS WASM connectors graduate; `conduit connector generate
   --from-openapi` hardens; more bindings on demand.
 
