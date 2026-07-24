@@ -24,6 +24,17 @@ name: chaos suite
 # Postgres replication-slot chaos test), it needs its own job here modeled on
 # test.yml's template-gallery-e2e job (bring up compose infra, run, tear
 # down), and this comment block should be updated to say so.
+#
+# REQUIRED-CHECK CONTRACT: this workflow is a required status check on the
+# protected branch. A required check MUST report a conclusion on every PR, so
+# the trigger is NOT path-filtered (a path-filtered trigger simply does not
+# run on unrelated PRs, leaving the required check permanently pending and
+# blocking the merge). Instead the single `chaos` job always runs, and the
+# expensive suite is gated *inside* the job by a data-path change detector
+# that FAILS CLOSED: on any ambiguity (missing base ref, git error) it runs
+# the suite rather than skipping it, so the gate can never be silently skipped
+# on a data-path PR. When no data-path tree changed, the job still completes
+# green in a few seconds, reporting the check without paying for the suite.
 
 on:
   schedule:
@@ -32,15 +43,6 @@ on:
     # for runners at the same time.
     - cron: '45 4 * * *'
   pull_request:
-    # Path-scoped so DBZ-3/AI-pipeline PRs (and any other data-path change)
-    # hit this gate, without forcing every docs/CLI/UI PR to pay for it.
-    # Adjust this list if new data-path packages land outside these trees.
-    paths:
-      - 'pkg/connector/**'
-      - 'pkg/pipeline/**'
-      - 'pkg/lifecycle/**'
-      - 'pkg/lifecycle-poc/**'
-      - 'tests/chaos/**'
   workflow_dispatch:
 
 jobs:
@@ -49,13 +51,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the data-path detector can diff against the PR
+          # base ref (a shallow clone would not have base.sha).
+          fetch-depth: 0
+
+      - name: Detect data-path changes
+        id: detect
+        # Decide whether this run must execute the chaos suite. schedule and
+        # workflow_dispatch always run. For pull_request, run only when a
+        # data-path tree changed - but FAIL CLOSED: any inability to compute
+        # the diff (unset/unfetched base, git error) runs the suite anyway,
+        # so a data-path change can never slip through unexercised. Keep this
+        # path list in sync with the data-path packages; it is the same list
+        # that used to live in the trigger's `paths:` filter.
+        #
+        # github.event.* values are bound via env (not interpolated into the
+        # script body) per GitHub's workflow-injection guidance; both are
+        # GitHub-controlled (event name; a hex commit SHA) but env-binding is
+        # the correct default regardless.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "reason=event $EVENT_NAME always runs" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "reason=base ref unavailable - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "reason=git diff failed - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qE '^(pkg/connector/|pkg/pipeline/|pkg/lifecycle/|pkg/lifecycle-poc/|tests/chaos/)'; then
+            echo "reason=data-path change detected" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reason=no data-path change - skipping suite, gate passes" >> "$GITHUB_OUTPUT"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate decision
+        env:
+          RUN: ${{ steps.detect.outputs.run }}
+          REASON: ${{ steps.detect.outputs.reason }}
+        run: echo "chaos suite run=$RUN ($REASON)"
 
       - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
       - name: Run chaos suite (repeated x3, shuffled, race detector)
+        if: steps.detect.outputs.run == 'true'
         # -count=3 catches flakiness independent of shuffled subtest
         # ordering, matching flake-hunt.yml's rationale; -race is kept on
         # here even though it roughly doubles runtime (a full pass is ~30s
