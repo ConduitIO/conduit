@@ -62,6 +62,50 @@ jobs:
       - name: Build linux/386
         run: GOOS=linux GOARCH=386 go build ./...
 
+  template-gallery-e2e:
+    # End-to-end CI for the two infra-dependent vendored pipeline templates
+    # (v0.19 Workstream 3,
+    # docs/design-documents/20260723-templates-gallery.md §6 AC-3: "infra spun up, pipeline
+    # run, records asserted landed at the destination — not just YAML
+    # parseability"). The two infra-FREE templates (generator-log,
+    # generator-file) need no separate job: their end-to-end tests
+    # (template_gallery_e2e_test.go) carry no build tag, so they already run
+    # as part of the `test` job's `make test-integration` step above, on
+    # every PR, with zero extra CI wiring.
+    #
+    # A matrix entry per template (rather than one job covering both) so a
+    # postgres-s3 regression and a postgres-cdc-kafka regression show up as
+    # distinct, independently-failing checks — matching
+    # docs/design-documents/20260723-templates-gallery.md §6
+    # AC-3's "one CI job per template (or a matrix job)".
+    name: template gallery e2e (${{ matrix.template }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - template: postgres-s3
+            run: TestTemplateGalleryE2E_Integration_PostgresS3
+          - template: postgres-cdc-kafka
+            run: TestTemplateGalleryE2E_Integration_PostgresCDCKafka
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Bring up template gallery infra (Postgres+MinIO+Kafka)
+        run: docker compose -f test/compose-templates.yaml up --quiet-pull -d --wait
+
+      - name: Run ${{ matrix.template }} end-to-end test
+        run: go test -v -race --tags=templates_e2e -run '${{ matrix.run }}' ./cmd/conduit/root/pipelines/...
+
+      - name: Tear down template gallery infra
+        if: always()
+        run: docker compose -f test/compose-templates.yaml down
+
   docker-build:
     # Build the release Docker image. The image is otherwise only built by the
     # release workflow, so a Dockerfile issue (e.g. a base image whose Go version

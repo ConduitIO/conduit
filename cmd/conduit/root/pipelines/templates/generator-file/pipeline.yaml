@@ -1,0 +1,30 @@
+version: "2.2"
+pipelines:
+  - id: generator-file
+    description: >
+      Vendored template "generator-file": generates synthetic structured
+      records and appends each one as a line of newline-delimited JSON to a
+      local file. Scaffolded by
+      `conduit pipelines init --template generator-file`. No external
+      infrastructure required. See README.md in this template's directory
+      for the config reference and delivery-semantics notes.
+    status: running
+    name: generator-file
+    connectors:
+      - id: generator-file-source
+        type: source
+        plugin: "builtin:generator"
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          rate: "1"
+      - id: generator-file-destination
+        type: destination
+        plugin: "builtin:file"
+        settings:
+          # Update this to a path that suits your environment. Relative
+          # paths are resolved against the working directory `conduit run`
+          # is invoked from.
+          path: ./generator-file-output.ndjson

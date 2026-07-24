@@ -1,0 +1,34 @@
+version: "2.2"
+pipelines:
+  - id: postgres-s3
+    description: >
+      Vendored template "postgres-s3": reads a Postgres table (initial
+      snapshot, then ongoing change data capture) and writes each record as a
+      JSON object to an S3 bucket. Scaffolded by
+      `conduit pipelines init --template postgres-s3`. Fill in the
+      placeholder connection values below before running `conduit run`. See
+      README.md in this template's directory for the config reference and
+      delivery-semantics notes.
+    status: running
+    name: postgres-s3
+    connectors:
+      - id: postgres-s3-source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          # Postgres connection string, e.g.
+          # postgres://user:password@localhost:5432/dbname?sslmode=disable
+          url: postgres://user:password@localhost:5432/dbname?sslmode=disable
+          # Comma-separated table names, or "*" for all tables.
+          tables: my_table
+          snapshotMode: initial
+          cdcMode: auto
+      - id: postgres-s3-destination
+        type: destination
+        plugin: "builtin:s3"
+        settings:
+          aws.accessKeyId: your-access-key-id
+          aws.secretAccessKey: your-secret-access-key
+          aws.region: us-east-1
+          aws.bucket: your-bucket-name
+          format: json
