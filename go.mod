@@ -41,7 +41,7 @@ require (
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.19.1
 	github.com/matryer/is v1.4.1
-	github.com/mattn/go-isatty v0.0.23
+	github.com/mattn/go-isatty v0.0.24
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/neilotoole/slogt v1.1.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.3.0
