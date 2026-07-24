@@ -25,9 +25,12 @@ change what Slice 2 must build (not just document):
    Conduit engine. This is meaningless for a genuinely remote host process (Mode 2 below) and
    Slice 2 cannot rely on it there; a custom `ReattachFunc`, or reliance on RPC-call failure alone,
    must be an explicit design choice, not a default nobody looked at.
-2. The `Reattach` path **skips protocol-version handshake verification** that the spawn path
-   performs. Slice 2's "version mismatch" failure mode is not just an "advisable to check" nicety
-   — it is filling a gap go-plugin itself does not close for this path.
+2. The `Reattach` path performs **zero version-based plugin-set selection** — not merely a weaker
+   check than the spawn path's, an _absent_ one. `checkProtoVersion` never runs on this path and
+   `c.config.Plugins` is never derived from `VersionedPlugins`; Slice 2's dispenser must hard-code
+   the stub set itself, unchecked by go-plugin against what the dialed server implements. Slice 2's
+   "version mismatch" failure mode is not an "advisable to check" nicety — it is filling a gap
+   go-plugin contributes nothing toward closing on this path.
 
 Risk tier: **Tier 1-adjacent** (connector-acquisition path, protocol-adjacent). Design-ahead only:
 no code ships from this doc. **DeVaris sign-off is required before Slice 2 implementation
@@ -44,7 +47,7 @@ Today, `pconnector/client.New(logger, path, opts...)`
 cmd := exec.CommandContext(context.Background(), path)
 clientConfig := &plugin.ClientConfig{
     HandshakeConfig:  pconnector.HandshakeConfig,
-    VersionedPlugins: map[int]plugin.PluginSet{ /_ v1 -> clientv1 stubs, v2 -> clientv2 stubs _/ },
+    VersionedPlugins: map[int]plugin.PluginSet{ /* v1 -> clientv1 stubs, v2 -> clientv2 stubs */ },
     Cmd:              cmd,
     AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 }
@@ -57,7 +60,8 @@ Conduit's own spawn-by-path dispenser (`pkg/plugin/connector/standalone/dispense
 filesystem `Path` (`registry.go:51-57`, `blueprint{FullName, Specification, Path}`).
 
 Go-plugin (`github.com/hashicorp/go-plugin@v1.8.0`) has a second, first-class way to acquire the
-same `plugin.Client`, which I read directly rather than trusting the parent doc's line numbers:
+same `plugin.Client`, re-read directly from the module cache for this addendum rather than taken
+on the parent doc's line numbers:
 
 - `ReattachConfig{Protocol, ProtocolVersion, Addr net.Addr, Pid int, ReattachFunc, Test}` —
   `client.go:299-315`.
@@ -80,7 +84,7 @@ same `plugin.Client`, which I read directly rather than trusting the parent doc'
 **Conclusion, stated as definitively as the evidence supports: a new dispenser variant — sibling
 to `standalone.Dispenser`, building `plugin.ClientConfig{Reattach: &plugin.ReattachConfig{Addr:
 ...}}` instead of `{Cmd: cmd}` — requires zero changes to any `.proto` file, any
-`pconnector._Request`/`_Response` message, or any `clientv1`/`clientv2` stub. It is new **Go-side
+`pconnector.*Request`/`*Response` message, or any `clientv1`/`clientv2` stub. It is new **Go-side
 client-construction code** in `pkg/plugin/connector/` (a new package, e.g.
 `pkg/plugin/connector/external/`) plus a `config.Connector` field addition
 (`pkg/provisioning/config/parser.go:40-47` today has `Connector{ID, Type, Plugin, Name, Settings,
@@ -126,21 +130,32 @@ not proactive. Slice 2 inherits that same passive posture for free if it picks o
 (b) is new machinery and should not be built speculatively without a documented reason (CLAUDE.md's
 no-speculative-generality rule) — see Failure mode 3 for the recommendation.
 
-**(2) `Reattach` skips the protocol-version handshake the spawn path performs.** On the spawn path,
-`Start()` parses the child's handshake line and calls `checkProtoVersion(parts[1])`
-(`client.go:871-880`), which validates the **server's actual advertised version** against
-`VersionedPlugins`' keys and fails if incompatible. On the `Reattach` path, there is no handshake
-line to parse (no process was spawned to write one) — `reattach()` instead sets
-`c.negotiatedVersion = c.config.Reattach.ProtocolVersion` directly from **the caller-supplied
-config field**, unverified against whatever the dialed server actually implements
-(`client.go:1016`). **This means go-plugin itself provides no protection against Conduit believing
-a host connector speaks `pconnector` v2 when it actually speaks v1 (or an incompatible future v3):
-the mismatch surfaces only as a runtime RPC failure (unknown method, decode error) on the first
-real call, not as a clean rejection at dispense time.** This sharpens Failure mode 4 below from "a
-compatibility nicety" to "a gap Slice 2 must close itself," e.g. by having the external-connector
-registration path perform its own `Specify` round-trip immediately after dial and compare the
-returned `Specification`'s protocol version against what the pipeline config declared, before the
-connector is wired into a running pipeline.
+**(2) `Reattach` performs zero version-based plugin-set selection — the gap is "absent," not
+merely "unverified."** On the spawn path, `Start()` parses the child's handshake line and calls
+`checkProtoVersion(parts[1])` (`client.go:871`), which validates the **server's actual advertised
+version** against `VersionedPlugins`' keys and — critically — the result _selects which
+`PluginSet` the client actually dispenses symbols from_: `c.config.Plugins = pluginSet` and
+`c.negotiatedVersion = version` (`client.go:879-880`).
+
+On the `Reattach` path (`reattach()`, `client.go:972-1026`), `checkProtoVersion` is **never called
+at all** — there is no handshake line to parse (no process was spawned to write one), and
+`c.config.Plugins` is never touched by `reattach()`. The single `negotiatedVersion` assignment on
+this path, `c.negotiatedVersion = c.config.Reattach.ProtocolVersion`, is gated by
+`if c.config.Reattach.Test` (`client.go:1015-1016`) — a test-harness-only flag (its own doc
+comment: "reattaching to ... a plugin in 'test mode'"). In the real, non-test `Reattach` path
+Slice 2 would actually use, that branch is skipped entirely (`client.go:1020-1023`), so
+**`negotiatedVersion` stays its zero value and `c.config.Plugins` is never derived from
+`VersionedPlugins` at all.** The caller must supply `ClientConfig.Plugins` directly, hand-picked,
+with zero help from go-plugin's version-negotiation machinery. **Conclusion: go-plugin does not
+weakly trust a caller-supplied version on production `Reattach` — it performs no version-based
+plugin-set selection whatsoever.** Whatever gRPC stub set Slice 2's dispenser hard-codes into
+`ClientConfig.Plugins` is used unconditionally, with nothing in go-plugin checking it against what
+the dialed server actually implements. This sharpens Failure mode 4 below from "a compatibility
+nicety" to "a gap Slice 2 must close itself entirely" — go-plugin contributes nothing here to lean
+on. The mitigation is unchanged and still sufficient: the external-connector registration path
+must perform its own `Specify` round-trip immediately after dial and compare the returned
+`Specification`'s protocol version against the `ClientConfig.Plugins` set the dispenser hard-coded,
+failing registration on mismatch before the connector is wired into a running pipeline.
 
 ## `inline_source` / `inline_destination`
 
@@ -278,14 +293,18 @@ matches the already-proven spawned-plugin case before Slice 2 merges.** This add
 authorize skipping that test.
 
 **4. Version mismatch between host connector and engine.** Sharpened by the go-plugin finding
-above: `Reattach`'s `ProtocolVersion` field is trusted, not verified, by go-plugin itself
-(`client.go:1016`). Slice 2 must close this gap explicitly: immediately after a successful dial,
-perform a `Specify` round-trip (`pconnector.SpecifierSpecifyRequest`, the same call
-`standalone.Registry.loadSpecifications` already makes at `registry.go:181-191` for spawned
-plugins) and compare the returned specification's supported protocol version against what the
-pipeline config or dispenser assumed, failing registration with an actionable `ConduitError` on
-mismatch — before the connector is wired into a running pipeline, not discovered as a decode error
-on the first real record.
+above: production `Reattach` performs **no version-based plugin-set selection at all** —
+`checkProtoVersion` never runs on this path, and `c.config.Plugins` is never derived from
+`VersionedPlugins` (`client.go:972-1026`, `1015-1016`; see "The mechanism" above). Slice 2's
+dispenser must hard-code the `ClientConfig.Plugins` stub set itself, entirely unchecked by
+go-plugin against what the dialed server actually implements. Slice 2 must close this gap
+explicitly: immediately after a successful dial, perform a `Specify` round-trip
+(`pconnector.SpecifierSpecifyRequest`, the same call `standalone.Registry.loadSpecifications`
+already makes at `registry.go:181-191` for spawned plugins) and compare the returned
+specification's supported protocol version against the `ClientConfig.Plugins` set the dispenser
+hard-coded, failing registration with an actionable `ConduitError` on mismatch — before the
+connector is wired into a running pipeline, not discovered as a decode error on the first real
+record.
 
 **5. Engine's `Stop` while the host connector is mid-write.** Two distinct cases:
 
@@ -342,12 +361,32 @@ spawning a binary the engine's own operator placed in a plugin directory
   return a well-formed `Specification`); a stronger story (mTLS between engine and external
   connector, a shared registration token analogous to `pconnutils.EnvConduitConnectorToken` already
   used for spawned plugins per `registry.go:174/230`) is an open question for Slice 2's own design
-  pass, not resolved by this addendum.
-- **Encrypting the channel.** `plugin.ClientConfig.TLSConfig` already exists in go-plugin for the
-  spawn path; whether it's wired for `Reattach` and what the registration handshake looks like for
-  provisioning certs/tokens between a host library and a remote engine is unaddressed here and must
-  be resolved before Mode 2 is ever attempted (loopback-only Mode 1 makes this lower-stakes, though
-  not zero-stakes on a shared multi-tenant host).
+  pass, not resolved by this addendum. **This requirement is stronger than it first looks, because
+  one of go-plugin's own integrity mechanisms is structurally unavailable here:**
+  `Client.Init`/`Start()` hard-fails if both `SecureConfig` and `Reattach` are set —
+  `if c.config.SecureConfig != nil && c.config.Reattach != nil { return nil, ErrSecureConfigAndReattach }`
+  (`client.go:606-607`). `SecureConfig` is go-plugin's checksum-based binary-integrity check (verify
+  the executable's hash before running it) — the spawn path's baseline defense against "someone
+  swapped the plugin binary." **That defense does not merely need reinforcing for external
+  connectors; it is unavailable to them by construction.** There is no binary to checksum (nothing
+  is executed — a pre-running server is dialed), so authenticating the far end cannot fall back on
+  "verify the artifact" the way a spawned plugin can; it must be an on-the-wire property (mTLS,
+  token) from the start, not a defense-in-depth addition to a checksum baseline that doesn't exist
+  here.
+- **Encrypting the channel.** Corrected from an earlier "unaddressed" framing: `TLSConfig` is
+  **available today, not unknown, for `Reattach`.** `newGRPCClient` — the single call site that
+  actually dials the gRPC connection, shared by both the spawn and `Reattach` paths
+  (`client.go:463`) — calls `dialGRPCConn(c.config.TLSConfig, c.dialer, ...)`
+  (`grpc_client.go:59`), downstream of `Start()` for either path. By this addendum's own
+  "everything downstream of `Start()` is shared" logic (see "The mechanism" above), `TLSConfig`
+  therefore already applies transparently to `Reattach` connections exactly as it does to spawned
+  ones — no go-plugin code change needed to encrypt the channel. **What remains open is not
+  whether TLS works, but how certs get provisioned and trusted**: a shared CA between the host
+  library and the engine, cert distribution at `conduit.local()`/`conduit.connect()` setup time,
+  and rotation — a real design gap, but a provisioning problem, not a mechanism gap. This is an
+  open question for Slice 2's own design pass, not resolved by this addendum, and matters more as
+  Mode 2 is considered (loopback-only Mode 1 makes it lower-stakes, though not zero-stakes on a
+  shared multi-tenant host).
 
 ## Upgrade / rollback
 
@@ -400,8 +439,8 @@ change, but a future revision to the version-check logic itself would need one).
    active `Ping()`-based health-checking (new machinery, faster detection, no precedent elsewhere
    in the codebase)? This addendum recommends the former on no-speculative-generality grounds, but
    it's a real trade-off (detection latency vs. new code) worth an explicit call.
-2. *_Is Mode 2 for `inline__` a real near-term ask, or should Slice 2's docs foreclose it more
-   forcefully*_ (e.g., a `local()`-only guard in the client library that rejects `inline__` against
+2. **Is Mode 2 for `inline_*` a real near-term ask, or should Slice 2's docs foreclose it more
+   forcefully** (e.g., a `local()`-only guard in the client library that rejects `inline_*` against
    `connect()`) rather than leaving it as "not yet solved but maybe someday"? A hard guard is
    cheaper to build than the honest-but-open framing this addendum currently uses.
 3. **Multi-tenant / SSRF exposure timeline.** Does anything on the roadmap (fleet console API
@@ -434,8 +473,14 @@ change, but a future revision to the version-check logic itself would need one).
   — the existing `StatusDegraded` path this addendum confirms an external-connector failure reuses
   unchanged.
 - `github.com/hashicorp/go-plugin@v1.8.0`: `client.go:299-315` (`ReattachConfig`), `client.go:580-
-  616` (`Start()` dispatch), `client.go:972-1024` (`reattach()`), `client.go:871-880` (spawn-path
-  `checkProtoVersion`), `client.go:1016` (reattach-path trusts `ProtocolVersion` unverified),
+  616` (`Start()` dispatch), `client.go:606-607` (`ErrSecureConfigAndReattach` — `SecureConfig` and
+  `Reattach` are mutually exclusive), `client.go:972-1026` (`reattach()`), `client.go:871, 879-880`
+  (spawn-path `checkProtoVersion` + `Plugins`/`negotiatedVersion` assignment), `client.go:1015-1016`
+  (reattach-path `negotiatedVersion` assignment gated by `Reattach.Test`, a test-only flag — never
+  runs in production, and `checkProtoVersion`/`c.config.Plugins` derivation never run on this path
+  at all), `client.go:463` and `grpc_client.go:59` (`newGRPCClient`/`dialGRPCConn(c.config.TLSConfig,
+  ...)` — the single shared dial call site downstream of `Start()` for both `Cmd` and `Reattach`,
+  confirming `TLSConfig` already applies transparently to `Reattach`),
   `internal/cmdrunner/cmd_reattach.go:16-38` (default `ReattachFunc`, local-PID-based),
   `grpc_client.go:127-130` (`Ping()` via `grpc_health_v1`, unused elsewhere in this codebase today)
   — all read directly from the module cache for this addendum, not taken from the parent doc's
