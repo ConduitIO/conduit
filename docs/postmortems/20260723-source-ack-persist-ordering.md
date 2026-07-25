@@ -38,10 +38,46 @@ code deserves the same rigor whether or not it happened to reach a tagged releas
 - **Confirmed benign (no gap):** the identical code path and crash window against a
   retention-based upstream (Kafka-like: replay from an older, still-valid offset simply
   redelivers) produces only a duplicate — consistent with the at-least-once floor, not a violation.
-- **Not yet classified:** MySQL-binlog and MongoDB-change-stream/oplog-backed sources. Reasoning in
-  the companion design doc suggests both are more likely retention-based (and thus benign) than
-  prune-on-commit, but this is inference, not verification — flagged as a required follow-up, not
-  assumed safe.
+- **Verified retention-based, both benign (2026-07-24):** MySQL-binlog and
+  MongoDB-change-stream/oplog-backed sources were classified by reading each connector's source, no
+  longer inference. Both drive **zero** upstream state from the plugin-side `Ack` and are pruned
+  only by server-side time/size, independent of any consumer position — so neither was ever in the
+  prune-on-commit data-loss class this bug targets.
+  - **MySQL** (`conduitio-labs/conduit-connector-mysql`): CDC is binlog streaming via go-mysql
+    `canal` (`cdc_iterator.go`); `Ack` for the CDC path is a literal `return nil` no-op
+    (`cdc_iterator.go:140-142`), and a full-tree search found no `PURGE`/`register…slave`/
+    `binlog_expire` primitive. MySQL has no Postgres-slot equivalent: binlog is never pruned by a
+    replica's _consumed_ position. Crash-in-window → benign duplicate (re-read from binlog); the
+    only edge (binlog time/size-expired during downtime) is a **hard `RunFrom` error, never a
+    silent skip**.
+  - **MongoDB** (`conduitio-labs/conduit-connector-mongo`): CDC is Change Streams with a
+    client-held `resumeAfter` token (`cdc.go:179-180`); `Ack` is a debug-log no-op
+    (`source.go:135-139`). The dangerous case — a stale resume token whose oplog history has rolled
+    away — **hard-errors** (`ChangeStreamHistoryLost` propagates out of `NewCombined`,
+    `combined.go:61-65`; the sole swallowed error is the unrelated CosmosDB `$project` capability
+    string). There is **no silent "start from now" fallback**. Crash-in-window → benign duplicate;
+    oplog-rolled-past-token → hard resume error.
+
+  A "fixed" claim now extends to both **for this bug class**. Residual risk from the persist-window
+  class after the engine fix: none (the fix is redundant safety for connectors whose ack drives no
+  upstream pruning). Regression-test lock-in for the per-connector property is tracked below
+  (Follow-ups) — the determination is a structural property of each connector's no-op ack, and the
+  engine-level ordering guarantee is already gated by the DBZ-1 chaos suite.
+
+  **Scope caveat — a separate MySQL gap surfaced during this verification.** The adversarial pass
+  (prompted to hunt for _any_ silent gap, not just the persist-window class) found an unrelated
+  silent data-loss bug in `conduit-connector-mysql`: the CDC start position captured under the
+  snapshot lock is held in-memory only and never persisted during the snapshot phase, so a crash
+  during the initial snapshot resumes CDC from a fresh, later binlog position and silently drops
+  `UPDATE`/`DELETE`s to already-copied rows (Invariant-3 violation, initial-sync window only). This
+  is **not** the Source.Ack persist-window class — it is a snapshot→CDC handoff bug — so it does not
+  change this postmortem's determination, but "retention-class, no-op ack" must not be read as
+  "MySQL has no data-loss issues." Tracked as its own sev-0-class item with a Tier-1 design doc +
+  position-format migration + SIGKILL-during-snapshot regression test (design doc in progress;
+  DeVaris signed off the sequencing 2026-07-24). Two external assumptions the code analysis could
+  not verify and that the tracked regression tests should pin: go-mysql `canal`'s internal replica
+  registration (MySQL keeps no durable flush position for it) and mongo-driver's classification of
+  `ChangeStreamHistoryLost` (286) as non-resumable.
 - **Blast radius within a single crash:** bounded to whatever positions were acked-but-unflushed at
   the moment of the crash for the affected connector(s) — at most one debounce window (~1s) or
   10k records, whichever triggers first. `Persister.flushNow` batches across **every** connector
@@ -149,14 +185,28 @@ upstreams.
 
 ## Follow-ups
 
-- [ ] DeVaris Tier-1 sign-off on Approach A (or a decision to pursue an alternative), tracked in
-      the companion design doc.
-- [ ] Fix PR: engine-side reorder + per-partition HWM tracking + `StopAndWait` drain update +
-      un-skip the DBZ-1 gap assertion + benchi throughput comparison attached.
-- [ ] **Verify MySQL-binlog and MongoDB-change-stream/oplog connectors** against the same
-      DBZ-1-style `prune`-toggle chaos harness rather than relying on the design doc's inference
-      that they're likely retention-based. Do not extend a "fixed" claim to either without this
-      run.
+- [x] DeVaris Tier-1 sign-off on Approach A (or a decision to pursue an alternative), tracked in
+      the companion design doc. — signed off; superseded the interim by PR #2680.
+- [x] Fix PR: engine-side reorder + per-partition HWM tracking + `StopAndWait` drain update +
+      un-skip the DBZ-1 gap assertion + benchi throughput comparison attached. — shipped as PR
+      #2680 (connector-level FIFO seq; DeVaris blessed connector-level over per-partition HWM since
+      `SourceState.Position` is always the full cumulative snapshot).
+- [x] **Verify MySQL-binlog and MongoDB-change-stream/oplog connectors** (2026-07-24). Classified by
+      reading each connector's source rather than the design doc's inference — see "Verified
+      retention-based" under Impact above. Both no-op-ack / retention-class / fail-loud at the
+      retention boundary; neither was ever in the data-loss class. Note: the DBZ-1 `prune`-toggle
+      chaos harness (`tests/chaos`) uses an in-process synthetic upstream and cannot drive real
+      MySQL/Mongo — the realistic per-connector regression gate is a SIGKILL-mid-stream +
+      retention-boundary integration test in each `conduitio-labs` repo (neither harness models a
+      real SIGKILL today; both use graceful `Teardown`). Tracked as its own item below.
+- [ ] **Per-connector SIGKILL + retention-boundary regression tests** (MySQL, Mongo). Lock the
+      verified determination: (a) kill mid-stream between emit and position-persist, restart, assert
+      re-delivery (duplicate, not gap); (b) force binlog/oplog expiry past the persisted position,
+      assert a **hard error, never a silent skip**. Both `conduitio-labs` harnesses need a real
+      process-kill helper built (today's resume tests use graceful `Teardown`). Lower priority: the
+      guarded property is structural (no-op ack) and the engine ordering is already chaos-gated —
+      this defends against a future connector rewrite that adds a consumer-position-driven prune
+      call, which neither upstream protocol even exposes.
 - [ ] Longer-term observability follow-up (not blocking the fix): no metric exists today for
       ack-vs-persist lag or replication-slot retention pressure; a production instance of this bug
       class would be invisible until a downstream data-quality incident surfaced it. Tracked
