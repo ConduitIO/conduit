@@ -40,6 +40,17 @@ type childConfig struct {
 	prune       bool
 	paceMS      int
 	total       uint64
+
+	// snapshotK/snapshotPaceMS: DBZ-2 Property 1/2's two-phase producer
+	// knobs (see chaosPlugin's type doc, upstream.go). Zero values preserve
+	// DBZ-1's original single-phase behavior.
+	snapshotK      uint64
+	snapshotPaceMS int
+
+	// numKeys: DBZ-2 Property 3's multi-key knob (see chaosPlugin's type
+	// doc, upstream.go). Zero/one preserves DBZ-1's original,
+	// single-position-space behavior.
+	numKeys int
 }
 
 func (c childConfig) env() []string {
@@ -50,6 +61,9 @@ func (c childConfig) env() []string {
 		envPrune + "=" + strconv.FormatBool(c.prune),
 		envPaceMS + "=" + strconv.Itoa(c.paceMS),
 		envTotal + "=" + strconv.FormatUint(c.total, 10),
+		envSnapshotK + "=" + strconv.FormatUint(c.snapshotK, 10),
+		envSnapshotPaceMS + "=" + strconv.Itoa(c.snapshotPaceMS),
+		envNumKeys + "=" + strconv.Itoa(c.numKeys),
 	}
 }
 
@@ -187,6 +201,20 @@ func (c *childProcess) line(prefix string) (string, bool) {
 	return "", false
 }
 
+// linesWithPrefix returns every observed line with the given prefix, in the
+// order they were emitted by the child (i.e. arrival/delivery order — see
+// Property 3's ordering_test.go, which relies on this order to reconstruct
+// the per-key ack delivery ledger from ACK_ORDER lines).
+func (c *childProcess) linesWithPrefix(prefix string) []string {
+	var out []string
+	for _, l := range c.linesSnapshot() {
+		if strings.HasPrefix(l, prefix) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 func (c *childProcess) diagnostics() string {
 	// stderr is its own syncBuffer (self-synchronizing, see its doc), not
 	// guarded by c.mu - c.mu only ever protected lines. Reading it while the
@@ -242,6 +270,26 @@ func (c *childProcess) waitForReadCount(t *testing.T, n int, timeout time.Durati
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %d reads (saw %d)\n%s", n, c.readCount(), c.diagnostics())
+}
+
+// waitForMarker blocks (polling, not sleeping a fixed duration) until a line
+// with the given prefix has been observed, or fails the test after timeout.
+// Used by Property 2's mid-handoff case to gate the kill on the HANDOFF
+// marker itself rather than a read-count that merely happens to be close to
+// it: HANDOFF is printed synchronously by chaosPlugin.produceLoop the
+// instant the producer crosses the snapshot->stream boundary (upstream.go),
+// so waiting on it is exactly as race-free as waitForReadCount - it is
+// gated on genuine, paced producer progress, never a wall-clock guess.
+func (c *childProcess) waitForMarker(t *testing.T, prefix string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, ok := c.line(prefix); ok {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for marker %q\n%s", prefix, c.diagnostics())
 }
 
 // sigkill sends SIGKILL (not SIGTERM, not context cancellation) and reaps
