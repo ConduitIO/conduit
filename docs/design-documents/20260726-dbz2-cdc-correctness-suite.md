@@ -1,5 +1,8 @@
 # DBZ-2: CDC correctness / acceptance-test suite
 
+**Status:** Accepted (DeVaris Tier-1-adjacent sign-off, 2026-07-26, PR #2692). v0.20 Workstream 6. All
+four open questions are resolved — see [Resolved decisions](#resolved-decisions-devaris-sign-off-2026-07-26-pr-2692).
+
 ## Summary
 
 DBZ-2 is the correctness gate that lets Conduit _earn_ the "Debezium-class" CDC claim instead of
@@ -342,8 +345,10 @@ DBZ-3.
   `w.DLQ.Ack`) and `funnel.Worker.Nack` (`worker.go:507`, which routes via `w.DLQ.Nack` and acks only
   the successfully-DLQ'd prefix) feeding `Source.Ack`, and position non-advancement on halt.
 - _Boundary._ Real DDL emission, schema-history reconstruction, and evolve-policy application are
-  deferred to DBZ-3 against real Postgres, per Q1. This is the largest lift in DBZ-2 (it needs the
-  funnel + destination + DLQ integration above) and is phased last (see Rollout).
+  deferred to DBZ-3 against real Postgres, per Q1. The transport half here is the largest single lift
+  in DBZ-2 (it needs the funnel + destination + DLQ integration above), but per DeVaris's sign-off
+  (2026-07-26) it lands in **Phase 1**, not last, because the AI-pipeline record-path work depends on
+  this engine-side no-silent-drop gate (see Rollout and the resolved decisions).
 
 ### Q4. KC-wrapper offset-bridge + FIFO-ack coverage
 
@@ -476,9 +481,11 @@ The specific ways DBZ-2 could be wrong, and the mitigations:
   3x repetition are load-bearing for a concurrency-heavy suite: they surface the flaky-under-scheduling
   failures a single clean run would hide.
 - **Merge gating within v0.20.** Per the plan, chaos-CI + DBZ-2 land _before_ DBZ-3 or the
-  AI-pipeline record-path work merges. DBZ-2's definition-of-done for that gate is Properties 1, 2,
-  and 3 green (handoff, SIGKILL x3, FIFO-ack ordering); Property 4's transport half may trail within
-  v0.20 (it is the largest lift). See Open questions.
+  AI-pipeline record-path work merges. Per DeVaris's sign-off (2026-07-26), the definition-of-done that
+  unblocks **DBZ-3** is Properties 1 + 2 + 3 green (smoke, SIGKILL x3, FIFO-ack + per-partition
+  ordering); Property 4's real-DDL half rides inside DBZ-3's own real-DB acceptance test. Property 4's
+  **transport** half is not deferred — it lands in Phase 1 and is the gate the **AI-pipeline**
+  record-path work depends on. See the resolved decisions.
 - **Gating external connectors.** The DBZ-2 contract (checklist + SDK acceptance profile) is the bar a
   connector meets in its _own_ repo's CI to claim log-based / Debezium-class status. DBZ-3 is the first
   connector to instantiate it; the checklist is what a new CDC connector's review checks against.
@@ -504,47 +511,64 @@ schema-drift decisions on the pipeline API) is DBZ-3's acceptance criterion, not
 
 ## Rollout / phasing
 
-Ordered so the DBZ-3 gate is unblocked first and the largest lift lands last:
+Revised per DeVaris's sign-off (2026-07-26, PR #2692): the invariant-6 transport half and one
+SIGTERM/invariant-7 case are pulled **into Phase 1** rather than deferred, because the AI-pipeline
+record-path work also leans on the engine-side no-silent-drop gate. Phase 1 is therefore larger than
+originally scoped and is the DBZ-3 merge-gate.
 
-1. **Phase 1 (lands first — the DBZ-3 gate).** Generalize `tests/chaos` from one scenario family to a
-   scenario matrix. Add the two-phase snapshot/stream `chaosPlugin` (Property 1), the mid-handoff and
-   mid-position-write SIGKILL cases (Property 2, extending the existing mid-snapshot/mid-stream table),
-   and the explicit strict-FIFO-one-Ack-call ack-ordering assertion (Property 3 engine half + the Q4
-   wrapper contract). These reuse the existing harness almost verbatim and are the properties DBZ-3
-   most depends on. This is DBZ-2's merge-gate definition-of-done for v0.20.
-2. **Phase 2.** The multi-key per-partition ordering scenario with a real delivery ledger (Property 3
-   full engine half). A modest extension of `chaosPlugin` to multiple keys.
-3. **Phase 3 (largest lift — a new integration, not harness reuse).** The transport-level invariant-6
-   no-silent-drop scenario (Property 4), which requires standing up a real `funnel.Worker`
-   (`pkg/lifecycle-poc/funnel`) plus a synthetic destination and DLQ — the current child bypasses all
-   three by calling `src.Read`/`src.Ack` directly (`child.go:159-183`). May trail within v0.20 if the
-   runway tightens; the plan already lists DBZ-3 depth as the biggest swing, and Property 4's _real_
-   half rides with DBZ-3 regardless.
-4. **Parallel, owned with DBZ-3.** The DBZ-2 contract: the "CDC done" checklist in the connector
-   authoring docs and the SDK acceptance-suite extension, with the first real instantiation against
-   Postgres landing as part of DBZ-3.
+1. **Phase 1 (the DBZ-3 gate — everything the engine-side suite needs).** Generalize `tests/chaos`
+   from one scenario family to a scenario matrix:
+   - The two-phase snapshot/stream `chaosPlugin` (Property 1, no-crash pacing/smoke).
+   - The mid-handoff (producer-pacing variant) and mid-position-write SIGKILL cases (Property 2,
+     extending the existing mid-snapshot/mid-stream table).
+   - The strict-FIFO-one-Ack-call ack-ordering assertion plus the multi-key per-partition ordering
+     scenario with a real delivery ledger (Property 3, engine half + the Q4 wrapper-seam contract).
+   - **The invariant-6 transport half (Property 4 transport), now in Phase 1.** This is the biggest
+     single lift: it requires standing up a real `funnel.Worker` (`pkg/lifecycle-poc/funnel`) plus a
+     synthetic destination and DLQ — wiring the chaos harness has never had, since the current child
+     bypasses all three by calling `src.Read`/`src.Ack` directly (`child.go:159-183`). It asserts a
+     drift/poison-marked record is never silently acked without being handled (delivered / DLQ'd /
+     halt), never silently coerced or dropped.
+   - **One SIGTERM / invariant-7 graceful-shutdown case, now in Phase 1.** Drives `Source.Teardown`'s
+     flush-and-wait-then-`stopStream` ordering (`source.go:249-326`) and asserts the final deferred
+     ack is sent before the stream is torn down (no dropped final ack on the graceful path), the
+     complement to the SIGKILL cases on the crash path.
+   Property 1+2+3 green is the definition-of-done that unblocks DBZ-3 (see the resolved open
+   questions); the Property 4 transport half lands in the same phase and gates the AI-pipeline
+   record-path work.
+2. **Parallel, owned with DBZ-3 — the DBZ-2 contract.** The connector-facing "CDC done" definition:
+   the SDK acceptance-suite extension in `conduit-connector-sdk` for native connectors plus the prose
+   checklist for the JVM KC-wrapper, with the first real instantiation (and Property 4's real-DDL
+   half) landing inside DBZ-3's own real-Postgres acceptance test.
 
 Each phase ships with its verified-to-fail-without-the-fix note and updates the suite `doc.go` to keep
 the synthetic-vs-real boundary stated at the source.
 
-## Open questions for DeVaris
+## Resolved decisions (DeVaris sign-off, 2026-07-26, PR #2692)
 
-1. **Property 4 scope in DBZ-2 core.** Do we take on a synthetic destination + DLQ in the chaos
-   harness now (needed for the transport-level no-silent-drop assertion, and a real step up in harness
-   complexity), or keep DBZ-2 core strictly source-side (ack/position/handoff/ordering) for v0.20 and
-   push _all_ of invariant-6 to DBZ-3's per-connector acceptance against real Postgres? Recommendation:
-   keep core source-side for the v0.20 merge-gate; add the transport assertion only if it stays cheap.
-2. **Where the DBZ-2 contract physically ships.** SDK acceptance-suite extension in
-   `conduit-connector-sdk` for native connectors, plus a prose checklist the JVM wrapper's
-   `DebeziumPgSourceIT` must satisfy (it cannot import a Go harness)? Confirm that split, and confirm
-   the SDK acceptance suite is the right home versus a new CDC-specific acceptance package.
-3. **DBZ-2's own definition-of-done as the DBZ-3 gate.** Confirm Properties 1 + 2 + 3 (continuity
-   smoke, SIGKILL x3, FIFO-ack order) green is sufficient to unblock DBZ-3, with Property 4 allowed to
-   trail within v0.20. Or must Property 4's transport half also be green before DBZ-3 merges?
-4. **SIGTERM / invariant-7 coverage.** `CLAUDE.md` frames chaos as SIGKILL, but `Source.Teardown`'s
-   deferred-ack-before-`stopStream` ordering (invariant 7) is a real data-path correctness surface the
-   same harness could cover with one graceful-shutdown case. Add a SIGTERM/Teardown scenario to DBZ-2,
-   or keep DBZ-2 strictly kill-9 and leave invariant-7 to unit tests in `pkg/connector`?
+All four open questions were answered at sign-off. Recorded here so the doc matches what we build.
+
+1. **Property 4 (invariant-6 transport half) scope — RESOLVED 2026-07-26: build it in Phase 1, do not
+   defer.** DeVaris pulled the transport-level no-silent-drop assertion into the initial
+   implementation, explicitly because the AI-pipeline record-path work also depends on that engine-side
+   gate. Phase 1 therefore stands up the `pkg/lifecycle-poc/funnel` Worker + DLQ + a synthetic
+   destination in the harness — the substantial new integration, not harness reuse. (Only the
+   _real-DDL_ half stays deferred to DBZ-3's real-DB acceptance test.)
+2. **Where the DBZ-2 contract ships — RESOLVED 2026-07-26: the SDK acceptance suite for native
+   connectors + a prose checklist for the JVM KC-wrapper.** The reusable "CDC done" profile is an
+   extension of the `conduit-connector-sdk` acceptance suite (already the compatibility contract per
+   `CLAUDE.md`); the wrapper, which cannot import a Go harness, satisfies a prose checklist verified
+   against its own `DebeziumPgSourceIT`. Not a new CDC-specific acceptance package.
+3. **Definition-of-done that unblocks DBZ-3 — RESOLVED 2026-07-26: Properties 1 + 2 + 3 green.**
+   Crash-safety (SIGKILL x3), ack-FIFO, and per-partition ordering green is the DBZ-3 merge-gate.
+   Property 4's real-DDL half rides inside DBZ-3's own real-Postgres acceptance test rather than
+   blocking the gate; the Property 4 _transport_ half still lands in Phase 1 (decision 1) and gates the
+   AI-pipeline record-path work.
+4. **SIGTERM / invariant-7 coverage — RESOLVED 2026-07-26: add one graceful-shutdown case, in Phase
+   1.** DBZ-2 covers `Source.Teardown`'s flush-and-wait-then-`stopStream` ordering
+   (`source.go:249-326`) with a single SIGTERM/Teardown scenario asserting the final deferred ack is
+   sent before teardown — the graceful-path complement to the SIGKILL crash-path cases, not left to
+   `pkg/connector` unit tests alone.
 
 ## Related
 
