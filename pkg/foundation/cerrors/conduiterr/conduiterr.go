@@ -109,6 +109,17 @@ var (
 	// CodeProcessorPluginNotFound is raised when a referenced processor plugin
 	// cannot be located.
 	CodeProcessorPluginNotFound = Register("processor.plugin_not_found", codes.NotFound)
+	// CodeExternalConnectorUnreachable is raised when an external connector's
+	// dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be
+	// reached - at registration time (fail fast, never discovered on the
+	// first pipeline record) or when the connection is lost.
+	CodeExternalConnectorUnreachable = Register("connector.external_unreachable", codes.Unavailable)
+	// CodeExternalConnectorVersionMismatch is raised when an external
+	// connector's dialed address does not implement the pconnector protocol
+	// version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin
+	// performs no version negotiation on the Reattach path, so this package
+	// must verify it explicitly via a Specify round trip).
+	CodeExternalConnectorVersionMismatch = Register("connector.external_version_mismatch", codes.FailedPrecondition)
 )
 
 // Fix is a structured, machine-appliable change that resolves an error. The same

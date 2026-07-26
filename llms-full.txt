@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (81)
+## 3. Error codes (83)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -627,6 +627,8 @@ Author: Meroxa, Inc.
 | `config.field_too_long` | InvalidArgument | config: field too long |
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
+| `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
+| `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
