@@ -27,14 +27,18 @@ allowlisted, host-executed HTTP call.
   host (full Go `net/http`) performs the I/O.
 - **Security boundary:** a host-side allowlist enforced in **two independent stages** — a coarse
   hostname/scheme pre-filter, then the **load-bearing resolved-IP check in the dialer's `Control`
-  hook on every dial** (the DNS-rebinding / TOCTOU defense). Private, link-local, loopback, and
-  reserved ranges are refused unless that exact IP is itself explicitly allowlisted (the local-Ollama
-  case). Redirects to non-allowlisted targets are not followed. Per-call timeout and response-size
-  cap are host-enforced, never guest-requestable.
-- **Configuration:** default **deny-all**. Egress is opt-in via a **host-reserved** config key,
-  clamped by an **engine-level ceiling** the Conduit operator sets — the guest can never widen its
-  own allowlist, because the resolved policy is bound host-side into the per-processor host-module
-  instance at `newWASMProcessor` time and is never mutable from guest code.
+  hook on every dial, for http and TLS alike** (the DNS-rebinding / TOCTOU defense). Private,
+  link-local, loopback, reserved, and embedded-v4 ranges (v4-mapped **and** NAT64 `64:ff9b::/96`) are
+  refused unless that exact **(IP, port)** pair is explicitly allowlisted (the local-Ollama case). The
+  transport uses **no proxy** (`Transport.Proxy` pinned `nil`, so `HTTP(S)_PROXY`/`ALL_PROXY` cannot
+  bypass the dialer); redirects to non-allowlisted targets are not followed; `Host`, `Authorization`,
+  and `Accept-Encoding` are host-reserved; per-call timeout and response-size cap are host-enforced.
+- **Configuration + credentials:** default **deny-all**. Egress is opt-in via a **host-reserved**
+  config key, clamped by an **engine-level ceiling** the Conduit operator sets. The guest can never
+  widen its own policy, because the resolved policy is threaded **per-call** into the per-processor
+  host-module instance (never held on a shared `Registry`/`PluginService` field — a tested isolation
+  invariant). **Credentials are host-injected** and mandatory: the guest names a secret; the host sets
+  `Authorization`; the key never enters guest memory.
 
 ## Context
 
@@ -102,9 +106,11 @@ this and this doc makes it a testable requirement (§ Security boundary, § Test
   streaming responses are out of scope (embedding endpoints return a small JSON body); a streaming
   ABI is a fundamentally different, cursor-stateful design and is not built here.
 - **Not raw sockets, not WASI-P2 `wasi:http`, not a new plugin transport.** See Alternatives.
-- **Not a secrets-management subsystem.** How the embedding processor's API key reaches the request
-  is a real decision this doc surfaces as an open question (host-side injection vs. guest-supplied
-  header), but the secret store itself is out of scope.
+- **Not a secrets-management subsystem.** The secret _store_ is out of scope. But the credential-flow
+  _mechanism_ is **not** left open: this doc mandates **host-side credential injection** (the guest
+  references a secret by name; the host resolves and injects the `Authorization` header; the key never
+  enters guest memory). That mechanism is specified in the ABI (§ "Host-injected credentials");
+  wiring it to a concrete secret backend is the out-of-scope part.
 - **Not a change to `conduit-connector-protocol` or the processor command protocol.** The new host
   function is additive to the WASM host-module surface only.
 - **Not TCP/UDP/arbitrary-protocol egress.** HTTP(S) only, with `https` the default and `http`
@@ -149,6 +155,10 @@ type HTTPRequest struct {
     URL     string            // parsed + validated host-side; see Security boundary
     Headers map[string][]string
     Body    []byte
+    // AuthSecretRef names a secret the HOST resolves and injects as the Authorization
+    // header. The guest never supplies the credential value; a guest-set Authorization
+    // header is rejected. See "Host-injected credentials".
+    AuthSecretRef string
 }
 
 type HTTPResponse struct {
@@ -189,6 +199,28 @@ response-size cap matters twice over:
 to the guest. Embedding responses are small JSON (a vector array + usage), so this is not a
 constraint in practice; it is called out so no future contributor assumes a streaming contract the
 ABI does not provide.
+
+### Host-injected credentials (mandatory — the guest never sees the key)
+
+The whole premise of this capability is that the guest is **untrusted**. A credential placed in guest
+memory is therefore one memory-disclosure bug — or one malicious guest binary — away from theft, and
+unlike a bad destination there is **no dial-time gate that can catch a stolen key leaving in a
+request body**. So credential handling is **not** an open choice; it is fixed:
+
+- **The guest never supplies the credential value.** `HTTPRequest.AuthSecretRef` carries a _name_
+  (e.g. `openai_api_key`); the host resolves that name against Conduit's secret mechanism and sets the
+  `Authorization` header itself, after all validation, immediately before dispatch.
+- **`Authorization` is a host-reserved header.** A guest-supplied `Authorization` (or any header on
+  the reserved-header denylist) is rejected with `ErrorCodeHTTPInvalidRequest` — there is **no**
+  guest-supplied-credential path at all, not even as a fallback.
+- **The name→secret binding is part of the per-processor policy** (bound host-side at processor open,
+  like the allowlist), so a guest cannot reference a secret its pipeline was not granted.
+- This closes the credential-theft leg of SSRF/exfiltration. It does **not** close data exfiltration
+  of pipeline _records_ to an allowlisted-but-hostile host — that residual risk (#14) remains a
+  policy/review concern, stated honestly below, not something credential injection can prevent.
+
+Wiring `AuthSecretRef` to a concrete secret store is out of scope (Non-goals); the reserved-header +
+name-reference mechanism is not, and lives here in the ABI.
 
 ### Error codes (the ABI's numeric band vs. the product's `ai.*` codes)
 
@@ -243,10 +275,26 @@ each `connect(2)`, for every candidate address the resolver returns**. The hook 
 IP-and-port about to be dialed and refuses the connection unless:
 
 - the IP is **not** in any refused range (below), **or**
-- that exact IP is itself an explicit entry in this processor's allowlist (the local-Ollama /
-  private-VPC-endpoint case).
+- that exact **(IP, port)** pair is itself an explicit entry in this processor's allowlist (the
+  local-Ollama / private-VPC-endpoint case).
 
-Refused ranges (canonical set; final list is an open question, but must at minimum cover):
+**The carve-out is scoped to the (IP, port) pair, never the IP alone.** Allowlisting
+`127.0.0.1:11434` (Ollama) must **not** implicitly admit `127.0.0.1:6379` (a local Redis),
+`127.0.0.1:5432` (Postgres), or any other loopback port — those are exactly the internal services an
+SSRF wants to reach. The `Control` hook has the port in hand (it receives `host:port`), so the check
+is against the pair; a matching IP on a non-allowlisted port is refused like any other private dial.
+
+**`Control` must govern both plain-HTTP and TLS dials.** The custom `net.Dialer` (carrying the
+`Control` hook) must be the dialer for `https` connections as well as `http` — i.e. the client sets
+`Transport.DialContext` and lets the standard TLS path build on it, and **must not** install a custom
+`DialTLSContext` that takes over connection establishment and bypasses `Control` entirely. An
+implementation that gates HTTP but reaches TLS targets through an un-hooked `DialTLSContext` has a
+complete Stage-2 bypass for exactly the `https` traffic this capability mostly carries; the
+rebinding test therefore runs against a real `https` target, not only an HTTP fixture (§ Testing).
+
+Refused ranges (canonical set; final list is an open question, but must at minimum cover — and note
+Teredo `2001::/32` and 6to4 `2002::/16` also embed IPv4 and should be unwrapped-and-rechecked or
+refused wholesale in the same pass as NAT64, tracked in Open Question #6):
 
 | Family | Ranges |
 | --- | --- |
@@ -255,12 +303,24 @@ Refused ranges (canonical set; final list is an open question, but must at minim
 | IPv6 loopback / unspecified | `::1/128`, `::/128` |
 | IPv6 link-local / ULA | `fe80::/10`, `fc00::/7` |
 | IPv4-mapped / -compatible IPv6 | `::ffff:0:0/96`, `::/96` — unwrapped to their v4 form, then re-checked |
+| IPv6 NAT64 (RFC 6052) | `64:ff9b::/96` — **unwrapped to its embedded v4 form, then re-checked** |
+
+**The NAT64 unwrap is load-bearing, not cosmetic.** `64:ff9b::/96` is the well-known NAT64 prefix: a
+DNS64 resolver (or a malicious authoritative server) can legitimately return
+`64:ff9b::a9fe:a9fe` — which _embeds_ `169.254.169.254`, the metadata endpoint — and a naive
+refused-range check that only knows about `::ffff:`-style v4-mapped addresses will not recognize it,
+so `Control` would dial straight to metadata over IPv6. The Stage-2 classifier must therefore unwrap
+the embedded IPv4 from **both** the v4-mapped/`::ffff:` form **and** the `64:ff9b::/96` NAT64 form,
+re-running the full v4 refused-range check on the extracted address, and refuse the whole
+`64:ff9b::/96` block outright as a belt-and-braces default (no legitimate embedding provider is
+reached only via a synthesized NAT64 address).
 
 Because the check runs on the **parsed `net.IP` about to be dialed**, it is immune to textual
-encoding tricks (decimal/octal/hex IPs, `0x`-forms, IPv6-mapped literals) — those all resolve to the
-same address bytes the hook inspects. Because it runs **per candidate address on every dial** (not
-once, not cached across calls), it closes the TOCTOU/rebinding window: the coarse hostname check and
-the actual connection can see different DNS answers, and only the connection-time answer governs.
+encoding tricks (decimal/octal/hex IPs, `0x`-forms, IPv6-mapped and NAT64-embedded literals) — those
+all resolve to the same address bytes the hook inspects, and the embedded-v4 forms are unwrapped
+before the range check. Because it runs **per candidate address on every dial** (not once, not cached
+across calls), it closes the TOCTOU/rebinding window: the coarse hostname check and the actual
+connection can see different DNS answers, and only the connection-time answer governs.
 
 For multi-answer DNS (a hostname returning several A/AAAA records, or happy-eyeballs dual-stack),
 each candidate connection triggers its own `Control` invocation, so a public+private mixed answer set
@@ -268,22 +328,44 @@ cannot smuggle a private dial through on a fallback attempt.
 
 ### Hardening rules
 
+- **The egress transport MUST NOT use a proxy — this is the single most critical rule after Stage 2.**
+  Go's default `http.Transport.Proxy` is `http.ProxyFromEnvironment`, which honors `HTTP_PROXY`,
+  `HTTPS_PROXY`, and `ALL_PROXY`. If any of those is set in the Conduit process environment, the
+  dialer only ever connects to the **proxy's** IP — so `Control` validates the proxy, not the true
+  destination — and for `https` the client issues a `CONNECT` tunnel through which the real target
+  **never passes through the dialer at all**. That is a complete Stage-1+Stage-2 bypass. The egress
+  `http.Transport.Proxy` **must be explicitly `nil`** (or a locked, non-environment-derived value the
+  operator sets deliberately as policy), never `ProxyFromEnvironment`. A test sets `HTTP_PROXY` /
+  `HTTPS_PROXY` / `ALL_PROXY` and asserts the egress client ignores them and still dials — and gates —
+  the real destination (§ Testing).
 - **Redirects are not followed** by default. The client's `CheckRedirect` returns an error, so a 3xx
   from an allowlisted server pointing at a non-allowlisted (or private) `Location` becomes a failed
   call (`ErrorCodeHTTPForbidden`/`ErrorCodeHTTPTransport`), never an automatic hop out of the
   allowlist. Embedding APIs do not need redirects; making the guest handle a 3xx explicitly keeps the
   policy honest. (If a future API needs follow-redirects, it re-runs Stages 1+2 on each hop — flagged
   as an open question, default off.)
-- **The `Host` header is derived from the validated URL, never a guest override.** A guest-supplied
-  `Host`/`:authority`/connection-control header is rejected (`ErrorCodeHTTPInvalidRequest`) so the
-  guest cannot present one hostname to the allowlist and another to the server (Host/SNI confusion).
+- **Host-reserved headers cannot be set by the guest.** `Host`/`:authority`, `Authorization` (§
+  "Host-injected credentials"), `Accept-Encoding`, and the connection-control headers are on a
+  reserved-header denylist; a guest attempt to set any of them is rejected
+  (`ErrorCodeHTTPInvalidRequest`). `Host` derives from the validated URL (so the guest cannot present
+  one hostname to the allowlist and another to the server — Host/SNI confusion); `Authorization` is
+  host-injected from a secret ref; `Accept-Encoding` is host-controlled for the reason in the next
+  bullet.
+- **`Accept-Encoding` is host-controlled so the decompression cap cannot be silently disarmed.** Go's
+  transport only performs transparent gzip decompression when the **caller did not set its own
+  `Accept-Encoding`**. If a guest sets `Accept-Encoding: gzip` itself, Go hands back the _compressed_
+  body untouched, and a naive host that applies its `io.LimitReader` to that stream ends up capping
+  the **compressed** size — so a decompression bomb passes the cap and only inflates when the guest
+  decompresses it. Blast radius is bounded (guest self-DoS, capped by WASM32's 4 GiB linear memory),
+  but it is closed cleanly by reserving `Accept-Encoding` to the host, which keeps transparent
+  decompression (and therefore the decompressed-stream cap) firmly in the host's control.
 - **Header names/values are validated** — CRLF and control characters are rejected (header/response
   splitting). `net/http` rejects most of these already; the host asserts it rather than relying on it.
-- **Decompression is bounded.** If the host lets the transport transparently decompress (`gzip`,
-  etc.), the response-size `io.LimitReader` wraps the **decompressed** stream, so a decompression
-  bomb (small body, huge inflation) still trips `ErrorCodeHTTPResponseTooLarge`. Alternatively the
-  host disables transparent decompression and caps the raw bytes; either is acceptable, a cap on the
-  decompressed size is not.
+- **Decompression is bounded.** With `Accept-Encoding` host-controlled (above), the transport's
+  transparent decompression stays on, and the response-size `io.LimitReader` wraps the
+  **decompressed** stream, so a decompression bomb (small body, huge inflation) still trips
+  `ErrorCodeHTTPResponseTooLarge`. Capping the compressed size instead is **not** acceptable — that is
+  exactly the failure the `Accept-Encoding` reservation prevents.
 - **Per-call timeout** (host-set, guest cannot extend) bounds dial + TLS + response-header + body
   read, so a slow/hung server fails deterministically to `ErrorCodeHTTPTimeout` rather than wedging
   the `Process` call.
@@ -297,14 +379,20 @@ cannot smuggle a private dial through on a fallback attempt.
 | 3 | Allowlisted hostname resolves to a private IP at dial time (DNS rebinding / TOCTOU) | Stage 2 resolved-IP check on every dial | `ErrorCodeHTTPForbidden` |
 | 4 | Allowlisted server 3xx-redirects to a non-allowlisted / private `Location` | Redirects not followed | failed call, no hop |
 | 5 | Encoded metadata IP (`0xA9FEA9FE`, octal, `::ffff:169.254.169.254`) | Stage 2 inspects parsed `net.IP`, v4-mapped unwrapped | `ErrorCodeHTTPForbidden` |
+| 5b | NAT64-embedded metadata (`64:ff9b::a9fe:a9fe` via DNS64 / hostile DNS) | Stage 2 unwraps NAT64 embedded v4 + refuses `64:ff9b::/96` | `ErrorCodeHTTPForbidden` |
 | 6 | Multi-answer DNS: one public + one private A record | Stage 2 fires per candidate address | private candidate refused |
 | 7 | Non-HTTP scheme (`file://`, `gopher://`, `unix://`) | Stage 1 scheme check | `ErrorCodeHTTPInvalidRequest` |
 | 8 | Header injection / response splitting (CRLF in a header) | Header validation | `ErrorCodeHTTPInvalidRequest` |
 | 9 | `Host` header override to bypass the allowlist string | `Host` derived from URL, override rejected | `ErrorCodeHTTPInvalidRequest` |
+| 9b | `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` set → dialer/Control see only the proxy, https CONNECT-tunnels the real target | `Transport.Proxy` pinned `nil`, env ignored | gating still applies to real dest |
+| 9c | Custom `DialTLSContext` bypasses the `net.Dialer` `Control` hook for https | Control governs http + TLS dials alike; no un-hooked `DialTLSContext` | Stage 2 fires on https too |
+| 9d | Carve-out abuse: allowlisted `127.0.0.1:11434` used to reach `127.0.0.1:6379` (Redis) | carve-out matches (IP, **port**) pair, not IP | `ErrorCodeHTTPForbidden` |
+| 9e | Guest sets `Accept-Encoding: gzip` to make the size cap measure compressed bytes | `Accept-Encoding` host-reserved; cap on decompressed stream | rejected / cap holds |
 | 10 | Oversized response body → host OOM | `io.LimitReader` at the cap | `ErrorCodeHTTPResponseTooLarge` |
 | 11 | Decompression bomb | cap applied to decompressed stream | `ErrorCodeHTTPResponseTooLarge` |
 | 12 | Slowloris / hung connection to wedge `Process` | per-call timeout | `ErrorCodeHTTPTimeout` |
 | 13 | Guest tries to widen its own allowlist via config it controls | policy bound host-side at instance open; guest copy not trusted | opt-in ignored, deny-all holds |
+| 13b | Guest reads a credential out of its own memory / a malicious guest exfiltrates the key | key never enters guest memory; host injects `Authorization` from a secret ref | no key to steal |
 | 14 | Exfiltration: guest POSTs records to an allowlisted-but-hostile host | **not prevented** — operator trust decision; bounded + audited | logged; see residual risk |
 
 **Residual risk (#14), stated plainly.** If an operator allowlists a host the attacker controls, the
@@ -318,13 +406,20 @@ one; the design makes the trust decision explicit and observable rather than imp
 ### The local-Ollama exception
 
 Local Ollama is served from `127.0.0.1:11434` (or a private VPC address). Stage 2 refuses
-loopback/private by default, so this case is handled by the **explicit-IP-allowlist carve-out**: an
-operator who lists `127.0.0.1:11434` (or a specific private endpoint) as an allowlist entry has that
-exact IP admitted through Stage 2. The distinction that keeps this from reopening the SSRF hole: an
-operator deliberately listing a loopback target in reviewed config is a decision; an
-`api.some-vendor.com` entry silently _resolving_ to `127.0.0.1` is not — and Stage 2 tells the two
-apart because the carve-out matches the **explicitly-listed IP**, not "any private address once a
-hostname is listed."
+loopback/private by default, so this case is handled by the **explicit-(IP, port)-allowlist
+carve-out**: an operator who lists `127.0.0.1:11434` (or a specific private endpoint) as an allowlist
+entry has that exact **(IP, port) pair** admitted through Stage 2. Two properties keep this from
+reopening the SSRF hole:
+
+- **The carve-out matches the explicitly-listed (IP, port), not the IP alone.** Allowlisting
+  `127.0.0.1:11434` does not admit `127.0.0.1:6379` (Redis) or any other loopback port — a matching
+  IP on an unlisted port is refused like any other private dial. This is the difference between "the
+  operator opened one local service" and "the operator opened all of loopback."
+- **It matches an explicitly-listed target, not a hostname that happens to resolve into the private
+  range.** An operator deliberately listing a loopback target in reviewed config is a decision; an
+  `api.some-vendor.com` entry silently _resolving_ to `127.0.0.1` is not — and Stage 2 tells the two
+  apart because the carve-out keys on the explicit (IP, port), never "any private address once a
+  hostname is listed."
 
 ## Configuration
 
@@ -347,21 +442,49 @@ Three properties, in order of precedence:
    affirmative operator action at both levels (defense in depth for shared/multi-tenant instances).
    Whether the ceiling defaults to deny-all or to "whatever pipelines request" is Open Question #1.
 
-### Why the guest cannot influence the policy
+### Why the guest cannot influence the policy — and why per-processor isolation is a tested invariant
 
-This is the architectural crux and it is a small but real departure from the schema pattern.
-`schemaService` is a **process-global singleton**: `createServices` (`pkg/conduit/runtime.go`)
-constructs one `procSchemaService` and hands it to `standalone.NewRegistry`, which shares it across
-every processor instance. Egress policy **cannot** be global — each processor's allowlist differs.
+This is the architectural crux, and it is a **more invasive change than the schema pattern**, not a
+"slightly more plumbing" one — the doc says so plainly because getting it wrong produces a
+cross-tenant policy leak.
 
-So the plumbing is: the resolved, clamped allowlist + timeout + size-cap for a given processor is
-computed by the engine from (pipeline processor config ∩ engine ceiling) **at the moment the
-processor is opened**, and bound into that processor's host-module instance via `hostModuleOptions`
-(the same seam that injects `schemaService` in `newWASMProcessor`). It lives in `hostModuleInstance`,
-host-side, for the life of the processor. The guest never receives a mutable copy and the host never
-re-reads policy from guest-supplied data. This requires threading the per-processor egress config
-through `Registry.MakeProcessor` → `newWASMProcessor` → `hostModuleOptions` — slightly more than the
-stateless schema wiring, and the one genuinely new bit of engine plumbing this capability adds.
+`schemaService` is a **process-global singleton**: `createServices` (`pkg/conduit/runtime.go:388-389`)
+constructs one `procSchemaService` and hands it to `standalone.NewRegistry`, which stores it as a
+`Registry` field and shares it across every processor instance (`registry.go:55,111`). Egress policy
+**cannot** be modeled that way — each processor's allowlist, secret refs, timeout, and size cap
+differ, so a `Registry`-level field would be shared state that leaks one pipeline's policy to another.
+
+**Hard requirement: no field on `standalone.Registry` (or `PluginService`) may hold egress policy.**
+The policy must be threaded **per-call** down to the per-processor host-module instance. That instance
+(`hostModuleInstance`, created in `newWASMProcessor`) is genuinely per-processor, so it is the correct
+and only place the resolved policy lives. Enforcing this means widening **three signatures plus their
+mocks**, because none of them carries the processor's config today:
+
+1. `PluginService.NewProcessor(ctx, pluginName, id)` (`pkg/plugin/processor/service.go:57`; the
+   interface is also declared at `pkg/processor/service.go:33`).
+2. `standalone.Registry.NewProcessor(ctx, fullName, id)` (`registry.go:123`).
+3. `newWASMProcessor(...)` → `hostModuleOptions(...)` (`processor.go:76,99`), the same seam that
+   injects `schemaService` — but here the injected value is per-call, not the shared singleton.
+
+Each gains a resolved-egress-policy argument (the allowlist ∩ engine ceiling, secret-ref bindings,
+timeout, size cap), computed by the engine from the `Instance`'s current config at open time. The
+gomock-generated `Registry`/`StandaloneRegistry` mocks (`pkg/plugin/processor/mock/registry.go`) and
+their recorders must be regenerated to match — a real, if mechanical, cost this doc names rather than
+hides.
+
+**Reconfigure rebinds policy — verified against the live hot-reload path.** The live in-place
+reconfigure (`MakeRunnableProcessorForReconfigure`, `pkg/processor/service.go:136-146`) builds a
+**fresh** processor through the very same `registry.NewProcessor(ctx, i.Plugin, i.ID)` →
+`newWASMProcessor` path as a cold start (`MakeRunnableProcessor`, `service.go:114`), dispensing from
+the instance's **already-updated** config, open-before-teardown. So when the per-processor egress
+policy is resolved at `NewProcessor` time, a reconfigure necessarily rebinds it to the then-current
+config — the "policy refreshes on reconfigure" property holds by construction, not by a separate
+mechanism, precisely because the reconfigure path is the same open path.
+
+**Tested invariant:** a multi-tenant isolation test runs two processors with two different allowlists
+on one Conduit instance and asserts neither processor's policy (allowlist, secret ref) is visible to
+or usable by the other — proving the policy is per-instance state, not shared `Registry` state
+(§ Testing).
 
 ### Allowlist entry syntax (proposed)
 
@@ -397,9 +520,11 @@ Per CLAUDE.md "think in failure modes first." Each has a defined, coded, non-sil
    `ErrorCodeHTTPResponseTooLarge`, connection closed, no partial body delivered to the guest.
 7. **Transport / TLS error.** Connection reset, TLS handshake failure, etc. → `ErrorCodeHTTPTransport`,
    retryable-transient classification.
-8. **Malicious guest (SSRF / exfil attempt).** Covered by the attack table; every attempt is
-   refused-and-logged (scenarios 1–13) or bounded-and-audited (14). The host never trusts the guest's
-   URL beyond using it as an input to Stages 1+2.
+8. **Malicious guest (SSRF / exfil / credential-theft attempt).** Covered by the attack table; every
+   attempt is refused-and-logged (scenarios 1–13b — including the proxy-env bypass 9b, the TLS-dial
+   bypass 9c, the carve-out-port abuse 9d, and credential theft 13b) or bounded-and-audited (14). The
+   host never trusts the guest's URL or headers beyond using them as inputs to Stages 1+2, and never
+   accepts a guest-supplied credential (the key is host-injected and never enters guest memory).
 9. **Backward/forward compat mismatch.** See next section — a load-time, discoverable failure, never
    a silent one.
 
@@ -427,7 +552,7 @@ Per CLAUDE.md "think in failure modes first." Each has a defined, coded, non-sil
   negotiation call, the capability is _present_ iff the host exports the function (discovered at load
   time as above) and _enabled_ iff the processor opted in (the first `Do` returns
   `ErrorCodeHTTPEgressDisabled` if not). This avoids an extra round-trip and extra ABI surface. Open
-  Question #4 asks whether a lightweight capability-probe is worth adding anyway.
+  Question #3 asks whether a lightweight capability-probe is worth adding anyway.
 
 ## Alternatives considered
 
@@ -494,32 +619,59 @@ processor that consumes it.
 
 - **Allowlist enforcement (Stage 1).** Table-driven: allowed host passes; non-allowlisted host,
   non-allowlisted port, and rejected scheme each return the correct numeric code.
-- **DNS-rebinding / resolved-IP check (Stage 2) — the headline test.** Inject a fake resolver that
-  returns a **public** IP for an allowlisted hostname on the first lookup and a
-  **private/loopback/link-local** IP on a subsequent lookup (simulating a rebind or a plain
-  private-resolving host). Assert the dial is **refused at the `Control` hook** regardless of the
-  hostname having passed Stage 1 — proving the check is at dial time against the actual address, not
-  once against the string. Parameterize across the full refused-range table (RFC 1918, `127/8`,
-  `169.254/16` incl. `169.254.169.254`, `::1`, `fe80::/10`, `fc00::/7`, v4-mapped-v6, `0.0.0.0`).
-- **The local-Ollama carve-out.** An explicitly-allowlisted `127.0.0.1:11434` entry is **not** blocked
-  by the Stage-2 private-range refusal — proving the refusal is explicit-IP-allowlist-aware, not a
-  blanket ban that would break the zero-key local path.
+- **DNS-rebinding / resolved-IP check (Stage 2) — the headline test, run against a real `https`
+  target.** Inject a fake resolver that returns a **public** IP for an allowlisted hostname on the
+  first lookup and a **private/loopback/link-local** IP on a subsequent lookup (simulating a rebind or
+  a plain private-resolving host). Assert the dial is **refused at the `Control` hook** regardless of
+  the hostname having passed Stage 1 — proving the check is at dial time against the actual address,
+  not once against the string. **The test target is `https`, not only an HTTP fixture**, so it proves
+  `Control` governs the TLS dial and is not bypassed by a custom `DialTLSContext` (MUST-FIX 4).
+  Parameterize across the full refused-range table (RFC 1918, `127/8`, `169.254/16` incl.
+  `169.254.169.254`, `100.64/10`, `::1`, `fe80::/10`, `fc00::/7`, `0.0.0.0`).
+- **Embedded-v4 unwrap: v4-mapped AND NAT64.** A companion table asserts both `::ffff:169.254.169.254`
+  (v4-mapped) **and** `64:ff9b::a9fe:a9fe` (NAT64-embedded metadata, RFC 6052) are refused — proving
+  the classifier unwraps the embedded v4 from the NAT64 prefix and re-checks it, not only the
+  `::ffff:` form (MUST-FIX 2). The fuzz target below exercises the same unwrap paths.
+- **Proxy-env bypass (MUST-FIX 1).** Set `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` in the test
+  process env; assert the egress client **ignores** them (dials, and Stage-2-gates, the real
+  destination) — i.e. `Transport.Proxy` is pinned `nil` and never `ProxyFromEnvironment`. Without this
+  test the most critical bypass is invisible.
+- **Carve-out is (IP, port)-scoped (MUST-FIX 3).** An allowlisted `127.0.0.1:11434` admits that pair
+  but an attempt to reach `127.0.0.1:6379` (same IP, different port) is **refused** — proving the
+  carve-out keys on the pair, not the IP alone.
+- **The local-Ollama carve-out (positive case).** An explicitly-allowlisted `127.0.0.1:11434` entry is
+  **not** blocked by the Stage-2 private-range refusal — proving the refusal is
+  explicit-(IP, port)-allowlist-aware, not a blanket ban that would break the zero-key local path.
 - **Redirect handling.** An allowlisted server returning a 3xx to a non-allowlisted / private
   `Location` results in a failed call, not an automatic hop.
-- **Header / request hardening.** CRLF in a header, a guest-supplied `Host` override, and a
-  non-http(s) scheme each return `ErrorCodeHTTPInvalidRequest`.
+- **Header / request hardening.** CRLF in a header, and a guest-supplied `Host`, `Authorization`, or
+  `Accept-Encoding` override each return `ErrorCodeHTTPInvalidRequest`; a non-http(s) scheme too.
+- **Host-injected credential (mandatory path).** Assert the guest's `AuthSecretRef` results in a
+  host-set `Authorization` header the guest never supplied, and that a guest attempt to set
+  `Authorization` directly is rejected — there is no guest-supplied-credential path.
+- **`Accept-Encoding` / decompression-bomb (MUST-FIX 5).** With `Accept-Encoding` host-reserved, a
+  small-but-hugely-inflating gzip body trips `ErrorCodeHTTPResponseTooLarge` (cap on the
+  **decompressed** stream); a test also asserts a guest-set `Accept-Encoding` is rejected so the cap
+  cannot be silently moved to the compressed size.
 - **Timeout.** A slow test server (delayed headers, then delayed body) trips `ErrorCodeHTTPTimeout`
   within the configured deadline.
-- **Response-size cap + decompression bomb.** An oversized body and a small-but-hugely-inflating gzip
-  body both trip `ErrorCodeHTTPResponseTooLarge`, with the cap enforced on the **decompressed** size.
+- **Oversized response.** A response exceeding the cap trips `ErrorCodeHTTPResponseTooLarge`,
+  connection closed, no partial body delivered.
 - **Config clamping.** A per-processor allowlist naming a host outside the engine ceiling yields the
   intersection (excess dropped with a warning); a non-opted-in processor gets
   `ErrorCodeHTTPEgressDisabled`; the guest cannot widen the policy via any config it supplies.
+- **Multi-tenant policy isolation (MUST-FIX 6).** Two processors with two different allowlists (and
+  different secret refs) on one Conduit instance: assert neither's policy is visible to or usable by
+  the other — the concrete proof that egress policy is per-`hostModuleInstance` state and that no
+  `Registry`/`PluginService` field holds it. A companion test drives a live reconfigure
+  (`MakeRunnableProcessorForReconfigure`) with a changed allowlist and asserts the rebuilt processor
+  enforces the **new** policy, not the pre-reconfigure one.
 - **Backward/forward compat.** New guest on old host → instantiation fails with an unresolved-import
   error (discoverable); old guest on new host → unaffected.
 - **Fuzzing (per CLAUDE.md "fuzz every parser boundary").** Fuzz the URL parser + allowlist matcher +
-  the refused-range classifier — these are the parser/decision boundaries where an encoding or
-  edge-case bug becomes an SSRF bypass. Native Go fuzzing, CI-short + scheduled-long.
+  the refused-range classifier (including the v4-mapped and NAT64 unwrap paths) — these are the
+  parser/decision boundaries where an encoding or edge-case bug becomes an SSRF bypass. Native Go
+  fuzzing, CI-short + scheduled-long.
 - **ABI round-trip (property).** `HTTPRequest`/`HTTPResponse` proto marshal/unmarshal round-trips
   under the park/resize protocol, including the buffer-too-small resize path, mirroring the existing
   schema-call tests.
@@ -533,32 +685,39 @@ processor that consumes it.
    (simpler for single-tenant / laptop use). Recommendation: deny-all engine default, overridable.
 2. **Allowlist entry syntax — wildcards.** Exact-host-only (recommended default) vs. permitting a
    single left-most-label wildcard (`*.api.openai.com`). Broad wildcards are out regardless. Confirm.
-3. **Secret / API-key handling — the most consequential question.** The embedding processor needs an
-   `Authorization: Bearer <key>` header. Two options: **(a)** the key flows from pipeline config into
-   the guest, and the guest puts it in `HTTPRequest.Headers` — simple, but the key lives in WASM guest
-   memory; or **(b)** the guest references a secret _by name_ and the **host injects** the actual
-   header from Conduit's secret store, so the key **never enters the sandbox**. Option (b) is
-   materially stronger (a compromised/malicious guest never sees the credential) but adds a
-   secret-resolution + reserved-header-injection step to the ABI. Recommendation leans (b); this
-   changes the ABI, so it needs a decision before implementation.
-4. **Capability-probe.** Ship with no explicit negotiation (present-iff-exported, enabled-iff-opted-in,
+3. **Capability-probe.** Ship with no explicit negotiation (present-iff-exported, enabled-iff-opted-in,
    as designed) or add a lightweight `egress_available`-style probe the guest can call first?
    Recommendation: none for v1; the load-time import failure + `ErrorCodeHTTPEgressDisabled` cover it.
-5. **Redirect policy default.** Recommend **never follow**. Confirm no v0.20 embedding provider needs
+4. **Redirect policy default.** Recommend **never follow**. Confirm no v0.20 embedding provider needs
    redirect-following (none of OpenAI/Voyage/Cohere/Ollama embeddings endpoints do).
-6. **Defaults to freeze vs. leave to implementation.** Per-call timeout (proposed 30s, matching the
+5. **Defaults to freeze vs. leave to implementation.** Per-call timeout (proposed 30s, matching the
    parent doc's provider timeout) and response-size cap (proposed a few MiB — embedding responses are
    small; the cap is a DoS bound, not a functional limit). Freeze now or leave as implementation-time
    constants like the parent doc did for batch size?
-7. **Refused-range set extensibility.** The canonical block-list (RFC 1918 / link-local / loopback /
-   ULA / v4-mapped) is fixed and non-negotiable as a floor. Should operators be able to **add** ranges
-   to the refusal set (tighter), and — the harder call — should the explicit-IP carve-out generalize
-   from "a single loopback/private IP" to "an operator-declared private CIDR" for private-VPC embedding
-   endpoints (the Ollama case at datacenter scale)? Recommendation: allow adding to the refusal set;
-   keep the carve-out to explicit IPs (not CIDRs) in v1 to keep the bypass surface minimal.
-8. **Ship gated as experimental?** Given this is a new security boundary, do we land it behind an
+6. **Refused-range set: NAT64/Teredo/6to4 unwrap and operator extensibility.** The canonical
+   block-list (RFC 1918 / link-local / loopback / ULA / v4-mapped / NAT64 `64:ff9b::/96`) is fixed and
+   non-negotiable as a floor, and the classifier unwraps embedded v4 from v4-mapped and NAT64 forms.
+   Two calls to confirm: (i) do we **also** unwrap-and-recheck (or refuse wholesale) Teredo
+   `2001::/32` and 6to4 `2002::/16`, which likewise embed v4 — recommendation: refuse wholesale by
+   default, since no legitimate embedding provider is reached only via those; and (ii) should
+   operators be able to **add** ranges to the refusal set (tighter), and should the explicit-(IP, port)
+   carve-out generalize to an "operator-declared private CIDR" for private-VPC embedding endpoints (the
+   Ollama case at datacenter scale)? Recommendation: allow adding to the refusal set; keep the
+   carve-out to explicit (IP, port) pairs (not CIDRs) in v1 to keep the bypass surface minimal.
+7. **Ship gated as experimental?** Given this is a new security boundary, do we land it behind an
    explicit `experimental`/feature-flag posture for the first release, with the flag removed once the
    embedding processor has exercised it in CI end-to-end?
+
+**Resolved (was an open question, now asserted — not a choice).** _Secret / API-key handling._
+Credentials are **host-injected**: the guest references a secret by name (`HTTPRequest.AuthSecretRef`),
+the host resolves and sets the `Authorization` header, and a guest-supplied `Authorization` is
+rejected outright — the key never enters guest memory. A guest-supplied-credential path was
+considered and **rejected**: the guest is untrusted, and unlike a bad destination there is no
+dial-time gate that can catch a stolen key leaving in a request body, so a key in guest memory is one
+memory-disclosure bug or one malicious binary away from theft. See § "Host-injected credentials". The
+data-exfiltration residual risk (#14 — records sent to an allowlisted-but-hostile host) is unaffected
+by this and remains a policy/review concern, stated honestly, not something credential injection can
+close.
 
 ## Related
 
