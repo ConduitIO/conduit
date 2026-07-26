@@ -30,6 +30,26 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
+// Header-name constants for names referenced in more than one place (the
+// reserved-request set and the hop-by-hop-response set overlap heavily). Kept as
+// constants so the two maps and their tests share one source of truth.
+const (
+	hdrHost               = "Host"
+	hdrAuthority          = ":authority"
+	hdrAuthorization      = "Authorization"
+	hdrAcceptEncoding     = "Accept-Encoding"
+	hdrConnection         = "Connection"
+	hdrProxyConnection    = "Proxy-Connection"
+	hdrProxyAuthorization = "Proxy-Authorization"
+	hdrProxyAuthenticate  = "Proxy-Authenticate"
+	hdrTransferEncoding   = "Transfer-Encoding"
+	hdrContentLength      = "Content-Length"
+	hdrUpgrade            = "Upgrade"
+	hdrKeepAlive          = "Keep-Alive"
+	hdrTE                 = "Te"
+	hdrTrailer            = "Trailer"
+)
+
 // reservedHeaders are host-controlled: a guest attempt to set any of them is
 // rejected with ErrHTTPInvalidRequest. Keys are canonical MIME form.
 //
@@ -42,19 +62,19 @@ import (
 //     guest-set Accept-Encoding would let a decompression bomb pass the cap).
 //   - Connection-control headers: never guest-settable.
 var reservedHeaders = map[string]struct{}{
-	"Host":                {},
-	":authority":          {}, // not canonicalizable, checked verbatim too
-	"Authorization":       {},
-	"Accept-Encoding":     {},
-	"Connection":          {},
-	"Proxy-Connection":    {},
-	"Proxy-Authorization": {},
-	"Transfer-Encoding":   {},
-	"Content-Length":      {},
-	"Upgrade":             {},
-	"Keep-Alive":          {},
-	"Te":                  {},
-	"Trailer":             {},
+	hdrHost:               {},
+	hdrAuthority:          {}, // not canonicalizable, checked verbatim too
+	hdrAuthorization:      {},
+	hdrAcceptEncoding:     {},
+	hdrConnection:         {},
+	hdrProxyConnection:    {},
+	hdrProxyAuthorization: {},
+	hdrTransferEncoding:   {},
+	hdrContentLength:      {},
+	hdrUpgrade:            {},
+	hdrKeepAlive:          {},
+	hdrTE:                 {},
+	hdrTrailer:            {},
 }
 
 // SecretResolver resolves a named secret to the value the host sets as the
@@ -412,7 +432,7 @@ func (s *Service) buildHTTPRequest(ctx context.Context, u *url.URL, method strin
 		if serr != nil {
 			return nil, egressErr(pprocutils.ErrHTTPInvalidRequest, "failed to resolve secret reference")
 		}
-		httpReq.Header.Set("Authorization", val)
+		httpReq.Header.Set(hdrAuthorization, val)
 	}
 
 	return httpReq, nil
@@ -489,15 +509,37 @@ func validHeaderValue(v string) bool {
 	return true
 }
 
+// hopByHopResponseHeaders are connection-scoped headers that are meaningless to
+// (and potentially confusing for) the guest: they describe the host<->origin
+// transport, not the response payload. Dropped on the way back. Canonical MIME form.
+var hopByHopResponseHeaders = map[string]struct{}{
+	hdrConnection:         {},
+	hdrProxyConnection:    {},
+	hdrKeepAlive:          {},
+	hdrTransferEncoding:   {},
+	hdrTE:                 {},
+	hdrTrailer:            {},
+	hdrUpgrade:            {},
+	hdrProxyAuthenticate:  {},
+	hdrProxyAuthorization: {},
+}
+
 // filterResponseHeaders copies response headers into a plain map, dropping
-// hop-by-hop headers. Authorization is a request header and never echoed here.
+// hop-by-hop (connection-scoped) headers so only end-to-end response headers
+// reach the guest. Authorization is a request header and never echoed here.
 func filterResponseHeaders(h http.Header) map[string][]string {
 	if len(h) == 0 {
 		return nil
 	}
 	out := make(map[string][]string, len(h))
 	for k, v := range h {
+		if _, hop := hopByHopResponseHeaders[textproto.CanonicalMIMEHeaderKey(k)]; hop {
+			continue
+		}
 		out[k] = append([]string(nil), v...)
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

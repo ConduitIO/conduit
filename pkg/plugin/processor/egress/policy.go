@@ -241,10 +241,27 @@ func ResolvePolicy(perProcessor Policy, ceiling Policy) (effective Policy, dropp
 		eff.MaxResponseBytes = DefaultMaxResponseBytes
 	}
 
-	// Ceiling with no entries but enabled == unrestricted host set.
+	// Ceiling with no entries but enabled == unrestricted host set (single-tenant
+	// convenience). Secret refs pass through unclamped in that mode too — the
+	// operator has declared this instance unrestricted.
 	if len(ceiling.Allowlist) == 0 {
 		eff.Allowlist = perProcessor.Allowlist
 		return eff, nil
+	}
+
+	// Restricted (multi-tenant) ceiling: clamp SecretRefs to the ceiling's granted
+	// set exactly as the allowlist is clamped, so one tenant cannot name a secret
+	// the operator did not grant this instance. An ungranted ref is dropped here
+	// (defense in depth) and would additionally fail closed per-request in
+	// buildHTTPRequest. A ceiling that grants no secrets clamps to none.
+	if len(perProcessor.SecretRefs) > 0 {
+		clamped := make(map[string]struct{})
+		for ref := range perProcessor.SecretRefs {
+			if _, ok := ceiling.SecretRefs[ref]; ok {
+				clamped[ref] = struct{}{}
+			}
+		}
+		eff.SecretRefs = clamped
 	}
 
 	ceilingSet := make(map[string]struct{}, len(ceiling.Allowlist))

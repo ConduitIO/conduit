@@ -144,6 +144,42 @@ func TestResolvePolicy_Clamping(t *testing.T) {
 		is.Equal(len(eff.Allowlist), 1)
 		is.Equal(len(dropped), 0)
 	})
+
+	// Regression: red-team finding #3 — SecretRefs must be clamped to the ceiling
+	// on a restricted (multi-tenant) ceiling, mirroring the allowlist intersection,
+	// so a tenant cannot name a secret the operator did not grant this instance.
+	t.Run("secret refs clamped by restricted ceiling", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.SecretRefs = map[string]struct{}{"openai_key": {}, "stolen_key": {}}
+		ceiling := mk("api.openai.com")
+		ceiling.SecretRefs = map[string]struct{}{"openai_key": {}} // only openai granted
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.True(eff.Enabled)
+		_, granted := eff.SecretRefs["openai_key"]
+		is.True(granted) // granted ref survives
+		_, leaked := eff.SecretRefs["stolen_key"]
+		is.True(!leaked) // ungranted ref clamped away
+		is.Equal(len(eff.SecretRefs), 1)
+	})
+
+	t.Run("restricted ceiling granting no secrets clamps to none", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.SecretRefs = map[string]struct{}{"openai_key": {}}
+		ceiling := mk("api.openai.com") // no SecretRefs granted
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.Equal(len(eff.SecretRefs), 0) // nothing granted => nothing survives
+	})
+
+	t.Run("unrestricted ceiling passes secret refs through", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.SecretRefs = map[string]struct{}{"openai_key": {}}
+		ceiling := Policy{Enabled: true} // unrestricted single-tenant mode
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.Equal(len(eff.SecretRefs), 1) // convenience mode: no clamp
+	})
 }
 
 // FuzzParseAllowEntry fuzzes the allowlist-entry parser + Stage-1 matcher — a

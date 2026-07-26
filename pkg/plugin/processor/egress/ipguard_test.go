@@ -62,6 +62,13 @@ func TestRefuse_RefusedRanges(t *testing.T) {
 		{"Teredo", "2001::1"},
 		{"Teredo full", "2001:0:4136:e378:8000:63bf:3fff:fdd2"},
 		{"v4-compatible metadata", "::169.254.169.254"},
+		// Regression: red-team findings #1/#2 — the two encoding-gap ranges the
+		// classifier previously let through.
+		{"v4-translated metadata (::ffff:0:169.254.169.254)", "::ffff:0:169.254.169.254"},
+		{"v4-translated private", "::ffff:0:10.0.0.1"},
+		{"v4-translated prefix base", "::ffff:0:0:0"},
+		{"v6 site-local (deprecated fec0::/10)", "fec0::1"},
+		{"v6 site-local high", "fecf:ffff::1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,6 +140,8 @@ func FuzzRefuse(f *testing.F) {
 		net.ParseIP("::ffff:169.254.169.254").To16(),
 		net.ParseIP("64:ff9b::a9fe:a9fe").To16(),
 		net.ParseIP("2002:a9fe:a9fe::1").To16(),
+		net.ParseIP("::ffff:0:169.254.169.254").To16(), // v4-translated (finding #1)
+		net.ParseIP("fec0::1").To16(),                  // deprecated site-local (finding #2)
 		net.ParseIP("8.8.8.8").To4(),
 		net.ParseIP("2606:4700::1").To16(),
 	}

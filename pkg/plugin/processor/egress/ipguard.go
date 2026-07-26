@@ -29,9 +29,11 @@ const (
 	reasonV4CGNAT      refusedReason = "v4_cgnat"
 	reasonV6Loopback   refusedReason = "v6_loopback_or_unspecified"
 	reasonV6LinkLocal  refusedReason = "v6_link_local"
+	reasonV6SiteLocal  refusedReason = "v6_site_local"
 	reasonV6ULA        refusedReason = "v6_ula"
 	reasonV4Mapped     refusedReason = "v4_mapped_embedded"
 	reasonV4Compatible refusedReason = "v4_compatible_embedded"
+	reasonV4Translated refusedReason = "v4_translated_embedded"
 	reasonNAT64        refusedReason = "nat64_embedded_v4"
 	reasonSixToFour    refusedReason = "6to4_embedded_v4"
 	reasonTeredo       refusedReason = "teredo_embedded_v4"
@@ -74,10 +76,21 @@ var refusedV6 = []struct {
 	{mustCIDR("::1/128"), reasonV6Loopback},
 	{mustCIDR("::/128"), reasonV6Loopback},
 	{mustCIDR("fe80::/10"), reasonV6LinkLocal},
+	{mustCIDR("fec0::/10"), reasonV6SiteLocal}, // RFC 3879 deprecated site-local, still parseable/private
 	{mustCIDR("fc00::/7"), reasonV6ULA},
 }
 
-var nat64Net = mustCIDR("64:ff9b::/96") // RFC 6052 well-known NAT64 prefix
+var (
+	nat64Net = mustCIDR("64:ff9b::/96") // RFC 6052 well-known NAT64 prefix
+	// v4TranslatedNet is the RFC 6052 IPv4-Translated special-purpose prefix. It
+	// is DISTINCT from the v4-mapped ::ffff:0:0/96 that ip.To4() unwraps: the
+	// embedded v4 sits one 16-bit group further right (bytes [12:16] with ffff at
+	// bytes [8:9]), so To4() returns nil for it and classifyV4 never sees it. A
+	// DNS64/SIIT translator can synthesize ::ffff:0:<metadata-v4> to smuggle a
+	// private/metadata dial past a gate that only unwraps v4-mapped — refuse the
+	// whole block wholesale, in the same threat class as NAT64/6to4/Teredo.
+	v4TranslatedNet = mustCIDR("::ffff:0:0:0/96")
+)
 
 // classifyV4 runs the IPv4 refused-range floor on a 4-byte (or v4-mapped) IP.
 func classifyV4(ip net.IP) refusedReason {
@@ -144,6 +157,12 @@ func Refuse(ip net.IP) (bool, refusedReason) {
 	if nat64Net.Contains(ip16) {
 		return true, reasonNAT64
 	}
+	// IPv4-Translated ::ffff:0:0:0/96 (RFC 6052) — embeds a v4 in bytes [12:16]
+	// that To4() does NOT unwrap (ffff sits at [8:9], not [10:11]); refuse
+	// wholesale so a synthesized ::ffff:0:<private-v4> cannot slip the gate.
+	if v4TranslatedNet.Contains(ip16) {
+		return true, reasonV4Translated
+	}
 	// 6to4 2002::/16 embeds the v4 in bytes [2:6]; refuse wholesale.
 	if ip16[0] == 0x20 && ip16[1] == 0x02 {
 		return true, reasonSixToFour
@@ -199,6 +218,8 @@ func embeddedV4(ip net.IP) net.IP {
 	}
 	switch {
 	case nat64Net.Contains(ip16):
+		return net.IPv4(ip16[12], ip16[13], ip16[14], ip16[15])
+	case v4TranslatedNet.Contains(ip16): // RFC 6052 IPv4-translated: embedded v4 in [12:16]
 		return net.IPv4(ip16[12], ip16[13], ip16[14], ip16[15])
 	case ip16[0] == 0x20 && ip16[1] == 0x02: // 6to4
 		return net.IPv4(ip16[2], ip16[3], ip16[4], ip16[5])

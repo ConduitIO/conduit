@@ -100,6 +100,33 @@ func TestService_DenyAll(t *testing.T) {
 	is.True(cerrors.Is(err, pprocutils.ErrHTTPEgressDisabled))
 }
 
+// TestFilterResponseHeaders_DropsHopByHop is the regression test for red-team
+// finding #4: connection-scoped (hop-by-hop) response headers must not be echoed
+// to the guest; end-to-end headers must pass through.
+func TestFilterResponseHeaders_DropsHopByHop(t *testing.T) {
+	is := is.New(t)
+	in := http.Header{
+		"Content-Type":      {"application/json"},
+		hdrConnection:       {"keep-alive"},
+		hdrTransferEncoding: {"chunked"},
+		hdrKeepAlive:        {"timeout=5"},
+		hdrTrailer:          {"Expires"},
+		hdrUpgrade:          {"h2c"},
+		"X-Request-Id":      {"abc123"},
+	}
+	out := filterResponseHeaders(in)
+	// End-to-end headers survive.
+	is.Equal(out["Content-Type"], []string{"application/json"})
+	is.Equal(out["X-Request-Id"], []string{"abc123"})
+	// Hop-by-hop headers are dropped.
+	for _, hop := range []string{hdrConnection, hdrTransferEncoding, hdrKeepAlive, hdrTrailer, hdrUpgrade} {
+		_, present := out[hop]
+		is.True(!present)
+	}
+	// A response of only hop-by-hop headers filters down to nil, not an empty map.
+	is.Equal(filterResponseHeaders(http.Header{hdrConnection: {"close"}}), nil)
+}
+
 func TestService_Stage1_Allowlist(t *testing.T) {
 	is := is.New(t)
 	s := New(mustAllow(t, "api.openai.com:443"), log.Nop())
