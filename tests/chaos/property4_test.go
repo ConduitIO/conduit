@@ -241,6 +241,58 @@ func (h *funnelHarness) waitDelivered(t *testing.T, n int, timeout time.Duration
 	)
 }
 
+// waitUpstreamCommitted polls until the synthetic upstream's committed watermark
+// equals want, or fails after timeout. On the halt path, waitHalted returns as
+// soon as Do propagates the fatal error, but the funnel's acks for records
+// handled BEFORE the halt (and thus the upstream commits they drive) land
+// ASYNCHRONOUSLY relative to that — so reading the watermark the instant
+// waitHalted returns races that pipeline. Under CI load (the full -race suite
+// contending) the last handled position's commit can lag the read, and a commit
+// still in flight when the test returns can even race t.TempDir cleanup (a
+// "rename ... no such file" on the store's atomic commit). Polling to the exact
+// expected value removes both races: it waits for precisely the commits that
+// must happen and guarantees they have landed before the test proceeds. It
+// fails loudly if the watermark advances PAST want — that would be the real
+// invariant-6 violation (a halted/DLQ'd record acked upstream "for free").
+func (h *funnelHarness) waitUpstreamCommitted(t *testing.T, want uint64, timeout time.Duration) {
+	t.Helper()
+	is := is.New(t)
+	deadline := time.Now().Add(timeout)
+	var last uint64
+	for time.Now().Before(deadline) {
+		committed, err := h.built.upstream.Committed()
+		is.NoErr(err)
+		last = committed
+		if committed == want {
+			return
+		}
+		if committed > want {
+			t.Fatalf("upstream committed watermark advanced to %d, past the expected %d - a handled-record was acked upstream that should not have been (invariant 6)", committed, want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for upstream committed watermark to reach %d (last observed %d)", want, last)
+}
+
+// waitPersistedPosition polls Conduit's own durably-persisted resume position
+// until it equals want, for the same async-ack reason as waitUpstreamCommitted.
+func (h *funnelHarness) waitPersistedPosition(t *testing.T, want uint64, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last uint64
+	for time.Now().Before(deadline) {
+		last = h.persistedPosition(t)
+		if last == want {
+			return
+		}
+		if last > want {
+			t.Fatalf("persisted resume position advanced to %d, past the expected %d (invariant 6)", last, want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for persisted resume position to reach %d (last observed %d)", want, last)
+}
+
 // stopGracefully stops the worker (draining any in-flight batch, tearing
 // down the source) and waits for the Do goroutine to return, asserting it
 // returned cleanly (no error) - used by the DLQ-routing case, which is
@@ -423,11 +475,13 @@ func TestSchemaDrift_TransportHalf_Halt_PositionNeverAdvances(t *testing.T) {
 	// The core invariant-6 transport assertion: the persisted/upstream
 	// position must NEVER advance past the last successfully handled record
 	// (2) - the drift record must never be acked upstream "for free" just
-	// because the pipeline gave up on it.
-	committed, err := h.built.upstream.Committed()
-	is.NoErr(err)
-	is.Equal(committed, uint64(2))
-	is.Equal(h.persistedPosition(t), uint64(2)) // Conduit's own persisted resume position agrees
+	// because the pipeline gave up on it. Poll (don't read instantly): the
+	// halt path's acks for positions 1-2 land asynchronously relative to
+	// waitHalted returning - see waitUpstreamCommitted. Both helpers fail loudly
+	// if the watermark ever creeps PAST 2, which is the actual invariant-6
+	// violation this test exists to catch.
+	h.waitUpstreamCommitted(t, 2, 10*time.Second)
+	h.waitPersistedPosition(t, 2, 10*time.Second) // Conduit's own persisted resume position agrees
 
 	// At-least-once: a restart must redeliver the unhandled record, not skip
 	// it.

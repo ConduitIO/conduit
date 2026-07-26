@@ -343,7 +343,13 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// pipeline errors contain only string messages, so we can only compare the errors by the messages
 	t.Log(pl.Error)
 
-	event, eventReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	// The OnFailure event is emitted as part of the degradation that WaitPipeline
+	// above already observed, so it arrives ~immediately - but it's delivered on a
+	// separate goroutine, so a too-tight timeout flakes under CI load (the full
+	// -race suite saturating CPUs can delay the send past a sub-second window).
+	// A generous bound removes the flake without weakening the assertion: the
+	// event still MUST arrive.
+	event, eventReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 10*time.Second)
 	is.NoErr(err)
 	is.True(eventReceived)
 	is.Equal(pl.ID, event.ID)
