@@ -12,14 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package chaos is the repo's first chaos-testing harness (v0.19 Workstream 7,
-// DBZ-1). It is deliberately minimal — sized for one scenario family (a SIGKILL
-// crash-safety test on the source connector's offset↔position bridge), not a
-// generalized chaos framework. If a second scenario (DBZ-2) ever needs one,
-// it should generalize from this package rather than the reverse; see
-// docs/design-documents (dbz1-chaos.md, the design doc this package
-// implements) for why building the generalized skeleton now would be
-// speculative generality.
+// Package chaos is the repo's chaos-testing harness. It started (v0.19
+// Workstream 7, DBZ-1) deliberately minimal — sized for one scenario family
+// (a SIGKILL crash-safety test on the source connector's offset↔position
+// bridge), not a generalized chaos framework; DBZ-1's own doc comment said
+// that if a second scenario ever needed one, it should generalize from this
+// package rather than build a speculative skeleton ahead of need.
+//
+// DBZ-2 Phase 1a (docs/design-documents/20260726-dbz2-cdc-correctness-suite.md)
+// is that second scenario: it generalizes chaosPlugin (upstream.go) two ways
+// — a two-phase snapshot/stream producer with a HANDOFF marker
+// (snapshotK/snapshotPaceMS) and a multi-key partition producer
+// (numKeys/ACK_ORDER) — both opt-in via zero-valued fields, so DBZ-1's
+// original single-phase, single-key scenarios (sigkill_test.go) are
+// unchanged. It adds three properties, still scoped to CDC correctness (not
+// a general fault-injection framework — see the design doc's Non-goals):
+//
+//   - Property 1 (handoff_test.go): snapshot->stream continuity, a no-crash
+//     smoke test. Deliberately NOT evidence that handoff is atomic — the
+//     engine stores one opaque monotone position with no persisted boundary
+//     state, so a clean run is near-tautological. Real handoff atomicity is
+//     a connector property, deferred to DBZ-3 and the DBZ-2 contract.
+//   - Property 2 (property2_test.go): at-least-once under SIGKILL at three
+//     producer-timing points (mid-snapshot, mid-handoff, mid-position-write),
+//     against both upstream prune classes. The engine exposes exactly two
+//     post-crash resume states (empty, valid-stale) — mid-handoff is a
+//     producer-pacing variant that collapses into one of those two, not a
+//     fictional third "boundary" state; see resumeShape's doc comment.
+//   - Property 3 (ordering_test.go): per-partition ack-delivery ordering.
+//     Unlike Properties 1/2 this never crashes or restarts — it asserts
+//     pkg/connector/source.go's onPersistFlushed delivers acks to the
+//     plugin in strict Source.Ack call order, one Ack-call at a time, via a
+//     real per-key delivery ledger (not just a max-position counter).
+//
+// Property 4 (schema-drift transport half, requiring a real funnel.Worker +
+// DLQ + destination the harness doesn't yet have) and the SIGTERM/Teardown
+// graceful-shutdown case are out of scope for Phase 1a — see the design
+// doc's Rollout section for their own phase.
 //
 // # What this package tests, and why the real Debezium wrapper isn't here
 //

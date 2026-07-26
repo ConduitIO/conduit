@@ -38,19 +38,24 @@ import (
 // conduit run's actual config surface (see doc.go / the design doc's
 // observability section on this exact point).
 const (
-	envChild        = "CONDUIT_CHAOS_CHILD"
-	envDBDir        = "CONDUIT_CHAOS_DB_DIR"
-	envUpstreamDir  = "CONDUIT_CHAOS_UPSTREAM_DIR"
-	envPrune        = "CONDUIT_CHAOS_PRUNE"
-	envPaceMS       = "CONDUIT_CHAOS_PACE_MS"
-	envTotal        = "CONDUIT_CHAOS_TOTAL"
-	instanceID      = "chaos-source"
-	instancePlugin  = "chaos-plugin"
-	instancePipe    = "chaos-pipeline"
-	markerOpenGap   = "OPEN_GAP_ERROR"
-	markerDone      = "DONE"
-	markerFatal     = "FATAL"
-	markerCorruptPo = "CORRUPT_POSITION"
+	envChild          = "CONDUIT_CHAOS_CHILD"
+	envDBDir          = "CONDUIT_CHAOS_DB_DIR"
+	envUpstreamDir    = "CONDUIT_CHAOS_UPSTREAM_DIR"
+	envPrune          = "CONDUIT_CHAOS_PRUNE"
+	envPaceMS         = "CONDUIT_CHAOS_PACE_MS"
+	envTotal          = "CONDUIT_CHAOS_TOTAL"
+	envSnapshotK      = "CONDUIT_CHAOS_SNAPSHOT_K"
+	envSnapshotPaceMS = "CONDUIT_CHAOS_SNAPSHOT_PACE_MS"
+	envNumKeys        = "CONDUIT_CHAOS_NUM_KEYS"
+	instanceID        = "chaos-source"
+	instancePlugin    = "chaos-plugin"
+	instancePipe      = "chaos-pipeline"
+	markerOpenGap     = "OPEN_GAP_ERROR"
+	markerDone        = "DONE"
+	markerFatal       = "FATAL"
+	markerCorruptPo   = "CORRUPT_POSITION"
+	markerHandoff     = "HANDOFF"   // Property 1/2: producer crossed the snapshot->stream boundary, see upstream.go/produceLoop
+	markerAckOrder    = "ACK_ORDER" // Property 3: per-key ack delivery ledger, see upstream.go/ackLoop
 )
 
 // exitCode values the parent harness distinguishes between. An OPEN_GAP_ERROR
@@ -80,6 +85,17 @@ type childEnv struct {
 	prune       bool
 	paceMS      int
 	total       uint64
+
+	// snapshotK/snapshotPaceMS: Property 1/2's two-phase producer knobs.
+	// snapshotK == 0 means "no distinct snapshot phase" (DBZ-1's original
+	// single-phase behavior) - see chaosPlugin's type doc (upstream.go).
+	snapshotK      uint64
+	snapshotPaceMS int
+
+	// numKeys: Property 3's multi-key knob. numKeys <= 1 means "single,
+	// unkeyed position space" (DBZ-1's original behavior) - see
+	// chaosPlugin's type doc (upstream.go).
+	numKeys int
 }
 
 // parseChildEnv reads and validates the child's environment. Any failure
@@ -104,6 +120,32 @@ func parseChildEnv() childEnv {
 		os.Exit(exitBadArgs)
 	}
 	cfg.total = total
+
+	// snapshotK/snapshotPaceMS/numKeys default to 0 (via strconv's error
+	// return on an empty string) when the parent didn't opt into Property
+	// 1/2's two-phase producer or Property 3's multi-key mode - childConfig.env
+	// always sets these explicitly (defaulting to "0"), so an empty/unparseable
+	// value here IS a harness misconfiguration, not a legitimate "unset".
+	snapshotK, err := strconv.ParseUint(os.Getenv(envSnapshotK), 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envSnapshotK, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.snapshotK = snapshotK
+
+	snapshotPaceMS, err := strconv.Atoi(os.Getenv(envSnapshotPaceMS))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envSnapshotPaceMS, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.snapshotPaceMS = snapshotPaceMS
+
+	numKeys, err := strconv.Atoi(os.Getenv(envNumKeys))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envNumKeys, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.numKeys = numKeys
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s and %s are required\n", markerFatal, envDBDir, envUpstreamDir)
@@ -154,9 +196,23 @@ func printResumePosition(instance *connector.Instance) {
 }
 
 // runReadAckLoop reads and immediately acks records one batch at a time
-// until the last acked position reaches total (or forever, if total is 0).
-// It exits the process directly on any Read/Ack error.
-func runReadAckLoop(ctx context.Context, src *connector.Source, total uint64) {
+// until termination, then returns. It exits the process directly on any
+// Read/Ack error.
+//
+// Termination is decided one of two ways, selected by keyed:
+//   - keyed == false (Property 1/2, single global position space): decode
+//     the last acked position and stop once it reaches total. This is what
+//     makes RESTART termination correct - a resumed run only reads/acks the
+//     REMAINING positions (resume+1..total), so a plain records-processed
+//     count would stop too early.
+//   - keyed == true (Property 3, multi-key "k<i>:<seq>" positions): stop
+//     once the total NUMBER of records processed in this run reaches total.
+//     Property 3 never restarts (see chaosPlugin's type doc, upstream.go),
+//     so there is no resume offset to account for, and the keyed position
+//     encoding isn't a single monotone counter decodePosition could compare
+//     against total in the first place.
+func runReadAckLoop(ctx context.Context, src *connector.Source, total uint64, keyed bool) {
+	var processed uint64
 	for {
 		recs, err := src.Read(ctx)
 		if err != nil {
@@ -173,11 +229,19 @@ func runReadAckLoop(ctx context.Context, src *connector.Source, total uint64) {
 			os.Exit(exitOpenOtherError)
 		}
 
-		if total > 0 {
-			last, _ := decodePosition(positions[len(positions)-1])
-			if last >= total {
+		if total == 0 {
+			continue
+		}
+		if keyed {
+			processed += uint64(len(recs))
+			if processed >= total {
 				return
 			}
+			continue
+		}
+		last, _ := decodePosition(positions[len(positions)-1])
+		if last >= total {
+			return
 		}
 	}
 }
@@ -215,7 +279,14 @@ func runChild() {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
 	}
-	plugin := &chaosPlugin{store: upstream, total: cfg.total, paceMS: cfg.paceMS}
+	plugin := &chaosPlugin{
+		store:          upstream,
+		total:          cfg.total,
+		paceMS:         cfg.paceMS,
+		snapshotK:      cfg.snapshotK,
+		snapshotPaceMS: cfg.snapshotPaceMS,
+		numKeys:        cfg.numKeys,
+	}
 
 	fetcher := staticFetcher{instance.Plugin: staticDispenser{source: plugin}}
 	c, err := instance.Connector(ctx, fetcher)
@@ -245,17 +316,30 @@ func runChild() {
 		os.Exit(exitOpenOtherError)
 	}
 
-	runReadAckLoop(ctx, src, cfg.total)
+	keyed := cfg.numKeys > 1
+	runReadAckLoop(ctx, src, cfg.total, keyed)
 
 	// src.Ack only guarantees the ack was HANDED OFF to the plugin
 	// (stream.Send rendezvous with the plugin's Recv) - it does not wait for
-	// chaosPlugin.ackLoop's subsequent, synchronous upstream.Commit call to
-	// finish. Without waiting here, this process could os.Exit before that
-	// last commit's fsync completes, truncating the run by one position and
-	// producing a false-positive gap that has nothing to do with the engine
-	// code under test. This wait is test-harness synchronization only - it
-	// has no analog in (and makes no claim about) production code.
-	waitForUpstreamCommitted(upstream, cfg.total)
+	// chaosPlugin.ackLoop's subsequent side effects to finish. Without
+	// waiting here, this process could os.Exit before those side effects
+	// land, truncating the run by one position and producing a
+	// false-positive gap/missing-ledger-entry that has nothing to do with
+	// the engine code under test. This wait is test-harness synchronization
+	// only - it has no analog in (and makes no claim about) production code.
+	//
+	// Property 3 (keyed) has no single upstream watermark to wait on (see
+	// ackLoop) - it waits on chaosPlugin.ackedCount instead, which tracks
+	// exactly the same thing (every ACK_ORDER line has actually been
+	// printed) via a different signal.
+	if keyed {
+		if !plugin.waitForAckedCount(cfg.total, 5*time.Second) {
+			fmt.Fprintf(os.Stderr, "%s: timed out waiting for plugin to ack %d positions\n", markerFatal, cfg.total)
+			os.Exit(exitOpenOtherError)
+		}
+	} else {
+		waitForUpstreamCommitted(upstream, cfg.total)
+	}
 
 	// Graceful path: only reached when this run was allowed to finish
 	// (the parent didn't SIGKILL it). Tear down cleanly so the final
