@@ -45,10 +45,41 @@
 //     plugin in strict Source.Ack call order, one Ack-call at a time, via a
 //     real per-key delivery ledger (not just a max-position counter).
 //
-// Property 4 (schema-drift transport half, requiring a real funnel.Worker +
-// DLQ + destination the harness doesn't yet have) and the SIGTERM/Teardown
-// graceful-shutdown case are out of scope for Phase 1a — see the design
-// doc's Rollout section for their own phase.
+// DBZ-2 Phase 1b (per DeVaris's sign-off, 2026-07-26, PR #2692) adds the two
+// cases Phase 1a deferred — both pulled forward because the AI-pipeline
+// record-path work depends on the engine-side no-silent-drop gate:
+//
+//   - Property 4 transport half (property4_test.go, invariant 6): the one
+//     property in this package that is not near-verbatim harness reuse. The
+//     direct child.go read/ack loop (runReadAckLoop) deliberately bypasses
+//     the funnel, DLQ, and any destination by calling src.Read/src.Ack
+//     directly — so there was previously no routing path in this package to
+//     assert invariant 6 against. property4_test.go stands up a real
+//     pkg/lifecycle-poc/funnel.Worker (SourceTask wrapping the same real
+//     *connector.Source Properties 1-3 use, via buildChild) with a small
+//     transport-level drift-detection Task and a synthetic destination
+//     behind a real funnel.DLQ, and drives a record carrying chaosPlugin's
+//     synthetic drift/poison marker (metadataDriftKey, upstream.go) through
+//     it under two funnel.DLQ configurations: always-route (the "DLQ"
+//     policy) and never-route (the "halt" policy, DLQ effectively disabled —
+//     see newFunnelHarness's doc for the exact dlqWindow semantics that
+//     produce each). It is deliberately NOT a crash-safety scenario (no
+//     SIGKILL, no cross-process re-exec) — it is a routing/ack/position
+//     correctness property. Per the design doc's Q1 boundary, this is a
+//     transport-level marker check, never a real schema/DDL engine; real
+//     drift-policy application against a real database is DBZ-3's job.
+//   - SIGTERM/invariant-7 (sigterm_test.go): the graceful-path complement to
+//     Property 2's SIGKILL cases. It mirrors the cross-process child pattern
+//     (runChildSigterm, child.go) but sends SIGTERM instead of SIGKILL,
+//     asserting Source.Teardown's flush-and-wait-then-stopStream ordering
+//     (source.go:249-326) actually drains the ack that was still deferred at
+//     the moment the signal landed — no restart required, unlike the SIGKILL
+//     cases' "eventually safe after a restart" guarantee. Because
+//     runChildSigterm has no funnel.Worker serializing its read/ack loop
+//     against Teardown, it reconstructs that same discipline directly
+//     (processingMu, mirroring worker.go's processingLock) — see its doc
+//     comment for why Source.Teardown's own doc explicitly delegates that
+//     guarantee to the caller.
 //
 // # What this package tests, and why the real Debezium wrapper isn't here
 //

@@ -51,6 +51,22 @@ type childConfig struct {
 	// doc, upstream.go). Zero/one preserves DBZ-1's original,
 	// single-position-space behavior.
 	numKeys int
+
+	// driftAt: Property 4's synthetic drift/poison-marker knob (see
+	// chaosPlugin.driftAt's field doc, upstream.go). Zero preserves every
+	// existing scenario's behavior unchanged - no record in the run carries
+	// the marker. Property 4 itself (property4_test.go) drives this
+	// in-process via buildChild directly, not through this cross-process
+	// config; this field exists so the knob is available end-to-end for
+	// symmetry/parity with the rest of childConfig, and so a future
+	// cross-process drift scenario doesn't need new plumbing.
+	driftAt uint64
+
+	// sigtermMode: DBZ-2's SIGTERM/invariant-7 knob (see runChildSigterm,
+	// child.go, and sigterm_test.go). false preserves every existing
+	// scenario's behavior unchanged - the child runs runChild, not
+	// runChildSigterm.
+	sigtermMode bool
 }
 
 func (c childConfig) env() []string {
@@ -64,6 +80,8 @@ func (c childConfig) env() []string {
 		envSnapshotK + "=" + strconv.FormatUint(c.snapshotK, 10),
 		envSnapshotPaceMS + "=" + strconv.Itoa(c.snapshotPaceMS),
 		envNumKeys + "=" + strconv.Itoa(c.numKeys),
+		envDriftAt + "=" + strconv.FormatUint(c.driftAt, 10),
+		envSigtermMode + "=" + strconv.FormatBool(c.sigtermMode),
 	}
 }
 
@@ -303,6 +321,23 @@ func (c *childProcess) sigkill(t *testing.T) {
 	}
 	_ = c.reap() // a "signal: killed" wait error is expected here, not a failure
 	<-c.readerDone
+}
+
+// sigterm sends SIGTERM (not SIGKILL) and waits (via waitExit) for the child
+// to exit gracefully on its own within timeout. Used by the SIGTERM/
+// invariant-7 case (sigterm_test.go): unlike sigkill (which expects and
+// tolerates a "signal: killed" wait error - see its doc comment), this
+// expects the child to catch SIGTERM, run Source.Teardown's
+// flush-and-wait-then-stopStream ordering (source.go:249-326, runChildSigterm
+// in child.go), and exit cleanly with code 0 - a graceful shutdown, not a
+// crash. waitExit already fails the test on a nonzero exit code or a timeout,
+// so a child that doesn't handle SIGTERM cleanly fails loudly here.
+func (c *childProcess) sigterm(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("SIGTERM child (pid %d): %v", c.cmd.Process.Pid, err)
+	}
+	c.waitExit(t, timeout)
 }
 
 // waitExit blocks until the child exits on its own (the "let it run to

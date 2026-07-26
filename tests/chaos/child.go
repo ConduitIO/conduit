@@ -18,8 +18,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -47,6 +51,8 @@ const (
 	envSnapshotK      = "CONDUIT_CHAOS_SNAPSHOT_K"
 	envSnapshotPaceMS = "CONDUIT_CHAOS_SNAPSHOT_PACE_MS"
 	envNumKeys        = "CONDUIT_CHAOS_NUM_KEYS"
+	envDriftAt        = "CONDUIT_CHAOS_DRIFT_AT"
+	envSigtermMode    = "CONDUIT_CHAOS_SIGTERM_MODE"
 	instanceID        = "chaos-source"
 	instancePlugin    = "chaos-plugin"
 	instancePipe      = "chaos-pipeline"
@@ -56,6 +62,19 @@ const (
 	markerCorruptPo   = "CORRUPT_POSITION"
 	markerHandoff     = "HANDOFF"   // Property 1/2: producer crossed the snapshot->stream boundary, see upstream.go/produceLoop
 	markerAckOrder    = "ACK_ORDER" // Property 3: per-key ack delivery ledger, see upstream.go/ackLoop
+	// markerSigtermDone is the SIGTERM/invariant-7 case's completion marker
+	// (sigterm_test.go, runChildSigterm) - deliberately distinct from
+	// markerDone, which means "ran to cfg.total and tore down at the natural
+	// end of the run". This marker means "a SIGTERM arrived mid-run and
+	// Source.Teardown's flush-and-wait-then-stopStream ordering
+	// (source.go:249-326) completed" - a graceful stop, not a completed run.
+	markerSigtermDone = "SIGTERM_TEARDOWN_OK"
+
+	// envValueTrue is the string childConfig.env() writes (via
+	// strconv.FormatBool) for boolean env flags (envPrune, envSigtermMode) -
+	// named so the comparisons in parseChildEnv/TestMain share one constant
+	// instead of repeating the literal (goconst).
+	envValueTrue = "true"
 )
 
 // exitCode values the parent harness distinguishes between. An OPEN_GAP_ERROR
@@ -96,6 +115,18 @@ type childEnv struct {
 	// unkeyed position space" (DBZ-1's original behavior) - see
 	// chaosPlugin's type doc (upstream.go).
 	numKeys int
+
+	// driftAt: Property 4's synthetic drift/poison-marker knob. 0 (the
+	// default) means no record in this run carries the marker - see
+	// chaosPlugin.driftAt's field doc (upstream.go).
+	driftAt uint64
+
+	// sigtermMode: if true, runChildSigterm runs instead of runChild - an
+	// unbounded read/ack loop that waits for SIGTERM and drives
+	// Source.Teardown's flush-and-wait-then-stopStream ordering
+	// (source.go:249-326) explicitly, rather than tearing down at the
+	// natural end of a total-bounded run. See sigterm_test.go.
+	sigtermMode bool
 }
 
 // parseChildEnv reads and validates the child's environment. Any failure
@@ -105,7 +136,7 @@ func parseChildEnv() childEnv {
 	var cfg childEnv
 	cfg.dbDir = os.Getenv(envDBDir)
 	cfg.upstreamDir = os.Getenv(envUpstreamDir)
-	cfg.prune = os.Getenv(envPrune) == "true"
+	cfg.prune = os.Getenv(envPrune) == envValueTrue
 
 	paceMS, err := strconv.Atoi(os.Getenv(envPaceMS))
 	if err != nil {
@@ -146,6 +177,15 @@ func parseChildEnv() childEnv {
 		os.Exit(exitBadArgs)
 	}
 	cfg.numKeys = numKeys
+
+	driftAt, err := strconv.ParseUint(os.Getenv(envDriftAt), 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envDriftAt, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.driftAt = driftAt
+
+	cfg.sigtermMode = os.Getenv(envSigtermMode) == envValueTrue
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s and %s are required\n", markerFatal, envDBDir, envUpstreamDir)
@@ -246,6 +286,81 @@ func runReadAckLoop(ctx context.Context, src *connector.Source, total uint64, ke
 	}
 }
 
+// childBuilt bundles the real engine pieces buildChild wires together for a
+// single child run: a real *connector.Source, backed by a real on-disk
+// badger DB and connector.Persister, driven by an in-process chaosPlugin.
+// Factored out of runChild so Property 4's in-process funnel integration
+// (property4_test.go) can build and drive the IDENTICAL construction through
+// a real funnel.Worker instead of runReadAckLoop's direct src.Read/src.Ack
+// calls - see doc.go's note on why the direct loop bypasses the
+// funnel/DLQ/destination entirely, which is exactly the gap Property 4
+// closes.
+type childBuilt struct {
+	logger    log.CtxLogger
+	persister *connector.Persister
+	store     *connector.Store
+	instance  *connector.Instance
+	upstream  *upstreamStore
+	plugin    *chaosPlugin
+	src       *connector.Source
+}
+
+// buildChild opens (or creates) the badger DB at cfg.dbDir and the
+// upstreamStore at cfg.upstreamDir, then constructs a real *connector.Source
+// around an in-process chaosPlugin configured per cfg - the exact
+// construction runChild used inline before this refactor. Every error here is
+// a test-harness misconfiguration (bad dirs, unexpected connector type), not
+// a scenario under test, mirroring the exitBadArgs treatment the inline code
+// gave each of these failures.
+func buildChild(ctx context.Context, cfg childEnv) (*childBuilt, error) {
+	logger := log.New(zerolog.Nop()) // keep stdout clean; it is our progress-line channel
+
+	db, err := badger.New(zerolog.Nop(), cfg.dbDir)
+	if err != nil {
+		return nil, fmt.Errorf("open badger db: %w", err)
+	}
+
+	persister := connector.NewPersister(logger, db, connector.DefaultPersisterDelayThreshold, connector.DefaultPersisterBundleCountThreshold)
+	store := connector.NewStore(db, logger)
+
+	instance := loadOrCreateInstance(ctx, store)
+	instance.Init(logger, persister)
+
+	upstream, err := openUpstreamStore(cfg.upstreamDir, cfg.prune)
+	if err != nil {
+		return nil, err
+	}
+	plugin := &chaosPlugin{
+		store:          upstream,
+		total:          cfg.total,
+		paceMS:         cfg.paceMS,
+		snapshotK:      cfg.snapshotK,
+		snapshotPaceMS: cfg.snapshotPaceMS,
+		numKeys:        cfg.numKeys,
+		driftAt:        cfg.driftAt,
+	}
+
+	fetcher := staticFetcher{instance.Plugin: staticDispenser{source: plugin}}
+	c, err := instance.Connector(ctx, fetcher)
+	if err != nil {
+		return nil, fmt.Errorf("build connector: %w", err)
+	}
+	src, ok := c.(*connector.Source)
+	if !ok {
+		return nil, fmt.Errorf("unexpected connector type %T", c)
+	}
+
+	return &childBuilt{
+		logger:    logger,
+		persister: persister,
+		store:     store,
+		instance:  instance,
+		upstream:  upstream,
+		plugin:    plugin,
+		src:       src,
+	}, nil
+}
+
 // runChild is the entire child-process program: build a real
 // pkg/connector.Source, backed by a real on-disk badger DB (the same
 // production persister backend, via connector.NewPersister) and the
@@ -259,46 +374,17 @@ func runChild() {
 	ctx := context.Background()
 	cfg := parseChildEnv()
 
-	logger := log.New(zerolog.Nop()) // keep stdout clean; it is our progress-line channel
-
-	db, err := badger.New(zerolog.Nop(), cfg.dbDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: open badger db: %v\n", markerFatal, err)
-		os.Exit(exitBadArgs)
-	}
-
-	persister := connector.NewPersister(logger, db, connector.DefaultPersisterDelayThreshold, connector.DefaultPersisterBundleCountThreshold)
-	store := connector.NewStore(db, logger)
-
-	instance := loadOrCreateInstance(ctx, store)
-	instance.Init(logger, persister)
-	printResumePosition(instance)
-
-	upstream, err := openUpstreamStore(cfg.upstreamDir, cfg.prune)
+	built, err := buildChild(ctx, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
 	}
-	plugin := &chaosPlugin{
-		store:          upstream,
-		total:          cfg.total,
-		paceMS:         cfg.paceMS,
-		snapshotK:      cfg.snapshotK,
-		snapshotPaceMS: cfg.snapshotPaceMS,
-		numKeys:        cfg.numKeys,
-	}
+	printResumePosition(built.instance)
 
-	fetcher := staticFetcher{instance.Plugin: staticDispenser{source: plugin}}
-	c, err := instance.Connector(ctx, fetcher)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: build connector: %v\n", markerFatal, err)
-		os.Exit(exitBadArgs)
-	}
-	src, ok := c.(*connector.Source)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "%s: unexpected connector type %T\n", markerFatal, c)
-		os.Exit(exitBadArgs)
-	}
+	src := built.src
+	persister := built.persister
+	upstream := built.upstream
+	plugin := built.plugin
 
 	if err := src.Open(ctx); err != nil {
 		if containsGapMarker(err) {
@@ -353,6 +439,180 @@ func runChild() {
 
 	fmt.Println(markerDone)
 	os.Exit(exitOK)
+}
+
+// runChildSigterm is runChild's counterpart for the SIGTERM/invariant-7 case
+// (sigterm_test.go). Unlike runChild, it does not run to cfg.total and tear
+// down at the natural end of the run - it runs the read/ack loop
+// indefinitely in the background and waits for a SIGTERM, then drives
+// Source.Teardown's flush-and-wait-then-stopStream ordering
+// (source.go:249-326) explicitly: invariant 7 requires that the ack deferred
+// at the moment the signal lands is actually SENT to the plugin (and, per
+// Ack's own invariant 1, only sent once the resulting position is durably
+// flushed) before the stream is torn down - the graceful-path complement to
+// sigkill_test.go's/property2_test.go's SIGKILL cases, which instead prove
+// "eventually safe after a restart".
+//
+// Prints markerSigtermDone (never markerDone, which means "reached cfg.total
+// and tore down normally") once Teardown has confirmed the deferred ack was
+// drained, so the parent test can tell this exit apart from both a normal
+// completed run and a crash.
+func runChildSigterm() {
+	ctx := context.Background()
+	cfg := parseChildEnv()
+
+	built, err := buildChild(ctx, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
+		os.Exit(exitBadArgs)
+	}
+	printResumePosition(built.instance)
+
+	src := built.src
+	if err := src.Open(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: source open failed: %v\n", markerFatal, err)
+		os.Exit(exitOpenOtherError)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM)
+
+	// stopping + processingMu mirror funnel.Worker.Stop's own
+	// stop-flag-plus-processingLock discipline (worker.go's Stop and doTask):
+	// Source.Teardown's own doc comment explicitly relies on "no new Ack call
+	// can start once a Teardown has begun" being guaranteed by the CALLER,
+	// not by Teardown itself. In production that guarantee comes from
+	// funnel.Worker's processingLock; this child has no funnel.Worker (see
+	// property4_test.go's package doc for why Property 4 is the one that
+	// needs a real Worker - this SIGTERM case does not), so it must
+	// reconstruct the same discipline directly: processingMu is held for
+	// exactly one Read+Ack cycle at a time, and the signal handler
+	// synchronizes on it before calling Teardown, guaranteeing no cycle is
+	// in flight (and none will start) once Teardown begins. Without this,
+	// a late Ack racing Teardown's own forced flush could register a
+	// position that never gets flushed before the process exits - not a
+	// bug in Source.Teardown, but exactly the caller-side race its doc
+	// comment warns about.
+	var stopping atomic.Bool
+	var processingMu sync.Mutex
+	readLoopDone := make(chan struct{})
+	go func() {
+		defer close(readLoopDone)
+		for {
+			processingMu.Lock()
+			if stopping.Load() {
+				processingMu.Unlock()
+				return
+			}
+
+			recs, err := src.Read(ctx)
+			if err != nil {
+				processingMu.Unlock()
+				if stopping.Load() {
+					return // expected: Teardown's stopStream unblocked this Read
+				}
+				fmt.Fprintf(os.Stderr, "%s: read failed: %v\n", markerFatal, err)
+				os.Exit(exitOpenOtherError)
+			}
+
+			positions := make([]opencdc.Position, len(recs))
+			for i, r := range recs {
+				positions[i] = r.Position
+			}
+			ackErr := src.Ack(ctx, positions)
+			processingMu.Unlock()
+			if ackErr != nil {
+				if stopping.Load() {
+					return // expected: the stream closed while Teardown was tearing it down
+				}
+				fmt.Fprintf(os.Stderr, "%s: ack failed: %v\n", markerFatal, ackErr)
+				os.Exit(exitOpenOtherError)
+			}
+		}
+	}()
+
+	<-sigCh
+	stopping.Store(true)
+	// Block until no Read+Ack cycle is in flight (see the goroutine's own
+	// comment above) - after this returns, the reader goroutine is
+	// guaranteed to observe stopping==true and exit without starting
+	// another cycle, so no Ack can race what follows.
+	processingMu.Lock()
+	processingMu.Unlock() //nolint:staticcheck // deliberate lock/unlock handshake, not a no-op - see comment above
+
+	// Invariant 7, the property this entire case exists to pin: Teardown
+	// forces the pending flush and waits (bounded) for its resulting
+	// deferred ack to actually be SENT to the plugin - which, per Ack's own
+	// invariant-1 ordering, only happens once that flush's write is durably
+	// confirmed - BEFORE stopping the stream (source.go:249-326). Only once
+	// this returns is it safe to treat whatever was in flight at signal-time
+	// as drained, not dropped.
+	if err := src.Teardown(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: teardown failed: %v\n", markerFatal, err)
+		os.Exit(exitOpenOtherError)
+	}
+	<-readLoopDone
+
+	built.persister.WaitPendingWrites() // belt-and-suspenders; Teardown's own wait already covers this (see its doc comment)
+
+	// Teardown's (and WaitPendingWrites') guarantee only reaches as far as
+	// "the deferred ack was HANDED OFF to the plugin" (stream.Send
+	// rendezvous with chaosPlugin.ackLoop's Recv) - exactly like
+	// runReadAckLoop's own tail comment explains, it does not wait for
+	// ackLoop's subsequent side effect (upstreamStore.Commit) to finish.
+	// Without this wait, this process could exit while that commit is still
+	// in flight, making the parent test observe a stale upstream watermark
+	// that has nothing to do with whether Teardown actually drained the
+	// deferred ack - see waitForUpstreamAtLeast.
+	finalPos := readPersistedPosition(ctx, built.store)
+	if !waitForUpstreamAtLeast(built.upstream, finalPos, 5*time.Second) {
+		fmt.Fprintf(os.Stderr, "%s: timed out waiting for upstream to catch up to persisted position %d\n", markerFatal, finalPos)
+		os.Exit(exitOpenOtherError)
+	}
+
+	fmt.Println(markerSigtermDone)
+	os.Exit(exitOK)
+}
+
+// readPersistedPosition reads Conduit's own durably-persisted resume
+// position directly from the store (a fresh round-trip through
+// connector.Store.Get/decode, not the in-memory Instance this process
+// already holds), mirroring printResumePosition's own durability check.
+// Returns 0 if nothing has been acked/persisted yet.
+func readPersistedPosition(ctx context.Context, store *connector.Store) uint64 {
+	instance, err := store.Get(ctx, instanceID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: read persisted position: %v\n", markerFatal, err)
+		os.Exit(exitOpenOtherError)
+	}
+	state, ok := instance.State.(connector.SourceState)
+	if !ok {
+		return 0
+	}
+	pos, err := decodePosition(state.Position)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: decode persisted position: %v\n", markerFatal, err)
+		os.Exit(exitOpenOtherError)
+	}
+	return pos
+}
+
+// waitForUpstreamAtLeast blocks (polling) until the upstream store reports at
+// least target positions committed, or returns false once timeout has
+// elapsed. See runChildSigterm's call site for why this - not just
+// Persister.WaitPendingWrites - is needed to bridge the "handed off to the
+// plugin" vs. "the plugin's side effect actually landed" gap.
+func waitForUpstreamAtLeast(upstream *upstreamStore, target uint64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		committed, err := upstream.Committed()
+		if err == nil && committed >= target {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	committed, err := upstream.Committed()
+	return err == nil && committed >= target
 }
 
 // waitForUpstreamCommitted blocks briefly until the upstream store reports
