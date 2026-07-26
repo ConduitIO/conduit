@@ -178,6 +178,19 @@ type chaosPlugin struct {
 	// tracked by a single watermark).
 	numKeys int
 
+	// driftAt is Property 4's synthetic drift/poison-marker knob (see
+	// docs/design-documents/20260726-dbz2-cdc-correctness-suite.md, Property
+	// 4 section, and property4_test.go). If nonzero, the single-key producer
+	// (produceLoop; Property 4 never uses numKeys>1) marks the record at
+	// exactly this position with metadataDriftKey instead of producing it
+	// normally - a transport-level "explicit schema-change/error flag on a
+	// chaosPlugin record", never a real schema/DDL engine (see the design
+	// doc's Q1 boundary: DBZ-2 core owns only the routing/ack/position
+	// transport guarantee, not real drift detection). driftAt == 0 (the
+	// default) means no record in this run carries the marker - identical to
+	// every existing scenario.
+	driftAt uint64
+
 	mu         sync.Mutex
 	nextToRead uint64 // set by Open, read by the producer goroutine (single-key mode only, see Open)
 
@@ -297,6 +310,14 @@ func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start
 		pos++
 
 		rec := makeRecord(pos)
+		if p.driftAt > 0 && pos == p.driftAt {
+			// Property 4 (docs/design-documents/20260726-dbz2-cdc-correctness-suite.md):
+			// this is the one record in the run carrying the synthetic
+			// drift/poison marker - see the field doc above and
+			// property4_test.go's driftDetectTask, which is the only code
+			// that ever inspects metadataDriftKey.
+			rec = makeDriftRecord(pos)
+		}
 		if err := server.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}}); err != nil {
 			return // stream closed (process exiting, or Teardown ran)
 		}
@@ -446,6 +467,33 @@ func makeRecord(pos uint64) opencdc.Record {
 
 func encodePosition(pos uint64) opencdc.Position {
 	return opencdc.Position(strconv.FormatUint(pos, 10))
+}
+
+// metadataDriftKey is Property 4's synthetic transport-level drift/poison
+// marker (see chaosPlugin.driftAt's field doc and property4_test.go's
+// driftDetectTask, the only reader of this key). It is deliberately just a
+// metadata flag - never a real schema encoding - per the design doc's Q1
+// boundary: DBZ-2 core never fakes a schema engine, it only routes on an
+// explicit marker.
+const metadataDriftKey = "chaos.drift"
+
+// metadataDriftValue is the value stored under metadataDriftKey - its
+// content is never inspected, only its presence (see driftDetectTask), so
+// any non-empty string would do; named as its own constant (rather than an
+// inline literal) purely to keep goconst happy alongside envValueTrue's
+// unrelated "true" (child.go).
+const metadataDriftValue = "true"
+
+// makeDriftRecord is makeRecord plus Property 4's synthetic drift/poison
+// marker. Everything else about the record (position, key, payload) is
+// unchanged, so the same deterministic-payload trick (makeRecord's doc)
+// still applies - only the disposition differs, decided entirely by
+// property4_test.go's driftDetectTask + funnel.DLQ policy, never by this
+// plugin.
+func makeDriftRecord(pos uint64) opencdc.Record {
+	rec := makeRecord(pos)
+	rec.Metadata[metadataDriftKey] = metadataDriftValue
+	return rec
 }
 
 // decodePosition returns 0 for a nil/empty position (Conduit's Source.Open
