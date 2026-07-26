@@ -374,3 +374,5 @@ require (
 	mvdan.cc/gofumpt v0.8.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
+
+replace github.com/conduitio/conduit-processor-sdk => /private/tmp/claude-501/-Users-devarisbrown-Code-projects-conduit/ca8b4be3-81fb-4e36-9ea0-6d0dd3d91d7a/scratchpad/sdk

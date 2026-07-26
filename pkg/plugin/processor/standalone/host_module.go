@@ -37,6 +37,7 @@ var hostModule wazergo.HostModule[*hostModuleInstance] = hostModuleFunctions{
 	"command_response": wazergo.F1((*hostModuleInstance).commandResponse),
 	"create_schema":    wazergo.F1((*hostModuleInstance).createSchema),
 	"get_schema":       wazergo.F1((*hostModuleInstance).getSchema),
+	"http_request":     wazergo.F1((*hostModuleInstance).httpRequest),
 }
 
 // hostModuleFunctions type implements HostModule, providing the module name,
@@ -51,7 +52,7 @@ func (f hostModuleFunctions) Name() string {
 
 // Functions is a helper that returns the exported functions of the module.
 func (f hostModuleFunctions) Functions() wazergo.Functions[*hostModuleInstance] {
-	return (wazergo.Functions[*hostModuleInstance])(f)
+	return wazergo.Functions[*hostModuleInstance](f)
 }
 
 // Instantiate creates a new instance of the module. This is called by the
@@ -78,12 +79,14 @@ func hostModuleOptions(
 	requests <-chan *processorv1.CommandRequest,
 	responses chan<- tuple[*processorv1.CommandResponse, error],
 	schemaService pprocutils.SchemaService,
+	httpService pprocutils.HTTPService,
 ) hostModuleOption {
 	return wazergo.OptionFunc(func(m *hostModuleInstance) {
 		m.logger = logger
 		m.commandRequests = requests
 		m.commandResponses = responses
 		m.schemaService = schemaService
+		m.httpService = httpService
 	})
 }
 
@@ -93,6 +96,11 @@ type hostModuleInstance struct {
 	commandRequests  <-chan *processorv1.CommandRequest
 	commandResponses chan<- tuple[*processorv1.CommandResponse, error]
 	schemaService    pprocutils.SchemaService
+	// httpService is the per-processor egress capability, bound host-side to this
+	// instance's resolved egress policy. It is genuinely per-instance state — never
+	// a shared registry field — so one processor's allowlist cannot leak to
+	// another. A nil httpService means egress was not wired (deny-all).
+	httpService pprocutils.HTTPService
 
 	parkedCommandRequest *processorv1.CommandRequest
 	parkedResponses      map[string]proto.Message
@@ -261,4 +269,39 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	}
 
 	return m.handleWasmRequest(ctx, buf, "get_schema", serviceFunc)
+}
+
+// httpRequest is the exported host function that performs a host-mediated,
+// allowlisted, security-gated outbound HTTP call on behalf of the WASM guest and
+// writes the buffered response back into the guest-owned buffer. It mirrors
+// create_schema/get_schema exactly (same park/resize protocol, same numeric
+// error-code band); the guest never gets a socket.
+//
+// The security boundary (allowlist + resolved-IP dial-time gate, no-proxy
+// transport, redirect suppression, per-call timeout, response-size cap,
+// host-injected credentials) lives entirely in the per-instance httpService,
+// which is bound to this processor's egress policy. See package egress.
+func (m *hostModuleInstance) httpRequest(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing http_request")
+
+	// A nil httpService means egress was never wired for this processor: deny-all.
+	if m.httpService == nil {
+		return pprocutils.ErrorCodeHTTPEgressDisabled
+	}
+
+	serviceFunc := func(ctx context.Context, buf types.Bytes) (proto.Message, error) {
+		var req procutilsv1.HTTPRequest
+		err := proto.Unmarshal(buf, &req)
+		if err != nil {
+			m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf http request")
+			return nil, err
+		}
+		resp, err := m.httpService.Do(ctx, fromproto.HTTPRequest(&req))
+		if err != nil {
+			return nil, err
+		}
+		return toproto.HTTPResponse(resp), nil
+	}
+
+	return m.handleWasmRequest(ctx, buf, "http_request", serviceFunc)
 }

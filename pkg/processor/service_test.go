@@ -157,7 +157,7 @@ func TestService_Init_PluginNotFound(t *testing.T) {
 
 	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -182,7 +182,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 
 	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, wantErr)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -625,7 +625,7 @@ func newPluginService(t *testing.T, processors map[string]sdk.Processor) *mock.P
 	pg := mock.NewPluginService(gomock.NewController(t))
 	for name, proc := range processors {
 		pg.EXPECT().
-			NewProcessor(gomock.Any(), name, gomock.Any()).AnyTimes().
+			NewProcessor(gomock.Any(), name, gomock.Any(), gomock.Any()).AnyTimes().
 			Return(proc, nil)
 	}
 	return pg

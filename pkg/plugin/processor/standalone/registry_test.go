@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -76,7 +77,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 	t.Run("NewProcessor", func(t *testing.T) {
 		is := is.New(t)
 
-		p, err := underTest.NewProcessor(ctx, standaloneProcessorName, "test-processor")
+		p, err := underTest.NewProcessor(ctx, standaloneProcessorName, "test-processor", egress.DenyAll())
 		is.NoErr(err)
 
 		got, err := p.Specification()
@@ -100,7 +101,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				p, err := underTest.NewProcessor(ctx, "standalone:chaos-processor@v1.3.5", fmt.Sprintf("test-processor-%d", i))
+				p, err := underTest.NewProcessor(ctx, "standalone:chaos-processor@v1.3.5", fmt.Sprintf("test-processor-%d", i), egress.DenyAll())
 				is.NoErr(err)
 
 				err = p.Configure(ctx, map[string]string{"process.prefix": fmt.Sprintf("%d", i)})

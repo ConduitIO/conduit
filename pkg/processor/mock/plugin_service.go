@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	egress "github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,18 +43,18 @@ func (m *PluginService) EXPECT() *PluginServiceMockRecorder {
 }
 
 // NewProcessor mocks base method.
-func (m *PluginService) NewProcessor(ctx context.Context, pluginName, id string) (sdk.Processor, error) {
+func (m *PluginService) NewProcessor(ctx context.Context, pluginName, id string, egressPolicy egress.Policy) (sdk.Processor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewProcessor", ctx, pluginName, id)
+	ret := m.ctrl.Call(m, "NewProcessor", ctx, pluginName, id, egressPolicy)
 	ret0, _ := ret[0].(sdk.Processor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewProcessor indicates an expected call of NewProcessor.
-func (mr *PluginServiceMockRecorder) NewProcessor(ctx, pluginName, id any) *PluginServiceNewProcessorCall {
+func (mr *PluginServiceMockRecorder) NewProcessor(ctx, pluginName, id, egressPolicy any) *PluginServiceNewProcessorCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*PluginService)(nil).NewProcessor), ctx, pluginName, id)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*PluginService)(nil).NewProcessor), ctx, pluginName, id, egressPolicy)
 	return &PluginServiceNewProcessorCall{Call: call}
 }
 
@@ -69,13 +70,13 @@ func (c *PluginServiceNewProcessorCall) Return(arg0 sdk.Processor, arg1 error) *
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PluginServiceNewProcessorCall) Do(f func(context.Context, string, string) (sdk.Processor, error)) *PluginServiceNewProcessorCall {
+func (c *PluginServiceNewProcessorCall) Do(f func(context.Context, string, string, egress.Policy) (sdk.Processor, error)) *PluginServiceNewProcessorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PluginServiceNewProcessorCall) DoAndReturn(f func(context.Context, string, string) (sdk.Processor, error)) *PluginServiceNewProcessorCall {
+func (c *PluginServiceNewProcessorCall) DoAndReturn(f func(context.Context, string, string, egress.Policy) (sdk.Processor, error)) *PluginServiceNewProcessorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

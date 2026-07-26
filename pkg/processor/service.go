@@ -27,10 +27,11 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
 type PluginService interface {
-	NewProcessor(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+	NewProcessor(ctx context.Context, pluginName string, id string, egressPolicy egress.Policy) (sdk.Processor, error)
 }
 
 type Service struct {
@@ -39,16 +40,55 @@ type Service struct {
 	registry  PluginService
 	instances map[string]*Instance
 	store     *Store
+
+	// egressCeiling is the operator-set engine-level ceiling that clamps every
+	// processor's per-pipeline egress opt-in (the intersection). Its zero value
+	// is deny-all, so on a stock instance egress stays off until the operator
+	// affirmatively opens the ceiling — defense in depth for shared instances.
+	egressCeiling egress.Policy
+}
+
+// ServiceOption configures a Service at construction.
+type ServiceOption func(*Service)
+
+// WithEgressCeiling sets the engine-level egress ceiling (from the Conduit
+// instance config). Omitting it leaves the ceiling at deny-all.
+func WithEgressCeiling(ceiling egress.Policy) ServiceOption {
+	return func(s *Service) { s.egressCeiling = ceiling }
 }
 
 // NewService creates a new processor plugin service.
-func NewService(logger log.CtxLogger, db database.DB, registry PluginService) *Service {
-	return &Service{
+func NewService(logger log.CtxLogger, db database.DB, registry PluginService, opts ...ServiceOption) *Service {
+	s := &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
 		instances: make(map[string]*Instance),
 		store:     NewStore(db),
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// resolveEgressPolicy computes the effective, engine-clamped egress policy for a
+// processor instance from its current config. It is called at every processor
+// open (cold start and live reconfigure), so a reconfigure necessarily rebinds
+// the policy to the then-current config. A malformed egress config fails the
+// build rather than silently disabling egress.
+func (s *Service) resolveEgressPolicy(i *Instance) (egress.Policy, error) {
+	requested, err := egress.PolicyFromSettings(i.Config.Settings)
+	if err != nil {
+		return egress.DenyAll(), err
+	}
+	effective, dropped := egress.ResolvePolicy(requested, s.egressCeiling)
+	if len(dropped) > 0 {
+		s.logger.Warn(context.Background()).
+			Str("processor_id", i.ID).
+			Int("dropped_entries", len(dropped)).
+			Msg("egress allowlist entries dropped: outside the engine-level egress ceiling")
+	}
+	return effective, nil
 }
 
 // Init fetches instances from the store.
@@ -111,7 +151,12 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 		return nil, ErrProcessorRunning
 	}
 
-	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
+	egressPolicy, err := s.resolveEgressPolicy(i)
+	if err != nil {
+		i.running.Store(false)
+		return nil, err
+	}
+	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID, egressPolicy)
 	if err != nil {
 		i.running.Store(false)
 		return nil, err
@@ -134,7 +179,14 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 // is dropped. It dispenses a new plugin from the instance's current (already
 // updated) config, exactly as MakeRunnableProcessor does for a fresh start.
 func (s *Service) MakeRunnableProcessorForReconfigure(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
-	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
+	// Invariant (design § reconfigure rebinds policy): resolving the egress policy
+	// here from the instance's already-updated config means the reconfigure swap
+	// binds the NEW policy to the rebuilt processor, by construction.
+	egressPolicy, err := s.resolveEgressPolicy(i)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID, egressPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +214,9 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
-	// check if the processor plugin exists
-	p, err := s.registry.NewProcessor(ctx, plugin, id)
+	// check if the processor plugin exists — a throwaway processor torn down
+	// immediately below, so it gets deny-all egress (it never processes records).
+	p, err := s.registry.NewProcessor(ctx, plugin, id, egress.DenyAll())
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
