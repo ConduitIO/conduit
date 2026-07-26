@@ -394,14 +394,30 @@ func TestSource_Teardown_SendsPendingDeferredAckBeforeReturning(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
-	// A long delay threshold and high bundle-count threshold mean the ack
-	// below would NOT be auto-flushed for the lifetime of this test - the
-	// only thing that can flush it is Teardown's own forced Flush call.
+	// This test proves invariant 7 (Teardown drains the deferred ack before
+	// returning) DETERMINISTICALLY, without racing a receiver goroutine's
+	// scheduling against a non-blocking check. It does so by gating the flush -
+	// the only thing that sends the deferred ack - on a blockingDB the test
+	// controls: while the flush is blocked, Teardown must NOT return and the ack
+	// must NOT be sent; only once the flush is unblocked does the ack go out and
+	// Teardown return. A regression that let Teardown return WITHOUT waiting for
+	// the flush would return (or let the async flush send the ack) while the
+	// flush is still blocked here, tripping one of the "still blocked" asserts -
+	// which a naive bounded-wait-after-Teardown check would instead silently
+	// mask, since the async flush would deliver the ack a few microseconds late.
 	logger := log.Nop()
-	db := &inmemory.DB{}
+	unblock := make(chan struct{})
+	db := &blockingDB{DB: &inmemory.DB{}, unblock: unblock}
+	// A long delay threshold and high bundle-count threshold mean the ack below
+	// is never auto-flushed - the only flush is Teardown's own forced Flush
+	// call, which blockingDB gates on `unblock`.
 	persister := NewPersister(logger, db, time.Hour, 100)
 
 	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	// Generous flush timeout so the bounded-wait fallback (the stuck-flush path,
+	// covered by TestSource_Teardown_BoundedWaitOnStuckFlush) never fires here -
+	// we unblock the flush well within it, exercising the wait-then-succeed path.
+	src.teardownFlushTimeout = 10 * time.Second
 	stream := expectSourceOpen(src, sourceMock)
 	sourceMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
@@ -414,23 +430,43 @@ func TestSource_Teardown_SendsPendingDeferredAckBeforeReturning(t *testing.T) {
 	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("final-pos")}))
 
 	serverStream := stream.Server()
-	recvDone := make(chan opencdc.Position)
+	recvDone := make(chan opencdc.Position, 1)
 	go func() {
 		resp, err := serverStream.Recv()
 		is.NoErr(err)
 		recvDone <- resp.AckPositions[0]
 	}()
 
-	is.NoErr(src.Teardown(ctx))
+	teardownErr := make(chan error, 1)
+	go func() { teardownErr <- src.Teardown(ctx) }()
 
-	// Teardown already returned by this point - the ack must already have
-	// been delivered, not merely "eventually" delivered on some later,
-	// unrelated event.
+	// While the flush is stuck, Teardown must be blocked waiting for it, and the
+	// ack must not have been sent. This is the deterministic anti-regression
+	// assertion: Teardown genuinely WAITS for the drain.
+	select {
+	case err := <-teardownErr:
+		t.Fatalf("Teardown returned before the deferred-ack flush completed (err=%v) - it did not wait to drain the ack", err)
+	case pos := <-recvDone:
+		t.Fatalf("deferred ack (%s) was sent before the flush was even allowed to complete - it bypassed the persister", pos)
+	case <-time.After(200 * time.Millisecond):
+		// Correct: Teardown is blocked waiting for the (still-stuck) flush.
+	}
+
+	// Let the flush complete: onPersistFlushed drains the pending ack and sends
+	// it, WaitPendingWritesContext returns, Teardown returns.
+	close(unblock)
+
 	select {
 	case pos := <-recvDone:
-		is.Equal(pos, opencdc.Position("final-pos"))
-	default:
-		t.Fatal("Teardown returned without the pending deferred ack having been sent")
+		is.Equal(pos, opencdc.Position("final-pos")) // the deferred ack was delivered by the flush Teardown waited for
+	case <-time.After(5 * time.Second):
+		t.Fatal("deferred ack was never delivered after the flush completed")
+	}
+	select {
+	case err := <-teardownErr:
+		is.NoErr(err) // Teardown returned cleanly, after the ack went out
+	case <-time.After(5 * time.Second):
+		t.Fatal("Teardown did not return after the flush completed")
 	}
 }
 
@@ -575,15 +611,20 @@ func TestSource_Teardown_FastFlushCompletesWithinBoundedTimeout(t *testing.T) {
 
 	is.NoErr(src.Teardown(ctx))
 
-	// Teardown already returned by this point - the ack must already have
-	// been delivered (same invariant-7 property as
-	// TestSource_Teardown_SendsPendingDeferredAckBeforeReturning), not
-	// merely "eventually" delivered on some later, unrelated event.
+	// The deferred ack must be delivered. A bounded wait (not a non-blocking
+	// check) accommodates the receiver goroutine's scheduling without flaking;
+	// nothing else in this test sends this ack (delayThreshold=time.Hour,
+	// bundleCountThreshold=100, so no auto-flush), so its arrival proves
+	// Teardown's forced flush delivered it. The strictly-before-return
+	// invariant-7 guarantee is proven deterministically by
+	// TestSource_Teardown_SendsPendingDeferredAckBeforeReturning; this case's
+	// distinct job is that the SHORT teardownFlushTimeout did not falsely
+	// truncate a healthy fast flush (asserted by the no-timeout-log check below).
 	select {
 	case pos := <-recvDone:
 		is.Equal(pos, opencdc.Position("fast-pos"))
-	default:
-		t.Fatal("Teardown returned without the pending deferred ack having been sent")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Teardown returned without the pending deferred ack ever being sent")
 	}
 
 	is.True(!strings.Contains(logBuf.String(), "timed out waiting"))
@@ -634,7 +675,8 @@ func newTestSourceWithPersister(ctx context.Context, t testing.TB, ctrl *gomock.
 func expectSourceOpen(src *Source, sourceMock *mock.SourcePlugin) *builtin.InMemorySourceRunStream {
 	stream := &builtin.InMemorySourceRunStream{}
 
-	sourceMock.EXPECT().Configure(gomock.Any(),
+	sourceMock.EXPECT().Configure(
+		gomock.Any(),
 		pconnector.SourceConfigureRequest{
 			Config: src.Instance.Config.Settings,
 		},
