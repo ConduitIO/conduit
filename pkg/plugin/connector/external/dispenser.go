@@ -169,12 +169,21 @@ func (d *Dispenser) teardown() {
 	}
 
 	d.logger.Debug().Msg("tearing down external connector client")
-	// Unblock the runner's Wait before Kill(), so plugin.Client.Kill() does
-	// not block for its full 2s graceful-exit timeout on every teardown (see
-	// attachedRunner.markDone's doc). This is purely a latency optimization:
-	// Kill() is safe (a no-op against the external process) with or without
-	// this call.
-	d.runner.markDone()
+	// Deliberately NOT calling d.runner.markDone() here first: that would
+	// race plugin.Client.Kill()'s own graceful Controller.Shutdown RPC
+	// against the doneCtx cancellation that follows immediately from Wait
+	// returning, aborting the graceful shutdown message roughly half the
+	// time (see attachedRunner.markDone's doc). Kill() runs go-plugin's
+	// normal path uncontended: it issues the graceful Controller.Shutdown
+	// RPC via client.Close(), then selects on doneCtx (canceled once Wait
+	// returns) racing a 2s timer before falling back to calling this
+	// runner's Kill (the only thing that ever calls markDone). Since
+	// nothing else ever unblocks Wait, that select's doneCtx branch can
+	// never win - teardown of an external connector deterministically takes
+	// go-plugin's full ~2s graceful window every time, not merely "up to"
+	// it. That is the cost of giving the peer a clean shutdown signal
+	// instead of an abrupt disconnect, and this package is not yet wired
+	// into any hot path where that latency matters.
 	d.client.Kill()
 	d.client = nil
 	d.dispensed = false

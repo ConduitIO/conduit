@@ -96,14 +96,17 @@ func (r *attachedRunner) Kill(context.Context) error {
 	return nil
 }
 
-// markDone unblocks Wait. Dispenser.teardown calls it proactively, before
-// invoking the underlying plugin.Client's Kill(), to avoid that call
-// blocking for its full 2-second graceful-exit timeout on every teardown:
-// plugin.Client.Kill() closes its own gRPC connection first, then selects on
-// this runner's death being observed (via Wait returning) racing a 2s timer,
-// before falling back to calling Kill on the runner. Closing done early
-// means that race is already resolved by the time Client.Kill() reaches it.
-// Safe to call more than once.
+// markDone unblocks Wait. It is only ever called from Kill (never
+// proactively by Dispenser.teardown - see the doc there for why): closing
+// done any earlier races the graceful Controller.Shutdown RPC that
+// plugin.Client.Kill()'s own client.Close() call issues on c.doneCtx against
+// that same doneCtx being canceled the moment Wait returns
+// (client.go:989-1004's reattach bookkeeping goroutine cancels doneCtx as
+// its very next step after Wait returns) - aborting the graceful shutdown
+// message roughly half the time in practice, and leaving the peer with an
+// abrupt disconnect instead of the clean Controller.Shutdown signal it may
+// use as its flush-and-exit cue. Safe to call more than once (idempotent via
+// closeOnce).
 func (r *attachedRunner) markDone() {
 	r.closeOnce.Do(func() { close(r.done) })
 }

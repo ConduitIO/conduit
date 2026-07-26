@@ -41,8 +41,9 @@ func testAddr(t *testing.T) net.Addr {
 // (which returns once the OS-level process actually exits), this runner has
 // no independent way to observe the external connector's death (see the
 // type's doc: that gap is deliberate, not a bug). It only unblocks via
-// markDone (called from Kill, or proactively from Dispenser.teardown) or
-// context cancellation.
+// markDone (called from Kill only - see markDone's doc for why Dispenser.
+// teardown deliberately does not call it proactively) or context
+// cancellation.
 func TestAttachedRunner_Wait_BlocksUntilMarkDone(t *testing.T) {
 	is := is.New(t)
 	r := newAttachedRunner(testAddr(t))

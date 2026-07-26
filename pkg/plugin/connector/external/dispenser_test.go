@@ -181,11 +181,20 @@ func TestDispenser_Validate_VersionMismatch(t *testing.T) {
 	is.Equal(ce.Code, conduiterr.CodeExternalConnectorVersionMismatch)
 }
 
-// TestDispenser_Teardown_DoesNotBlockOnGracefulTimeout proves
-// attachedRunner.markDone's latency optimization: tearing down a Dispenser
-// must not incur go-plugin's full 2-second graceful-exit wait on every
-// teardown (see reattach.go's markDone doc) - it should return quickly.
-func TestDispenser_Teardown_DoesNotBlockOnGracefulTimeout(t *testing.T) {
+// TestDispenser_Teardown_CompletesGracefully proves teardown actually
+// completes (doesn't hang) and, deliberately, exercises go-plugin's full
+// graceful-shutdown window rather than short-circuiting it: Dispenser.
+// teardown does NOT call attachedRunner.markDone proactively (an earlier
+// version of this package did, and that raced plugin.Client.Kill()'s own
+// graceful Controller.Shutdown RPC against the doneCtx cancellation that
+// follows immediately from Wait returning, aborting the graceful shutdown
+// message roughly half the time - see markDone's doc). Since nothing else
+// ever unblocks this runner's Wait, Kill()'s internal select always takes
+// its 2s-timeout branch before falling back to Runner.Kill() (which is what
+// finally calls markDone) - so teardown here reliably takes on the order of
+// go-plugin's ~2s graceful window, not less. This test asserts it still
+// completes well within that plus a comfortable margin, not that it's fast.
+func TestDispenser_Teardown_CompletesGracefully(t *testing.T) {
 	is := is.New(t)
 
 	srv := startFakeServer(t, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{})
@@ -201,8 +210,8 @@ func TestDispenser_Teardown_DoesNotBlockOnGracefulTimeout(t *testing.T) {
 	is.NoErr(err)
 	elapsed := time.Since(start)
 
-	// go-plugin's Client.Kill() would otherwise block for up to 2s waiting
-	// to observe the runner's death before falling back to Runner.Kill();
-	// markDone should make this resolve immediately instead.
-	is.True(elapsed < 1*time.Second)
+	// Comfortably above go-plugin's ~2s graceful window - this bounds
+	// "teardown eventually completes" (catches a real hang), it does not
+	// assert low latency.
+	is.True(elapsed < 5*time.Second)
 }
