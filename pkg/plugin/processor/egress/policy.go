@@ -241,6 +241,19 @@ func ResolvePolicy(perProcessor Policy, ceiling Policy) (effective Policy, dropp
 		eff.MaxResponseBytes = DefaultMaxResponseBytes
 	}
 
+	// Ceiling caps are tightening-only: a positive ceiling Timeout/MaxResponseBytes
+	// is an operator-set upper bound no pipeline can exceed. A per-processor value
+	// larger than the ceiling is clamped down; a smaller one is kept. A zero
+	// ceiling value means "no cap" (the per-processor value / defaults stand).
+	// This runs before both the unrestricted and restricted branches below, so the
+	// cap holds regardless of allowlist shape.
+	if ceiling.Timeout > 0 && eff.Timeout > ceiling.Timeout {
+		eff.Timeout = ceiling.Timeout
+	}
+	if ceiling.MaxResponseBytes > 0 && eff.MaxResponseBytes > ceiling.MaxResponseBytes {
+		eff.MaxResponseBytes = ceiling.MaxResponseBytes
+	}
+
 	// Ceiling with no entries but enabled == unrestricted host set (single-tenant
 	// convenience). Secret refs pass through unclamped in that mode too — the
 	// operator has declared this instance unrestricted.

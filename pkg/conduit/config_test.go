@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/lifecycle"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/matryer/is"
 )
 
@@ -44,6 +45,70 @@ func TestDefaultConfig_AllowUnsignedDisabledByDefault(t *testing.T) {
 	is := is.New(t)
 	cfg := DefaultConfigWithBasePath(t.TempDir())
 	is.True(!cfg.Install.AllowUnsigned)
+}
+
+// TestDefaultConfig_EgressCeilingDenyAllByDefault locks in the host-egress
+// security default (docs/design-documents/20260726-wasm-host-egress-capability.md
+// §"Default deny-all"): a fresh config produces a deny-all engine egress ceiling
+// (Enabled=false). Egress must stay fully closed until an operator affirmatively
+// sets processors.egress.enabled=true — so a processor requesting egress on a
+// stock instance resolves to DenyAll.
+func TestDefaultConfig_EgressCeilingDenyAllByDefault(t *testing.T) {
+	is := is.New(t)
+	cfg := DefaultConfigWithBasePath(t.TempDir())
+	is.True(!cfg.Processors.Egress.Enabled) // the operator has not opted in
+
+	ceiling, err := cfg.egressCeiling()
+	is.NoErr(err)
+	is.True(!ceiling.Enabled) // the ceiling handed to the engine is deny-all
+
+	// End-to-end: a processor that requests egress against this default ceiling
+	// resolves to DenyAll — the closed default is the effective policy, not just
+	// the config value.
+	requested := egress.Policy{
+		Enabled:   true,
+		Allowlist: []egress.AllowEntry{{Scheme: "https", Host: "api.openai.com", Port: "443"}},
+	}
+	effective, dropped := egress.ResolvePolicy(requested, ceiling)
+	is.True(!effective.Enabled) // deny-all: the pipeline opt-in cannot open a closed ceiling
+	is.Equal(len(dropped), 1)   // the requested entry is reported as dropped, never honored
+}
+
+// TestConfig_EgressCeiling_EnabledIntersection verifies that an operator-enabled
+// ceiling with an allowlist produces the expected intersection through the same
+// egress.ResolvePolicy the engine uses, and that the ceiling's timeout/size caps
+// clamp a wider per-processor request (tightening-only).
+func TestConfig_EgressCeiling_EnabledIntersection(t *testing.T) {
+	is := is.New(t)
+	cfg := DefaultConfigWithBasePath(t.TempDir())
+	cfg.Processors.Egress.Enabled = true
+	cfg.Processors.Egress.Allow = []string{"api.openai.com", "api.voyageai.com"}
+	cfg.Processors.Egress.Timeout = 5 * time.Second
+	cfg.Processors.Egress.MaxResponseBytes = 1 << 20 // 1 MiB
+
+	ceiling, err := cfg.egressCeiling()
+	is.NoErr(err)
+	is.True(ceiling.Enabled)
+	is.Equal(len(ceiling.Allowlist), 2)
+
+	// Pipeline requests one in-ceiling host + one outside it, with a wider timeout.
+	requested := egress.Policy{
+		Enabled: true,
+		Allowlist: []egress.AllowEntry{
+			{Scheme: "https", Host: "api.openai.com", Port: "443"},
+			{Scheme: "https", Host: "evil.example.com", Port: "443"},
+		},
+		Timeout:          60 * time.Second,
+		MaxResponseBytes: 8 << 20,
+	}
+	effective, dropped := egress.ResolvePolicy(requested, ceiling)
+	is.True(effective.Enabled)
+	is.Equal(len(effective.Allowlist), 1) // intersection: only the in-ceiling host survives
+	is.Equal(effective.Allowlist[0].Host, "api.openai.com")
+	is.Equal(len(dropped), 1) // the out-of-ceiling host is dropped, never honored
+	is.Equal(dropped[0].Host, "evil.example.com")
+	is.Equal(effective.Timeout, 5*time.Second)         // clamped down to the ceiling
+	is.Equal(effective.MaxResponseBytes, int64(1<<20)) // clamped down to the ceiling
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -308,6 +373,60 @@ func TestConfig_Validate(t *testing.T) {
 				return c
 			},
 			want: cerrors.New(`invalid error recovery config: "max-retries-window" config value must be positive (got: -1s)`),
+		},
+		{
+			name: "egress: disabled with entries is valid (deny-all, entries still validated)",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = false
+				c.Processors.Egress.Allow = []string{"api.openai.com"}
+				return c
+			},
+			want: nil,
+		},
+		{
+			name: "egress: enabled with valid allowlist",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = true
+				c.Processors.Egress.Allow = []string{"api.openai.com", "https://api.voyageai.com:443"}
+				return c
+			},
+			want: nil,
+		},
+		{
+			name: "egress: malformed allowlist entry fails startup (never silently disables)",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = true
+				c.Processors.Egress.Allow = []string{"*.evil.com"}
+				return c
+			},
+			want: cerrors.New(`"processors.egress.allow" config value is invalid: wildcard allowlist entries are not permitted: "*.evil.com"`),
+		},
+		{
+			name: "egress: malformed allowlist entry fails even when disabled",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = false
+				c.Processors.Egress.Allow = []string{"*.evil.com"}
+				return c
+			},
+			want: cerrors.New(`"processors.egress.allow" config value is invalid: wildcard allowlist entries are not permitted: "*.evil.com"`),
+		},
+		{
+			name: "egress: negative timeout fails startup",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = true
+				c.Processors.Egress.Timeout = -time.Second
+				return c
+			},
+			want: invalidConfigFieldErr("processors.egress.timeout"),
+		},
+		{
+			name: "egress: negative max-response-bytes fails startup",
+			setupConfig: func(c Config) Config {
+				c.Processors.Egress.Enabled = true
+				c.Processors.Egress.MaxResponseBytes = -1
+				return c
+			},
+			want: invalidConfigFieldErr("processors.egress.max-response-bytes"),
 		},
 	}
 

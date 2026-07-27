@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -29,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
@@ -167,6 +169,46 @@ type Config struct {
 
 	Processors struct {
 		Path string `long:"processors.path" usage:"path to standalone processors' directory"`
+
+		// Egress is the engine-level host-egress ceiling for standalone (WASM)
+		// processors — the operator's outer bound on the network hosts a
+		// processor may reach via the host `http_request` capability. It clamps
+		// every pipeline's per-processor `sdk.egress.*` opt-in by intersection
+		// (see pkg/plugin/processor/egress.ResolvePolicy).
+		//
+		// SECURITY POSTURE: the default is DENY-ALL. Egress stays fully closed
+		// until an operator affirmatively sets processors.egress.enabled=true
+		// (defense in depth for shared/multi-tenant instances) — a processor
+		// requesting egress on a stock instance gets DenyAll. The allowlist is
+		// the opt-in; the dial-time resolved-IP gate (egress.Refuse) is the real
+		// SSRF guarantee, not this coarse host pre-filter. See
+		// docs/design-documents/20260726-wasm-host-egress-capability.md and the
+		// README "Processor host egress" section.
+		Egress struct {
+			// Enabled opens the engine-level egress ceiling. When false (the
+			// default) the ceiling is deny-all and no pipeline opt-in can
+			// override it, regardless of the fields below.
+			Enabled bool `long:"processors.egress.enabled" mapstructure:"enabled" usage:"open the engine-level host-egress ceiling for standalone processors (default false = deny-all; no pipeline can exceed this ceiling)"`
+			// Allow is the ceiling allowlist of host[:port] / scheme://host[:port]
+			// entries (repeatable, or comma/space-separated). Empty + enabled =>
+			// unrestricted single-tenant mode (honor whatever pipelines request).
+			// Each entry is parsed by egress.ParseAllowlist; a malformed entry
+			// fails startup.
+			Allow []string `long:"processors.egress.allow" mapstructure:"allow" usage:"engine-level egress allowlist: host[:port] or scheme://host[:port] entries (repeatable); empty with enabled=true means unrestricted (single-tenant)"`
+			// SecretRefs is the set of secret names the ceiling grants; a
+			// pipeline may reference (via sdk.egress.secretRefs) only secrets in
+			// this set on a restricted (non-empty Allow) ceiling.
+			SecretRefs []string `long:"processors.egress.secret-refs" mapstructure:"secret-refs" usage:"engine-level egress secret grants: secret names a pipeline may reference for host-injected Authorization (repeatable)"`
+			// Timeout, when > 0, is an upper bound on the per-call egress timeout
+			// no pipeline can exceed (tightening only). 0 means no ceiling cap
+			// (the per-processor value / egress.DefaultTimeout applies).
+			Timeout time.Duration `long:"processors.egress.timeout" mapstructure:"timeout" usage:"engine-level upper bound on the per-call egress timeout (0 = no ceiling cap)"`
+			// MaxResponseBytes, when > 0, is an upper bound on the buffered
+			// response body no pipeline can exceed (tightening only). 0 means no
+			// ceiling cap (the per-processor value / egress.DefaultMaxResponseBytes
+			// applies).
+			MaxResponseBytes int64 `long:"processors.egress.max-response-bytes" mapstructure:"max-response-bytes" usage:"engine-level upper bound on the buffered egress response body in bytes (0 = no ceiling cap)"`
+		} `mapstructure:"egress"`
 	}
 
 	Pipelines struct {
@@ -283,6 +325,10 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Install.AllowStaleBundle = false
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
+	// Deny-all by default: the host-egress ceiling is closed until an operator
+	// affirmatively opens it (processors.egress.enabled=true). Set explicitly so
+	// the security default is legible here and anchored by a test.
+	cfg.Processors.Egress.Enabled = false
 
 	cfg.Pipelines.Path = filepath.Join(basePath, "pipelines")
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
@@ -397,6 +443,73 @@ func (c Config) validateSchemaRegistryConfig() error {
 	return nil
 }
 
+// egressCeiling translates the operator's engine-level egress config
+// (processors.egress.*) into the egress.Policy ceiling handed to the processor
+// service via processor.WithEgressCeiling. It is the single source of truth for
+// that translation: Config.Validate calls it to surface a malformed config as a
+// startup error, and createServices calls it to build the ceiling actually
+// passed to the engine.
+//
+// SECURITY: a zero/disabled config yields egress.DenyAll() (Enabled=false) — the
+// deny-all default that keeps the host-egress boundary closed until an operator
+// sets processors.egress.enabled=true. A malformed allowlist or negative bound
+// is a startup error, NEVER a silent disable (a silent disable would be a
+// confusing security surprise: the operator thinks egress is scoped when it is
+// actually off, or vice-versa).
+func (c Config) egressCeiling() (egress.Policy, error) {
+	e := c.Processors.Egress
+
+	// Parse/validate the allowlist regardless of Enabled so a typo fails startup
+	// rather than silently doing nothing. ParseAllowlist accepts the repeatable
+	// []string joined with commas (it also splits on commas/whitespace itself),
+	// so both `--processors.egress.allow a --processors.egress.allow b` and a
+	// single "a,b" env/yaml value parse identically.
+	allow, err := egress.ParseAllowlist(strings.Join(e.Allow, ","))
+	if err != nil {
+		return egress.DenyAll(), cerrors.Errorf("%q config value is invalid: %w", "processors.egress.allow", err)
+	}
+	if e.Timeout < 0 {
+		return egress.DenyAll(), invalidConfigFieldErr("processors.egress.timeout")
+	}
+	if e.MaxResponseBytes < 0 {
+		return egress.DenyAll(), invalidConfigFieldErr("processors.egress.max-response-bytes")
+	}
+
+	if !e.Enabled {
+		// Deny-all default (defense in depth): the ceiling stays closed no matter
+		// what else is configured. Returning the zero-value Policy makes
+		// ResolvePolicy return DenyAll for every processor.
+		return egress.DenyAll(), nil
+	}
+
+	var secretRefs map[string]struct{}
+	if len(e.SecretRefs) > 0 {
+		secretRefs = make(map[string]struct{})
+		for _, raw := range e.SecretRefs {
+			for _, name := range strings.FieldsFunc(raw, func(r rune) bool {
+				return r == ',' || r == ' ' || r == '\t' || r == '\n'
+			}) {
+				secretRefs[name] = struct{}{}
+			}
+		}
+	}
+
+	return egress.Policy{
+		Enabled:          true,
+		Allowlist:        allow,
+		SecretRefs:       secretRefs,
+		Timeout:          e.Timeout,          // 0 => ResolvePolicy applies no ceiling cap
+		MaxResponseBytes: e.MaxResponseBytes, // 0 => ResolvePolicy applies no ceiling cap
+	}, nil
+}
+
+// validateEgressConfig fails startup on a malformed engine-level egress config
+// (bad allowlist entry, negative bound). It never silently disables egress.
+func (c Config) validateEgressConfig() error {
+	_, err := c.egressCeiling()
+	return err
+}
+
 func (c Config) validateErrorRecovery() error {
 	errRecoveryCfg := c.Pipelines.ErrorRecovery
 	var errs []error
@@ -465,6 +578,10 @@ func (c Config) Validate() error {
 
 	if err := c.validateErrorRecovery(); err != nil {
 		return cerrors.Errorf("invalid error recovery config: %w", err)
+	}
+
+	if err := c.validateEgressConfig(); err != nil {
+		return err
 	}
 	return nil
 }

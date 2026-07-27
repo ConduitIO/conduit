@@ -17,6 +17,7 @@ package egress
 import (
 	"net"
 	"testing"
+	"time"
 
 	"github.com/matryer/is"
 )
@@ -179,6 +180,43 @@ func TestResolvePolicy_Clamping(t *testing.T) {
 		ceiling := Policy{Enabled: true} // unrestricted single-tenant mode
 		eff, _ := ResolvePolicy(perProc, ceiling)
 		is.Equal(len(eff.SecretRefs), 1) // convenience mode: no clamp
+	})
+
+	// Ceiling Timeout/MaxResponseBytes are tightening-only caps: a positive
+	// ceiling value is an upper bound no pipeline can exceed.
+	t.Run("ceiling caps timeout and size down", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.Timeout = 60 * time.Second
+		perProc.MaxResponseBytes = 8 << 20
+		ceiling := mk("api.openai.com")
+		ceiling.Timeout = 5 * time.Second
+		ceiling.MaxResponseBytes = 1 << 20
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.Equal(eff.Timeout, 5*time.Second)         // clamped down to the ceiling
+		is.Equal(eff.MaxResponseBytes, int64(1<<20)) // clamped down to the ceiling
+	})
+
+	t.Run("ceiling does not raise a smaller per-processor value", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.Timeout = 2 * time.Second
+		perProc.MaxResponseBytes = 512 << 10
+		ceiling := mk("api.openai.com")
+		ceiling.Timeout = 30 * time.Second
+		ceiling.MaxResponseBytes = 4 << 20
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.Equal(eff.Timeout, 2*time.Second)           // smaller per-processor value kept
+		is.Equal(eff.MaxResponseBytes, int64(512<<10)) // smaller per-processor value kept
+	})
+
+	t.Run("zero ceiling cap means no cap (defaults stand)", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com") // no Timeout/MaxResponseBytes set
+		ceiling := mk("api.openai.com") // no cap set
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.Equal(eff.Timeout, DefaultTimeout)                   // per-processor default stands
+		is.Equal(eff.MaxResponseBytes, DefaultMaxResponseBytes) // per-processor default stands
 	})
 }
 

@@ -286,6 +286,59 @@ to write custom processors in JavaScript.
 More detailed information as well as examples can be found in
 the [Processors documentation](https://conduitdata.io/docs/using/processors/getting-started).
 
+### Processor host egress
+
+Standalone (WASM) processors can reach the network — for example to call an
+embedding provider — through a host-provided HTTP capability. This is a
+security boundary, so it is **closed by default** and opens in two independent
+tiers (a processor gets egress only where both agree):
+
+1. **Per-processor opt-in (pipeline config).** The pipeline author enables
+   egress for a specific processor with a `sdk.egress.allow` allowlist in that
+   processor's config.
+2. **Engine-level ceiling (instance config, `processors.egress.*`).** The
+   operator running the instance sets an outer bound no pipeline can exceed. The
+   effective allowlist is the **intersection** of the two; entries a pipeline
+   requests that the ceiling does not permit are dropped with a startup warning,
+   never silently honored.
+
+The engine ceiling defaults to **deny-all** — on a stock instance a processor
+requesting egress gets nothing until an operator affirmatively sets
+`processors.egress.enabled: true`. The allowlist is the opt-in; the real SSRF
+guarantee is the dial-time resolved-IP gate (a matched hostname that resolves to
+a private/link-local/hostile address is still refused at connect time), not this
+coarse host pre-filter.
+
+Engine-level configuration options (CLI flag / env var / `conduit.yaml`):
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `processors.egress.enabled` | `false` | Open the ceiling. `false` = deny-all; no pipeline opt-in can override it. |
+| `processors.egress.allow` | _(empty)_ | Allowlist of `host[:port]` / `scheme://host[:port]` entries (repeatable). Empty **with `enabled: true`** means unrestricted (single-tenant convenience). |
+| `processors.egress.secret-refs` | _(empty)_ | Secret names a pipeline may reference for host-injected `Authorization` (repeatable). |
+| `processors.egress.timeout` | `0` (no cap) | Upper bound on the per-call egress timeout; a larger per-processor value is clamped down. |
+| `processors.egress.max-response-bytes` | `0` (no cap) | Upper bound on the buffered response body in bytes; a larger per-processor value is clamped down. |
+
+A malformed engine egress config (for example a wildcard or otherwise invalid
+allowlist entry) fails startup with an actionable error — egress is never
+silently disabled. Example scoping an instance to two embedding providers:
+
+```yaml
+processors:
+  egress:
+    enabled: true
+    allow:
+      - api.openai.com
+      - https://api.voyageai.com:443
+    secret-refs:
+      - openai_api_key
+    max-response-bytes: 4194304 # 4 MiB
+```
+
+See the
+[host-egress design document](docs/design-documents/20260726-wasm-host-egress-capability.md)
+for the full threat model and the two-tier resolution semantics.
+
 ## API
 
 Conduit exposes a gRPC API and an HTTP API.
