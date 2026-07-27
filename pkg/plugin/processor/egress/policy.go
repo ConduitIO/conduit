@@ -205,6 +205,21 @@ func ParseAllowlist(raw string) ([]AllowEntry, error) {
 // the engine ceiling.
 func entryKey(e AllowEntry) string { return e.Scheme + "|" + e.Host + "|" + e.Port }
 
+// intersectRefs returns the secret-ref names present in BOTH the per-processor
+// request and the ceiling grant. It is the secret-scope analog of the allowlist
+// intersection: a pipeline can only end up with a secret ref its instance-level
+// ceiling also granted. A nil/empty ceiling yields an empty result (grant
+// nothing), never a pass-through.
+func intersectRefs(requested, ceiling map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{}, len(requested))
+	for ref := range requested {
+		if _, ok := ceiling[ref]; ok {
+			out[ref] = struct{}{}
+		}
+	}
+	return out
+}
+
 // ResolvePolicy computes the effective per-processor policy: the intersection of
 // the pipeline-author's per-processor allowlist with the operator's engine-level
 // ceiling. Entries a pipeline requests that the ceiling does not permit are
@@ -254,11 +269,17 @@ func ResolvePolicy(perProcessor Policy, ceiling Policy) (effective Policy, dropp
 		eff.MaxResponseBytes = ceiling.MaxResponseBytes
 	}
 
-	// Ceiling with no entries but enabled == unrestricted host set (single-tenant
-	// convenience). Secret refs pass through unclamped in that mode too — the
-	// operator has declared this instance unrestricted.
+	// Ceiling with no allowlist entries but enabled == unrestricted host set
+	// (single-tenant convenience). Secrets still honor an explicit ceiling scope:
+	// if the operator granted a specific secret-refs set, clamp to it even here —
+	// otherwise a ceiling that restricts secrets but not hosts would leak
+	// ungranted refs. With no ceiling secret-refs, this stays a pass-through
+	// (nothing to enforce).
 	if len(ceiling.Allowlist) == 0 {
 		eff.Allowlist = perProcessor.Allowlist
+		if len(ceiling.SecretRefs) > 0 {
+			eff.SecretRefs = intersectRefs(perProcessor.SecretRefs, ceiling.SecretRefs)
+		}
 		return eff, nil
 	}
 
@@ -266,16 +287,9 @@ func ResolvePolicy(perProcessor Policy, ceiling Policy) (effective Policy, dropp
 	// set exactly as the allowlist is clamped, so one tenant cannot name a secret
 	// the operator did not grant this instance. An ungranted ref is dropped here
 	// (defense in depth) and would additionally fail closed per-request in
-	// buildHTTPRequest. A ceiling that grants no secrets clamps to none.
-	if len(perProcessor.SecretRefs) > 0 {
-		clamped := make(map[string]struct{})
-		for ref := range perProcessor.SecretRefs {
-			if _, ok := ceiling.SecretRefs[ref]; ok {
-				clamped[ref] = struct{}{}
-			}
-		}
-		eff.SecretRefs = clamped
-	}
+	// buildHTTPRequest. A restricted ceiling that grants no secrets clamps to none
+	// (explicit-grants-only).
+	eff.SecretRefs = intersectRefs(perProcessor.SecretRefs, ceiling.SecretRefs)
 
 	ceilingSet := make(map[string]struct{}, len(ceiling.Allowlist))
 	for _, e := range ceiling.Allowlist {

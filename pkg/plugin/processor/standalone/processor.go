@@ -99,7 +99,14 @@ func newWASMProcessor(
 	// processor's allowlist cannot leak into another's (a tested isolation
 	// invariant). A deny-all policy still yields a Service that refuses every
 	// call with ErrHTTPEgressDisabled.
-	httpService := egress.New(egressPolicy, logger)
+	//
+	// The secret resolver is host-side and namespaced (CONDUIT_SECRET_*): it is
+	// safe to wire unconditionally because it is only consulted for an
+	// AuthSecretRef the per-processor policy already granted, and only on an
+	// enabled policy (a deny-all Do never reaches the credential path). The
+	// resolver is stateless process-env, so a single value serves every
+	// processor; per-processor scope is enforced by the policy's granted refs.
+	httpService := egress.New(egressPolicy, logger, egress.WithSecretResolver(egress.EnvSecretResolver{}))
 
 	// instantiate conduit host module and inject it into the context
 	logger.Debug(ctx).Msg("instantiating conduit host module")

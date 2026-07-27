@@ -173,13 +173,33 @@ func TestResolvePolicy_Clamping(t *testing.T) {
 		is.Equal(len(eff.SecretRefs), 0) // nothing granted => nothing survives
 	})
 
-	t.Run("unrestricted ceiling passes secret refs through", func(t *testing.T) {
+	t.Run("unrestricted ceiling with no secret refs passes secret refs through", func(t *testing.T) {
 		is := is.New(t)
 		perProc := mk("api.openai.com")
 		perProc.SecretRefs = map[string]struct{}{"openai_key": {}}
-		ceiling := Policy{Enabled: true} // unrestricted single-tenant mode
+		ceiling := Policy{Enabled: true} // unrestricted, no secret scope declared
 		eff, _ := ResolvePolicy(perProc, ceiling)
-		is.Equal(len(eff.SecretRefs), 1) // convenience mode: no clamp
+		is.Equal(len(eff.SecretRefs), 1) // convenience mode: nothing to enforce
+	})
+
+	// Regression: the empty-allowlist + secret-refs gap. An operator that scopes
+	// secrets on the ceiling must have that honored even when the ceiling leaves
+	// the host allowlist unrestricted — otherwise an ungranted ref leaks through
+	// the single-tenant convenience branch.
+	t.Run("unrestricted ceiling still clamps secret refs when the operator scoped them", func(t *testing.T) {
+		is := is.New(t)
+		perProc := mk("api.openai.com")
+		perProc.SecretRefs = map[string]struct{}{"openai_key": {}, "stolen_key": {}}
+		ceiling := Policy{Enabled: true}                           // empty allowlist (unrestricted hosts)...
+		ceiling.SecretRefs = map[string]struct{}{"openai_key": {}} // ...but scoped secrets
+		eff, _ := ResolvePolicy(perProc, ceiling)
+		is.True(eff.Enabled)
+		is.Equal(len(eff.Allowlist), 1) // hosts still unrestricted (pipeline's own list)
+		_, granted := eff.SecretRefs["openai_key"]
+		is.True(granted)
+		_, leaked := eff.SecretRefs["stolen_key"]
+		is.True(!leaked) // ungranted ref clamped even under an unrestricted host ceiling
+		is.Equal(len(eff.SecretRefs), 1)
 	})
 
 	// Ceiling Timeout/MaxResponseBytes are tightening-only caps: a positive
