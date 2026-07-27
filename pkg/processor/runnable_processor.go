@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
 // RunnableProcessor is a stream.Processor which has been
@@ -44,7 +45,16 @@ func newRunnableProcessor(
 }
 
 func (p *RunnableProcessor) Open(ctx context.Context) error {
-	err := p.proc.Configure(ctx, maps.Clone(p.Config.Settings))
+	// Host-reserved sdk.egress.* keys are consumed host-side by
+	// Service.resolveEgressPolicy (from the instance's own Settings); strip them
+	// from the clone handed to the guest so a processor that strictly validates
+	// its declared parameters does not reject the operator's egress opt-in as an
+	// "unrecognized parameter". The guest must never see host-reserved config
+	// (design: 20260726-wasm-host-egress-capability.md).
+	settings := maps.Clone(p.Config.Settings)
+	egress.StripReservedKeys(settings)
+
+	err := p.proc.Configure(ctx, settings)
 	if err != nil {
 		return cerrors.Errorf("failed configuring processor: %w", err)
 	}

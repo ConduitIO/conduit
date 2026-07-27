@@ -20,15 +20,66 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
+
+// TestRunnableProcessor_Open_StripsHostReservedEgressKeys is the regression test
+// for the bug the engine-level RAG template e2e surfaced: the host-reserved
+// sdk.egress.* config keys (consumed host-side by Service.resolveEgressPolicy)
+// were passed through to the guest's Configure, where a standalone processor
+// that strictly validates its declared parameters rejected them as
+// "unrecognized parameter" — so no pipeline could opt a WASM processor into
+// egress via YAML. Open must strip the sdk.egress.* namespace from the settings
+// handed to Configure while leaving the instance's own Settings (and every
+// non-reserved key) intact.
+func TestRunnableProcessor_Open_StripsHostReservedEgressKeys(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	inst := &Instance{
+		Config: Config{
+			Settings: config.Config{
+				"model":                    "nomic-embed-text",
+				egress.ConfigKeyAllow:      "http://127.0.0.1:11434",
+				egress.ConfigKeyTimeout:    "30s",
+				egress.ConfigKeySecretRefs: "openai-key",
+			},
+		},
+	}
+
+	var gotSettings config.Config
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().
+		Configure(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, s config.Config) error {
+			gotSettings = s
+			return nil
+		})
+	proc.EXPECT().Open(gomock.Any()).Return(nil)
+
+	underTest := newRunnableProcessor(proc, nil, inst)
+	is.NoErr(underTest.Open(ctx))
+
+	// No host-reserved sdk.egress.* key reaches the guest.
+	for _, k := range []string{egress.ConfigKeyAllow, egress.ConfigKeyTimeout, egress.ConfigKeySecretRefs} {
+		_, present := gotSettings[k]
+		is.True(!present)
+	}
+	// Non-reserved settings are preserved.
+	is.Equal(gotSettings["model"], "nomic-embed-text")
+	// The instance's own Settings are untouched — resolveEgressPolicy reads them.
+	_, instanceStillHasAllow := inst.Config.Settings[egress.ConfigKeyAllow]
+	is.True(instanceStillHasAllow)
+}
 
 func TestRunnableProcessor_Open(t *testing.T) {
 	ctx := context.Background()
