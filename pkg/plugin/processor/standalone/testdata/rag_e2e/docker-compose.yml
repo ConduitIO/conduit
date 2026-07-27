@@ -1,0 +1,26 @@
+# docker-compose for TestRAGPipeline_ChunkEmbedPgvector (rag_e2e_test.go, build
+# tag "rag_e2e"). Brings up a pgvector/Postgres instance the test writes real
+# embedding rows into (and deletes from) via the real conduit-connector-pgvector
+# Destination running as an external connector subprocess.
+#
+# Deliberately a SEPARATE instance/port from conduit-connector-pgvector's own
+# test/docker-compose.yml (port 5433, db conduit_test) rather than reusing it:
+# this suite lives in a different repo, is brought up independently in CI, and
+# giving it its own port/db avoids any accidental cross-repo container reuse or
+# port collision if a developer has both checkouts' compose files up at once.
+#
+# Usage: docker compose -f pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml up -d
+services:
+  pgvector:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "conduit_rag_e2e", "-U", "conduit" ]
+      timeout: 30s
+      interval: 5s
+      retries: 10
+    environment:
+      - POSTGRES_USER=conduit
+      - POSTGRES_PASSWORD=conduit
+      - POSTGRES_DB=conduit_rag_e2e

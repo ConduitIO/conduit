@@ -1,0 +1,79 @@
+name: rag-e2e
+
+# Cross-repo end-to-end test for the RAG pipeline: builds the REAL chunk.wasm +
+# embedding.wasm from conduitio/conduit-processor-ai and the REAL
+# conduit-connector-pgvector binary, and drives a chunk -> embed -> pgvector
+# pipeline through this repo's standalone host module + egress gate, against a
+# live pgvector (docker). Asserts the composable record-shape contract AND the
+# delete path (source delete removes all its chunk vectors via
+# delete-by-source_key). The embedding provider's HTTP endpoint is the only mock;
+# the WASM boundary, egress gate, and pgvector are all real.
+#
+# Scoped to the surfaces the e2e exercises. Not yet a required check (that's a
+# repo-settings change to follow), matching the bundle-e2e precedent.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+      - 'pkg/plugin/processor/standalone/**'
+      - '.github/workflows/rag-e2e.yml'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+    inputs:
+      processor_ai_ref:
+        description: 'conduit-processor-ai ref to test against'
+        required: false
+        default: 'main'
+      pgvector_ref:
+        description: 'conduit-connector-pgvector ref to test against'
+        required: false
+        default: 'main'
+
+env:
+  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
+  PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'main' }}
+
+jobs:
+  rag-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out conduit
+        uses: actions/checkout@v4
+
+      - name: Check out conduit-processor-ai
+        uses: actions/checkout@v4
+        with:
+          repository: ConduitIO/conduit-processor-ai
+          ref: ${{ env.PROCESSOR_AI_REF }}
+          path: _rag/conduit-processor-ai
+
+      - name: Check out conduit-connector-pgvector
+        uses: actions/checkout@v4
+        with:
+          repository: ConduitIO/conduit-connector-pgvector
+          ref: ${{ env.PGVECTOR_REF }}
+          path: _rag/conduit-connector-pgvector
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Start pgvector
+        run: docker compose -f pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml up --wait
+
+      - name: Run RAG pipeline e2e (chunk -> embed -> pgvector, incl. delete path)
+        env:
+          CONDUIT_PROCESSOR_AI_DIR: ${{ github.workspace }}/_rag/conduit-processor-ai
+          CONDUIT_CONNECTOR_PGVECTOR_DIR: ${{ github.workspace }}/_rag/conduit-connector-pgvector
+        run: |
+          go test -tags=rag_e2e -race -count=1 -v \
+            -run 'TestRAGPipeline_ChunkEmbedPgvector' \
+            ./pkg/plugin/processor/standalone/...
+
+      - name: Stop pgvector
+        if: always()
+        run: docker compose -f pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml down --volumes
