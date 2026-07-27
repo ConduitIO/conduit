@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -36,13 +37,13 @@ func TestPluginService_GetBuiltin_NotFound(t *testing.T) {
 
 	br := mock.NewRegistry(ctrl)
 	br.EXPECT().
-		NewProcessor(gomock.Any(), plugin.FullName(name), id).
+		NewProcessor(gomock.Any(), plugin.FullName(name), id, gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
 
 	sr := mock.NewStandaloneRegistry(ctrl)
 
 	underTest := NewPluginService(log.Nop(), br, sr)
-	got, err := underTest.NewProcessor(ctx, name, id)
+	got, err := underTest.NewProcessor(ctx, name, id, egress.DenyAll())
 	is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
 	is.True(got == nil)
 }
@@ -58,11 +59,11 @@ func TestPluginService_GetStandalone_NotFound(t *testing.T) {
 	br := mock.NewRegistry(ctrl)
 	sr := mock.NewStandaloneRegistry(ctrl)
 	sr.EXPECT().
-		NewProcessor(gomock.Any(), plugin.FullName(name), id).
+		NewProcessor(gomock.Any(), plugin.FullName(name), id, gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
 
 	underTest := NewPluginService(log.Nop(), br, sr)
-	got, err := underTest.NewProcessor(ctx, name, id)
+	got, err := underTest.NewProcessor(ctx, name, id, egress.DenyAll())
 	is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
 	is.True(got == nil)
 }
@@ -76,7 +77,7 @@ func TestPluginService_InvalidPluginType(t *testing.T) {
 	sr := mock.NewStandaloneRegistry(ctrl)
 	underTest := NewPluginService(log.Nop(), br, sr)
 
-	got, err := underTest.NewProcessor(ctx, "crunchy:test-processor", "test-id")
+	got, err := underTest.NewProcessor(ctx, "crunchy:test-processor", "test-id", egress.DenyAll())
 	is.True(err != nil)
 	is.Equal("invalid plugin name prefix \"crunchy\"", err.Error())
 	is.True(got == nil)
@@ -95,7 +96,7 @@ func TestPluginService_Get(t *testing.T) {
 			procName: "builtin:test-processor",
 			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				br.EXPECT().
-					NewProcessor(gomock.Any(), plugin.FullName("builtin:test-processor"), "test-id").
+					NewProcessor(gomock.Any(), plugin.FullName("builtin:test-processor"), "test-id", gomock.Any()).
 					Return(proc, nil)
 			},
 		},
@@ -104,7 +105,7 @@ func TestPluginService_Get(t *testing.T) {
 			procName: "standalone:test-processor",
 			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				sr.EXPECT().
-					NewProcessor(gomock.Any(), plugin.FullName("standalone:test-processor"), "test-id").
+					NewProcessor(gomock.Any(), plugin.FullName("standalone:test-processor"), "test-id", gomock.Any()).
 					Return(proc, nil)
 			},
 		},
@@ -113,7 +114,7 @@ func TestPluginService_Get(t *testing.T) {
 			procName: "test-processor",
 			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				sr.EXPECT().
-					NewProcessor(gomock.Any(), plugin.FullName("test-processor"), "test-id").
+					NewProcessor(gomock.Any(), plugin.FullName("test-processor"), "test-id", gomock.Any()).
 					Return(proc, nil)
 			},
 		},
@@ -130,7 +131,7 @@ func TestPluginService_Get(t *testing.T) {
 			tc.setup(br, sr, want)
 
 			underTest := NewPluginService(log.Nop(), br, sr)
-			got, err := underTest.NewProcessor(ctx, tc.procName, "test-id")
+			got, err := underTest.NewProcessor(ctx, tc.procName, "test-id", egress.DenyAll())
 			is.NoErr(err)
 			is.Equal(want, got)
 		})

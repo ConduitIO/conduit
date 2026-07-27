@@ -1,0 +1,61 @@
+name: bundle-e2e
+
+# Cross-repo end-to-end test for the WASM host-egress bundle: builds the REAL
+# embedding.wasm from conduitio/conduit-processor-ai and drives it through this
+# repo's standalone host module + SSRF egress gate. This is the acceptance bar
+# for the host-egress capability (design docs/design-documents/20260726-wasm-host-egress-capability.md).
+#
+# It is intentionally scoped to the paths that make up the bundle, so it runs on
+# changes to the egress gate, the standalone host module, the processor service,
+# or engine config — the surfaces the e2e actually exercises.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+      - 'pkg/plugin/processor/egress/**'
+      - 'pkg/plugin/processor/standalone/**'
+      - 'pkg/processor/**'
+      - 'pkg/conduit/**'
+      - '.github/workflows/bundle-e2e.yml'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+    inputs:
+      processor_ai_ref:
+        description: 'conduit-processor-ai ref to test against'
+        required: false
+        default: 'main'
+
+env:
+  # The conduit-processor-ai ref whose embedding processor is built into WASM
+  # and exercised. Defaults to main; overridable via workflow_dispatch.
+  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
+
+jobs:
+  bundle-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out conduit
+        uses: actions/checkout@v4
+
+      - name: Check out conduit-processor-ai
+        uses: actions/checkout@v4
+        with:
+          repository: ConduitIO/conduit-processor-ai
+          ref: ${{ env.PROCESSOR_AI_REF }}
+          path: _bundle/conduit-processor-ai
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run host-egress bundle e2e (real guest through host gate)
+        env:
+          CONDUIT_PROCESSOR_AI_DIR: ${{ github.workspace }}/_bundle/conduit-processor-ai
+        run: |
+          go test -race -count=1 -v \
+            -run 'TestEmbeddingWASM_HostEgressBundle_EndToEnd' \
+            ./pkg/plugin/processor/standalone/...

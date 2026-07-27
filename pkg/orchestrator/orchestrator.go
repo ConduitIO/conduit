@@ -121,7 +121,6 @@ type ConnectorPluginService interface {
 
 type ProcessorPluginService interface {
 	List(ctx context.Context) (map[string]processorSdk.Specification, error)
-	NewProcessor(ctx context.Context, pluginName string, id string) (processorSdk.Processor, error)
 	RegisterStandalonePlugin(ctx context.Context, path string) (string, error)
 }
 

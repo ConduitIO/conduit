@@ -23,10 +23,11 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
 type registry interface {
-	NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error)
+	NewProcessor(ctx context.Context, fullName plugin.FullName, id string, egressPolicy egress.Policy) (sdk.Processor, error)
 	List() map[plugin.FullName]sdk.Specification
 }
 
@@ -54,20 +55,20 @@ func (s *PluginService) Check(context.Context) error {
 	return nil
 }
 
-func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
+func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id string, egressPolicy egress.Policy) (sdk.Processor, error) {
 	fullName := plugin.FullName(pluginName)
 	switch fullName.PluginType() {
 	// standalone processors take precedence
 	// over built-in processors with the same name
 	case plugin.PluginTypeStandalone:
-		return s.standaloneReg.NewProcessor(ctx, fullName, id)
+		return s.standaloneReg.NewProcessor(ctx, fullName, id, egressPolicy)
 	case plugin.PluginTypeBuiltin:
-		return s.builtinReg.NewProcessor(ctx, fullName, id)
+		return s.builtinReg.NewProcessor(ctx, fullName, id, egressPolicy)
 	case plugin.PluginTypeAny:
-		d, err := s.standaloneReg.NewProcessor(ctx, fullName, id)
+		d, err := s.standaloneReg.NewProcessor(ctx, fullName, id, egressPolicy)
 		if err != nil {
 			s.logger.Debug(ctx).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = s.builtinReg.NewProcessor(ctx, fullName, id)
+			d, err = s.builtinReg.NewProcessor(ctx, fullName, id, egressPolicy)
 		}
 		return d, err
 	default:

@@ -38,6 +38,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
@@ -189,7 +190,11 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
+// NewProcessor builds a built-in processor. The egressPolicy argument exists to
+// satisfy the shared registry interface; built-in processors are compiled into
+// the core binary with full net/http and are NOT sandboxed, so the WASM
+// host-egress gate does not apply to them and the policy is ignored here.
+func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string, _ egress.Policy) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		// Invariant: errors.Is(err, plugin.ErrPluginNotFound) still holds — the

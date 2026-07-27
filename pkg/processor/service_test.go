@@ -28,12 +28,88 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	proc_mock "github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
+
+// TestService_resolveEgressPolicy_DefaultDenyAll is the end-to-end proof of the
+// security default: a Service with NO WithEgressCeiling option (the stock engine
+// wiring) has a zero-value/deny-all ceiling, so a processor that explicitly
+// requests egress via sdk.egress.allow still resolves to DenyAll. This closes
+// red-team finding #4 in the safe direction — the default stays fully closed.
+func TestService_resolveEgressPolicy_DefaultDenyAll(t *testing.T) {
+	is := is.New(t)
+	db := &inmemory.DB{}
+	registry := newPluginService(t, map[string]sdk.Processor{})
+
+	// No WithEgressCeiling => egressCeiling is the zero value (Enabled=false).
+	service := NewService(log.Nop(), db, registry)
+
+	inst := &Instance{
+		ID: uuid.NewString(),
+		Config: Config{Settings: map[string]string{
+			egress.ConfigKeyAllow: "api.openai.com", // the pipeline DOES opt in
+		}},
+	}
+
+	eff, err := service.resolveEgressPolicy(inst)
+	is.NoErr(err)
+	is.True(!eff.Enabled) // closed engine ceiling wins: effective policy is deny-all
+}
+
+// TestService_resolveEgressPolicy_EnabledIntersection verifies that an operator
+// ceiling (set via WithEgressCeiling, as runtime.go wires it from config) clamps
+// the per-processor request to the intersection.
+func TestService_resolveEgressPolicy_EnabledIntersection(t *testing.T) {
+	is := is.New(t)
+	db := &inmemory.DB{}
+	registry := newPluginService(t, map[string]sdk.Processor{})
+
+	ceiling := egress.Policy{
+		Enabled: true,
+		Allowlist: []egress.AllowEntry{
+			{Scheme: "https", Host: "api.openai.com", Port: "443"},
+		},
+	}
+	service := NewService(log.Nop(), db, registry, WithEgressCeiling(ceiling))
+
+	inst := &Instance{
+		ID: uuid.NewString(),
+		Config: Config{Settings: map[string]string{
+			egress.ConfigKeyAllow: "api.openai.com, api.voyageai.com", // one in, one out
+		}},
+	}
+
+	eff, err := service.resolveEgressPolicy(inst)
+	is.NoErr(err)
+	is.True(eff.Enabled)
+	is.Equal(len(eff.Allowlist), 1) // intersection: only the in-ceiling host survives
+	is.Equal(eff.Allowlist[0].Host, "api.openai.com")
+}
+
+// TestService_resolveEgressPolicy_MalformedFails verifies a malformed
+// per-processor egress config surfaces as an error (which fails the processor
+// build) rather than silently disabling egress.
+func TestService_resolveEgressPolicy_MalformedFails(t *testing.T) {
+	is := is.New(t)
+	db := &inmemory.DB{}
+	registry := newPluginService(t, map[string]sdk.Processor{})
+	service := NewService(log.Nop(), db, registry, WithEgressCeiling(egress.Policy{Enabled: true}))
+
+	inst := &Instance{
+		ID: uuid.NewString(),
+		Config: Config{Settings: map[string]string{
+			egress.ConfigKeyAllow: "*.evil.com", // wildcard is rejected
+		}},
+	}
+
+	_, err := service.resolveEgressPolicy(inst)
+	is.True(err != nil)
+}
 
 func TestService_Init_Success(t *testing.T) {
 	is := is.New(t)
@@ -157,7 +233,7 @@ func TestService_Init_PluginNotFound(t *testing.T) {
 
 	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -182,7 +258,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 
 	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, wantErr)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -625,7 +701,7 @@ func newPluginService(t *testing.T, processors map[string]sdk.Processor) *mock.P
 	pg := mock.NewPluginService(gomock.NewController(t))
 	for name, proc := range processors {
 		pg.EXPECT().
-			NewProcessor(gomock.Any(), name, gomock.Any()).AnyTimes().
+			NewProcessor(gomock.Any(), name, gomock.Any(), gomock.Any()).AnyTimes().
 			Return(proc, nil)
 	}
 	return pg

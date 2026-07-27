@@ -15,6 +15,7 @@ import (
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	plugin "github.com/conduitio/conduit/pkg/plugin"
+	egress "github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -81,18 +82,18 @@ func (c *RegistryListCall) DoAndReturn(f func() map[plugin.FullName]sdk.Specific
 }
 
 // NewProcessor mocks base method.
-func (m *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
+func (m *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string, egressPolicy egress.Policy) (sdk.Processor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewProcessor", ctx, fullName, id)
+	ret := m.ctrl.Call(m, "NewProcessor", ctx, fullName, id, egressPolicy)
 	ret0, _ := ret[0].(sdk.Processor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewProcessor indicates an expected call of NewProcessor.
-func (mr *RegistryMockRecorder) NewProcessor(ctx, fullName, id any) *RegistryNewProcessorCall {
+func (mr *RegistryMockRecorder) NewProcessor(ctx, fullName, id, egressPolicy any) *RegistryNewProcessorCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*Registry)(nil).NewProcessor), ctx, fullName, id)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*Registry)(nil).NewProcessor), ctx, fullName, id, egressPolicy)
 	return &RegistryNewProcessorCall{Call: call}
 }
 
@@ -108,13 +109,13 @@ func (c *RegistryNewProcessorCall) Return(arg0 sdk.Processor, arg1 error) *Regis
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RegistryNewProcessorCall) Do(f func(context.Context, plugin.FullName, string) (sdk.Processor, error)) *RegistryNewProcessorCall {
+func (c *RegistryNewProcessorCall) Do(f func(context.Context, plugin.FullName, string, egress.Policy) (sdk.Processor, error)) *RegistryNewProcessorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RegistryNewProcessorCall) DoAndReturn(f func(context.Context, plugin.FullName, string) (sdk.Processor, error)) *RegistryNewProcessorCall {
+func (c *RegistryNewProcessorCall) DoAndReturn(f func(context.Context, plugin.FullName, string, egress.Policy) (sdk.Processor, error)) *RegistryNewProcessorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -182,18 +183,18 @@ func (c *StandaloneRegistryListCall) DoAndReturn(f func() map[plugin.FullName]sd
 }
 
 // NewProcessor mocks base method.
-func (m *StandaloneRegistry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
+func (m *StandaloneRegistry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string, egressPolicy egress.Policy) (sdk.Processor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewProcessor", ctx, fullName, id)
+	ret := m.ctrl.Call(m, "NewProcessor", ctx, fullName, id, egressPolicy)
 	ret0, _ := ret[0].(sdk.Processor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewProcessor indicates an expected call of NewProcessor.
-func (mr *StandaloneRegistryMockRecorder) NewProcessor(ctx, fullName, id any) *StandaloneRegistryNewProcessorCall {
+func (mr *StandaloneRegistryMockRecorder) NewProcessor(ctx, fullName, id, egressPolicy any) *StandaloneRegistryNewProcessorCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*StandaloneRegistry)(nil).NewProcessor), ctx, fullName, id)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*StandaloneRegistry)(nil).NewProcessor), ctx, fullName, id, egressPolicy)
 	return &StandaloneRegistryNewProcessorCall{Call: call}
 }
 
@@ -209,13 +210,13 @@ func (c *StandaloneRegistryNewProcessorCall) Return(arg0 sdk.Processor, arg1 err
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StandaloneRegistryNewProcessorCall) Do(f func(context.Context, plugin.FullName, string) (sdk.Processor, error)) *StandaloneRegistryNewProcessorCall {
+func (c *StandaloneRegistryNewProcessorCall) Do(f func(context.Context, plugin.FullName, string, egress.Policy) (sdk.Processor, error)) *StandaloneRegistryNewProcessorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StandaloneRegistryNewProcessorCall) DoAndReturn(f func(context.Context, plugin.FullName, string) (sdk.Processor, error)) *StandaloneRegistryNewProcessorCall {
+func (c *StandaloneRegistryNewProcessorCall) DoAndReturn(f func(context.Context, plugin.FullName, string, egress.Policy) (sdk.Processor, error)) *StandaloneRegistryNewProcessorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

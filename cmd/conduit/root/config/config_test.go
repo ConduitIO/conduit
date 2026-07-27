@@ -133,6 +133,27 @@ func TestConfigWithFlags(t *testing.T) {
 				"pipelines.error-recovery.max-retries-window: 5m0s",
 				"schema-registry.type: builtin",
 				"preview.pipeline-arch-v2: false",
+				// Host-egress ceiling is deny-all by default (the flag is
+				// registered and reads false unless an operator opts in).
+				"processors.egress.enabled: false",
+			},
+		},
+		{
+			name: "egress ceiling flags",
+			args: []string{
+				"--processors.egress.enabled=true",
+				"--processors.egress.allow", "api.openai.com",
+				"--processors.egress.allow", "https://api.voyageai.com:443",
+				"--processors.egress.secret-refs", "openai_api_key",
+				"--processors.egress.timeout", "5s",
+				"--processors.egress.max-response-bytes", "1048576",
+			},
+			wantLines: []string{
+				"processors.egress.enabled: true",
+				"processors.egress.allow: [api.openai.com https://api.voyageai.com:443]",
+				"processors.egress.secret-refs: [openai_api_key]",
+				"processors.egress.timeout: 5s",
+				"processors.egress.max-response-bytes: 1048576",
 			},
 		},
 	}

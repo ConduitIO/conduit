@@ -293,7 +293,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
-	connectorPersister := connector.NewPersister(logger, db,
+	connectorPersister := connector.NewPersister(
+		logger, db,
 		connector.DefaultPersisterDelayThreshold,
 		connector.DefaultPersisterBundleCountThreshold,
 	)
@@ -413,7 +414,18 @@ func createServices(r *Runtime) error {
 
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
-	procService := processor.NewService(r.logger, r.DB, procPluginService)
+
+	// Engine-level host-egress ceiling (processors.egress.*). Its default is
+	// deny-all, so on a stock instance this passes a closed ceiling and every
+	// processor resolves to DenyAll. Already validated in Config.Validate (called
+	// in NewRuntime before createServices); rebuilt here as the single source of
+	// truth. Re-checked defensively so a future caller that skips Validate still
+	// fails closed rather than silently running with no ceiling.
+	egressCeiling, err := r.Config.egressCeiling()
+	if err != nil {
+		return cerrors.Errorf("invalid processor egress config: %w", err)
+	}
+	procService := processor.NewService(r.logger, r.DB, procPluginService, processor.WithEgressCeiling(egressCeiling))
 
 	var lifecycleService lifecycleService
 	if r.Config.Preview.PipelineArchV2 {

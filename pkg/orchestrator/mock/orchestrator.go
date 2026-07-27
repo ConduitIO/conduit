@@ -1227,45 +1227,6 @@ func (c *ProcessorPluginServiceListCall) DoAndReturn(f func(context.Context) (ma
 	return c
 }
 
-// NewProcessor mocks base method.
-func (m *ProcessorPluginService) NewProcessor(ctx context.Context, pluginName, id string) (sdk.Processor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewProcessor", ctx, pluginName, id)
-	ret0, _ := ret[0].(sdk.Processor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewProcessor indicates an expected call of NewProcessor.
-func (mr *ProcessorPluginServiceMockRecorder) NewProcessor(ctx, pluginName, id any) *ProcessorPluginServiceNewProcessorCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*ProcessorPluginService)(nil).NewProcessor), ctx, pluginName, id)
-	return &ProcessorPluginServiceNewProcessorCall{Call: call}
-}
-
-// ProcessorPluginServiceNewProcessorCall wrap *gomock.Call
-type ProcessorPluginServiceNewProcessorCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *ProcessorPluginServiceNewProcessorCall) Return(arg0 sdk.Processor, arg1 error) *ProcessorPluginServiceNewProcessorCall {
-	c.Call = c.Call.Return(arg0, arg1)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *ProcessorPluginServiceNewProcessorCall) Do(f func(context.Context, string, string) (sdk.Processor, error)) *ProcessorPluginServiceNewProcessorCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ProcessorPluginServiceNewProcessorCall) DoAndReturn(f func(context.Context, string, string) (sdk.Processor, error)) *ProcessorPluginServiceNewProcessorCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // RegisterStandalonePlugin mocks base method.
 func (m *ProcessorPluginService) RegisterStandalonePlugin(ctx context.Context, path string) (string, error) {
 	m.ctrl.T.Helper()

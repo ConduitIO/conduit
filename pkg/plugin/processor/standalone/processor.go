@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -80,6 +81,7 @@ func newWASMProcessor(
 	processorModule wazero.CompiledModule,
 	hostModule *wazergo.CompiledModule[*hostModuleInstance],
 	schemaService pprocutils.SchemaService,
+	egressPolicy egress.Policy,
 
 	id string,
 	logger log.CtxLogger,
@@ -92,6 +94,13 @@ func newWASMProcessor(
 	commandResponses := make(chan tuple[*processorv1.CommandResponse, error])
 	moduleStopped := make(chan struct{})
 
+	// Build the per-processor egress capability from the resolved policy. The
+	// policy is bound here, per instance — never on the shared Registry — so one
+	// processor's allowlist cannot leak into another's (a tested isolation
+	// invariant). A deny-all policy still yields a Service that refuses every
+	// call with ErrHTTPEgressDisabled.
+	httpService := egress.New(egressPolicy, logger)
+
 	// instantiate conduit host module and inject it into the context
 	logger.Debug(ctx).Msg("instantiating conduit host module")
 	ins, err := hostModule.Instantiate(
@@ -101,6 +110,7 @@ func newWASMProcessor(
 			commandRequests,
 			commandResponses,
 			schemaService,
+			httpService,
 		),
 	)
 	if err != nil {

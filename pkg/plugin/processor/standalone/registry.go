@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -120,7 +121,13 @@ func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutil
 	return r, nil
 }
 
-func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
+// NewProcessor builds a standalone (WASM) processor. egressPolicy is the
+// resolved, per-processor egress policy the engine computed from this instance's
+// config; it is threaded per-call (never stored on the Registry, which is a
+// process-global singleton shared across all processors — a policy field there
+// would leak one pipeline's allowlist to another) down to newWASMProcessor,
+// where it is bound to the per-instance host module.
+func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string, egressPolicy egress.Policy) (sdk.Processor, error) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
@@ -151,7 +158,7 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 		return nil, err
 	}
 
-	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, r.schemaService, id, r.logger)
+	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, r.schemaService, egressPolicy, id, r.logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create a new WASM processor: %w", err)
 	}
@@ -273,7 +280,9 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, "init-processor", r.logger)
+	// Spec extraction only: a throwaway processor that never processes records, so
+	// it gets deny-all egress.
+	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, egress.DenyAll(), "init-processor", r.logger)
 	if err != nil {
 		return blueprint{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
 	}
