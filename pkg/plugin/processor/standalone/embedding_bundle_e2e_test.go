@@ -195,13 +195,17 @@ func testEmbeddingHappyPath(t *testing.T, ctx context.Context, mod wazero.Compil
 	}))
 	is.NoErr(underTest.Open(ctx))
 
+	// embed's default inputField is .Payload.After.text (the composable RAG
+	// record shape the chunking processor emits), so the text must be a named
+	// StructuredData field, not raw bytes at the payload root.
 	records := []opencdc.Record{
-		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.RawData("short")}},
-		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.RawData("a much longer chunk of text")}},
+		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.StructuredData{"text": "short"}}},
+		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.StructuredData{"text": "a much longer chunk of text"}}},
 	}
 	processed := underTest.Process(ctx, records)
 	is.Equal(len(processed), 2)
 
+	wantTexts := []string{"short", "a much longer chunk of text"}
 	wantLens := []int{len("short"), len("a much longer chunk of text")}
 	for i, pr := range processed {
 		single, ok := pr.(sdk.SingleRecord)
@@ -221,14 +225,20 @@ func testEmbeddingHappyPath(t *testing.T, ctx context.Context, mod wazero.Compil
 		_, hasScope := rec.Metadata["ai.embedding.tokensUsedScope"]
 		is.True(!hasScope)
 
-		raw, ok := rec.Payload.After.(opencdc.RawData)
+		// embed writes the vector as a native []any of float64 to its default
+		// outputField (.Payload.After.vector), preserving the input "text" field
+		// alongside — the composable {text, vector} shape a vector sink consumes.
+		sd, ok := rec.Payload.After.(opencdc.StructuredData)
 		if !ok {
-			t.Fatalf("record %d: want opencdc.RawData output payload, got %T", i, rec.Payload.After)
+			t.Fatalf("record %d: want opencdc.StructuredData output payload, got %T", i, rec.Payload.After)
 		}
-		var vec []float32
-		is.NoErr(json.Unmarshal(raw.Bytes(), &vec))
+		is.Equal(sd["text"], wantTexts[i]) // input text preserved
+		vec, ok := sd["vector"].([]any)
+		if !ok {
+			t.Fatalf("record %d: want []any vector at .Payload.After.vector, got %T", i, sd["vector"])
+		}
 		is.Equal(len(vec), 3)
-		is.Equal(int(vec[0]), wantLens[i])
+		is.Equal(int(vec[0].(float64)), wantLens[i])
 	}
 
 	is.NoErr(underTest.Teardown(ctx))
@@ -282,7 +292,7 @@ func testEmbeddingSSRFBlocked(t *testing.T, ctx context.Context, mod wazero.Comp
 	is.NoErr(underTest.Open(ctx))
 
 	processed := underTest.Process(ctx, []opencdc.Record{
-		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.RawData("ssrf-attempt")}},
+		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.StructuredData{"text": "ssrf-attempt"}}},
 	})
 	is.Equal(len(processed), 1)
 
@@ -344,8 +354,8 @@ func testEmbeddingProviderErrorInvariant(t *testing.T, ctx context.Context, mod 
 	is.NoErr(underTest.Open(ctx))
 
 	processed := underTest.Process(ctx, []opencdc.Record{
-		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.RawData("trigger-error")}},
-		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.RawData("this one succeeds")}},
+		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.StructuredData{"text": "trigger-error"}}},
+		{Operation: opencdc.OperationCreate, Payload: opencdc.Change{After: opencdc.StructuredData{"text": "this one succeeds"}}},
 	})
 	is.Equal(len(processed), 2)
 
@@ -366,13 +376,17 @@ func testEmbeddingProviderErrorInvariant(t *testing.T, ctx context.Context, mod 
 		t.Fatalf("record 1: want sdk.SingleRecord (independent success), got %T (%+v)", processed[1], processed[1])
 	}
 	rec := opencdc.Record(single)
-	raw, ok := rec.Payload.After.(opencdc.RawData)
+	sd, ok := rec.Payload.After.(opencdc.StructuredData)
 	if !ok {
-		t.Fatalf("record 1: want opencdc.RawData output payload, got %T", rec.Payload.After)
+		t.Fatalf("record 1: want opencdc.StructuredData output payload, got %T", rec.Payload.After)
 	}
-	var vec []float32
-	is.NoErr(json.Unmarshal(raw.Bytes(), &vec))
-	is.Equal(vec, []float32{1, 2, 3})
+	is.Equal(sd["text"], "this one succeeds") // input text preserved alongside the vector
+	vec, ok := sd["vector"].([]any)
+	if !ok {
+		t.Fatalf("record 1: want []any vector at .Payload.After.vector, got %T", sd["vector"])
+	}
+	is.Equal(len(vec), 3)
+	is.Equal([]float64{vec[0].(float64), vec[1].(float64), vec[2].(float64)}, []float64{1, 2, 3})
 
 	is.NoErr(underTest.Teardown(ctx))
 }
