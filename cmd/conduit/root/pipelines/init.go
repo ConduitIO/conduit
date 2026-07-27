@@ -88,6 +88,19 @@ type InitResult struct {
 	// from (see --template), or empty when scaffolded via the generic
 	// --source/--destination path.
 	Template string `json:"template,omitempty"`
+	// Prerequisites lists preflight steps (plugin installs, or — where no
+	// install command exists yet — manual build/placement steps) that must
+	// be completed before `conduit run` will succeed against this
+	// scaffolded pipeline. Populated only for templates that reference
+	// plugins not built into this binary (GalleryTemplate.Prerequisites,
+	// docs/design-documents/20260724-ai-pipeline-components.md §8) — empty
+	// for the generic --source/--destination path and for every
+	// built-in-only template, which is self-sufficient the moment it's
+	// written. Surfaced here (not only in the template's README) so
+	// `pipelines init --template <name>` never emits a bare YAML that
+	// fails opaquely on first `conduit run` because a plugin isn't
+	// present.
+	Prerequisites []string `json:"prerequisites,omitempty"`
 }
 
 // InitSummary is `pipelines init`'s --json summary payload
@@ -528,14 +541,15 @@ func (c *InitCommand) executeTemplateScaffold(ctx context.Context) (cecdysis.Out
 		OK:      true,
 		Summary: InitSummary{Written: written},
 		Result: InitResult{
-			Path:         c.configFilePath,
-			PipelineName: c.pipelineName,
-			Source:       c.sourceConnector,
-			Destination:  c.destinationConnector,
-			DryRun:       c.flags.DryRun,
-			Forced:       c.flags.Force,
-			Config:       tmpl.YAML,
-			Template:     tmpl.Name,
+			Path:          c.configFilePath,
+			PipelineName:  c.pipelineName,
+			Source:        c.sourceConnector,
+			Destination:   c.destinationConnector,
+			DryRun:        c.flags.DryRun,
+			Forced:        c.flags.Force,
+			Config:        tmpl.YAML,
+			Template:      tmpl.Name,
+			Prerequisites: tmpl.Prerequisites,
 		},
 	}, nil
 }
@@ -543,19 +557,40 @@ func (c *InitCommand) executeTemplateScaffold(ctx context.Context) (cecdysis.Out
 // Render returns the human-readable rendering of a successful init run: the
 // original "your pipeline has been initialized" message when a file was
 // written, or the rendered config plus a "nothing was written" notice under
-// --dry-run.
+// --dry-run — followed by a prerequisites section whenever the scaffolded
+// template names one (renderPrerequisites), so a template whose plugins
+// aren't built into this binary never prints a plain "run `conduit run`"
+// that would fail opaquely.
 func (c *InitCommand) Render(outcome cecdysis.Outcome) string {
 	if list, ok := outcome.Result.(TemplateListResult); ok {
 		return renderTemplateList(list)
 	}
 
 	result, _ := outcome.Result.(InitResult)
+	prereq := renderPrerequisites(result.Prerequisites)
 
 	if result.DryRun {
 		return fmt.Sprintf("Dry run: the following pipeline configuration would be written to %q "+
-			"(nothing was written):\n\n%s", result.Path, result.Config)
+			"(nothing was written):\n\n%s%s", result.Path, result.Config, prereq)
 	}
 
 	return fmt.Sprintf("Your pipeline has been initialized and created at %q.\n"+
-		"To run the pipeline, simply run `conduit run`.\n", result.Path)
+		"To run the pipeline, simply run `conduit run`.\n%s", result.Path, prereq)
+}
+
+// renderPrerequisites renders InitResult.Prerequisites as a "before you can
+// run this" section, or "" when there are none (the common case: the
+// generic scaffold path and every built-in-only template).
+func renderPrerequisites(prerequisites []string) string {
+	if len(prerequisites) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\nBefore `conduit run` will work, complete these steps " +
+		"(this template references plugins not built into this binary):\n\n")
+	for _, p := range prerequisites {
+		fmt.Fprintf(&b, "  - %s\n", p)
+	}
+	return b.String()
 }

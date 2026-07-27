@@ -33,6 +33,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	provconfig "github.com/conduitio/conduit/pkg/provisioning/config"
 	yamlparser "github.com/conduitio/conduit/pkg/provisioning/config/yaml"
@@ -77,6 +79,41 @@ type GalleryTemplate struct {
 	// YAML is the literal, embedded pipeline configuration this template
 	// scaffolds.
 	YAML string
+	// AllowedNonBuiltin is a SCOPED exception to the built-in-only invariant
+	// above: the plugin names (Specification.Name / connector-plugin name)
+	// this ONE template is explicitly permitted to reference as its Source
+	// or Destination even though they are not in
+	// builtin.DefaultBuiltinConnectors. This is the registry-backed
+	// template extension point named (but not built) by
+	// docs/design-documents/20260723-templates-gallery.md §7's "a future
+	// template author proposes one needing a non-built-in connector" row,
+	// exercised for the first time by
+	// docs/design-documents/20260724-ai-pipeline-components.md §8's
+	// postgres-pgvector-rag template. Nil for every other template: leaving
+	// this empty is what keeps AC-5 ("zero templates require a non-built-in
+	// connector") a hard, package-init-enforced invariant for the rest of
+	// the catalog — validateGalleryCatalog and
+	// validateGalleryTemplateConnectors both consult this field per-template
+	// rather than relaxing the check globally, so granting the exception to
+	// one entry can never silently authorize it for another (see
+	// TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate).
+	AllowedNonBuiltin []string
+	// Prerequisites are preflight steps (registry plugin installs, or —
+	// where no install command exists yet — manual build/placement steps)
+	// that must be completed before `conduit run` will succeed against this
+	// template's scaffolded YAML. `pipelines init --template <name>`
+	// surfaces these directly in its result (both --json and
+	// human-readable) rather than only documenting them in the template's
+	// README, mirroring `conduit migrate kafka-connect`'s "never silently
+	// drop config it can't translate" spirit — applied here as "never emit
+	// a bare YAML that fails opaquely on first `conduit run` because a
+	// plugin isn't present" (design doc §8). Nil for every template whose
+	// Source/Destination are both built in (AllowedNonBuiltin is also nil
+	// for those, structurally: a template with prerequisites necessarily
+	// has a non-empty AllowedNonBuiltin, though the converse — an allowed
+	// non-builtin plugin the user is assumed to already have installed —
+	// isn't required to hold).
+	Prerequisites []string
 }
 
 //go:embed templates/generator-log/pipeline.yaml
@@ -91,21 +128,30 @@ var galleryYAMLPostgresS3 string
 //go:embed templates/postgres-cdc-kafka/pipeline.yaml
 var galleryYAMLPostgresCDCKafka string
 
+//go:embed templates/postgres-pgvector-rag/pipeline.yaml
+var galleryYAMLPostgresPgvectorRAG string
+
 // Template names (GalleryTemplate.Name / --template values) and built-in
 // connector names used more than once below — named so golangci-lint's
 // goconst check doesn't flag repeated string literals, and so the E2E test
 // file (template_gallery_e2e_test.go) can reference the same names rather
 // than re-typing them.
 const (
-	templateNameGeneratorLog     = "generator-log"
-	templateNameGeneratorFile    = "generator-file"
-	templateNamePostgresS3       = "postgres-s3"
-	templateNamePostgresCDCKafka = "postgres-cdc-kafka"
+	templateNameGeneratorLog        = "generator-log"
+	templateNameGeneratorFile       = "generator-file"
+	templateNamePostgresS3          = "postgres-s3"
+	templateNamePostgresCDCKafka    = "postgres-cdc-kafka"
+	templateNamePostgresPgvectorRAG = "postgres-pgvector-rag"
 
 	connNamePostgres = "postgres"
 	connNameS3       = "s3"
 	connNameKafka    = "kafka"
 	connNameFile     = "file"
+	// connNamePgvector is NOT in builtin.DefaultBuiltinConnectors — it is
+	// the one registry-installed, non-built-in destination the
+	// postgres-pgvector-rag template is scoped-exception-permitted to name
+	// (GalleryTemplate.AllowedNonBuiltin).
+	connNamePgvector = "pgvector"
 )
 
 // galleryCatalogSpec is the MVP template set (
@@ -156,6 +202,45 @@ func galleryCatalogSpec() []GalleryTemplate {
 				"\"logrepl\" — refuses to run rather than silently degrading to polling.",
 			YAML: galleryYAMLPostgresCDCKafka,
 		},
+		{
+			// postgres-pgvector-rag is the RAG-sync template
+			// (docs/design-documents/20260724-ai-pipeline-components.md
+			// §8): Postgres CDC -> chunk -> embed -> pgvector. It is the
+			// FIRST (and, deliberately, only) entry naming a non-built-in
+			// destination — AllowedNonBuiltin below is the scoped
+			// exception that makes validateGalleryCatalog and
+			// validateGalleryTemplateConnectors permit it without
+			// weakening AC-5 for every other template.
+			Name: templateNamePostgresPgvectorRAG,
+			Description: "Sync a Postgres table into a RAG-ready vector store: chunk each row's text, " +
+				"embed it, and upsert the vectors into pgvector.",
+			Source:            connNamePostgres,
+			Destination:       connNamePgvector,
+			AllowedNonBuiltin: []string{connNamePgvector},
+			DeliverySemantics: "At-least-once, not exactly-once; a row is only acknowledged upstream " +
+				"once pgvector has durably upserted every chunk derived from it. Deletes remove all " +
+				"chunks ever derived from a source row (matched by source_key), even across a chunk-count " +
+				"change, so no orphaned vectors survive an update or delete.",
+			YAML: galleryYAMLPostgresPgvectorRAG,
+			// Prerequisites: this template's pipeline.yaml references three
+			// plugins none of which are built into this binary (postgres
+			// is the only built-in participant). Surfaced directly in
+			// `pipelines init --template postgres-pgvector-rag`'s result
+			// (init.go's InitResult.Prerequisites / Render) so the command
+			// never emits a bare YAML that fails opaquely on first
+			// `conduit run` — see this field's doc comment.
+			Prerequisites: []string{
+				"Install the pgvector destination connector: `conduit connectors install pgvector@<version>` " +
+					"(run `conduit connectors search pgvector` to see available versions).",
+				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are WASM " +
+					"processor plugins. There is no `conduit processor-plugins install` command in this " +
+					"build — that install path does not exist yet. Until it does: build them yourself from " +
+					"a github.com/conduitio/conduit-processor-ai checkout with " +
+					"`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking` and " +
+					"`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-embed.wasm ./cmd/embedding`, then " +
+					"place both .wasm files in the directory configured as --processors.path.",
+			},
+		},
 	}
 }
 
@@ -178,13 +263,21 @@ func mustBuildGalleryCatalog() []GalleryTemplate {
 // template must hold (
 // docs/design-documents/20260723-templates-gallery.md §6 AC-5, §7's reserved-name row): unique,
 // non-empty names; never the reserved "list" sentinel; a non-empty
-// description; source/destination that both resolve to a built-in
-// connector; non-empty embedded YAML. It does NOT check individual setting
-// keys against the connector's parameter spec — that is
-// validateGalleryTemplateSettings's job, run per-template at scaffold time
-// (not at package init, so a synthetic "stale fixture" can be asserted
-// against directly in a test without crashing the whole test binary via a
-// package-level panic).
+// description; source/destination that either resolve to a built-in
+// connector OR are named in that specific template's own AllowedNonBuiltin
+// (the scoped registry-backed-template exception,
+// docs/design-documents/20260724-ai-pipeline-components.md §8 — see
+// GalleryTemplate's doc comment); non-empty embedded YAML. Because the
+// exception is checked per-template (t.AllowedNonBuiltin), a connector named
+// in one template's allowlist grants NO permission to any other template —
+// every other entry's empty AllowedNonBuiltin keeps AC-5 exactly as hard as
+// before (see
+// TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate).
+// This does NOT check individual setting keys against the connector's
+// parameter spec — that is validateGalleryTemplateSettings's job, run
+// per-template at scaffold time (not at package init, so a synthetic "stale
+// fixture" can be asserted against directly in a test without crashing the
+// whole test binary via a package-level panic).
 func validateGalleryCatalog(catalog []GalleryTemplate) error {
 	seen := make(map[string]bool, len(catalog))
 	for _, t := range catalog {
@@ -208,12 +301,16 @@ func validateGalleryCatalog(catalog []GalleryTemplate) error {
 		if strings.TrimSpace(t.DeliverySemantics) == "" {
 			return cerrors.Errorf("embedded template gallery: template %q has an empty delivery-semantics summary", t.Name)
 		}
-		if !isBuiltinConnectorName(t.Source) {
-			return cerrors.Errorf("embedded template gallery: template %q: source %q is not a built-in connector",
+		if !isBuiltinConnectorName(t.Source) && !slices.Contains(t.AllowedNonBuiltin, t.Source) {
+			return cerrors.Errorf(
+				"embedded template gallery: template %q: source %q is not a built-in connector "+
+					"and is not in this template's AllowedNonBuiltin allowlist",
 				t.Name, t.Source)
 		}
-		if !isBuiltinConnectorName(t.Destination) {
-			return cerrors.Errorf("embedded template gallery: template %q: destination %q is not a built-in connector",
+		if !isBuiltinConnectorName(t.Destination) && !slices.Contains(t.AllowedNonBuiltin, t.Destination) {
+			return cerrors.Errorf(
+				"embedded template gallery: template %q: destination %q is not a built-in connector "+
+					"and is not in this template's AllowedNonBuiltin allowlist",
 				t.Name, t.Destination)
 		}
 		if strings.TrimSpace(t.YAML) == "" {
@@ -302,7 +399,7 @@ func validateGalleryTemplateSettings(ctx context.Context, tmpl GalleryTemplate) 
 	}
 
 	for _, p := range pipelineCfgs {
-		if err := validateGalleryTemplateConnectors(tmpl.Name, p.Connectors); err != nil {
+		if err := validateGalleryTemplateConnectors(tmpl, p.Connectors); err != nil {
 			return err
 		}
 	}
@@ -330,15 +427,38 @@ func configParamRecognized(params config.Parameters, key string) bool {
 	return false
 }
 
-func validateGalleryTemplateConnectors(templateName string, connectors []provconfig.Connector) error {
+// validateGalleryTemplateConnectors checks tmpl's parsed connectors against
+// this build's actual connector param specs, with one scoped exception: a
+// connector plugin named in tmpl.AllowedNonBuiltin (see GalleryTemplate's doc
+// comment and validateGalleryCatalog) skips the builtin-spec lookup entirely
+// — builtinConnectorSpecParams would legitimately return not-found for it
+// (its spec isn't compiled into this binary at all), so treating that as a
+// "does not exist" error would be wrong for a template deliberately
+// referencing a registry-installed plugin. The allowlist is consulted
+// per-connector against THIS tmpl only, so it grants no permission to any
+// other catalog entry.
+func validateGalleryTemplateConnectors(tmpl GalleryTemplate, connectors []provconfig.Connector) error {
 	for _, c := range connectors {
-		pluginName := strings.TrimPrefix(c.Plugin, "builtin:")
+		pluginName := plugin.FullName(c.Plugin).PluginName()
+
+		if slices.Contains(tmpl.AllowedNonBuiltin, pluginName) {
+			// Scoped exception (design doc §8 / GalleryTemplate.AllowedNonBuiltin):
+			// this plugin's parameter spec is not compiled into this
+			// binary, so there is nothing to validate setting keys
+			// against here — a registry-installed plugin's own
+			// install/startup validation is where a real mismatch would
+			// surface. Do NOT build a parallel spec-fetching subsystem for
+			// this; see the task scope note in this package's design doc
+			// citation.
+			continue
+		}
 
 		params, ok := builtinConnectorSpecParams(pluginName, c.Type)
 		if !ok {
 			ce := conduiterr.New(CodeTemplateVersionMismatch, fmt.Sprintf(
 				"embedded template %q references %s connector %q, which does not exist in this build's "+
-					"built-in connector set", templateName, c.Type, pluginName,
+					"built-in connector set and is not in this template's AllowedNonBuiltin allowlist",
+				tmpl.Name, c.Type, pluginName,
 			))
 			ce.Suggestion = "this is a packaging bug in the vendored template, not a user config error " +
 				"— please file an issue against ConduitIO/conduit"
@@ -351,7 +471,7 @@ func validateGalleryTemplateConnectors(templateName string, connectors []provcon
 			}
 			ce := conduiterr.New(CodeTemplateVersionMismatch, fmt.Sprintf(
 				"embedded template %q sets %s connector %q's parameter %q, which is not recognized by "+
-					"the %q connector built into this binary", templateName, c.Type, c.ID, key, pluginName,
+					"the %q connector built into this binary", tmpl.Name, c.Type, c.ID, key, pluginName,
 			))
 			ce.Suggestion = "the vendored template is pinned against an older connector parameter shape " +
 				"than the one built into this binary — this is a packaging bug, not a user config error; " +
