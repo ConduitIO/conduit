@@ -39,6 +39,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -64,17 +65,24 @@ func TestGalleryCatalog_Valid(t *testing.T) {
 	is := is.New(t)
 
 	is.NoErr(validateGalleryCatalog(galleryTemplates))
-	is.Equal(len(galleryTemplates), 4)
+	is.Equal(len(galleryTemplates), 5)
 
 	wantNames := map[string]bool{
 		"generator-log": true, "generator-file": true,
 		"postgres-s3": true, "postgres-cdc-kafka": true,
+		"postgres-pgvector-rag": true,
 	}
 	for _, tmpl := range galleryTemplates {
 		is.True(wantNames[tmpl.Name])
 		is.True(tmpl.Name != templateListSentinel)
-		is.True(isBuiltinConnectorName(tmpl.Source))
-		is.True(isBuiltinConnectorName(tmpl.Destination))
+		// AC-5 ("zero templates require a non-built-in connector") holds
+		// for source/destination that are EITHER a built-in connector OR
+		// explicitly allowlisted by that same template's own
+		// AllowedNonBuiltin — postgres-pgvector-rag is the one entry that
+		// exercises the second branch (its Destination is "pgvector",
+		// which isBuiltinConnectorName alone would reject).
+		is.True(isBuiltinConnectorName(tmpl.Source) || slices.Contains(tmpl.AllowedNonBuiltin, tmpl.Source))
+		is.True(isBuiltinConnectorName(tmpl.Destination) || slices.Contains(tmpl.AllowedNonBuiltin, tmpl.Destination))
 		is.True(strings.TrimSpace(tmpl.Description) != "")
 		is.True(strings.TrimSpace(tmpl.DeliverySemantics) != "")
 		is.True(strings.TrimSpace(tmpl.YAML) != "")
@@ -113,6 +121,51 @@ func TestValidateGalleryCatalog_RejectsNonBuiltinConnector(t *testing.T) {
 	err := validateGalleryCatalog(bad)
 	is.True(err != nil)
 	is.True(strings.Contains(err.Error(), "not-a-real-connector"))
+}
+
+// TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate
+// is the load-bearing safety property of the postgres-pgvector-rag
+// exception (GalleryTemplate.AllowedNonBuiltin,
+// docs/design-documents/20260724-ai-pipeline-components.md §8): granting
+// ONE template permission to reference a non-built-in connector must not
+// leak that permission to any OTHER template. This builds a synthetic
+// catalog with two entries — one that legitimately allowlists
+// "not-a-real-connector" (mirroring the real postgres-pgvector-rag entry's
+// shape) and a second, unrelated template that references the SAME
+// connector name WITHOUT itself being on any allowlist — and asserts the
+// first passes while the second still fails validation. If the exception
+// were checked catalog-wide instead of per-template, this test would fail
+// (the second entry would wrongly pass once the first legitimized the
+// name).
+func TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate(t *testing.T) {
+	is := is.New(t)
+
+	catalog := []GalleryTemplate{
+		{
+			Name: "legitimately-allowlisted", Description: "x", DeliverySemantics: "x",
+			Source: "generator", Destination: "not-a-real-connector",
+			AllowedNonBuiltin: []string{"not-a-real-connector"},
+			YAML:              "version: \"2.2\"\n",
+		},
+		{
+			Name: "not-allowlisted", Description: "x", DeliverySemantics: "x",
+			Source: "generator", Destination: "not-a-real-connector",
+			// No AllowedNonBuiltin: this template never opted into the
+			// exception, even though a sibling entry's allowlist happens
+			// to name the exact same connector.
+			YAML: "version: \"2.2\"\n",
+		},
+	}
+
+	err := validateGalleryCatalog(catalog)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "not-allowlisted"))
+	is.True(strings.Contains(err.Error(), "not-a-real-connector"))
+
+	// Isolate: the first entry alone (with its own allowlist) must pass on
+	// its own — proving the failure above is really about the SECOND
+	// entry's missing allowlist, not some other defect in the fixture.
+	is.NoErr(validateGalleryCatalog(catalog[:1]))
 }
 
 // TestValidateGalleryCatalog_RejectsDuplicateName and
@@ -235,6 +288,56 @@ pipelines:
 	is.Equal(ce.Code.Reason(), CodeTemplateVersionMismatch.Reason())
 }
 
+// TestValidateGalleryTemplateConnectors_AllowedNonBuiltin_SkipsSpecCheck_ScopedToTemplate
+// is validateGalleryTemplateConnectors's own half of the scoped-exception
+// safety property (the catalog-level half is
+// TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate):
+// a connector plugin named in THIS template's AllowedNonBuiltin skips the
+// builtin-spec/parameter check entirely — even one setting a nonsense key,
+// since there's no compiled-in spec to check it against — while the exact
+// same plugin/settings pair on a DIFFERENT template (no allowlist) still
+// fails with CodeTemplateVersionMismatch.
+func TestValidateGalleryTemplateConnectors_AllowedNonBuiltin_SkipsSpecCheck_ScopedToTemplate(t *testing.T) {
+	is := is.New(t)
+
+	yaml := `version: "2.2"
+pipelines:
+  - id: uses-pgvector
+    status: running
+    name: uses-pgvector
+    connectors:
+      - id: src
+        type: source
+        plugin: "builtin:generator"
+      - id: dst
+        type: destination
+        plugin: "standalone:pgvector"
+        settings:
+          anySettingAtAll: "not checked against a compiled-in spec"
+`
+
+	allowed := GalleryTemplate{
+		Name: "allowed", Description: "x", DeliverySemantics: "x",
+		Source: "generator", Destination: "pgvector",
+		AllowedNonBuiltin: []string{"pgvector"},
+		YAML:              yaml,
+	}
+	is.NoErr(validateGalleryTemplateSettings(context.Background(), allowed))
+
+	notAllowed := GalleryTemplate{
+		Name: "not-allowed", Description: "x", DeliverySemantics: "x",
+		Source: "generator", Destination: "pgvector",
+		// No AllowedNonBuiltin — the identical connector reference must
+		// still be refused for THIS template.
+		YAML: yaml,
+	}
+	err := validateGalleryTemplateSettings(context.Background(), notAllowed)
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeTemplateVersionMismatch.Reason())
+}
+
 func newTemplateGalleryEcdysis() *ecdysis.Ecdysis {
 	return ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithResultDecorator{}))
 }
@@ -271,6 +374,73 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 	}
 }
 
+// TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites is the
+// preflight-note requirement from design doc §8 ("never emit a bare YAML
+// that fails opaquely on first `conduit run` because a plugin isn't
+// present"): scaffolding postgres-pgvector-rag must surface its
+// GalleryTemplate.Prerequisites in BOTH the --json result and the
+// human-readable Render output, naming the exact `conduit connectors
+// install pgvector@<version>` command and stating plainly that no
+// `conduit processor-plugins install` equivalent exists yet for the two
+// WASM processors.
+func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+
+	cmd := newTemplateGalleryEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--json"})
+	is.NoErr(cmd.Execute())
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal(out.Bytes(), &got))
+	is.True(got.OK)
+
+	resultBytes, err := json.Marshal(got.Result)
+	is.NoErr(err)
+	var result InitResult
+	is.NoErr(json.Unmarshal(resultBytes, &result))
+	is.True(len(result.Prerequisites) >= 2)
+
+	joined := strings.Join(result.Prerequisites, "\n")
+	is.True(strings.Contains(joined, "conduit connectors install pgvector@"))
+	is.True(strings.Contains(joined, "no `conduit processor-plugins install` command"))
+
+	// The human-readable Render path must surface the same note, not just
+	// the --json payload.
+	cmd2 := newTemplateGalleryEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out2 bytes.Buffer
+	cmd2.SetOut(&out2)
+	cmd2.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--force"})
+	is.NoErr(cmd2.Execute())
+	is.True(strings.Contains(out2.String(), "conduit connectors install pgvector@"))
+}
+
+// TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites is
+// the converse: a built-in-only template (generator-log) must never carry a
+// prerequisites note — it's self-sufficient the moment it's scaffolded, and
+// the field should stay empty rather than print a vacuous "no steps needed"
+// section.
+func TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+
+	cmd := newTemplateGalleryEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pipelines.path=" + dir, "--template=generator-log", "--json"})
+	is.NoErr(cmd.Execute())
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal(out.Bytes(), &got))
+	resultBytes, err := json.Marshal(got.Result)
+	is.NoErr(err)
+	var result InitResult
+	is.NoErr(json.Unmarshal(resultBytes, &result))
+	is.Equal(len(result.Prerequisites), 0)
+}
+
 // TestTemplateList_JSON_EnvelopeShape is AC-2: --template list --json must
 // conform to the Family A envelope and enumerate all four templates with a
 // non-empty description each.
@@ -296,7 +466,7 @@ func TestTemplateList_JSON_EnvelopeShape(t *testing.T) {
 	is.NoErr(err)
 	var result TemplateListResult
 	is.NoErr(json.Unmarshal(resultBytes, &result))
-	is.Equal(len(result.Templates), 4)
+	is.Equal(len(result.Templates), 5)
 	for _, entry := range result.Templates {
 		is.True(entry.Name != "")
 		is.True(entry.Description != "")
@@ -351,7 +521,9 @@ func TestInitCommand_UnknownTemplate_HardFailure(t *testing.T) {
 	is.True(!got.OK)
 	is.True(got.Error != nil)
 	is.Equal(got.Error.Code, CodeUnknownTemplate.Reason())
-	for _, name := range []string{"generator-log", "generator-file", "postgres-s3", "postgres-cdc-kafka"} {
+	for _, name := range []string{
+		"generator-log", "generator-file", "postgres-s3", "postgres-cdc-kafka", "postgres-pgvector-rag",
+	} {
 		is.True(strings.Contains(got.Error.Suggestion, name))
 	}
 

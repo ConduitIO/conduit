@@ -1,0 +1,117 @@
+version: "2.2"
+pipelines:
+  - id: postgres-pgvector-rag
+    description: >
+      Vendored template "postgres-pgvector-rag": syncs a Postgres table
+      (initial snapshot, then ongoing change data capture) into a RAG-ready
+      vector store — each row's text is chunked, embedded, and upserted into
+      pgvector, keyed so redelivery and updates converge cleanly and deletes
+      remove every chunk ever derived from a row. Scaffolded by
+      `conduit pipelines init --template postgres-pgvector-rag`. This
+      template's non-postgres connector/processors are NOT built into
+      `conduit` — run the preflight steps this command printed (or see
+      README.md in this template's directory) before `conduit run`, and
+      fill in the placeholder connection values below.
+    status: running
+    name: postgres-pgvector-rag
+    connectors:
+      - id: postgres-pgvector-rag-source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          # Postgres connection string, e.g.
+          # postgres://user:password@localhost:5432/dbname?sslmode=disable
+          url: postgres://user:password@localhost:5432/dbname?sslmode=disable
+          # Comma-separated table names, or "*" for all tables. Each row's
+          # text-bearing column is read by the chunking processor's
+          # inputField setting below — update BOTH together.
+          tables: my_table
+          # Take a full snapshot on first run (so existing rows are synced
+          # into the vector store immediately), then keep syncing ongoing
+          # changes — this is the "sync," not "CDC-only," shape. See
+          # README.md's delivery-semantics note.
+          snapshotMode: initial
+          # Use logical replication if available, otherwise fall back to
+          # long-polling. Set to "logrepl" if you need a hard guarantee
+          # (matching the postgres-cdc-kafka template's stance).
+          cdcMode: auto
+      - id: postgres-pgvector-rag-destination
+        type: destination
+        # pgvector (conduit-connector-pgvector): NOT a built-in connector —
+        # see this template's preflight note / README for the install
+        # command. Field shape verified against
+        # conduit-connector-pgvector's destination.Config.
+        plugin: "standalone:pgvector"
+        settings:
+          # Connection string for the Postgres instance running the
+          # pgvector extension — can be the same database as the source
+          # above, or a dedicated vector store.
+          url: postgres://user:password@localhost:5432/vectordb?sslmode=disable
+          # Target table for the embedding rows. Must already exist with
+          # the shape: id text PRIMARY KEY, embedding vector(<dimension>),
+          # metadata jsonb, source_key text (indexed) — see README.md for
+          # the exact CREATE TABLE statement.
+          table: document_chunks
+          # MUST match the embedding model's output dimension configured
+          # below (nomic-embed-text is 768). Validated at connector
+          # startup — a mismatch refuses to run rather than silently
+          # truncating.
+          dimension: "768"
+          # vectorColumn is the pgvector `vector` column name on the target
+          # table (distinct from vectorField below, which is the record's
+          # payload field, not a database column).
+          vectorColumn: embedding
+          keyColumn: id
+          # vectorField is the record payload field carrying the embedding
+          # — the default "vector" is exactly ai.embed's default
+          # outputField basename below.
+          vectorField: vector
+          metadataColumn: metadata
+          # source_key population is what lets a source-row delete remove
+          # every chunk ever derived from it (design doc §5) — do not
+          # disable this for a RAG-sync pipeline.
+          sourceKeyColumn: source_key
+          sourceKeyMetadataKey: ai.chunk.source_key
+          idMetadataKey: ai.chunk.id
+    processors:
+      # ai.chunk (conduit-processor-ai): splits each row's text into N chunk
+      # records. NOT a built-in processor — see this template's preflight
+      # note / README for the install gap. Field shape verified against
+      # conduit-processor-ai's chunk.Config.
+      - id: chunk
+        plugin: "standalone:ai.chunk"
+        settings:
+          strategy: recursive
+          chunkSize: "1000"
+          overlap: "100"
+          # The record field holding the text to chunk. Point this at your
+          # table's actual text-bearing column — "content" is a placeholder
+          # matching the "tables: my_table" placeholder above.
+          inputField: ".Payload.After.content"
+          # outputField is left at its default (".Payload.After.text"),
+          # which is exactly ai.embed's default inputField below — this
+          # composable, zero-config handoff is the RAG contract the two
+          # processors share (conduit-processor-ai design doc §3/§4).
+      # ai.embed (conduit-processor-ai): calls an embedding provider for
+      # each chunk's text. NOT a built-in processor — see this template's
+      # preflight note / README. Field shape verified against
+      # conduit-processor-ai's embed.Config. Provider is "ollama" (local,
+      # keyless) so this template runs with zero cloud credentials; swap in
+      # "openai" (openai.authSecretRef + openai.baseURL) or another
+      # supported provider for production use.
+      - id: embed
+        plugin: "standalone:ai.embed"
+        settings:
+          provider: ollama
+          # nomic-embed-text is a common local Ollama embedding model,
+          # 768-dimensional — the pgvector destination's "dimension"
+          # setting above MUST match whatever model you actually use.
+          model: nomic-embed-text
+          ollama.baseURL: http://localhost:11434
+          requestTimeout: 30s
+          maxRetries: "5"
+          # inputField/outputField are left at their defaults
+          # (".Payload.After.text" / ".Payload.After.vector") — matching
+          # ai.chunk's default output and the pgvector destination's
+          # default vectorField respectively, with zero field configuration
+          # needed between all three components.
