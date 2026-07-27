@@ -159,3 +159,59 @@ func TestHostModule_HTTPRequest_MultiTenantIsolation(t *testing.T) {
 	_, ec = callHTTPRequest(t, mB, toproto.HTTPRequest(pprocutils.HTTPRequest{Method: "GET", URL: srvA.URL}))
 	is.Equal(ec, uint32(pprocutils.ErrorCodeHTTPForbidden))
 }
+
+// TestHostModule_HTTPRequest_EnvSecretInjection proves the host-injected
+// credential path end-to-end at the host-ABI layer with the real
+// EnvSecretResolver: the guest names a granted secret (AuthSecretRef) and sets
+// NO Authorization header itself; the host reads the value from the namespaced
+// process env and injects it, and the destination server receives it. This is
+// the wiring newWASMProcessor uses in production (egress.New(..., WithSecretResolver(EnvSecretResolver{}))).
+func TestHostModule_HTTPRequest_EnvSecretInjection(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("CONDUIT_SECRET_TEST_KEY", "Bearer sk-injected-by-host")
+
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	// Policy grants the secret ref AND allowlists the local server. The resolver
+	// is the real env-backed one, exactly as newWASMProcessor wires it.
+	al, err := egress.ParseAllowlist("http://" + hp(t, srv))
+	is.NoErr(err)
+	policy := egress.Policy{
+		Enabled:          true,
+		Allowlist:        al,
+		SecretRefs:       map[string]struct{}{"test_key": {}},
+		MaxResponseBytes: egress.DefaultMaxResponseBytes,
+	}
+	m := &hostModuleInstance{
+		logger:           log.Nop(),
+		httpService:      egress.New(policy, log.Nop(), egress.WithSecretResolver(egress.EnvSecretResolver{})),
+		parkedResponses:  make(map[string]proto.Message),
+		lastRequestBytes: make(map[string][]byte),
+	}
+
+	// The guest supplies AuthSecretRef and NO Authorization header of its own.
+	resp, ec := callHTTPRequest(t, m, toproto.HTTPRequest(pprocutils.HTTPRequest{
+		Method:        "POST",
+		URL:           srv.URL,
+		AuthSecretRef: "test_key",
+	}))
+	is.Equal(ec, uint32(0))
+	is.Equal(int(resp.StatusCode), 200)
+	// The server saw the env-sourced credential, injected host-side.
+	is.Equal(gotAuth, "Bearer sk-injected-by-host")
+
+	// An ungranted ref is refused before any resolution (defense in depth), even
+	// if its env var happens to exist.
+	t.Setenv("CONDUIT_SECRET_UNGRANTED", "Bearer nope")
+	_, ec = callHTTPRequest(t, m, toproto.HTTPRequest(pprocutils.HTTPRequest{
+		Method:        "POST",
+		URL:           srv.URL,
+		AuthSecretRef: "ungranted",
+	}))
+	is.Equal(ec, uint32(pprocutils.ErrorCodeHTTPForbidden))
+}
