@@ -39,6 +39,31 @@ const (
 	ConfigKeySecretRefs = "sdk.egress.secretRefs" //nolint:gosec // config key name, not a credential value
 )
 
+// reservedKeyPrefix is the host-reserved processor-config namespace. Every key
+// under it is consumed HOST-SIDE by PolicyFromSettings at processor-open time
+// and is never meant to reach guest code — the design mandates egress config be
+// "host-reserved ... immutable from guest code"
+// (docs/design-documents/20260726-wasm-host-egress-capability.md). StripReservedKeys
+// removes the whole namespace so a standalone processor that strictly validates
+// its declared parameters does not reject the operator's egress opt-in as an
+// "unrecognized parameter".
+const reservedKeyPrefix = "sdk.egress."
+
+// StripReservedKeys deletes every host-reserved egress config key (the
+// sdk.egress.* namespace) from settings, mutating it in place. Call it on the
+// clone of a processor's Settings handed to Configure, AFTER PolicyFromSettings
+// has consumed the same keys host-side (they are read from the instance's own
+// Settings, not from this stripped clone, so removing them here does not affect
+// policy resolution). Stripping by prefix — rather than the four known
+// constants — keeps a future sdk.egress.* sub-key host-reserved automatically.
+func StripReservedKeys(settings map[string]string) {
+	for k := range settings {
+		if strings.HasPrefix(k, reservedKeyPrefix) {
+			delete(settings, k)
+		}
+	}
+}
+
 // splitList splits a comma/whitespace-separated config value into trimmed,
 // non-empty tokens.
 func splitList(raw string) []string {
