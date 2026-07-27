@@ -61,6 +61,28 @@ test-integration-templates:
 		docker compose -f test/compose-templates.yaml down; \
 		exit $$ret
 
+# test-integration-rag-template runs the postgres-pgvector-rag gallery template's
+# FULL-ENGINE end-to-end test (cmd/conduit/root/pipelines/
+# template_gallery_rag_e2e_integration_test.go, build tag `rag_template_e2e`).
+# Its own target and compose file (test/compose-rag-template.yaml), separate from
+# test-integration-templates: this template needs a SINGLE pgvector +
+# logical-replication Postgres (both CDC source and vector store), which neither
+# that target's postgres:17 (no vector extension) nor the rag_e2e pgvector (no
+# wal_level=logical) provides.
+#
+# Requires two sibling checkouts, named via env vars (the two non-postgres
+# plugins are not built into conduit and have no install command yet):
+#   CONDUIT_PROCESSOR_AI_DIR       -> a ConduitIO/conduit-processor-ai checkout
+#   CONDUIT_CONNECTOR_PGVECTOR_DIR -> a ConduitIO/conduit-connector-pgvector checkout
+# The test SKIPS cleanly (does not fail) when either is unset — so this target is
+# a no-op-by-skip without the checkouts.
+.PHONY: test-integration-rag-template
+test-integration-rag-template:
+	docker compose -f test/compose-rag-template.yaml up --quiet-pull -d --wait
+	go test $(GOTEST_FLAGS) -race --tags=rag_template_e2e ./cmd/conduit/root/pipelines/...; ret=$$?; \
+		docker compose -f test/compose-rag-template.yaml down; \
+		exit $$ret
+
 .PHONY: fmt
 fmt:
 	gofumpt -l -w .

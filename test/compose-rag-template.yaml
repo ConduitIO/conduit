@@ -1,0 +1,33 @@
+# rag-template-postgres backs the postgres-pgvector-rag vendored template's
+# full-engine end-to-end test (cmd/conduit/root/pipelines/
+# template_gallery_rag_e2e_integration_test.go, build tag `rag_template_e2e`,
+# run by `make test-integration-rag-template`).
+#
+# It is a DELIBERATELY SEPARATE instance/port from every other e2e's Postgres:
+#
+#   - test/compose-templates.yaml's postgres:17 (:5442) has wal_level=logical
+#     but NO `vector` extension.
+#   - pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml's
+#     pgvector/pgvector:pg17 (:5435) has the extension but NO wal_level=logical.
+#   - conduit-connector-pgvector's own compose is on :5433.
+#
+# This template's test needs a SINGLE database that is BOTH a logical-replication
+# CDC source AND a pgvector store, so it uses the pgvector image WITH the
+# logical-replication server flags, on its own port (:5445) to avoid colliding
+# with any of the three above if a developer has them up at once.
+services:
+  rag-template-postgres:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "5445:5432"
+    environment:
+      - POSTGRES_USER=conduit
+      - POSTGRES_PASSWORD=conduit
+      - POSTGRES_DB=conduit_rag_template_e2e
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "conduit_rag_template_e2e", "-U", "conduit"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

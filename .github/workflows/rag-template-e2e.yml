@@ -1,0 +1,88 @@
+name: rag-template-e2e
+
+# Full-engine end-to-end test for the postgres-pgvector-rag GALLERY TEMPLATE:
+# scaffolds the template via the real `conduit pipelines init`, makes the REAL
+# ai.chunk + ai.embed WASM guests (built from conduitio/conduit-processor-ai)
+# and the REAL conduit-connector-pgvector binary discoverable by the engine's
+# own plugin registries, boots the real conduit.Runtime, and asserts embedding
+# rows land in pgvector (right dimension/id/source_key) then that a source-row
+# delete removes every derived chunk row through the engine's tombstone fan-out.
+# The embedding provider's HTTP endpoint is the only mock; the WASM boundary,
+# egress gate, connector protocol, pipeline lifecycle, and pgvector are all real.
+#
+# This is DISTINCT from:
+#   - the `templates_e2e` matrix in test.yml (single-repo, built-in-only
+#     templates), and
+#   - the `rag-e2e` job (component-level chunk->embed->pgvector, scoped to
+#     pkg/plugin/processor/standalone/**, bypassing the engine).
+#
+# Not yet a required check (that's a repo-settings change to follow), matching
+# the rag-e2e / bundle-e2e precedent.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+      - 'cmd/conduit/root/pipelines/templates/postgres-pgvector-rag/**'
+      - 'cmd/conduit/root/pipelines/template_gallery_rag_e2e_integration_test.go'
+      - 'test/compose-rag-template.yaml'
+      - '.github/workflows/rag-template-e2e.yml'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+    inputs:
+      processor_ai_ref:
+        description: 'conduit-processor-ai ref to test against'
+        required: false
+        default: 'main'
+      pgvector_ref:
+        description: 'conduit-connector-pgvector ref to test against'
+        required: false
+        default: 'main'
+
+env:
+  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
+  PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'main' }}
+
+jobs:
+  rag-template-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out conduit
+        uses: actions/checkout@v4
+
+      - name: Check out conduit-processor-ai
+        uses: actions/checkout@v4
+        with:
+          repository: ConduitIO/conduit-processor-ai
+          ref: ${{ env.PROCESSOR_AI_REF }}
+          path: _rag/conduit-processor-ai
+
+      - name: Check out conduit-connector-pgvector
+        uses: actions/checkout@v4
+        with:
+          repository: ConduitIO/conduit-connector-pgvector
+          ref: ${{ env.PGVECTOR_REF }}
+          path: _rag/conduit-connector-pgvector
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Start pgvector + logical-replication Postgres
+        run: docker compose -f test/compose-rag-template.yaml up --wait
+
+      - name: Run RAG template gallery e2e (scaffold -> engine -> pgvector, incl. delete path)
+        env:
+          CONDUIT_PROCESSOR_AI_DIR: ${{ github.workspace }}/_rag/conduit-processor-ai
+          CONDUIT_CONNECTOR_PGVECTOR_DIR: ${{ github.workspace }}/_rag/conduit-connector-pgvector
+        run: |
+          go test -tags=rag_template_e2e -race -count=1 -v \
+            -run 'TestTemplateGalleryRAG_Integration' \
+            ./cmd/conduit/root/pipelines/...
+
+      - name: Stop pgvector
+        if: always()
+        run: docker compose -f test/compose-rag-template.yaml down --volumes
