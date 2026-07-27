@@ -87,6 +87,8 @@ func (c protoConverter) processedRecord(in *processorv1.Process_ProcessedRecord)
 	switch v := in.Record.(type) {
 	case *processorv1.Process_ProcessedRecord_SingleRecord:
 		return c.singleRecord(v)
+	case *processorv1.Process_ProcessedRecord_MultiRecord:
+		return c.multiRecord(v)
 	case *processorv1.Process_ProcessedRecord_FilterRecord:
 		return c.filterRecord(v)
 	case *processorv1.Process_ProcessedRecord_ErrorRecord:
@@ -108,6 +110,33 @@ func (c protoConverter) singleRecord(in *processorv1.Process_ProcessedRecord_Sin
 	}
 
 	return sdk.SingleRecord(rec), nil
+}
+
+// multiRecord converts a guest's Process_ProcessedRecord_MultiRecord response
+// into an sdk.MultiRecord — the fan-out shape a processor uses to turn one
+// input record into zero, one, or many output records (e.g. the ai.chunk
+// standalone processor splitting a source record into N chunk records). Prior
+// to this fix, processedRecord's switch had no case for this oneof variant at
+// all: any standalone WASM processor returning sdk.MultiRecord from Process
+// would have every such response rejected host-side as "unknown processed
+// record type", regardless of what the guest itself did correctly. A nil
+// MultiRecord (matching the zero-element sdk.MultiRecord{} the SDK documents
+// as a filter-equivalent, empty response) converts to an empty, non-nil
+// slice — never nil — for the same "no records survives the guest boundary
+// as a real empty fan-out, not an absent one" reasoning singleRecord's own
+// nil-guard follows.
+func (c protoConverter) multiRecord(in *processorv1.Process_ProcessedRecord_MultiRecord) (sdk.MultiRecord, error) {
+	if in == nil || in.MultiRecord == nil {
+		return sdk.MultiRecord{}, nil
+	}
+
+	recs := make([]opencdc.Record, len(in.MultiRecord.Records))
+	for i, r := range in.MultiRecord.Records {
+		if err := recs[i].FromProto(r); err != nil {
+			return nil, fmt.Errorf("failed to convert multi-record entry %d: %w", i, err)
+		}
+	}
+	return sdk.MultiRecord(recs), nil
 }
 
 func (c protoConverter) filterRecord(_ *processorv1.Process_ProcessedRecord_FilterRecord) (sdk.FilterRecord, error) {
