@@ -324,6 +324,12 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 	is.NoErr(err)
 	_, err = pg.Exec(ctx, `CREATE TABLE my_table (id INT PRIMARY KEY, content TEXT NOT NULL)`)
 	is.NoErr(err)
+	// REPLICA IDENTITY FULL so a CDC DELETE carries the old row's key columns in
+	// the WAL — otherwise the delete tombstone reaches the pipeline without the
+	// key the chunk processor stringifies into source_key, and pgvector's
+	// delete-by-source_key fan-out cannot match the rows the snapshot wrote.
+	_, err = pg.Exec(ctx, `ALTER TABLE my_table REPLICA IDENTITY FULL`)
+	is.NoErr(err)
 	t.Cleanup(func() { _, _ = pg.Exec(context.Background(), `DROP TABLE IF EXISTS my_table`) })
 
 	// Vector table exactly per the template README's CREATE TABLE. A unique
@@ -417,6 +423,12 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 	cfg.Connectors.Path = connDir
 	cfg.Processors.Egress.Enabled = true
 	cfg.Processors.Egress.Allow = []string{allowSpec}
+	// The chunk processor fans one source record into many chunk records
+	// (sdk.MultiRecord). Fan-out is only supported by pipeline architecture v2
+	// (the classic 1-in-1-out stream node rejects MultiRecord as an "unknown
+	// record type"), so the RAG template requires it. arch-v2's "1 source + 1
+	// destination per pipeline" constraint is satisfied by this template.
+	cfg.Preview.PipelineArchV2 = true
 	cfg.Log.Level = "info"
 	cfg.Log.NewLogger = func(level, _ string) log.CtxLogger {
 		l, _ := zerolog.ParseLevel(level)
