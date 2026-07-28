@@ -37,6 +37,16 @@ This gap — `conduit processor-plugins install` not existing — is stated here
 invented around; `conduit pipelines init --template postgres-pgvector-rag` names it in its
 prerequisite note every time this template is scaffolded.
 
+## Requires pipeline architecture v2
+
+The chunking processor fans one source record into **many** chunk records (one per chunk). Record
+fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; the default engine is
+one-record-in-one-record-out and rejects a fan-out with an `"unknown record type"` error at the
+chunk step. Run this pipeline with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true`
+in the config). Architecture v2 is currently a **preview** engine — it is more allocation-efficient
+than the default but does not yet have automatic error-recovery parity; review its status before
+depending on it for production data.
+
 You'll also need the pgvector target table created ahead of time, matching the `dimension` you
 configure (768 for the template's default `nomic-embed-text` model):
 
