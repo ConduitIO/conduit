@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -356,11 +357,17 @@ func TestSource_OnPersistFlushed_OutOfOrderCompletionStillDeliversInOrder(t *tes
 	src.ackMu.Unlock()
 
 	// Simulate the highest seq's flush completing FIRST (out of order): this
-	// must drain and send all three, in order. onPersistFlushed sends
-	// synchronously (that's what lets Persister.WaitPendingWrites prove the
-	// send happened, see its doc), so it must run concurrently with the
-	// Recv calls below rather than before them, or it would block forever
-	// waiting for a reader on the first send.
+	// must drain all three and deliver them, in order. Under Approach A2
+	// (docs/design-documents/20260728-snapshot-handoff-deferred-ack-deadlock.md)
+	// onPersistFlushed no longer sends inline — it enqueues the drained
+	// positions onto the deferredAckQueue (in FIFO order) and the dedicated
+	// per-source delivery goroutine (started in Open) performs the sends. So
+	// the ordering guarantee this test pins is now: whatever order the flush
+	// callbacks fire in, the delivery goroutine sends every position exactly
+	// once, strictly in the order Ack queued them. onPersistFlushed itself
+	// returns fast (it does not block on a send), so the `go` is no longer
+	// required for liveness, but is kept to exercise it running concurrently
+	// with the Recv calls exactly as a real persister callback would.
 	go src.onPersistFlushed(3, nil)
 
 	serverStream := stream.Server()
@@ -628,6 +635,168 @@ func TestSource_Teardown_FastFlushCompletesWithinBoundedTimeout(t *testing.T) {
 	}
 
 	is.True(!strings.Contains(logBuf.String(), "timed out waiting"))
+}
+
+// faultySourceStream wraps a real source-run stream client and injects a
+// bounded number of transient Send failures before delegating to the real
+// stream. It exists to deterministically reproduce the natural, timing-
+// dependent bug the snapshot-handoff fix targets (a transient stream.Send
+// failure for a deferred ack), which the pre-A2 code logged-and-dropped. Recv
+// and every other method delegate to the embedded client unchanged.
+type faultySourceStream struct {
+	pconnector.SourceRunStreamClient
+
+	mu        sync.Mutex
+	failsLeft int
+	failErr   error
+	failCount int
+}
+
+func (f *faultySourceStream) Send(req pconnector.SourceRunRequest) error {
+	f.mu.Lock()
+	if f.failsLeft > 0 {
+		f.failsLeft--
+		f.failCount++
+		f.mu.Unlock()
+		return f.failErr
+	}
+	f.mu.Unlock()
+	return f.SourceRunStreamClient.Send(req)
+}
+
+func (f *faultySourceStream) failures() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.failCount
+}
+
+// TestSource_DeferredAck_TransientSendFailure_EventuallyDelivered is the core
+// regression test for the snapshot→CDC handoff deadlock
+// (docs/design-documents/20260728-snapshot-handoff-deferred-ack-deadlock.md,
+// Approach A2). It is the deterministic analogue of the natural, load-
+// dependent bug: it fault-injects transient stream.Send failures for the first
+// N attempts of a deferred ack WHILE THE PLUGIN IS RUNNING, and asserts the
+// ack is EVENTUALLY delivered (retried), never dropped.
+//
+// Pre-A2, sendDeferredAck logged-and-dropped the first failure. For a snapshot-
+// gating source (Postgres) that emits no further records until it receives the
+// snapshot-boundary ack, that drop is a permanent handoff deadlock plus silent
+// loss of all post-snapshot CDC (invariant 3) — not the benign no-op the old
+// code assumed. This test would fail (Recv would block until the timeout)
+// against the pre-A2 drop-on-failure behavior, and passes with A2's retry.
+func TestSource_DeferredAck_TransientSendFailure_EventuallyDelivered(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	// bundleCountThreshold=1 (newTestSource) means the Ack below is flushed
+	// immediately (asynchronously), so onPersistFlushed enqueues the deferred
+	// ack for the delivery goroutine without needing a fake clock.
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+
+	// Wrap the (now open) stream so the delivery goroutine's first N sends of
+	// the deferred ack fail transiently. Set BEFORE the Ack that triggers
+	// delivery; no delivery is in flight yet (no ack queued), and the Ack ->
+	// enqueue -> signal -> goroutine-read chain establishes a happens-before
+	// edge over this write, so there is no race (verified under -race).
+	const transientFailures = 4
+	faulty := &faultySourceStream{
+		SourceRunStreamClient: src.stream,
+		failsLeft:             transientFailures,
+		failErr:               cerrors.New("transient send failure"),
+	}
+	src.stream = faulty
+	// Retry generously and back off ~instantly so the test is fast and
+	// deterministic (test-only overrides, mirroring teardownFlushTimeout).
+	src.deferredAckMaxRetries = 100
+	src.deferredAckBackoffCap = time.Millisecond
+
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("boundary-pos")}))
+
+	serverStream := stream.Server()
+	recvDone := make(chan opencdc.Position, 1)
+	go func() {
+		// The delivery goroutine retries past the injected failures; the send
+		// that finally succeeds pairs with this Recv. If the ack were dropped
+		// (the pre-A2 bug), this Recv would block forever.
+		resp, err := serverStream.Recv()
+		is.NoErr(err)
+		recvDone <- resp.AckPositions[0]
+	}()
+
+	select {
+	case pos := <-recvDone:
+		is.Equal(pos, opencdc.Position("boundary-pos")) // eventually delivered, not dropped
+	case <-time.After(10 * time.Second):
+		t.Fatal("deferred ack was never delivered despite retries — the snapshot-handoff deadlock regressed")
+	}
+	// All injected failures were retried through, not dropped: the successful
+	// send happens strictly after them in the single delivery goroutine, so by
+	// the time recvDone fired the count is settled.
+	is.Equal(faulty.failures(), transientFailures)
+
+	// Clean up the delivery goroutine.
+	is.NoErr(src.Teardown(ctx))
+}
+
+// TestSource_DeferredAck_PersistentSendFailure_EscalatesViaErrs pins the other
+// half of Approach A2's contract: a deferred-ack send that NEVER recovers while
+// the plugin is running must fail LOUDLY (escalate via errs) once retries are
+// exhausted — not silently drop (which for a snapshot-gating source is a silent
+// deadlock) and not hang. Escalation is safe while running because the node is
+// reading errs; it is suppressed only during teardown (see deliverOneAck).
+func TestSource_DeferredAck_PersistentSendFailure_EscalatesViaErrs(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	_ = expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+
+	wantErr := cerrors.New("permanent send failure")
+	faulty := &faultySourceStream{
+		SourceRunStreamClient: src.stream,
+		failsLeft:             1 << 30, // effectively always fail
+		failErr:               wantErr,
+	}
+	src.stream = faulty
+	// Small retry bound + near-instant backoff: exhaust quickly, then escalate.
+	src.deferredAckMaxRetries = 3
+	src.deferredAckBackoffCap = time.Millisecond
+
+	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("doomed-pos")}))
+
+	// Read errs as the node would while the plugin is running. A regression
+	// that dropped the exhausted ack (or hung) would leave this blocked.
+	select {
+	case err := <-src.Errors():
+		is.True(cerrors.Is(err, wantErr))
+	case <-time.After(10 * time.Second):
+		t.Fatal("a persistent deferred-ack send failure while running was never escalated via errs — it was silently dropped or hung")
+	}
+
+	// After escalation the connector is on its way down; tear it down. The
+	// stream is still failing, so the bounded drain can't deliver — that is
+	// fine (bounded, benign). A short teardown timeout keeps the test fast.
+	src.teardownFlushTimeout = 100 * time.Millisecond
+	is.NoErr(src.Teardown(ctx))
 }
 
 func newTestSource(ctx context.Context, t testing.TB, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
