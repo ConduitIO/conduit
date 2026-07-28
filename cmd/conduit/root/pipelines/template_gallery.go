@@ -230,6 +230,11 @@ func galleryCatalogSpec() []GalleryTemplate {
 			// never emits a bare YAML that fails opaquely on first
 			// `conduit run` — see this field's doc comment.
 			Prerequisites: []string{
+				"Run the pipeline with pipeline architecture v2 (`--preview.pipeline-arch-v2`, or " +
+					"`preview.pipeline-arch-v2: true` in the config). The chunking processor fans one source " +
+					"record into many chunk records, and record fan-out is only supported by architecture v2; " +
+					"on the default engine the pipeline fails at the chunk step with an \"unknown record type\" " +
+					"error. Architecture v2 is a preview engine — see its status before relying on it in production.",
 				"Install the pgvector destination connector: `conduit connectors install pgvector@<version>` " +
 					"(run `conduit connectors search pgvector` to see available versions).",
 				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are WASM " +

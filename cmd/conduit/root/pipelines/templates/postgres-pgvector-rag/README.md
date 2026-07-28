@@ -37,6 +37,16 @@ This gap — `conduit processor-plugins install` not existing — is stated here
 invented around; `conduit pipelines init --template postgres-pgvector-rag` names it in its
 prerequisite note every time this template is scaffolded.
 
+## Requires pipeline architecture v2
+
+The chunking processor fans one source record into **many** chunk records (one per chunk). Record
+fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; the default engine is
+one-record-in-one-record-out and rejects a fan-out with an `"unknown record type"` error at the
+chunk step. Run this pipeline with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true`
+in the config). Architecture v2 is currently a **preview** engine — it is more allocation-efficient
+than the default but does not yet have automatic error-recovery parity; review its status before
+depending on it for production data.
+
 You'll also need the pgvector target table created ahead of time, matching the `dimension` you
 configure (768 for the template's default `nomic-embed-text` model):
 
@@ -83,9 +93,17 @@ egress-allowlist host module, and a real out-of-process `conduit-connector-pgvec
 to real Postgres in `pkg/plugin/processor/standalone/rag_e2e_test.go` (build tag `rag_e2e`) — that
 suite is what validates the exact record shape this template's processors/destination compose
 around (chunk's `.Payload.After.text` → embed's `.Payload.After.vector` → pgvector's `vectorField`).
-A full template-gallery end-to-end job (this template scaffolded via `conduit pipelines init` and
-run as a real `conduit` pipeline against Postgres CDC + pgvector) is tracked as follow-up work; see
-this template's addition PR for the current state of that harness.
+The full template-gallery end-to-end job now exists: `TestTemplateGalleryRAG_Integration`
+(`cmd/conduit/root/pipelines/template_gallery_rag_e2e_integration_test.go`, build tag
+`rag_template_e2e`) scaffolds this template via the real `conduit pipelines init`, makes the
+`ai.chunk`/`ai.embed` WASM guests and the `pgvector` connector discoverable by the engine's own
+plugin registries, boots the real `conduit.Runtime`, and asserts embedding rows land in pgvector
+(right dimension, `id` = `<source_key>:<chunk_index>`, populated `source_key`) then that a
+source-row delete removes every derived chunk row through the engine's tombstone fan-out. Run it
+with `make test-integration-rag-template` (needs `CONDUIT_PROCESSOR_AI_DIR` and
+`CONDUIT_CONNECTOR_PGVECTOR_DIR` sibling checkouts; skips cleanly without them). It runs in CI via
+the `rag-template-e2e` workflow — a **non-required** check for now (like `rag-e2e`), gated on changes
+to this template and the harness.
 
 ## Delivery semantics
 
