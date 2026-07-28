@@ -18,6 +18,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -40,6 +41,30 @@ import (
 // the failure mode this bound exists for.
 const DefaultTeardownFlushTimeout = 10 * time.Second
 
+// Deferred-ack delivery retry policy (Approach A2, docs/design-documents/
+// 20260728-snapshot-handoff-deferred-ack-deadlock.md). A snapshot-gating
+// source (e.g. Postgres) blocks its own progress until the snapshot-boundary
+// ack is delivered, so a transient stream.Send failure for a deferred ack must
+// be RETRIED until it succeeds, not dropped — a dropped boundary ack is a
+// permanent handoff deadlock + silent post-snapshot CDC loss (invariant 3),
+// not the benign no-op the pre-A2 code assumed. These constants bound that
+// retry so a genuinely broken stream (not a transient blip) is escalated
+// loudly via errs instead of retried forever. They are overridable per source
+// via the deferredAck* fields below for deterministic tests (mirroring
+// teardownFlushTimeout).
+const (
+	// DefaultDeferredAckMaxRetries bounds how many times the per-source
+	// ack-delivery goroutine retries a transient stream.Send failure to a
+	// running plugin before escalating the error via errs.
+	DefaultDeferredAckMaxRetries = 12
+	// DefaultDeferredAckBackoffInitial is the first inter-retry backoff; it
+	// doubles each attempt, capped at DefaultDeferredAckBackoffCap.
+	DefaultDeferredAckBackoffInitial = 10 * time.Millisecond
+	// DefaultDeferredAckBackoffCap caps the exponential backoff between
+	// deferred-ack retries.
+	DefaultDeferredAckBackoffCap = 500 * time.Millisecond
+)
+
 type Source struct {
 	Instance *Instance
 
@@ -56,6 +81,16 @@ type Source struct {
 
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
+
+	// streamCtx is the context that stopStream cancels — the single context
+	// shared by both directions of the plugin stream (see run). The deferred-
+	// ack delivery goroutine observes streamCtx.Done() as the authoritative
+	// "the stream is being torn down" signal: once it is done, any stream.Send
+	// resolves to ctx.Canceled rather than an actual send, so the goroutine
+	// stops retrying and drops (benign — the position is already durable). It
+	// is set once in run, before deliverDeferredAcks is started, so the
+	// goroutine reads it race-free.
+	streamCtx context.Context //nolint:containedctx // mirrors the stream's own contained ctx; read-only in the delivery goroutine
 
 	// wg tracks the number of in flight calls to the connectorPlugin.
 	wg sync.WaitGroup
@@ -89,11 +124,53 @@ type Source struct {
 	// arrive out of order.
 	durableAckSeq uint64
 
+	// deferredAckQueue is the FIFO hand-off from onPersistFlushed (which runs
+	// in connector.Persister's shared callbackWg goroutine) to the dedicated
+	// per-source delivery goroutine (deliverDeferredAcks). onPersistFlushed
+	// appends the durable positions it drains here, in the exact order it
+	// drains them, and returns fast — it never performs the (retryable,
+	// possibly-slow) stream.Send itself, so a slow plugin no longer blocks the
+	// process-wide flush cycle (Approach A2 narrows the blast radius #2680
+	// flagged). Guarded by ackMu; each element is one Ack call's positions.
+	deferredAckQueue [][]opencdc.Position
+	// deferredAckClosed is set by Teardown (under ackMu) once it has begun
+	// draining the delivery goroutine. After it is set, onPersistFlushed stops
+	// enqueuing (a straggler flush's positions are already durable, so dropping
+	// its ack during teardown is benign — restart re-delivers). Guarded by
+	// ackMu.
+	deferredAckClosed bool
+
+	// deferredAckSignal wakes deliverDeferredAcks when new work is enqueued (or
+	// when Teardown sets deferredAckClosed). Buffered (size 1) and sent to
+	// non-blockingly, so a producer under ackMu never blocks on it; a single
+	// buffered slot is sufficient because the goroutine always drains the
+	// entire queue on each wakeup.
+	deferredAckSignal chan struct{}
+	// deliveryDone is closed by deliverDeferredAcks when it exits, so Teardown
+	// can join it and guarantee no goroutine leak.
+	deliveryDone chan struct{}
+	// tearingDown is set true at the very start of Teardown, before any wait.
+	// Once set, deliverDeferredAcks still RETRIES a transient send failure (to
+	// deliver the final durable ack, invariant 7) but never ESCALATES an
+	// exhausted retry via errs — nothing reads errs during teardown, so an
+	// escalation there would block the goroutine forever. While it is false
+	// (plugin genuinely running), an exhausted retry escalates loudly, which
+	// is safe because the node is reading errs. See deliverOneAck.
+	tearingDown atomic.Bool
+
 	// teardownFlushTimeout overrides DefaultTeardownFlushTimeout for
 	// Teardown's bounded flush wait. Zero (the production default — this
 	// field is only ever set by tests) means "use
 	// DefaultTeardownFlushTimeout"; see Teardown.
 	teardownFlushTimeout time.Duration
+
+	// deferredAckMaxRetries and deferredAckBackoffCap override
+	// DefaultDeferredAckMaxRetries / DefaultDeferredAckBackoffCap for the
+	// deferred-ack delivery goroutine's retry policy. Zero (the production
+	// default — these fields are only ever set by tests) means "use the
+	// Default* constant"; see deliverOneAck.
+	deferredAckMaxRetries int
+	deferredAckBackoffCap time.Duration
 }
 
 // pendingAck is one Source.Ack call's positions, queued until the resulting
@@ -180,6 +257,16 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	s.Instance.connector = s
 	s.Instance.persister.ConnectorStarted()
 
+	// Start the dedicated per-source deferred-ack delivery goroutine (Approach
+	// A2). It is started last, after every fallible step of Open has succeeded
+	// (run, the last such step, has already set stream/streamCtx), so a failed
+	// Open never leaks it. Teardown drains and joins it. See
+	// deliverDeferredAcks and docs/design-documents/
+	// 20260728-snapshot-handoff-deferred-ack-deadlock.md.
+	s.deferredAckSignal = make(chan struct{}, 1)
+	s.deliveryDone = make(chan struct{})
+	go s.deliverDeferredAcks()
+
 	return nil
 }
 
@@ -216,6 +303,17 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 // docs/design-documents/20260723-source-ack-persist-ordering-fix.md,
 // "Graceful shutdown (invariant 7)".
 //
+// Under Approach A2 (docs/design-documents/
+// 20260728-snapshot-handoff-deferred-ack-deadlock.md) the actual stream.Send
+// of each deferred ack is performed by the dedicated per-source delivery
+// goroutine (deliverDeferredAcks), not inline in onPersistFlushed. So the
+// flush-and-wait below only guarantees the final durable positions are
+// ENQUEUED; the additional waitDeliveryDrain step (also before stopStream,
+// also bounded by the same budget) is what guarantees they are actually SENT
+// before the stream is closed. tearingDown is set first so that, from here on,
+// the delivery goroutine still retries transient sends but never escalates via
+// errs (nothing reads errs during teardown).
+//
 // Critically, this flush-and-wait must happen BEFORE stopStream, not after:
 // stopStream cancels the one context shared by both directions of the
 // plugin stream (see run's context.WithCancel and, for the in-memory
@@ -247,6 +345,14 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 // not have reached disk yet, so a restart simply re-delivers it), never a
 // gap.
 func (s *Source) Teardown(ctx context.Context) error {
+	// Signal the deferred-ack delivery goroutine that we are tearing down,
+	// before any wait below. From here on it will still retry a transient send
+	// (to deliver the final durable ack during the bounded drain) but will
+	// never escalate an exhausted retry via errs — nothing reads errs during
+	// teardown, so an escalation there would deadlock the goroutine. See the
+	// tearingDown field doc and deliverOneAck.
+	s.tearingDown.Store(true)
+
 	s.Instance.Lock()
 	if s.plugin == nil {
 		s.Instance.Unlock()
@@ -266,6 +372,11 @@ func (s *Source) Teardown(ctx context.Context) error {
 	if timeout <= 0 {
 		timeout = DefaultTeardownFlushTimeout
 	}
+	// Both the flush wait and the delivery-goroutine drain below share one
+	// bound (DefaultTeardownFlushTimeout): they must complete, in total,
+	// before we cancel the stream and tear the plugin down. deadline anchors
+	// that single budget.
+	deadline := time.Now().Add(timeout)
 	s.Instance.persister.Flush(ctx)
 	if err := s.Instance.persister.WaitPendingWritesContext(ctx, timeout); err != nil {
 		// Bounded-wait fallback (see doc comment above): proceed with
@@ -280,6 +391,22 @@ func (s *Source) Teardown(ctx context.Context) error {
 			Dur("timeout", timeout).
 			Msg("timed out waiting for the final flush/deferred ack before tearing down source connector plugin; proceeding with teardown anyway (safe: at worst a benign duplicate on restart, never a gap — see Teardown's doc comment)")
 	}
+
+	// The forced flush above has run its onPersistFlushed callbacks (waited on
+	// by WaitPendingWritesContext), so the final durable positions are now
+	// enqueued for delivery. Close the queue and drain the delivery goroutine
+	// so the FINAL ack is actually SENT before we cancel the stream below —
+	// bounded by whatever remains of the same budget. On timeout we proceed:
+	// stopStream then cancels the stream and the goroutine finishes fast,
+	// degrading any still-undelivered ack to the already-proven-safe benign
+	// duplicate on restart (never a gap), exactly as the flush-wait fallback
+	// above. This is Approach A2's move of #2680's bounded-drain from the
+	// persister callback onto the delivery goroutine.
+	s.ackMu.Lock()
+	s.deferredAckClosed = true
+	s.ackMu.Unlock()
+	s.signalDelivery()
+	s.waitDeliveryDrain(ctx, time.Until(deadline))
 
 	s.Instance.Lock()
 	if s.plugin == nil {
@@ -298,6 +425,17 @@ func (s *Source) Teardown(ctx context.Context) error {
 		s.stopStream()
 	}
 	s.Instance.Unlock()
+
+	// Join the delivery goroutine before waiting on in-flight plugin calls and
+	// tearing the plugin down. If the bounded drain above already saw it exit,
+	// this returns immediately; if the drain timed out, stopStream just
+	// canceled streamCtx, so the goroutine's in-flight/queued sends now fail
+	// fast (ctx.Canceled) and its retry backoff aborts — it exits promptly.
+	// This guarantees no goroutine leak and that no deferred-ack send races
+	// the plugin.Teardown below (which nils s.plugin).
+	if s.deliveryDone != nil {
+		<-s.deliveryDone
+	}
 
 	// wait for any calls to the plugin to stop running (e.g. Stop, or a Read
 	// that was blocked waiting for a record that will never come, now
@@ -447,59 +585,269 @@ func (s *Source) onPersistFlushed(seq uint64, err error) {
 		return
 	}
 
-	var toSend [][]opencdc.Position
+	appended := false
 	s.ackMu.Lock()
 	if seq > s.durableAckSeq {
 		s.durableAckSeq = seq
 	}
 	i := 0
 	for ; i < len(s.pendingAcks) && s.pendingAcks[i].seq <= s.durableAckSeq; i++ {
-		toSend = append(toSend, s.pendingAcks[i].positions)
+		// Approach A2: hand the durable positions to the dedicated per-source
+		// delivery goroutine (deliverDeferredAcks) in FIFO order instead of
+		// sending them to the plugin inline here. Appending under ackMu keeps
+		// enqueue order identical to drain order (invariant 4) and returns
+		// fast — this callback runs in connector.Persister's shared callbackWg
+		// goroutine, so it must not block on a (retryable, possibly-slow)
+		// stream.Send (that would widen the process-wide flush blast radius
+		// #2680 flagged). If Teardown has already begun draining
+		// (deferredAckClosed), the positions are still durable, so dropping
+		// their ack now is benign — restart re-delivers.
+		if !s.deferredAckClosed {
+			s.deferredAckQueue = append(s.deferredAckQueue, s.pendingAcks[i].positions)
+			appended = true
+		}
 	}
 	s.pendingAcks = s.pendingAcks[i:]
 	s.ackMu.Unlock()
 
-	for _, positions := range toSend {
-		s.sendDeferredAck(positions)
+	if appended {
+		s.signalDelivery()
 	}
 }
 
-// sendDeferredAck sends one previously-queued Ack call's positions to the
-// plugin now that the resulting position is known durable. Unlike Ack's own
-// (pre-Approach-A) synchronous send, a failure here is never escalated via
-// errs, on purpose: the position this ack refers to is already durable
-// (that's precisely why onPersistFlushed called this), so failing to
-// deliver the message itself is always a benign, already-safe no-op, never a
-// data-integrity problem — the plugin will learn about it on the next ack it
-// does receive (see the design doc's failure-mode analysis, "crash between
-// flush-complete and plugin-ack"). This is not merely a style choice: Teardown
-// deliberately cancels the stream's context (stopStream) before forcing the
-// final flush that can trigger this exact call, specifically so any
-// still-batched position gets flushed and acked while the plugin is still
-// considered "running" for preparePluginCall's purposes — which means a
-// perfectly expected send here is one racing an already-canceled context,
-// returning context.Canceled (not io.EOF; see
-// pkg/plugin/connector/builtin/stream.go's inMemoryStreamClient.Send and
-// equivalents), not a real transport fault. Escalating that via the
-// unbuffered errs channel (as a genuine send failure was before this fix)
-// would risk this goroutine blocking forever the moment nothing is left
-// reading errs during teardown — a self-inflicted deadlock, not a
-// correctness improvement.
-func (s *Source) sendDeferredAck(positions []opencdc.Position) {
-	cleanup, err := s.preparePluginCall()
-	defer cleanup()
-	if err != nil {
-		// Plugin already torn down; benign, see doc comment above.
+// signalDelivery wakes the deferred-ack delivery goroutine without blocking.
+// deferredAckSignal is buffered (size 1); a non-blocking send is sufficient
+// because deliverDeferredAcks always drains the whole queue on each wakeup, so
+// at most one pending wakeup ever needs to be latched.
+func (s *Source) signalDelivery() {
+	select {
+	case s.deferredAckSignal <- struct{}{}:
+	default:
+	}
+}
+
+// deliverDeferredAcks is the dedicated per-source ack-delivery goroutine
+// (Approach A2, docs/design-documents/
+// 20260728-snapshot-handoff-deferred-ack-deadlock.md). It reads the FIFO
+// deferredAckQueue that onPersistFlushed populates and delivers each durable
+// position set to the plugin, in order, retrying transient failures while the
+// plugin is running (see deliverOneAck). It exists so a snapshot-gating source
+// (e.g. Postgres), which blocks its own progress until the snapshot-boundary
+// ack is delivered, can never lose that ack to a transient send failure — the
+// pre-A2 code logged-and-dropped it, which for such a source is a permanent
+// handoff deadlock + silent post-snapshot CDC loss (invariant 3).
+//
+// It is started in Open (after run has set stream/streamCtx) and exits once
+// Teardown has set deferredAckClosed and it has drained everything queued
+// before that point. On exit it closes deliveryDone, which Teardown joins to
+// guarantee no leak.
+func (s *Source) deliverDeferredAcks() {
+	defer close(s.deliveryDone)
+	for {
+		s.ackMu.Lock()
+		queue := s.deferredAckQueue
+		s.deferredAckQueue = nil
+		closed := s.deferredAckClosed
+		s.ackMu.Unlock()
+
+		for _, positions := range queue {
+			s.deliverOneAck(positions)
+		}
+
+		if len(queue) > 0 {
+			// We may have raced a producer that enqueued more while we were
+			// delivering; re-check the queue before parking.
+			continue
+		}
+		if closed {
+			// Teardown has closed the queue and we have drained everything
+			// enqueued before it did (onPersistFlushed stops enqueuing once
+			// deferredAckClosed is set, all under ackMu, so there is nothing
+			// left to come). Exit.
+			return
+		}
+		// Nothing to do; park until a producer (or Teardown) signals. The
+		// signal is latched (buffered size 1) and sent after the enqueue/close
+		// under ackMu, so this can never miss a wakeup.
+		<-s.deferredAckSignal
+	}
+}
+
+// deliverOneAck delivers one previously-queued Ack call's positions to the
+// plugin now that the resulting position is known durable.
+//
+// Invariant 3 (at-least-once) at a snapshot→CDC handoff: while the plugin is
+// running, a transient stream.Send failure is RETRIED with bounded backoff
+// until it succeeds — it is NOT dropped. A snapshot-gating source emits no
+// further records until it receives the snapshot-boundary ack, so there is no
+// "next ack" to carry a dropped one; dropping it deadlocks the handoff and
+// silently loses all post-snapshot CDC. If the retries exhaust while the
+// plugin is genuinely running (a broken stream, not teardown), the error is
+// escalated via errs — safe, because the node is reading errs while running;
+// a loud failure of an already-broken connector is correct.
+//
+// During teardown the calculus flips back to #2680's proven-safe behavior: the
+// position is already durable, so a failed/undelivered ack is a benign
+// duplicate on restart, never a gap. So once teardown has begun (tearingDown
+// set, or streamCtx canceled by stopStream), an exhausted/failed send is
+// dropped and NEVER escalated — escalating during teardown would block on the
+// unbuffered errs channel that nothing is reading, a self-inflicted deadlock.
+// The stream must stay open during Teardown's bounded drain (Teardown cancels
+// streamCtx only after that drain) precisely so these final sends can succeed.
+func (s *Source) deliverOneAck(positions []opencdc.Position) {
+	attempt := 0
+	for {
+		cleanup, err := s.preparePluginCall()
+		if err != nil {
+			// Plugin already torn down; benign (position durable).
+			cleanup()
+			return
+		}
+		if s.stream == nil {
+			cleanup()
+			return
+		}
+		sendErr := s.stream.Send(pconnector.SourceRunRequest{AckPositions: positions})
+		cleanup()
+		if sendErr == nil {
+			return // delivered
+		}
+
+		// If the stream is already being torn down, every further send will
+		// resolve to ctx.Canceled the same way; stop retrying and drop
+		// (benign — the position is durable, restart re-delivers).
+		if s.streamTornDown() {
+			return
+		}
+
+		attempt++
+		if attempt >= s.maxDeferredAckRetries() {
+			// Retries exhausted. Escalate only if the plugin is genuinely
+			// running (not tearing down): during teardown, dropping is benign
+			// and escalating would deadlock on errs.
+			if !s.tearingDown.Load() {
+				s.Instance.logger.Warn(context.Background()).Err(sendErr).
+					Msg("exhausted retries delivering deferred ack to a running source connector plugin; escalating (stream appears broken)")
+				s.escalateDeferredAckFailure(sendErr)
+			}
+			return
+		}
+
+		s.Instance.logger.Debug(context.Background()).Err(sendErr).
+			Int("attempt", attempt).
+			Msg("transient failure delivering deferred ack to running source connector plugin; retrying")
+		if !s.backoffDeferredAck(attempt) {
+			// Backoff aborted because the stream was torn down; drop (benign).
+			return
+		}
+	}
+}
+
+// streamTornDown reports whether the plugin stream's context has been canceled
+// (by stopStream in Teardown or run's error path). Once it has, a stream.Send
+// resolves to ctx.Canceled rather than an actual delivery, so the delivery
+// goroutine treats this as "teardown, stop retrying, drop benign".
+func (s *Source) streamTornDown() bool {
+	if s.streamCtx == nil {
+		return false
+	}
+	select {
+	case <-s.streamCtx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// escalateDeferredAckFailure surfaces a deferred-ack delivery failure to the
+// node via errs. It selects on streamCtx.Done() so that if teardown begins
+// while it is trying to escalate (the node having stopped reading errs), it
+// abandons the escalation instead of blocking forever — keeping the delivery
+// goroutine leak-free.
+func (s *Source) escalateDeferredAckFailure(err error) {
+	if s.streamCtx == nil {
+		s.errs <- err
 		return
 	}
-	if s.stream == nil {
-		return
+	select {
+	case s.errs <- err:
+	case <-s.streamCtx.Done():
+	}
+}
+
+// maxDeferredAckRetries returns the per-source retry bound, honoring a
+// test-only override (see the deferredAckMaxRetries field).
+func (s *Source) maxDeferredAckRetries() int {
+	if s.deferredAckMaxRetries > 0 {
+		return s.deferredAckMaxRetries
+	}
+	return DefaultDeferredAckMaxRetries
+}
+
+// backoffDeferredAck sleeps the exponential backoff for the given retry
+// attempt (capped, honoring the deferredAckBackoffCap test override), aborting
+// early if the stream is torn down. It returns false if the sleep was aborted
+// (the caller should stop retrying), true if it elapsed normally.
+func (s *Source) backoffDeferredAck(attempt int) bool {
+	backoffCap := s.deferredAckBackoffCap
+	if backoffCap <= 0 {
+		backoffCap = DefaultDeferredAckBackoffCap
+	}
+	d := backoffCap
+	if attempt >= 1 {
+		if shift := attempt - 1; shift < 62 {
+			if candidate := DefaultDeferredAckBackoffInitial << uint(shift); candidate > 0 && candidate < backoffCap {
+				d = candidate
+			}
+		}
 	}
 
-	if sendErr := s.stream.Send(pconnector.SourceRunRequest{AckPositions: positions}); sendErr != nil {
-		s.Instance.logger.Debug(context.Background()).Err(sendErr).
-			Msg("failed to send deferred ack to source connector plugin; position is already durable, tolerating as benign (see sendDeferredAck's doc comment)")
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	if s.streamCtx == nil {
+		<-timer.C
+		return true
 	}
+	select {
+	case <-timer.C:
+		return true
+	case <-s.streamCtx.Done():
+		return false
+	}
+}
+
+// waitDeliveryDrain waits, bounded by timeout, for the deferred-ack delivery
+// goroutine to finish delivering everything queued before Teardown closed the
+// queue and to exit. On timeout it logs and returns so Teardown can proceed
+// (stopStream then makes the goroutine finish fast; any still-undelivered ack
+// degrades to a benign duplicate on restart, never a gap).
+func (s *Source) waitDeliveryDrain(ctx context.Context, timeout time.Duration) {
+	if s.deliveryDone == nil {
+		return
+	}
+	if timeout < 0 {
+		timeout = 0
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-s.deliveryDone:
+	case <-ctx.Done():
+		s.warnDeliveryDrainTimedOut(ctx)
+	case <-timer.C:
+		// Double-check it didn't just finish to avoid a spurious warning when
+		// the goroutine exits at almost exactly the deadline.
+		select {
+		case <-s.deliveryDone:
+		default:
+			s.warnDeliveryDrainTimedOut(ctx)
+		}
+	}
+}
+
+func (s *Source) warnDeliveryDrainTimedOut(ctx context.Context) {
+	s.Instance.logger.Warn(ctx).
+		Msg("gave up draining pending deferred acks within the teardown budget; proceeding with teardown (safe: at worst a benign duplicate on restart, never a gap — see Teardown's doc comment)")
 }
 
 func (s *Source) OnDelete(ctx context.Context) (err error) {
@@ -586,6 +934,7 @@ func (s *Source) run(ctx context.Context) error {
 	}
 	s.stream = stream.Client()
 	s.stopStream = stopStream
+	s.streamCtx = ctx
 	return nil
 }
 
