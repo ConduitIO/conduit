@@ -74,3 +74,26 @@ func TestLoadState_CorruptFileIsAnError(t *testing.T) {
 	_, err := index.LoadState(path)
 	is.True(err != nil)
 }
+
+// TestLoadState_LegacyConnectorsHashKeyIsIgnoredFailSafe is the upgrade
+// regression guard for the content-subtree widening (design doc D4): a state
+// file written by an older build — carrying the pre-widening JSON key
+// "lastVerifiedConnectorsHash" — must load with LastVerifiedContentHash EMPTY
+// (the old key is now unknown and ignored). That is fail-safe: an empty hash
+// means "no root-verified content on record", so Verify's freshness path
+// requires a fresh root signature on the next fetch rather than accepting a
+// freshness-only index against a stale connectors-only hash. Version, a stable
+// key, still loads normally, so rollback protection is preserved across the
+// upgrade — only the (self-healing) content hash resets.
+func TestLoadState_LegacyConnectorsHashKeyIsIgnoredFailSafe(t *testing.T) {
+	is := is.New(t)
+	path := filepath.Join(t.TempDir(), "state.json")
+
+	legacy := []byte(`{"version": 7, "lastVerifiedConnectorsHash": "sha256:deadbeef"}`)
+	is.NoErr(os.WriteFile(path, legacy, 0o600))
+
+	got, err := index.LoadState(path)
+	is.NoErr(err)
+	is.Equal(got.Version, int64(7))           // stable key preserved: rollback floor intact
+	is.Equal(got.LastVerifiedContentHash, "") // old key ignored => fail-safe to "requires root"
+}

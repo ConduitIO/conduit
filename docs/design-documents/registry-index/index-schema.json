@@ -49,6 +49,11 @@
           "type": "array",
           "description": "One entry per registered connector name. Names are unique within the index (index-CI enforces this; JSON Schema alone cannot express cross-array uniqueness on a subfield, see r1-spec.md).",
           "items": { "$ref": "#/$defs/connector" }
+        },
+        "processors": {
+          "type": "array",
+          "description": "One entry per registered standalone-WASM-processor name. Added additively under schemaVersion 1 (see docs/design-documents/20260727-registry-processor-artifacts.md, D1): a client built before this field existed verifies the whole payload (this array included) and then silently ignores it, still installing connectors. NOT in payload.required -- a connector-only index omits the key entirely, keeping its bytes identical to the pre-processor schema. Names are unique within processors[] (index-CI enforces this, same as connectors[]); a name may legitimately appear in BOTH connectors[] and processors[] (different plugin types, different install commands, different directories).",
+          "items": { "$ref": "#/$defs/processor" }
         }
       }
     },
@@ -111,6 +116,40 @@
           "type": "array",
           "description": "Published versions for this connector, newest-first by convention (not schema-enforced). Entries are append-only once published: index-CI must reject a PR that mutates any field of an already-present version other than `deprecated`, `yanked`, or `yanked.reason`/`yanked.yankedAt` (see r1-spec.md §(d)).",
           "items": { "$ref": "#/$defs/connectorVersion" }
+        }
+      }
+    },
+
+    "processor": {
+      "type": "object",
+      "description": "One registered standalone-WASM-processor name. Mirrors `connector` and reuses `publisher` (identity pinning) and `yankReason`/`revocation` verbatim -- a processor's root-of-trust decision behaves identically to a connector's. Deliberately a SEPARATE collection rather than a `connector` with a new artifact kind, so the connector's host-(os,arch) artifact selection stays untouched (see docs/design-documents/20260727-registry-processor-artifacts.md, D1).",
+      "additionalProperties": false,
+      "required": ["name", "publisher", "versions"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "description": "Unique registry name for the processor, e.g. \"conduit-processor-ai\". Same naming rule as a connector. Resolution by `install` is exact-match only. The runtime registers the processor under the name from its own Specification(), NOT this index name -- install-time validation (PR-B) binds the two."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-friendly name for the web UI. Not used in any trust decision."
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description for the web UI / `list`. Not used in any trust decision."
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "description": "Source repository URL, for the web UI and human review context. Not itself a trust input -- the trust input is `publisher.expectedIdentityPattern`."
+        },
+        "publisher": { "$ref": "#/$defs/publisher" },
+        "versions": {
+          "type": "array",
+          "description": "Published versions for this processor, newest-first by convention (not schema-enforced). Append-only once published, same rule as connectors[].versions (index-CI rejects mutating any field of an already-present version other than `deprecated`/`yanked`).",
+          "items": { "$ref": "#/$defs/processorVersion" }
         }
       }
     },
@@ -230,6 +269,99 @@
         "yanked": {
           "$ref": "#/$defs/yankReason",
           "description": "If present, this specific version is yanked (e.g. bad build, discovered vulnerability, accidental publish). `install` refuses selecting it (naming the reason); `conduit connectors audit` flags it if already installed. Does not affect sibling versions of the same connector."
+        }
+      }
+    },
+
+    "processorVersion": {
+      "type": "object",
+      "description": "One published processor release. Mirrors `connectorVersion` but carries a SINGLE arch-neutral `artifact` object (not an `artifacts` array): a WASM processor builds once as wasip1/wasm and runs everywhere, so there is exactly one artifact and no per-(os,arch) list (see docs/design-documents/20260727-registry-processor-artifacts.md, D1/D2).",
+      "additionalProperties": false,
+      "required": ["version", "minConduitVersion", "minProtocolVersion", "artifact"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+          "description": "Semver version string of this processor release, e.g. \"0.1.0\". Immutable once published (append-only; see `processors[].versions` description)."
+        },
+        "releasedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this version was published to the index. Used for web UI ordering and audit context; not itself a trust input."
+        },
+        "minConduitVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Minimum Conduit engine version this processor version requires."
+        },
+        "minProtocolVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Minimum conduit-processor-sdk/protocol version this processor version requires."
+        },
+        "artifact": {
+          "$ref": "#/$defs/processorArtifact",
+          "description": "The single arch-neutral (wasip1/wasm) WASM build for this version. Not an array: a processor has exactly one artifact, selected by a fixed (wasip1, wasm) rule that NEVER consults the host platform (D2). A per-host artifact list cannot even be expressed here -- that is the point of the separate collection."
+        },
+        "slsaProvenance": {
+          "$ref": "#/$defs/provenanceRef",
+          "description": "OPTIONAL SLSA provenance attestation for this version's single artifact. Version-level and per-artifact collapse here (there is only one artifact), so it is declared once at the version level."
+        },
+        "deprecated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Soft signal: still installable, but flagged (e.g. superseded, unmaintained). Same semantics as connectorVersion.deprecated."
+        },
+        "yanked": {
+          "$ref": "#/$defs/yankReason",
+          "description": "If present, this specific processor version is yanked. `install` refuses selecting it (naming the reason). Does not affect sibling versions of the same processor."
+        }
+      }
+    },
+
+    "processorArtifact": {
+      "type": "object",
+      "description": "One standalone-WASM-processor build. Structurally like `artifact` but pinned to the arch-neutral WASM target: os/arch/kind are fixed constants, so a host os/arch or a non-WASM kind is a schema violation, not a valid-but-skipped entry (D2, failure mode 3). Kept a SEPARATE def from `artifact` -- rather than widening the connector artifact's os/arch/kind enums -- so connector artifact validation stays byte-for-byte unchanged.",
+      "additionalProperties": false,
+      "required": ["os", "arch", "kind", "url", "sha256", "size", "signature"],
+      "properties": {
+        "os": {
+          "type": "string",
+          "const": "wasip1",
+          "description": "GOOS value, fixed to the WASI preview-1 target. A processor is arch-neutral; a host GOOS here is a malformed/spoofed entry."
+        },
+        "arch": {
+          "type": "string",
+          "const": "wasm",
+          "description": "GOARCH value, fixed to wasm. A host GOARCH here is a malformed/spoofed entry."
+        },
+        "kind": {
+          "type": "string",
+          "const": "wasm-processor",
+          "description": "Artifact kind for a standalone WASM processor module (wazero runtime). SelectProcessorArtifact asserts exactly this value."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Scarf-gatewayed download URL of the `.wasm` module. Inside the signed payload; the digest is always recomputed from the received bytes, so a compromised gateway can only cause a failed verification, never a wrong-artifact install."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Expected SHA-256 of the `.wasm` bytes. Corruption detection; the trust boundary is `signature` verified against the processor's pinned identity."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expected artifact size in bytes."
+        },
+        "signature": {
+          "$ref": "#/$defs/signatureRef",
+          "description": "Reference to the Sigstore bundle covering THIS `.wasm` module's own digest. Required, same as a connector artifact."
+        },
+        "slsaProvenance": {
+          "$ref": "#/$defs/provenanceRef",
+          "description": "OPTIONAL per-artifact SLSA provenance. For a single-artifact processor version this is equivalent to processorVersion.slsaProvenance; the version-level field is preferred."
         }
       }
     },

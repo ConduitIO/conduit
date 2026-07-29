@@ -121,7 +121,7 @@ func (v *TrustedVerifier) VerifyIndex(_ context.Context, raw []byte) (*index.Ver
 		return nil, conduiterr.Wrap(conduiterr.CodeInternal, "could not load persisted index state", err)
 	}
 
-	verified, err := index.Verify(raw, v.Anchors, state.LastVerifiedConnectorsHash)
+	verified, err := index.Verify(raw, v.Anchors, state.LastVerifiedContentHash)
 	if err != nil {
 		return nil, err
 	}
@@ -137,13 +137,13 @@ func (v *TrustedVerifier) VerifyIndex(_ context.Context, raw []byte) (*index.Ver
 		return nil, err
 	}
 
-	newState := index.State{Version: verified.Payload.Index.Version, LastVerifiedConnectorsHash: state.LastVerifiedConnectorsHash}
+	newState := index.State{Version: verified.Payload.Index.Version, LastVerifiedContentHash: state.LastVerifiedContentHash}
 	if verified.RootVerified {
-		hash, err := index.HashConnectors(verified.Payload.Connectors)
+		hash, err := index.HashContentSubtree(verified.Payload.Connectors, verified.Payload.Processors)
 		if err != nil {
-			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "could not hash verified connectors for state persistence", err)
+			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "could not hash verified content subtree for state persistence", err)
 		}
-		newState.LastVerifiedConnectorsHash = hash
+		newState.LastVerifiedContentHash = hash
 	}
 	fireChaos(chaosPointIndexStateBeforeWrite)
 	if err := index.SaveState(v.StatePath, newState); err != nil {

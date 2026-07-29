@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (83)
+## 3. Error codes (84)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -678,6 +678,7 @@ Author: Meroxa, Inc.
 | `registry.index_too_large` | ResourceExhausted | CodeIndexTooLarge is raised when a fetched index exceeds the P0-2 size cap (plan-v2 §2.4 item 1). ResourceExhausted already carries a defined pkg/conduit/exitcode bucket (Environment) — see fetch.go's doc comment for the footnote this resolves. |
 | `registry.index_unreachable` | Unavailable | CodeIndexUnreachable is raised when fetching the index fails at the network/HTTP layer (distinct from a fetch that succeeds but is too large, stale, or rolled back). |
 | `registry.install_locked` | Unavailable | CodeInstallLocked is raised when the per-target install lock is not acquired within --lock-timeout. |
+| `registry.invalid_processor_artifact` | FailedPrecondition | CodeInvalidProcessorArtifact is raised by SelectProcessorArtifact when a processor version's single artifact is not the required arch-neutral WASM shape — Kind != "wasm-processor", or (OS, Arch) != ("wasip1", "wasm"). Unlike the connector path's SelectArtifact, which deliberately SKIPS an unrecognized kind ("no matching artifact"), a malformed processor artifact is a hard validation error, never a silent skip (design doc D2, failure mode 3): a processor has exactly one artifact and it must be the WASM one, so anything else is a malformed or spoofed index entry. FailedPrecondition — the index entry as published does not meet the precondition for install. |
 | `registry.no_platform_artifact` | NotFound | CodeNoPlatformArtifact is raised when no artifact exists for the host (os, arch). |
 | `registry.provenance_invalid` | PermissionDenied | CodeProvenanceInvalid is raised when the SLSA provenance's subject-digest match or builder.id/configSource.uri binding fails (trust.ErrProvenanceInvalid). |
 | `registry.schema_too_new` | FailedPrecondition | CodeSchemaTooNew is raised when payload.schemaVersion exceeds the highest this build was compiled to understand. |

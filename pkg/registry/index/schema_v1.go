@@ -37,6 +37,20 @@ type Payload struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	Index         IndexMeta   `json:"index"`
 	Connectors    []Connector `json:"connectors"`
+	// Processors is the standalone-WASM-processor collection, added additively
+	// under schemaVersion 1 (design doc 20260727-registry-processor-artifacts,
+	// D1). It is forward-compatible: a client built before this field existed
+	// canonicalizes and signature-verifies the WHOLE payload it received —
+	// processors[] included — and then, unmarshalling into its older typed
+	// Payload, silently ignores the unknown field while still reading
+	// connectors[]. MaxSupportedSchemaVersion therefore STAYS 1.
+	//
+	// The `omitempty` is load-bearing, not cosmetic: a connector-only index
+	// (Processors nil/empty) must marshal to bytes byte-identical to the
+	// pre-processor schema, so existing connector-only golden fixtures and any
+	// persisted content-subtree hash over them do not drift (design doc failure
+	// mode 6). Enforced by TestConnectorOnlyIndex_OmitemptyKeepsBytesIdentical.
+	Processors []Processor `json:"processors,omitempty"`
 }
 
 // IndexMeta is the freeze/rollback-protection metadata (R-1 §b): Version is
@@ -99,6 +113,51 @@ type ConnectorVersion struct {
 	// and the frozen sample index writes it explicitly even when false —
 	// dropping it on marshal would fail the golden round-trip test against
 	// that fixture.
+	Deprecated bool        `json:"deprecated"`
+	Yanked     *YankReason `json:"yanked,omitempty"`
+}
+
+// Processor is one registered standalone-WASM-processor name's entry. It
+// reuses the exact Publisher/Revocation identity-pinning shapes Connector
+// does — a processor's root-of-trust decision behaves identically to a
+// connector's (design doc D1). It is deliberately a SEPARATE top-level
+// collection rather than a Connector with a new artifact kind, so the
+// connector selector (registry.SelectArtifact, host-(GOOS,GOARCH)-matched)
+// stays untouched and a WASM processor structurally cannot acquire a
+// per-platform artifact list (design doc D1, "why a separate collection").
+type Processor struct {
+	Name        string             `json:"name"`
+	DisplayName string             `json:"displayName,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Repository  string             `json:"repository,omitempty"`
+	Publisher   Publisher          `json:"publisher"`
+	Versions    []ProcessorVersion `json:"versions"`
+}
+
+// ProcessorVersion is one published processor release. Unlike ConnectorVersion
+// it carries exactly ONE arch-neutral Artifact (a single GOOS=wasip1
+// GOARCH=wasm build runs on every host wazero supports), not a per-(os,arch)
+// Artifacts list — so a processor entry cannot smuggle host-targeted artifact
+// selection (design doc D2, failure mode 3). Entries are append-only once
+// published, exactly like ConnectorVersion: index-CI rejects a PR mutating any
+// field of an already-present version other than Deprecated / Yanked.
+//
+// The Artifact must be selected via registry.SelectProcessorArtifact, which
+// asserts Kind == "wasm-processor" and (OS, Arch) == ("wasip1", "wasm") and
+// never consults runtime.GOOS/GOARCH.
+type ProcessorVersion struct {
+	Version            string     `json:"version"`
+	ReleasedAt         *time.Time `json:"releasedAt,omitempty"`
+	MinConduitVersion  string     `json:"minConduitVersion"`
+	MinProtocolVersion string     `json:"minProtocolVersion"`
+	// Artifact is the single arch-neutral (wasip1/wasm) build for this version,
+	// with Kind == "wasm-processor". Not a list: see the type doc.
+	Artifact       Artifact       `json:"artifact"`
+	SLSAProvenance *ProvenanceRef `json:"slsaProvenance,omitempty"`
+	// Deprecated has no omitempty for the same reason ConnectorVersion.Deprecated
+	// does not (see above): the schema's documented default is false, the frozen
+	// sample index writes it explicitly even when false, and dropping it on
+	// marshal would fail the golden round-trip against that fixture.
 	Deprecated bool        `json:"deprecated"`
 	Yanked     *YankReason `json:"yanked,omitempty"`
 }
