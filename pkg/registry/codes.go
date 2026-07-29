@@ -93,4 +93,14 @@ var (
 	// key not among them. Verification never proceeds when this is raised —
 	// it can only make installs fail closed, never open.
 	CodeTrustAnchorsUnavailable = conduiterr.Register("registry.trust_anchors_unavailable", codes.Internal)
+	// CodeInvalidProcessorArtifact is raised by SelectProcessorArtifact when a
+	// processor version's single artifact is not the required arch-neutral WASM
+	// shape — Kind != "wasm-processor", or (OS, Arch) != ("wasip1", "wasm").
+	// Unlike the connector path's SelectArtifact, which deliberately SKIPS an
+	// unrecognized kind ("no matching artifact"), a malformed processor artifact
+	// is a hard validation error, never a silent skip (design doc D2, failure
+	// mode 3): a processor has exactly one artifact and it must be the WASM one,
+	// so anything else is a malformed or spoofed index entry. FailedPrecondition
+	// — the index entry as published does not meet the precondition for install.
+	CodeInvalidProcessorArtifact = conduiterr.Register("registry.invalid_processor_artifact", codes.FailedPrecondition)
 )

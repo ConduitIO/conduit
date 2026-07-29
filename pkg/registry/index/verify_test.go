@@ -62,11 +62,40 @@ func (b *testIndexBuilder) anchors(t *testing.T) index.TrustAnchors {
 	}
 }
 
-// payload is a minimal but schema-shaped connectors-index payload.
+// payload is a minimal but schema-shaped connectors-index payload. Processors
+// carries `omitempty` so the many tests that leave it nil sign byte-identical
+// bytes to the pre-processor shape (mirrors index.Payload's own omitempty).
 type testPayload struct {
 	SchemaVersion int               `json:"schemaVersion"`
 	Index         index.IndexMeta   `json:"index"`
 	Connectors    []index.Connector `json:"connectors"`
+	Processors    []index.Processor `json:"processors,omitempty"`
+}
+
+// withProcessor returns a copy of p carrying one minimal, schema-shaped
+// processor entry — used by the freshness content-subtree (D4) and
+// forward-compat tests.
+func withProcessor(p testPayload) testPayload {
+	p.Processors = []index.Processor{
+		{
+			Name: "example-processor",
+			Publisher: index.Publisher{
+				ExpectedOIDCIssuer:      "https://token.actions.githubusercontent.com",
+				ExpectedIdentityPattern: `^https://github\.com/ExampleOrg/conduit-processor-example/\.github/workflows/publish\.yml@refs/tags/v.*$`,
+			},
+			Versions: []index.ProcessorVersion{
+				{
+					Version: "0.1.0", MinConduitVersion: "0.19.0", MinProtocolVersion: "0.14.0",
+					Artifact: index.Artifact{
+						OS: "wasip1", Arch: "wasm", Kind: "wasm-processor",
+						URL: "https://example/proc_0.1.0_wasip1_wasm.wasm", SHA256: "abc123", Size: 4096,
+						Signature: index.SignatureRef{BundleURL: "https://example/proc.wasm.sigstore.json"},
+					},
+				},
+			},
+		},
+	}
+	return p
 }
 
 func defaultTestPayload() testPayload {
@@ -151,10 +180,10 @@ func TestVerify_ValidFreshnessSignatureWithMatchingConnectors(t *testing.T) {
 	b := newTestIndexBuilder(t)
 	payload := defaultTestPayload()
 
-	lastHash, err := index.HashConnectors(payload.Connectors)
+	lastHash, err := index.HashContentSubtree(payload.Connectors, payload.Processors)
 	is.NoErr(err)
 
-	// A "heartbeat" re-sign: same connectors[], bumped version/timestamp,
+	// A "heartbeat" re-sign: same content subtree, bumped version/timestamp,
 	// freshness-signed only (no root signature present at all).
 	payload.Index.Version = 2
 	payload.Index.Timestamp = time.Now().UTC()
@@ -171,7 +200,7 @@ func TestVerify_FreshnessSignatureWithMismatchedConnectorsRequiresRoot(t *testin
 	b := newTestIndexBuilder(t)
 	payload := defaultTestPayload()
 
-	lastHash, err := index.HashConnectors(payload.Connectors)
+	lastHash, err := index.HashContentSubtree(payload.Connectors, payload.Processors)
 	is.NoErr(err)
 
 	// Freshness key re-signs DIFFERENT connectors content — must be refused:
@@ -184,6 +213,62 @@ func TestVerify_FreshnessSignatureWithMismatchedConnectorsRequiresRoot(t *testin
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), index.CodeIndexIntegrity.Reason())
+}
+
+// TestVerify_FreshnessSignatureWithMutatedProcessorsRequiresRoot is the D4
+// regression guard (design doc 20260727-registry-processor-artifacts, failure
+// mode 2): the freshness content subtree covers processors[] too, so a
+// freshness re-sign that mutates ONLY processors[] — leaving connectors[]
+// byte-identical to the last root-verified content — must be REFUSED. Without
+// the subtree widening (HashConnectors over connectors[] alone), this attack
+// would have silently authorized a changed processor tree on the unattended
+// freshness key: a content-authorization escalation. This test fails on the
+// pre-D4 code and passes only with the widened HashContentSubtree.
+func TestVerify_FreshnessSignatureWithMutatedProcessorsRequiresRoot(t *testing.T) {
+	is := is.New(t)
+	b := newTestIndexBuilder(t)
+	payload := withProcessor(defaultTestPayload())
+
+	// The last root-verified content hash covers BOTH collections.
+	lastHash, err := index.HashContentSubtree(payload.Connectors, payload.Processors)
+	is.NoErr(err)
+
+	// Connectors[] stays byte-identical; ONLY the processor artifact URL is
+	// swapped (e.g. repointed at an attacker-controlled .wasm). A subtree that
+	// covered connectors[] alone would accept this on freshness; it must not.
+	payload.Processors[0].Versions[0].Artifact.URL = "https://attacker.example/evil.wasm"
+	payload.Index.Version = 2
+	raw := b.sign(t, payload, "freshness")
+
+	_, err = index.Verify(raw, b.anchors(t), lastHash)
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), index.CodeIndexIntegrity.Reason())
+}
+
+// TestVerify_FreshnessSignatureWithMatchingProcessorsAccepted is the positive
+// half of D4: a genuine heartbeat re-sign of a processor-bearing index (both
+// collections byte-identical, only version/timestamp bumped) is still accepted
+// on the freshness key alone — the widening refuses mutation, not legitimate
+// freshness.
+func TestVerify_FreshnessSignatureWithMatchingProcessorsAccepted(t *testing.T) {
+	is := is.New(t)
+	b := newTestIndexBuilder(t)
+	payload := withProcessor(defaultTestPayload())
+
+	lastHash, err := index.HashContentSubtree(payload.Connectors, payload.Processors)
+	is.NoErr(err)
+
+	payload.Index.Version = 2
+	payload.Index.Timestamp = time.Now().UTC()
+	raw := b.sign(t, payload, "freshness")
+
+	vi, err := index.Verify(raw, b.anchors(t), lastHash)
+	is.NoErr(err)
+	is.True(vi.Verified)
+	is.True(!vi.RootVerified)
+	is.Equal(len(vi.Payload.Processors), 1)
 }
 
 func TestVerify_UnrecognizedKeyID(t *testing.T) {
@@ -295,4 +380,65 @@ func TestVerify_NoSignaturesAtAll(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), index.CodeTrustAnchorExpired.Reason())
+}
+
+// legacyPayload is the schemaVersion-1 payload shape as it existed BEFORE
+// processors[] was added — a faithful stand-in for an older Conduit build's
+// typed struct. It has no Processors field at all.
+type legacyPayload struct {
+	SchemaVersion int               `json:"schemaVersion"`
+	Index         index.IndexMeta   `json:"index"`
+	Connectors    []index.Connector `json:"connectors"`
+}
+
+// TestVerify_ForwardCompat_OlderClientIgnoresProcessors is the design doc's
+// required upgrade test (Upgrade/rollback; failure mode 1). It proves the
+// additive-under-schemaVersion-1 promise from both ends:
+//
+//   - The signature is computed over the WHOLE payload bytes (processors[]
+//     included), so an older client — which canonicalizes and verifies those
+//     exact bytes — still verifies successfully. Adding processors[] does NOT
+//     invalidate the signature for anyone.
+//   - An older typed struct (legacyPayload, no Processors field) unmarshals the
+//     same payload fine: Go silently ignores the unknown "processors" key,
+//     reads connectors[] normally, and sees schemaVersion 1 (NOT
+//     CodeSchemaTooNew — MaxSupportedSchemaVersion stays 1).
+//   - A current build (index.Verify) sees and reads processors[].
+func TestVerify_ForwardCompat_OlderClientIgnoresProcessors(t *testing.T) {
+	is := is.New(t)
+	b := newTestIndexBuilder(t)
+
+	payload := withProcessor(defaultTestPayload())
+	raw := b.sign(t, payload, "root")
+
+	// (a) Current build verifies and SEES processors[].
+	vi, err := index.Verify(raw, b.anchors(t), "")
+	is.NoErr(err)
+	is.True(vi.Verified)
+	is.Equal(vi.Payload.SchemaVersion, 1) // schemaVersion stays 1
+	is.Equal(len(vi.Payload.Connectors), 1)
+	is.Equal(len(vi.Payload.Processors), 1)
+	is.Equal(vi.Payload.Processors[0].Name, "example-processor")
+
+	// (b) Older client: extract the exact payload bytes the client received and
+	// unmarshal into the pre-processor typed struct. connectors[] reads fine;
+	// processors[] is silently ignored; no error; schemaVersion still 1.
+	var env struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	is.NoErr(json.Unmarshal(raw, &env))
+
+	var legacy legacyPayload
+	is.NoErr(json.Unmarshal(env.Payload, &legacy))
+	is.Equal(legacy.SchemaVersion, 1)
+	is.Equal(len(legacy.Connectors), 1)
+	is.Equal(legacy.Connectors[0].Name, "example")
+
+	// (c) And the signature still verifies over those whole bytes — the older
+	// client's crypto check is unaffected by the field it will ignore. (We
+	// re-run Verify here to stand in for the older client's identical
+	// canonicalize+verify of the bytes it holds; the point is the SAME raw
+	// bytes both verify AND legacy-parse.)
+	_, err = index.Verify(raw, b.anchors(t), "")
+	is.NoErr(err)
 }

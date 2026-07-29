@@ -37,9 +37,10 @@ type VerifiedIndex struct {
 	Verified bool
 	// RootVerified is true only when acceptance came from a role:"root"
 	// signature — as opposed to a role:"freshness" signature accepted
-	// because connectors[] was byte-identical to the last root-verified
-	// content (R-1 §a.2.c). Callers persisting State.LastVerifiedConnectorsHash
-	// (via HashConnectors) should only update it when RootVerified is true:
+	// because the content subtree (connectors[] and processors[]) was
+	// byte-identical to the last root-verified content (R-1 §a.2.c; design
+	// doc D4). Callers persisting State.LastVerifiedContentHash (via
+	// HashContentSubtree) should only update it when RootVerified is true:
 	// a freshness-only acceptance by construction already matches the
 	// existing persisted hash, so re-deriving it is a no-op at best and,
 	// if ever wrong, must never widen what freshness alone can authorize.
@@ -83,11 +84,12 @@ func ParseUnverified(raw []byte) (*Payload, error) {
 //     anchors for that entry's declared role ("root" or "freshness") and
 //     verify the ed25519 signature over the canonical bytes.
 //  4. Accept if any role:"root" signature verifies. Otherwise, accept if a
-//     role:"freshness" signature verifies AND the payload's connectors[]
-//     (canonicalized, hashed via HashConnectors) is byte-identical to
-//     lastVerifiedConnectorsHash — the last root-verified content on
-//     record (persisted in State, R-1 §a.2.c: "a freshness signature may
-//     extend freshness, never authorize content").
+//     role:"freshness" signature verifies AND the payload's content subtree
+//     — connectors[] and processors[], canonicalized, hashed via
+//     HashContentSubtree — is byte-identical to lastVerifiedContentHash —
+//     the last root-verified content on record (persisted in State, R-1
+//     §a.2.c: "a freshness signature may extend freshness, never authorize
+//     content"; design doc D4 widened the subtree to include processors[]).
 //  5. Only once accepted, peek schemaVersion and unmarshal into the typed
 //     Payload (shared with ParseUnverified, via decodeTypedPayload).
 //
@@ -102,15 +104,15 @@ func ParseUnverified(raw []byte) (*Payload, error) {
 //     recognized, but no recognized signature both verified cryptographically
 //     AND was sufficient to authorize this content (a root signature that
 //     fails crypto; a freshness signature that verifies crypto but doesn't
-//     match lastVerifiedConnectorsHash; a duplicate key; malformed
+//     match lastVerifiedContentHash; a duplicate key; malformed
 //     signature bytes) — tampering/corruption, refuse and report loudly.
 //
-// lastVerifiedConnectorsHash is the caller's persisted
-// State.LastVerifiedConnectorsHash (empty string if no index has ever been
+// lastVerifiedContentHash is the caller's persisted
+// State.LastVerifiedContentHash (empty string if no index has ever been
 // root-verified on this machine — R-1 §b's documented first-fetch gap: a
 // freshness-only index can never be the FIRST index a client ever accepts,
 // by construction, since an empty hash can never equal a real one).
-func Verify(raw []byte, anchors TrustAnchors, lastVerifiedConnectorsHash string) (*VerifiedIndex, error) {
+func Verify(raw []byte, anchors TrustAnchors, lastVerifiedContentHash string) (*VerifiedIndex, error) {
 	env, err := decodeEnvelope(raw)
 	if err != nil {
 		return nil, err
@@ -149,8 +151,8 @@ func Verify(raw []byte, anchors TrustAnchors, lastVerifiedConnectorsHash string)
 	}
 
 	freshnessVerified := freshnessCryptoVerified &&
-		lastVerifiedConnectorsHash != "" &&
-		matchesLastVerifiedConnectors(env.Payload, lastVerifiedConnectorsHash)
+		lastVerifiedContentHash != "" &&
+		matchesLastVerifiedContent(env.Payload, lastVerifiedContentHash)
 
 	if !rootVerified && !freshnessVerified {
 		if !anyKeyRecognized {
@@ -185,19 +187,23 @@ func resolveAnchor(anchors TrustAnchors, role, keyID string) (ed25519.PublicKey,
 	}
 }
 
-// matchesLastVerifiedConnectors reports whether payloadRaw's connectors[]
-// field, canonicalized and hashed, equals want. A malformed payload here
-// (connectors[] doesn't even unmarshal) is treated as a mismatch, not a
-// separate error: the caller's fall-through to CodeIndexIntegrity already
-// covers "freshness signature verified crypto but content doesn't match".
-func matchesLastVerifiedConnectors(payloadRaw json.RawMessage, want string) bool {
+// matchesLastVerifiedContent reports whether payloadRaw's CONTENT SUBTREE —
+// its connectors[] AND processors[] fields — canonicalized and hashed, equals
+// want. Both collections are covered (design doc D4): a freshness re-sign that
+// mutated processors[] while leaving connectors[] byte-identical must NOT be
+// accepted on the freshness key alone. A malformed payload here (a collection
+// doesn't even unmarshal) is treated as a mismatch, not a separate error: the
+// caller's fall-through to CodeIndexIntegrity already covers "freshness
+// signature verified crypto but content doesn't match".
+func matchesLastVerifiedContent(payloadRaw json.RawMessage, want string) bool {
 	var probe struct {
 		Connectors []Connector `json:"connectors"`
+		Processors []Processor `json:"processors"`
 	}
 	if err := json.Unmarshal(payloadRaw, &probe); err != nil {
 		return false
 	}
-	got, err := HashConnectors(probe.Connectors)
+	got, err := HashContentSubtree(probe.Connectors, probe.Processors)
 	if err != nil {
 		return false
 	}

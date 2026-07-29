@@ -25,20 +25,30 @@ import (
 
 // State is the locally persisted rollback high-water mark (R-1 §b item 1):
 // the highest payload.index.version this client has successfully verified,
-// plus the sha256 of the JCS-canonicalized connectors[] array from the last
-// ROOT-verified (not freshness-only) index (PR-2, R-1 §a.2.c) — the value
-// Verify's freshness-only acceptance path compares against, so a freshness
-// signature can only ever extend timestamp/version over byte-identical
-// content, never authorize new content on its own.
+// plus the sha256 of the JCS-canonicalized CONTENT SUBTREE (connectors[] and
+// processors[]) from the last ROOT-verified (not freshness-only) index (PR-2,
+// R-1 §a.2.c; design doc 20260727-registry-processor-artifacts, D4) — the
+// value Verify's freshness-only acceptance path compares against, so a
+// freshness signature can only ever extend timestamp/version over
+// byte-identical content, never authorize new content on its own.
 type State struct {
 	Version int64 `json:"version"`
-	// LastVerifiedConnectorsHash is "sha256:<hex>" over the JCS-canonicalized
-	// connectors[] array from the last root-verified index, or "" if no
-	// index has ever been root-verified yet (see HashConnectors). Additive
-	// field: a State persisted by PR-0/PR-1 (before this field existed)
-	// unmarshals with this empty, matching "no root-verified content on
-	// record" — Verify's freshness path then correctly requires root.
-	LastVerifiedConnectorsHash string `json:"lastVerifiedConnectorsHash,omitempty"`
+	// LastVerifiedContentHash is "sha256:<hex>" over the JCS-canonicalized
+	// content subtree (connectors[] AND processors[]) from the last
+	// root-verified index, or "" if no index has ever been root-verified yet
+	// (see HashContentSubtree).
+	//
+	// This field's JSON key was renamed from "lastVerifiedConnectorsHash" when
+	// the content subtree was widened to include processors[] (design doc D4):
+	// the old key is now unknown and ignored on load, leaving this empty. That
+	// is fail-safe, not fail-open — an empty hash matches "no root-verified
+	// content on record", so Verify's freshness path REQUIRES a root signature
+	// on the next fetch (a routine, non-destructive, self-healing one-time
+	// event after upgrade), and can never accept a freshness-only index against
+	// a stale connectors-only hash. Same additive behavior as the PR-0/PR-1 ->
+	// PR-2 transition that first introduced the hash. Regression guard:
+	// TestLoadState_LegacyConnectorsHashKeyIsIgnoredFailSafe.
+	LastVerifiedContentHash string `json:"lastVerifiedContentHash,omitempty"`
 }
 
 // LoadState reads the persisted high-water mark from path. A missing file
