@@ -5,33 +5,37 @@ name: bundle-e2e
 # repo's standalone host module + SSRF egress gate. This is the acceptance bar
 # for the host-egress capability (design docs/design-documents/20260726-wasm-host-egress-capability.md).
 #
-# It is intentionally scoped to the paths that make up the bundle, so it runs on
-# changes to the egress gate, the standalone host module, the processor service,
-# or engine config — the surfaces the e2e actually exercises.
+# REQUIRED-CHECK CONTRACT (mirrors chaos.yml): to be a *required* status check,
+# this job must report a conclusion on EVERY pull request — a path-filtered
+# trigger cannot, because it leaves the check permanently *pending* (and thus
+# unmergeable) on PRs that don't touch its paths. So the trigger is NOT
+# path-filtered; the single `bundle-e2e` job always runs and gates the expensive
+# cross-repo work *inside* the job with a FAIL-CLOSED path detector: any
+# ambiguity (missing base ref, git error) runs the suite; an unrelated PR
+# completes green in seconds (checkout + detector only, no sibling checkout, no
+# wasm build).
+#
+# Sibling ref is PINNED (not `main`): as a required check, tracking a sibling's
+# moving `main` would break this repo's merge gate whenever that sibling's main
+# breaks. The pin is bumped deliberately (edit PROCESSOR_AI_REF below), or
+# overridden per-run via workflow_dispatch for fresh-against-main testing.
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    paths:
-      - 'pkg/plugin/processor/egress/**'
-      - 'pkg/plugin/processor/standalone/**'
-      - 'pkg/processor/**'
-      - 'pkg/conduit/**'
-      - '.github/workflows/bundle-e2e.yml'
-      - 'go.mod'
-      - 'go.sum'
   workflow_dispatch:
     inputs:
       processor_ai_ref:
-        description: 'conduit-processor-ai ref to test against'
+        description: 'conduit-processor-ai ref to test against (default: the pinned SHA)'
         required: false
-        default: 'main'
+        default: ''
 
 env:
-  # The conduit-processor-ai ref whose embedding processor is built into WASM
-  # and exercised. Defaults to main; overridable via workflow_dispatch.
-  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
+  # Pinned known-good conduit-processor-ai commit. Bump deliberately after
+  # confirming the e2e is green against the new commit; override per-run via
+  # the workflow_dispatch input.
+  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || '24dee9ffd9e8be633a010d427a142d6c2f244793' }}
 
 jobs:
   bundle-e2e:
@@ -39,8 +43,53 @@ jobs:
     steps:
       - name: Check out conduit
         uses: actions/checkout@v4
+        with:
+          # Full history so the path detector can diff against the PR base ref.
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: detect
+        # schedule/workflow_dispatch/push always run. For pull_request, run only
+        # when a surface this e2e exercises changed — FAIL CLOSED: any inability
+        # to compute the diff runs the suite anyway. Keep this list in sync with
+        # the surfaces the bundle e2e actually covers (was the trigger `paths:`).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "reason=event $EVENT_NAME always runs" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "reason=base ref unavailable - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "reason=git diff failed - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qE '^(pkg/plugin/processor/egress/|pkg/plugin/processor/standalone/|pkg/processor/|pkg/conduit/|\.github/workflows/bundle-e2e\.yml|go\.mod|go\.sum)'; then
+            echo "reason=bundle-surface change detected" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reason=no bundle-surface change - skipping suite, gate passes" >> "$GITHUB_OUTPUT"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate decision
+        env:
+          RUN: ${{ steps.detect.outputs.run }}
+          REASON: ${{ steps.detect.outputs.reason }}
+        run: echo "bundle-e2e run=$RUN ($REASON)"
 
       - name: Check out conduit-processor-ai
+        if: steps.detect.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           repository: ConduitIO/conduit-processor-ai
@@ -48,11 +97,13 @@ jobs:
           path: _bundle/conduit-processor-ai
 
       - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
       - name: Run host-egress bundle e2e (real guest through host gate)
+        if: steps.detect.outputs.run == 'true'
         env:
           CONDUIT_PROCESSOR_AI_DIR: ${{ github.workspace }}/_bundle/conduit-processor-ai
         run: |
