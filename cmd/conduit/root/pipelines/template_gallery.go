@@ -98,8 +98,8 @@ type GalleryTemplate struct {
 	// one entry can never silently authorize it for another (see
 	// TestValidateGalleryCatalog_RejectsNonBuiltinConnector_ScopedToOneTemplate).
 	AllowedNonBuiltin []string
-	// Prerequisites are preflight steps (registry plugin installs, or —
-	// where no install command exists yet — manual build/placement steps)
+	// Prerequisites are preflight steps (registry plugin installs, offline
+	// `--bundle` installs, or a manual build/placement for a local dev build)
 	// that must be completed before `conduit run` will succeed against this
 	// template's scaffolded YAML. `pipelines init --template <name>`
 	// surfaces these directly in its result (both --json and
@@ -237,13 +237,14 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"error. Architecture v2 is a preview engine — see its status before relying on it in production.",
 				"Install the pgvector destination connector: `conduit connectors install pgvector@<version>` " +
 					"(run `conduit connectors search pgvector` to see available versions).",
-				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are WASM " +
-					"processor plugins. There is no `conduit processor-plugins install` command in this " +
-					"build — that install path does not exist yet. Until it does: build them yourself from " +
-					"a github.com/conduitio/conduit-processor-ai checkout with " +
-					"`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking` and " +
-					"`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-embed.wasm ./cmd/embedding`, then " +
-					"place both .wasm files in the directory configured as --processors.path.",
+				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are " +
+					"standalone WASM plugins, installed with `conduit processor-plugins install ai.chunk` " +
+					"and `conduit processor-plugins install ai.embed`. Once conduit-processor-ai publishes " +
+					"signed artifacts to the registry, those commands fetch and verify them directly; until " +
+					"the registry serves processors, install from a signed bundle with `--bundle <path>`, or " +
+					"for local development build them from a github.com/conduitio/conduit-processor-ai " +
+					"checkout (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, " +
+					"likewise `./cmd/embedding`) and place the .wasm files under --processors.path.",
 			},
 		},
 	}

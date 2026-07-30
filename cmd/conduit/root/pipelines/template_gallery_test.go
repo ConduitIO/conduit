@@ -380,9 +380,8 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
 // human-readable Render output, naming the exact `conduit connectors
-// install pgvector@<version>` command and stating plainly that no
-// `conduit processor-plugins install` equivalent exists yet for the two
-// WASM processors.
+// install pgvector@<version>` command and the `conduit processor-plugins
+// install ai.chunk`/`ai.embed` commands for the two WASM processors.
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -405,7 +404,8 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 
 	joined := strings.Join(result.Prerequisites, "\n")
 	is.True(strings.Contains(joined, "conduit connectors install pgvector@"))
-	is.True(strings.Contains(joined, "no `conduit processor-plugins install` command"))
+	is.True(strings.Contains(joined, "conduit processor-plugins install ai.chunk"))
+	is.True(strings.Contains(joined, "conduit processor-plugins install ai.embed"))
 
 	// The human-readable Render path must surface the same note, not just
 	// the --json payload.
