@@ -460,7 +460,7 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, targetDi
 		}
 	}
 
-	verifyResult, err := runVerificationGate(ctx, opts, dl, ra)
+	verifyResult, err := runVerificationGate(ctx, opts, targetDir, dl, ra)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
@@ -613,14 +613,20 @@ func stageArtifact(ctx context.Context, opts InstallOptions, targetDir string, a
 // (this file) is the ONLY call site of policy.Decide in this codebase,
 // enforced by the PolicyBypass depguard rule in .golangci.yml.
 //
+// targetDir is the install root (--connectors.path or --processors.path); it
+// is threaded through solely so the unsigned-install audit log lands under the
+// SAME directory the artifact is installed into — a processor install
+// (opts.ConnectorsPath == "") would otherwise write its unsigned-install log to
+// a bogus relative path. It never affects the verification decision itself.
+//
 // Invariant (fail-closed by construction, PR-1): with the production
 // FailClosedVerifier and AllowUnsigned unset, VerifyArtifact ALWAYS returns
 // ErrVerificationNotConfigured. With the real TrustedVerifier (PR-2), a
 // non-Signed success without going through the AllowUnsigned+policy.Decide
 // path is a programming error refused below, never silently installed.
-func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
+func runVerificationGate(ctx context.Context, opts InstallOptions, targetDir string, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
 	if opts.AllowUnsigned {
-		return unsignedInstallGate(opts, dl, ra)
+		return unsignedInstallGate(opts, targetDir, dl, ra)
 	}
 
 	ref, err := fetchArtifactRef(ctx, opts, dl.Digest, ra)
@@ -655,7 +661,7 @@ func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadRe
 // unsigned install to be logged, no exceptions — and returns
 // VerifyResult{Signed: false}, which downloadVerifyAndInstall records
 // verbatim into the manifest's Signed/AllowUnsigned fields.
-func unsignedInstallGate(opts InstallOptions, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
+func unsignedInstallGate(opts InstallOptions, targetDir string, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
 	dec, err := policy.Decide(policy.Context{
 		TTY:               opts.TTY,
 		CIEnv:             opts.CIEnv,
@@ -681,7 +687,13 @@ func unsignedInstallGate(opts InstallOptions, dl DownloadResult, ra resolvedArti
 	}
 	logPath := opts.UnsignedInstallsLogPath
 	if logPath == "" {
-		logPath = unsignedInstallsLogPath(opts.ConnectorsPath)
+		// targetDir, not opts.ConnectorsPath: a processor install sets
+		// ProcessorsPath and leaves ConnectorsPath empty, so keying the log off
+		// ConnectorsPath would drop the mandatory unsigned-install audit entry
+		// into a stray relative ".registry" path instead of under
+		// --processors.path. For a connector install targetDir == ConnectorsPath,
+		// so this is behavior-preserving.
+		logPath = unsignedInstallsLogPath(targetDir)
 	}
 	if err := policy.AppendUnsignedInstallEvent(logPath, policy.UnsignedInstallEvent{
 		Connector:      ra.name,

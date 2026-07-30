@@ -385,8 +385,15 @@ func readCappedTarEntry(tr *tar.Reader, maxBytes int64) ([]byte, error) {
 
 // InstallBundleOptions is InstallFromBundle's configuration.
 type InstallBundleOptions struct {
-	BundlePath     string
+	BundlePath string
+	// ConnectorsPath is the target for InstallFromBundle (a connector bundle).
 	ConnectorsPath string
+	// ProcessorsPath is the target for InstallProcessorBundle (a WASM processor
+	// bundle). Exactly one of ConnectorsPath/ProcessorsPath is set by the
+	// respective entry point; they share this options struct because every
+	// other field (verifier, running versions, and the stale-bundle policy
+	// signals) is identical for both artifact kinds.
+	ProcessorsPath string
 
 	// Verifier MUST be a real *TrustedVerifier — offline install never uses
 	// FailClosedVerifier-style verification-disabled wiring; there is no
@@ -467,7 +474,7 @@ func InstallFromBundle(ctx context.Context, opts InstallBundleOptions) (*Install
 			manifest.BundleFormatVersion, BundleFormatVersion))
 	}
 
-	verified, err := verifyBundleIndex(ctx, opts, snapshotRaw)
+	verified, err := verifyBundleIndex(ctx, opts, snapshotRaw, opts.ConnectorsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -477,10 +484,13 @@ func InstallFromBundle(ctx context.Context, opts InstallBundleOptions) (*Install
 		return nil, err
 	}
 
-	sum, verifyResult, err := verifyBundleArtifact(ctx, opts, bundleArtifactMaterial{
+	sum, verifyResult, err := verifyBundleArtifact(ctx, opts.Verifier, bundleArtifactMaterial{
 		artifactBytes: artifactBytes, manifestSHA256: manifest.SHA256,
 		signatureBundle: signatureBundle, provenanceBundle: provenanceBundle,
-	}, resolved, artifact)
+	}, trust.PinnedIdentity{
+		OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
+		IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
+	}, artifact)
 	if err != nil {
 		return nil, err
 	}
@@ -559,6 +569,156 @@ func InstallFromBundle(ctx context.Context, opts InstallBundleOptions) (*Install
 	}, nil
 }
 
+// InstallProcessorBundle installs a standalone WASM processor fully offline
+// from a signed bundle tarball — the processor analogue of InstallFromBundle
+// (AC-13). It reuses the SAME offline trust core verbatim: readBundleTar,
+// verifyBundleIndex (including the gated stale-bundle carve-out),
+// verifyBundleArtifact (identity-pinned signature + provenance over bytes
+// already in hand — NO network call of any kind), and finalizeArtifactInstall
+// (which additionally runs the install-time WASM compile+spec validation via
+// wasmProcessorTarget's validate hook, so a bundle whose .wasm won't compile or
+// whose spec name disagrees with the index name is refused before the atomic
+// rename, exactly as the online processor path refuses it). It differs from
+// InstallFromBundle only in resolving over payload.Processors + selecting the
+// single arch-neutral artifact, the processor target/filename/mode/manifest
+// Kind, the "processor_install" audit label, and --processors.path as the
+// install root.
+func InstallProcessorBundle(ctx context.Context, opts InstallBundleOptions) (*InstallResult, error) {
+	if opts.BundlePath == "" {
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, "--bundle path is required")
+	}
+	if opts.ProcessorsPath == "" {
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, "--processors.path is required")
+	}
+	if opts.Verifier == nil {
+		return nil, conduiterr.New(CodeVerificationUnavailable, "no verifier configured for bundle install")
+	}
+
+	manifest, artifactBytes, signatureBundle, provenanceBundle, snapshotRaw, err := readBundleTar(opts.BundlePath)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.BundleFormatVersion > BundleFormatVersion {
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, fmt.Sprintf(
+			"bundle format version %d is newer than this build supports (max %d) — upgrade conduit",
+			manifest.BundleFormatVersion, BundleFormatVersion))
+	}
+
+	verified, err := verifyBundleIndex(ctx, opts, snapshotRaw, opts.ProcessorsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved, artifact, err := resolveProcessorBundleArtifact(verified, manifest, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	sum, verifyResult, err := verifyBundleArtifact(ctx, opts.Verifier, bundleArtifactMaterial{
+		artifactBytes: artifactBytes, manifestSHA256: manifest.SHA256,
+		signatureBundle: signatureBundle, provenanceBundle: provenanceBundle,
+	}, trust.PinnedIdentity{
+		OIDCIssuer:      resolved.Processor.Publisher.ExpectedOIDCIssuer,
+		IdentityPattern: resolved.Processor.Publisher.ExpectedIdentityPattern,
+	}, artifact)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := ManifestKey(resolved.Processor.Name, resolved.Version.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	targetLock, err := AcquireTargetLock(opts.ProcessorsPath, resolved.Processor.Name, opts.lockTimeout())
+	if err != nil {
+		return nil, err
+	}
+	defer targetLock.Unlock() //nolint:errcheck // best-effort; flock also releases at process exit
+
+	entry, alreadyInstalled, err := lookupManifestEntry(opts.ProcessorsPath, key)
+	if err != nil {
+		return nil, err
+	}
+	if alreadyInstalled {
+		return &InstallResult{
+			Name: entry.Name, Version: entry.Version, OS: entry.OS, Arch: entry.Arch,
+			AlreadyInstalled: true, ArtifactFile: entry.ArtifactFile, Digest: entry.Digest,
+			SourceIndexVersion: entry.SourceIndexVersion,
+		}, nil
+	}
+
+	stagingDir, err := createBundleStagingDir(opts.ProcessorsPath)
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(stagingDir)
+
+	archivePath := filepath.Join(stagingDir, "artifact.tar.gz")
+	if err := os.WriteFile(archivePath, artifactBytes, 0o600); err != nil {
+		return nil, conduiterr.Wrap(CodeArchiveInvalid, "could not stage bundled artifact", err)
+	}
+
+	entryToSave, err := finalizeArtifactInstall(ctx, finalizeInstallOptions{
+		targetDir:          opts.ProcessorsPath,
+		target:             wasmProcessorTarget(),
+		stagingDir:         stagingDir,
+		archivePath:        archivePath,
+		name:               resolved.Processor.Name,
+		version:            resolved.Version.Version,
+		os:                 artifact.OS,
+		arch:               artifact.Arch,
+		digest:             sum,
+		size:               int64(len(artifactBytes)),
+		installedBy:        opts.InstalledBy,
+		sourceIndexVersion: verified.Payload.Index.Version,
+		source:             InstallSourceOfflineBundle,
+		bundleIndexVersion: verified.Payload.Index.Version,
+		verifyResult:       verifyResult,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := writeManifestEntry(opts.ProcessorsPath, key, entryToSave, opts.lockTimeout()); err != nil {
+		return nil, err
+	}
+
+	if err := AppendAuditEvent(auditLogPath(opts.ProcessorsPath), AuditEvent{
+		Event: "processor_install", Connector: entryToSave.Name, Version: entryToSave.Version,
+		Digest: entryToSave.Digest, Operator: opts.InstalledBy, Timestamp: entryToSave.InstalledAt,
+		Signed: entryToSave.Signed, VerifiedIdentity: entryToSave.VerifiedIdentity, AllowUnsigned: entryToSave.AllowUnsigned,
+	}); err != nil {
+		return nil, conduiterr.Wrap(conduiterr.CodeInternal, "processor installed but could not append the audit log entry", err)
+	}
+
+	return &InstallResult{
+		Name: entryToSave.Name, Version: entryToSave.Version, OS: entryToSave.OS, Arch: entryToSave.Arch,
+		Deprecated: resolved.Version.Deprecated, ArtifactFile: entryToSave.ArtifactFile,
+		Digest: entryToSave.Digest, SourceIndexVersion: entryToSave.SourceIndexVersion,
+	}, nil
+}
+
+// resolveProcessorBundleArtifact resolves manifest.Name/Version against the
+// verified snapshot's processors[] collection and selects the single
+// arch-neutral WASM artifact — the processor twin of resolveBundleArtifact,
+// factored out purely to keep InstallProcessorBundle's cyclomatic complexity
+// down.
+func resolveProcessorBundleArtifact(verified *index.VerifiedIndex, manifest BundleManifest, opts InstallBundleOptions) (*ResolvedProcessorVersion, *index.Artifact, error) {
+	resolved, err := ResolveProcessor(verified.Payload, ResolveOptions{
+		Name: manifest.Name, Version: manifest.Version,
+		RunningConduitVersion: opts.RunningConduitVersion, RunningProtocolVersion: opts.RunningProtocolVersion,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	artifact, err := SelectProcessorArtifact(resolved.Processor.Name, resolved.Version)
+	if err != nil {
+		return nil, nil, err
+	}
+	return resolved, artifact, nil
+}
+
 // resolveBundleArtifact resolves manifest.Name/Version against the
 // verified snapshot and selects the (os, arch) artifact the bundle claims —
 // factored out of InstallFromBundle purely to keep that function's
@@ -592,8 +752,11 @@ type bundleArtifactMaterial struct {
 // sha256, plan-v2/step5 §7 step 7) and the identity-pinned signature/
 // provenance verification, exactly as install.go's runVerificationGate does
 // for a live artifact — factored out of InstallFromBundle purely to keep
-// that function's cyclomatic complexity down.
-func verifyBundleArtifact(ctx context.Context, opts InstallBundleOptions, m bundleArtifactMaterial, resolved *ResolvedVersion, artifact *index.Artifact) ([32]byte, VerifyResult, error) {
+// that function's cyclomatic complexity down. It takes the pinned identity
+// directly (not a *ResolvedVersion) so the processor bundle path
+// (InstallProcessorBundle) reuses this exact same trust check with its own
+// resolved processor's publisher identity — one trust core, never forked.
+func verifyBundleArtifact(ctx context.Context, verifier *TrustedVerifier, m bundleArtifactMaterial, identity trust.PinnedIdentity, artifact *index.Artifact) ([32]byte, VerifyResult, error) {
 	sum := sha256.Sum256(m.artifactBytes)
 	if err := CheckCorruption(sum, m.manifestSHA256); err != nil {
 		return sum, VerifyResult{}, err
@@ -602,11 +765,7 @@ func verifyBundleArtifact(ctx context.Context, opts InstallBundleOptions, m bund
 		return sum, VerifyResult{}, err
 	}
 
-	identity := trust.PinnedIdentity{
-		OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
-		IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
-	}
-	verifyResult, err := opts.Verifier.VerifyArtifact(ctx, ArtifactRef{
+	verifyResult, err := verifier.VerifyArtifact(ctx, ArtifactRef{
 		Digest: sum, SignatureBundle: m.signatureBundle, ProvenanceBundle: m.provenanceBundle,
 	}, identity)
 	if err != nil {
@@ -647,7 +806,11 @@ func createBundleStagingDir(connectorsPath string) (string, error) {
 // for this one verification. Every other failure (integrity, rollback,
 // trust-anchor) is refused unconditionally — there is no override for
 // those, ever.
-func verifyBundleIndex(ctx context.Context, opts InstallBundleOptions, snapshotRaw []byte) (*index.VerifiedIndex, error) {
+// auditDir is the install root whose .registry/audit.jsonl a stale-bundle
+// override event is appended to (--connectors.path for InstallFromBundle,
+// --processors.path for InstallProcessorBundle) — the only reason this
+// otherwise artifact-kind-neutral function is parameterized on a directory.
+func verifyBundleIndex(ctx context.Context, opts InstallBundleOptions, snapshotRaw []byte, auditDir string) (*index.VerifiedIndex, error) {
 	verified, err := opts.Verifier.VerifyIndex(ctx, snapshotRaw)
 	if err == nil {
 		if !verified.Verified {
@@ -699,7 +862,7 @@ func verifyBundleIndex(ctx context.Context, opts InstallBundleOptions, snapshotR
 			"the bundled index snapshot could not be cryptographically verified — refusing to install")
 	}
 
-	if logErr := AppendAuditEvent(auditLogPath(opts.ConnectorsPath), AuditEvent{
+	if logErr := AppendAuditEvent(auditLogPath(auditDir), AuditEvent{
 		Event: "stale_bundle_override", Timestamp: time.Now().UTC(), Operator: opts.InstalledBy,
 	}); logErr != nil {
 		return nil, conduiterr.Wrap(conduiterr.CodeInternal, "stale bundle override approved but could not append the audit log entry", logErr)

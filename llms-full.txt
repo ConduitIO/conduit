@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (85)
+## 3. Error codes (87)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -680,7 +680,9 @@ Author: Meroxa, Inc.
 | `registry.install_locked` | Unavailable | CodeInstallLocked is raised when the per-target install lock is not acquired within --lock-timeout. |
 | `registry.invalid_processor_artifact` | FailedPrecondition | CodeInvalidProcessorArtifact is raised by SelectProcessorArtifact when a processor version's single artifact is not the required arch-neutral WASM shape — Kind != "wasm-processor", or (OS, Arch) != ("wasip1", "wasm"). Unlike the connector path's SelectArtifact, which deliberately SKIPS an unrecognized kind ("no matching artifact"), a malformed processor artifact is a hard validation error, never a silent skip (design doc D2, failure mode 3): a processor has exactly one artifact and it must be the WASM one, so anything else is a malformed or spoofed index entry. FailedPrecondition — the index entry as published does not meet the precondition for install. |
 | `registry.no_platform_artifact` | NotFound | CodeNoPlatformArtifact is raised when no artifact exists for the host (os, arch). |
+| `registry.processor_in_use` | FailedPrecondition | CodeProcessorInUse is raised when an UninstallProcessor is refused because a pipeline still references the exact standalone:<name>[@version] in a processors block. Distinct from CodeConnectorInUse: the in-use scan is a separate code path (the processors blocks of provisioned pipeline YAML, not the connectors blocks). codes.FailedPrecondition, like its connector sibling. |
 | `registry.processor_not_found` | NotFound | CodeProcessorNotFound is raised when an exact-match name lookup in the index's processors[] collection fails. Distinct from CodeConnectorNotFound so an operator/agent can tell which collection was searched (a name may legitimately exist in one and not the other); codes.NotFound, exactly like its connector sibling. Same anti-typosquat stance as findConnector: exact-match only, never a fuzzy suggestion. |
+| `registry.processor_not_installed` | NotFound | CodeProcessorNotInstalled is raised on an UninstallProcessor/manifest lookup miss. Distinct from CodeConnectorNotInstalled so an operator/agent can tell which install directory (--processors.path vs --connectors.path) was searched; codes.NotFound, exactly like its connector sibling. |
 | `registry.provenance_invalid` | PermissionDenied | CodeProvenanceInvalid is raised when the SLSA provenance's subject-digest match or builder.id/configSource.uri binding fails (trust.ErrProvenanceInvalid). |
 | `registry.schema_too_new` | FailedPrecondition | CodeSchemaTooNew is raised when payload.schemaVersion exceeds the highest this build was compiled to understand. |
 | `registry.trust_anchor_expired` | FailedPrecondition | CodeTrustAnchorExpired is raised when no keyId in signatures[] matches any of this build's compiled-in trust anchors at all — the "upgrade Conduit" case, distinct from CodeIndexIntegrity's "recognized key, verification failed". |

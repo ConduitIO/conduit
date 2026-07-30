@@ -34,6 +34,8 @@ func (c *ProcessorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
 		&DescribeCommand{},
+		&InstallCommand{},
+		&UninstallCommand{},
 	}
 }
 
@@ -42,5 +44,11 @@ func (c *ProcessorPluginsCommand) Usage() string { return "processor-plugins" }
 func (c *ProcessorPluginsCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Manage Processor Plugins",
+		Long: `Manage standalone WASM processor plugins.
+
+'list' and 'describe' are ONLINE commands: they query a running Conduit engine over gRPC.
+'install' and 'uninstall' are OFFLINE commands: they read and write --processors.path on disk
+with no engine running (the contract is "install, then 'conduit run' discovers it at startup").
+This online/offline split is deliberate and mirrors 'conduit connectors'.`,
 	}
 }

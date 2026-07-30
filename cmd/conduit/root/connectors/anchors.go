@@ -73,6 +73,21 @@ func init() {
 	defaultTrustAnchors = anchors
 }
 
+// DefaultTrustAnchors returns this build's compiled-in registry root/freshness
+// anchors. Exported so the sibling `conduit processor-plugins install` command
+// verifies against the SAME single embedded anchor set (the ceremony writes the
+// PEMs into this package's trustanchors/ directory) rather than embedding a
+// second copy — one trust core, never forked. The processor-plugins package
+// snapshots this at its own package-init time (connectors' init, which
+// populates it, runs first because that package imports this one).
+func DefaultTrustAnchors() index.TrustAnchors { return defaultTrustAnchors }
+
+// AnchorLoadErr reports the embedded-anchor load failure (nil on a normal
+// release build). Exported alongside DefaultTrustAnchors so the sibling
+// processor-plugins install command mirrors guardTrustAnchors' fail-closed
+// refusal on a broken/anchor-stripped build.
+func AnchorLoadErr() error { return errAnchorLoad }
+
 // guardTrustAnchors returns a clear, machine-actionable error when this build's
 // embedded trust anchors could not be loaded. install/audit/bundle call it
 // before constructing the verifier so a broken build reports

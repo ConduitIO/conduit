@@ -110,4 +110,16 @@ var (
 	// so anything else is a malformed or spoofed index entry. FailedPrecondition
 	// — the index entry as published does not meet the precondition for install.
 	CodeInvalidProcessorArtifact = conduiterr.Register("registry.invalid_processor_artifact", codes.FailedPrecondition)
+	// CodeProcessorNotInstalled is raised on an UninstallProcessor/manifest
+	// lookup miss. Distinct from CodeConnectorNotInstalled so an operator/agent
+	// can tell which install directory (--processors.path vs --connectors.path)
+	// was searched; codes.NotFound, exactly like its connector sibling.
+	CodeProcessorNotInstalled = conduiterr.Register("registry.processor_not_installed", codes.NotFound)
+	// CodeProcessorInUse is raised when an UninstallProcessor is refused because
+	// a pipeline still references the exact standalone:<name>[@version] in a
+	// processors block. Distinct from CodeConnectorInUse: the in-use scan is a
+	// separate code path (the processors blocks of provisioned pipeline YAML,
+	// not the connectors blocks). codes.FailedPrecondition, like its connector
+	// sibling.
+	CodeProcessorInUse = conduiterr.Register("registry.processor_in_use", codes.FailedPrecondition)
 )

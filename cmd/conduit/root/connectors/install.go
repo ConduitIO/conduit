@@ -47,6 +47,12 @@ import (
 // alone nor a copy-pasted script line alone can trigger it.
 const unsignedInstallEnvVar = "CONDUIT_ALLOW_UNSIGNED_INSTALL"
 
+// UnsignedInstallEnvVar exports unsignedInstallEnvVar so the sibling
+// `conduit processor-plugins install` command reads the exact same
+// non-interactive escape-hatch env var — the --allow-unsigned gate must be
+// identical across both install surfaces, from one source of truth.
+const UnsignedInstallEnvVar = unsignedInstallEnvVar
+
 var (
 	_ ecdysis.CommandWithFlags   = (*InstallCommand)(nil)
 	_ ecdysis.CommandWithConfig  = (*InstallCommand)(nil)
