@@ -30,12 +30,14 @@ is):
 | Plugin | Kind | Install |
 | --- | --- | --- |
 | `standalone:pgvector` (destination) | Registry-installed Go connector (`conduit-connector-pgvector`) | `conduit connectors install pgvector@<version>` |
-| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | **No install command exists yet.** Build `./cmd/chunking` from a `conduit-processor-ai` checkout (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`) and place the `.wasm` file under your `--processors.path` directory. |
-| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Same gap as above: build `./cmd/embedding` (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-embed.wasm ./cmd/embedding`) and place it under `--processors.path`. |
+| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.chunk` once it's published to the signed registry; until then `conduit processor-plugins install --bundle <signed.tgz>`, or build `./cmd/chunking` (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`) and place the `.wasm` under `--processors.path`. |
+| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.embed` (same options as above; build `./cmd/embedding`). |
 
-This gap — `conduit processor-plugins install` not existing — is stated here plainly rather than
-invented around; `conduit pipelines init --template postgres-pgvector-rag` names it in its
-prerequisite note every time this template is scaffolded.
+The `conduit processor-plugins install` / `uninstall` commands exist, and
+`conduit pipelines init --template postgres-pgvector-rag` names them in its prerequisite note every
+time this template is scaffolded. The hosted `install ai.chunk` / `install ai.embed` fetch goes live
+once `conduit-processor-ai` publishes signed processor artifacts to the registry; until then use the
+offline `--bundle` path or a local build.
 
 ## Requires pipeline architecture v2
 
