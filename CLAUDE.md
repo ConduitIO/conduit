@@ -216,7 +216,7 @@ Do not claim a bar is met when it structurally isn't. Mark PRs against what's re
 | Human (DeVaris) sign-off on Tier 1 | **live now** |
 | Coverage floor enforcement, benchi regression gate | by Phase 1 |
 | Property + fuzz tests on data-path/boundaries | by Phase 1 |
-| Chaos suite (`tests/chaos`) nightly | **live now** (`.github/workflows/chaos.yml`) — nightly + PRs touching `pkg/connector`, `pkg/pipeline`, `pkg/lifecycle`, `pkg/lifecycle-poc`, `tests/chaos`; runs the SIGKILL/FIFO-ack no-infra subset only (everything in `tests/chaos` today); not yet a _required_ (blocking) branch-protection check — that's a repo-settings change |
+| Chaos suite (`tests/chaos`) nightly | **live now + REQUIRED** (`.github/workflows/chaos.yml`) — nightly + every PR via the always-report/fail-closed detector (the job runs on all PRs; the SIGKILL/FIFO-ack no-infra suite executes only when a data-path tree changed, fail-closed on any diff ambiguity). `tests/chaos (race, x3)` **is** in `main`'s required branch-protection contexts (blocking) — the earlier "not yet required" note was stale. `bundle-e2e`/`rag-e2e` are being restructured to the same always-report pattern to become required next (bundle-e2e first; rag-e2e after a de-flake soak) |
 | Upgrade/downgrade tests gating releases | by Phase 2 |
 | 24h soak gating every release | by Phase 2 |
 

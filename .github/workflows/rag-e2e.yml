@@ -9,32 +9,35 @@ name: rag-e2e
 # delete-by-source_key). The embedding provider's HTTP endpoint is the only mock;
 # the WASM boundary, egress gate, and pgvector are all real.
 #
-# Scoped to the surfaces the e2e exercises. Not yet a required check (that's a
-# repo-settings change to follow), matching the bundle-e2e precedent.
+# REQUIRED-CHECK CONTRACT (mirrors chaos.yml / bundle-e2e.yml): the trigger is
+# NOT path-filtered so this job reports a conclusion on EVERY PR (a path-filtered
+# required check goes permanently pending and blocks merges); the expensive
+# cross-repo + docker work is gated INSIDE the job by a FAIL-CLOSED path
+# detector. Sibling refs are PINNED (not `main`) so this repo's merge gate can't
+# be broken by a sibling's moving main. NOTE: bundle-e2e (docker-free) is the one
+# made *required* first; this docker+cross-repo job stays advisory-but-always-
+# reporting until a de-flake green-streak soak justifies flipping it too.
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    paths:
-      - 'pkg/plugin/processor/standalone/**'
-      - '.github/workflows/rag-e2e.yml'
-      - 'go.mod'
-      - 'go.sum'
   workflow_dispatch:
     inputs:
       processor_ai_ref:
-        description: 'conduit-processor-ai ref to test against'
+        description: 'conduit-processor-ai ref to test against (default: the pinned SHA)'
         required: false
-        default: 'main'
+        default: ''
       pgvector_ref:
-        description: 'conduit-connector-pgvector ref to test against'
+        description: 'conduit-connector-pgvector ref to test against (default: the pinned SHA)'
         required: false
-        default: 'main'
+        default: ''
 
 env:
-  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
-  PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'main' }}
+  # Pinned known-good sibling commits. Bump deliberately after confirming the
+  # e2e is green against the new commits; override per-run via the inputs above.
+  PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || '24dee9ffd9e8be633a010d427a142d6c2f244793' }}
+  PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'b5361ef72d943a684fcb41b0e33605eef28c41b9' }}
 
 jobs:
   rag-e2e:
@@ -42,8 +45,52 @@ jobs:
     steps:
       - name: Check out conduit
         uses: actions/checkout@v4
+        with:
+          # Full history so the path detector can diff against the PR base ref.
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: detect
+        # push/workflow_dispatch always run. For pull_request, run only when a
+        # surface this e2e exercises changed — FAIL CLOSED: any inability to
+        # compute the diff runs the suite anyway.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "reason=event $EVENT_NAME always runs" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "reason=base ref unavailable - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "reason=git diff failed - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qE '^(pkg/plugin/processor/standalone/|\.github/workflows/rag-e2e\.yml|go\.mod|go\.sum)'; then
+            echo "reason=rag-surface change detected" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reason=no rag-surface change - skipping suite, gate passes" >> "$GITHUB_OUTPUT"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate decision
+        env:
+          RUN: ${{ steps.detect.outputs.run }}
+          REASON: ${{ steps.detect.outputs.reason }}
+        run: echo "rag-e2e run=$RUN ($REASON)"
 
       - name: Check out conduit-processor-ai
+        if: steps.detect.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           repository: ConduitIO/conduit-processor-ai
@@ -51,6 +98,7 @@ jobs:
           path: _rag/conduit-processor-ai
 
       - name: Check out conduit-connector-pgvector
+        if: steps.detect.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           repository: ConduitIO/conduit-connector-pgvector
@@ -58,14 +106,17 @@ jobs:
           path: _rag/conduit-connector-pgvector
 
       - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
       - name: Start pgvector
+        if: steps.detect.outputs.run == 'true'
         run: docker compose -f pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml up --wait
 
       - name: Run RAG pipeline e2e (chunk -> embed -> pgvector, incl. delete path)
+        if: steps.detect.outputs.run == 'true'
         env:
           CONDUIT_PROCESSOR_AI_DIR: ${{ github.workspace }}/_rag/conduit-processor-ai
           CONDUIT_CONNECTOR_PGVECTOR_DIR: ${{ github.workspace }}/_rag/conduit-connector-pgvector
@@ -75,5 +126,5 @@ jobs:
             ./pkg/plugin/processor/standalone/...
 
       - name: Stop pgvector
-        if: always()
+        if: always() && steps.detect.outputs.run == 'true'
         run: docker compose -f pkg/plugin/processor/standalone/testdata/rag_e2e/docker-compose.yml down --volumes
