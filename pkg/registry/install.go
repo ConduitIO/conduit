@@ -66,8 +66,16 @@ type InstallOptions struct {
 
 	// ConnectorsPath is the standalone connectors directory
 	// (--connectors.path) the binary is installed into, and under which
-	// .registry/ bookkeeping lives.
+	// .registry/ bookkeeping lives. Used by Install (connectors).
 	ConnectorsPath string
+
+	// ProcessorsPath is the standalone processors directory
+	// (--processors.path) a WASM processor artifact is installed into, and
+	// under which its OWN, SEPARATE .registry/ bookkeeping lives. Used by
+	// InstallProcessor (processors) exactly as ConnectorsPath is used by
+	// Install — never commingled: a processor install writes a distinct
+	// <processors.path>/.registry/manifest.json (plan edge case 15).
+	ProcessorsPath string
 
 	// IndexURL is the index to fetch over HTTP(S). Ignored if IndexFile is
 	// set.
@@ -246,19 +254,36 @@ func Install(ctx context.Context, opts InstallOptions) (*InstallResult, error) {
 		return nil, err
 	}
 
+	// Collapse the connector-specific resolution into the artifact-kind-neutral
+	// shape the shared install core (installArtifact) consumes — so connectors
+	// and processors funnel through ONE download/verify/rename/manifest path.
+	ra := resolvedArtifact{
+		name:    resolved.Connector.Name,
+		version: resolved.Version.Version,
+		identity: trust.PinnedIdentity{
+			OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
+			IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
+		},
+		artifact:          artifact,
+		versionProvenance: resolved.Version.SLSAProvenance,
+		deprecated:        resolved.Version.Deprecated,
+	}
+
 	if opts.DryRun {
 		return &InstallResult{
-			Name: resolved.Connector.Name, Version: resolved.Version.Version,
+			Name: ra.name, Version: ra.version,
 			OS: artifact.OS, Arch: artifact.Arch,
-			Deprecated:  resolved.Version.Deprecated,
+			Deprecated:  ra.deprecated,
 			DryRun:      true,
 			ArtifactURL: artifact.URL,
 			Size:        artifact.Size,
 		}, nil
 	}
 
-	// 4-9: lock, download, verify, extract, atomically install, record.
-	return installResolved(ctx, opts, verified, resolved, artifact)
+	// 4-9: lock, download, verify, extract, atomically install, record — into
+	// ConnectorsPath, with the connector target's naming/mode/kind/audit
+	// (connectorTarget preserves today's connector behavior exactly).
+	return installArtifact(ctx, opts, opts.ConnectorsPath, connectorTarget(), verified, ra)
 }
 
 // resolveInstall runs steps 1-3: fetch+shape-check the index (via
@@ -292,19 +317,25 @@ func resolveInstall(ctx context.Context, opts InstallOptions) (*index.VerifiedIn
 	return verified, resolved, artifact, nil
 }
 
-// installResolved runs steps 4-9 of Install against an already-resolved
-// connector version and platform artifact: acquire the per-target lock,
-// short-circuit if already installed, download+verify+extract+atomically
-// install, then record the manifest entry and audit event.
-func installResolved(ctx context.Context, opts InstallOptions, verified *index.VerifiedIndex, resolved *ResolvedVersion, artifact *index.Artifact) (*InstallResult, error) {
-	key, err := ManifestKey(resolved.Connector.Name, resolved.Version.Version)
+// installArtifact runs steps 4-9 against an already-resolved, artifact-kind-
+// neutral resolvedArtifact: acquire the per-target lock, short-circuit if
+// already installed, download+verify+extract+atomically install into targetDir,
+// then record the manifest entry and audit event. Both Install (connectors)
+// and InstallProcessor (processors) funnel through here — the trust gate,
+// staging, atomic rename, manifest and audit discipline is IDENTICAL and never
+// forked (ADR 20260727-processors-ride-connector-registry, decision 1). target
+// carries the only artifact-kind-specific parameters (on-disk filename, file
+// mode, manifest Kind, audit label, and the optional install-time validation
+// hook); targetDir is --connectors.path or --processors.path.
+func installArtifact(ctx context.Context, opts InstallOptions, targetDir string, target installTarget, verified *index.VerifiedIndex, ra resolvedArtifact) (*InstallResult, error) {
+	key, err := ManifestKey(ra.name, ra.version)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Per-target lock: serializes the ENTIRE remaining pipeline for two
-	// concurrent installs of the same connector name.
-	targetLock, err := AcquireTargetLock(opts.ConnectorsPath, resolved.Connector.Name, opts.lockTimeout())
+	// concurrent installs of the same name.
+	targetLock, err := AcquireTargetLock(targetDir, ra.name, opts.lockTimeout())
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +345,7 @@ func installResolved(ctx context.Context, opts InstallOptions, verified *index.V
 	// a concurrent install of the same name that started earlier may have
 	// just finished; reading the manifest before the lock could observe a
 	// write in flight and give a stale answer.
-	entry, alreadyInstalled, err := lookupManifestEntry(opts.ConnectorsPath, key)
+	entry, alreadyInstalled, err := lookupManifestEntry(targetDir, key)
 	if err != nil {
 		return nil, err
 	}
@@ -328,28 +359,31 @@ func installResolved(ctx context.Context, opts InstallOptions, verified *index.V
 		}, nil
 	}
 
-	entry, err = downloadVerifyAndInstall(ctx, opts, verified, resolved, artifact)
+	entry, err = downloadVerifyAndInstall(ctx, opts, targetDir, target, verified, ra)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := writeManifestEntry(opts.ConnectorsPath, key, entry, opts.lockTimeout()); err != nil {
+	if err := writeManifestEntry(targetDir, key, entry, opts.lockTimeout()); err != nil {
 		return nil, err
 	}
 
 	// 9. Audit event — appended only AFTER the rename and manifest write
 	// above have both succeeded (see AppendAuditEvent's invariant comment).
-	if err := AppendAuditEvent(auditLogPath(opts.ConnectorsPath), AuditEvent{
-		Event: "connector_install", Connector: entry.Name, Version: entry.Version,
+	// AuditEvent.Connector carries the artifact name for both kinds; the Event
+	// label (target.auditEvent) is what distinguishes a processor_install from
+	// a connector_install in the trail.
+	if err := AppendAuditEvent(auditLogPath(targetDir), AuditEvent{
+		Event: target.auditEvent, Connector: entry.Name, Version: entry.Version,
 		Digest: entry.Digest, Operator: opts.InstalledBy, Timestamp: entry.InstalledAt,
 		Signed: entry.Signed, VerifiedIdentity: entry.VerifiedIdentity, AllowUnsigned: entry.AllowUnsigned,
 	}); err != nil {
-		return nil, conduiterr.Wrap(conduiterr.CodeInternal, "connector installed but could not append the audit log entry", err)
+		return nil, conduiterr.Wrap(conduiterr.CodeInternal, "artifact installed but could not append the audit log entry", err)
 	}
 
 	return &InstallResult{
 		Name: entry.Name, Version: entry.Version, OS: entry.OS, Arch: entry.Arch,
-		Deprecated:         resolved.Version.Deprecated,
+		Deprecated:         ra.deprecated,
 		ArtifactFile:       entry.ArtifactFile,
 		Digest:             entry.Digest,
 		SourceIndexVersion: entry.SourceIndexVersion,
@@ -357,24 +391,28 @@ func installResolved(ctx context.Context, opts InstallOptions, verified *index.V
 }
 
 // downloadVerifyAndInstall runs steps 5-8: stage, download, corruption
-// check, the verification gate, extract, and the atomic rename — returning
-// the ManifestEntry to record (steps 8-9's write/audit stay in
-// installResolved, since they're identical regardless of how the entry was
-// produced).
-func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified *index.VerifiedIndex, resolved *ResolvedVersion, artifact *index.Artifact) (ManifestEntry, error) {
+// check, the verification gate, extract, (optionally) install-time-validate,
+// and the atomic rename — returning the ManifestEntry to record (steps 8-9's
+// write/audit stay in installArtifact, since they're identical regardless of
+// how the entry was produced).
+func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, targetDir string, target installTarget, verified *index.VerifiedIndex, ra resolvedArtifact) (ManifestEntry, error) {
 	// Best-effort, non-blocking cache housekeeping (step5 §5): sweep any
 	// orphaned ".tmp-populate-*" directory left by a crash mid-CachePopulate
 	// on a PRIOR install. Never fails or slows this install over a stale
 	// temp directory — errors are swallowed inside CacheSweepTmp itself.
-	CacheSweepTmp(opts.ConnectorsPath, cacheTmpMaxAge)
+	CacheSweepTmp(targetDir, cacheTmpMaxAge)
 
 	// 5. Staging directory: a private (0700), uniquely-named SUBDIRECTORY
-	// of ConnectorsPath — never the OS temp dir. This is required, not
+	// of targetDir — never the OS temp dir. This is required, not
 	// just tidy, so the final os.Rename below is a same-filesystem,
 	// therefore atomic, rename: a temp directory on a different volume
 	// would make that rename a non-atomic copy and could fail outright
-	// with EXDEV.
-	stagingRoot := stagingRootPath(opts.ConnectorsPath)
+	// with EXDEV. Invariant 5. For a processor install targetDir is
+	// --processors.path, so staging lives under
+	// <processors.path>/.registry/staging and the rename stays on the
+	// processors filesystem (plan edge case 7 — the single most important
+	// porting detail).
+	stagingRoot := stagingRootPath(targetDir)
 	if err := os.MkdirAll(stagingRoot, 0o700); err != nil {
 		return ManifestEntry{}, conduiterr.Wrap(CodeDownloadFailed, "could not create staging root directory", err)
 	}
@@ -395,7 +433,7 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 	}
 
 	archivePath := filepath.Join(stagingDir, "artifact.tar.gz")
-	dl, fromCache, err := stageArtifact(ctx, opts, artifact, archivePath)
+	dl, fromCache, err := stageArtifact(ctx, opts, targetDir, ra.artifact, archivePath)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
@@ -405,7 +443,7 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 	// unconditionally regardless of fromCache: a cache hit still proves
 	// nothing about the bytes' trustworthiness on its own (see stageArtifact's
 	// doc comment) — it only short-circuits the network fetch.
-	if err := CheckCorruption(dl.Digest, artifact.SHA256); err != nil {
+	if err := CheckCorruption(dl.Digest, ra.artifact.SHA256); err != nil {
 		return ManifestEntry{}, err
 	}
 
@@ -418,23 +456,24 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 			// Best-effort: the cache is purely an optimization (step5 §5) —
 			// a populate failure must never fail an otherwise-successful
 			// install.
-			_ = CachePopulate(opts.ConnectorsPath, normalizeDigestHex(artifact.SHA256), data, artifact.URL)
+			_ = CachePopulate(targetDir, normalizeDigestHex(ra.artifact.SHA256), data, ra.artifact.URL)
 		}
 	}
 
-	verifyResult, err := runVerificationGate(ctx, opts, dl, resolved, artifact)
+	verifyResult, err := runVerificationGate(ctx, opts, dl, ra)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
 
-	return finalizeArtifactInstall(finalizeInstallOptions{
-		connectorsPath:     opts.ConnectorsPath,
+	return finalizeArtifactInstall(ctx, finalizeInstallOptions{
+		targetDir:          targetDir,
+		target:             target,
 		stagingDir:         stagingDir,
 		archivePath:        archivePath,
-		name:               resolved.Connector.Name,
-		version:            resolved.Version.Version,
-		os:                 artifact.OS,
-		arch:               artifact.Arch,
+		name:               ra.name,
+		version:            ra.version,
+		os:                 ra.artifact.OS,
+		arch:               ra.artifact.Arch,
 		digest:             dl.Digest,
 		size:               dl.Size,
 		installedBy:        opts.InstalledBy,
@@ -449,9 +488,14 @@ func downloadVerifyAndInstall(ctx context.Context, opts InstallOptions, verified
 // archive whose bytes have ALREADY passed the corruption check and the full
 // verification gate.
 type finalizeInstallOptions struct {
-	connectorsPath string
-	stagingDir     string
-	archivePath    string
+	// targetDir is --connectors.path (connectors) or --processors.path
+	// (processors); the artifact is renamed into it and staging shares its
+	// filesystem.
+	targetDir string
+	// target carries the artifact-kind-specific naming/mode/kind/validate.
+	target      installTarget
+	stagingDir  string
+	archivePath string
 
 	name, version, os, arch string
 	digest                  [32]byte
@@ -469,42 +513,55 @@ type finalizeInstallOptions struct {
 }
 
 // finalizeArtifactInstall is steps 7-9's shared tail: extract the single
-// candidate binary, atomically rename it into connectorsPath, and build the
-// ManifestEntry to record — used by BOTH the online install pipeline
-// (downloadVerifyAndInstall, above) and the offline bundle-install path
-// (bundle.go's InstallFromBundle), so the two paths can never diverge on
-// the extract/rename/manifest-shape discipline. Manifest write + audit
-// event (steps 8-9's remaining parts) stay with each caller, since
-// InstallFromBundle's is otherwise identical to installResolved's but for
-// the ManifestEntry.Source/BundleIndexVersion fields.
-func finalizeArtifactInstall(o finalizeInstallOptions) (ManifestEntry, error) {
+// candidate artifact, run the target's optional install-time validation hook,
+// atomically rename it into o.targetDir, and build the ManifestEntry to record
+// — used by the online connector pipeline (downloadVerifyAndInstall, above),
+// the online processor pipeline (via the same path with a processor target),
+// and the offline bundle-install path (bundle.go's InstallFromBundle), so
+// those paths can never diverge on the extract/validate/rename/manifest-shape
+// discipline. Manifest write + audit event (steps 8-9's remaining parts) stay
+// with each caller, since InstallFromBundle's is otherwise identical to
+// installArtifact's but for the ManifestEntry.Source/BundleIndexVersion
+// fields.
+func finalizeArtifactInstall(ctx context.Context, o finalizeInstallOptions) (ManifestEntry, error) {
 	binaryPath, err := extractAndGuard(o.archivePath, o.stagingDir)
 	if err != nil {
 		return ManifestEntry{}, err
 	}
 
-	finalName := fmt.Sprintf("conduit-connector-%s_%s", o.name, o.version)
-	finalPath := filepath.Join(o.connectorsPath, finalName)
+	// Install-time validation hook (processors, ADR decision 4 / plan AC-9):
+	// runs on the extracted artifact — still inside the private staging dir —
+	// AFTER the corruption + trust gates and BEFORE the atomic rename, so a
+	// module that will not compile or whose spec name disagrees with the
+	// resolved index name never lands under targetDir. nil for connectors, so
+	// the connector path's behavior is preserved exactly.
+	if o.target.validate != nil {
+		if err := o.target.validate(ctx, binaryPath, o.name, o.version); err != nil {
+			return ManifestEntry{}, err
+		}
+	}
+
+	finalName := o.target.finalName(o.name, o.version)
+	finalPath := filepath.Join(o.targetDir, finalName)
 
 	// Invariant 5 (atomic state/checkpoint writes): os.Rename within one
 	// filesystem is a single atomic syscall — there is no OS-observable
 	// "mid-rename" state. A crash before it returns leaves the OLD binary
 	// (if any) untouched at finalPath; a crash after leaves the NEW binary
 	// fully present. This is exactly why staging must share a filesystem
-	// with connectorsPath — the guarantee does not hold across devices
-	// (EXDEV).
+	// with targetDir — the guarantee does not hold across devices (EXDEV).
 	if err := os.Rename(binaryPath, finalPath); err != nil {
 		return ManifestEntry{}, conduiterr.Wrap(CodeArchiveInvalid, fmt.Sprintf("could not install %q", finalName), err)
 	}
-	if err := os.Chmod(finalPath, 0o755); err != nil {
-		return ManifestEntry{}, conduiterr.Wrap(CodeArchiveInvalid, "could not set installed binary permissions", err)
+	if err := os.Chmod(finalPath, o.target.fileMode); err != nil {
+		return ManifestEntry{}, conduiterr.Wrap(CodeArchiveInvalid, "could not set installed artifact permissions", err)
 	}
 	fireChaos(chaosPointPostRenamePreManifest)
 
 	now := time.Now().UTC()
 	return ManifestEntry{
 		Name: o.name, Version: o.version,
-		Kind: StandaloneArtifactKind, OS: o.os, Arch: o.arch,
+		Kind: o.target.kind, OS: o.os, Arch: o.arch,
 		ArtifactFile: finalName, Digest: fmt.Sprintf("sha256:%x", o.digest), Size: o.size,
 		InstalledAt: now, InstalledBy: o.installedBy,
 		SourceIndexVersion: o.sourceIndexVersion, Source: o.source, BundleIndexVersion: o.bundleIndexVersion,
@@ -523,10 +580,10 @@ func finalizeArtifactInstall(o finalizeInstallOptions) (ManifestEntry, error) {
 // decision: the caller still runs CheckCorruption and the full verification
 // gate against the returned DownloadResult exactly as it would for a fresh
 // download; this function only ever decides where the BYTES come from.
-func stageArtifact(ctx context.Context, opts InstallOptions, artifact *index.Artifact, archivePath string) (DownloadResult, bool, error) {
+func stageArtifact(ctx context.Context, opts InstallOptions, targetDir string, artifact *index.Artifact, archivePath string) (DownloadResult, bool, error) {
 	digestHex := normalizeDigestHex(artifact.SHA256)
 	if digestHex != "" {
-		if cached, hit, cacheErr := CacheLookup(opts.ConnectorsPath, digestHex); cacheErr == nil && hit {
+		if cached, hit, cacheErr := CacheLookup(targetDir, digestHex); cacheErr == nil && hit {
 			if werr := os.WriteFile(archivePath, cached, 0o600); werr == nil {
 				sum := sha256.Sum256(cached)
 				var digest [32]byte
@@ -561,19 +618,16 @@ func stageArtifact(ctx context.Context, opts InstallOptions, artifact *index.Art
 // ErrVerificationNotConfigured. With the real TrustedVerifier (PR-2), a
 // non-Signed success without going through the AllowUnsigned+policy.Decide
 // path is a programming error refused below, never silently installed.
-func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadResult, resolved *ResolvedVersion, artifact *index.Artifact) (VerifyResult, error) {
+func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
 	if opts.AllowUnsigned {
-		return unsignedInstallGate(opts, dl, resolved)
+		return unsignedInstallGate(opts, dl, ra)
 	}
 
-	ref, err := fetchArtifactRef(ctx, opts, dl.Digest, resolved.Version, artifact)
+	ref, err := fetchArtifactRef(ctx, opts, dl.Digest, ra)
 	if err != nil {
 		return VerifyResult{}, err
 	}
-	identity := trust.PinnedIdentity{
-		OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
-		IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
-	}
+	identity := ra.identity
 
 	verifyResult, err := opts.ArtifactVerifier.VerifyArtifact(ctx, ref, identity)
 	if err != nil {
@@ -601,7 +655,7 @@ func runVerificationGate(ctx context.Context, opts InstallOptions, dl DownloadRe
 // unsigned install to be logged, no exceptions — and returns
 // VerifyResult{Signed: false}, which downloadVerifyAndInstall records
 // verbatim into the manifest's Signed/AllowUnsigned fields.
-func unsignedInstallGate(opts InstallOptions, dl DownloadResult, resolved *ResolvedVersion) (VerifyResult, error) {
+func unsignedInstallGate(opts InstallOptions, dl DownloadResult, ra resolvedArtifact) (VerifyResult, error) {
 	dec, err := policy.Decide(policy.Context{
 		TTY:               opts.TTY,
 		CIEnv:             opts.CIEnv,
@@ -630,8 +684,8 @@ func unsignedInstallGate(opts InstallOptions, dl DownloadResult, resolved *Resol
 		logPath = unsignedInstallsLogPath(opts.ConnectorsPath)
 	}
 	if err := policy.AppendUnsignedInstallEvent(logPath, policy.UnsignedInstallEvent{
-		Connector:      resolved.Connector.Name,
-		Version:        resolved.Version.Version,
+		Connector:      ra.name,
+		Version:        ra.version,
 		ResolvedDigest: fmt.Sprintf("sha256:%x", dl.Digest),
 		Operator:       opts.InstalledBy,
 		Timestamp:      time.Now().UTC(),
@@ -690,8 +744,9 @@ func fetchIndexRaw(ctx context.Context, opts InstallOptions) ([]byte, error) {
 // whichever is present) into an ArtifactRef, bounded per MaxBundleBytes —
 // this package never hands ArtifactVerifier a bare URL; it fetches the
 // bytes itself so the interface stays crypto-library-agnostic.
-func fetchArtifactRef(ctx context.Context, opts InstallOptions, digest [32]byte, v index.ConnectorVersion, a *index.Artifact) (ArtifactRef, error) {
+func fetchArtifactRef(ctx context.Context, opts InstallOptions, digest [32]byte, ra resolvedArtifact) (ArtifactRef, error) {
 	ref := ArtifactRef{Digest: digest}
+	a := ra.artifact
 
 	if a.Signature.BundleURL != "" {
 		sig, err := fetchBundle(ctx, a.Signature.BundleURL)
@@ -703,7 +758,7 @@ func fetchArtifactRef(ctx context.Context, opts InstallOptions, digest [32]byte,
 
 	provRef := a.SLSAProvenance
 	if provRef == nil {
-		provRef = v.SLSAProvenance
+		provRef = ra.versionProvenance
 	}
 	if provRef != nil && provRef.BundleURL != "" {
 		prov, err := fetchBundle(ctx, provRef.BundleURL)

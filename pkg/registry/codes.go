@@ -93,6 +93,13 @@ var (
 	// key not among them. Verification never proceeds when this is raised —
 	// it can only make installs fail closed, never open.
 	CodeTrustAnchorsUnavailable = conduiterr.Register("registry.trust_anchors_unavailable", codes.Internal)
+	// CodeProcessorNotFound is raised when an exact-match name lookup in the
+	// index's processors[] collection fails. Distinct from
+	// CodeConnectorNotFound so an operator/agent can tell which collection was
+	// searched (a name may legitimately exist in one and not the other);
+	// codes.NotFound, exactly like its connector sibling. Same anti-typosquat
+	// stance as findConnector: exact-match only, never a fuzzy suggestion.
+	CodeProcessorNotFound = conduiterr.Register("registry.processor_not_found", codes.NotFound)
 	// CodeInvalidProcessorArtifact is raised by SelectProcessorArtifact when a
 	// processor version's single artifact is not the required arch-neutral WASM
 	// shape — Kind != "wasm-processor", or (OS, Arch) != ("wasip1", "wasm").

@@ -201,20 +201,28 @@ func Bundle(ctx context.Context, opts BundleOptions) (*BundleResult, error) {
 		return nil, err
 	}
 
-	// fetchArtifactRef's InstallOptions parameter carries no fields it
-	// actually reads (bundle fetches always go through boundedfetch's own
-	// http.DefaultClient) — passed as a zero value deliberately, not an
-	// oversight.
-	ref, err := fetchArtifactRef(ctx, InstallOptions{}, dl.Digest, resolved.Version, artifact)
+	// Collapse the connector resolution into the artifact-kind-neutral shape
+	// fetchArtifactRef now consumes. fetchArtifactRef's InstallOptions
+	// parameter carries no fields it actually reads (bundle fetches always go
+	// through boundedfetch's own http.DefaultClient) — passed as a zero value
+	// deliberately, not an oversight.
+	ra := resolvedArtifact{
+		name:    resolved.Connector.Name,
+		version: resolved.Version.Version,
+		identity: trust.PinnedIdentity{
+			OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
+			IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
+		},
+		artifact:          artifact,
+		versionProvenance: resolved.Version.SLSAProvenance,
+		deprecated:        resolved.Version.Deprecated,
+	}
+	ref, err := fetchArtifactRef(ctx, InstallOptions{}, dl.Digest, ra)
 	if err != nil {
 		return nil, err
 	}
 
-	identity := trust.PinnedIdentity{
-		OIDCIssuer:      resolved.Connector.Publisher.ExpectedOIDCIssuer,
-		IdentityPattern: resolved.Connector.Publisher.ExpectedIdentityPattern,
-	}
-	verifyResult, err := opts.ArtifactVerifier.VerifyArtifact(ctx, ref, identity)
+	verifyResult, err := opts.ArtifactVerifier.VerifyArtifact(ctx, ref, ra.identity)
 	if err != nil {
 		return nil, err
 	}
@@ -511,8 +519,9 @@ func InstallFromBundle(ctx context.Context, opts InstallBundleOptions) (*Install
 		return nil, conduiterr.Wrap(CodeArchiveInvalid, "could not stage bundled artifact", err)
 	}
 
-	entryToSave, err := finalizeArtifactInstall(finalizeInstallOptions{
-		connectorsPath:     opts.ConnectorsPath,
+	entryToSave, err := finalizeArtifactInstall(ctx, finalizeInstallOptions{
+		targetDir:          opts.ConnectorsPath,
+		target:             connectorTarget(),
 		stagingDir:         stagingDir,
 		archivePath:        archivePath,
 		name:               resolved.Connector.Name,
