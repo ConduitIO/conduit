@@ -16,6 +16,7 @@ package stream
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/google/uuid"
@@ -174,6 +176,67 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	// after the node stops the out channel should be closed
 	_, ok := <-out
 	is.Equal(false, ok)
+}
+
+func TestProcessorNode_FanOutRequiresArchV2_ActionableError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	processor := mock.NewProcessor(ctrl)
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		// one input record fanned out to N — only pipeline arch-v2 supports this;
+		// the classic engine must reject it with an ACTIONABLE error.
+		Return([]sdk.ProcessedRecord{sdk.MultiRecord{
+			{Position: []byte("a")}, {Position: []byte("b")},
+		}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	var nacked error
+	nackHandler := func(_ *Message, nm NackMetadata) error {
+		nacked = nm.Reason
+		return nil // regarded as handled so Run returns nil
+	}
+
+	n := ProcessorNode{
+		Name:           "chunk",
+		Processor:      processor,
+		ProcessorTimer: noop.Timer{},
+	}
+
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	msg := &Message{Ctx: ctx}
+	msg.RegisterNackHandler(nackHandler)
+	go func() {
+		in <- msg
+		close(in)
+	}()
+
+	// Fan-out on the classic engine is a fatal pipeline misconfiguration (not a
+	// per-record DLQ), so Run stops and returns the coded error — even though the
+	// message was also nacked.
+	err := n.Run(ctx)
+	is.True(err != nil)
+	is.Equal(MessageStatusNacked, msg.Status())
+
+	// Both the returned error and the nacked reason are the coded, actionable
+	// fan-out error naming the flag — NOT the generic "unknown record type".
+	for _, e := range []error{err, nacked} {
+		ce, ok := conduiterr.Get(e)
+		is.True(ok)
+		is.Equal(ce.Code.Reason(), CodeFanOutRequiresArchV2.Reason())
+		is.True(strings.Contains(ce.Suggestion, "--preview.pipeline-arch-v2"))
+		is.True(strings.Contains(e.Error(), "fan-out"))
+		is.True(!strings.Contains(e.Error(), "unknown record type"))
+	}
+
+	_, ok2 := <-out
+	is.Equal(false, ok2)
 }
 
 func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {

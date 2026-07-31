@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (87)
+## 3. Error codes (88)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -641,6 +641,7 @@ Author: Meroxa, Inc.
 | `orchestrator.invalid_processor_parent_type` | InvalidArgument | CodeInvalidProcessorParentType is raised when a processor's parent is neither a pipeline nor a connector. |
 | `orchestrator.pipeline_has_connectors_attached` | FailedPrecondition | CodePipelineHasConnectorsAttached is raised when a pipeline cannot be deleted because it still has connectors attached. |
 | `orchestrator.pipeline_has_processors_attached` | FailedPrecondition | CodePipelineHasProcessorsAttached is raised when a pipeline cannot be deleted because it still has processors attached. |
+| `pipeline.fanout_requires_arch_v2` | FailedPrecondition | pipeline: fanout requires arch v2 |
 | `pipeline.instance_not_found` | NotFound | CodePipelineNotFound is raised when a referenced pipeline instance cannot be located. |
 | `pipeline.name_already_exists` | AlreadyExists | CodePipelineNameAlreadyExists is raised when a pipeline config's name collides with an existing pipeline's name. |
 | `pipeline.name_missing` | InvalidArgument | CodePipelineNameMissing is raised when a pipeline config is missing the required name field. |
