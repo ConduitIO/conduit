@@ -125,6 +125,22 @@ func (c *childProcess) reap() error {
 // pattern.
 func spawnChild(t *testing.T, cfg childConfig) *childProcess {
 	t.Helper()
+	return spawnChildWithEnv(t, cfg.env())
+}
+
+// spawnChildWithEnv is spawnChild's env-agnostic core: it re-executes the
+// current test binary with the given extra environment variables appended,
+// and is the actual re-exec-self-as-child-process mechanism every chaos
+// scenario in this package uses to get a real, SIGKILL-able OS process (see
+// spawnChild's doc for why this - not an in-process approximation - is what
+// makes "kill and check for a gap" mean something for a hard crash). Factored
+// out of spawnChild so a scenario whose child needs a different
+// environment-variable protocol than childConfig.env() (e.g. recovery_test.go's
+// pkg/lifecycle-poc.Service scenario, driven by lcChildConfig.env()) can reuse
+// the identical process-spawning/stdout-capture/cleanup machinery without
+// forcing every scenario's config through one shared env-var struct.
+func spawnChildWithEnv(t *testing.T, env []string) *childProcess {
+	t.Helper()
 
 	exe := os.Args[0]
 	if !filepath.IsAbs(exe) {
@@ -141,7 +157,7 @@ func spawnChild(t *testing.T, cfg childConfig) *childProcess {
 	// cancellation.
 	//nolint:gosec // exe is this test binary's own path (os.Args[0]/os.Executable), not external input - the standard re-exec-self pattern
 	cmd := exec.CommandContext(context.Background(), exe)
-	cmd.Env = append(os.Environ(), cfg.env()...)
+	cmd.Env = append(os.Environ(), env...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

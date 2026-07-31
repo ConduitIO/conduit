@@ -81,6 +81,31 @@
 //     comment for why Source.Teardown's own doc explicitly delegates that
 //     guarantee to the caller.
 //
+// arch-v2 recovery-loop chaos (recovery_test.go, recovery_child.go, PR-3 of
+// the arch-v2 recovery epic, feat/archv2-recovery-port) is a different layer
+// than every scenario above: instead of driving pkg/connector.Source
+// directly (or, for Property 4, a funnel.Worker without the pkg/lifecycle-poc
+// Service on top), it builds a REAL pkg/lifecycle-poc.Service around a real
+// funnel.Worker, so a SIGKILL exercises the error-recovery loop itself
+// (Service.recoverPipeline / StartWithBackoff / runPipeline's recovery arm,
+// pkg/lifecycle-poc/service.go) - composed ON TOP OF, not instead of, the
+// connector/persister durability boundary the SIGKILL cases above already
+// prove gap-free. It targets two crash windows pkg/lifecycle-poc/
+// service_test.go's in-process TestServiceLifecycle_Recovery_* tests cannot
+// reach (the process never actually dies in those tests): parked in the
+// recovery backoff wait (StartWithBackoff's time.After select), and mid the
+// recovered run (after Recovering -> Running again, while the second run is
+// actively processing). Its own two synthetic plugins
+// (recoverySourcePlugin/recoveryDestinationPlugin, recovery_child.go) are a
+// separate pair from chaosPlugin/upstream.go's - kept deliberately isolated
+// from Properties 1-4's shared producer rather than extending it, since this
+// scenario needed a capability (injecting a transient stream error partway
+// through a run, to drive the recovery loop) chaosPlugin never needed and a
+// durable destination-side delivery ledger (deliveryLog) no earlier scenario
+// needed either. See recovery_test.go's own package-level doc comment for
+// the exact invariant assertions and an honest statement of what this
+// scenario does and does not prove about a hard crash.
+//
 // # What this package tests, and why the real Debezium wrapper isn't here
 //
 // The workstream's motivating question is about

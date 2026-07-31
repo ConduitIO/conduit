@@ -29,6 +29,9 @@ import (
 // re-exec protocol.
 func TestMain(m *testing.M) {
 	if isChildInvocation() {
+		if os.Getenv(envLCMode) == envValueTrue {
+			runChildLifecycle() // never returns; always os.Exit's - see recovery_child.go
+		}
 		if os.Getenv(envSigtermMode) == envValueTrue {
 			runChildSigterm() // never returns; always os.Exit's - see sigterm_test.go
 		}
