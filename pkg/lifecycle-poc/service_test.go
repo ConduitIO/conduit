@@ -457,6 +457,122 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	is.Equal("", pl.Error)
 }
 
+// TestServiceLifecycle_PipelineForceStop is the regression test for the v2
+// force-stop fatal-tagging bug (arch-v2 recovery-port prerequisite). A forceful
+// Stop must kill the pipeline tomb with a *fatal* error so the cleanup
+// goroutine's `cerrors.IsFatalError(rp.t.Err())` classification treats it as
+// terminal. Before the fix, v2 force-stopped with a plain (non-fatal)
+// pipeline.ErrForceStop; harmless while recovery is disabled, but once the v1
+// recovery loop is ported, a non-fatal force-stop would be classified transient
+// and auto-restarted — restarting a pipeline the user explicitly force-stopped
+// (violates the design-doc "force-stop is not recovered" acceptance criterion).
+//
+// This test asserts the property the port depends on: the terminal error is
+// fatal-tagged and the pipeline lands in StatusDegraded. It fails without the
+// fatal tag (IsFatalError is false and status stays Running, since the non-fatal
+// arm writes no status), and passes with it. Mirrors v1's forceful-stop case in
+// pkg/lifecycle/service_test.go (TestServiceLifecycle_Stop).
+func TestServiceLifecycle_PipelineForceStop(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	// See TestServiceLifecycle_PipelineError's defer: prevents the persister's
+	// background flush goroutine from outliving the test.
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	// Zero records (mirrors v1's forceful-stop case): a force-stop cuts the tomb
+	// immediately, so the number of acks that reach the source plugin before the
+	// stream is torn down is inherently nondeterministic — asserting a nonzero ack
+	// count would flake. With no records there is nothing to ack, the source Run
+	// blocks (keeping the pipeline in StatusRunning so the force Stop is accepted),
+	// and force-stop exercises exactly the tomb-kill classification we care about.
+	// stop=false: a force-stop kills the tomb directly (Worker.Stop is never called
+	// gracefully), so the source plugin gets no Stop call — only Teardown via
+	// Worker.Close.
+	ctrl := gomock.NewController(t)
+	wantRecords := generateRecords(0)
+	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, false)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		ps,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Wait until the pipeline is fully Running before force-stopping. Force-stopping
+	// mid-startup is a separate, independently-tracked robustness concern (see the
+	// equivalent note in v1's tests) and not what this regression test exercises;
+	// Stop also rejects any status other than Running/Recovering.
+	waitForPipelineRunning(t, pl)
+
+	err = ls.Stop(ctx, pl.ID, true)
+	is.NoErr(err)
+
+	err = ls.WaitPipeline(pl.ID)
+	is.True(err != nil)
+
+	// The property the recovery port depends on: a user force-stop is fatal, so
+	// the classification the port will branch on (IsFatalError) is true and the
+	// pipeline is never eligible for auto-recovery. This assertion fails without
+	// the fatal tag on the force-stop kill.
+	is.True(cerrors.IsFatalError(err))
+	is.True(cerrors.Is(err, pipeline.ErrForceStop))
+	// Fatal terminal error routes to StatusDegraded (the fatal arm of the cleanup
+	// switch), matching v1. Without the fatal tag, the non-fatal arm writes no
+	// status and the pipeline would remain StatusRunning.
+	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+}
+
+// waitForPipelineRunning blocks until the pipeline instance reports
+// StatusRunning, failing the test if that doesn't happen within the timeout. It
+// is the deterministic replacement for a fixed sleep-after-Start: it lets the
+// pipeline finish transitioning to Running before a test force-stops it, without
+// guessing a duration. pipeline.Instance.GetStatus is lock-guarded, so this is a
+// legitimate concurrent observation point.
+func waitForPipelineRunning(t *testing.T, pl *pipeline.Instance) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if pl.GetStatus() == pipeline.StatusRunning {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for pipeline to reach StatusRunning (last status: %s)", pl.GetStatus())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // waitForRecordsAcked blocks until the source connector has acked through the
 // position of the last of the given records (or returns immediately if records
 // is empty). It fails the test if that doesn't happen within the timeout.

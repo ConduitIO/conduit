@@ -246,7 +246,13 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 			Msg("force stopping pipeline")
-		rp.t.Kill(pipeline.ErrForceStop)
+		// Invariant 3/7: a user force-stop is a deliberate terminal action, not a
+		// transient failure. Tag it fatal (matching v1's stopForceful,
+		// pkg/lifecycle/service.go) so the cleanup goroutine's IsFatalError check
+		// (see the switch on rp.t.Err() below) classifies it as terminal and error
+		// recovery — once wired in — never auto-restarts a pipeline the user
+		// explicitly stopped.
+		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
 	panic("unreachable")
