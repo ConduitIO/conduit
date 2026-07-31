@@ -96,6 +96,38 @@ func TestFrozenSchema_ValidatesConnectorOnlyIndex(t *testing.T) {
 // fixed wasip1/wasm must be a schema violation, not a valid-but-skipped entry.
 // This is what makes "a host os/arch is a malformed/spoofed entry" enforceable
 // by index-CI linting, not only at install time.
+// TestFrozenSchema_AcceptsDottedProcessorName proves the processor name pattern
+// permits dots. Real standalone-processor names are namespaced (ai.chunk,
+// ai.embed) and the resolver exact-matches them against the WASM's own
+// Specification().Name, so the schema MUST accept them. The pattern originally
+// reused the connector rule (no dots), which would have failed every real
+// processor entry at schema-validation time — a latent bug this test locks out.
+func TestFrozenSchema_AcceptsDottedProcessorName(t *testing.T) {
+	is := is.New(t)
+	sch := compileFrozenSchema(t)
+
+	raw, err := os.ReadFile("testdata/sample-index.json")
+	is.NoErr(err)
+
+	var env map[string]any
+	is.NoErr(json.Unmarshal(raw, &env))
+	proc := env["payload"].(map[string]any)["processors"].([]any)[0].(map[string]any)
+
+	// A dotted name must validate.
+	proc["name"] = "ai.chunk"
+	mutated, err := json.Marshal(env)
+	is.NoErr(err)
+	is.NoErr(validateAgainstFrozenSchema(t, sch, mutated))
+
+	// The pattern still enforces the rest of the rule (lowercase only) — an
+	// uppercase name is rejected, so widening to allow dots didn't loosen it into
+	// accepting arbitrary names.
+	proc["name"] = "AI.Chunk"
+	mutatedBad, err := json.Marshal(env)
+	is.NoErr(err)
+	is.True(validateAgainstFrozenSchema(t, sch, mutatedBad) != nil)
+}
+
 func TestFrozenSchema_RejectsHostTargetedProcessorArtifact(t *testing.T) {
 	is := is.New(t)
 	sch := compileFrozenSchema(t)
