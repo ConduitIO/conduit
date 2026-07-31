@@ -427,11 +427,25 @@ func createServices(r *Runtime) error {
 	}
 	procService := processor.NewService(r.logger, r.DB, procPluginService, processor.WithEgressCeiling(egressCeiling))
 
+	// Error recovery configuration. Shared by both lifecycle implementations
+	// (the v2/funnel service reuses the lifecycle.ErrRecoveryCfg type) so an
+	// operator's pipelines.error-recovery.* settings apply under
+	// Preview.PipelineArchV2 too — without this, v2 silently ignored them and
+	// turned every transient error into a permanently-degraded pipeline.
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
+		MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
+		BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
+		MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
+		MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
+	}
+
 	var lifecycleService lifecycleService
 	if r.Config.Preview.PipelineArchV2 {
 		r.logger.Info(context.Background()).Msg("using lifecycle service v2")
 		lifecycleService = lifecycle_v2.NewService(
 			r.logger,
+			errRecoveryCfg,
 			connService,
 			procService,
 			connPluginService,
@@ -439,15 +453,6 @@ func createServices(r *Runtime) error {
 			r.Config.Preview.PipelineArchV2DisableMetrics,
 		)
 	} else {
-		// Error recovery configuration
-		errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
-			MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
-			MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
-			BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
-			MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
-			MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
-		}
-
 		lifecycleService = lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 	}
 

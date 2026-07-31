@@ -29,12 +29,22 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
+
+// errGracefulShutdownDuringRecovery is an internal sentinel returned by
+// StartWithBackoff when a graceful shutdown (StopAll) began while the pipeline
+// was parked in the recovery backoff wait. It is never surfaced to callers: the
+// cleanup goroutine maps it to a terminal StatusSystemStopped (a graceful stop,
+// not a degraded failure) — see runPipeline's recovery arm. Invariant 7: a
+// shutdown must finalize the pipeline, not race the shutdown with a restart.
+var errGracefulShutdownDuringRecovery = cerrors.New("graceful shutdown during recovery backoff")
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
@@ -47,6 +57,13 @@ type FailureHandler func(FailureEvent)
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
+
+	// errRecoveryCfg configures the bounded-backoff auto-recovery loop that
+	// restarts a pipeline after a transient (non-fatal) error. Shared with the
+	// v1 lifecycle service via the lifecycle.ErrRecoveryCfg type (pure config,
+	// no lifecycle coupling — see the arch-v2 recovery-port design). Must be
+	// non-nil: buildRunnablePipeline reads it to seed each pipeline's backoff.
+	errRecoveryCfg *lifecyclev1.ErrRecoveryCfg
 
 	pipelines  PipelineService
 	connectors ConnectorService
@@ -73,6 +90,7 @@ type Service struct {
 // NewService initializes and returns a lifecycle.Service.
 func NewService(
 	logger log.CtxLogger,
+	errRecoveryCfg *lifecyclev1.ErrRecoveryCfg,
 	connectors ConnectorService,
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
@@ -81,6 +99,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		logger:           logger.WithComponent("lifecycle.Service"),
+		errRecoveryCfg:   errRecoveryCfg,
 		connectors:       connectors,
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
@@ -95,6 +114,14 @@ type runnablePipeline struct {
 	pipeline *pipeline.Instance
 	w        *funnel.Worker
 	t        *tomb.Tomb
+
+	// backoff and recoveryAttempts hold the auto-recovery state. backoff is
+	// seeded per build; recoveryAttempts is carried across restarts by Start so
+	// MaxRetries actually bounds the retry loop (a reset every restart would make
+	// the ceiling unreachable). recoveryAttempts is a pointer so the shared
+	// counter survives the rp swap on restart. Mirrors pkg/lifecycle.
+	backoff          *backoff.Backoff
+	recoveryAttempts *atomic.Int64
 }
 
 // ConnectorService can fetch and create a connector instance.
@@ -170,6 +197,16 @@ func (s *Service) Start(
 	rp, err := s.buildRunnablePipeline(ctx, pl)
 	if err != nil {
 		return cerrors.Errorf("could not build tasks for pipeline %s: %w", pl.ID, err)
+	}
+
+	// If this pipeline was already running (i.e. this Start is a recovery
+	// restart driven by StartWithBackoff), carry its backoff state onto the new
+	// runnablePipeline. Without this, every restart resets the attempt counter
+	// and MaxRetries would never bite — an unbounded restart loop. Mirrors
+	// pkg/lifecycle.Service.Start.
+	if oldRp, ok := s.runningPipelines.Get(pipelineID); ok {
+		rp.backoff = oldRp.backoff
+		rp.recoveryAttempts = oldRp.recoveryAttempts
 	}
 
 	// A new run supersedes any terminal error recorded by a previous run of this
@@ -432,6 +469,17 @@ func (s *Service) buildRunnablePipeline(
 	return &runnablePipeline{
 		pipeline: pl,
 		w:        worker,
+		// Seed a fresh backoff and attempt counter. Start carries these onto the
+		// next runnablePipeline across a recovery restart. Mirrors
+		// pkg/lifecycle.buildRunnablePipeline; the backoff parameters come from
+		// the shared lifecycle.ErrRecoveryCfg (equivalent to its toBackoff()).
+		backoff: &backoff.Backoff{
+			Min:    s.errRecoveryCfg.MinDelay,
+			Max:    s.errRecoveryCfg.MaxDelay,
+			Factor: float64(s.errRecoveryCfg.BackoffFactor),
+			Jitter: true,
+		},
+		recoveryAttempts: &atomic.Int64{},
 	}, nil
 }
 
@@ -740,30 +788,61 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				return err
 			}
 		default:
-			if cerrors.IsFatalError(err) {
-				// we use %+v to get the stack trace too
+			switch {
+			case cerrors.IsFatalError(err):
+				// Invariant 3/7: a fatal terminal error (including a user
+				// force-stop, which stopRunnablePipeline fatal-tags) is never
+				// auto-recovered — it degrades. we use %+v to get the stack trace too.
 				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 					return err
 				}
-			} else { //nolint:staticcheck // TODO: implement recovery
-				// // try to recover the pipeline
-				// if recoveryErr := s.recoverPipeline(ctx, rp); recoveryErr != nil {
-				// 	s.logger.
-				// 		Err(ctx, err).
-				// 		Str(log.PipelineIDField, rp.pipeline.ID).
-				// 		Msg("pipeline recovery failed")
-				//
-				// 	if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
-				// 		return updateErr
-				// 	}
-				//
-				// 	// we assign it to err so it's returned and notified by the cleanup function
-				// 	err = recoveryErr
-				// } else {
-				// 	// recovery was triggered didn't error, so no cleanup
-				// 	// this is why we return nil to skip the cleanup below.
-				// 	return nil
-				// }
+			case s.isGracefulShutdown.Load():
+				// Transient error that fired while Conduit is already shutting
+				// down: do not start a recovery loop that would race the
+				// shutdown (invariant 7). Finalize as a system stop. This is a
+				// deliberate v2 improvement over v1, which does not gate its
+				// error arm on graceful shutdown — flagged in the PR.
+				err = nil
+				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
+					return updateErr
+				}
+			default:
+				// Transient (non-fatal) error: attempt bounded-backoff recovery.
+				recoveryErr := s.recoverPipeline(ctx, rp)
+				switch {
+				case recoveryErr == nil:
+					// Recovery restarted the pipeline (or an external Start
+					// already replaced the running entry). The live run now owns
+					// terminal cleanup, so return early WITHOUT running the
+					// cleanup tail below — deleting the runningPipelines entry
+					// here would delete the new run's entry. Mirrors v1's
+					// return nil (pkg/lifecycle/service.go). This early return is
+					// also what lets StartWithBackoff's "am I still the live
+					// pipeline" guard observe a concurrent restart during the
+					// backoff wait: the old entry must stay in runningPipelines
+					// until Start swaps in the new one.
+					return nil
+				case cerrors.Is(recoveryErr, errGracefulShutdownDuringRecovery):
+					// A graceful shutdown began while we were parked in the
+					// backoff wait. Finalize as a system stop, not a degraded
+					// failure, and run the cleanup tail so the entry is removed.
+					err = nil
+					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
+						return updateErr
+					}
+				default:
+					// Recovery is exhausted (MaxRetries) or itself errored.
+					s.logger.
+						Err(ctx, err).
+						Str(log.PipelineIDField, rp.pipeline.ID).
+						Msg("pipeline recovery failed")
+
+					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
+						return updateErr
+					}
+					// assign so it's the terminal error recorded and notified below.
+					err = recoveryErr
+				}
 			}
 		}
 
@@ -793,6 +872,107 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	close(startupDone)
 	return err
+}
+
+// recoverPipeline attempts to recover a pipeline that stopped with a transient
+// (non-fatal) error. It marks the pipeline StatusRecovering and hands off to
+// StartWithBackoff, which waits out the backoff and restarts the pipeline.
+//
+// Restart-from-position correctness (invariants 1 & 3) is a connector/persister
+// property, not a lifecycle one: by the time this runs, the cleanup goroutine
+// has already joined the worker goroutine (workersWg.Wait in runPipeline), and
+// that goroutine unconditionally ran Worker.Close → Source.Teardown, which
+// forces a persister flush and waits for pending writes (pkg/connector/source.go
+// Teardown). So every position the old worker durably acked is persisted before
+// this restart builds a fresh worker whose Source.Open resumes from that
+// position: no acked record is re-read as un-acked, and no un-acked record is
+// skipped. The restart re-reads and re-processes anything not yet durably acked
+// (at-least-once).
+func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) error {
+	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
+	if !s.metricsDisabled {
+		measure.PipelineRecoveringCount.WithValues(rp.pipeline.Config.Name).Inc()
+	}
+
+	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
+	if err != nil {
+		return err
+	}
+
+	// Exit the goroutine and attempt to restart the pipeline.
+	return s.StartWithBackoff(ctx, rp)
+}
+
+// StartWithBackoff waits out the recovery backoff for rp, then restarts the
+// pipeline. It bounds the number of restarts via ErrRecoveryCfg.MaxRetries
+// (InfiniteRetriesErrRecovery disables the bound), returning a fatal
+// ErrPipelineCannotRecover once the bound is exceeded so the caller degrades the
+// pipeline. Ported from pkg/lifecycle.Service.StartWithBackoff.
+//
+// Return contract (interpreted by runPipeline's recovery arm):
+//   - nil: the pipeline was restarted, or an external Start already replaced the
+//     running entry while we waited — either way the live run owns terminal
+//     cleanup and the caller must NOT run its cleanup tail.
+//   - errGracefulShutdownDuringRecovery: a graceful shutdown began during the
+//     backoff wait; the caller finalizes a system stop instead of restarting.
+//   - any other error: a fatal recovery failure (MaxRetries exhausted) or a
+//     Start error; the caller degrades the pipeline.
+func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
+	// Increment number of recovery attempts. recoveryAttempts is shared across
+	// restarts (carried over in Start), so this bounds the whole retry sequence,
+	// not a single restart.
+	attempt := rp.recoveryAttempts.Add(1)
+
+	if s.errRecoveryCfg.MaxRetries != lifecyclev1.InfiniteRetriesErrRecovery && attempt > s.errRecoveryCfg.MaxRetries {
+		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
+	}
+
+	duration := rp.backoff.ForAttempt(float64(attempt))
+	s.logger.Info(ctx).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Dur(log.DurationField, duration).
+		Int64(log.AttemptField, attempt).
+		Msg("restarting with backoff")
+
+	// Retry-window reset: decrement the attempt counter after the backoff plus a
+	// stable window, so a pipeline that recovers and stays healthy past the
+	// window effectively resets its backoff, while sustained flapping within the
+	// window accumulates toward MaxRetries. Ported verbatim from v1; note v1
+	// implements only this timer-based reset, not the per-successful-record reset
+	// the design doc also mentions (documented, not shipped).
+	time.AfterFunc(duration+s.errRecoveryCfg.MaxRetriesWindow, func() {
+		s.logger.Debug(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Dur(log.DurationField, duration).
+			Int64(log.AttemptField, attempt).
+			Msg("decreasing recovery attempts")
+		rp.recoveryAttempts.Add(-1) // Decrement the number of attempts after delay.
+	})
+
+	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...],
+	// 10m, 10m,... balancing recovery time against downtime.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(duration):
+	}
+
+	// The user may have stopped or restarted the pipeline while we were waiting.
+	// If the live entry is no longer this rp, an external Start already replaced
+	// it — that run owns cleanup, so return nil and do not restart.
+	actualRp, ok := s.runningPipelines.Get(rp.pipeline.ID)
+	if !ok || actualRp != rp {
+		return nil
+	}
+
+	// If a graceful shutdown began while we waited, do not restart — finalize a
+	// system stop instead (invariant 7). Checked after the guard so a legitimate
+	// concurrent restart still wins.
+	if s.isGracefulShutdown.Load() {
+		return errGracefulShutdownDuringRecovery
+	}
+
+	return s.Start(ctx, rp.pipeline.ID)
 }
 
 // notify notifies all registered FailureHandlers about an error.

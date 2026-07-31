@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -72,6 +75,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -135,6 +139,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -174,6 +179,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID: source,
 			testDLQID: dlq,
@@ -242,6 +248,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -328,6 +335,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -418,6 +426,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -511,6 +520,7 @@ func TestServiceLifecycle_PipelineForceStop(t *testing.T) {
 
 	ls := NewService(
 		logger,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -551,6 +561,470 @@ func TestServiceLifecycle_PipelineForceStop(t *testing.T) {
 	// switch), matching v1. Without the fatal tag, the non-fatal arm writes no
 	// status and the pipeline would remain StatusRunning.
 	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+}
+
+// TestServiceLifecycle_Recovery_TransientErrorRecovers is the core arch-v2
+// recovery-port acceptance test (design-doc path: running → recovering →
+// running). A running v2 pipeline whose source returns a transient (non-fatal)
+// error must auto-restart with backoff and return to running WITHOUT operator
+// action, then process records on the recovered run.
+//
+// It also pins the status-transition fidelity (AC-7): the recorded UpdateStatus
+// sequence is exactly [Running, Recovering, Running, UserStopped] — the initial
+// run, the recovery entry, the recovered run, and the final graceful stop.
+func TestServiceLifecycle_Recovery_TransientErrorRecovers(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	// A non-fatal error drives recovery; the second (recovered) run delivers
+	// these records end-to-end.
+	transientErr := cerrors.New("lost connection to source")
+	healthyRecords := generateRecords(3)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := sourceRecoversAfterTransientError(ctrl, persister, healthyRecords, transientErr)
+	destination, destDispenser := destinationRecovers(ctrl, persister, healthyRecords)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Wait until the pipeline has recovered: it must have passed through
+	// Recovering and be Running again. (The initial run also briefly reports
+	// Running, so "Running after a Recovering" is what distinguishes recovery.)
+	waitForRecovered(t, rec)
+
+	// The recovered run delivers its records end-to-end; wait for the source to
+	// ack them so the graceful stop below has a deterministic last position.
+	waitForRecordsAcked(t, source, healthyRecords)
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	err = ls.Stop(ctx, pl.ID, false)
+	is.NoErr(err)
+	is.NoErr(ls.WaitPipeline(pl.ID))
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+
+	// AC-7: exact status-transition sequence for the recovered-then-stopped path.
+	is.Equal(rec.snapshot(), []pipeline.Status{
+		pipeline.StatusRunning,
+		pipeline.StatusRecovering,
+		pipeline.StatusRunning,
+		pipeline.StatusUserStopped,
+	})
+}
+
+// TestServiceLifecycle_Recovery_MaxRetriesExhausted proves the bounded-retry
+// path (design-doc path: running → recovering → degraded). With a finite
+// MaxRetries and a source that fails on every run, the pipeline attempts exactly
+// MaxRetries restarts and then degrades with a fatal ErrPipelineCannotRecover —
+// it does NOT loop forever. This also guards the §2.2(3) backoff-carry-over: if
+// recoveryAttempts reset on each restart, MaxRetries would never bite and the
+// source would be dispensed indefinitely (the Times(k+1) expectation would fail).
+func TestServiceLifecycle_Recovery_MaxRetriesExhausted(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	const maxRetries = 2
+	// Initial run + maxRetries restarts = maxRetries+1 dispenses, then degrade.
+	const wantDispenses = maxRetries + 1
+
+	transientErr := cerrors.New("source keeps flapping")
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := failingSourceTimes(ctrl, persister, transientErr, wantDispenses)
+	destination, destDispenser := destinationTimes(ctrl, persister, wantDispenses)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, wantDispenses)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	cfg := testErrRecoveryCfg()
+	cfg.MaxRetries = maxRetries
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		cfg,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	events := make(chan FailureEvent, 1)
+	ls.OnFailure(func(e FailureEvent) { events <- e })
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// The terminal fatal error is delivered via the Failurehandler (and recorded
+	// in terminalErrors), not necessarily by WaitPipeline: WaitPipeline can latch
+	// onto an intermediate run's tomb, which carries that run's (non-fatal)
+	// transient error, not the final exhaustion error. The FailureEvent is only
+	// emitted on the terminal degrade, so it carries the fatal cause.
+	event, received, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 10*time.Second)
+	is.NoErr(err)
+	is.True(received)
+	is.Equal(pl.ID, event.ID)
+	is.True(cerrors.IsFatalError(event.Error))                          // exhaustion is terminal
+	is.True(cerrors.Is(event.Error, pipeline.ErrPipelineCannotRecover)) // with the recovery-failed sentinel
+
+	waitForStatus(t, pl, pipeline.StatusDegraded)
+
+	// The recorded transitions: an initial Running, then a Recovering per restart
+	// attempt (with an interleaved Running for each successful re-dispense), and a
+	// terminal Degraded. Assert the shape without over-fitting the interleaving:
+	// Recovering appears, and the terminal status is Degraded.
+	statuses := rec.snapshot()
+	is.True(len(statuses) >= 2)
+	is.Equal(statuses[len(statuses)-1], pipeline.StatusDegraded)
+	var recovering int
+	for _, s := range statuses {
+		if s == pipeline.StatusRecovering {
+			recovering++
+		}
+	}
+	is.Equal(recovering, wantDispenses) // one Recovering per recovery entry (incl. the exhausting one)
+}
+
+// TestServiceLifecycle_Recovery_GracefulShutdownDuringBackoff proves invariant 7
+// under recovery: a graceful shutdown (StopAll) issued while the pipeline is
+// parked in the recovery backoff wait must NOT restart it. The pipeline finalizes
+// as StatusSystemStopped (a clean stop, not a degraded failure) and the source is
+// dispensed exactly once — no recovery restart races the shutdown.
+func TestServiceLifecycle_Recovery_GracefulShutdownDuringBackoff(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	transientErr := cerrors.New("lost connection to source")
+	ctrl := gomock.NewController(t)
+	// Exactly one dispense: the initial run. A recovery restart would be a second
+	// dispense and fail the Times(1) expectation — precisely the bug this guards.
+	source, srcDispenser := failingSourceTimes(ctrl, persister, transientErr, 1)
+	destination, destDispenser := destinationTimes(ctrl, persister, 1)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 1)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	// A long MinDelay makes the backoff wait wide enough to reliably observe the
+	// Recovering state and issue StopAll before the wait elapses.
+	cfg := testErrRecoveryCfg()
+	cfg.MinDelay = 500 * time.Millisecond
+	cfg.MaxDelay = 500 * time.Millisecond
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		cfg,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Wait until the pipeline is parked in the backoff wait (StatusRecovering),
+	// then trigger a graceful shutdown mid-wait.
+	waitForStatus(t, pl, pipeline.StatusRecovering)
+	err = ls.StopAll(ctx, false)
+	is.NoErr(err)
+
+	// It finalizes as a clean system stop and is never restarted. StatusSystemStopped
+	// is written only by the sentinel (graceful-shutdown-during-backoff) path, so
+	// observing it proves the recovery was aborted, not completed. The source is
+	// dispensed exactly once (Times(1)); a restart would be a second dispense and
+	// fail at controller finish.
+	waitForStatus(t, pl, pipeline.StatusSystemStopped)
+	// Drain the pipeline's goroutines before the persister.Wait/ctrl.Finish
+	// deferred cleanups. WaitPipeline's return is intentionally not asserted: it
+	// races the cleanup's runningPipelines delete and surfaces either the run's
+	// transient tomb error or nil — the status assertion above is the invariant.
+	_ = ls.WaitPipeline(pl.ID)
+
+	statuses := rec.snapshot()
+	is.Equal(statuses[len(statuses)-1], pipeline.StatusSystemStopped)
+}
+
+// statusRecorder wraps a PipelineService, recording every UpdateStatus target
+// status in order so a test can assert the transition sequence. UpdateStatus is
+// called from multiple goroutines (the initial run and the cleanup/recovery
+// goroutine), so the slice is mutex-guarded.
+type statusRecorder struct {
+	PipelineService
+	mu       sync.Mutex
+	statuses []pipeline.Status
+}
+
+func newStatusRecorder(inner PipelineService) *statusRecorder {
+	return &statusRecorder{PipelineService: inner}
+}
+
+func (r *statusRecorder) UpdateStatus(ctx context.Context, id string, status pipeline.Status, errMsg string) error {
+	r.mu.Lock()
+	r.statuses = append(r.statuses, status)
+	r.mu.Unlock()
+	return r.PipelineService.UpdateStatus(ctx, id, status, errMsg)
+}
+
+func (r *statusRecorder) snapshot() []pipeline.Status {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]pipeline.Status, len(r.statuses))
+	copy(out, r.statuses)
+	return out
+}
+
+// waitForRecovered blocks until the recorded status sequence shows a recovery:
+// a Recovering entry followed by a later Running. Fails the test on timeout.
+func waitForRecovered(t *testing.T, rec *statusRecorder) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		statuses := rec.snapshot()
+		seenRecovering := false
+		for _, s := range statuses {
+			switch {
+			case s == pipeline.StatusRecovering:
+				seenRecovering = true
+			case s == pipeline.StatusRunning && seenRecovering:
+				return // Running after a Recovering == recovered
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for pipeline to recover (statuses: %v)", statuses)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// waitForStatus blocks until the pipeline instance reports the given status,
+// failing the test on timeout. Used to catch a transient status (Recovering)
+// during the backoff wait.
+func waitForStatus(t *testing.T, pl *pipeline.Instance, want pipeline.Status) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if pl.GetStatus() == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for pipeline status %s (last: %s)", want, pl.GetStatus())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// sourceRecoversAfterTransientError builds a source whose first dispensed run
+// emits no records and fails with transientErr (driving exactly one recovery),
+// and whose second (recovered) run emits healthyRecords and can be gracefully
+// stopped. Exactly two dispenses are expected: the initial run and the recovery
+// restart.
+func sourceRecoversAfterTransientError(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	healthyRecords []opencdc.Record,
+	transientErr error,
+) (*connector.Instance, *pmock.Dispenser) {
+	source := dummySource(persister)
+	var call atomic.Int64
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
+		if call.Add(1) == 1 {
+			// First run: fail transiently, no graceful Stop (the error path only
+			// tears the source down via Worker.Close).
+			return pmock.NewConfigurableSourcePlugin(ctrl,
+				pmock.SourcePluginWithConfigure(),
+				pmock.SourcePluginWithOpen(),
+				pmock.SourcePluginWithRun(),
+				pmock.SourcePluginWithRecords(nil, transientErr),
+				pmock.SourcePluginWithAcks(0, false),
+				pmock.SourcePluginWithTeardown(),
+			), nil
+		}
+		// Recovered run: emit records, stay running until stopped. The funnel's
+		// graceful stop tears the source down (Worker.Close → Source.Teardown)
+		// without sending the plugin Stop signal, so no SourcePluginWithStop here.
+		return pmock.NewConfigurableSourcePlugin(ctrl,
+			pmock.SourcePluginWithConfigure(),
+			pmock.SourcePluginWithOpen(),
+			pmock.SourcePluginWithRun(),
+			pmock.SourcePluginWithRecords(healthyRecords, nil),
+			pmock.SourcePluginWithAcks(len(healthyRecords), false),
+			pmock.SourcePluginWithTeardown(),
+		), nil
+	}).Times(2)
+	return source, dispenser
+}
+
+// destinationRecovers mirrors sourceRecoversAfterTransientError on the
+// destination side: the first dispensed run receives no records and is only torn
+// down (error path), the second receives healthyRecords and is gracefully
+// stopped.
+func destinationRecovers(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	healthyRecords []opencdc.Record,
+) (*connector.Instance, *pmock.Dispenser) {
+	dest := dummyDestination(persister)
+	var call atomic.Int64
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseDestination().DoAndReturn(func() (connectorPlugin.DestinationPlugin, error) {
+		if call.Add(1) == 1 {
+			return pmock.NewConfigurableDestinationPlugin(ctrl,
+				pmock.DestinationPluginWithConfigure(),
+				pmock.DestinationPluginWithOpen(),
+				pmock.DestinationPluginWithRun(),
+				pmock.DestinationPluginWithRecords(nil),
+				pmock.DestinationPluginWithTeardown(),
+			), nil
+		}
+		// Recovered run receives the records and is torn down on stop (the funnel
+		// does not send the plugin Stop signal — see sourceRecoversAfterTransientError).
+		return pmock.NewConfigurableDestinationPlugin(ctrl,
+			pmock.DestinationPluginWithConfigure(),
+			pmock.DestinationPluginWithOpen(),
+			pmock.DestinationPluginWithRun(),
+			pmock.DestinationPluginWithRecords(healthyRecords),
+			pmock.DestinationPluginWithTeardown(),
+		), nil
+	}).Times(2)
+	return dest, dispenser
+}
+
+// failingSourceTimes builds a source that emits no records and fails with
+// transientErr on every one of its `times` dispenses (a source that never
+// recovers). Each dispense yields a fresh plugin, mirroring how
+// buildRunnablePipeline re-dispenses on every restart.
+func failingSourceTimes(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	transientErr error,
+	times int,
+) (*connector.Instance, *pmock.Dispenser) {
+	source := dummySource(persister)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
+		return pmock.NewConfigurableSourcePlugin(ctrl,
+			pmock.SourcePluginWithConfigure(),
+			pmock.SourcePluginWithOpen(),
+			pmock.SourcePluginWithRun(),
+			pmock.SourcePluginWithRecords(nil, transientErr),
+			pmock.SourcePluginWithAcks(0, false),
+			pmock.SourcePluginWithTeardown(),
+		), nil
+	}).Times(times)
+	return source, dispenser
+}
+
+// destinationTimes builds a destination that receives no records and is only
+// torn down (no graceful Stop) on every one of its `times` dispenses. Suitable
+// for the error/recovery paths where the destination is rebuilt per restart.
+func destinationTimes(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	times int,
+) (*connector.Instance, *pmock.Dispenser) {
+	dest := dummyDestination(persister)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseDestination().DoAndReturn(func() (connectorPlugin.DestinationPlugin, error) {
+		return pmock.NewConfigurableDestinationPlugin(ctrl,
+			pmock.DestinationPluginWithConfigure(),
+			pmock.DestinationPluginWithOpen(),
+			pmock.DestinationPluginWithRun(),
+			pmock.DestinationPluginWithRecords(nil),
+			pmock.DestinationPluginWithTeardown(),
+		), nil
+	}).Times(times)
+	return dest, dispenser
+}
+
+// dlqDispenserTimes builds a DLQ destination dispensed `times` times (the DLQ is
+// rebuilt on every pipeline (re)start). It receives no records and is only torn
+// down.
+func dlqDispenserTimes(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	times int,
+) (*connector.Instance, *pmock.Dispenser) {
+	return destinationTimes(ctrl, persister, times)
 }
 
 // waitForPipelineRunning blocks until the pipeline instance reports
@@ -603,6 +1077,22 @@ func waitForRecordsAcked(t *testing.T, source *connector.Instance, records []ope
 			t.Fatalf("timed out waiting for source to ack all %d records (last acked state: %+v)", len(records), source.State)
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// testErrRecoveryCfg returns an error-recovery configuration tuned for fast,
+// deterministic unit tests: a small MinDelay so the backoff wait is short, and a
+// MaxRetriesWindow large enough that the retry-window decrement (a time.AfterFunc
+// in StartWithBackoff) never fires mid-test — so attempt counting stays
+// deterministic. Individual tests override MaxRetries where they need a finite
+// bound. Mirrors pkg/lifecycle's testErrRecoveryCfg, retimed for the funnel.
+func testErrRecoveryCfg() *lifecyclev1.ErrRecoveryCfg {
+	return &lifecyclev1.ErrRecoveryCfg{
+		MinDelay:         time.Millisecond,
+		MaxDelay:         10 * time.Millisecond,
+		BackoffFactor:    2,
+		MaxRetries:       lifecyclev1.InfiniteRetriesErrRecovery,
+		MaxRetriesWindow: time.Minute,
 	}
 }
 
