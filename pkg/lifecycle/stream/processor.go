@@ -19,12 +19,14 @@ package stream
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
@@ -153,35 +155,62 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			return cerrors.FatalError(err)
 		}
 
-		switch v := recsOut[0].(type) {
-		case sdk.SingleRecord:
-			err := n.handleSingleRecord(ctx, msg, v)
-			// handleSingleRecord already checks the nack error (if any)
-			// so it's enough to just return the error from it
-			if err != nil {
-				return err
-			}
-		case sdk.FilterRecord:
-			msg.filtered = true
-			n.logger.Trace(ctx).
-				Str(log.MessageIDField, msg.ID()).
-				Msg("message marked as filtered, sending directly to next node")
-			err = n.base.Send(ctx, n.logger, msg)
-			if err != nil {
-				return msg.Nack(err, n.ID())
-			}
-		case sdk.ErrorRecord:
-			err = msg.Nack(v.Error, n.ID())
-			if err != nil {
-				return cerrors.FatalError(cerrors.Errorf("error executing processor: %w", err))
-			}
-		default:
-			err := cerrors.Errorf("processor returned unknown record type: %T", v)
-			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
-				return cerrors.FatalError(nackErr)
-			}
-			return cerrors.FatalError(err)
+		if err := n.handleProcessedRecord(ctx, msg, recsOut[0]); err != nil {
+			return err
 		}
+	}
+}
+
+// handleProcessedRecord routes one ProcessedRecord returned by the processor.
+// It returns nil to continue the run loop (the record was forwarded, filtered,
+// or nacked-and-handled) and a non-nil error to stop the node (a fatal
+// condition, or an unhandled nack). Extracted from Run purely to keep Run's
+// cyclomatic complexity in check; behaviour is identical to the prior inline
+// switch.
+func (n *ProcessorNode) handleProcessedRecord(ctx context.Context, msg *Message, rec sdk.ProcessedRecord) error {
+	switch v := rec.(type) {
+	case sdk.SingleRecord:
+		// handleSingleRecord already checks the nack error (if any), so
+		// returning its error is enough.
+		return n.handleSingleRecord(ctx, msg, v)
+	case sdk.FilterRecord:
+		msg.filtered = true
+		n.logger.Trace(ctx).
+			Str(log.MessageIDField, msg.ID()).
+			Msg("message marked as filtered, sending directly to next node")
+		if err := n.base.Send(ctx, n.logger, msg); err != nil {
+			return msg.Nack(err, n.ID())
+		}
+		return nil
+	case sdk.ErrorRecord:
+		if err := msg.Nack(v.Error, n.ID()); err != nil {
+			return cerrors.FatalError(cerrors.Errorf("error executing processor: %w", err))
+		}
+		return nil
+	case sdk.MultiRecord:
+		// A fan-out result (one input → N output records) is only supported by
+		// pipeline architecture v2 (the funnel lifecycle). The classic engine is
+		// one-record-in-one-record-out, so return an actionable coded error naming
+		// the flag instead of the generic "unknown record type" — a developer
+		// running e.g. ai.chunk/split/clone here otherwise has no way to know the
+		// fix is --preview.pipeline-arch-v2. Fatal (a pipeline misconfiguration for
+		// this engine), not a per-record DLQ.
+		err := conduiterr.New(CodeFanOutRequiresArchV2, fmt.Sprintf(
+			"processor %q emitted a fan-out result (%d records from 1 input), which the default "+
+				"pipeline engine does not support", n.ID(), len(v)))
+		err.Suggestion = "enable pipeline architecture v2: run with --preview.pipeline-arch-v2 " +
+			"(or set preview.pipeline-arch-v2: true in the config); fan-out processors " +
+			"(e.g. ai.chunk, split, clone) require it"
+		if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+			return cerrors.FatalError(nackErr)
+		}
+		return cerrors.FatalError(err)
+	default:
+		err := cerrors.Errorf("processor returned unknown record type: %T", v)
+		if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+			return cerrors.FatalError(nackErr)
+		}
+		return cerrors.FatalError(err)
 	}
 }
 
