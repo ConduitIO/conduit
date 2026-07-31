@@ -585,6 +585,12 @@ func (s lcConnectorService) Create(context.Context, string, connector.Type, stri
 	return s.dlq, nil
 }
 
+// WaitPersisted satisfies the ConnectorService interface (widened for arch-v2
+// StopAndWait's durability barrier). This crash scenario never calls StopAndWait
+// — it SIGKILLs the process — so there is nothing to wait on; the real
+// persister's durability is what the test asserts against post-restart.
+func (s lcConnectorService) WaitPersisted() {}
+
 // lcProcessorService fulfills pkg/lifecycle-poc.ProcessorService. This
 // scenario's pipeline has no processors (pl.ProcessorIDs is always empty), so
 // neither method is ever actually invoked - present only to satisfy the
