@@ -471,13 +471,14 @@ func TestApplyPlanLive_RestartOnRunning_GateSkippedWhenNotRunning(t *testing.T) 
 
 // TestApplyPlanLive_StopAndWaitFails_NoMutation proves ApplyPlanLive never
 // attempts to mutate the pipeline's stored config if StopAndWait itself
-// fails. This is also the generic mechanism behind the lifecycle-poc parity
-// guard (pkg/lifecycle-poc.Service.StopAndWait always returns
-// CodeStopAndWaitUnsupported): ApplyPlanLive needs no poc-specific branch —
-// whatever error StopAndWait returns, for whatever reason, is surfaced here
-// and nothing downstream runs. No Create/Update/Delete/Start expectation is
-// set on any mock, so gomock fails the test if apply attempts anything beyond
-// StopAndWait itself.
+// fails, whatever the reason — e.g. a pkg/lifecycle-poc.Service.StopAndWait
+// call that hits its O2 drain-timeout bound (CodeStopAndWaitTimeout, see
+// docs/design-documents/20260731-archv2-drain-reconfigure.md) is exactly one
+// instance of this generic contract: ApplyPlanLive needs no arch-specific
+// branch — whatever error StopAndWait returns, for whatever reason, is
+// surfaced here and nothing downstream runs. No Create/Update/Delete/Start
+// expectation is set on any mock, so gomock fails the test if apply attempts
+// anything beyond StopAndWait itself.
 func TestApplyPlanLive_StopAndWaitFails_NoMutation(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -487,7 +488,7 @@ func TestApplyPlanLive_StopAndWaitFails_NoMutation(t *testing.T) {
 	old, desired := settingsUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
 
-	wantErr := conduiterr.New(CodePlanStale, "stand-in for lifecycle_v2.CodeStopAndWaitUnsupported")
+	wantErr := conduiterr.New(CodePlanStale, "stand-in for a StopAndWait failure (e.g. lifecycle_v2.CodeStopAndWaitTimeout)")
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").Return(wantErr)
 
 	diff, err := srv.Plan(ctx, desired)
