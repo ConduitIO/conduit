@@ -658,14 +658,25 @@ func (s *Service) buildRunnablePipeline(
 // a task node graph. The returned slice contains the first task nodes in every
 // branch of the graph. The other task nodes are connected to the first task node
 // in their branch.
+//
+// Slice 3a of the arch-v2 multi-connector epic: destTasks may now contain
+// more than one branch (1 source, M destinations). Each destination's task
+// chain becomes its own branch, and all M branches are attached as the Next
+// of the single shared prefix (source tasks + pipeline processors) in one
+// AppendToEnd call, so funnel.Worker.doNextTask fans the batch out to all of
+// them (see multiAckNacker for the per-record ack/nack accounting that
+// makes that safe). For M=1 this is exactly the previous single-destination
+// behavior.
+//
+// TODO(multi-connector): multiple SOURCE connectors still need their own
+// worker each (see the multi-source guard in buildSourceTasks) — that's a
+// later slice, not this one.
 func (s *Service) buildTaskNodes(
 	srcTasks [][]funnel.Task,
 	procTasks []funnel.Task,
 	destTasks [][]funnel.Task,
 ) ([]*funnel.TaskNode, error) {
-	// TODO(multi-connector): when we have multiple connectors this will not be as straight forward
-	srcTasksBranch := srcTasks[0]   // we only support one source connector for now
-	destTasksBranch := destTasks[0] // we only support one destination connector for now
+	srcTasksBranch := srcTasks[0] // we only support one source connector for now
 
 	taskNode := &funnel.TaskNode{Task: srcTasksBranch[0]}
 	for _, task := range srcTasksBranch[1:] {
@@ -680,11 +691,30 @@ func (s *Service) buildTaskNodes(
 			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
 		}
 	}
-	for _, task := range destTasksBranch {
-		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
-		if err != nil {
-			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+
+	destBranches := make([]*funnel.TaskNode, len(destTasks))
+	for i, destTasksBranch := range destTasks {
+		if len(destTasksBranch) == 0 {
+			return nil, cerrors.New("(bug) destination branch has no tasks")
 		}
+
+		branchNode := &funnel.TaskNode{Task: destTasksBranch[0]}
+		for _, task := range destTasksBranch[1:] {
+			err := branchNode.AppendToEnd(&funnel.TaskNode{Task: task})
+			if err != nil {
+				return nil, cerrors.Errorf("failed to append task to destination branch: %w", err)
+			}
+		}
+		destBranches[i] = branchNode
+	}
+
+	// A single AppendToEnd call with all M branches: the shared prefix's tail
+	// currently has 0 Next (nothing destination-related has been attached
+	// yet), so this sets its Next to destBranches directly rather than
+	// requiring M separate appends (which AppendToEnd can't do once a node
+	// already has more than 1 Next — see its doc).
+	if err := taskNode.AppendToEnd(destBranches...); err != nil {
+		return nil, cerrors.Errorf("failed to attach destination branches to task node list: %w", err)
 	}
 
 	return []*funnel.TaskNode{taskNode}, nil
@@ -740,6 +770,13 @@ func (s *Service) buildSourceTasks(
 	return tasks, nil
 }
 
+// buildDestinationTasks builds one task branch per destination connector in
+// the pipeline. Slice 3a of the arch-v2 multi-connector epic: multiple
+// destination connectors are supported here — funnel.Worker fans the batch
+// out to every branch this returns and multiAckNacker tracks per-record
+// ack/nack outcomes across all of them (see buildTaskNodes and
+// funnel.newMultiAckNacker). Multiple SOURCE connectors are a separate,
+// later slice — see the guard in buildSourceTasks, which stays in place.
 func (s *Service) buildDestinationTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
@@ -755,11 +792,6 @@ func (s *Service) buildDestinationTasks(
 
 		if instance.Type != connector.TypeDestination {
 			continue // skip any connector that's not a destination
-		}
-
-		if len(tasks) > 0 {
-			// TODO(multi-connector): remove check
-			return nil, cerrors.New("pipelines with multiple destination connectors currently not supported, please disable the experimental feature flag")
 		}
 
 		dest, err := instance.Connector(ctx, s.connectorPlugins)

@@ -468,6 +468,16 @@ OUTER:
 	return b.sub(firstIndex, lastIndex)
 }
 
+// doNextTask advances the batch b to whatever comes after taskNode. A single
+// next task is the common case (linear pipeline). Multiple next tasks means
+// taskNode is the fan-out point into M destination branches (see slice 3a of
+// the arch-v2 multi-connector epic): the batch is cloned once per branch and
+// the branches run concurrently, each writing to a different destination.
+//
+// Only the destination-fan-out axis is supported here (single source, M
+// destinations) — spawning multiple *workers* for multiple *sources* is a
+// separate, later slice; see the multi-source guard in
+// pkg/lifecycle-poc/service.go's buildSourceTasks.
 func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, acker ackNacker) error {
 	switch len(taskNode.Next) {
 	case 0:
@@ -477,26 +487,34 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		// single next task, let's pass the batch to it
 		return w.doTask(ctx, taskNode.Next[0], b, acker)
 	default:
-		// TODO(multi-connector): remove error
-		return cerrors.Errorf("multiple next tasks not supported yet")
+		// Multiple next tasks: fan the batch out to each destination branch
+		// concurrently and track per-record ack/nack outcomes across all of
+		// them with multiAckNacker.
+		//
+		// Invariant 1/3 (enforcement site): capture the batch's ORIGINAL
+		// (pre-split) positions up front, before any branch runs. Branches
+		// diverge independently from this point on — a per-branch processor
+		// may split a record into pieces that a sibling branch does not — so
+		// multiAckNacker must key its per-position tally on a position that
+		// is stable across all M branches. b.originalBatch() is exactly the
+		// batch-wide "no splits yet" view; any splitting an upstream SHARED
+		// processor already did (before this fan-out point) is collapsed
+		// here so the tally is keyed by the true root position, not an
+		// intermediate one.
+		orig := b.originalBatch()
+		multiAcker := newMultiAckNacker(acker, len(taskNode.Next), orig.positions)
 
-		// multiple next tasks, let's clone the batch and pass it to them
-		// concurrently
-		//nolint:govet // TODO implement multi ack nacker
-		multiAcker := newMultiAckNacker(acker, len(taskNode.Next))
-		p := pool.New().WithErrors() // TODO WithContext?
+		p := pool.New().WithErrors()
 		for _, nextTask := range taskNode.Next {
-			b := b.clone()
+			branchBatch := b.clone()
 			p.Go(func() error {
-				return w.doTask(ctx, nextTask, b, multiAcker)
+				return w.doTask(ctx, nextTask, branchBatch, multiAcker)
 			})
 		}
-		err := p.Wait()
-		if err != nil {
+		if err := p.Wait(); err != nil {
 			return err // no need to wrap, it already contains the task ID
 		}
 
-		// TODO merge batch statuses?
 		return nil
 	}
 }
@@ -644,27 +662,297 @@ type ackNacker interface {
 	Nack(context.Context, *Batch, string) error
 }
 
-// multiAckNacker is an ackNacker that expects multiple acks/nacks for the same
-// batch. It keeps track of the number of acks/nacks and only acks/nacks the
-// batch when all expected acks/nacks are received.
+// multiAckNacker is the ackNacker used at a destination fan-out point (see
+// Worker.doNextTask): it sits between M concurrently-running destination
+// branches and the single parent ackNacker (the Worker itself, or an outer
+// multiAckNacker), and is responsible for turning M independent per-branch
+// votes for each source record into exactly one Ack or Nack call on the
+// parent.
+//
+// # Why per-batch counting is wrong
+//
+// A naive implementation would count acks/nacks per BATCH (one counter,
+// decremented once per branch, act once it hits zero). That is a data-loss
+// bug: destinations diverge per RECORD, not per batch. Destination 1 might
+// ack records 0-4 of a 5-record batch while destination 2 nacks record 3 —
+// there is no single moment where "the batch" is uniformly ack'd or nack'd.
+// A per-batch counter has no way to represent record 3 being nacked while
+// records 0, 1, 2 and 4 are acked, and either drops the divergence (silently
+// acking a record that a destination never durably wrote — invariant 1) or
+// blocks forever (waiting for a nack vote on a record every branch actually
+// acked).
+//
+// # Required semantics (per original source position)
+//
+//  1. Ack-only-when-unanimous (invariant 1): a position is acked to the
+//     parent only once ALL M branches have voted ack for it.
+//  2. Nack-wins (invariant 3): if ANY branch nacks a position, it is routed
+//     to the parent's DLQ exactly once, regardless of how the other
+//     branches voted. A record written durably to destination 1 but failed
+//     on destination 2 is NOT a partial success — the whole record goes to
+//     the DLQ, then is acked to the source (the DLQ write is itself the
+//     durable handling that earns the source ack). A partially-written
+//     record is never acked to the source as if it were a full success.
+//  3. Idempotent, race-free: branches run concurrently and call Ack/Nack
+//     from separate goroutines; once a position reaches a terminal decision
+//     (acked-by-all or nacked-by-one), any further vote for it (a slow
+//     branch's ack arriving after a sibling already nacked the same
+//     position) is a no-op. This assumes each branch votes exactly once per
+//     position (ack xor nack) — the same assumption the rest of the batch
+//     pipeline already makes (see Batch's tainted-splitting in doTask).
+//  4. In-source-order release (invariant 4): positions are released to the
+//     parent in ascending source order, never in branch-completion order —
+//     a branch that finishes record 10 before another branch finishes
+//     record 3 must not let record 10 reach the parent first, or
+//     Source.Ack's monotonically-advancing position would skip ahead of a
+//     record that has not actually reached a terminal decision yet.
+//     Contiguous runs of ack decisions are batched into a single parent.Ack
+//     call to preserve the parent's batch semantics; nacks are released one
+//     position at a time (see the comment on releaseLocked for why).
+//  5. Fatal-error propagation: if the parent's Nack returns a fatal error
+//     (e.g. the DLQ nack-threshold was exceeded), that error is returned to
+//     the caller so the branch pool errors out and the worker tombs with it
+//     — identical to what happens on the single-destination path.
+//
+// This is intentionally a mutex-guarded per-position tally rather than a
+// lock-free or channel-based design: it is Tier-1, highest-data-loss-risk
+// code, and boring-and-obviously-correct beats clever here. See
+// docs/design-documents/20260731-archv2-multiconnector.md and
+// docs/architecture-decision-records/20260731-archv2-fanout-ack-model.md.
 type multiAckNacker struct {
-	parent ackNacker
-	count  *atomic.Int32
+	parent   ackNacker
+	branches int
+
+	// positions holds the ORIGINAL (pre-split) source positions the fan-out
+	// batch contained, captured once at construction time (see
+	// Worker.doNextTask). Index i in every other slice below corresponds to
+	// positions[i].
+	positions []opencdc.Position
+	// posIndex maps a position's byte content to its index in positions, so
+	// Ack/Nack can look up which slot an incoming (already-collapsed-to-
+	// original) record belongs to.
+	posIndex map[string]int
+
+	mu sync.Mutex
+	// ackVotes[i] counts how many of the M branches have voted ack for
+	// positions[i] so far. Only meaningful while !terminal[i].
+	ackVotes []int
+	// terminal[i] is true once positions[i] has reached a final decision
+	// (ack'd by all branches, or nack'd by any one of them) — further votes
+	// for it are no-ops (requirement 3 above).
+	terminal []bool
+	// acked[i] is only meaningful once terminal[i] is true: true means the
+	// terminal decision was "ack", false means "nack".
+	acked []bool
+	// record[i] holds a record to represent positions[i] in the eventual
+	// parent Ack/Nack call. For an ack it can come from any branch (only the
+	// position matters for Source.Ack; content is used only for metrics/DLQ-
+	// window bookkeeping). For a nack it MUST be the record and error from
+	// the branch that actually nacked it, so the DLQ entry reflects the real
+	// failure.
+	record []opencdc.Record
+	// nackErr[i] and nackTaskID[i] are set alongside acked[i]=false: the
+	// error and originating task ID of the branch that nacked positions[i],
+	// needed to reconstruct the single-record batch passed to parent.Nack.
+	nackErr    []error
+	nackTaskID []string
+
+	// released is the count of leading positions (a prefix of positions)
+	// that have already been handed to the parent. Positions are only ever
+	// released in order, released..len(positions), never out of order
+	// (invariant 4).
+	released int
 }
 
-func newMultiAckNacker(parent ackNacker, count int) *multiAckNacker {
-	c := atomic.Int32{}
-	c.Add(int32(count)) //nolint:gosec // no risk of overflow
+// newMultiAckNacker creates a multiAckNacker for a fan-out of a batch whose
+// original (pre-split) source positions are given by positions, split across
+// branches concurrently-running destination branches. positions must be
+// captured from the fan-out batch's originalBatch() before cloning it for
+// the branches — see Worker.doNextTask.
+func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Position) *multiAckNacker {
+	posIndex := make(map[string]int, len(positions))
+	for i, p := range positions {
+		posIndex[string(p)] = i
+	}
+
+	n := len(positions)
 	return &multiAckNacker{
-		parent: parent,
-		count:  &c,
+		parent:     parent,
+		branches:   branches,
+		positions:  positions,
+		posIndex:   posIndex,
+		ackVotes:   make([]int, n),
+		terminal:   make([]bool, n),
+		acked:      make([]bool, n),
+		record:     make([]opencdc.Record, n),
+		nackErr:    make([]error, n),
+		nackTaskID: make([]string, n),
 	}
 }
 
-func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
-	panic("not implemented")
+// indexOf returns the tally slot for pos, or an error if pos is not part of
+// the original fan-out batch. That would mean a branch produced a record
+// whose position doesn't trace back (via originalBatch) to one of the
+// positions captured when the fan-out started — an internal bug in the task
+// graph, not a runtime/data condition, so it's reported as such rather than
+// silently dropped.
+func (m *multiAckNacker) indexOf(pos opencdc.Position) (int, error) {
+	idx, ok := m.posIndex[string(pos)]
+	if !ok {
+		return 0, cerrors.Errorf("(bug) multiAckNacker: position %q is not part of the original fan-out batch", pos)
+	}
+	return idx, nil
 }
 
+// Ack records an ack vote from one branch for every position in batch.
+// batch.originalBatch() is applied first, so a branch that split records
+// internally still votes using the same original positions every other
+// branch votes on — see the doc comment on the type for why this matters.
+//
+// Invariant 1 (enforcement site): a position is only ever forwarded to
+// parent.Ack once ALL m.branches have voted ack for it.
+func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
+	ob := batch.originalBatch()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, pos := range ob.positions {
+		idx, err := m.indexOf(pos)
+		if err != nil {
+			return err
+		}
+
+		if m.terminal[idx] {
+			// Requirement 3: this position already reached a terminal
+			// decision. The only way to get here is a sibling branch having
+			// nacked it already (an ack can only ever be the LAST vote to
+			// arrive, since it takes exactly m.branches acks to go
+			// terminal) — nack wins, this vote is a no-op.
+			continue
+		}
+
+		m.record[idx] = ob.records[i]
+		m.ackVotes[idx]++
+		if m.ackVotes[idx] == m.branches {
+			m.terminal[idx] = true
+			m.acked[idx] = true
+		}
+	}
+
+	return m.releaseLocked(ctx)
+}
+
+// Nack records a nack vote from one branch (identified by taskID) for every
+// position in batch. Like Ack, batch.originalBatch() is applied first.
+//
+// Invariant 3 (enforcement site): nack wins. The first nack vote for a
+// position is terminal — it is routed to the parent's DLQ exactly once, and
+// any later vote (ack or nack) for the same position from another branch is
+// a no-op. A record durably written by some but not all branches is treated
+// as a failure of the whole record, never partially acked.
 func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) error {
-	panic("not implemented")
+	ob := batch.originalBatch()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, pos := range ob.positions {
+		idx, err := m.indexOf(pos)
+		if err != nil {
+			return err
+		}
+
+		if m.terminal[idx] {
+			// Already resolved (either a sibling nack got here first, which
+			// is idempotent, or - should never happen given the one-vote-
+			// per-branch-per-position invariant - an ack already went
+			// terminal). Either way, nothing to do.
+			continue
+		}
+
+		m.terminal[idx] = true
+		m.acked[idx] = false
+		m.record[idx] = ob.records[i]
+		m.nackErr[idx] = ob.recordStatuses[i].Error
+		m.nackTaskID[idx] = taskID
+	}
+
+	return m.releaseLocked(ctx)
+}
+
+// releaseLocked walks the positions starting at m.released and forwards
+// every leading run of terminal positions to the parent, stopping at the
+// first position that hasn't reached a terminal decision yet. Must be called
+// with m.mu held.
+//
+// Invariant 4 (enforcement site): positions are only ever released as a
+// prefix, in ascending source order — m.released only ever moves forward,
+// and never past a position that is not yet terminal - so the parent (and
+// transitively Source.Ack's monotonically-advancing State.Position) never
+// observes a position out of order or skips over one still in flight.
+//
+// Contiguous ack runs are coalesced into a single parent.Ack call to
+// preserve the parent's batch semantics (fewer, larger Source.Ack calls).
+// Nacks are released one position at a time: parent.Nack takes a single
+// taskID for the whole batch it's given (used for DLQ metadata on every
+// record in that call), and a run of nacked positions can legitimately come
+// from different branches/tasks. Coalescing them under one taskID would
+// misattribute the DLQ failure reason for some records. Nacks are the
+// exceptional, rare path, so the extra parent calls are an acceptable
+// tradeoff for that correctness.
+func (m *multiAckNacker) releaseLocked(ctx context.Context) error {
+	for m.released < len(m.positions) {
+		if !m.terminal[m.released] {
+			return nil
+		}
+
+		if m.acked[m.released] {
+			from := m.released
+			to := from
+			for to < len(m.positions) && m.terminal[to] && m.acked[to] {
+				to++
+			}
+
+			if err := m.parent.Ack(ctx, m.ackBatch(from, to)); err != nil {
+				return err
+			}
+			m.released = to
+			continue
+		}
+
+		idx := m.released
+		if err := m.parent.Nack(ctx, m.nackBatch(idx), m.nackTaskID[idx]); err != nil {
+			// Requirement 5: a fatal DLQ error (nack threshold exceeded)
+			// must surface exactly like it does on the single-destination
+			// path, so the branch pool errors out and the worker tombs.
+			return err
+		}
+		m.released = idx + 1
+	}
+	return nil
+}
+
+// ackBatch builds a Batch representing the already-resolved, all-branches-
+// acked positions [from, to) for a parent.Ack call. The result carries no
+// split records (they were already collapsed by Ack/Nack via
+// batch.originalBatch()), so the parent's own originalBatch() call is a
+// no-op on it.
+func (m *multiAckNacker) ackBatch(from, to int) *Batch {
+	return &Batch{
+		records:        m.record[from:to],
+		recordStatuses: make([]RecordStatus, to-from), // zero value is RecordFlagAck
+		positions:      m.positions[from:to],
+	}
+}
+
+// nackBatch builds a single-record Batch for positions[idx], which some
+// branch nacked, for a parent.Nack call.
+func (m *multiAckNacker) nackBatch(idx int) *Batch {
+	return &Batch{
+		records:        []opencdc.Record{m.record[idx]},
+		recordStatuses: []RecordStatus{{Flag: RecordFlagNack, Error: m.nackErr[idx]}},
+		positions:      []opencdc.Position{m.positions[idx]},
+		tainted:        true,
+	}
 }

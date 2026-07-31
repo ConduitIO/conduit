@@ -35,6 +35,9 @@ func TestMain(m *testing.M) {
 		if os.Getenv(envSigtermMode) == envValueTrue {
 			runChildSigterm() // never returns; always os.Exit's - see sigterm_test.go
 		}
+		if os.Getenv(envFanoutMode) == envValueTrue {
+			runChildFanout() // never returns; always os.Exit's - see fanout_child.go
+		}
 		runChild() // never returns; always os.Exit's
 	}
 	os.Exit(m.Run())
