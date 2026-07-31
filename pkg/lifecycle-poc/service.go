@@ -122,12 +122,40 @@ type runnablePipeline struct {
 	// counter survives the rp swap on restart. Mirrors pkg/lifecycle.
 	backoff          *backoff.Backoff
 	recoveryAttempts *atomic.Int64
+
+	// intentionalStop is set by stopRunnablePipeline's graceful-stop branch,
+	// before it calls rp.w.Stop, to mark this run as one an operator (or
+	// provisioning.ApplyPlanLive via StopAndWait) deliberately asked to stop —
+	// as opposed to a spontaneous failure. runPipeline's cleanup goroutine
+	// checks it alongside isGracefulShutdown: a transient (non-fatal) error
+	// that surfaces from the drain itself (e.g. a destination write failing
+	// while a batch already in flight when Stop was called finishes unwinding)
+	// must finalize as StatusUserStopped, never auto-restart via
+	// recoverPipeline. Without this, an operator-initiated Stop(force=false)
+	// that happens to race a transient drain error is misclassified as a
+	// spontaneous transient failure and the pipeline is auto-restarted out
+	// from under the operator that just stopped it — the bug this field
+	// fixes.
+	//
+	// Deliberately a plain (non-pointer) atomic.Bool on rp, NOT carried over to
+	// a new runnablePipeline the way backoff/recoveryAttempts are (see Start):
+	// an intentional stop must never survive a restart. A fresh rp always
+	// starts with intentionalStop false, so a pipeline that recovers and later
+	// stops for an unrelated reason gets ordinary recovery semantics again, not
+	// a stale "this was user-stopped" marker from a previous run.
+	intentionalStop atomic.Bool
 }
 
-// ConnectorService can fetch and create a connector instance.
+// ConnectorService can fetch and create a connector instance, and report when
+// every position/state write already queued for persistence has been
+// durably committed — see WaitPersisted's doc (pkg/connector.Service) and
+// StopAndWait, which relies on it to await durability after a pipeline has
+// fully drained. Mirrors the sibling pkg/lifecycle.ConnectorService interface
+// (O1/O2 parity, see StopAndWait's doc).
 type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
+	WaitPersisted()
 }
 
 // ProcessorService can fetch a processor instance and make a runnable processor from it.
@@ -277,7 +305,29 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 			Msg("gracefully stopping pipeline")
-		return rp.w.Stop(ctx)
+
+		// Invariant 3/7: mark this run as an intentional (operator-initiated)
+		// stop BEFORE calling rp.w.Stop, so that if the drain itself surfaces a
+		// transient (non-fatal) error — e.g. a batch already in flight when
+		// Stop was called finishes unwinding with a destination write failure —
+		// runPipeline's cleanup goroutine (see the intentionalStop check there)
+		// finalizes it as StatusUserStopped instead of misreading it as a
+		// spontaneous failure and auto-restarting via recoverPipeline. See the
+		// intentionalStop field doc.
+		rp.intentionalStop.Store(true)
+		err := rp.w.Stop(ctx)
+		if err != nil {
+			// rp.w.Stop failed outright (e.g. it never got past acquiring the
+			// processing lock — see the O2 drain bound in StopAndWait, which
+			// passes a deadline-bound ctx here). w.stop was therefore never
+			// actually set on the worker: the pipeline is still genuinely
+			// running, unattended, exactly as before this call. Clear the
+			// marker so a LATER, unrelated transient error is still eligible
+			// for ordinary auto-recovery instead of being permanently (and
+			// incorrectly) treated as an already-completed user stop.
+			rp.intentionalStop.Store(false)
+		}
+		return err
 	case true:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
@@ -368,44 +418,142 @@ func (s *Service) WaitPipeline(id string) error {
 	return nil
 }
 
-// StopAndWait exists to satisfy the LifecycleService interfaces shared with
-// the sibling pkg/lifecycle package (see provisioning.LifecycleService and
-// conduit.Runtime's lifecycleService) but is intentionally unimplemented
-// here: it always refuses with a CodeStopAndWaitUnsupported error.
+// DefaultStopAndWaitTimeout bounds the end-to-end StopAndWait sequence (Stop +
+// drain-wait + persistence-wait) — see StopAndWait's doc, "O2: bounding the
+// drain". A wedged destination (Write that never returns) would otherwise
+// hold the pipeline's processingLock forever, so acquireProcessingLock's own
+// ctx (threaded through Stop -> funnel.Worker.Stop) never gets a deadline
+// unless StopAndWait supplies one — this constant is that deadline. Chosen
+// generously (well above a typical destination write timeout) so a merely
+// slow — not actually wedged — destination isn't spuriously aborted; see
+// docs/design-documents/20260731-archv2-drain-reconfigure.md, "O2".
+const DefaultStopAndWaitTimeout = 30 * time.Second
+
+// StopAndWait gracefully stops the pipeline with the given ID and blocks until
+// it has reached full quiescence (every worker goroutine has exited — see
+// WaitPipeline) AND every connector position/state write that drain triggered
+// has been durably flushed to the store (see connectors.WaitPersisted). It
+// ports pkg/lifecycle.Service.StopAndWait's contract to the funnel/arch-v2
+// lifecycle — see that method's doc for the full invariant-1/3 rationale
+// (never let a caller mutate/restart a pipeline whose drain or flush hasn't
+// actually completed) and
+// docs/design-documents/20260731-archv2-drain-reconfigure.md for the audit
+// (§3.1, "the funnel drain audit") that establishes this package's specific
+// Stop/WaitPipeline/Persister interaction gives the same guarantee:
 //
-// This is a deliberate Tier-1 safety guard, not a TODO. The Stop-and-restart
-// primitive backing provisioning.Service.ApplyPlanLive (stop-drain-restart on
-// the data path) requires a proven quiescence+durability guarantee — see
-// pkg/lifecycle.Service.StopAndWait's doc. That guarantee was established by
-// auditing pkg/lifecycle's specific Stop/WaitPipeline/Persister interaction
-// (docs/design-documents/20260708-live-server-deploy-apply.md, "Review
-// outcome & required rework"). This package's funnel.Worker-based Stop has a
-// different implementation and has not had the equivalent audit. Silently
-// building StopAndWait on top of an unaudited stop path here would let
-// ApplyPlanLive apply-to-running under Preview.PipelineArchV2 without the
-// safety case the design review actually verified — exactly the class of bug
-// blocker 1 found in the original (pre-rework) design. Refusing outright, so
-// ApplyPlanLive's error surfaces immediately instead of silently risking
-// data loss, is intentional until this architecture's drain semantics get
-// the same audit (tracked as the design doc's "Open parity item").
-func (s *Service) StopAndWait(context.Context, string) error {
-	ce := conduiterr.New(CodeStopAndWaitUnsupported,
-		"live apply (stop-drain-restart of a running pipeline) is not supported under the "+
-			"experimental Preview.PipelineArchV2 lifecycle service")
-	ce.Suggestion = "disable Preview.PipelineArchV2, or stop the pipeline manually before applying changes"
+//   - funnel.Worker's processingLock (acquired by Worker.Stop, held by the
+//     first/source task for the lifetime of a batch) guarantees no batch is
+//     mid-flight the instant Stop's lock acquisition succeeds — quiescence.
+//   - A batch that was read but never finished processing before the stop
+//     signal (worker.go's doTask, "stop signal received just before starting
+//     to process next batch") is thrown away WITHOUT acking: the source's
+//     position is never advanced past it, so a restart re-reads it — a benign
+//     duplicate, never a gap (invariants 1/3).
+//   - connector.Source.Teardown (called from Worker.Stop, tearDownSource)
+//     forces the persister to flush and waits (bounded by
+//     connector.DefaultTeardownFlushTimeout) for the deferred ack to drain —
+//     durability for whatever WAS acked.
+//   - WaitPipeline (the tomb join) and connectors.WaitPersisted (the
+//     persister's pending-write barrier) are the pipeline-wide barriers that
+//     let a caller observe both of the above have actually completed, not just
+//     been triggered.
+//
+// O2 (bounding the drain): unlike pkg/lifecycle's StopAndWait, this method
+// bounds the entire sequence — DefaultStopAndWaitTimeout, or a tighter
+// deadline already set on ctx, whichever is sooner — because a wedged
+// destination Write blocks the batch that holds processingLock forever, which
+// would otherwise hang Stop (and thus StopAndWait, and thus
+// provisioning.Service.ApplyPlanLive) indefinitely. On timeout this returns a
+// CodeStopAndWaitTimeout error and does NOT force-kill anything: whichever
+// step timed out (Stop, the drain wait, or the persistence wait) leaves the
+// pipeline in the exact state connector.Source.Teardown's own bounded-wait
+// fallback already established as safe (source.go's Teardown doc) — at worst
+// a benign duplicate on a later restart, never a gap. If Stop itself times
+// out, the worker's internal stop flag was never actually set (see
+// stopRunnablePipeline's rollback of intentionalStop on that path), so the
+// pipeline is simply still running, unattended, exactly as it was before this
+// call — safe to retry.
+//
+// StopAndWait requires the pipeline to already be running (it delegates to
+// Stop, which returns pipeline.ErrPipelineNotRunning-coded errors otherwise)
+// and only ever stops gracefully.
+func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
+	deadline := time.Now().Add(DefaultStopAndWaitTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d // honor a tighter caller-supplied deadline
+	}
+	stopCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	if err := s.Stop(stopCtx, pipelineID, false); err != nil {
+		if cerrors.Is(err, context.DeadlineExceeded) {
+			return s.stopAndWaitTimeoutErr(pipelineID, "stop", err)
+		}
+		return cerrors.Errorf("could not stop pipeline %s: %w", pipelineID, err)
+	}
+
+	if err := waitBounded(time.Until(deadline), func() error { return s.WaitPipeline(pipelineID) }); err != nil {
+		if cerrors.Is(err, context.DeadlineExceeded) {
+			return s.stopAndWaitTimeoutErr(pipelineID, "drain", err)
+		}
+		return cerrors.Errorf("pipeline %s did not stop gracefully: %w", pipelineID, err)
+	}
+
+	// Invariant 1/3: do not return — and thus do not let a caller mutate or
+	// tear down this pipeline's connectors — until every position/state write
+	// the drain above already triggered is durably persisted.
+	if err := waitBounded(time.Until(deadline), func() error { s.connectors.WaitPersisted(); return nil }); err != nil {
+		return s.stopAndWaitTimeoutErr(pipelineID, "persist", err)
+	}
+
+	return nil
+}
+
+// stopAndWaitTimeoutErr builds the coded, actionable error StopAndWait returns
+// when the bounded drain (O2) elapses during the named phase ("stop", "drain",
+// or "persist").
+func (s *Service) stopAndWaitTimeoutErr(pipelineID, phase string, cause error) error {
+	ce := conduiterr.Wrap(CodeStopAndWaitTimeout, fmt.Sprintf(
+		"timed out waiting for pipeline %q to %s within %s; the pipeline was not force-stopped and is left exactly as it was — safe to retry",
+		pipelineID, phase, DefaultStopAndWaitTimeout,
+	), cause)
+	ce.Suggestion = "check the destination/DLQ for a stuck write, then retry; this never drops or duplicates a record beyond the normal at-least-once contract"
 	return ce
 }
 
-// ReconfigureProcessor refuses under the experimental Preview.PipelineArchV2
-// lifecycle service, mirroring StopAndWait: live in-place apply is not supported
-// under this arch. Returning the same coded error means a live apply is cleanly
-// refused rather than silently downgraded.
-func (s *Service) ReconfigureProcessor(context.Context, string, string) error {
-	ce := conduiterr.New(CodeStopAndWaitUnsupported,
-		"live in-place apply (processor reconfigure on a running pipeline) is not supported under "+
-			"the experimental Preview.PipelineArchV2 lifecycle service")
-	ce.Suggestion = "disable Preview.PipelineArchV2, or stop the pipeline manually before applying changes"
-	return ce
+// waitBounded runs fn in a goroutine and returns its result, or
+// context.DeadlineExceeded if timeout elapses first. fn's goroutine is not
+// itself canceled on timeout (mirrors Persister.WaitPendingWritesContext's own
+// doc on this point) — if it eventually completes, its result is simply
+// discarded once the caller has already returned.
+func waitBounded(timeout time.Duration, fn func() error) error {
+	done := make(chan error, 1)
+	go func() { done <- fn() }()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return context.DeadlineExceeded
+	}
+}
+
+// ReconfigureProcessor always returns lifecyclev1.ErrProcessorNotLiveReconfigurable
+// under the experimental Preview.PipelineArchV2 lifecycle service (O1): unlike
+// pkg/lifecycle, this arch has no live in-place hot-swap capability at all yet
+// (no equivalent of stream.ProcessorNode.Reconfigure), so every reconfigure
+// request is, structurally, "not live-reconfigurable" — the caller must fall
+// back to a restart.
+//
+// Reusing the v1 sentinel (rather than a v2-specific one) is deliberate: the
+// only caller, provisioning.Service.applyInPlace, already matches
+// cerrors.Is(err, lifecycle.ErrProcessorNotLiveReconfigurable) to decide
+// whether to fall back to StopAndWait+Start — reusing it here means
+// applyInPlace needs no arch-v2-specific branch, and the package coupling
+// already exists (this file already imports lifecyclev1 for ErrRecoveryCfg).
+func (s *Service) ReconfigureProcessor(_ context.Context, pipelineID, processorID string) error {
+	return cerrors.Errorf("%w: processor %q in pipeline %q (Preview.PipelineArchV2 has no live in-place reconfigure yet)",
+		lifecyclev1.ErrProcessorNotLiveReconfigurable, processorID, pipelineID)
 }
 
 // buildRunnablePipeline will build and connect all tasks configured in the pipeline.
@@ -804,6 +952,22 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				// error arm on graceful shutdown — flagged in the PR.
 				err = nil
 				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
+					return updateErr
+				}
+			case rp.intentionalStop.Load():
+				// Invariant 3/7: an operator (or provisioning.ApplyPlanLive via
+				// StopAndWait) deliberately asked THIS pipeline to stop — see
+				// stopRunnablePipeline, which sets intentionalStop before
+				// calling rp.w.Stop. A transient (non-fatal) error surfacing
+				// from that deliberate drain must never be misread as a
+				// spontaneous failure needing recovery: auto-restarting here
+				// would restart a pipeline the operator just stopped, exactly
+				// the race the recovery port introduced (O3). Finalize as
+				// StatusUserStopped, mirroring the tomb.ErrStillAlive branch's
+				// clean-stop status, but via this arm because the drain itself
+				// returned an error instead of returning cleanly.
+				err = nil
+				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); updateErr != nil {
 					return updateErr
 				}
 			default:

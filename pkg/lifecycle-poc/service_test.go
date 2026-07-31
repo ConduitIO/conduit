@@ -823,6 +823,158 @@ func TestServiceLifecycle_Recovery_GracefulShutdownDuringBackoff(t *testing.T) {
 	is.Equal(statuses[len(statuses)-1], pipeline.StatusSystemStopped)
 }
 
+// TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery is the O3
+// regression test (docs/design-documents/20260731-archv2-drain-reconfigure.md):
+// the recovery port (a61d4bc) made a deliberate per-pipeline Stop(force=false)
+// racy against a transient (non-fatal) error surfacing from the drain itself.
+// A single record is read and reaches the destination (in flight, holding
+// funnel.Worker's processingLock); the destination is held there
+// deterministically (via pmock.DestinationPluginWithControlledError) until the
+// test has confirmed — by polling the *runnablePipeline's own intentionalStop
+// field, not a sleep — that Stop has already recorded this as an intentional,
+// operator-initiated stop. Only then is the destination released to fail with
+// a plain (non-fatal) error, exactly reproducing "Stop(force=false) racing a
+// transient drain error".
+//
+// Without the intentionalStop fix, this error falls into runPipeline's
+// recovery default arm and auto-restarts the pipeline — re-dispensing the
+// source and destination a second time, which fails this test's Times(1)
+// dispenser expectations, and finalizing with a Recovering status entry
+// instead of going straight to UserStopped. With the fix, the pipeline
+// finalizes UserStopped, recoverPipeline is never invoked (no Recovering
+// status, source/destination dispensed exactly once), and WaitPipeline
+// returns nil (the transient error is suppressed, mirroring the
+// isGracefulShutdown arm's existing behavior).
+func TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	wantRecords := generateRecords(1)
+
+	// Source: delivers the single record, then (since there's only one) its
+	// onRun returns nil without closing the stream — it just goes quiet, as if
+	// still waiting for a record that never comes. It is never acked (the
+	// batch fails downstream before Ack), so no ack-count assertion.
+	ctrl := gomock.NewController(t)
+	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(wantRecords, nil),
+		pmock.SourcePluginWithAcks(0, false),
+		pmock.SourcePluginWithTeardown(),
+	)
+	source := dummySource(persister)
+	sourceDispenser := pmock.NewDispenser(ctrl)
+	sourceDispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil).Times(1)
+
+	// Destination: receives the one record (signaling `received`), then
+	// blocks on `release` — holding the batch, and thus processingLock, "in
+	// flight" — until the test explicitly releases it with a plain (non-fatal)
+	// transient error.
+	received := make(chan struct{})
+	release := make(chan struct{})
+	transientErr := cerrors.New("transient destination write failure mid-drain")
+	destPlugin := pmock.NewConfigurableDestinationPlugin(ctrl,
+		pmock.DestinationPluginWithConfigure(),
+		pmock.DestinationPluginWithOpen(),
+		pmock.DestinationPluginWithRun(),
+		pmock.DestinationPluginWithControlledError(wantRecords, received, release, transientErr),
+		pmock.DestinationPluginWithTeardown(),
+	)
+	destination := dummyDestination(persister)
+	destDispenser := pmock.NewDispenser(ctrl)
+	destDispenser.EXPECT().DispenseDestination().Return(destPlugin, nil).Times(1)
+
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	<-received // the record is in flight at the destination, processingLock held
+
+	stopErr := make(chan error, 1)
+	go func() { stopErr <- ls.Stop(ctx, pl.ID, false) }()
+
+	// Poll the real runnablePipeline's intentionalStop field directly (this
+	// test is in-package) instead of sleeping: this is the exact condition
+	// runPipeline's cleanup goroutine will check, so waiting for it to become
+	// true is the precise, race-free point at which releasing the transient
+	// error reproduces "Stop already recorded this as intentional when the
+	// error surfaced" — not a timing guess.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		rp, ok := ls.runningPipelines.Get(pl.ID)
+		if ok && rp.intentionalStop.Load() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for intentionalStop to be set")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(release) // now let the transient error surface
+
+	is.NoErr(<-stopErr) // Stop itself (rp.w.Stop) completes once the batch unwinds
+
+	// The core O3 assertion: the pipeline finalizes UserStopped, never
+	// Recovering. WaitPipeline's own return is intentionally not asserted
+	// here: it races runPipeline's cleanup deleting the runningPipelines
+	// entry, and can surface either the tomb's raw (pre-reassignment) Kill
+	// error or nil depending on which side of that race the caller lands on
+	// — the same documented caveat TestServiceLifecycle_Recovery_
+	// GracefulShutdownDuringBackoff already establishes for the sibling
+	// isGracefulShutdown arm, which this new arm mirrors. The reliable
+	// signal is the persisted status, not this return value.
+	_ = ls.WaitPipeline(pl.ID)
+	waitForStatus(t, pl, pipeline.StatusUserStopped)
+
+	for _, s := range rec.snapshot() {
+		if s == pipeline.StatusRecovering {
+			t.Fatalf("pipeline entered StatusRecovering - the transient mid-drain error was auto-recovered instead of being treated as an intentional stop (statuses: %v)", rec.snapshot())
+		}
+	}
+
+	// ctrl.Finish() (registered by gomock.NewController(t)) verifies both
+	// dispensers were called exactly once (Times(1)) - i.e. recoverPipeline
+	// never redispensed either connector for a restart.
+}
+
 // statusRecorder wraps a PipelineService, recording every UpdateStatus target
 // status in order so a test can assert the transition sequence. UpdateStatus is
 // called from multiple goroutines (the initial run and the cleanup/recovery
@@ -1252,6 +1404,25 @@ func (s testConnectorService) Get(_ context.Context, id string) (*connector.Inst
 
 func (s testConnectorService) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
 	return s[testDLQID], nil
+}
+
+// WaitPersisted is a no-op here: none of the existing tests using
+// testConnectorService directly need a real durability wait — see
+// testConnectorServiceWithPersister below for the tests that do. Mirrors
+// pkg/lifecycle's identical testConnectorService.WaitPersisted no-op.
+func (s testConnectorService) WaitPersisted() {}
+
+// testConnectorServiceWithPersister routes WaitPersisted to the real
+// persister backing its connectors, for tests that need to prove
+// StopAndWait actually blocked until a flush landed (O2/StopAndWait tests).
+// Mirrors pkg/lifecycle's identical helper.
+type testConnectorServiceWithPersister struct {
+	testConnectorService
+	persister *connector.Persister
+}
+
+func (s testConnectorServiceWithPersister) WaitPersisted() {
+	s.persister.WaitPendingWrites()
 }
 
 // testProcessorService fulfills the ProcessorService interface.

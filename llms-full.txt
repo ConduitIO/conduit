@@ -635,7 +635,7 @@ Author: Meroxa, Inc.
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |
-| `lifecycle_v2.stop_and_wait_unsupported` | Unimplemented | lifecycle v2: stop and wait unsupported |
+| `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |
 | `orchestrator.connector_has_processors_attached` | FailedPrecondition | CodeConnectorHasProcessorsAttached is raised when a connector cannot be deleted because it still has processors attached. |
 | `orchestrator.immutable_provisioned_by_config` | FailedPrecondition | CodeImmutableProvisionedByConfig is raised when a pipeline, connector, or processor provisioned by a config file is mutated through the API instead of the config file. |
 | `orchestrator.invalid_processor_parent_type` | InvalidArgument | CodeInvalidProcessorParentType is raised when a processor's parent is neither a pipeline nor a connector. |

@@ -19,14 +19,20 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-// CodeStopAndWaitUnsupported is raised by StopAndWait, which this
-// (Preview.PipelineArchV2 / "funnel") lifecycle implementation does not yet
-// provide. See StopAndWait's doc for why: the sibling pkg/lifecycle package's
-// Stop/WaitPipeline drain semantics were audited for the Tier-1 live-apply
-// review (docs/design-documents/20260708-live-server-deploy-apply.md, "Open
-// parity item") and found safe to build StopAndWait on top of; this
-// experimental worker/funnel architecture has not had the equivalent audit.
-// Rather than guess at its drain semantics, StopAndWait refuses outright so
-// provisioning.Service.ApplyPlanLive can never apply-to-running under an
-// unaudited stop path.
-var CodeStopAndWaitUnsupported = conduiterr.Register("lifecycle_v2.stop_and_wait_unsupported", codes.Unimplemented)
+// CodeStopAndWaitTimeout is returned by StopAndWait when the bounded drain
+// (DefaultStopAndWaitTimeout, or a tighter caller-supplied ctx deadline)
+// elapses before the pipeline finished stopping, draining, or persisting. See
+// StopAndWait's doc ("O2: bounding the drain") for why this is safe to
+// surface rather than silently retrying or force-killing: nothing is torn
+// down on this path, so the pipeline is left exactly as benign-duplicate-safe
+// as it was before the call — never a silent gap.
+//
+// This supersedes the former CodeStopAndWaitUnsupported (removed alongside
+// this package's StopAndWait/ReconfigureProcessor refusal guards — see
+// docs/design-documents/20260731-archv2-drain-reconfigure.md, AC-7): that
+// code meant "this arch cannot do this at all"; this one means "this specific
+// attempt did not complete in time," which is the only refusal shape left
+// once the funnel drain audit (same design doc, §3.1) established the
+// underlying Stop/WaitPipeline/Persister interaction is safe to build
+// StopAndWait on top of.
+var CodeStopAndWaitTimeout = conduiterr.Register("lifecycle_v2.stop_and_wait_timeout", codes.DeadlineExceeded)

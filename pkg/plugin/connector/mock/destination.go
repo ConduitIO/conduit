@@ -152,6 +152,60 @@ func DestinationPluginWithRecords(records []opencdc.Record) ConfigurableDestinat
 	})
 }
 
+// DestinationPluginWithControlledError builds a destination plugin that
+// receives exactly len(records) records (asserting they match, like
+// DestinationPluginWithRecords), signals received once every record has been
+// received (but NOT yet acked), then blocks until release is closed, and
+// finally returns wantErr instead of ever sending an ack response.
+//
+// This exists for deterministically testing the "operator Stop races a
+// transient drain error" class of scenario (see
+// pkg/lifecycle-poc.TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery):
+// unlike DestinationPluginWithRecords (which always acks successfully and
+// offers no hook to control exactly when a failure surfaces relative to a
+// concurrent Stop call), this lets a test hold the batch "in flight" (and
+// thus hold funnel.Worker's processingLock) until it has confirmed some other
+// condition (e.g. that Stop has already been invoked), only then releasing
+// the failure. wantErr must be non-nil (a nil wantErr would leave the stream
+// open forever with no further sends, which is a "block forever" behavior a
+// caller should get via a different, dedicated helper instead of overloading
+// this one with two meanings for the zero value).
+func DestinationPluginWithControlledError(records []opencdc.Record, received chan<- struct{}, release <-chan struct{}, wantErr error) ConfigurableDestinationPluginOption {
+	return configurableDestinationPluginOptionFunc(func(p *ConfigurableDestinationPlugin) {
+		t := p.ctrl.T.(*testing.T)
+		is := is.New(t)
+		if wantErr == nil {
+			t.Fatalf("DestinationPluginWithControlledError: wantErr must be non-nil")
+		}
+
+		p.onRun = append(p.onRun, func() error {
+			serverStream := p.Stream.Server()
+
+			offset := 0
+			for offset < len(records) {
+				req, err := serverStream.Recv()
+				if err != nil {
+					if cerrors.Is(err, context.Canceled) || cerrors.Is(err, io.EOF) {
+						return nil // stopped/torn down before the controlled error ever fired
+					}
+					return cerrors.Errorf("destination mock recv stream error: %w", err)
+				}
+				for _, got := range req.Records {
+					if offset >= len(records) {
+						return cerrors.Errorf("destination mock received more records than expected")
+					}
+					is.Equal(got, records[offset])
+					offset++
+				}
+			}
+
+			close(received)
+			<-release
+			return wantErr
+		})
+	})
+}
+
 func DestinationPluginWithStop(lastPosition opencdc.Position) ConfigurableDestinationPluginOption {
 	return configurableDestinationPluginOptionFunc(func(p *ConfigurableDestinationPlugin) {
 		is := is.New(p.ctrl.T.(*testing.T))
