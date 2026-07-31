@@ -185,3 +185,18 @@ func SourcePluginWithTeardown() ConfigurableSourcePluginOption {
 			Return(pconnector.SourceTeardownResponse{}, nil)
 	})
 }
+
+// SourcePluginWithTeardownError makes every Teardown call fail with err. Used to
+// exercise the funnel.Worker.Stop path where the stop flag is armed
+// (w.stop.Store(true)) BEFORE tearDownSource runs and then teardown fails — a
+// wedged/dead source — so Stop returns an error while the worker is genuinely
+// stopping (Stopping() == true). AnyTimes because both Worker.Stop and the
+// subsequent Worker.Close retry the teardown.
+func SourcePluginWithTeardownError(err error) ConfigurableSourcePluginOption {
+	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
+		p.EXPECT().
+			Teardown(gomock.Any(), gomock.Any()).
+			Return(pconnector.SourceTeardownResponse{}, err).
+			AnyTimes()
+	})
+}

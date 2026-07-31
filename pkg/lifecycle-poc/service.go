@@ -316,15 +316,23 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// intentionalStop field doc.
 		rp.intentionalStop.Store(true)
 		err := rp.w.Stop(ctx)
-		if err != nil {
-			// rp.w.Stop failed outright (e.g. it never got past acquiring the
-			// processing lock — see the O2 drain bound in StopAndWait, which
-			// passes a deadline-bound ctx here). w.stop was therefore never
-			// actually set on the worker: the pipeline is still genuinely
+		if err != nil && !rp.w.Stopping() {
+			// Stop failed BEFORE arming the worker's stop flag — the only such
+			// path is acquireProcessingLock timing out (see funnel.Worker.Stop;
+			// the O2 drain bound in StopAndWait passes a deadline-bound ctx
+			// here). w.stop was never set: the pipeline is still genuinely
 			// running, unattended, exactly as before this call. Clear the
-			// marker so a LATER, unrelated transient error is still eligible
-			// for ordinary auto-recovery instead of being permanently (and
+			// marker so a LATER, unrelated transient error is still eligible for
+			// ordinary auto-recovery instead of being permanently (and
 			// incorrectly) treated as an already-completed user stop.
+			//
+			// Crucially we do NOT roll back when Stop errors but the worker IS
+			// stopping (rp.w.Stopping() == true) — that is the teardown-failed-
+			// after-w.stop-was-set path (a wedged/dead source), where the worker
+			// really is winding down. Rolling back there would let the resulting
+			// non-fatal Close error fall into recoverPipeline and auto-restart a
+			// pipeline the operator just stopped — exactly the O3 bug this field
+			// exists to prevent. Found by adversarial review of the drain PR.
 			rp.intentionalStop.Store(false)
 		}
 		return err
@@ -511,13 +519,28 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 
 // stopAndWaitTimeoutErr builds the coded, actionable error StopAndWait returns
 // when the bounded drain (O2) elapses during the named phase ("stop", "drain",
-// or "persist").
+// or "persist"). The end-state note is phase-specific because the phases leave
+// the pipeline in genuinely different states — nothing is ever force-stopped or
+// torn down on any of them, so all three stay at-least-once-safe (never a gap),
+// but only the "stop" phase leaves the pipeline still running and cleanly
+// retriable; after "drain"/"persist" the worker is already stopping, so a
+// literal StopAndWait retry would hit ErrPipelineNotRunning (adversarial-review
+// Finding 2).
 func (s *Service) stopAndWaitTimeoutErr(pipelineID, phase string, cause error) error {
+	var state, suggestion string
+	switch phase {
+	case "stop":
+		state = "the pipeline never began stopping (its worker's stop flag was not set) and is still running, exactly as before this call — safe to retry StopAndWait"
+		suggestion = "check the destination/DLQ for a stuck write holding the processing lock, then retry; the pipeline is untouched and at-least-once is intact"
+	default: // "drain" or "persist"
+		state = "the pipeline had already begun stopping and will finish draining on its own; the timeout only means quiescence/durability was not confirmed within the bound"
+		suggestion = "check the destination/DLQ for a stuck write; do not force-restart — let the pipeline reach a stopped state (it is at-least-once-safe, never a gap), then re-apply"
+	}
 	ce := conduiterr.Wrap(CodeStopAndWaitTimeout, fmt.Sprintf(
-		"timed out waiting for pipeline %q to %s within %s; the pipeline was not force-stopped and is left exactly as it was — safe to retry",
-		pipelineID, phase, DefaultStopAndWaitTimeout,
+		"timed out waiting for pipeline %q to %s within %s; %s",
+		pipelineID, phase, DefaultStopAndWaitTimeout, state,
 	), cause)
-	ce.Suggestion = "check the destination/DLQ for a stuck write, then retry; this never drops or duplicates a record beyond the normal at-least-once contract"
+	ce.Suggestion = suggestion
 	return ce
 }
 

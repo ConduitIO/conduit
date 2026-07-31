@@ -206,6 +206,63 @@ func DestinationPluginWithControlledError(records []opencdc.Record, received cha
 	})
 }
 
+// DestinationPluginWithControlledBlock is the clean-release sibling of
+// DestinationPluginWithControlledError: it holds the batch "in flight" (and thus
+// holds funnel.Worker's processingLock) — signaling on received once it has the
+// records and blocking on release — then acks them SUCCESSFULLY and returns nil,
+// rather than surfacing an error. Used to deterministically sequence a
+// concurrent Stop against a still-in-flight-but-healthy batch (e.g. so the
+// drain-terminating error can come from a DIFFERENT source, like a failing
+// source Teardown, without the destination itself erroring — see
+// pkg/lifecycle-poc.TestServiceLifecycle_Stop_SourceTeardownFails_NoRecovery).
+func DestinationPluginWithControlledBlock(records []opencdc.Record, received chan<- struct{}, release <-chan struct{}) ConfigurableDestinationPluginOption {
+	return configurableDestinationPluginOptionFunc(func(p *ConfigurableDestinationPlugin) {
+		is := is.New(p.ctrl.T.(*testing.T))
+
+		p.onRun = append(p.onRun, func() error {
+			serverStream := p.Stream.Server()
+
+			offset := 0
+			for offset < len(records) {
+				req, err := serverStream.Recv()
+				if err != nil {
+					if cerrors.Is(err, context.Canceled) || cerrors.Is(err, io.EOF) {
+						return nil // stopped/torn down before we finished receiving
+					}
+					return cerrors.Errorf("destination mock recv stream error: %w", err)
+				}
+				acks := make([]pconnector.DestinationRunResponseAck, len(req.Records))
+				for i, got := range req.Records {
+					if offset >= len(records) {
+						return cerrors.Errorf("destination mock received more records than expected")
+					}
+					is.Equal(got, records[offset])
+					acks[i] = pconnector.DestinationRunResponseAck{Position: got.Position}
+					offset++
+				}
+
+				close(received)
+				<-release // hold the batch in flight (processingLock held) until released
+
+				if err := serverStream.Send(pconnector.DestinationRunResponse{Acks: acks}); err != nil {
+					return cerrors.Errorf("destination mock send ack error: %w", err)
+				}
+			}
+
+			// Drain any further recv until the stream is stopped/torn down.
+			for {
+				_, err := serverStream.Recv()
+				if err != nil {
+					if cerrors.Is(err, context.Canceled) || cerrors.Is(err, io.EOF) {
+						return nil
+					}
+					return cerrors.Errorf("destination mock recv stream error: %w", err)
+				}
+			}
+		})
+	})
+}
+
 func DestinationPluginWithStop(lastPosition opencdc.Position) ConfigurableDestinationPluginOption {
 	return configurableDestinationPluginOptionFunc(func(p *ConfigurableDestinationPlugin) {
 		is := is.New(p.ctrl.T.(*testing.T))

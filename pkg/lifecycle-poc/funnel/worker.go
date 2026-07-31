@@ -227,6 +227,19 @@ func (w *Worker) Stop(ctx context.Context) error {
 	return nil
 }
 
+// Stopping reports whether this worker has armed its stop — i.e. w.stop was set
+// by a Stop call, so the Do loop will exit and no further batch will be read.
+// It becomes true the instant Stop sets the flag, BEFORE source teardown runs,
+// so it stays true even when Stop returns a teardown error. Callers use this to
+// distinguish "Stop returned an error but the worker is genuinely stopping"
+// (teardown failed after the flag was set) from "Stop failed before arming"
+// (lock-acquisition timeout) — the two have opposite implications for whether a
+// deliberate-stop marker should be rolled back. See
+// lifecycle-poc.Service.stopRunnablePipeline.
+func (w *Worker) Stopping() bool {
+	return w.stop.Load()
+}
+
 // acquireProcessingLock tries to acquire the processing lock. It returns a
 // release function that should be called to release the lock. If the context is
 // canceled before the lock is acquired, it returns the context error.

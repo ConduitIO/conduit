@@ -975,6 +975,148 @@ func TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery(t *testing.T) {
 	// never redispensed either connector for a restart.
 }
 
+// TestServiceLifecycle_Stop_SourceTeardownFails_NoRecovery is the Path-B O3
+// regression test found by adversarial review of the drain PR
+// (docs/design-documents/20260731-archv2-drain-reconfigure.md). It covers the
+// case the sibling _TransientErrorMidDrain_ test structurally cannot: here
+// funnel.Worker.Stop ARMS its stop flag (w.stop.Store(true)) and THEN
+// tearDownSource FAILS — a wedged/dead source — so Stop returns a non-nil error
+// while the worker is genuinely stopping (Stopping() == true).
+//
+// The original rollback cleared intentionalStop on ANY Stop error, which is
+// correct only for the lock-acquisition-timeout path (flag never armed). On
+// THIS path the flag WAS armed, so the unconditional rollback wrongly cleared
+// it: the subsequent non-fatal Worker.Close teardown error then fell into
+// runPipeline's recovery default arm and auto-restarted a pipeline the operator
+// just stopped — reintroducing the exact O3 bug the field exists to prevent.
+// The fix rolls back only when !rp.w.Stopping(). Without it this test's Times(1)
+// dispenser expectations fail (connectors redispensed for the restart) and a
+// Recovering status appears; with it the pipeline finalizes UserStopped and
+// recoverPipeline is never invoked.
+func TestServiceLifecycle_Stop_SourceTeardownFails_NoRecovery(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	wantRecords := generateRecords(1)
+
+	// Source: delivers one record, then goes quiet. Its Teardown FAILS every
+	// time (both Worker.Stop's and Worker.Close's retry), reproducing a
+	// dead/wedged source whose teardown errors AFTER Stop already armed w.stop.
+	teardownErr := cerrors.New("source teardown failure (wedged source)")
+	ctrl := gomock.NewController(t)
+	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(wantRecords, nil),
+		pmock.SourcePluginWithAcks(1, false),
+		pmock.SourcePluginWithTeardownError(teardownErr),
+	)
+	source := dummySource(persister)
+	sourceDispenser := pmock.NewDispenser(ctrl)
+	sourceDispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil).Times(1)
+
+	// Destination holds the one record in flight (processingLock held), then is
+	// released cleanly once the test has confirmed Stop recorded the intentional
+	// stop — so Stop proceeds into the source teardown that fails. The release
+	// carries no error: the drain-terminating error comes from source teardown,
+	// not the destination, isolating the Path-B path.
+	received := make(chan struct{})
+	release := make(chan struct{})
+	destPlugin := pmock.NewConfigurableDestinationPlugin(ctrl,
+		pmock.DestinationPluginWithConfigure(),
+		pmock.DestinationPluginWithOpen(),
+		pmock.DestinationPluginWithRun(),
+		pmock.DestinationPluginWithControlledBlock(wantRecords, received, release),
+		pmock.DestinationPluginWithTeardown(),
+	)
+	destination := dummyDestination(persister)
+	destDispenser := pmock.NewDispenser(ctrl)
+	destDispenser.EXPECT().DispenseDestination().Return(destPlugin, nil).Times(1)
+
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	<-received // record in flight at the destination, processingLock held
+
+	stopErr := make(chan error, 1)
+	go func() { stopErr <- ls.Stop(ctx, pl.ID, false) }()
+
+	// Race-free: wait for intentionalStop to be set (exactly what runPipeline's
+	// cleanup goroutine checks) before releasing the batch, so Stop then drives
+	// into the failing source teardown.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		rp, ok := ls.runningPipelines.Get(pl.ID)
+		if ok && rp.intentionalStop.Load() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for intentionalStop to be set")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(release) // batch unwinds cleanly; Stop proceeds to tear down the source
+
+	// Stop returns the source-teardown error — the whole point of Path B: Stop
+	// errored, yet the worker armed its stop flag, so intentionalStop must NOT
+	// be rolled back.
+	err = <-stopErr
+	is.True(err != nil)
+	is.True(cerrors.Is(err, teardownErr))
+
+	// Core assertion: finalizes UserStopped, never Recovering. (WaitPipeline's
+	// own return races the cleanup delete — see the sibling test's note — so the
+	// persisted status is the reliable signal.)
+	_ = ls.WaitPipeline(pl.ID)
+	waitForStatus(t, pl, pipeline.StatusUserStopped)
+
+	for _, s := range rec.snapshot() {
+		if s == pipeline.StatusRecovering {
+			t.Fatalf("pipeline entered StatusRecovering - a Stop that errored on source teardown (with the stop flag armed) was auto-recovered instead of being treated as an intentional stop (statuses: %v)", rec.snapshot())
+		}
+	}
+	// ctrl.Finish() verifies both dispensers were called exactly once — no
+	// recovery restart redispensed either connector.
+}
+
 // statusRecorder wraps a PipelineService, recording every UpdateStatus target
 // status in order so a test can assert the transition sequence. UpdateStatus is
 // called from multiple goroutines (the initial run and the cleanup/recovery

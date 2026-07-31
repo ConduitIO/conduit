@@ -214,6 +214,15 @@ every connector it manages** — including the DLQ destination, which `lifecycle
 creates through the same `s.connectors.Create` (and thus the same persister) as every other
 connector. There is no DLQ-specific persistence path this misses. **No gap found.**
 
+The same fact has one benign side effect (raised by adversarial review, Finding 3): because
+`WaitPersisted` is a **process-global** barrier over the shared persister — not scoped to a single
+`pipelineID` — a `StopAndWait` can hit its persist-phase O2 timeout because of an _unrelated_
+pipeline's slow/stuck write, not its own. This only ever over-waits (it can never return early
+before this pipeline's writes are durable), and a persist-phase timeout fails safe: `ApplyPlanLive`
+aborts on the error and mutates nothing (invariant 1 preserved). It is a liveness/observability
+wrinkle, not a correctness one; per-pipeline persistence scoping is a possible future refinement,
+not required for this interim.
+
 ### §3.1 — the funnel drain audit
 
 This is the audit the original `CodeStopAndWaitUnsupported` guard was waiting on. It walks the same
