@@ -39,7 +39,7 @@ func TestServiceLifecycle_StopAndWait_Unsupported(t *testing.T) {
 	is := is.New(t)
 
 	logger := log.New(zerolog.Nop())
-	ls := NewService(logger, testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, testPipelineService{}, true)
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, testPipelineService{}, true)
 
 	err := ls.StopAndWait(context.Background(), uuid.NewString())
 	is.True(err != nil)
@@ -59,7 +59,7 @@ func TestServiceLifecycle_ReconfigureProcessor_Unsupported(t *testing.T) {
 	is := is.New(t)
 
 	logger := log.New(zerolog.Nop())
-	ls := NewService(logger, testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, testPipelineService{}, true)
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, testPipelineService{}, true)
 
 	err := ls.ReconfigureProcessor(context.Background(), uuid.NewString(), uuid.NewString())
 	is.True(err != nil)
