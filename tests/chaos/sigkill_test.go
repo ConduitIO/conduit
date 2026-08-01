@@ -71,21 +71,35 @@ type sigkillCase struct {
 	paceMS         int
 	killAfterReads int
 	total          uint64
+	// persistDelayMS overrides the child's persister debounce (0 = default).
+	// See childConfig.persistDelayMS.
+	persistDelayMS int
 }
 
 var sigkillCases = []sigkillCase{
 	{
 		// Mid-snapshot: an initial, fast burst (minimal pacing, mirroring
 		// Debezium's initial full-table snapshot dumping many rows quickly).
-		// killAfterReads=30 at 1ms/read is ~30ms in - well before the FIRST
-		// automatic flush (which fires at ~1000ms), so Conduit has not
-		// persisted ANY position yet when the kill lands. This is the
-		// highest-stakes edge case named in the design doc: a crash before
-		// the snapshot watermark is durably recorded at all.
+		// The precondition is that Conduit has persisted NO position at all
+		// when the kill lands - the highest-stakes edge case in the design
+		// doc: a crash before the snapshot watermark is durably recorded.
+		//
+		// That used to be inferred from arithmetic ("30 reads x 1ms = ~30ms,
+		// well under the 1s flush"). On a loaded CI box those 30 reads can
+		// take longer than a second, the debounce fires, a position IS
+		// persisted, and the case silently stops testing what it claims to -
+		// failing for a scheduling reason rather than a correctness one.
+		// Observed twice in CI (issue #2534) and never reproducible locally.
+		//
+		// persistDelayMS makes the precondition deterministic: with a 10-minute
+		// debounce the first automatic flush cannot fire before the kill no
+		// matter how slow the machine is. The assertion itself is unchanged and
+		// exactly as strict - this removes a race in the SETUP, not a check.
 		name:           "mid-snapshot",
 		paceMS:         1,
 		killAfterReads: 30,
 		total:          500,
+		persistDelayMS: 600_000,
 	},
 	{
 		// Mid-stream: steady-state pacing slow enough that, by the time we
@@ -166,7 +180,15 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 		total:       tc.total,
 	}
 
-	first := spawnChild(t, cfg)
+	// The persister override applies ONLY to the first child. Its job is to
+	// guarantee this case's precondition (no position persisted when the kill
+	// lands); the RESUMED child must run with the real default, or it would
+	// never flush either — which is not the scenario under test, and would
+	// make the resume assertion vacuous.
+	firstCfg := cfg
+	firstCfg.persistDelayMS = tc.persistDelayMS
+
+	first := spawnChild(t, firstCfg)
 	first.waitForReadCount(t, tc.killAfterReads, 30*time.Second)
 	first.sigkill(t)
 
@@ -174,6 +196,24 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 	is.NoErr(err)
 	watermarkAtKill, err := committedAtKill.Committed()
 	is.NoErr(err)
+
+	// Make this case's PRECONDITION explicit and self-diagnosing. mid-snapshot
+	// exists to test a crash before Conduit persisted any position at all; if a
+	// persister flush somehow landed before the kill, the run is no longer
+	// exercising that scenario and any pass/fail below is meaningless.
+	//
+	// persistDelayMS should make that impossible, but this asserts it rather
+	// than trusting it: if the premise is ever violated again, the failure says
+	// so directly instead of surfacing as a confusing downstream mismatch. That
+	// matters because this case has flaked twice in CI (#2534) and was never
+	// reproducible locally — the next occurrence should identify itself.
+	if tc.persistDelayMS > 0 && watermarkAtKill != 0 {
+		t.Fatalf("precondition violated: mid-snapshot requires NO persisted position "+
+			"at kill time, but the upstream watermark was already %d. A persister "+
+			"flush beat the kill despite a %dms debounce, so this run did not test "+
+			"the crash-before-first-checkpoint scenario at all.",
+			watermarkAtKill, tc.persistDelayMS)
+	}
 
 	second := spawnChild(t, cfg)
 	second.waitExit(t, 30*time.Second)

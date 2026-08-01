@@ -41,6 +41,21 @@ type childConfig struct {
 	paceMS      int
 	total       uint64
 
+	// persistDelayMS overrides connector.DefaultPersisterDelayThreshold in the
+	// child. Zero means "use the default".
+	//
+	// This exists to make a case's PRECONDITION deterministic instead of
+	// wall-clock-inferred. The mid-snapshot case needs the kill to land before
+	// Conduit has persisted ANY position; it used to get that by arithmetic
+	// ("30 reads x 1ms = ~30ms, well under the 1s flush"), which silently stops
+	// being true on a loaded CI box where those 30 reads can take longer than a
+	// second. The flush then fires, the premise the assertion rests on is void,
+	// and the test fails for a reason that has nothing to do with the invariant
+	// under test. Setting the threshold far beyond any plausible scheduling
+	// delay removes the race rather than papering over it - the assertion is
+	// unchanged and just as strict. See sigkillCases.
+	persistDelayMS int
+
 	// snapshotK/snapshotPaceMS: DBZ-2 Property 1/2's two-phase producer
 	// knobs (see chaosPlugin's type doc, upstream.go). Zero values preserve
 	// DBZ-1's original single-phase behavior.
@@ -82,6 +97,7 @@ func (c childConfig) env() []string {
 		envNumKeys + "=" + strconv.Itoa(c.numKeys),
 		envDriftAt + "=" + strconv.FormatUint(c.driftAt, 10),
 		envSigtermMode + "=" + strconv.FormatBool(c.sigtermMode),
+		envPersistDelayMS + "=" + strconv.Itoa(c.persistDelayMS),
 	}
 }
 

@@ -47,6 +47,7 @@ const (
 	envUpstreamDir    = "CONDUIT_CHAOS_UPSTREAM_DIR"
 	envPrune          = "CONDUIT_CHAOS_PRUNE"
 	envPaceMS         = "CONDUIT_CHAOS_PACE_MS"
+	envPersistDelayMS = "CONDUIT_CHAOS_PERSIST_DELAY_MS"
 	envTotal          = "CONDUIT_CHAOS_TOTAL"
 	envSnapshotK      = "CONDUIT_CHAOS_SNAPSHOT_K"
 	envSnapshotPaceMS = "CONDUIT_CHAOS_SNAPSHOT_PACE_MS"
@@ -103,7 +104,10 @@ type childEnv struct {
 	upstreamDir string
 	prune       bool
 	paceMS      int
-	total       uint64
+	// persistDelayMS overrides the persister debounce; 0 = default. See
+	// childConfig.persistDelayMS in harness.go for why this is configurable.
+	persistDelayMS int
+	total          uint64
 
 	// snapshotK/snapshotPaceMS: Property 1/2's two-phase producer knobs.
 	// snapshotK == 0 means "no distinct snapshot phase" (DBZ-1's original
@@ -144,6 +148,16 @@ func parseChildEnv() childEnv {
 		os.Exit(exitBadArgs)
 	}
 	cfg.paceMS = paceMS
+
+	// Optional: 0/unset means use connector.DefaultPersisterDelayThreshold.
+	if v := os.Getenv(envPersistDelayMS); v != "" {
+		d, err := strconv.Atoi(v)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envPersistDelayMS, err)
+			os.Exit(exitBadArgs)
+		}
+		cfg.persistDelayMS = d
+	}
 
 	total, err := strconv.ParseUint(os.Getenv(envTotal), 10, 64)
 	if err != nil {
@@ -320,7 +334,11 @@ func buildChild(ctx context.Context, cfg childEnv) (*childBuilt, error) {
 		return nil, fmt.Errorf("open badger db: %w", err)
 	}
 
-	persister := connector.NewPersister(logger, db, connector.DefaultPersisterDelayThreshold, connector.DefaultPersisterBundleCountThreshold)
+	persistDelay := connector.DefaultPersisterDelayThreshold
+	if cfg.persistDelayMS > 0 {
+		persistDelay = time.Duration(cfg.persistDelayMS) * time.Millisecond
+	}
+	persister := connector.NewPersister(logger, db, persistDelay, connector.DefaultPersisterBundleCountThreshold)
 	store := connector.NewStore(db, logger)
 
 	instance := loadOrCreateInstance(ctx, store)
