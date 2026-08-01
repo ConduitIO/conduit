@@ -530,6 +530,24 @@ func TestRunLedger_FanOut_PendingRunOnOneBranch_NoPrematureUnanimity(t *testing.
 	// (still gated) or p2 (not reached yet - doTask's loop is still
 	// synchronously blocked resolving p1's retry). Only p0 can have reached
 	// unanimity so far.
+	//
+	// Wait for p0's ack to LAND before asserting, rather than assuming it has
+	// already happened. Branch A votes on its own goroutine, so on a loaded
+	// machine destB can have received all 3 records (the condition above)
+	// while branch A has not yet been scheduled to cast its p0 vote —
+	// ackedPositions() is then still nil and the assertion fails with
+	// "<nil> != [0]". That is the test checking too early, not the engine
+	// acking too early; observed twice in CI (#2534) and never reproducible
+	// locally, including at -count=240 under GOMAXPROCS=1 with 10 busy loops.
+	//
+	// This does NOT weaken the check. The wait only requires that SOME ack has
+	// landed; the assertion that follows is unchanged and still demands the
+	// acked set be EXACTLY [p0], so a premature p1 or p2 (the invariant-1
+	// violation this test exists to catch) still fails it — it would surface
+	// as [p0 p1] rather than being waited away.
+	waitForCondition(t, 5*time.Second, func() bool {
+		return len(src.ackedPositions()) > 0
+	})
 	is.Equal(src.ackedPositions(), []opencdc.Position{p0})
 
 	close(gate) // let branch A's deferred tail resolve

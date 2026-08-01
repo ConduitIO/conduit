@@ -428,6 +428,24 @@ func TestSchemaDrift_TransportHalf_DLQRouting(t *testing.T) {
 	// upstream like everything else - the persisted/upstream position
 	// reaches every position through total, not stopping short at the
 	// drift record.
+	// Wait for the ack->commit to land before asserting. Acking is deferred
+	// behind connector.Persister's debounce and the source's deferred-ack
+	// delivery goroutine, so the upstream commit is an ASYNCHRONOUS side
+	// effect of the delivery asserted above - reading it immediately can
+	// legitimately observe total-1 on a loaded machine, which is how this
+	// failed in CI as "4 != 5" (#2534, three occurrences, never reproducible
+	// locally).
+	//
+	// This does not weaken the check: the wait is bounded, and if the commit
+	// never reaches total the assertions below still fail exactly as before.
+	// It only removes the assumption that an async effect has already
+	// happened at the instant the synchronous one completed.
+	if !waitForUpstreamAtLeast(h.built.upstream, uint64(total), 10*time.Second) {
+		t.Fatalf("upstream commit never reached %d within the timeout - the drift "+
+			"record was not acked upstream (a silent drop is exactly what this "+
+			"test exists to catch)", total)
+	}
+
 	committed, err := h.built.upstream.Committed()
 	is.NoErr(err)
 	is.Equal(committed, uint64(total))
