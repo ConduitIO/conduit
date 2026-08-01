@@ -263,7 +263,7 @@ type Config struct {
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source, but multiple destinations, per pipeline)"`
+		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (supports multiple sources and multiple destinations per pipeline; a record split before a fan-out point is not yet supported and fails with a coded error)"`
 		PipelineArchV2DisableMetrics bool `long:"preview.pipeline-arch-v2-disable-metrics" mapstructure:"pipeline-arch-v2-disable-metrics" usage:"disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"`
 	}
 

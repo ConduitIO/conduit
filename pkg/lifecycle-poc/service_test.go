@@ -17,6 +17,7 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
@@ -100,17 +102,159 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	is.Equal("", cmp.Diff(pl, got.pipeline, cmpopts.IgnoreUnexported(pipeline.Instance{})))
 
-	wantTasks := []funnel.Task{
-		&funnel.SourceTask{},
-		&funnel.DestinationTask{},
-	}
+	// Slice 3b: a Worker's own FirstTask.Tasks() iterator now stops before the
+	// shared sink (see TaskNode.MarkSharedBoundary) - it only walks tasks the
+	// WORKER itself owns (Open/Close-wise), which for a single, processor-less
+	// source is just the source task. The destination is still reachable at
+	// runtime via Next directly (doTask/doNextTask never use this iterator),
+	// and is verified separately below via got.sink.
+	is.Equal(1, len(got.workers))
+	worker := got.workers[0]
+	wantOwnTasks := []funnel.Task{&funnel.SourceTask{}}
 	i := 0
-	for got := range got.w.FirstTask.Tasks() {
-		want := wantTasks[i]
-		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected task type
+	for task := range worker.FirstTask.Tasks() {
+		want := wantOwnTasks[i]
+		is.Equal(reflect.TypeOf(want), reflect.TypeOf(task)) // unexpected task type
 		i++
 	}
-	is.Equal(got.w.Source.(*connector.Source).Instance, source)
+	is.Equal(len(wantOwnTasks), i)
+	is.Equal(worker.Source.(*connector.Source).Instance, source)
+
+	// The shared sink (destination) is attached to the worker's own tail via
+	// Next, but owned/opened/closed by got.sink, not by this worker.
+	is.True(got.sink != nil)
+	is.Equal(1, len(worker.FirstTask.Next))
+	is.Equal(reflect.TypeOf(&funnel.DestinationTask{}), reflect.TypeOf(worker.FirstTask.Next[0].Task))
+}
+
+// recordingConnectorService wraps testConnectorService and records every
+// Create call's `id` argument, in call order. Used to verify slice 3b's
+// per-source DLQ naming (buildDLQName) actually reaches the connector
+// service - testConnectorService.Create itself ignores every argument but
+// the DLQ lookup key, so it can't tell two differently-named DLQ creations
+// apart on its own.
+type recordingConnectorService struct {
+	testConnectorService
+	mu      sync.Mutex
+	created []string
+}
+
+func (s *recordingConnectorService) Create(
+	ctx context.Context,
+	id string,
+	t connector.Type,
+	plug string,
+	pipelineID string,
+	cfg connector.Config,
+	pt connector.ProvisionType,
+) (*connector.Instance, error) {
+	s.mu.Lock()
+	s.created = append(s.created, id)
+	s.mu.Unlock()
+	return s.testConnectorService.Create(ctx, id, t, plug, pipelineID, cfg, pt)
+}
+
+// TestServiceLifecycle_buildRunnablePipeline_MultipleSources is slice 3b's
+// core buildRunnablePipeline test: N (here 2) source connectors must each
+// get their own funnel.Worker and their own per-source DLQ, while sharing
+// exactly ONE destination TaskNode (by pointer, not by value) via
+// runnablePipeline.sink.
+func TestServiceLifecycle_buildRunnablePipeline_MultipleSources(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	sourceA := dummySource(persister)
+	sourceB := dummySource(persister)
+	destination := dummyDestination(persister)
+	dlq := dummyDestination(persister)
+	pl := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Config: pipeline.Config{Name: "test-pipeline"},
+		DLQ: pipeline.DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{sourceA.ID, sourceB.ID, destination.ID},
+	}
+	pl.SetStatus(pipeline.StatusUserStopped)
+
+	connSvc := &recordingConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+	}
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     pmock.NewDispenser(ctrl),
+			sourceB.Plugin:     pmock.NewDispenser(ctrl),
+			destination.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:         pmock.NewDispenser(ctrl),
+		},
+		testPipelineService{},
+		false,
+	)
+
+	got, err := ls.buildRunnablePipeline(ctx, pl)
+	is.NoErr(err)
+
+	// One worker per source, each tagged with its own source's connector ID.
+	is.Equal(2, len(got.workers))
+	is.Equal(2, len(got.sourceIDs))
+	gotSourceIDs := map[string]bool{got.sourceIDs[0]: true, got.sourceIDs[1]: true}
+	is.True(gotSourceIDs[sourceA.ID])
+	is.True(gotSourceIDs[sourceB.ID])
+	is.True(got.sink != nil)
+
+	// Both workers' own prefix is just their source task (no per-connector
+	// processors configured), and both converge on the IDENTICAL shared
+	// destination TaskNode - the same pointer, not two independently-built
+	// copies of it. This is the shared-sink wiring the crux of this slice
+	// depends on: closing got.sink tears down this ONE node exactly once,
+	// regardless of how many workers point at it.
+	is.Equal(1, len(got.workers[0].FirstTask.Next))
+	is.Equal(1, len(got.workers[1].FirstTask.Next))
+	is.True(got.workers[0].FirstTask.Next[0] == got.workers[1].FirstTask.Next[0])
+	is.Equal(reflect.TypeOf(&funnel.DestinationTask{}), reflect.TypeOf(got.workers[0].FirstTask.Next[0].Task))
+
+	// Each worker's own Source is its own, distinct connector wrapper - never
+	// a sibling's. This is the structural property that makes cross-source
+	// ack contamination impossible (see runnablePipeline.workers' doc):
+	// Worker.Ack always calls THIS field's Ack, and there is exactly one
+	// funnel.Worker per source.
+	is.True(got.workers[0].Source != got.workers[1].Source)
+
+	// Per-source DLQ naming (slice 3b, hash-suffixed since the L1 fix — see
+	// buildDLQName): a distinct name for EACH source, never the old,
+	// now-collision-prone pl.ID+"-dlq", and never the pl.ID+"-"+sourceID+"-dlq"
+	// format that briefly replaced it (which double-embedded the pipeline ID,
+	// since a provisioned connector ID is already pipelineID+":"+name — see
+	// buildDLQName's doc).
+	wantDLQNames := map[string]bool{
+		buildDLQName(pl.ID, sourceA.ID): true,
+		buildDLQName(pl.ID, sourceB.ID): true,
+	}
+	connSvc.mu.Lock()
+	gotCreated := append([]string(nil), connSvc.created...)
+	connSvc.mu.Unlock()
+	is.Equal(2, len(gotCreated))
+	for _, name := range gotCreated {
+		is.True(wantDLQNames[name])
+	}
 }
 
 func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
@@ -1115,6 +1259,492 @@ func TestServiceLifecycle_Stop_SourceTeardownFails_NoRecovery(t *testing.T) {
 	}
 	// ctrl.Finish() verifies both dispensers were called exactly once — no
 	// recovery restart redispensed either connector.
+}
+
+// multiDLQConnectorService routes each buildDLQ Create call to one of a
+// fixed set of DLQ *connector.Instance values, CYCLING through them in call
+// order (index i%len(dlqs)). This is what an N-source Service-level test
+// needs and testConnectorService.Create (which returns the SAME instance for
+// every call, ignoring its arguments) can't provide: buildRunnablePipeline's
+// buildDLQ call happens once per source, in pl.ConnectorIDs order, and that
+// same per-source order repeats identically on every recovery restart (the
+// source list itself never changes) — so cycling (not simply popping a
+// fixed queue) is what lets ONE multiDLQConnectorService correctly serve
+// both a single-run test (N sources, N calls) and a recovery test (N
+// sources × M restarts, N*M calls, each source's DLQ instance/dispenser
+// reused with a Times(M) expectation) without the test needing to know how
+// many restarts will happen in advance.
+type multiDLQConnectorService struct {
+	testConnectorService
+	mu    sync.Mutex
+	dlqs  []*connector.Instance
+	calls int
+}
+
+func (s *multiDLQConnectorService) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.dlqs) == 0 {
+		return nil, cerrors.New("multiDLQConnectorService: no DLQ instances configured")
+	}
+	dlq := s.dlqs[s.calls%len(s.dlqs)]
+	s.calls++
+	return dlq, nil
+}
+
+// idleSourceTimes builds a source that never produces any records (its Read
+// blocks until stopped or the pipeline's context is canceled) and is
+// dispensed `times` times — a fresh mock plugin per dispense, matching how
+// buildRunnablePipeline re-dispenses on every restart. Used as an N-source
+// test's "quiet sibling": present in every run, contributing nothing, so a
+// test can isolate what happens to a DIFFERENT source without this one's
+// behavior — or its interleaving with a shared destination's strict-order
+// asserterDestination check — being part of what's under test.
+func idleSourceTimes(
+	ctrl *gomock.Controller,
+	persister *connector.Persister,
+	times int,
+) (*connector.Instance, *pmock.Dispenser) {
+	source := dummySource(persister)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
+		return pmock.NewConfigurableSourcePlugin(ctrl,
+			pmock.SourcePluginWithConfigure(),
+			pmock.SourcePluginWithOpen(),
+			pmock.SourcePluginWithRun(),
+			pmock.SourcePluginWithRecords(nil, nil),
+			pmock.SourcePluginWithAcks(0, false),
+			pmock.SourcePluginWithTeardown(),
+		), nil
+	}).Times(times)
+	return source, dispenser
+}
+
+// TestServiceLifecycle_NSource_PartialGracefulStop_Escalates is the
+// Service-level H1 regression test (adversarial review of #2734). It closes
+// the exact coverage hole the review found hid H1: before this test, there
+// was no Service-level test that ever drove stopRunnablePipeline's N-worker
+// choreography at all — service_test.go only asserted buildRunnablePipeline
+// wiring, and the funnel-level tests build Worker/Sink by hand, never going
+// through lifecycle-poc.Service.
+//
+// Two sources (A, B) share one destination. A's single record is held "in
+// flight" at the shared destination — via
+// pmock.DestinationPluginWithControlledBlock, which blocks the ack
+// round-trip until the test releases it — so A holds its OWN processingLock
+// (and, transitively, the shared destination's sharedMu) for the whole
+// window. A's Stop call therefore cannot acquire that lock within a short
+// ctx deadline. B has nothing in flight (idle, blocked in Read), so its
+// Stop call arms almost immediately. This reproduces H1's exact shape: some
+// source(s) armed (torn down) and other(s) didn't, within one bounded Stop
+// deadline.
+//
+// Before the fix this could strand the pipeline reporting StatusRunning
+// forever: workersWg never drains (B's own Do loop has nothing to make it
+// exit, and A is genuinely still blocked), so runPipeline's cleanup
+// goroutine — the only thing that ever writes a terminal status — never
+// runs. With the fix, Stop detects the partial result and escalates:
+// force-kills the pipeline's tomb and returns a coded
+// CodePartialGracefulStopEscalated error naming which source(s) armed and
+// which didn't. Releasing A's blocked write (this test's stand-in for "the
+// slow write eventually completes, exactly as a real ctx-respecting gRPC
+// call would") then lets A's worker unwind, and the pipeline reaches a
+// terminal StatusDegraded — never stuck.
+func TestServiceLifecycle_NSource_PartialGracefulStop_Escalates(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	recordsA := generateRecords(1)
+
+	ctrl := gomock.NewController(t)
+
+	// Source A: delivers its one record, then goes quiet (its Read just
+	// blocks — no plugin Stop RPC is ever sent on a graceful stop, see the
+	// sibling drain tests' comments on this file's established convention).
+	sourceAPlugin := pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(recordsA, nil),
+		pmock.SourcePluginWithAcks(0, false),
+		pmock.SourcePluginWithTeardown(),
+	)
+	sourceA := dummySource(persister)
+	sourceADispenser := pmock.NewDispenser(ctrl)
+	sourceADispenser.EXPECT().DispenseSource().Return(sourceAPlugin, nil).Times(1)
+
+	sourceB, sourceBDispenser := idleSourceTimes(ctrl, persister, 1)
+
+	// The shared destination: A's record is held in flight (processingLock
+	// AND sharedMu held by A's own Do goroutine) until the test releases it.
+	// releaseFn is idempotent and deferred (in addition to the explicit call
+	// below) so that if an assertion between here and the explicit call
+	// fails, A's write is still unblocked during the resulting t.Fatal
+	// unwind — without this, the deferred persister.Wait() above would hang
+	// forever on a pending write that can never flush, turning an assertion
+	// failure into a test-binary-wide timeout instead of a clean failure.
+	received := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseFn := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseFn()
+	destPlugin := pmock.NewConfigurableDestinationPlugin(ctrl,
+		pmock.DestinationPluginWithConfigure(),
+		pmock.DestinationPluginWithOpen(),
+		pmock.DestinationPluginWithRun(),
+		pmock.DestinationPluginWithControlledBlock(recordsA, received, release),
+		pmock.DestinationPluginWithTeardown(),
+	)
+	destination := dummyDestination(persister)
+	destDispenser := pmock.NewDispenser(ctrl)
+	destDispenser.EXPECT().DispenseDestination().Return(destPlugin, nil).Times(1)
+
+	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
+	connSvc := &multiDLQConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+		},
+		dlqs: []*connector.Instance{dlqA, dlqB},
+	}
+
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceA.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceB.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     sourceADispenser,
+			sourceB.Plugin:     sourceBDispenser,
+			destination.Plugin: destDispenser,
+			dlqA.Plugin:        dlqADispenser,
+			dlqB.Plugin:        dlqBDispenser,
+		},
+		ps,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	<-received // A's record is in flight; A holds its own processingLock + sharedMu
+
+	// A short deadline A can never meet (its own processingLock is held by
+	// its blocked Do goroutine, and won't be released until this test closes
+	// `release` below); B, idle, arms well within it.
+	stopCtx, stopCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer stopCancel()
+
+	stopErr := ls.Stop(stopCtx, pl.ID, false)
+	is.True(stopErr != nil)
+
+	ce, ok := conduiterr.Get(stopErr)
+	is.True(ok)
+	is.Equal(ce.Code, CodePartialGracefulStopEscalated)
+	is.True(strings.Contains(stopErr.Error(), sourceB.ID)) // names the armed source
+	is.True(strings.Contains(stopErr.Error(), sourceA.ID)) // names the unarmed source
+
+	// Release A's blocked write — this test's stand-in for "the slow write
+	// eventually completes" — letting A's worker unwind now that the
+	// escalation has already force-killed the pipeline's tomb.
+	releaseFn()
+
+	// Core H1 assertion: the pipeline reaches a terminal status. Before the
+	// fix, this would hang — workersWg never drains because B's Do loop, left
+	// running with no operator-visible signal, has nothing left to make it
+	// exit, and A's own exit (once release is closed) would just loop back
+	// into reading a fresh batch instead of terminating.
+	_ = ls.WaitPipeline(pl.ID)
+	waitForStatus(t, pl, pipeline.StatusDegraded)
+}
+
+// TestServiceLifecycle_NSource_FatalErrorOneSource_DegradesWholePipeline
+// generalizes TestServiceLifecycle_PipelineError to N sources: a fatal error
+// in ONE of two sources sharing a destination must degrade the WHOLE
+// pipeline (matching v1 and this slice's own design doc — "Status
+// aggregation"), not just the failing source. The idle sibling (B) unwinds
+// collaterally via context.Canceled once A's fatal error kills the shared
+// tomb.
+func TestServiceLifecycle_NSource_FatalErrorOneSource_DegradesWholePipeline(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.Test(t)
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	wantErr := cerrors.FatalError(cerrors.New("source A connector error"))
+	recordsA := generateRecords(3)
+
+	ctrl := gomock.NewController(t)
+	sourceA, sourceADispenser := generatorSourceFatalError(ctrl, persister, recordsA, wantErr)
+	sourceB, sourceBDispenser := idleSourceTimes(ctrl, persister, 1)
+
+	destination, destDispenser := asserterDestination(ctrl, persister, recordsA, false)
+
+	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
+	connSvc := &multiDLQConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+		},
+		dlqs: []*connector.Instance{dlqA, dlqB},
+	}
+
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceA.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceB.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     sourceADispenser,
+			sourceB.Plugin:     sourceBDispenser,
+			destination.Plugin: destDispenser,
+			dlqA.Plugin:        dlqADispenser,
+			dlqB.Plugin:        dlqBDispenser,
+		},
+		ps,
+		false,
+	)
+
+	events := make(chan FailureEvent, 1)
+	ls.OnFailure(func(e FailureEvent) { events <- e })
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	err = ls.WaitPipeline(pl.ID)
+	is.True(err != nil)
+
+	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	is.True(cerrors.Is(err, wantErr))
+
+	event, eventReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	is.NoErr(err)
+	is.True(eventReceived)
+	is.Equal(pl.ID, event.ID)
+}
+
+// TestServiceLifecycle_NSource_TransientErrorOneSource_Recovers generalizes
+// TestServiceLifecycle_Recovery_TransientErrorRecovers to N sources: a
+// transient (non-fatal) error in ONE of two sources drives PIPELINE-WIDE
+// recovery — the design doc's "Status aggregation" section states recovery
+// "rebuilds every source's worker and the shared sink from scratch" — so the
+// idle sibling (B) must be re-dispensed on the recovery restart exactly like
+// A is, proving the N-worker choreography survives a restart, not just an
+// initial run.
+func TestServiceLifecycle_NSource_TransientErrorOneSource_Recovers(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	transientErr := cerrors.New("lost connection to source A")
+	healthyRecords := generateRecords(3)
+
+	ctrl := gomock.NewController(t)
+	sourceA, sourceADispenser := sourceRecoversAfterTransientError(ctrl, persister, healthyRecords, transientErr)
+	sourceB, sourceBDispenser := idleSourceTimes(ctrl, persister, 2) // initial run + recovery restart
+	destination, destDispenser := destinationRecovers(ctrl, persister, healthyRecords)
+
+	dlqA, dlqADispenser := dlqDispenserTimes(ctrl, persister, 2)
+	dlqB, dlqBDispenser := dlqDispenserTimes(ctrl, persister, 2)
+	connSvc := &multiDLQConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+		},
+		dlqs: []*connector.Instance{dlqA, dlqB},
+	}
+
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceA.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceB.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	rec := newStatusRecorder(ps)
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     sourceADispenser,
+			sourceB.Plugin:     sourceBDispenser,
+			destination.Plugin: destDispenser,
+			dlqA.Plugin:        dlqADispenser,
+			dlqB.Plugin:        dlqBDispenser,
+		},
+		rec,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Wait until the pipeline has recovered: it must have passed through
+	// Recovering and be Running again.
+	waitForRecovered(t, rec)
+
+	waitForRecordsAcked(t, sourceA, healthyRecords)
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	err = ls.Stop(ctx, pl.ID, false)
+	is.NoErr(err)
+	is.NoErr(ls.WaitPipeline(pl.ID))
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+
+	is.Equal(rec.snapshot(), []pipeline.Status{
+		pipeline.StatusRunning,
+		pipeline.StatusRecovering,
+		pipeline.StatusRunning,
+		pipeline.StatusUserStopped,
+	})
+}
+
+// TestServiceLifecycle_NSource_OneSourceFinishesGracefully_StaysRunningUntilAllExit
+// covers M3 and the design doc's "a source finishing gracefully is not a
+// failure" acceptance criterion at the Service level: source A exhausts a
+// fixed record set (io.EOF — see Worker.doTaskAttempt's io.EOF branch)
+// while source B, still connected and alive but with nothing to emit yet
+// (an idle sibling, deliberately not ALSO writing to the shared destination
+// — see idleSourceTimes' doc on why: two sources concurrently writing to
+// the same asserterDestination would make its strict-arrival-order check
+// flaky), keeps its own worker running. The pipeline must stay Running the
+// whole time A is gone and B hasn't been asked to stop, and only reach a
+// terminal status once BOTH have exited.
+func TestServiceLifecycle_NSource_OneSourceFinishesGracefully_StaysRunningUntilAllExit(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer persister.Wait()
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	recordsA := generateRecords(2)
+
+	ctrl := gomock.NewController(t)
+
+	// Source A: exhausts its fixed record set with io.EOF — nobody calls
+	// Stop on it. See Worker.doTaskAttempt's io.EOF branch.
+	sourceAPlugin := pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(recordsA, io.EOF),
+		pmock.SourcePluginWithAcks(len(recordsA), false),
+		pmock.SourcePluginWithTeardown(),
+	)
+	sourceA := dummySource(persister)
+	sourceADispenser := pmock.NewDispenser(ctrl)
+	sourceADispenser.EXPECT().DispenseSource().Return(sourceAPlugin, nil).Times(1)
+
+	sourceB, sourceBDispenser := idleSourceTimes(ctrl, persister, 1)
+
+	destination, destDispenser := asserterDestination(ctrl, persister, recordsA, false)
+
+	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
+	connSvc := &multiDLQConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+		},
+		dlqs: []*connector.Instance{dlqA, dlqB},
+	}
+
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceA.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, sourceB.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     sourceADispenser,
+			sourceB.Plugin:     sourceBDispenser,
+			destination.Plugin: destDispenser,
+			dlqA.Plugin:        dlqADispenser,
+			dlqB.Plugin:        dlqBDispenser,
+		},
+		ps,
+		false,
+	)
+
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// Wait for A to have acked its own records — proof it fully exhausted
+	// and gracefully exited (its own worker returned nil, never touching
+	// rp.t.Kill — see runPipeline's doc on why an io.EOF exit never kills
+	// the tomb).
+	waitForRecordsAcked(t, sourceA, recordsA)
+
+	// The pipeline must still be Running: B's worker is still registered on
+	// the tomb (idle, but alive) — A's own Worker.Close only tore down A's
+	// own source + DLQ, never the shared sink (see funnel.Sink's doc), and
+	// nothing about A finishing touches B at all.
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	// Only now stop the pipeline (and therefore B) — the terminal status
+	// must not have appeared before this point.
+	err = ls.Stop(ctx, pl.ID, false)
+	is.NoErr(err)
+	is.NoErr(ls.WaitPipeline(pl.ID))
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 }
 
 // statusRecorder wraps a PipelineService, recording every UpdateStatus target
