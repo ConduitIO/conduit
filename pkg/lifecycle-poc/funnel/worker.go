@@ -391,6 +391,22 @@ func (w *Worker) doTask(
 			break
 		}
 
+		// Invariant 2/3: capture the span this sub-batch covers in the PARENT
+		// batch BEFORE handing it to a task, and advance idx by that — never by
+		// the sub-batch's length afterwards.
+		//
+		// A task may GROW the sub-batch: Batch.SplitRecord appends, and both the
+		// RecordFlagRetry branch (which re-enters doTask) and doNextTask can
+		// trigger it. Because subBatchByFlag three-index-clips, that growth
+		// reallocates and leaves the parent untouched — so after the call
+		// len(subBatch.positions) is larger than the span it actually covered.
+		// Advancing by the grown length made idx overshoot, and the records in
+		// between were never handed to any downstream task, never acked — while
+		// a later sub-batch's ack still advanced the persisted source position
+		// PAST them. Silent, permanent record loss with no error and no gap in
+		// the position sequence. See issue #2722.
+		span := len(subBatch.positions)
+
 		w.logger.Trace(ctx).
 			Str("task_id", t.ID()).
 			Int("batch_size", len(b.records)).
@@ -430,7 +446,7 @@ func (w *Worker) doTask(
 			}
 		}
 
-		idx += len(subBatch.positions)
+		idx += span
 	}
 
 	return nil
