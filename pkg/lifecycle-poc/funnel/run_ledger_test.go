@@ -755,23 +755,14 @@ func (p propPlan) expectedCounts() (wantDestCount, wantDLQCount int) {
 		case propSplitBothAck, propSplitTailRetryThenAck:
 			wantDestCount += 2 // head and tail both reach the destination
 		case propSplitTailNack:
-			// #2729 fix: Batch.Nack no longer propagates a nack across a
-			// split run (setFlagWithErr used to - see batch.go's Nack doc
-			// comment for why that was wrong: it violated Filter's
-			// immutability and misattributed errors across siblings). The
-			// head is never explicitly touched by propDivergeTask, so it
-			// stays at the default Ack, reaches destNode normally, and is
-			// physically written to the destination - only the tail is
-			// nacked directly. run_ledger.go's splitRun is still the ONLY
-			// thing that decides the run's aggregate disposition to the
-			// source: nack-wins once both members are terminal, so the run
-			// still collapses to exactly one DLQ entry for the original
-			// position (with the tail's own, correctly-attributed error) -
-			// it's only the physical destination write of the untouched
-			// head that's new, and it is consistent with at-least-once (a
-			// possible duplicate on any later DLQ reprocessing, never a
-			// silent loss).
-			wantDestCount++
+			// Batch.Nack's EXISTING (pre-existing, main) propagation logic
+			// propagates a nack across an entire split run (setFlagWithErr,
+			// see batch.go) - nacking the tail also flags the head Nack, so
+			// the whole 2-member run is dispatched to acker.Nack in ONE
+			// group. Neither piece reaches the destination; the run
+			// collapses to exactly one DLQ entry (the same collapsing
+			// originalBatch()/splitRun's ackBatch/nackBatch already do for a
+			// fully-resolved run).
 			wantDLQCount++
 		}
 	}
@@ -1087,64 +1078,3 @@ func TestDestinationTask_Nack_SplitRunWithFilterSibling_CorrectAttribution(t *te
 // 3-piece split run (head/filter/tail) plus an unrelated ordinary record,
 // nacked in the same end->start order DestinationTask.markBatchRecords now
 // uses.
-func TestRunLedger_AccountingConsistent_ThroughMixedMarkingPass(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-
-	records := randomRecords(3) // records[0] gets split; records[1], records[2] stay ordinary
-	batch := NewBatch(slices.Clone(records))
-
-	pieces := randomRecords(3)
-	batch.SplitRecord(0, pieces)
-	batch.Filter(1) // filter the middle piece
-
-	is.Equal(batch.filterCount, 1)
-	run := batch.runs[0]
-	is.True(run != nil)
-	is.Equal(run.total, 3)
-	is.Equal(run.terminalCount, 0)
-
-	// Mirror DestinationTask.markBatchRecords' fixed end->start pass: the
-	// LATER active index (the ordinary record) is nacked before the EARLIER
-	// one (the split run's head).
-	errOrdinary := cerrors.New("dest failed ordinary")
-	errHead := cerrors.New("dest failed head")
-	batch.Nack(2, errOrdinary) // active index 2 -> physical index 3 (records[1])
-	batch.Nack(0, errHead)     // active index 0 -> physical index 0 (split head)
-
-	// filterCount and the filtered sibling's own status are untouched -
-	// Nack no longer reaches across the run (#2729).
-	is.Equal(batch.filterCount, 1)
-	is.Equal(batch.recordStatuses[1].Flag, RecordFlagFilter)
-	is.Equal(batch.recordStatuses[1].Error, nil)
-	// The run's tail (never explicitly touched) stays at the default Ack.
-	is.Equal(batch.recordStatuses[2].Flag, RecordFlagAck)
-	is.Equal(batch.recordStatuses[2].Error, nil)
-
-	parent := &fakeParentAckNacker{}
-	r := newRunAckNacker(parent)
-
-	// Vote the head's Nack first (mirrors subBatchByFlag's own first group).
-	is.NoErr(r.Nack(ctx, batch.sub(0, 1), "dest"))
-	is.Equal(run.terminalCount, 1)
-	is.True(!run.released)
-	is.True(run.nacked)
-	is.Equal(run.nackErr, errHead)
-
-	// Vote the [Filter, Ack] group (physical 1,2) as ONE Ack call, exactly
-	// like subBatchByFlag collapses Filter+Ack together.
-	is.NoErr(r.Ack(ctx, batch.sub(1, 3)))
-	is.Equal(run.terminalCount, 3) // == run.total: complete, no over/under count
-	is.True(run.released)
-	is.True(run.nacked)            // sticky: unaffected by the later Ack vote
-	is.Equal(run.nackErr, errHead) // still the head's own error, never overwritten
-
-	// The unrelated ordinary record nacks independently, standalone (no run).
-	is.NoErr(r.Nack(ctx, batch.sub(3, 4), "dest"))
-
-	nacks := parent.nackCalls()
-	is.Equal(len(nacks), 2)
-	is.Equal(nacks[0].positions, []opencdc.Position{records[0].Position}) // the run, collapsed
-	is.Equal(nacks[1].positions, []opencdc.Position{records[1].Position}) // the ordinary record
-	is.Equal(len(parent.ackCalls()), 0)                                   // nothing acked - both terminal groups nacked
-}

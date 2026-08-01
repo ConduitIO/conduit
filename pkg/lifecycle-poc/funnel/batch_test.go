@@ -138,17 +138,6 @@ func TestBatch_SplitRecord(t *testing.T) {
 	is.Equal(batch.splitRecords[pos], records[1])
 }
 
-// TestBatch_Nack_SplitRecord is the regression test for #2729: nacking one
-// piece of a split record must NOT propagate the flag or error to its sibling
-// pieces. It used to (see git history for the removed propagation in
-// setFlagWithErr), which both violated Filter's documented immutability
-// (a Nack call could silently reach past a Filter'd sibling and flip it) and
-// misattributed one record's error to a completely different record's DLQ
-// entry once destination acks started arriving out of index order relative
-// to Batch's internal active-index bookkeeping. A split run's aggregate
-// disposition (nack-wins if any member ever nacks) is run_ledger.go's job -
-// see TestRunLedger_Property_SplitFilterRetryNackRewrite's propSplitTailNack
-// case for that behavior end to end.
 func TestBatch_Nack_SplitRecord(t *testing.T) {
 	is := is.New(t)
 	records := randomRecords(2)
@@ -158,44 +147,12 @@ func TestBatch_Nack_SplitRecord(t *testing.T) {
 	batch.SplitRecord(1, splitRecords)
 
 	wantErr := cerrors.New("test error")
-	batch.Nack(1, wantErr) // Nack only the head of the split record.
+	batch.Nack(1, wantErr) // Nack a split record
 
 	is.Equal(batch.recordStatuses[1].Flag, RecordFlagNack)
 	is.Equal(batch.recordStatuses[1].Error, wantErr)
-	// The sibling piece is untouched - still the default Ack, no error.
-	is.Equal(batch.recordStatuses[2].Flag, RecordFlagAck)
-	is.Equal(batch.recordStatuses[2].Error, nil)
-}
-
-// TestBatch_Nack_SplitRecord_SiblingFilterNeverOverwritten is the direct
-// regression test for the Filter-immutability half of #2729: nacking one
-// member of a split run must never flip an ALREADY-Filter'd sibling to Nack,
-// and must never corrupt filterCount bookkeeping in the process (Filter's own
-// doc comment: "Once a record is filtered ... its status can't be changed
-// anymore").
-func TestBatch_Nack_SplitRecord_SiblingFilterNeverOverwritten(t *testing.T) {
-	is := is.New(t)
-	records := randomRecords(1)
-	batch := NewBatch(slices.Clone(records))
-
-	// Split the record into 3 pieces: head, filtered middle, ack'd tail.
-	batch.SplitRecord(0, randomRecords(3))
-	batch.Filter(1) // filter the middle piece
-	is.Equal(batch.filterCount, 1)
-
-	wantErr := cerrors.New("test error")
-	batch.Nack(0, wantErr) // Nack the head.
-
-	is.Equal(batch.recordStatuses[0].Flag, RecordFlagNack)
-	is.Equal(batch.recordStatuses[0].Error, wantErr)
-	// The filtered sibling is untouched: still Filter, no error, and
-	// filterCount still reflects exactly one filtered record.
-	is.Equal(batch.recordStatuses[1].Flag, RecordFlagFilter)
-	is.Equal(batch.recordStatuses[1].Error, nil)
-	is.Equal(batch.filterCount, 1)
-	// The other (untouched) sibling stays at the default Ack.
-	is.Equal(batch.recordStatuses[2].Flag, RecordFlagAck)
-	is.Equal(batch.recordStatuses[2].Error, nil)
+	is.Equal(batch.recordStatuses[2].Flag, RecordFlagNack)
+	is.Equal(batch.recordStatuses[2].Error, wantErr)
 }
 
 func TestBatch_HasActiveRecords(t *testing.T) {

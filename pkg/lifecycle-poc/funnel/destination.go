@@ -149,11 +149,14 @@ func (t *DestinationTask) validateAcks(acks []connector.DestinationAck, position
 // success and attached its error to the wrong DLQ entry. Marking end->start
 // means a mutation at index i only affects indices ABOVE it, all already
 // resolved and acted on - never the lower indices still to come. This is now
-// defense in depth: Nack no longer mutates the active set at all (it only
-// ever touches the exact resolved index, and Filter's own documented
-// immutability means a Nack call can never target an already-filtered
-// record), but the ordering guarantee is kept so a future change to Nack's
-// semantics can't silently reintroduce the shift.
+// Scope of the guarantee, stated precisely: Do calls this once per
+// destination.Ack() return, with an INCREASING `from`, so the global order of
+// Nack calls is "chunk 0 reversed, then chunk 1 reversed, ...". The reversal
+// therefore protects indices within ONE ack chunk. If a future change made
+// Nack mutate the active set, a mutation in chunk 0 would still shift every
+// index in chunk 1 — closing that would require resolving all physical
+// indices up front, before any mutation. Do not read this reversal as a
+// blanket guarantee against index shift across the whole batch.
 func (t *DestinationTask) markBatchRecords(b *Batch, from int, acks []connector.DestinationAck) {
 	for i := len(acks) - 1; i >= 0; i-- {
 		if acks[i].Error != nil {

@@ -286,3 +286,64 @@ func TestProcessorTask_Do_MultiRecord_SplitThenEmpty_FiltersCorrectRecord(t *tes
 	is.Equal(batch.filterCount, 1)
 	is.Equal(batch.positions, []opencdc.Position{records[0].Position, nil, records[1].Position})
 }
+
+// TestProcessorTask_Do_MultiRecord_PreFilteredBatch_MarksCorrectRecords covers
+// the shape adversarial review found untested: a batch that ALREADY has
+// filtered records when it reaches markBatchRecords.
+//
+// Both existing #2728 regression tests start from a fresh, unfiltered batch, so
+// activeRecordIndices() returns nil on entry and active indices happen to equal
+// physical ones. The full-pipeline property test cannot produce this shape
+// either — it drives a single processor over a fresh batch. But a two-processor
+// chain reaches here with filterCount > 0, which is when the active→physical
+// mapping is non-trivial and an index-shift bug actually bites.
+//
+// Here record 1 is filtered by an earlier stage, then the processor returns
+// [empty, MultiRecord{a,b}, empty] for the three REMAINING active records. On
+// main the wrong record was split; end→start marking puts every decision on the
+// record the processor actually chose.
+func TestProcessorTask_Do_MultiRecord_PreFilteredBatch_MarksCorrectRecords(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	ctrl := gomock.NewController(t)
+	processorMock := NewMockProcessor(ctrl)
+	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
+
+	records := randomRecords(4)
+	batch := NewBatch(slices.Clone(records))
+
+	// An earlier stage filtered record 1: active is now [0, 2, 3].
+	batch.Filter(1)
+	is.Equal(batch.filterCount, 1)
+	is.Equal(len(batch.ActiveRecords()), 3)
+
+	splitInto := randomRecords(2)
+	active := slices.Clone(batch.ActiveRecords())
+	processorMock.EXPECT().Process(ctx, active).Return(
+		toProcessedRecords(
+			active,
+			markMultiRecord(0, []opencdc.Record{}), // filter active[0] == record 0
+			markMultiRecord(1, splitInto),          // split  active[1] == record 2
+			markMultiRecord(2, []opencdc.Record{}), // filter active[2] == record 3
+		),
+	)
+
+	is.NoErr(task.Do(ctx, batch))
+
+	// Record 2 is the one split; records 0 and 3 are the ones filtered. The
+	// pre-existing filter on record 1 is untouched.
+	is.Equal(batch.ActiveRecords(), splitInto)
+	is.Equal(batch.recordStatuses, []RecordStatus{
+		{Flag: RecordFlagFilter}, // record 0: filtered by this pass
+		{Flag: RecordFlagFilter}, // record 1: filtered earlier, untouched
+		{Flag: RecordFlagAck},    // record 2: split piece 0
+		{Flag: RecordFlagAck},    // record 2: split piece 1
+		{Flag: RecordFlagFilter}, // record 3: filtered by this pass
+	})
+	is.Equal(batch.filterCount, 3)
+	is.Equal(batch.positions, []opencdc.Position{
+		records[0].Position, records[1].Position, records[2].Position, nil, records[3].Position,
+	})
+}
