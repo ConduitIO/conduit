@@ -66,6 +66,27 @@ func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Typ
 func (m ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
 	// Precalculate sizes so that we don't need to hold a reference to records
 	// and observations can happen in a goroutine.
+	// An empty batch is legal and reachable, so guard before dividing by the
+	// count. time.Duration(0) makes the division below an integer
+	// divide-by-zero, which PANICS on the worker's own goroutine — not inside
+	// the goroutine spawned below — and a panic on the data path is
+	// unrecoverable: it takes down the whole Conduit process, every pipeline
+	// in it, not just this one.
+	//
+	// Both call sites can pass an empty slice:
+	//   - SourceTask.Do observes whatever source.Read returned, and
+	//     connector.Source.Read does not reject an empty Records slice. The Go
+	//     SDK happens to skip empties, but a non-Go plugin (e.g. the Python
+	//     SDK) is not bound by that.
+	//   - DestinationTask.Do observes records[ackCount:ackCount+len(acks)] and
+	//     validateAcks explicitly permits len(acks) == 0.
+	//
+	// ProcessorTask.Do already guards its own equivalent; the connector path
+	// did not. Nothing to observe means nothing to record — return early.
+	if len(records) == 0 {
+		return
+	}
+
 	sizes := make([]float64, len(records))
 	for i, rec := range records {
 		sizes[i] = m.histogram.SizeOf(rec)
