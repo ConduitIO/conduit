@@ -309,18 +309,70 @@ func (b *Batch) findSplitRecord(i int) (int, int) {
 	return from, to
 }
 
+// clone returns an independent copy of the batch, suitable for handing to a
+// concurrently-running destination branch in a fan-out (see
+// Worker.doNextTask's multi-destination case).
+//
+// records, recordStatuses and splitRecords are fully copied so a branch can
+// mutate them (Ack/Nack/Filter/Retry/SplitRecord) without affecting its
+// siblings or the original batch.
+//
+// positions is intentionally NOT deep-copied: the underlying opencdc.Position
+// values are shared by reference with the original batch across all branches
+// (cheap, and multiAckNacker's per-position tally relies on the exact same
+// position bytes to match votes across branches — see
+// docs/design-documents/20260731-archv2-multiconnector.md). What IS required
+// is that the shared backing ARRAY can never be mutated through one branch's
+// slice header and observed by another's.
+//
+// Before this fix, clone() shared b.positions verbatim (same len AND cap).
+// Batch.SplitRecord grows b.positions via
+// `append(b.positions[:i+1], newElems...)`, and Go's append reuses the
+// backing array whenever spare capacity exists past the slice's length —
+// which it always did here, because slicing to a shorter length does not
+// reduce capacity. Two branches created from the same clone() call therefore
+// shared one growable backing array: if branch A called SplitRecord first, it
+// could silently overwrite index i+1 (and beyond) of the SAME array that
+// branch B's still-unmodified `positions` slice header pointed to, corrupting
+// B's view of its own positions out from under it while B's goroutine was
+// concurrently reading them — a data race with a data-loss blast radius
+// (wrong positions reaching Source.Ack violates invariant 2). This was only
+// reachable once destination fan-out went live (clone() had no caller before
+// slice 3a), so nothing shipped was ever exposed to it, but it would have
+// been the first thing a multi-destination pipeline with a splitting
+// processor hit. slices.Clip caps the capacity to the length (no reallocation
+// happens here — it's a zero-cost 3-index reslice), so the FIRST subsequent
+// SplitRecord call on either branch is forced to allocate a fresh backing
+// array via append, leaving every sibling's slice header (and the original
+// batch) untouched. See TestBatch_Clone_PositionsAliasing.
 func (b *Batch) clone() *Batch {
 	records := make([]opencdc.Record, len(b.records))
 	for i, r := range b.records {
 		records[i] = r.Clone()
 	}
 
+	var splitRecords map[string]opencdc.Record
+	if len(b.splitRecords) > 0 {
+		// Copy the map (not just the reference): SplitRecord writes new
+		// entries into it, and two branches calling SplitRecord concurrently
+		// on a shared map is a concurrent map write - a fatal, unrecoverable
+		// runtime crash, not just a benign race. The stored opencdc.Record
+		// values themselves are never mutated after being stored (only read
+		// back by originalBatch), so a shallow copy - reusing the same
+		// Record values across branches - is safe.
+		splitRecords = make(map[string]opencdc.Record, len(b.splitRecords))
+		for k, v := range b.splitRecords {
+			splitRecords[k] = v
+		}
+	}
+
 	return &Batch{
 		records:        records,
 		recordStatuses: slices.Clone(b.recordStatuses),
-		positions:      b.positions,
+		positions:      slices.Clip(b.positions),
 		tainted:        b.tainted,
 		filterCount:    b.filterCount,
+		splitRecords:   splitRecords,
 	}
 }
 

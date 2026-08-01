@@ -266,3 +266,128 @@ func TestBatch_Clone(t *testing.T) {
 	})
 	is.Equal(batch.splitRecords, nil)
 }
+
+// TestBatch_Clone_PositionsAliasing is the regression test for edge (j) named
+// in the arch-v2 multi-connector slice 3a plan: clone() must never let a
+// SplitRecord call on one fan-out branch corrupt a sibling branch's
+// (or the original batch's) view of its own positions.
+//
+// Before the fix, clone() shared b.positions verbatim - same length AND same
+// capacity as the original. Go's append reuses spare backing-array capacity
+// whenever it's available, and slicing to a shorter length does not reduce
+// capacity, so `append(b.positions[:i+1], newElems...)` (SplitRecord's own
+// implementation) could silently overwrite index i+1 (and beyond) of the
+// SAME backing array every branch's clone still pointed to - a data race
+// with a data-loss blast radius, since a corrupted position could reach
+// Source.Ack (invariant 2).
+//
+// The corruption needs the shared array to have SPARE capacity (cap > len)
+// to reproduce: a batch fresh out of NewBatch always has cap == len (no
+// headroom), so a single split on it always reallocates regardless of the
+// bug - it can never trigger the very first time. Go's append growth
+// strategy over-allocates once a slice DOES grow, though (confirmed
+// empirically: splitting a freshly-built 5-position batch once yields
+// cap=10, len=7), so the reachable scenario - and the one this test
+// reproduces - is a SHARED upstream processor splitting a record before the
+// destination fan-out point (giving the shared batch spare capacity), which
+// is then cloned into M branches that split further, independently, on top
+// of that same spare-capacity array.
+func TestBatch_Clone_PositionsAliasing(t *testing.T) {
+	is := is.New(t)
+
+	newPreSplitBatch := func() *Batch {
+		b := NewBatch(randomRecords(5))
+		b.SplitRecord(1, randomRecords(3)) // gives b.positions spare capacity (cap > len) - see doc comment
+		if cap(b.positions) == len(b.positions) {
+			t.Fatalf("test precondition failed: expected spare capacity after a split, got cap==len==%d", len(b.positions))
+		}
+		return b
+	}
+
+	original := newPreSplitBatch()
+	branchA := original.clone()
+	branchB := original.clone()
+
+	wantBPositions := slices.Clone(branchB.positions)
+	wantOriginalPositions := slices.Clone(original.positions)
+
+	// Split a record on branch A only, indexed into the shared array's spare
+	// capacity. If clone() shared the backing array without capping
+	// capacity, this append reuses (and corrupts) it - branchB's and
+	// original's positions would silently change despite neither being
+	// touched directly.
+	branchA.SplitRecord(3, randomRecords(2))
+
+	is.Equal(branchB.positions, wantBPositions)
+	is.Equal(original.positions, wantOriginalPositions)
+
+	// The concurrent version of the same scenario, run under -race: M
+	// branches split records from the same pre-split source AT THE SAME
+	// TIME, as doNextTask's real fan-out pool does. Without slices.Clip in
+	// clone(), this is a genuine data race on the shared backing array (not
+	// just a logical corruption a serial test might miss), so this loop
+	// gives the race detector many chances to catch it directly.
+	for i := 0; i < 50; i++ {
+		base := newPreSplitBatch()
+		a := base.clone()
+		b := base.clone()
+
+		done := make(chan struct{}, 2)
+		go func() {
+			defer func() { done <- struct{}{} }()
+			a.SplitRecord(3, randomRecords(2))
+		}()
+		go func() {
+			defer func() { done <- struct{}{} }()
+			b.SplitRecord(4, randomRecords(2))
+		}()
+		<-done
+		<-done
+	}
+}
+
+// TestBatch_Clone_PreservesSplitRecords guards the second bug clone() had
+// before this fix: it silently dropped splitRecords entirely (returned nil),
+// losing the ability to restore a record's true original (pre-split)
+// content via originalBatch() once cloned - relevant whenever a SHARED
+// processor (running before a destination fan-out point) already split a
+// record before the batch is cloned per branch. clone() must carry over a
+// COPY of the map (not the same map reference: two branches calling
+// SplitRecord concurrently on a shared map is a fatal concurrent-map-write
+// crash, not just a benign race).
+func TestBatch_Clone_PreservesSplitRecords(t *testing.T) {
+	is := is.New(t)
+	records := randomRecords(3)
+	batch := NewBatch(slices.Clone(records))
+	originalPositions := slices.Clone(batch.positions) // pre-split, for comparison below
+
+	// Simulate a shared upstream processor splitting record 1 BEFORE the
+	// fan-out point clones the batch.
+	batch.SplitRecord(1, randomRecords(2))
+	is.Equal(len(batch.splitRecords), 1)
+
+	branchA := batch.clone()
+	branchB := batch.clone()
+
+	// Both branches see the split, and it collapses back to the true
+	// original record via originalBatch() on EITHER branch independently.
+	is.Equal(len(branchA.splitRecords), 1)
+	is.Equal(len(branchB.splitRecords), 1)
+
+	origFromA := branchA.originalBatch()
+	origFromB := branchB.originalBatch()
+	// Collapsing removes the split fragment (position nil), so the 4
+	// records/positions the split introduced collapse back down to the
+	// original 3.
+	is.Equal(origFromA.positions, originalPositions)
+	is.Equal(origFromA.records[1], records[1]) // the true pre-split original, not a split fragment
+	is.Equal(origFromB.records[1], records[1])
+
+	// The two branches' maps are independent objects: further splitting on
+	// branch A must not appear in branch B's map (this is what makes the
+	// "copy, don't share" fix concurrency-safe - see
+	// TestBatch_Clone_PositionsAliasing for the analogous positions check).
+	branchA.SplitRecord(0, randomRecords(2))
+	is.Equal(len(branchA.splitRecords), 2)
+	is.Equal(len(branchB.splitRecords), 1)
+}
