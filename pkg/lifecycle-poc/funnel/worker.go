@@ -18,6 +18,7 @@ package funnel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"iter"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -502,7 +504,13 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		// here so the tally is keyed by the true root position, not an
 		// intermediate one.
 		orig := b.originalBatch()
-		multiAcker := newMultiAckNacker(acker, len(taskNode.Next), orig.positions)
+		multiAcker, err := newMultiAckNacker(acker, len(taskNode.Next), orig.positions)
+		if err != nil {
+			// Duplicate positions in the batch: fail the pipeline with the
+			// coded error rather than fan out into a silent, unbounded
+			// never-acked stall. See CodeDuplicateSourcePosition.
+			return err
+		}
 
 		p := pool.New().WithErrors()
 		for _, nextTask := range taskNode.Next {
@@ -769,9 +777,25 @@ type multiAckNacker struct {
 // branches concurrently-running destination branches. positions must be
 // captured from the fan-out batch's originalBatch() before cloning it for
 // the branches — see Worker.doNextTask.
-func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Position) *multiAckNacker {
+func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Position) (*multiAckNacker, error) {
 	posIndex := make(map[string]int, len(positions))
 	for i, p := range positions {
+		// Invariant 4: positions are released to the source strictly in
+		// order, so every slot must be individually resolvable. A duplicate
+		// (including two records that both carry an empty/nil position) would
+		// silently shadow the earlier slot in this map: it could never
+		// accumulate votes, never become terminal, and the in-order release
+		// would stop there forever — the ENTIRE batch would then never be
+		// acked to the source, with no error surfaced. Fail loud instead.
+		// See CodeDuplicateSourcePosition.
+		if prev, dup := posIndex[string(p)]; dup {
+			ce := conduiterr.New(CodeDuplicateSourcePosition, fmt.Sprintf(
+				"source emitted duplicate position %q for records %d and %d in the same batch; "+
+					"a position must uniquely identify a record", p, prev, i))
+			ce.Suggestion = "this is a bug in the source connector: ensure every record in a batch " +
+				"carries a distinct, non-empty position"
+			return nil, ce
+		}
 		posIndex[string(p)] = i
 	}
 
@@ -787,7 +811,7 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		record:     make([]opencdc.Record, n),
 		nackErr:    make([]error, n),
 		nackTaskID: make([]string, n),
-	}
+	}, nil
 }
 
 // indexOf returns the tally slot for pos, or an error if pos is not part of

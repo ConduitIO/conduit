@@ -16,11 +16,13 @@ package funnel
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/matryer/is"
 )
 
@@ -124,7 +126,7 @@ func TestMultiAckNacker_UnanimousAck_ReleasesOnce(t *testing.T) {
 	positions := []opencdc.Position{records[0].Position, records[1].Position, records[2].Position}
 
 	parent := &fakeParentAckNacker{}
-	m := newMultiAckNacker(parent, 2, positions)
+	m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 	// Branch 1 acks all three - not yet unanimous, nothing released.
 	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))
@@ -155,7 +157,7 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		positions := []opencdc.Position{records[0].Position}
 
 		parent := &fakeParentAckNacker{}
-		m := newMultiAckNacker(parent, 2, positions)
+		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))                          // branch A acks
 		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks
@@ -174,7 +176,7 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		positions := []opencdc.Position{records[0].Position}
 
 		parent := &fakeParentAckNacker{}
-		m := newMultiAckNacker(parent, 2, positions)
+		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks first
 		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))                          // branch A's ack arrives late
@@ -206,7 +208,7 @@ func TestMultiAckNacker_PartialPerRecordDivergence(t *testing.T) {
 	}
 
 	parent := &fakeParentAckNacker{}
-	m := newMultiAckNacker(parent, 2, positions)
+	m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 	// Destination A: clean batch, acks all 5 in one call (worker.go's
 	// !b.tainted shortcut path).
@@ -246,7 +248,7 @@ func TestMultiAckNacker_OutOfOrderCompletion_ReleasesInSourceOrder(t *testing.T)
 	p0, p1, p2 := records[0].Position, records[1].Position, records[2].Position
 
 	parent := &fakeParentAckNacker{}
-	m := newMultiAckNacker(parent, 2, []opencdc.Position{p0, p1, p2})
+	m := mustNewMultiAckNacker(t, parent, 2, []opencdc.Position{p0, p1, p2})
 
 	// Branch B races ahead and votes for p2 FIRST - only 1 of 2 votes, so it
 	// cannot go terminal yet regardless.
@@ -292,7 +294,7 @@ func TestMultiAckNacker_FatalDLQError_Propagates(t *testing.T) {
 
 	fatalErr := cerrors.FatalError(cerrors.New("DLQ nack threshold exceeded"))
 	parent := &fakeParentAckNacker{nackErr: fatalErr}
-	m := newMultiAckNacker(parent, 2, []opencdc.Position{pos})
+	m := mustNewMultiAckNacker(t, parent, 2, []opencdc.Position{pos})
 
 	err := m.Nack(ctx, nackBatchFor(records, pos, cerrors.New("write failed")), "destA-task")
 	is.True(err != nil)
@@ -317,7 +319,7 @@ func TestMultiAckNacker_UnknownPosition_ReturnsBugError(t *testing.T) {
 	known := records[0].Position
 
 	parent := &fakeParentAckNacker{}
-	m := newMultiAckNacker(parent, 2, []opencdc.Position{known})
+	m := mustNewMultiAckNacker(t, parent, 2, []opencdc.Position{known})
 
 	err := m.Ack(ctx, ackBatchFor(records, records[1].Position)) // records[1].Position was never registered
 	is.True(err != nil)
@@ -334,7 +336,7 @@ func TestMultiAckNacker_ThreeBranches_UnanimousRequiresAllThree(t *testing.T) {
 	pAcked, pNacked := records[0].Position, records[1].Position
 
 	parent := &fakeParentAckNacker{}
-	m := newMultiAckNacker(parent, 3, []opencdc.Position{pAcked, pNacked})
+	m := mustNewMultiAckNacker(t, parent, 3, []opencdc.Position{pAcked, pNacked})
 
 	// pAcked: all 3 branches ack it.
 	is.NoErr(m.Ack(ctx, ackBatchFor(records, pAcked)))
@@ -362,4 +364,63 @@ func TestMultiAckNacker_ThreeBranches_UnanimousRequiresAllThree(t *testing.T) {
 	is.Equal(len(nacks), 1)
 	is.Equal(nacks[0].positions, []opencdc.Position{pNacked})
 	is.Equal(nacks[0].taskID, "destC-task")
+}
+
+// mustNewMultiAckNacker builds a multiAckNacker for tests whose positions are
+// known-unique, failing the test if construction rejects them (see
+// CodeDuplicateSourcePosition).
+func mustNewMultiAckNacker(t *testing.T, parent ackNacker, branches int, positions []opencdc.Position) *multiAckNacker {
+	t.Helper()
+	m, err := newMultiAckNacker(parent, branches, positions)
+	is.New(t).NoErr(err)
+	return m
+}
+
+// TestMultiAckNacker_DuplicatePositions_FailsLoud is the regression test for a
+// silent-stall bug found while reviewing this slice.
+//
+// posIndex maps position bytes to a slot index. Two records in one batch
+// carrying identical positions (including two empty/nil positions) made the
+// map's later entry shadow the earlier one: the shadowed slot could never
+// accumulate ack votes, never became terminal, and because positions are
+// released to the source strictly in order (invariant 4), releaseLocked stopped
+// at that slot forever. Verified before the fix: with 3 positions where #0 and
+// #2 collide, parent.Ack was called ZERO times — the entire batch was never
+// acked to the source, silently and unboundedly, while the pipeline kept
+// running. At-least-once still held (nothing acked, so nothing lost — records
+// replay on restart), but a silent liveness failure with no error is worse for
+// an operator than a clear one.
+//
+// Construction now rejects duplicates with a coded, actionable error instead.
+func TestMultiAckNacker_DuplicatePositions_FailsLoud(t *testing.T) {
+	is := is.New(t)
+	records := randomRecords(3)
+	records[0].Position = opencdc.Position("dup")
+	records[2].Position = opencdc.Position("dup")
+	positions := []opencdc.Position{records[0].Position, records[1].Position, records[2].Position}
+
+	m, err := newMultiAckNacker(&fakeParentAckNacker{}, 2, positions)
+	is.True(m == nil)
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // must be a coded error, not a bare one
+	is.Equal(ce.Code.Reason(), CodeDuplicateSourcePosition.Reason())
+	is.True(strings.Contains(ce.Suggestion, "distinct, non-empty position"))
+}
+
+// TestMultiAckNacker_EmptyPositions_FailsLoud covers the most plausible real
+// trigger of the same bug: a source emitting several records with empty/nil
+// positions, which all collapse to the same "" map key.
+func TestMultiAckNacker_EmptyPositions_FailsLoud(t *testing.T) {
+	is := is.New(t)
+	positions := []opencdc.Position{nil, nil}
+
+	m, err := newMultiAckNacker(&fakeParentAckNacker{}, 2, positions)
+	is.True(m == nil)
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeDuplicateSourcePosition.Reason())
 }
