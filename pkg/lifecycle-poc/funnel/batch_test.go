@@ -234,10 +234,18 @@ func TestBatch_Clone(t *testing.T) {
 		{},
 		{},
 	})
+	// Indices 2 and 3 are the two pieces of the SplitRecord(1, ...) call
+	// above (raw indices 2,3 - pos3 split into 2). clonedBatch.Retry(2)
+	// (active index 2, raw index 3) marks only the SECOND piece, but Retry
+	// propagates across a split run (setFlagEscalating/splitRunFlagTier), so
+	// index 2 (the run's other piece, otherwise left at the default Ack) is
+	// escalated to Retry too - this is the #2723 fix: a split run must never
+	// carry a mix of Ack and Retry, or Worker.subBatchByFlag could later
+	// partition it and ack the run's head before its tail is delivered.
 	is.Equal(clonedBatch.recordStatuses, []RecordStatus{
 		{Flag: RecordFlagFilter},
 		{Flag: RecordFlagNack, Error: nackErr},
-		{Flag: RecordFlagAck},
+		{Flag: RecordFlagRetry},
 		{Flag: RecordFlagRetry},
 	})
 	is.Equal(clonedBatch.positions, []opencdc.Position{

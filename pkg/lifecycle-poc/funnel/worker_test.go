@@ -227,7 +227,8 @@ func TestWorker_subBatchByFlag(t *testing.T) {
 	batch.Filter(2, 4)                 // Filter 2 and 3
 
 	// Ack and Filter are grouped
-	sub := worker.subBatchByFlag(batch, 0)
+	sub, err := worker.subBatchByFlag(batch, 0)
+	is.NoErr(err)
 	is.Equal(len(sub.records), 4)
 	is.Equal(cap(sub.records), 4) // Ensure capacity is correct
 	is.Equal(sub.recordStatuses, []RecordStatus{
@@ -238,13 +239,15 @@ func TestWorker_subBatchByFlag(t *testing.T) {
 	})
 
 	// Nack is alone
-	sub2 := worker.subBatchByFlag(batch, 4)
+	sub2, err := worker.subBatchByFlag(batch, 4)
+	is.NoErr(err)
 	is.Equal(len(sub2.records), 1)
 	is.Equal(cap(sub2.records), 1)
 	is.Equal(sub2.recordStatuses[0].Flag, RecordFlagNack)
 
 	// Out of bounds
-	sub3 := worker.subBatchByFlag(batch, 5)
+	sub3, err := worker.subBatchByFlag(batch, 5)
+	is.NoErr(err)
 	is.Equal(sub3, nil)
 }
 

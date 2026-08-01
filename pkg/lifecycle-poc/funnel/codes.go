@@ -57,3 +57,27 @@ var CodeDuplicateSourcePosition = conduiterr.Register("pipeline.duplicate_source
 // run (a Retry/Filter that does not propagate across the run). The suggestion
 // therefore points at the processor chain, not the source.
 var CodeEmptySourcePosition = conduiterr.Register("pipeline.empty_source_position", codes.FailedPrecondition)
+
+// CodeSplitRunPartitioned is returned when Worker.subBatchByFlag is about to
+// build a sub-batch whose boundary cuts through the middle of a split run
+// (see Batch.SplitRecord) — some of the run's pieces inside the proposed
+// sub-batch, the rest outside it.
+//
+// This should never happen: Batch.Retry, Batch.Filter and Batch.Nack all
+// propagate their flag across a whole split run (splitRunFlagTier in
+// batch.go), specifically so a run always carries one uniform flag and
+// subBatchByFlag's same-flag grouping can never cut through the middle of
+// it. If this error fires anyway, that guarantee has regressed — most likely
+// a new flag-setting code path was added without routing it through the
+// tiered propagation.
+//
+// This is a second line of defense behind that propagation, not a substitute
+// for it: it exists because the alternative is the exact bug this whole
+// mechanism was added to close (#2723) — a sub-batch covering only the head
+// of a split run collapses (via Batch.originalBatch) to the original
+// position and gets acked while the rest of the run has gone nowhere,
+// violating invariants 1 and 3. Failing loud here, before that ack/nack call
+// is ever made, converts a silent data-loss bug into a stopped pipeline with
+// a coded, actionable error — the same trade CodeEmptySourcePosition makes
+// for the nil-tail half of this shape.
+var CodeSplitRunPartitioned = conduiterr.Register("pipeline.split_run_partitioned", codes.Internal)

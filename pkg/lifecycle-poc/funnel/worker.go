@@ -385,7 +385,10 @@ func (w *Worker) doTask(
 	// status before further processing.
 	idx := 0
 	for {
-		subBatch := w.subBatchByFlag(b, idx)
+		subBatch, err := w.subBatchByFlag(b, idx)
+		if err != nil {
+			return err
+		}
 		if subBatch == nil {
 			w.logger.Trace(ctx).Msg("processed last batch")
 			break
@@ -454,9 +457,17 @@ func (w *Worker) doTask(
 
 // subBatchByFlag collects a sub-batch of records with the same status starting
 // from the given index. It returns nil if firstIndex is out of bounds.
-func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
+//
+// It returns an error if the resulting boundary would partition a split run
+// (see validateSplitRunBoundary) — a defensive backstop, not the primary
+// safeguard: Batch.Retry, Batch.Filter and Batch.Nack are what actually
+// guarantee a split run always carries one uniform flag (splitRunFlagTier in
+// batch.go), so in practice this check should never trip. It exists so that
+// if that guarantee ever regresses, the failure is a loud coded error
+// instead of the silent premature ack #2723 was filed for.
+func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) (*Batch, error) {
 	if firstIndex >= len(b.recordStatuses) {
-		return nil
+		return nil, nil
 	}
 
 	flags := make([]RecordFlag, 0, 2)
@@ -483,7 +494,54 @@ OUTER:
 		break
 	}
 
-	return b.sub(firstIndex, lastIndex)
+	if err := validateSplitRunBoundary(b, firstIndex, lastIndex); err != nil {
+		return nil, err
+	}
+
+	return b.sub(firstIndex, lastIndex), nil
+}
+
+// validateSplitRunBoundary reports an error if the proposed sub-batch bounds
+// [firstIndex, lastIndex) cut through the middle of a split run instead of
+// containing it entirely or excluding it entirely. Split runs are always
+// physically contiguous in a batch (see the splitRecords field), so a single
+// interval boundary can only ever partition a run at one of its two edges —
+// checking both edges (the first and last record the proposed sub-batch
+// would contain) is therefore sufficient to catch every possible partition,
+// including the case where the boundary lands mid-run on both sides at once.
+//
+// See CodeSplitRunPartitioned for why this fires loud rather than letting
+// the partition through.
+func validateSplitRunBoundary(b *Batch, firstIndex, lastIndex int) error {
+	if len(b.splitRecords) == 0 {
+		return nil
+	}
+
+	checkEdge := func(idx int) error {
+		pos := b.positions[idx]
+		_, isHead := b.splitRecords[pos.String()]
+		if pos != nil && !isHead {
+			return nil // idx is not part of a split run.
+		}
+
+		from, to := b.findSplitRecord(idx)
+		if from < firstIndex || to >= lastIndex {
+			ce := conduiterr.New(CodeSplitRunPartitioned, fmt.Sprintf(
+				"split run spanning batch indices [%d,%d] was about to be partitioned by a sub-batch "+
+					"boundary [%d,%d): this would ack or nack part of a split record before the rest of it "+
+					"was durably handled",
+				from, to, firstIndex, lastIndex))
+			ce.Suggestion = "this is an internal invariant violation (see #2723), not a connector or " +
+				"processor bug; please report it"
+			return ce
+		}
+		return nil
+	}
+
+	if err := checkEdge(firstIndex); err != nil {
+		return err
+	}
+	return checkEdge(lastIndex - 1)
 }
 
 // doNextTask advances the batch b to whatever comes after taskNode. A single

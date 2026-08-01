@@ -111,13 +111,21 @@ if profiling ever shows otherwise.
   regresses to dropping that map, `multiAckNacker`'s correctness claim above no longer holds for
   pipelines with pre-fan-out splitting.
 
-  **Known gap (narrowing this claim):** convergence assumes a split run carries a _uniform_ status
-  flag. `Batch.Nack` propagates across a run, but `Retry` and `Filter` do not — so a sub-batch can
-  cover only the _head_ of a split run and vote ack for the original position before the tail has
-  been delivered. Tracked as issue #2723; the nil-tail half of that shape is already contained by
-  `validateAckPositions` (an empty position is refused rather than acked, which would otherwise
-  overwrite the durable source position), but the head case remains open. Do not read the
-  convergence claim as covering `Retry`/`Filter`-partitioned split runs.
+  **Known gap, closed:** convergence assumes a split run carries a _uniform_ status flag.
+  `Batch.Nack` propagated across a run from the start, but `Retry` and `Filter` did not — so a
+  sub-batch could cover only the _head_ of a split run and vote ack for the original position
+  before the tail had been delivered. Filed as issue #2723; the nil-tail half of that shape was
+  already contained by `validateAckPositions` (an empty position is refused rather than acked,
+  which would otherwise overwrite the durable source position), but the head case remained open.
+  Fixed by giving every flag that can leave a record "not yet done" (`Retry`, `Filter`, alongside
+  the pre-existing `Nack`) the same whole-run propagation, ranked so a stronger flag can never be
+  downgraded by a weaker one touching a different piece of the same run (`splitRunFlagTier` in
+  `pkg/lifecycle-poc/funnel/batch.go`) — a split run now always carries one uniform flag, so
+  `Worker.subBatchByFlag`'s same-flag grouping can no longer land on a partial run. A defensive,
+  coded backstop (`CodeSplitRunPartitioned`, `validateSplitRunBoundary` in worker.go) rejects a
+  partitioned boundary outright if this guarantee ever regresses, rather than silently allowing a
+  premature ack. The convergence claim above now covers `Retry`/`Filter`-partitioned split runs
+  too, not just `Nack`-partitioned ones.
 - **Extending to N sources is out of scope for this decision.** This ADR only covers 1 source, M
   destinations. A future N-source slice would need its own decision about how (or whether) acks
   compose across multiple `funnel.Worker` instances — not addressed here.

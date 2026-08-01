@@ -105,8 +105,12 @@ func (b *Batch) Nack(i int, errs ...error) {
 // Note that the indices i and j point to the slice returned by ActiveRecords.
 // If the slice contains filtered records, the filtered records are skipped and
 // not marked to be retried.
+//
+// If any of the marked records belongs to a split run (see SplitRecord), the
+// Retry flag propagates to every other record in that run - see
+// setFlagEscalating and splitRunFlagTier for why.
 func (b *Batch) Retry(i int, j ...int) {
-	b.setFlagNoErr(RecordFlagRetry, i, j...)
+	b.setFlagEscalating(RecordFlagRetry, i, j...)
 	b.tainted = true
 }
 
@@ -120,13 +124,15 @@ func (b *Batch) Retry(i int, j ...int) {
 // Note that the indices i and j point to the slice returned by ActiveRecords.
 // If the slice contains filtered records, the filtered records are skipped and
 // not marked to be retried.
+//
+// Filtering never overrides a stronger flag (Retry/Nack) already present
+// elsewhere in the same split run - see setFlagEscalating and
+// splitRunFlagTier. filterCount is maintained by setFlagEscalating as part of
+// applying the flag, not here, so that a filter that gets refused (because a
+// sibling split-run record already escalated this one past RecordFlagFilter)
+// never gets double-counted.
 func (b *Batch) Filter(i int, j ...int) {
-	b.setFlagNoErr(RecordFlagFilter, i, j...)
-	end := i + 1
-	if len(j) == 1 {
-		end = j[0]
-	}
-	b.filterCount += end - i
+	b.setFlagEscalating(RecordFlagFilter, i, j...)
 }
 
 // SetRecords replaces the records in the batch starting at index i with the
@@ -262,6 +268,13 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 // assigned to the records starting at index i. If an error is assigned to a
 // split record, all records in the split record are marked with the same flag
 // and error.
+//
+// Only Nack calls this today. The primary record (idx) is always set
+// unconditionally, matching Nack's existing (pre-#2723) behaviour: Nack is
+// the highest tier in splitRunFlagTier, so it can never legitimately be
+// downgraded by a later touch within the same task, and unconditional
+// overwrite has always been how it wins over a sibling split-run record that
+// was previously Filtered or marked for Retry.
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
@@ -273,8 +286,7 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 		}
 
 		// Set the flag and error for this record.
-		b.recordStatuses[idx].Flag = f
-		b.recordStatuses[idx].Error = err
+		b.setRecordFlag(idx, f, err)
 
 		// Handle split records when nacking.
 		if len(b.splitRecords) > 0 && f == RecordFlagNack {
@@ -285,10 +297,145 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 				// records in the split record.
 				from, to := b.findSplitRecord(idx)
 				for j := from; j <= to; j++ {
-					b.recordStatuses[j].Flag = f
-					b.recordStatuses[j].Error = err
+					b.setRecordFlag(j, f, err)
 				}
 			}
+		}
+	}
+}
+
+// splitRunFlagTier ranks a flag by how strongly it must propagate across a
+// split run (the pieces SplitRecord produces from one original record, see
+// the splitRecords field). RecordFlagAck and RecordFlagFilter share the
+// lowest tier because Worker.subBatchByFlag already groups them into a
+// single sub-batch (its "Collect Filters and Acks together" case), so a
+// split run made only of Ack/Filter pieces can never be partitioned by it and
+// needs no further protection here. RecordFlagRetry outranks both: a run
+// that isn't fully done with the current task must be held back and
+// resubmitted as a whole rather than letting some pieces move on ahead of
+// it. RecordFlagNack outranks everything: any single failed piece condemns
+// the entire run (see setFlagWithErr, which predates this ranking but is
+// equivalent to it since Nack already sits at the top).
+//
+// setFlagEscalating and setRecordFlag use this ranking to decide whether a
+// flag write is allowed: a record's flag may only escalate (move to a
+// strictly higher tier) or hold, never downgrade. That asymmetry is what
+// guarantees a split run always ends up carrying one uniform flag - and
+// therefore can never be torn apart by Worker.subBatchByFlag into a
+// sub-batch that covers only part of the run, regardless of the order in
+// which ProcessorTask.Do happens to mark its output ranges (it marks them
+// from the end of the batch towards the start; see the comment there).
+//
+// Invariant 1/3 (design rationale): before this ranking existed, a split
+// run's head could be acked while its tail (marked for Retry or Filter by a
+// later processor that returned fewer records than it received) had gone
+// nowhere - #2723.
+func splitRunFlagTier(f RecordFlag) int {
+	switch f { //nolint:exhaustive // Ack and Filter are intentionally the same tier, handled by default.
+	case RecordFlagNack:
+		return 2
+	case RecordFlagRetry:
+		return 1
+	default: // RecordFlagAck, RecordFlagFilter
+		return 0
+	}
+}
+
+// setRecordFlag writes flag f (and, for a Nack, error err) to the record at
+// idx unless idx already carries a strictly stronger flag per
+// splitRunFlagTier, in which case the write is silently ignored (never
+// downgrade). It keeps filterCount in sync with any Filter <-> non-Filter
+// transition, so HasActiveRecords/ActiveRecords stay accurate even when a
+// record is escalated away from Filter by a sibling split-run record's
+// Retry or Nack (see setFlagEscalating).
+func (b *Batch) setRecordFlag(idx int, f RecordFlag, err error) {
+	if splitRunFlagTier(f) < splitRunFlagTier(b.recordStatuses[idx].Flag) {
+		return
+	}
+	switch {
+	case b.recordStatuses[idx].Flag == RecordFlagFilter && f != RecordFlagFilter:
+		b.filterCount--
+	case f == RecordFlagFilter && b.recordStatuses[idx].Flag != RecordFlagFilter:
+		b.filterCount++
+	}
+	b.recordStatuses[idx].Flag = f
+	if f == RecordFlagNack {
+		b.recordStatuses[idx].Error = err
+	}
+}
+
+// setFlagEscalating sets the flag for the record at index i (or, with a
+// second index j, every record in [i, j)) to f, tier-guarded per
+// splitRunFlagTier: it is used for RecordFlagRetry and RecordFlagFilter,
+// neither of which may downgrade a record a prior touch within the same task
+// already escalated to a stronger flag.
+//
+// If a marked record belongs to a split run, the same tier-guarded write is
+// propagated to every other record in that run (see escalateFlag). This is
+// the mechanism that makes Retry and Filter behave like Nack already did
+// (setFlagWithErr): a split run can never end up carrying a mix of "done
+// with this task" (Ack/Filter) and "not yet" (Retry) that
+// Worker.subBatchByFlag would partition into separate sub-batches - the
+// exact shape that let a split run's head be acked before the rest of the
+// run was ever delivered anywhere (#2723).
+func (b *Batch) setFlagEscalating(f RecordFlag, i int, j ...int) {
+	// TODO: we should not have to recalculate the active record indices every time.
+	activeIndices := b.activeRecordIndices()
+	end := i + 1
+	switch len(j) {
+	case 0:
+	case 1:
+		if i >= j[0] {
+			panic(fmt.Sprintf("invalid range (%d >= %d)", i, j[0]))
+		}
+		end = j[0]
+	default:
+		panic(fmt.Sprintf("too many arguments (%d)", len(j)))
+	}
+
+	for k := i; k < end; k++ {
+		idx := k
+		if activeIndices != nil {
+			// We have filtered records, so we need to use the active index.
+			idx = activeIndices[k]
+		}
+		b.escalateFlag(idx, f)
+	}
+}
+
+// escalateFlag sets the flag of the record at idx to f via setRecordFlag
+// (which refuses to downgrade a strictly stronger existing flag). If idx is
+// part of a split run (its position is nil, or it is the run's head - i.e.
+// its position is a key in splitRecords), the escalation also propagates to
+// every OTHER record in that run, but only where it is a strict upgrade for
+// that specific sibling (splitRunFlagTier(f) > the sibling's current tier).
+//
+// The strict (not "or equal") comparison for siblings is deliberate: it is
+// what stops Filter (tier 0) from ever being pushed onto an Ack sibling
+// (also tier 0) it did not itself choose. Doing that would silently drop the
+// sibling's real output from ActiveRecords - a data-loss bug of its own, not
+// the one this function exists to close. Retry and Nack (tiers 1 and 2)
+// still escalate tier-0 siblings (both Ack and Filter) without any special
+// case, because they are strictly higher.
+func (b *Batch) escalateFlag(idx int, f RecordFlag) {
+	b.setRecordFlag(idx, f, nil)
+
+	if len(b.splitRecords) == 0 {
+		return
+	}
+	pos := b.positions[idx]
+	_, isHead := b.splitRecords[pos.String()]
+	if pos != nil && !isHead {
+		return // idx is not part of a split run.
+	}
+
+	from, to := b.findSplitRecord(idx)
+	for k := from; k <= to; k++ {
+		if k == idx {
+			continue
+		}
+		if splitRunFlagTier(f) > splitRunFlagTier(b.recordStatuses[k].Flag) {
+			b.setRecordFlag(k, f, nil)
 		}
 	}
 }
