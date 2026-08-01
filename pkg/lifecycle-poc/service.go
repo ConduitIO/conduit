@@ -367,6 +367,24 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		var mu sync.Mutex
 		var errs []error
 		armed := make([]bool, len(rp.workers))
+
+		// F1 (review of the H1 fix): snapshot each worker's stop flag BEFORE
+		// dispatching, and count a worker as armed only if THIS call flipped it
+		// false->true. Worker.Stopping() reports w.stop, which is worker-owned
+		// and can already be true for a reason nothing to do with this Stop —
+		// the io.EOF branch sets it when a source exhausts ITSELF. Reading it
+		// afterwards conflated "this Stop armed it" with "it stopped itself",
+		// so an ordinary slow graceful stop of a live source, alongside a
+		// sibling that had exhausted an hour earlier, looked like a partial
+		// teardown and escalated to a FATAL kill: the live source's in-flight
+		// batch cancelled instead of drained, and Degraded instead of the
+		// retriable "nothing armed" outcome. The escalation's premise is
+		// "sources torn down BY THIS CALL", so that is what must be measured.
+		preArmed := make([]bool, len(rp.workers))
+		for i, w := range rp.workers {
+			preArmed[i] = w.Stopping()
+		}
+
 		wg.Add(len(rp.workers))
 		for i, w := range rp.workers {
 			go func(i int, w *funnel.Worker) {
@@ -381,13 +399,25 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 				// Stop does BEFORE attempting source teardown - so this is
 				// accurate even when Stop itself went on to return an error
 				// (a wedged/dead source's teardown failing AFTER arming).
-				armed[i] = w.Stopping()
+				armed[i] = !preArmed[i] && w.Stopping()
 			}(i, w)
 		}
 		wg.Wait()
 
+		// A worker that had ALREADY stopped itself before this call (preArmed —
+		// e.g. a source that exhausted via io.EOF) is neither armed-by-us nor
+		// failed-to-arm: it is simply gone, and workersWg already accounts for
+		// its exit. It must be excluded from BOTH sets. Counting it as armed
+		// would be the original F1 bug (a self-exhausted sibling making an
+		// ordinary slow stop look partial); counting it as unarmed is the
+		// mirror image of the same mistake, and would escalate a perfectly
+		// healthy "one source finished, the other stopped cleanly" pipeline to
+		// a fatal forced stop.
 		var armedSources, unarmedSources []string
 		for i, a := range armed {
+			if preArmed[i] {
+				continue
+			}
 			if a {
 				armedSources = append(armedSources, rp.sourceIDs[i])
 			} else {
@@ -424,7 +454,10 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// every still-unarmed worker's blocked Read (or its wait for
 			// sharedMu/processingLock) observes cancellation on its next
 			// check and unwinds via the context.Canceled path in
-			// Worker.doTaskAttempt - guaranteeing workersWg DOES drain and
+			// Worker.doTaskAttempt - guaranteeing workersWg drains once any in-flight shared
+			// write completes — sharedMu is a plain mutex with no ctx
+			// awareness, so a sibling blocked on it is released by the current
+			// holder finishing, not by cancellation and
 			// the cleanup goroutine DOES run, reporting a terminal
 			// (Degraded) status instead of an invisible half-stopped
 			// pipeline. This trades "graceful" for "terminates
@@ -613,6 +646,32 @@ const DefaultStopAndWaitTimeout = 30 * time.Second
 // StopAndWait requires the pipeline to already be running (it delegates to
 // Stop, which returns pipeline.ErrPipelineNotRunning-coded errors otherwise)
 // and only ever stops gracefully.
+// isPartialStopEscalation reports whether err (typically a cerrors.Join tree
+// from stopRunnablePipeline) contains a CodePartialGracefulStopEscalated
+// anywhere, regardless of how many other coded errors precede it. See the call
+// site in StopAndWait for why first-match is not sufficient.
+func isPartialStopEscalation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ce, ok := conduiterr.Get(err); ok && ce.Code == CodePartialGracefulStopEscalated {
+		return true
+	}
+	// Walk the rest of the join tree: Get/As stops at the first match, so a
+	// coded sibling appearing earlier would otherwise mask the escalation.
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if isPartialStopEscalation(e) {
+				return true
+			}
+		}
+	}
+	if u := cerrors.Unwrap(err); u != nil {
+		return isPartialStopEscalation(u)
+	}
+	return false
+}
+
 func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 	deadline := time.Now().Add(DefaultStopAndWaitTimeout)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
@@ -635,7 +694,18 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 		// cerrors.Is(err, context.DeadlineExceeded) and fall into that
 		// generic branch, surfacing a FALSE "safe to retry" claim for a
 		// pipeline that is actually being force-stopped.
-		if ce, ok := conduiterr.Get(err); ok && ce.Code == CodePartialGracefulStopEscalated {
+		// F3 (review): match the escalation by walking EVERY coded error in the
+		// join tree, not just the first. conduiterr.Get is cerrors.As, which
+		// returns the first *ConduitError in a pre-order walk — and
+		// stopRunnablePipeline appends the per-worker Stop errors (in
+		// nondeterministic goroutine order) BEFORE the escalation error. Today
+		// every Worker.Stop failure path yields an uncoded error so Get happens
+		// to find the escalation, but the moment one of them becomes coded the
+		// escalation would be skipped and control would fall through to the
+		// generic DeadlineExceeded arm below — printing the exact "still
+		// running, safe to retry" text this escalation exists to suppress, for
+		// a pipeline that was just force-killed.
+		if isPartialStopEscalation(err) {
 			return s.stopAndWaitTimeoutErr(pipelineID, "stop-escalated", err)
 		}
 		if cerrors.Is(err, context.DeadlineExceeded) {
@@ -1352,6 +1422,32 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				Str(log.PipelineIDField, rp.pipeline.ID).
 				Str(log.ConnectorIDField, sourceID).
 				Msg("pipeline source worker stopped")
+
+			// F2 (review of the H2 fix): record the ROOT-CAUSE error on the
+			// tomb here, immediately after Do returns and BEFORE the
+			// multi-second w.Close below (source teardown waits on a persister
+			// flush). tomb.v2 keeps only the FIRST reason, so whoever Kills
+			// first defines the pipeline's terminal classification.
+			//
+			// The H2 poison fix moved that race. Previously a sibling blocked
+			// on sharedMu was released only by ctx cancellation, which happens
+			// strictly AFTER this worker's Kill — so the root cause always won.
+			// Now the deferred sharedMu.Unlock() fires inside doTask, waking
+			// the sibling long before this goroutine reaches its Kill; the
+			// sibling then refuses entry with the non-fatal
+			// CodeSharedDestinationPoisoned and races us to Kill through its
+			// own w.Close. If it won, a FATAL root cause (e.g.
+			// CodeRetryNotConverging, which #2732 landed precisely to fail
+			// loud) would be masked by a non-fatal collateral error — flipping
+			// the pipeline out of Degraded and into the recovery arm, to
+			// restart against a processor that will never converge, and
+			// showing the operator the symptom instead of the cause.
+			//
+			// Killing before Close closes that window: the sibling still has
+			// to unwind and run its own Close before it can Kill.
+			if doErr != nil {
+				rp.t.Kill(doErr)
+			}
 
 			// Invariant (crux of slice 3b): Worker.Close now only tears down
 			// THIS worker's own source and its own per-source DLQ — the
