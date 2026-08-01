@@ -40,3 +40,20 @@ import (
 // Emitting duplicate positions within one batch is a connector contract
 // violation, so this is a user-actionable error, not an internal assertion.
 var CodeDuplicateSourcePosition = conduiterr.Register("pipeline.duplicate_source_position", codes.FailedPrecondition)
+
+// CodeEmptySourcePosition is returned when a batch about to be acked to the
+// source contains a record with an empty/nil position.
+//
+// connector.Source.Ack persists State.Position = p[len(p)-1] unconditionally,
+// so acking an empty position OVERWRITES the durable source position with
+// nothing: on restart the source resumes from an empty position — a full
+// re-snapshot for Postgres, offset 0 for file/Kafka. That is an invariant-2
+// (monotonic, crash-safe positions) violation.
+//
+// Unlike CodeDuplicateSourcePosition, this is usually NOT the source
+// connector's fault. Batch.SplitRecord gives every piece after the first a nil
+// position, so a sub-batch that covers only the tail of a split run collapses
+// to nils — which happens when a later processor returns only part of a split
+// run (a Retry/Filter that does not propagate across the run). The suggestion
+// therefore points at the processor chain, not the source.
+var CodeEmptySourcePosition = conduiterr.Register("pipeline.empty_source_position", codes.FailedPrecondition)

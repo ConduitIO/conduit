@@ -409,9 +409,8 @@ func TestMultiAckNacker_DuplicatePositions_FailsLoud(t *testing.T) {
 	is.True(strings.Contains(ce.Suggestion, "distinct, non-empty position"))
 }
 
-// TestMultiAckNacker_EmptyPositions_FailsLoud covers the most plausible real
-// trigger of the same bug: a source emitting several records with empty/nil
-// positions, which all collapse to the same "" map key.
+// TestMultiAckNacker_EmptyPositions_FailsLoud: nil positions are rejected, and
+// attributed to the processor chain (SplitRecord makes them), NOT to the source.
 func TestMultiAckNacker_EmptyPositions_FailsLoud(t *testing.T) {
 	is := is.New(t)
 	positions := []opencdc.Position{nil, nil}
@@ -422,5 +421,56 @@ func TestMultiAckNacker_EmptyPositions_FailsLoud(t *testing.T) {
 
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
-	is.Equal(ce.Code.Reason(), CodeDuplicateSourcePosition.Reason())
+	is.Equal(ce.Code.Reason(), CodeEmptySourcePosition.Reason())
+}
+
+// TestMultiAckNacker_SingleEmptyPosition_Rejected is the regression test for a
+// position-WIPE bug found by adversarial review of this PR.
+//
+// The duplicate guard keys on string(p), so TWO nils collide and were caught —
+// but a SINGLE nil sailed straight through. That is reachable: SplitRecord
+// gives every piece after the first a nil position, so a sub-batch covering
+// only the tail of a split run collapses to exactly [nil]. It then reached
+// connector.Source.Ack, which persists State.Position = p[len(p)-1]
+// unconditionally — overwriting the durable source position with NOTHING. On
+// restart the source resumes from an empty position: a full re-snapshot for
+// Postgres, offset 0 for file/Kafka. Invariant 2 (monotonic, crash-safe
+// positions) violated, with a far worse blast radius than the stall the
+// duplicate guard was written to close.
+func TestMultiAckNacker_SingleEmptyPosition_Rejected(t *testing.T) {
+	is := is.New(t)
+
+	m, err := newMultiAckNacker(&fakeParentAckNacker{}, 2, []opencdc.Position{nil})
+	is.True(m == nil)
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeEmptySourcePosition.Reason())
+}
+
+// TestValidateAckPositions_RejectsEmpty guards the actual corruption site.
+// Worker.Ack calls this before connector.Source.Ack, so the protection covers
+// the single-destination (M=1) path too — where the same [nil] sub-batch would
+// otherwise wipe the position with no fan-out involved at all.
+func TestValidateAckPositions_RejectsEmpty(t *testing.T) {
+	is := is.New(t)
+
+	is.NoErr(validateAckPositions([]opencdc.Position{
+		opencdc.Position("p0"), opencdc.Position("p1"),
+	}))
+
+	for _, tc := range [][]opencdc.Position{
+		{nil},
+		{opencdc.Position("p0"), nil},
+		{opencdc.Position{}},
+	} {
+		err := validateAckPositions(tc)
+		is.True(err != nil)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code.Reason(), CodeEmptySourcePosition.Reason())
+		// The blame must point at the processor chain, not the source.
+		is.True(strings.Contains(ce.Suggestion, "processor"))
+	}
 }

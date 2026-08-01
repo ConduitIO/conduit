@@ -529,6 +529,24 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	originalBatch := batch.originalBatch()
+
+	// Invariant 2: positions are monotonic and crash-safe. connector.Source.Ack
+	// persists State.Position = p[len(p)-1] unconditionally, so handing it an
+	// empty/nil position OVERWRITES the durable source position with nothing —
+	// on restart the source resumes from an empty position, which for Postgres
+	// means a full re-snapshot and for file/Kafka means offset 0. That is a
+	// monotonicity violation with a far worse blast radius than the stall this
+	// check's sibling guard (CodeDuplicateSourcePosition) prevents.
+	//
+	// A nil position here is never the source's fault: Batch.SplitRecord marks
+	// every piece after the first with a nil position, and a sub-batch that
+	// happens to cover only that tail collapses to nils. Failing loud is the
+	// only safe response — the records are simply not acked, so they replay on
+	// restart (invariant 3 preserved), whereas proceeding corrupts the position.
+	if err := validateAckPositions(originalBatch.positions); err != nil {
+		return err
+	}
+
 	err := w.Source.Ack(ctx, originalBatch.positions)
 	if err != nil && !isClosedSourceStream(err) {
 		return cerrors.Errorf("failed to ack %d records in source: %w", len(originalBatch.positions), err)
@@ -540,6 +558,27 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 
 	w.DLQ.Ack(ctx, batch)
 	w.updateTimer(batch.records)
+	return nil
+}
+
+// validateAckPositions rejects a position slice that is about to be handed to
+// connector.Source.Ack but contains an empty/nil entry. See Worker.Ack for why
+// this is invariant-2 corruption rather than a cosmetic problem, and
+// CodeEmptySourcePosition for who is actually at fault.
+func validateAckPositions(positions []opencdc.Position) error {
+	for i, p := range positions {
+		if len(p) != 0 {
+			continue
+		}
+		ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
+			"refusing to ack an empty position (index %d of %d) to the source: "+
+				"acking it would overwrite the durable source position and force a full re-read on restart",
+			i, len(positions)))
+		ce.Suggestion = "this usually means a processor split a record and a later processor returned " +
+			"only part of the split run; the records are not acked and will be redelivered, but the " +
+			"pipeline is stopped to protect the source position"
+		return ce
+	}
 	return nil
 }
 
@@ -788,12 +827,24 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		// would stop there forever — the ENTIRE batch would then never be
 		// acked to the source, with no error surfaced. Fail loud instead.
 		// See CodeDuplicateSourcePosition.
+		// An EMPTY position is checked first and attributed separately: two nils
+		// would also trip the duplicate check below, but blaming the source for
+		// them is wrong — nil positions come from Batch.SplitRecord, i.e. the
+		// processor chain. A single nil never trips the duplicate check at all,
+		// which is why validateAckPositions guards the corruption site too.
+		if len(p) == 0 {
+			ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
+				"record %d of %d in a fanned-out batch has an empty position", i, len(positions)))
+			ce.Suggestion = "this usually means a processor split a record and a later processor " +
+				"returned only part of the split run; fix the processor chain so split runs stay intact"
+			return nil, ce
+		}
 		if prev, dup := posIndex[string(p)]; dup {
 			ce := conduiterr.New(CodeDuplicateSourcePosition, fmt.Sprintf(
-				"source emitted duplicate position %q for records %d and %d in the same batch; "+
-					"a position must uniquely identify a record", p, prev, i))
-			ce.Suggestion = "this is a bug in the source connector: ensure every record in a batch " +
-				"carries a distinct, non-empty position"
+				"records %d and %d in the same batch carry the identical position %q; "+
+					"a position must uniquely identify a record", prev, i, p))
+			ce.Suggestion = "if these records came straight from the source, this is a source-connector " +
+				"bug: every record in a batch must carry a distinct, non-empty position"
 			return nil, ce
 		}
 		posIndex[string(p)] = i
