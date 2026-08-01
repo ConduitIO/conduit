@@ -599,18 +599,22 @@ func (w *Worker) doTaskAttempt(
 					ce := conduiterr.New(CodeRetryNotConverging, fmt.Sprintf(
 						"task %s: retry made no progress for %d consecutive attempt(s) "+
 							"(of %d total): %d record(s) were fed to the processor and "+
-							"%d are still unresolved — the processor is returning the "+
-							"same unresolved records without ever processing, filtering, "+
-							"or erroring any of them",
+							"%d came back with no result at all — not processed, not "+
+							"filtered, not errored",
 						t.ID(), stall, retry.count+1, retry.size, size,
 					))
 					ce.Suggestion = fmt.Sprintf(
-						"task %q is not converging on a retry: check its logic for a "+
-							"condition that always returns fewer records than it "+
-							"receives for this input (e.g. a size threshold or "+
-							"rate-limit path that is never satisfied); no records were "+
-							"acked, they will be redelivered on restart", t.ID())
-					return ce
+						"task %q returned an empty/unset result for these records rather "+
+							"than a processed record, a filter, or an error. For a "+
+							"standalone (WASM) processor this usually means a malformed or "+
+							"version-mismatched plugin sending a ProcessedRecord with no "+
+							"Record set; check the plugin build and its processor-SDK "+
+							"version. NOTE: a processor that merely returns FEWER records "+
+							"than it received is not this condition — that shrinks the "+
+							"retry group and converges normally. No records were acked; "+
+							"they will be redelivered on restart", t.ID(),
+					)
+					return cerrors.FatalError(ce)
 				}
 				next = &retryAttempt{count: retry.count + 1, size: size, stall: stall}
 			}
@@ -626,8 +630,9 @@ func (w *Worker) doTaskAttempt(
 						"if it is genuinely converging (shrinking every attempt) on "+
 						"unusually large batches, reduce the source's batch size — "+
 						"no records were acked, they will be redelivered on restart",
-					t.ID(), maxRetryAttempts)
-				return ce
+					t.ID(), maxRetryAttempts,
+				)
+				return cerrors.FatalError(ce)
 			}
 
 			err := w.doTaskAttempt(ctx, taskNode, subBatch, acker, next)
@@ -802,7 +807,8 @@ func validateAckPositions(positions []opencdc.Position) error {
 		ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
 			"refusing to ack an empty position (index %d of %d) to the source: "+
 				"acking it would overwrite the durable source position and force a full re-read on restart",
-			i, len(positions)))
+			i, len(positions),
+		))
 		ce.Suggestion = "this usually means a processor split a record and a later processor returned " +
 			"only part of the split run; the records are not acked and will be redelivered, but the " +
 			"pipeline is stopped to protect the source position"
@@ -1063,7 +1069,8 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		// which is why validateAckPositions guards the corruption site too.
 		if len(p) == 0 {
 			ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
-				"record %d of %d in a fanned-out batch has an empty position", i, len(positions)))
+				"record %d of %d in a fanned-out batch has an empty position", i, len(positions),
+			))
 			ce.Suggestion = "this usually means a processor split a record and a later processor " +
 				"returned only part of the split run; fix the processor chain so split runs stay intact"
 			return nil, ce
@@ -1071,7 +1078,8 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		if prev, dup := posIndex[string(p)]; dup {
 			ce := conduiterr.New(CodeDuplicateSourcePosition, fmt.Sprintf(
 				"records %d and %d in the same batch carry the identical position %q; "+
-					"a position must uniquely identify a record", prev, i, p))
+					"a position must uniquely identify a record", prev, i, p,
+			))
 			ce.Suggestion = "if these records came straight from the source, this is a source-connector " +
 				"bug: every record in a batch must carry a distinct, non-empty position"
 			return nil, ce

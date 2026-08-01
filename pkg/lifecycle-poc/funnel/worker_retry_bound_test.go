@@ -16,13 +16,17 @@ package funnel
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 // This file is the regression suite for #2726: Worker.doTask's
@@ -75,6 +79,12 @@ func TestDoTask_Retry_NonConverging_FailsWithCodedError(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok) // must be a registered, machine-actionable ConduitError
 	is.Equal(ce.Code.Reason(), CodeRetryNotConverging.Reason())
+	// Invariant: must be FATAL. A non-fatal error falls into the lifecycle's
+	// recovery arm, which restarts the pipeline with backoff — and because this
+	// fix deliberately does not advance the source position, every restart
+	// re-reads the identical records and re-hits the identical fixpoint, forever,
+	// with a blank status message and the actionable code visible only in logs.
+	is.True(cerrors.IsFatalError(err))
 	is.True(strings.Contains(err.Error(), "stuck-task")) // names the offending task
 
 	// Bounded: the initial pass, plus maxRetryStall (3) consecutive retry
@@ -266,6 +276,12 @@ func TestDoTask_Retry_SplitRun_NonConverging_NoEarlyReleaseOrWithhold(t *testing
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), CodeRetryNotConverging.Reason())
+	// Invariant: must be FATAL. A non-fatal error falls into the lifecycle's
+	// recovery arm, which restarts the pipeline with backoff — and because this
+	// fix deliberately does not advance the source position, every restart
+	// re-reads the identical records and re-hits the identical fixpoint, forever,
+	// with a blank status message and the actionable code visible only in logs.
+	is.True(cerrors.IsFatalError(err))
 
 	// Split (1 call) + maxRetryStall (3) consecutive failed retry attempts on
 	// the tail, each observing zero shrinkage.
@@ -333,6 +349,12 @@ func TestDoTask_Retry_IterationCap_Reached(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), CodeRetryNotConverging.Reason())
+	// Invariant: must be FATAL. A non-fatal error falls into the lifecycle's
+	// recovery arm, which restarts the pipeline with backoff — and because this
+	// fix deliberately does not advance the source position, every restart
+	// re-reads the identical records and re-hits the identical fixpoint, forever,
+	// with a blank status message and the actionable code visible only in logs.
+	is.True(cerrors.IsFatalError(err))
 	is.True(strings.Contains(err.Error(), "maximum of 3 attempts"))
 
 	// One initial call, then 3 rounds of genuine shrinkage before the
@@ -355,5 +377,57 @@ func TestDoTask_Retry_IterationCap_Reached(t *testing.T) {
 			is.True(string(stuck) != string(got))
 		}
 	}
+	is.Equal(len(parent.nackCalls()), 0)
+}
+
+// TestDoTask_Retry_ProcessorTask_UnsetProcessedRecord_FailsFatally drives the
+// non-convergence through a REAL ProcessorTask, which is the only production
+// path that marks a batch RecordFlagRetry (processor.go is the sole in-repo
+// caller of Batch.Retry). Every other test in this file hand-rolls a Task that
+// calls b.Retry directly, which proves the mechanism but not the reachable
+// shape.
+//
+// Adversarial review of #2726's fix established what can and cannot trigger it:
+// ProcessorTask.Do rejects an empty result and pads exactly len(in)-len(out)
+// entries, so a processor that merely returns FEWER records than it received
+// always shrinks the retry group and converges. The reachable trigger is a
+// record that comes back with NO result at all — a ProcessedRecord whose Record
+// oneof is unset, which the standalone (WASM) plugin boundary surfaces as a nil
+// entry (pkg/plugin/processor/standalone/proto.go). That means a malformed or
+// version-mismatched plugin.
+//
+// Asserts the bounded coded error AND that it is fatal: a non-fatal error would
+// fall into the lifecycle's recovery arm and restart-loop forever, since the fix
+// deliberately does not advance the source position.
+func TestDoTask_Retry_ProcessorTask_UnsetProcessedRecord_FailsFatally(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	logger := log.Nop()
+
+	records := randomRecords(2)
+
+	proc := NewMockProcessor(ctrl)
+	// Always return nil entries: "no result at all" for every record, every
+	// round — the fixpoint. AnyTimes because the bound decides how many rounds.
+	proc.EXPECT().Process(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+			return make([]sdk.ProcessedRecord, len(recs))
+		}).AnyTimes()
+
+	node := &TaskNode{Task: NewProcessorTask("stuck-proc", proc, logger, NoOpProcessorMetrics{})}
+	parent := &fakeParentAckNacker{}
+	w := &Worker{logger: logger, processingLock: make(chan struct{}, 1)}
+
+	err := w.doTask(ctx, node, NewBatch(slices.Clone(records)), newRunAckNacker(parent))
+
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeRetryNotConverging.Reason())
+	is.True(cerrors.IsFatalError(err)) // must degrade the pipeline, not restart-loop
+
+	// Invariant 1/3: nothing acked or nacked — the records are redelivered.
+	is.Equal(len(parent.ackCalls()), 0)
 	is.Equal(len(parent.nackCalls()), 0)
 }

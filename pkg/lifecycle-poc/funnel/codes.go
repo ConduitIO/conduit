@@ -85,16 +85,22 @@ var CodeSplitRunStraddlesFanOut = conduiterr.Register("pipeline.split_run_stradd
 // not making progress on a retried sub-batch, or has exceeded the hard
 // iteration cap that backstops that detection.
 //
-// ProcessorTask.Do marks a sub-batch RecordFlagRetry whenever the processor
-// returns fewer records than it received; Worker.doTask re-feeds that exact
-// sub-batch to the same task. A processor whose short return is a
-// deterministic function of its input (e.g. one that always skips records
-// above a size threshold, or a rate-limit path that returns only what it
-// could process and is handed the identical batch back) never resolves any
-// of those records, so the recursion is a fixpoint: it would recurse forever,
+// ProcessorTask.Do marks a sub-batch RecordFlagRetry for exactly those
+// records the processor returned NO result for, then Worker.doTask re-feeds
+// that sub-batch to the same task. If the same records come back unresolved
+// again and again, the recursion is a fixpoint: it would recurse forever,
 // growing the goroutine stack without bound until it hit Go's 1GB limit and
 // crashed the ENTIRE process - not just the offending pipeline - with an
 // unrecoverable fatal error. See #2726.
+//
+// What actually triggers this, and what does NOT: a processor that simply
+// returns FEWER records than it received is NOT this condition. ProcessorTask.Do
+// rejects an empty result and pads exactly len(in)-len(out) entries, so such a
+// processor shrinks the retry group every round and converges normally - a size
+// threshold or a rate-limit path that returns partial results is fine. The
+// reachable trigger is a record that comes back with no result AT ALL: for a
+// standalone (WASM) processor, a ProcessedRecord whose Record oneof is unset,
+// which in practice means a malformed or version-mismatched plugin.
 //
 // This is fixed loudly instead of silently: nothing in the un-converged
 // sub-batch (or anything after it in the same batch - Worker.doTask's tainted
