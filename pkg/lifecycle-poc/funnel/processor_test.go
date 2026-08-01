@@ -191,3 +191,98 @@ func TestProcessorTask_Do_MultiRecord(t *testing.T) {
 		})
 	})
 }
+
+// TestProcessorTask_Do_MultiRecord_EmptyThenSplit_NoPanic is the direct
+// regression test for #2728's shape 1: a processor returns
+// [MultiRecord{}, MultiRecord{a,b}] for a 2-record input batch.
+//
+// markBatchRecords used to mix b.Filter(from+i) and b.SplitRecord(from+i, ...)
+// in a single FORWARD pass over the MultiRecord range. Filtering the first
+// output record shrank activeRecordIndices() by one before the SECOND output
+// record's SplitRecord call resolved its own (now stale) index against it -
+// index out of range, panicking the whole process. Iterating end->start (this
+// fix) means the split (the higher index) happens before the filter (the
+// lower index), so the filter's shrink can never be observed by an index that
+// was already resolved and acted on.
+func TestProcessorTask_Do_MultiRecord_EmptyThenSplit_NoPanic(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	ctrl := gomock.NewController(t)
+	processorMock := NewMockProcessor(ctrl)
+	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
+
+	records := randomRecords(2)
+	batch := NewBatch(slices.Clone(records))
+	splitInto := randomRecords(2)
+
+	processorMock.EXPECT().Process(ctx, batch.records).Return(
+		toProcessedRecords(
+			batch.records,
+			markMultiRecord(0, []opencdc.Record{}),
+			markMultiRecord(1, splitInto),
+		),
+	)
+
+	err := task.Do(ctx, batch)
+	is.NoErr(err) // must not panic
+
+	is.Equal(batch.ActiveRecords(), splitInto)
+	is.Equal(batch.recordStatuses, []RecordStatus{
+		{Flag: RecordFlagFilter}, // record 0: filtered (empty MultiRecord)
+		{Flag: RecordFlagAck},    // record 1, split piece 0
+		{Flag: RecordFlagAck},    // record 1, split piece 1
+	})
+	is.Equal(batch.filterCount, 1)
+}
+
+// TestProcessorTask_Do_MultiRecord_SplitThenEmpty_FiltersCorrectRecord is the
+// direct regression test for #2728's shape 2: a processor returns
+// [MultiRecord{a,b}, MultiRecord{}] for a 2-record input batch.
+//
+// Forward iteration used to split the first output record BEFORE filtering
+// the second, so the filter's index (resolved via activeRecordIndices(),
+// which is nil - i.e. "use raw physical indices" - only until the FIRST
+// mutation) landed on one of the freshly-inserted split pieces instead of the
+// second original record: the record the processor meant to filter stayed Ack
+// and was delivered, while an unrelated split piece was silently dropped
+// (silent data loss - the confirmed #2728 symptom). Iterating end->start
+// filters the second record first (while it is still the raw, un-shifted
+// index) and only then splits the first.
+func TestProcessorTask_Do_MultiRecord_SplitThenEmpty_FiltersCorrectRecord(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	ctrl := gomock.NewController(t)
+	processorMock := NewMockProcessor(ctrl)
+	task := NewProcessorTask("test", processorMock, logger, NoOpProcessorMetrics{})
+
+	records := randomRecords(2)
+	batch := NewBatch(slices.Clone(records))
+	splitInto := randomRecords(2)
+
+	processorMock.EXPECT().Process(ctx, batch.records).Return(
+		toProcessedRecords(
+			batch.records,
+			markMultiRecord(0, splitInto),
+			markMultiRecord(1, []opencdc.Record{}),
+		),
+	)
+
+	err := task.Do(ctx, batch)
+	is.NoErr(err)
+
+	// The intended record (records[1]) is the one filtered; both split
+	// pieces of records[0] are active and delivered - NOT the buggy
+	// "flags=[ack filter ack]" outcome the issue reported.
+	is.Equal(batch.ActiveRecords(), splitInto)
+	is.Equal(batch.recordStatuses, []RecordStatus{
+		{Flag: RecordFlagAck},    // record 0, split piece 0
+		{Flag: RecordFlagAck},    // record 0, split piece 1
+		{Flag: RecordFlagFilter}, // record 1: filtered (empty MultiRecord)
+	})
+	is.Equal(batch.filterCount, 1)
+	is.Equal(batch.positions, []opencdc.Position{records[0].Position, nil, records[1].Position})
+}

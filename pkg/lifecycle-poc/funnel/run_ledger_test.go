@@ -755,14 +755,23 @@ func (p propPlan) expectedCounts() (wantDestCount, wantDLQCount int) {
 		case propSplitBothAck, propSplitTailRetryThenAck:
 			wantDestCount += 2 // head and tail both reach the destination
 		case propSplitTailNack:
-			// Batch.Nack's EXISTING (pre-existing, main) propagation logic
-			// propagates a nack across an entire split run (setFlagWithErr,
-			// see batch.go) - nacking the tail also flags the head Nack, so
-			// the whole 2-member run is dispatched to acker.Nack in ONE
-			// group. Neither piece reaches the destination; the run
-			// collapses to exactly one DLQ entry (the same collapsing
-			// originalBatch()/splitRun's ackBatch/nackBatch already do for a
-			// fully-resolved run).
+			// #2729 fix: Batch.Nack no longer propagates a nack across a
+			// split run (setFlagWithErr used to - see batch.go's Nack doc
+			// comment for why that was wrong: it violated Filter's
+			// immutability and misattributed errors across siblings). The
+			// head is never explicitly touched by propDivergeTask, so it
+			// stays at the default Ack, reaches destNode normally, and is
+			// physically written to the destination - only the tail is
+			// nacked directly. run_ledger.go's splitRun is still the ONLY
+			// thing that decides the run's aggregate disposition to the
+			// source: nack-wins once both members are terminal, so the run
+			// still collapses to exactly one DLQ entry for the original
+			// position (with the tail's own, correctly-attributed error) -
+			// it's only the physical destination write of the untouched
+			// head that's new, and it is consistent with at-least-once (a
+			// possible duplicate on any later DLQ reprocessing, never a
+			// silent loss).
+			wantDestCount++
 			wantDLQCount++
 		}
 	}
@@ -936,4 +945,206 @@ func TestRunLedger_FanOut_RunCutBeforeFanOut_FailsLoud(t *testing.T) {
 	// And crucially: nothing was acked to the source. The records are
 	// redelivered on restart rather than skipped.
 	is.Equal(len(parent.ackCalls()), 0)
+}
+
+// --- #2729: destination nack index shift / wrong DLQ error attribution ---
+
+// splitFilterOnceTask models the upstream processor state in #2729's
+// reproduction: on its first call it splits the first active record into 3
+// pieces (head, middle, tail) and immediately filters the middle piece. This
+// makes the batch it hands downstream exactly the "split run [Ack, Filter,
+// Ack] (untainted, so never normalized)" shape the issue describes - Filter
+// alone never taints a batch, so this reaches DestinationTask.Do without ever
+// going through doTask's tainted-splitting loop first.
+type splitFilterOnceTask struct {
+	id        string
+	triggered bool
+}
+
+func (t *splitFilterOnceTask) ID() string                  { return t.id }
+func (t *splitFilterOnceTask) Open(context.Context) error  { return nil }
+func (t *splitFilterOnceTask) Close(context.Context) error { return nil }
+func (t *splitFilterOnceTask) Do(_ context.Context, b *Batch) error {
+	if t.triggered {
+		return nil
+	}
+	t.triggered = true
+	active := b.ActiveRecords()
+	orig := active[0]
+
+	// Give each piece a distinct Record.Position so the fake destination
+	// (which keys writes/nacks by the record's OWN Position field, exactly
+	// like a real destination plugin would) can independently target one
+	// piece - Batch's own, separately-tracked original position (b.positions)
+	// is untouched by this and stays "p0" for the head, nil for the tail
+	// pieces, per SplitRecord's contract.
+	head := orig.Clone()
+	head.Position = opencdc.Position("piece0")
+	mid := orig.Clone()
+	mid.Position = opencdc.Position("piece1")
+	tail := orig.Clone()
+	tail.Position = opencdc.Position("piece2")
+
+	b.SplitRecord(0, []opencdc.Record{head, mid, tail})
+	b.Filter(1) // filter the middle piece - Filter alone does not taint.
+	return nil
+}
+
+// TestDestinationTask_Nack_SplitRunWithFilterSibling_CorrectAttribution is
+// the direct end-to-end regression test for #2729, reproducing the exact
+// shape from the issue: a split run [Ack, Filter, Ack] (untainted) plus two
+// ordinary records p1, p2. The destination fails the split run's head
+// (piece0) and the unrelated ordinary record p1.
+//
+// Before the fix: DestinationTask.markBatchRecords nacked piece0 forward
+// first, and Batch.Nack's propagation-across-a-split-run logic (removed by
+// this fix) re-included the Filter'd middle piece in the "active" set,
+// shifting every later index in this same pass - the SECOND Nack call (meant
+// for p1) landed back on a split piece instead, attaching p1's error to the
+// run's DLQ entry while p1 itself kept its default Ack status and was
+// silently acked to the source as a success. See the issue for the exact
+// (wrong) observed trace.
+//
+// After the fix: p1 is correctly Nack'd and DLQ'd with its OWN error, and the
+// split run's DLQ entry carries the head's OWN error - never p1's.
+func TestDestinationTask_Nack_SplitRunWithFilterSibling_CorrectAttribution(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	p0 := opencdc.Record{Position: opencdc.Position("p0"), Operation: opencdc.OperationCreate, Metadata: opencdc.Metadata{}, Payload: opencdc.Change{After: opencdc.RawData("v0")}}
+	p1 := opencdc.Record{Position: opencdc.Position("p1"), Operation: opencdc.OperationCreate, Metadata: opencdc.Metadata{}, Payload: opencdc.Change{After: opencdc.RawData("v1")}}
+	p2 := opencdc.Record{Position: opencdc.Position("p2"), Operation: opencdc.OperationCreate, Metadata: opencdc.Metadata{}, Payload: opencdc.Change{After: opencdc.RawData("v2")}}
+	records := []opencdc.Record{p0, p1, p2}
+
+	src := newFakeSource("src", append([]opencdc.Record(nil), records...))
+	dest := newFakeDestination("dest")
+	dlqDest := newFakeDestination("dlq")
+	dlq := NewDLQ("dlq", dlqDest, logger, NoOpConnectorMetrics{}, 0, 0)
+
+	errHead := cerrors.New("dest failed piece0")
+	errP1 := cerrors.New("dest failed p1")
+	dest.setNackErr(opencdc.Position("piece0"), errHead)
+	dest.setNackErr(opencdc.Position("p1"), errP1)
+
+	splitFilterNode := &TaskNode{Task: &splitFilterOnceTask{id: "split-filter"}}
+	destNode := &TaskNode{Task: NewDestinationTask(dest.id, dest, logger, NoOpConnectorMetrics{})}
+	srcNode := &TaskNode{Task: NewSourceTask("src", src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{splitFilterNode}}
+	splitFilterNode.Next = []*TaskNode{destNode}
+
+	w, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
+	is.NoErr(err)
+
+	batch := NewBatch(append([]opencdc.Record(nil), records...))
+	is.NoErr(w.doTask(ctx, splitFilterNode, batch, newRunAckNacker(w)))
+
+	// The destination saw all 4 non-filtered pieces (head, tail, p1, p2).
+	is.Equal(len(dest.written), 4)
+
+	// Exactly 2 DLQ entries: the split run (once, collapsed to its original
+	// position) and p1 - never both AND acked, never neither.
+	is.Equal(len(dlqDest.written), 2)
+
+	byPos := make(map[string]opencdc.Record, len(dlqDest.written))
+	for _, r := range dlqDest.written {
+		byPos[string(r.Position)] = r
+	}
+
+	gotHeadEntry, ok := byPos["p0"]
+	is.True(ok)
+	headErr, err := gotHeadEntry.Metadata.GetConduitDLQNackError()
+	is.NoErr(err)
+	is.Equal(headErr, errHead.Error()) // NOT errP1 - the bug's misattribution
+
+	gotP1Entry, ok := byPos["p1"]
+	is.True(ok)
+	p1Err, err := gotP1Entry.Metadata.GetConduitDLQNackError()
+	is.NoErr(err)
+	is.Equal(p1Err, errP1.Error())
+
+	// Every original position reaches the source exactly once - Worker.Nack
+	// acks a position too, once its DLQ write succeeds (that IS how a nacked
+	// record is "durably handled"), so p0 and p1 are expected here as well as
+	// p2. The bug was never about p1 failing to reach the source at all - in
+	// the buggy trace it was ALSO acked once, just via the wrong (direct,
+	// non-DLQ) path, having silently kept its default Ack status instead of
+	// being nacked. The discriminator is len(dlqDest.written) and the
+	// per-entry error above, not source-ack presence.
+	acked := src.ackedPositions()
+	ackedSet := make(map[string]int, len(acked))
+	for _, p := range acked {
+		ackedSet[string(p)]++
+	}
+	is.Equal(ackedSet["p0"], 1)
+	is.Equal(ackedSet["p1"], 1)
+	is.Equal(ackedSet["p2"], 1)
+	is.Equal(len(acked), 3) // no extras, no double-acks
+}
+
+// TestRunLedger_AccountingConsistent_ThroughMixedMarkingPass directly asserts
+// that filterCount, splitRun.total and splitRun.terminalCount all stay
+// mutually consistent through the exact mixed marking pass #2729 exercises: a
+// 3-piece split run (head/filter/tail) plus an unrelated ordinary record,
+// nacked in the same end->start order DestinationTask.markBatchRecords now
+// uses.
+func TestRunLedger_AccountingConsistent_ThroughMixedMarkingPass(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	records := randomRecords(3) // records[0] gets split; records[1], records[2] stay ordinary
+	batch := NewBatch(slices.Clone(records))
+
+	pieces := randomRecords(3)
+	batch.SplitRecord(0, pieces)
+	batch.Filter(1) // filter the middle piece
+
+	is.Equal(batch.filterCount, 1)
+	run := batch.runs[0]
+	is.True(run != nil)
+	is.Equal(run.total, 3)
+	is.Equal(run.terminalCount, 0)
+
+	// Mirror DestinationTask.markBatchRecords' fixed end->start pass: the
+	// LATER active index (the ordinary record) is nacked before the EARLIER
+	// one (the split run's head).
+	errOrdinary := cerrors.New("dest failed ordinary")
+	errHead := cerrors.New("dest failed head")
+	batch.Nack(2, errOrdinary) // active index 2 -> physical index 3 (records[1])
+	batch.Nack(0, errHead)     // active index 0 -> physical index 0 (split head)
+
+	// filterCount and the filtered sibling's own status are untouched -
+	// Nack no longer reaches across the run (#2729).
+	is.Equal(batch.filterCount, 1)
+	is.Equal(batch.recordStatuses[1].Flag, RecordFlagFilter)
+	is.Equal(batch.recordStatuses[1].Error, nil)
+	// The run's tail (never explicitly touched) stays at the default Ack.
+	is.Equal(batch.recordStatuses[2].Flag, RecordFlagAck)
+	is.Equal(batch.recordStatuses[2].Error, nil)
+
+	parent := &fakeParentAckNacker{}
+	r := newRunAckNacker(parent)
+
+	// Vote the head's Nack first (mirrors subBatchByFlag's own first group).
+	is.NoErr(r.Nack(ctx, batch.sub(0, 1), "dest"))
+	is.Equal(run.terminalCount, 1)
+	is.True(!run.released)
+	is.True(run.nacked)
+	is.Equal(run.nackErr, errHead)
+
+	// Vote the [Filter, Ack] group (physical 1,2) as ONE Ack call, exactly
+	// like subBatchByFlag collapses Filter+Ack together.
+	is.NoErr(r.Ack(ctx, batch.sub(1, 3)))
+	is.Equal(run.terminalCount, 3) // == run.total: complete, no over/under count
+	is.True(run.released)
+	is.True(run.nacked)            // sticky: unaffected by the later Ack vote
+	is.Equal(run.nackErr, errHead) // still the head's own error, never overwritten
+
+	// The unrelated ordinary record nacks independently, standalone (no run).
+	is.NoErr(r.Nack(ctx, batch.sub(3, 4), "dest"))
+
+	nacks := parent.nackCalls()
+	is.Equal(len(nacks), 2)
+	is.Equal(nacks[0].positions, []opencdc.Position{records[0].Position}) // the run, collapsed
+	is.Equal(nacks[1].positions, []opencdc.Position{records[1].Position}) // the ordinary record
+	is.Equal(len(parent.ackCalls()), 0)                                   // nothing acked - both terminal groups nacked
 }

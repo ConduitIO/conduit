@@ -126,6 +126,31 @@ func (b *Batch) Ack(i int, j ...int) {
 // Note that the indices i and j point to the slice returned by ActiveRecords.
 // If the slice contains filtered records, the filtered records are skipped and
 // not marked as nacked.
+//
+// # #2729: nacking one piece of a split record does not propagate to siblings
+//
+// Nack only ever sets the flag and error of the exact record(s) at the given
+// index/indices - never any other member of a split run it may belong to.
+// This used to be different: setFlagWithErr propagated a Nack's flag and
+// error across an entire split run (see git history), on the theory that
+// Batch.originalBatch's collapse-to-head logic needed every member to agree
+// so the run's failure wasn't lost. That reasoning no longer holds now that
+// run_ledger.go exists: originalBatch already drops every non-head member of
+// a run (their position is nil), so propagating to them never affected what
+// reached the parent through that path in the first place - and
+// runAckNacker/splitRun (run_ledger.go) is the ONE place that decides a run's
+// aggregate disposition, independently of any single member's RecordFlag,
+// via its own terminalCount/nacked bookkeeping.
+//
+// Worse, the propagation was actively wrong: it overwrote a sibling's flag
+// and error even when that sibling had ALREADY reached its own, different,
+// genuine outcome earlier in the same pass (e.g. a Filter decision, which
+// Filter's own doc comment says can never change again once set; or an
+// independent successful destination ack for a different piece of the same
+// run) - misattributing one record's failure reason to a completely
+// different record's DLQ entry, and doing so via index arithmetic
+// (activeRecordIndices) that the propagation itself silently invalidated for
+// any later index still to be processed in the same call. See #2729.
 func (b *Batch) Nack(i int, errs ...error) {
 	b.setFlagWithErr(RecordFlagNack, i, errs)
 	b.tainted = true
@@ -364,9 +389,12 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 
 // setFlagWithErr sets the flag for the record at index i to f, and sets the
 // error for the record to err. If multiple errors are provided, they are
-// assigned to the records starting at index i. If an error is assigned to a
-// split record, all records in the split record are marked with the same flag
-// and error.
+// assigned to the records starting at index i.
+//
+// This never touches any record other than the one(s) resolved from i/errs -
+// in particular it never reaches across a split run to a sibling record. See
+// Nack's doc comment (#2729) for why: a sibling's disposition is aggregated
+// by run_ledger.go, not by mutating its RecordStatus here.
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
@@ -380,38 +408,7 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 		// Set the flag and error for this record.
 		b.recordStatuses[idx].Flag = f
 		b.recordStatuses[idx].Error = err
-
-		// Handle split records when nacking.
-		if len(b.splitRecords) > 0 && f == RecordFlagNack {
-			// If the record was split, we need to set the error for all
-			// records in the split record, so they are all marked as nacked.
-			if _, ok := b.splitRecords[b.positions[idx].String()]; b.positions[idx] == nil || ok {
-				// This is a split record, we need to set the error for all
-				// records in the split record.
-				from, to := b.findSplitRecord(idx)
-				for j := from; j <= to; j++ {
-					b.recordStatuses[j].Flag = f
-					b.recordStatuses[j].Error = err
-				}
-			}
-		}
 	}
-}
-
-func (b *Batch) findSplitRecord(i int) (int, int) {
-	// Find the first record that has a position (i.e. first split record).
-	from := i
-	for from > 0 && b.positions[from] == nil {
-		from--
-	}
-	// Find the last record that has a position. (i.e. last split record).
-	to := i + 1
-	for to < len(b.positions) && b.positions[to] == nil {
-		to++
-	}
-	to-- // Adjust index to point to the last record that was split.
-
-	return from, to
 }
 
 // clone returns an independent copy of the batch, suitable for handing to a

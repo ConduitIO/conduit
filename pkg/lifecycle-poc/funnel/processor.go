@@ -159,8 +159,26 @@ func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.Proce
 		}
 		b.Nack(from, errs...)
 	case sdk.MultiRecord:
-		for i, rec := range records {
-			multiRec := rec.(sdk.MultiRecord)
+		// #2728: iterate end->start, exactly like Do's outer loop does across
+		// type-boundaries (see the comment there). b.Filter and b.SplitRecord
+		// both resolve their index against activeRecordIndices(), which is
+		// recomputed on every call; Filter shrinks the active set (and
+		// SplitRecord can grow it, if called on a batch that already has
+		// filtered records ahead of it). Marking forward meant a Filter or
+		// SplitRecord call at a lower index invalidated the "from+i" indices
+		// of every later entry still to be processed in this same loop -
+		// either indexing past the end of activeRecordIndices() (a panic
+		// that takes down the whole process, e.g.
+		// [MultiRecord{}, MultiRecord{a,b}]) or silently landing on the wrong
+		// physical record (e.g. [MultiRecord{a,b}, MultiRecord{}], where the
+		// filter meant for the second output record landed on a split piece
+		// of the first instead - see TestProcessorTask_Do_MultiRecord_*
+		// regression tests). Processing the highest index first means a
+		// mutation only ever affects indices ABOVE it, all of which this
+		// loop has already resolved and acted on - never the lower indices
+		// still to come.
+		for i := len(records) - 1; i >= 0; i-- {
+			multiRec := records[i].(sdk.MultiRecord)
 
 			switch len(multiRec) {
 			case 0:

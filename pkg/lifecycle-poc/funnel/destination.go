@@ -134,10 +134,30 @@ func (t *DestinationTask) validateAcks(acks []connector.DestinationAck, position
 	return nil
 }
 
+// markBatchRecords marks every errored ack in acks as nacked in b.
+//
+// #2729: iterate end->start, same discipline as ProcessorTask.markBatchRecords
+// (#2728) and Do's outer range-collapsing loop. b.Nack resolves "from+i"
+// against activeRecordIndices(), which is recomputed on every call; a Nack
+// call used to be able to change what that mapping considers active (see
+// batch.go's Nack/setFlagWithErr for why that propagation was itself removed
+// as the root cause), which shifted the indices of every later entry still to
+// be processed in this same forward pass. The confirmed failure: nacking an
+// early split-run member reshuffled the active set so a LATER ack for an
+// unrelated ordinary record (e.g. p1) resolved to the wrong physical record,
+// which both let the genuinely-failed record get acked to the source as a
+// success and attached its error to the wrong DLQ entry. Marking end->start
+// means a mutation at index i only affects indices ABOVE it, all already
+// resolved and acted on - never the lower indices still to come. This is now
+// defense in depth: Nack no longer mutates the active set at all (it only
+// ever touches the exact resolved index, and Filter's own documented
+// immutability means a Nack call can never target an already-filtered
+// record), but the ordering guarantee is kept so a future change to Nack's
+// semantics can't silently reintroduce the shift.
 func (t *DestinationTask) markBatchRecords(b *Batch, from int, acks []connector.DestinationAck) {
-	for i, ack := range acks {
-		if ack.Error != nil {
-			b.Nack(from+i, ack.Error)
+	for i := len(acks) - 1; i >= 0; i-- {
+		if acks[i].Error != nil {
+			b.Nack(from+i, acks[i].Error)
 		}
 	}
 }
