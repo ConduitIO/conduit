@@ -932,10 +932,30 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// "tomb.Go called after all goroutines terminated".
 	startupDone := make(chan struct{})
 
+	// registered closes once BOTH t.Go calls below have been made. The worker
+	// goroutine waits on it before doing any work, which is what actually makes
+	// the panic above impossible.
+	//
+	// Adjacency alone is NOT sufficient, despite what the comment above used to
+	// claim: the Go runtime is free to schedule the worker goroutine and run it
+	// to completion in the window between the two t.Go calls. When the worker
+	// fails FAST — precisely what a transient-error recovery scenario induces —
+	// tomb.alive drops back to 0 before the cleanup goroutine is registered, and
+	// the second t.Go panics. Observed in CI on
+	// TestServiceLifecycle_Recovery_TransientErrorRecovers under -shuffle (the
+	// panic surfaced at this second t.Go, with the connectors never dispensed).
+	// Gating the worker on this channel guarantees alive >= 1 for the entire
+	// window, so the tomb cannot die before both goroutines exist.
+	registered := make(chan struct{})
+
 	// TODO(multi-connector): when we have multiple connectors spawn a worker for each source
 	workersWg.Add(1)
 	rp.t.Go(func() error {
 		defer workersWg.Done()
+
+		// See `registered` above: must not return before the cleanup goroutine
+		// is registered on the tomb.
+		<-registered
 
 		doErr := rp.w.Do(ctx)
 		s.logger.Err(ctx, doErr).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline worker stopped")
@@ -1083,11 +1103,18 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return err
 	})
 
-	// Both goroutines are now registered (tomb.alive holds them alive regardless
-	// of how fast either finishes), so it's now safe to make the potentially slow
-	// UpdateStatus call and then release the cleanup goroutine to make its own.
-	// close(startupDone) unconditionally, including on error, so the cleanup
-	// goroutine (already blocked on it) is never left hanging.
+	// Both goroutines are now registered on the tomb, so release the worker: it
+	// can no longer drive tomb.alive to 0 before the cleanup goroutine exists.
+	// This must happen BEFORE the UpdateStatus call below, which is potentially
+	// slow — the worker only needs the registration barrier, not the status
+	// write (the cleanup goroutine is the one that waits for that, via
+	// startupDone).
+	close(registered)
+
+	// It's now safe to make the potentially slow UpdateStatus call and then
+	// release the cleanup goroutine to make its own. close(startupDone)
+	// unconditionally, including on error, so the cleanup goroutine (already
+	// blocked on it) is never left hanging.
 	err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	close(startupDone)
 	return err
