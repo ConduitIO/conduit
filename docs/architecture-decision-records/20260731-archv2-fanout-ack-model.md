@@ -103,12 +103,21 @@ if profiling ever shows otherwise.
   (`20260731-archv2-multiconnector.md`). This ADR's decision has no serialization format of its own and
   therefore no migration/upgrade-test obligation beyond what the source's existing position-persistence
   already covers.
-- **Composition with record-splitting is load-bearing.** Because the tally is keyed by
-  `originalBatch()`-collapsed positions, not raw batch indices, a per-destination processor that splits
-  records differently on different branches still converges on one shared key. This only holds because
-  `Batch.clone()` was fixed (in the same PR) to copy `splitRecords` rather than drop it — an ADR-level
-  dependency worth naming explicitly: if `clone()` regresses to dropping that map, `multiAckNacker`'s
-  correctness claim above no longer holds for pipelines with pre-fan-out splitting.
+- **Composition with record-splitting is load-bearing, and holds only for uniform-flag split runs.**
+  Because the tally is keyed by `originalBatch()`-collapsed positions, not raw batch indices, a
+  per-destination processor that splits records differently on different branches still converges on
+  one shared key. This only holds because `Batch.clone()` was fixed (in the same PR) to copy
+  `splitRecords` rather than drop it — an ADR-level dependency worth naming explicitly: if `clone()`
+  regresses to dropping that map, `multiAckNacker`'s correctness claim above no longer holds for
+  pipelines with pre-fan-out splitting.
+
+  **Known gap (narrowing this claim):** convergence assumes a split run carries a _uniform_ status
+  flag. `Batch.Nack` propagates across a run, but `Retry` and `Filter` do not — so a sub-batch can
+  cover only the _head_ of a split run and vote ack for the original position before the tail has
+  been delivered. Tracked as issue #2723; the nil-tail half of that shape is already contained by
+  `validateAckPositions` (an empty position is refused rather than acked, which would otherwise
+  overwrite the durable source position), but the head case remains open. Do not read the
+  convergence claim as covering `Retry`/`Filter`-partitioned split runs.
 - **Extending to N sources is out of scope for this decision.** This ADR only covers 1 source, M
   destinations. A future N-source slice would need its own decision about how (or whether) acks
   compose across multiple `funnel.Worker` instances — not addressed here.
