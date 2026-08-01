@@ -16,9 +16,11 @@ package funnel
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
 
 // splitRun tracks the completion state of one split run: a set of batch
@@ -98,8 +100,19 @@ type splitRun struct {
 // complete reports whether every currently-known member of the run has
 // reached a terminal disposition - see the total/terminalCount field docs for
 // why this correctly implies no further growth is possible.
-func (r *splitRun) complete() bool {
-	return r.terminalCount >= r.total
+//
+// It reports an error rather than silently tolerating an over-count: exceeding
+// total means a member was credited twice, which would release the run's source
+// position EARLIER than its members actually finished (invariant 1). The
+// released flag only guards a second forward, not a premature first one, so
+// this is the only place that condition can be caught.
+func (r *splitRun) complete() (bool, error) {
+	if r.terminalCount > r.total {
+		return false, cerrors.Errorf(
+			"(bug) splitRun %q: %d terminal members counted for a run of %d - a member was credited twice",
+			r.origPos, r.terminalCount, r.total)
+	}
+	return r.terminalCount == r.total, nil
 }
 
 // ackBatch builds the single-record *Batch representing this run's original
@@ -165,7 +178,13 @@ type runAckNacker struct {
 	parent ackNacker
 }
 
-// newRunAckNacker wraps parent with a fresh, empty run ledger. A fresh
+// newRunAckNacker wraps parent. NOTE: the returned value is STATELESS - the
+// run-completion tally lives in the *splitRun values inside Batch.runs, shared
+// across the sub-batches sub() derives from one parent batch. Instantiating a
+// new wrapper is therefore about scoping WHICH parent acker completed runs are
+// forwarded to, not about resetting any state.
+//
+// Original (inaccurate) note follows: wraps parent with a fresh, empty run ledger. A fresh
 // instance is required per scope that needs independent run tracking: once
 // per top-level batch-processing pass for a non-fanned-out pipeline (see
 // Worker.Do), and once per destination branch at a fan-out point (see
@@ -254,7 +273,11 @@ func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskI
 			run.nackTaskID = taskID
 		}
 
-		if run.complete() {
+		done, err := run.complete()
+		if err != nil {
+			return err
+		}
+		if done {
 			run.released = true
 			if run.nacked {
 				if err := r.parent.Nack(ctx, run.nackBatch(), run.nackTaskID); err != nil {
@@ -285,6 +308,62 @@ func firstRunError(statuses []RecordStatus) error {
 		if s.Error != nil {
 			return s.Error
 		}
+	}
+	return nil
+}
+
+// validateRunsWholeBeforeFanOut rejects a batch that is about to be fanned out
+// while holding only PART of a split run.
+//
+// Invariant 1/2/3 (enforcement site). Batch.clone gives each fan-out branch its
+// own copy of the run ledger (cloneRuns), which is necessary — branches diverge
+// independently and must not race on, or bleed decisions into, a shared tally.
+// But a clone copies splitRun.total, which counts every live member of the
+// WHOLE run, while the batch reaching a fan-out is a sub-batch that may hold
+// only the members of one flag group (doTask partitions a tainted batch by
+// flag). The branch's ledger then needs total members to complete but only ever
+// sees k < total of them, and the parent-side ledger only ever sees the other
+// total-k. Two disjoint tallies, neither able to complete, with no join point:
+// the run's original source position would be withheld FOREVER while every
+// later position acks normally — Source.Ack sets State.Position to the last
+// position it is given, so the withheld record is silently skipped on restart.
+//
+// That is strictly worse than not supporting the shape: before the run ledger
+// existed, this same shape failed loud (a pure-tail group collapses to nil
+// positions, which Worker.Ack's validateAckPositions and newMultiAckNacker both
+// reject). Withholding silently would disarm both of those backstops, so this
+// check restores the loud failure for a shape the ledger does not yet join
+// across branches.
+//
+// Splitting INSIDE a branch, after the clone, is unaffected and fully
+// supported: such a run is created entirely within that branch's own ledger, so
+// its total and its members agree.
+func validateRunsWholeBeforeFanOut(b *Batch) error {
+	if len(b.runs) == 0 {
+		return nil
+	}
+
+	present := make(map[*splitRun]int, len(b.runs))
+	for _, r := range b.runs {
+		if r != nil {
+			present[r]++
+		}
+	}
+
+	for run, n := range present {
+		if n >= run.total {
+			continue
+		}
+		ce := conduiterr.New(CodeSplitRunStraddlesFanOut, fmt.Sprintf(
+			"cannot fan out a batch holding only %d of the %d records that record %q was split into: "+
+				"the split run is cut across the fan-out boundary",
+			n, run.total, run.origPos,
+		))
+		ce.Suggestion = "this happens when a processor BEFORE the fan-out splits a record and a later " +
+			"pre-fan-out processor resolves only part of that split (for example returning fewer records " +
+			"than it received); move the splitting processor into the destination branches, or reduce the " +
+			"pipeline to a single destination. No records are acked or lost — they are redelivered on restart."
+		return ce
 	}
 	return nil
 }

@@ -57,3 +57,25 @@ var CodeDuplicateSourcePosition = conduiterr.Register("pipeline.duplicate_source
 // run (a Retry/Filter that does not propagate across the run). The suggestion
 // therefore points at the processor chain, not the source.
 var CodeEmptySourcePosition = conduiterr.Register("pipeline.empty_source_position", codes.FailedPrecondition)
+
+// CodeSplitRunStraddlesFanOut is returned when a batch reaching a
+// multi-destination fan-out holds only part of a split run — i.e. a processor
+// before the fan-out split a record, and a later pre-fan-out processor resolved
+// only some of the resulting pieces (for example by returning fewer records
+// than it received, which marks the remainder Retry).
+//
+// The run-completion ledger (see run_ledger.go) is per-Batch, and Batch.clone
+// gives each branch its own copy so branches cannot race or bleed decisions
+// into each other. That copy carries the run's whole-run member count, so a
+// branch holding only part of the run can never complete it — and neither can
+// the parent side. The run's original source position would then be withheld
+// forever while later positions ack past it, silently skipping the record on
+// restart.
+//
+// Failing loud is deliberate and restores the behaviour that predates the
+// ledger: this shape already failed loud before (via CodeEmptySourcePosition on
+// the nil-position tail), and silently withholding would have disarmed that
+// backstop. Nothing is acked and nothing is lost — the records are redelivered
+// on restart (invariant 3). Joining a run's tally across fan-out branches is
+// possible but is deliberately not attempted here without a real use case.
+var CodeSplitRunStraddlesFanOut = conduiterr.Register("pipeline.split_run_straddles_fanout", codes.FailedPrecondition)

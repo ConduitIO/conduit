@@ -227,16 +227,34 @@ layer doesn't need them to.
   a call shape that cannot currently occur was judged speculative complexity against a
   non-existent failure mode (CLAUDE.md's "no speculative generality"); if a future caller changes
   that assumption, this section is the flag to revisit it.
-- **A split run whose disjoint pieces each independently reach the _same, repeated_ destination
-  fan-out point** (a _pre_-fan-out processor splits a run across flag groups such that different
-  groups reach `doNextTask`'s fan-out branch at different times) is not newly handled. It already
-  fails loud today, unrelated to this change: each such group builds its own `multiAckNacker` via
-  `b.originalBatch()`, and a pure-tail group's `originalBatch()` yields nil positions, which
-  `newMultiAckNacker` already rejects with `CodeEmptySourcePosition`. This fix does not touch that
-  path, so behavior there is unchanged: a safe, coded failure, not silent corruption — but also not
-  something this ledger makes work correctly. The scoped shape this design (and its tests) covers is
-  a run split **after** a (possibly repeated) fan-out point, independently per branch, which is the
-  shape #2723 was actually filed against.
+- **A split run cut across a fan-out boundary is explicitly refused, with a coded error.** If a
+  processor _before_ a multi-destination fan-out splits a record and a later pre-fan-out processor
+  resolves only part of that run, the sub-batch reaching `doNextTask` holds only some of the run's
+  members. `Batch.clone` must give each branch its own ledger (branches diverge, and a shared tally
+  would race and bleed decisions across branches), but a clone carries `splitRun.total` — the
+  whole-run member count. The branch could then never complete the run, and neither could the parent
+  side: two disjoint tallies, no join point. `validateRunsWholeBeforeFanOut` detects this before the
+  fan-out and returns `CodeSplitRunStraddlesFanOut`. Nothing is acked, so the records are redelivered
+  on restart (invariant 3).
+
+  **An earlier draft of this document claimed this shape "already fails loud today … this fix does
+  not touch that path." Both halves were wrong**, and adversarial review caught it. The tail group
+  does not always reach `newMultiAckNacker` at all — `doTask` routes a `RecordFlagNack` group
+  straight to `acker.Nack`, and a group with no active records straight to `acker.Ack`, bypassing
+  `doNextTask` entirely. And the ledger _does_ touch that path: wrapping `Worker.Do` in a
+  `runAckNacker` intercepts the nil-position batch and withholds it, so `Worker.Ack`'s
+  `validateAckPositions` never runs either. Withholding silently would therefore have **disarmed both
+  of the backstops that caught this shape before the ledger existed**, turning a loud failure into a
+  permanently withheld position while later positions acked past it — silently skipping the record on
+  restart. The explicit refusal restores the loud failure.
+
+  Joining a run's tally _across_ fan-out branches is possible (hoist the ledger into a per-pass
+  registry, or have each branch complete against the member count it actually received rather than
+  `run.total`). It is deliberately not attempted without a real use case for the shape.
+
+- The shape this ledger positively supports is a run split **after** a fan-out point, independently
+  per branch — such a run is created wholly inside one branch's ledger, so its total and its members
+  agree. That is the shape #2723 was filed against.
 
 ## Testing
 

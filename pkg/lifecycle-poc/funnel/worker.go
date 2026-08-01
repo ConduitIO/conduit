@@ -289,9 +289,14 @@ func (w *Worker) Do(ctx context.Context) error {
 		// Invariant 1/3 (enforcement site, #2723): wrap the Worker in a fresh
 		// runAckNacker for this batch-read pass. A split run's original
 		// position must not reach w.Ack/w.Nack until every one of its members
-		// is terminal - see run_ledger.go. A fresh instance per pass is
-		// required: run completion state must not leak across independent
-		// batches read from the source.
+		// is terminal - see run_ledger.go.
+		//
+		// NB: runAckNacker itself is stateless - it holds only the parent. All
+		// completion state lives in the *splitRun values inside Batch.runs, so
+		// isolation between passes comes from NewBatch allocating fresh runs
+		// (and, at a fan-out, from cloneRuns), NOT from the wrapper being
+		// fresh. Naming the wrapper as the boundary is what hid the fan-out
+		// straddle bug - see validateRunsWholeBeforeFanOut.
 		if err := w.doTask(ctx, w.FirstTask, &Batch{}, newRunAckNacker(w)); err != nil {
 			return err
 		}
@@ -525,6 +530,16 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		// processor already did (before this fan-out point) is collapsed
 		// here so the tally is keyed by the true root position, not an
 		// intermediate one.
+		// Invariant 1/2/3: refuse to fan out a batch that holds only PART of a
+		// split run. Each branch clones the run ledger (necessarily — branches
+		// diverge), and a clone carries the whole-run member count, so a
+		// partial run can never complete on either side and its source
+		// position would be withheld forever while later positions ack past
+		// it. See validateRunsWholeBeforeFanOut.
+		if err := validateRunsWholeBeforeFanOut(b); err != nil {
+			return err
+		}
+
 		orig := b.originalBatch()
 		multiAcker, err := newMultiAckNacker(acker, len(taskNode.Next), orig.positions)
 		if err != nil {
@@ -543,9 +558,13 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 			// each needs its own run-completion ledger; multiAckNacker itself
 			// stays purely about per-position unanimity ACROSS branches (its
 			// existing job), unaware of any run structure. A branch votes for
-			// a run's original position exactly once - when runAckNacker
-			// forwards it - which is exactly what multiAckNacker's own
-			// one-vote-per-branch-per-position assumption requires.
+			// a run's original position AT MOST once - when runAckNacker
+			// forwards it - which satisfies multiAckNacker's
+			// one-vote-per-branch-per-position assumption. "At most", not
+			// "exactly": a branch holding only part of a run would never
+			// complete it and so would vote ZERO times, stalling that position
+			// and every later one in multiAckNacker's prefix scan. That shape
+			// is refused up front by validateRunsWholeBeforeFanOut above.
 			p.Go(func() error {
 				return w.doTask(ctx, nextTask, branchBatch, newRunAckNacker(multiAcker))
 			})

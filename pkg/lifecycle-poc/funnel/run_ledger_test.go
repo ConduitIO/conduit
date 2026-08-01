@@ -25,6 +25,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/matryer/is"
@@ -872,4 +873,67 @@ func BenchmarkRunLedger_VoteLinear(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestRunLedger_FanOut_RunCutBeforeFanOut_FailsLoud is the regression test for
+// the CRITICAL defect adversarial review found in the first version of this
+// ledger.
+//
+// The shape: a processor BEFORE the fan-out splits a record, and a later
+// pre-fan-out processor resolves only part of that split run (returning fewer
+// records than it received marks the remainder Retry). doTask then partitions
+// the batch by flag, so the sub-batch that reaches doNextTask holds only SOME
+// of the run's members.
+//
+// Batch.clone must give each branch its own ledger (branches diverge, and a
+// shared tally would race and bleed decisions across branches), but a clone
+// carries splitRun.total — the whole-run member count. So the branch needs
+// `total` members to complete while only ever seeing k < total of them, and the
+// parent side only ever sees the other total-k. Two disjoint tallies, neither
+// able to complete, and no join point between them.
+//
+// The consequence was strictly worse than not supporting the shape: the run's
+// original source position was withheld FOREVER while every later position
+// acked normally. Source.Ack sets State.Position from the last position it is
+// handed, so the withheld record was silently skipped on restart — no error, no
+// DLQ entry, no replay. It also disarmed the two backstops that caught this
+// shape before the ledger existed (validateAckPositions and
+// newMultiAckNacker's empty-position check), because the nil-position tail was
+// intercepted and withheld before ever reaching them.
+//
+// Now it fails loud with CodeSplitRunStraddlesFanOut. Nothing is acked, so the
+// records are redelivered on restart (invariant 3).
+func TestRunLedger_FanOut_RunCutBeforeFanOut_FailsLoud(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	records := randomRecords(1)
+	logger := log.Nop()
+	destA := newFakeDestination("destA")
+	destB := newFakeDestination("destB")
+
+	// split3 (pre-fan-out) → deferSecond (pre-fan-out, resolves only part of
+	// the run) → fan-out to two destinations.
+	splitNode := &TaskNode{Task: &split3Task{id: "split3"}}
+	cutNode := &TaskNode{Task: &deferSecondTask{id: "cut"}}
+	destANode := &TaskNode{Task: NewDestinationTask(destA.id, destA, logger, NoOpConnectorMetrics{})}
+	destBNode := &TaskNode{Task: NewDestinationTask(destB.id, destB, logger, NoOpConnectorMetrics{})}
+	splitNode.Next = []*TaskNode{cutNode}
+	cutNode.Next = []*TaskNode{destANode, destBNode}
+
+	parent := &fakeParentAckNacker{}
+	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+
+	batch := NewBatch(slices.Clone(records))
+	err := w.doTask(ctx, splitNode, batch, newRunAckNacker(parent))
+
+	// Must fail loud, not silently withhold.
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeSplitRunStraddlesFanOut.Reason())
+
+	// And crucially: nothing was acked to the source. The records are
+	// redelivered on restart rather than skipped.
+	is.Equal(len(parent.ackCalls()), 0)
 }
