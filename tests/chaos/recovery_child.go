@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,15 +210,28 @@ func parseLCChildEnv() lcChildEnv {
 	return cfg
 }
 
-// deliveryLog durably records every position a destination plugin has
-// written, so a post-crash assertion can verify - from disk, independent of
-// any in-memory state a SIGKILL destroys - exactly what actually reached the
-// destination before the kill (see recoveryDestinationPlugin.loop, and
-// recovery_test.go's invariant-1 assertion). Modeled on upstreamStore's own
-// durability approach (openUpstreamStore/Commit), but as a set of files (one
-// per position) rather than a single watermark, since the destination is not
-// guaranteed to receive positions strictly in increasing order across a
-// restart-induced duplicate delivery.
+// deliveryLog durably records every (sourceID, position) pair a destination
+// plugin has written, so a post-crash assertion can verify - from disk,
+// independent of any in-memory state a SIGKILL destroys - exactly what
+// actually reached the destination before the kill (see
+// recoveryDestinationPlugin.loop, and recovery_test.go's invariant-1
+// assertion). Modeled on upstreamStore's own durability approach
+// (openUpstreamStore/Commit), but as a set of files (one per delivered
+// (sourceID, position) pair) rather than a single watermark, since the
+// destination is not guaranteed to receive positions strictly in increasing
+// order across a restart-induced duplicate delivery.
+//
+// sourceID keys every entry alongside position (see Record/deliveryKey)
+// because positions are connector-defined and unique only WITHIN a source
+// (nsource_child.go's doc): once N sources share a destination and its one
+// deliveryLog, two sources can legitimately deliver byte-identical position
+// values, and keying on position alone would let one source's delivery
+// silently stand in for the other's (see nsource_sigkill_test.go, whose
+// entire point is proving that does NOT happen). Every caller before that
+// scenario (fanout_sigkill_test.go, recovery_test.go) always passes sourceID
+// == "" - a single, un-shared destination per log has nothing to
+// disambiguate - and deliveryKey's "" fast path keeps their on-disk file
+// names byte-for-byte identical to this type's original, pre-sourceID shape.
 type deliveryLog struct {
 	dir string
 }
@@ -229,15 +243,51 @@ func openDeliveryLog(dir string) (*deliveryLog, error) {
 	return &deliveryLog{dir: dir}, nil
 }
 
-// Record durably marks pos as delivered: an empty file, created and fsynced
-// before returning, named after the position. The file's mere existence is
-// the entire signal - unlike upstreamStore's single rewritten watermark file,
-// there is nothing to tear here: a crash before this returns simply means
-// the file doesn't exist yet (equivalent to "not yet delivered"), and a
-// duplicate delivery (expected under at-least-once) is a harmless re-create
-// of a file that's already there.
-func (l *deliveryLog) Record(pos uint64) error {
-	name := filepath.Join(l.dir, strconv.FormatUint(pos, 10))
+// deliveryKey returns the on-disk file name for (sourceID, pos), and
+// parseDeliveryKey is its exact inverse. sourceID == "" (every caller before
+// the N-source collision scenario) maps to the plain position string,
+// unchanged from this type's original naming - so every existing caller's
+// files are completely unaffected by sourceID's addition. A non-empty
+// sourceID is joined with "-": position digits never contain "-", so
+// splitting on the LAST "-" (see parseDeliveryKey) recovers sourceID exactly
+// even if sourceID itself contains one (e.g. "nsource-a").
+func deliveryKey(sourceID string, pos uint64) string {
+	if sourceID == "" {
+		return strconv.FormatUint(pos, 10)
+	}
+	return sourceID + "-" + strconv.FormatUint(pos, 10)
+}
+
+// parseDeliveryKey is deliveryKey's inverse: it recovers (sourceID, pos)
+// from an on-disk file name, or reports ok == false for anything that isn't
+// a name deliveryKey could have produced (e.g. a stray non-delivery file).
+// A name with no "-" is treated as the sourceID == "" case (a plain position
+// string); otherwise the LAST "-" splits sourceID from the trailing position
+// digits - see deliveryKey's doc for why the last, not first, split is safe.
+func parseDeliveryKey(name string) (sourceID string, pos uint64, ok bool) {
+	if n, err := strconv.ParseUint(name, 10, 64); err == nil {
+		return "", n, true
+	}
+	i := strings.LastIndex(name, "-")
+	if i < 0 {
+		return "", 0, false
+	}
+	n, err := strconv.ParseUint(name[i+1:], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return name[:i], n, true
+}
+
+// Record durably marks (sourceID, pos) as delivered: an empty file, created
+// and fsynced before returning, named per deliveryKey. The file's mere
+// existence is the entire signal - unlike upstreamStore's single rewritten
+// watermark file, there is nothing to tear here: a crash before this returns
+// simply means the file doesn't exist yet (equivalent to "not yet
+// delivered"), and a duplicate delivery (expected under at-least-once) is a
+// harmless re-create of a file that's already there.
+func (l *deliveryLog) Record(sourceID string, pos uint64) error {
+	name := filepath.Join(l.dir, deliveryKey(sourceID, pos))
 	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
 		return fmt.Errorf("deliveryLog: create %s: %w", name, err)
@@ -251,7 +301,15 @@ func (l *deliveryLog) Record(pos uint64) error {
 
 // Positions returns every durably delivered position, read fresh from disk
 // (so a freshly restarted/independent process observes exactly what a
-// previous, possibly killed, process actually delivered), sorted ascending.
+// previous, possibly killed, process actually delivered), sorted ascending -
+// WITHOUT source attribution. Every caller of this method predates the
+// N-source collision scenario and always records with sourceID == "" (a
+// single, un-shared destination has nothing to attribute), so this remains
+// exactly the plain numeric listing it always was. A scenario that shares one
+// deliveryLog across sources with colliding positions must use
+// PositionsBySource instead - conflating two sources' entries into one
+// []uint64 here would silently hide exactly the misattribution bug that
+// scenario exists to catch.
 func (l *deliveryLog) Positions() ([]uint64, error) {
 	entries, err := os.ReadDir(l.dir)
 	if err != nil {
@@ -259,13 +317,42 @@ func (l *deliveryLog) Positions() ([]uint64, error) {
 	}
 	out := make([]uint64, 0, len(entries))
 	for _, e := range entries {
-		n, err := strconv.ParseUint(e.Name(), 10, 64)
-		if err != nil {
-			continue // ignore any stray non-position file
+		_, pos, ok := parseDeliveryKey(e.Name())
+		if !ok {
+			continue // ignore any stray non-delivery file
 		}
-		out = append(out, n)
+		out = append(out, pos)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
+// DeliveryRecord attributes one durably-recorded delivery to the source that
+// produced it - see Record's (sourceID, pos) keying and PositionsBySource.
+type DeliveryRecord struct {
+	SourceID string
+	Position uint64
+}
+
+// PositionsBySource returns every durably delivered (sourceID, position)
+// pair, read fresh from disk (deliveryKey's inverse, via parseDeliveryKey),
+// unsorted. Unlike Positions, this distinguishes two sources' colliding
+// position values instead of conflating them into one []uint64 - the exact
+// case the N-source shared-destination collision scenario
+// (nsource_sigkill_test.go) exists to prove is handled correctly end-to-end.
+func (l *deliveryLog) PositionsBySource() ([]DeliveryRecord, error) {
+	entries, err := os.ReadDir(l.dir)
+	if err != nil {
+		return nil, fmt.Errorf("deliveryLog: readdir %s: %w", l.dir, err)
+	}
+	out := make([]DeliveryRecord, 0, len(entries))
+	for _, e := range entries {
+		sourceID, pos, ok := parseDeliveryKey(e.Name())
+		if !ok {
+			continue // ignore any stray non-delivery file
+		}
+		out = append(out, DeliveryRecord{SourceID: sourceID, Position: pos})
+	}
 	return out, nil
 }
 
@@ -342,7 +429,7 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		}
 		pos = next
 
-		rec := makeRecord(pos)
+		rec := makeRecord(pos, "") // recoverySourcePlugin never salts - single-source scenario, no collision to distinguish
 		if err := server.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}}); err != nil {
 			return // stream closed (process exiting, or Teardown ran)
 		}
@@ -459,7 +546,7 @@ func (p *recoveryDestinationPlugin) loop(server pconnector.DestinationRunStreamS
 		acks := make([]pconnector.DestinationRunResponseAck, 0, len(req.Records))
 		for _, r := range req.Records {
 			if pos, err := decodePosition(r.Position); err == nil {
-				if err := p.log.Record(pos); err != nil {
+				if err := p.log.Record("", pos); err != nil { // single-source scenario: no sourceID to disambiguate
 					fmt.Fprintf(os.Stderr, "%s: lc dest plugin: durable record failed: %v\n", markerFatal, err)
 					os.Exit(exitOpenOtherError)
 				}

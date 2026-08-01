@@ -191,6 +191,21 @@ type chaosPlugin struct {
 	// every existing scenario.
 	driftAt uint64
 
+	// sourceTag is the N-source shared-destination collision scenario's
+	// record-level salt (docs/design-documents/20260801-archv2-multiconnector-
+	// nsource.md's H2 section; nsource_child.go, nsource_sigkill_test.go).
+	// Positions are connector-defined and unique only WITHIN a source (see
+	// nsource_child.go's doc), so two chaosPlugin instances sharing one
+	// destination can legitimately produce byte-IDENTICAL positions - that
+	// collision is deliberate, not a bug, and must stay real (see
+	// makeRecord). sourceTag lets the parent test's delivery ledger tell the
+	// two sources' otherwise-identical records apart WITHOUT touching
+	// Position itself - see metadataSourceKey. The empty string (the default,
+	// every scenario before the collision case) means "no salt": makeRecord's
+	// output is then byte-for-byte identical to DBZ-1's original, unsalted
+	// records.
+	sourceTag string
+
 	mu         sync.Mutex
 	nextToRead uint64 // set by Open, read by the producer goroutine (single-key mode only, see Open)
 
@@ -309,14 +324,14 @@ func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start
 		}
 		pos++
 
-		rec := makeRecord(pos)
+		rec := makeRecord(pos, p.sourceTag)
 		if p.driftAt > 0 && pos == p.driftAt {
 			// Property 4 (docs/design-documents/20260726-dbz2-cdc-correctness-suite.md):
 			// this is the one record in the run carrying the synthetic
 			// drift/poison marker - see the field doc above and
 			// property4_test.go's driftDetectTask, which is the only code
 			// that ever inspects metadataDriftKey.
-			rec = makeDriftRecord(pos)
+			rec = makeDriftRecord(pos, p.sourceTag)
 		}
 		if err := server.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}}); err != nil {
 			return // stream closed (process exiting, or Teardown ran)
@@ -455,15 +470,38 @@ func (p *chaosPlugin) NewStream() pconnector.SourceRunStream {
 // record N ever delivered end-to-end" therefore needs no separate ledger —
 // it's answerable purely from the position, both here and in the parent
 // test's final verification.
-func makeRecord(pos uint64) opencdc.Record {
-	return opencdc.Record{
+//
+// sourceTag, if non-empty, is stamped into metadataSourceKey - see
+// chaosPlugin.sourceTag's field doc for why this exists (the N-source
+// shared-destination collision scenario) and why it deliberately leaves
+// Position (and every other field) untouched: the collision in position
+// BYTES across sources is the thing under test, not something to paper over.
+// sourceTag == "" (every scenario before the collision case) produces a
+// record byte-for-byte identical to this function's original, pre-salt
+// output - Metadata stays the same empty opencdc.Metadata{}.
+func makeRecord(pos uint64, sourceTag string) opencdc.Record {
+	rec := opencdc.Record{
 		Position:  encodePosition(pos),
 		Operation: opencdc.OperationCreate,
 		Metadata:  opencdc.Metadata{},
 		Key:       opencdc.RawData(fmt.Sprintf("key-%d", pos)),
 		Payload:   opencdc.Change{After: opencdc.RawData(fmt.Sprintf("record-%d", pos))},
 	}
+	if sourceTag != "" {
+		rec.Metadata[metadataSourceKey] = sourceTag
+	}
+	return rec
 }
+
+// metadataSourceKey is the record-level source-identity salt the N-source
+// shared-destination collision scenario (nsource_child.go,
+// nsource_sigkill_test.go) uses to make two sources' otherwise byte-identical
+// records (same position, same deterministic key/payload - see makeRecord's
+// doc) distinguishable once they land in the ONE shared deliveryLog, without
+// perturbing Position itself. See fanoutDestination.Write (fanout_child.go),
+// the only reader of this key. Empty/unset (every scenario that doesn't pass
+// a sourceTag to makeRecord) means "no salt".
+const metadataSourceKey = "chaos.source"
 
 func encodePosition(pos uint64) opencdc.Position {
 	return opencdc.Position(strconv.FormatUint(pos, 10))
@@ -490,8 +528,8 @@ const metadataDriftValue = "true"
 // still applies - only the disposition differs, decided entirely by
 // property4_test.go's driftDetectTask + funnel.DLQ policy, never by this
 // plugin.
-func makeDriftRecord(pos uint64) opencdc.Record {
-	rec := makeRecord(pos)
+func makeDriftRecord(pos uint64, sourceTag string) opencdc.Record {
+	rec := makeRecord(pos, sourceTag)
 	rec.Metadata[metadataDriftKey] = metadataDriftValue
 	return rec
 }
