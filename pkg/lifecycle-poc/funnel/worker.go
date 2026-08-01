@@ -381,11 +381,20 @@ func (w *Worker) doTask(
 		Str("task_id", t.ID()).
 		Msg("task returned tainted batch, splitting into sub-batches")
 
+	// Invariant 1/3: reconcile every split run into a single, groupable unit
+	// BEFORE partitioning — see Batch.normalizeSplitRuns for why this must
+	// happen exactly once, here, rather than incrementally while t.Do was
+	// still running.
+	b.normalizeSplitRuns()
+
 	// Batch is tainted, we need to go through all statuses and group them by
 	// status before further processing.
 	idx := 0
 	for {
-		subBatch := w.subBatchByFlag(b, idx)
+		subBatch, flag, err := w.subBatchByFlag(b, idx)
+		if err != nil {
+			return err
+		}
 		if subBatch == nil {
 			w.logger.Trace(ctx).Msg("processed last batch")
 			break
@@ -410,10 +419,10 @@ func (w *Worker) doTask(
 		w.logger.Trace(ctx).
 			Str("task_id", t.ID()).
 			Int("batch_size", len(b.records)).
-			Str("record_flag", b.recordStatuses[0].Flag.String()).
+			Str("record_flag", flag.String()).
 			Msg("collected sub-batch")
 
-		switch subBatch.recordStatuses[0].Flag {
+		switch flag {
 		case RecordFlagAck, RecordFlagFilter:
 			if !taskNode.HasNext() || !subBatch.HasActiveRecords() {
 				// Either this is the last task (the batch has made it end-to-end),
@@ -437,9 +446,13 @@ func (w *Worker) doTask(
 				return err
 			}
 		case RecordFlagRetry:
-			// Retry the sub-batch by passing it to the same task. We need to
-			// mark the records as acked, as that's the default record status.
-			subBatch.Ack(0, len(subBatch.records))
+			// Retry the sub-batch by passing it to the same task. Records
+			// still flagged Retry are reset to Ack (the default a task
+			// expects on input); records flagged Filter — part of a split
+			// run that also contains a Retry piece, see
+			// Batch.normalizeRun — are deliberately left alone, so the
+			// retry actually shrinks (see Batch.resetForRetry).
+			subBatch.resetForRetry()
 			err := w.doTask(ctx, taskNode, subBatch, acker)
 			if err != nil {
 				return err
@@ -452,38 +465,102 @@ func (w *Worker) doTask(
 	return nil
 }
 
-// subBatchByFlag collects a sub-batch of records with the same status starting
-// from the given index. It returns nil if firstIndex is out of bounds.
-func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
+// subBatchByFlag collects a sub-batch of records that share the same group
+// flag (see Batch.groupFlagAt), starting from the given index, and returns
+// that flag alongside the sub-batch. It returns a nil batch if firstIndex is
+// out of bounds.
+//
+// Because groupFlagAt always reports a whole split run's span at once —
+// never a partial slice of it — a boundary computed here can never land
+// strictly inside a run.
+//
+// It returns an error if the resulting boundary would partition a split run
+// anyway (see validateSplitRunBoundary): a defensive backstop, not the
+// primary safeguard — by construction this should be unreachable. It exists
+// so that if a future flag-writing code path bypasses normalizeSplitRuns,
+// the failure is a loud, coded error instead of the silent premature ack
+// #2723 was filed for. See CodeSplitRunPartitioned.
+func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) (*Batch, RecordFlag, error) {
 	if firstIndex >= len(b.recordStatuses) {
-		return nil
+		return nil, RecordFlagAck, nil
 	}
 
+	firstFlag, firstEnd, err := b.groupFlagAt(firstIndex)
+	if err != nil {
+		return nil, RecordFlagAck, err
+	}
 	flags := make([]RecordFlag, 0, 2)
-	flags = append(flags, b.recordStatuses[firstIndex].Flag)
+	flags = append(flags, firstFlag)
 	// Collect Filters and Acks together in the same batch.
-	switch flags[0] { //nolint:exhaustive // We only care about two flags.
+	switch firstFlag { //nolint:exhaustive // We only care about two flags.
 	case RecordFlagFilter:
 		flags = append(flags, RecordFlagAck)
 	case RecordFlagAck:
 		flags = append(flags, RecordFlagFilter)
 	}
 
-	lastIndex := firstIndex
-OUTER:
-	for _, status := range b.recordStatuses[firstIndex:] {
+	lastIndex := firstEnd
+	for lastIndex < len(b.recordStatuses) {
+		flag, end, err := b.groupFlagAt(lastIndex)
+		if err != nil {
+			return nil, RecordFlagAck, err
+		}
+
+		matched := false
 		for _, f := range flags {
-			if status.Flag == f {
-				lastIndex++
-				// Record has matching status, let's continue.
-				continue OUTER
+			if flag == f {
+				matched = true
+				break
 			}
 		}
-		// Record has a different status, we're done.
-		break
+		if !matched {
+			// Record (or run) has a different group flag, we're done.
+			break
+		}
+		lastIndex = end
 	}
 
-	return b.sub(firstIndex, lastIndex)
+	if err := validateSplitRunBoundary(b, firstIndex, lastIndex); err != nil {
+		return nil, RecordFlagAck, err
+	}
+
+	return b.sub(firstIndex, lastIndex), firstFlag, nil
+}
+
+// validateSplitRunBoundary reports an error if the proposed sub-batch bounds
+// [firstIndex, lastIndex) cut through the middle of a split run instead of
+// containing it entirely or excluding it entirely. Split runs are always
+// physically contiguous in a batch (see the splitRecords field), so a single
+// interval boundary can only ever partition a run at one of its two edges —
+// checking both edges (the first and last record the proposed sub-batch
+// would contain) is therefore sufficient to catch every possible partition,
+// including the case where the boundary lands mid-run on both sides at once.
+//
+// See CodeSplitRunPartitioned for why this fires loud rather than letting
+// the partition through.
+func validateSplitRunBoundary(b *Batch, firstIndex, lastIndex int) error {
+	if len(b.splitRecords) == 0 {
+		return nil
+	}
+
+	checkEdge := func(idx int) error {
+		pos := b.positions[idx]
+		_, isHead := b.splitRecords[pos.String()]
+		if pos != nil && !isHead {
+			return nil // idx is not part of a split run.
+		}
+
+		from, to := b.findSplitRecord(idx)
+		if from < firstIndex || to >= lastIndex {
+			return newSplitRunPartitionedError(from, to, firstIndex, lastIndex)
+		}
+		return nil
+	}
+
+	if err := checkEdge(firstIndex); err != nil {
+		return err
+	}
+	return checkEdge(lastIndex - 1)
 }
 
 // doNextTask advances the batch b to whatever comes after taskNode. A single

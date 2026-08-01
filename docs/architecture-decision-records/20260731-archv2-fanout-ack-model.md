@@ -111,13 +111,28 @@ if profiling ever shows otherwise.
   regresses to dropping that map, `multiAckNacker`'s correctness claim above no longer holds for
   pipelines with pre-fan-out splitting.
 
-  **Known gap (narrowing this claim):** convergence assumes a split run carries a _uniform_ status
-  flag. `Batch.Nack` propagates across a run, but `Retry` and `Filter` do not — so a sub-batch can
-  cover only the _head_ of a split run and vote ack for the original position before the tail has
-  been delivered. Tracked as issue #2723; the nil-tail half of that shape is already contained by
-  `validateAckPositions` (an empty position is refused rather than acked, which would otherwise
-  overwrite the durable source position), but the head case remains open. Do not read the
-  convergence claim as covering `Retry`/`Filter`-partitioned split runs.
+  **Gap closed (was: narrowing this claim):** convergence used to assume a split run carries a
+  _uniform_ status flag by construction, which wasn't true — `Batch.Nack` propagated across a run,
+  but `Retry` and `Filter` did not, so a sub-batch could cover only the _head_ of a split run and
+  vote ack for the original position before the tail had been delivered (issue #2723).
+  `validateAckPositions` already contained the nil-tail half of that shape (an empty position is
+  refused rather than acked, which would otherwise overwrite the durable source position), but the
+  head case remained open through two review rounds (PR #2725, reverted after an adversarial
+  review found the fix's per-write flag-escalation mutated `filterCount` mid-`Task.Do` and could
+  corrupt content or hang on a non-converging processor).
+  The fix that closed it does not touch `Do` at all: `Batch.normalizeSplitRuns` runs once, after a
+  task's `Do` returns and before `Worker.doTask` partitions the batch, and resolves each split run
+  by rank (`Nack` > `Retry` > `Filter`/`Ack`). The one deliberate asymmetry — `Filter` is never
+  escalated to `Retry` even when the rest of its run is — is itself load-bearing for this ADR's
+  convergence claim: it is what lets a retry pass on a split run actually shrink (filtered pieces
+  stay excluded from `Batch.ActiveRecords`) instead of re-feeding the processor an identical-sized
+  input forever. `Worker.subBatchByFlag` (via `Batch.groupFlagAt`) treats a normalized run as one
+  indivisible unit when partitioning, so it can no longer be torn apart at all; a defensive
+  `CodeSplitRunPartitioned` guard covers the case where some future write path bypasses
+  normalization. This closes #2723 for `Retry`/`Filter`-partitioned split runs, with M=1 and M>1
+  (fan-out) both covered by test. It does **not** close #2726 (a non-converging processor's retry
+  recursion has no bound) — a separate, still-open concern this fix was required not to make any
+  more likely.
 - **Extending to N sources is out of scope for this decision.** This ADR only covers 1 source, M
   destinations. A future N-source slice would need its own decision about how (or whether) acks
   compose across multiple `funnel.Worker` instances — not addressed here.

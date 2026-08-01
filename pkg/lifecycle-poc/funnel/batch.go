@@ -21,6 +21,7 @@ import (
 	"slices"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
 
 // Batch represents a batch of records that are processed together. It keeps
@@ -204,12 +205,41 @@ func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
 
 	b.records = append(b.records[:i], append(recs, b.records[i+1:]...)...)
 
-	// Extend the record statuses slice to accommodate the new records. By default
-	// the new records are marked as acked. The original record must have been
-	// acked, otherwise the processor wouldn't receive it.
+	// Extend the record statuses slice to accommodate the new records. Each
+	// new piece REPLICATES the CURRENT status of the record being split
+	// (index i) — it is not safe to default them to Ack (the zero value).
+	//
+	// The old comment here ("the original record must have been acked,
+	// otherwise the processor wouldn't receive it") is stale: it assumed the
+	// only way a record ever reaches SplitRecord is fresh off the Ack
+	// default. That is not a guarantee this type upholds — a record already
+	// part of an unresolved split run can be split further with a non-Ack
+	// status (e.g. Nack, which still propagates across a run — see
+	// normalizeSplitRuns). Defaulting the new pieces to Ack in that case
+	// would silently inject wrongly-flagged pieces into an already-Nack'd or
+	// already-Retry'd run, corrupting the run's uniformity — see #2723 and
+	// the adversarial review of #2725 (finding A) for the shape this caused.
+	current := b.recordStatuses[i]
+	if current.Flag == RecordFlagFilter {
+		// Unreachable through SplitRecord's own calling convention: i has
+		// just been translated through activeRecordIndices(), which by
+		// construction only ever yields indices whose current flag is NOT
+		// Filter (filtered records are excluded from ActiveRecords, and
+		// SplitRecord is only ever called — from ProcessorTask.Do's
+		// markBatchRecords — with an index derived from ActiveRecords).
+		// Panic rather than silently mis-accounting filterCount if some
+		// future caller ever violates that contract directly.
+		panic("(bug) SplitRecord: cannot split an already-filtered record - " +
+			"filtered records are excluded from ActiveRecords and unreachable " +
+			"via the active-index calling convention")
+	}
+	newStatuses := make([]RecordStatus, 0, len(recs)-1)
+	for k := 0; k < len(recs)-1; k++ {
+		newStatuses = append(newStatuses, current)
+	}
 	b.recordStatuses = append(
 		b.recordStatuses[:i+1],
-		append(make([]RecordStatus, len(recs)-1), b.recordStatuses[i+1:]...)...,
+		append(newStatuses, b.recordStatuses[i+1:]...)...,
 	)
 
 	// Extend the positions slice to accommodate the new records. The new records
@@ -262,6 +292,23 @@ func (b *Batch) setFlagNoErr(f RecordFlag, i int, j ...int) {
 // assigned to the records starting at index i. If an error is assigned to a
 // split record, all records in the split record are marked with the same flag
 // and error.
+//
+// Only Nack calls this today, and its split-run propagation below is kept
+// exactly as it always was (pre-dating #2723, and confirmed correct by the
+// adversarial review of #2725) — a failed piece condemns its whole run
+// immediately, not deferred to normalizeSplitRuns. This is deliberately NOT
+// generalized to Retry/Filter: those two are written as plain, local,
+// single-index ops during Do and reconciled in exactly one place,
+// normalizeSplitRuns, after Do returns — see its doc comment for why
+// mutating cross-record state DURING Do's own marking pass is the failure
+// mode this whole redesign exists to avoid (findings A and B of that
+// review). Nack does not carry that risk here because propagating it can
+// only ever move a sibling's flag towards Nack — the run's most severe,
+// terminal state — never destabilize the active-index mapping in a way
+// later, lower-index calls in the same pass depend on: activeRecordIndices
+// always re-derives its index list from the records' actual flags, so a
+// stale filterCount can only ever make it (safely) skip its own fast path,
+// not return a wrong index set.
 func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
@@ -273,8 +320,7 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 		}
 
 		// Set the flag and error for this record.
-		b.recordStatuses[idx].Flag = f
-		b.recordStatuses[idx].Error = err
+		b.setRecordFlagWithErr(idx, f, err)
 
 		// Handle split records when nacking.
 		if len(b.splitRecords) > 0 && f == RecordFlagNack {
@@ -285,10 +331,245 @@ func (b *Batch) setFlagWithErr(f RecordFlag, i int, errs []error) {
 				// records in the split record.
 				from, to := b.findSplitRecord(idx)
 				for j := from; j <= to; j++ {
-					b.recordStatuses[j].Flag = f
-					b.recordStatuses[j].Error = err
+					b.setRecordFlagWithErr(j, f, err)
 				}
 			}
+		}
+	}
+}
+
+// setRecordFlagWithErr sets the flag and error for the record at idx,
+// keeping filterCount in sync with any Filter -> non-Filter transition (see
+// setFlagWithErr's Nack-propagation loop, which can overwrite a Filter-
+// flagged sibling elsewhere in the same split run) so
+// HasActiveRecords/ActiveRecords stay accurate afterwards.
+func (b *Batch) setRecordFlagWithErr(idx int, f RecordFlag, err error) {
+	if b.recordStatuses[idx].Flag == RecordFlagFilter && f != RecordFlagFilter {
+		b.filterCount--
+	}
+	b.recordStatuses[idx].Flag = f
+	b.recordStatuses[idx].Error = err
+}
+
+// normalizeSplitRuns walks the batch once, immediately after a task's Do has
+// returned and before Worker.doTask partitions a tainted batch into
+// sub-batches, and resolves every split run (see SplitRecord) to a flag
+// arrangement that Worker.subBatchByFlag can always group as a single unit.
+//
+// This — not per-write escalation during Do — is the fix for #2723: a split
+// run whose pieces disagree (e.g. one piece nacked or marked for retry while
+// another already succeeded) can no longer be torn apart by subBatchByFlag
+// into a sub-batch that acks the run's head while the rest of the run is
+// still outstanding.
+//
+// It must run exactly once, after Do has fully returned. ProcessorTask.Do's
+// own marking loop processes ranges end-to-start specifically so that
+// filterCount and the active-index mapping stay stable for the lower-index
+// calls still to come; mutating either while that loop is still running —
+// the failure mode of an earlier, per-write "escalation" design (see the
+// adversarial review of #2725, findings A and B) — can silently corrupt
+// which physical record a later, lower-index call actually touches.
+// Reconciling once, after Do has committed all of its writes, sidesteps that
+// whole class of bug. It also keeps the operation O(n): every record is
+// visited a constant number of times total, rather than the O(run²) an
+// escalate-on-every-write design pays by re-walking a run's siblings on each
+// individual write (finding D).
+func (b *Batch) normalizeSplitRuns() {
+	if len(b.splitRecords) == 0 {
+		return // Fast path: the batch has no split runs at all.
+	}
+
+	i := 0
+	for i < len(b.recordStatuses) {
+		pos := b.positions[i]
+		_, isHead := b.splitRecords[pos.String()]
+		if pos != nil && !isHead {
+			i++ // An ordinary, unsplit record.
+			continue
+		}
+
+		from, to := b.findSplitRecord(i)
+		b.normalizeRun(from, to)
+		i = to + 1
+	}
+}
+
+// normalizeRun resolves the split run occupying records [from,to] (inclusive)
+// so Worker.subBatchByFlag will always group it as a single unit, regardless
+// of which of its pieces the task that just ran happened to mark first.
+//
+// Resolution, highest severity first (Nack > Retry > Filter/Ack):
+//
+//   - Any piece Nack: the entire run failed. Every piece — including any
+//     that were individually Filter or Ack — is set to Nack, carrying the
+//     first (lowest-index) Nack error found in the run. In practice a run
+//     should already be uniformly Nack by the time this runs: Batch.Nack
+//     (setFlagWithErr) propagates across a split run immediately, unlike
+//     Retry/Filter — see its doc comment for why that is safe to do inline
+//     during Do while Retry/Filter are not. This branch is therefore a
+//     defensive, idempotent restatement of that same rule, not the primary
+//     mechanism — cheap insurance if some future write path ever sets Nack
+//     without going through setFlagWithErr. When more than one piece is
+//     found individually nacked, picking the first (lowest-index) error as
+//     representative is an arbitrary but deterministic tie-break; which
+//     exact message reaches the DLQ record is not itself correctness-
+//     relevant — that the whole run is uniformly treated as failed is.
+//
+//   - No Nack, but any piece Retry: the run is not done. Every piece that
+//     is NOT Filter is set to Retry, so the whole run is resubmitted
+//     together the next time this task runs — without this, an already-
+//     Ack'd piece would stay behind and reach the source's ack path while
+//     the Retry piece(s) were still outstanding (#2723 itself).
+//
+//     Filter pieces are deliberately left untouched — this is the
+//     resolution for a run that contains BOTH Filter and Retry. Filter is a
+//     final decision the processor already made about that specific piece;
+//     escalating it to Retry would silently undo that decision. It would
+//     also re-feed the processor an unchanged-size input on the very next
+//     attempt: for a processor whose output is a deterministic function of
+//     its input (e.g. one that drops everything past a size limit), that is
+//     a fixpoint that never resolves (the unbounded-recursion crash tracked
+//     separately in #2726 — not fixed here, but this choice must not make
+//     it more likely, and preserving Filter shrinks the input instead of
+//     leaving it the same size). Preserving Filter lets a retry pass
+//     actually converge: previously-filtered pieces stay excluded from
+//     Batch.ActiveRecords and are never resubmitted, so the processor sees
+//     strictly less input each time a piece is dropped for good.
+//
+//     A run left in this state carries two distinct flags at once (Retry
+//     and Filter) — see Batch.groupFlagAt for how Worker.subBatchByFlag
+//     still treats the whole run as one group.
+//
+//   - Otherwise every piece is already Ack or Filter, a combination
+//     Worker.subBatchByFlag has always grouped as one bucket. Nothing to do.
+func (b *Batch) normalizeRun(from, to int) {
+	hasNack, hasRetry := false, false
+	var nackErr error
+	for k := from; k <= to; k++ {
+		switch b.recordStatuses[k].Flag { //nolint:exhaustive // only these two flags matter here.
+		case RecordFlagNack:
+			if !hasNack {
+				nackErr = b.recordStatuses[k].Error
+			}
+			hasNack = true
+		case RecordFlagRetry:
+			hasRetry = true
+		}
+	}
+
+	switch {
+	case hasNack:
+		for k := from; k <= to; k++ {
+			b.overwriteRunMember(k, RecordFlagNack, nackErr)
+		}
+	case hasRetry:
+		for k := from; k <= to; k++ {
+			if b.recordStatuses[k].Flag == RecordFlagFilter {
+				continue // Preserved — see the doc comment above.
+			}
+			b.overwriteRunMember(k, RecordFlagRetry, nil)
+		}
+	}
+}
+
+// overwriteRunMember sets the record at idx to flag f (and, for a Nack, error
+// err), keeping filterCount in sync with any Filter -> non-Filter transition
+// so HasActiveRecords/ActiveRecords stay accurate. f is always
+// RecordFlagNack or RecordFlagRetry here — normalizeRun never assigns Filter
+// through this path — so there is no non-Filter -> Filter case to handle.
+func (b *Batch) overwriteRunMember(idx int, f RecordFlag, err error) {
+	if b.recordStatuses[idx].Flag == RecordFlagFilter {
+		b.filterCount--
+	}
+	b.recordStatuses[idx].Flag = f
+	b.recordStatuses[idx].Error = err
+}
+
+// groupFlagAt returns the flag Worker.subBatchByFlag should treat the record
+// at idx as carrying, along with the index one past the span that flag
+// applies to.
+//
+// For an ordinary (non-split) record, that is just its own flag and idx+1.
+// For a member of a split run, the span is always the run's full [from,to]
+// bounds — never a partial slice of it — because normalizeSplitRuns
+// guarantees every run has at most one non-Filter flag (Nack, Retry or Ack)
+// among its pieces by the time this is called; that single flag (or Filter,
+// if literally every piece in the run was filtered) is what is returned.
+//
+// It returns an error if the run is NOT actually uniform — i.e. it finds
+// two DIFFERENT non-Filter flags among the run's pieces. This is what makes
+// the CodeSplitRunPartitioned backstop reachable at all: without checking
+// uniformity here, a physically contiguous run would always be swallowed as
+// one atomic span regardless of whether its pieces actually agree, silently
+// masking exactly the corruption this whole mechanism exists to catch (a
+// boundary check alone, run AFTER this function already collapsed the run
+// to one — possibly wrong — flag, would never see the inconsistency).
+func (b *Batch) groupFlagAt(idx int) (RecordFlag, int, error) {
+	if len(b.splitRecords) == 0 {
+		return b.recordStatuses[idx].Flag, idx + 1, nil
+	}
+	pos := b.positions[idx]
+	_, isHead := b.splitRecords[pos.String()]
+	if pos != nil && !isHead {
+		return b.recordStatuses[idx].Flag, idx + 1, nil // Not a run member.
+	}
+
+	from, to := b.findSplitRecord(idx)
+	flag := RecordFlagFilter
+	found := false
+	for k := from; k <= to; k++ {
+		f := b.recordStatuses[k].Flag
+		if f == RecordFlagFilter {
+			continue
+		}
+		if !found {
+			flag, found = f, true
+			continue
+		}
+		if f != flag {
+			return RecordFlagAck, to + 1, newSplitRunPartitionedError(from, to, -1, -1)
+		}
+	}
+	return flag, to + 1, nil
+}
+
+// newSplitRunPartitionedError builds the CodeSplitRunPartitioned error
+// shared by groupFlagAt (a run's pieces disagree with each other) and
+// validateSplitRunBoundary (a proposed sub-batch boundary would cut a run in
+// two) — the same underlying problem from two different vantage points.
+// firstIndex/lastIndex may be passed as -1 when the caller has no boundary
+// of its own to report (groupFlagAt detects the inconsistency before any
+// boundary is even proposed).
+func newSplitRunPartitionedError(from, to, firstIndex, lastIndex int) error {
+	detail := fmt.Sprintf("split run spanning batch indices [%d,%d] carries inconsistent flags", from, to)
+	if firstIndex >= 0 {
+		detail += fmt.Sprintf(" and was about to be partitioned by a sub-batch boundary [%d,%d)", firstIndex, lastIndex)
+	}
+	detail += ": this would ack or nack part of a split record before the rest of it was durably handled"
+
+	ce := conduiterr.New(CodeSplitRunPartitioned, detail)
+	ce.Suggestion = "this indicates a bug in Conduit's split-run flag normalization (see " +
+		"Batch.normalizeSplitRuns), not a connector or processor bug; please report it with the " +
+		"pipeline's processor chain and, if possible, a reproducing config"
+	return ce
+}
+
+// resetForRetry resets every record currently flagged Retry back to Ack, so
+// a task resubmitted via Worker.doTask's RecordFlagRetry case sees them as
+// fresh input. Records flagged Filter are left untouched.
+//
+// Preserving Filter here — rather than the previous unconditional
+// Ack(0, len(records)) reset — is what makes a retry pass on a split run
+// that mixes Filter and Retry pieces (see normalizeRun) actually shrink: a
+// Filter-flagged piece stays excluded from Batch.ActiveRecords, so the
+// processor is fed fewer records than on the previous attempt instead of an
+// identical-sized batch. That is the difference between a retry that can
+// converge and one that is a fixpoint (see #2726).
+func (b *Batch) resetForRetry() {
+	for i := range b.recordStatuses {
+		if b.recordStatuses[i].Flag == RecordFlagRetry {
+			b.recordStatuses[i].Flag = RecordFlagAck
+			b.recordStatuses[i].Error = nil
 		}
 	}
 }
