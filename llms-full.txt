@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (91)
+## 3. Error codes (92)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -648,6 +648,7 @@ Author: Meroxa, Inc.
 | `pipeline.name_already_exists` | AlreadyExists | CodePipelineNameAlreadyExists is raised when a pipeline config's name collides with an existing pipeline's name. |
 | `pipeline.name_missing` | InvalidArgument | CodePipelineNameMissing is raised when a pipeline config is missing the required name field. |
 | `pipeline.not_running` | FailedPrecondition | CodePipelineNotRunning is raised when an operation requires the pipeline to be running, but it is currently stopped. |
+| `pipeline.retry_not_converging` | FailedPrecondition | pipeline: retry not converging |
 | `pipeline.running` | FailedPrecondition | CodePipelineRunning is raised when an operation requires the pipeline to be stopped, but it is currently running. |
 | `pipeline.split_run_straddles_fanout` | FailedPrecondition | pipeline: split run straddles fanout |
 | `pipelines.init_destination_exists` | AlreadyExists | pipelines: init destination exists |

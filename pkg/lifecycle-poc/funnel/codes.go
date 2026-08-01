@@ -79,3 +79,33 @@ var CodeEmptySourcePosition = conduiterr.Register("pipeline.empty_source_positio
 // on restart (invariant 3). Joining a run's tally across fan-out branches is
 // possible but is deliberately not attempted here without a real use case.
 var CodeSplitRunStraddlesFanOut = conduiterr.Register("pipeline.split_run_straddles_fanout", codes.FailedPrecondition)
+
+// CodeRetryNotConverging is returned when Worker.doTask's RecordFlagRetry
+// self-recursion (see worker.go's retryAttempt) detects that a processor is
+// not making progress on a retried sub-batch, or has exceeded the hard
+// iteration cap that backstops that detection.
+//
+// ProcessorTask.Do marks a sub-batch RecordFlagRetry for exactly those
+// records the processor returned NO result for, then Worker.doTask re-feeds
+// that sub-batch to the same task. If the same records come back unresolved
+// again and again, the recursion is a fixpoint: it would recurse forever,
+// growing the goroutine stack without bound until it hit Go's 1GB limit and
+// crashed the ENTIRE process - not just the offending pipeline - with an
+// unrecoverable fatal error. See #2726.
+//
+// What actually triggers this, and what does NOT: a processor that simply
+// returns FEWER records than it received is NOT this condition. ProcessorTask.Do
+// rejects an empty result and pads exactly len(in)-len(out) entries, so such a
+// processor shrinks the retry group every round and converges normally - a size
+// threshold or a rate-limit path that returns partial results is fine. The
+// reachable trigger is a record that comes back with no result AT ALL: for a
+// standalone (WASM) processor, a ProcessedRecord whose Record oneof is unset,
+// which in practice means a malformed or version-mismatched plugin.
+//
+// This is fixed loudly instead of silently: nothing in the un-converged
+// sub-batch (or anything after it in the same batch - Worker.doTask's tainted
+// loop never advances its cursor past a Retry group it recursed into) is ever
+// acked or nacked before this error is returned, so every record in it is
+// redelivered on restart (invariant 3). No source position is corrupted or
+// skipped (invariant 2).
+var CodeRetryNotConverging = conduiterr.Register("pipeline.retry_not_converging", codes.FailedPrecondition)

@@ -305,12 +305,131 @@ func (w *Worker) Do(ctx context.Context) error {
 	return nil
 }
 
-//nolint:gocyclo // TODO: refactor
+// maxRetryAttempts bounds Worker.doTask's RecordFlagRetry self-recursion (see
+// retryAttempt). It is a pure stack-growth backstop, independent of the
+// non-convergence check below: even a processor that IS making genuine
+// progress (see retryAttempt's doc comment for why that is provably
+// well-founded — each attempt is strictly smaller than the last) recurses
+// once per attempt, and an absurdly large single batch could in principle
+// still need an absurd number of attempts to fully drain one record at a
+// time. This cap gives the recursion a fixed ceiling regardless of batch
+// size, so stack usage can never approach Go's 1GB per-goroutine limit
+// (#2726) even in that corner case. A source Read() call realistically
+// returns at most a few thousand records, so this is a generous multiple of
+// what any real batch needs and is not expected to ever be hit by a
+// legitimately converging processor — see TestDoTask_Retry_IterationCap_*.
+//
+// This is a var, not a const, solely so tests can lower it temporarily
+// (save the old value, defer restoring it) to exercise the cap deterministically
+// without constructing a batch of thousands of records. Production code must
+// never reassign it.
+var maxRetryAttempts = 10_000
+
+// maxRetryStall bounds how many CONSECUTIVE RecordFlagRetry attempts in a row
+// are allowed to make no progress (see retryAttempt.stall) before doTaskAttempt
+// declares the task non-converging. It exists specifically to tolerate a
+// processor whose lack of progress depends on something other than the
+// record content alone - most plausibly a real, wall-clock-based rate limiter
+// that can legitimately return "nothing processed" for a call or two while a
+// token bucket refills, then resume shrinking once it does. Comparing counts
+// (see retryAttempt's doc comment) is an EXACT test for "no progress THIS
+// round", but "no progress for one round" does not imply "will never make
+// progress" for a time-dependent processor the way it does for a purely
+// input-deterministic one (see #2726's own examples). Requiring several
+// consecutive stalls before failing trades a handful of extra (still tightly
+// bounded, still nowhere near maxRetryAttempts) recursion frames for a much
+// lower false-positive rate against that legitimate shape - a false positive
+// here kills a working pipeline with an unrecoverable fatal error, so this
+// errs conservative. A true fixpoint (the deterministic case #2726 is
+// actually about) still fails within maxRetryStall+1 Task.Do calls -
+// effectively immediate from an operator's perspective, and the count is
+// small enough that it adds no meaningful stack growth even if this
+// tolerance turns out to be wrong for some shape we haven't seen.
+//
+// This is a var, not a const, for the same test-override reason as
+// maxRetryAttempts.
+var maxRetryStall = 3
+
+// retryAttempt threads bounded-retry bookkeeping through consecutive
+// RecordFlagRetry self-recursions of Worker.doTask for the SAME task node
+// (see the RecordFlagRetry case in doTask below, and #2726). It is nil on
+// every doTask entry that is NOT itself continuing a retry chain: the
+// top-level call from Worker.Do, and every call doNextTask makes to advance
+// to a DIFFERENT task node both go through the doTask wrapper, which always
+// starts a fresh (nil) chain. Only the RecordFlagRetry case constructs one
+// and passes it to doTaskAttempt directly — that self-recursion is the ONLY
+// place unbounded stack growth was possible.
+//
+// # What "progress" means, and why comparing counts is exact here, not a proxy
+//
+// A retried sub-batch is fed forward completely unchanged in content:
+// Batch.Ack (called just before recursing) only resets recordStatuses, never
+// record data, and a RecordFlagRetry-classified record is by
+// ProcessorTask.Do's contract exactly one the processor returned NOTHING for
+// this round (the "nil" case in markBatchRecords' switch) — so no record
+// outside the current retry group can ever join it; the group fed into
+// attempt N+1 is always a SUBSET of the group fed into attempt N (never a
+// superset, never a disjoint swap). A subset with the SAME cardinality as the
+// set it was drawn from IS that set. So "the retry group's size did not
+// shrink between two consecutive attempts" is not merely correlated with "the
+// exact same records came back unresolved" — under this recursion's own
+// structure it is EQUIVALENT to it. Comparing counts is therefore an exact
+// progress test here, not a heuristic; no deeper (and slower, and
+// non-deterministic-processor-hostile) content comparison is needed to tell
+// whether a SINGLE round made progress.
+//
+// # Why one stalled round is not enough to fail (see maxRetryStall)
+//
+// The very first time a task's Do call marks part of a batch Retry is the
+// normal, universal trigger for this whole mechanism — it says nothing yet
+// about whether the processor will converge, so the FIRST attempt (retry ==
+// nil) is never compared at all. From the second attempt onward, a single
+// non-shrinking round is exact evidence that THAT round made no progress, but
+// not necessarily that the processor never will (see maxRetryStall's doc
+// comment for the time-dependent-processor case this guards against) - so
+// stall counts consecutive non-shrinking rounds, resets to 0 the moment a
+// round DOES shrink, and only trips the failure once it reaches
+// maxRetryStall. A permanently stuck (input-deterministic) processor - #2726's
+// actual failure mode - never shrinks at all, so it hits maxRetryStall
+// immediately regardless of its value.
+type retryAttempt struct {
+	// count is how many consecutive RecordFlagRetry recursions have happened
+	// so far for this task, starting at 1 for the first recursion (i.e. the
+	// second time overall Task.Do has run on data descended from this batch).
+	count int
+	// size is len(b.records) at the doTaskAttempt call this retryAttempt
+	// value was passed into — how many records were fed to Task.Do on the
+	// attempt that produced it. The NEXT retry group's size is compared
+	// against this to detect a stalled (non-shrinking) round.
+	size int
+	// stall counts CONSECUTIVE attempts, up to and including the one that
+	// produced this value, whose retry-group size did not shrink relative to
+	// the attempt before it. It resets to 0 the moment a round shrinks. See
+	// maxRetryStall for why a run of these - not a single occurrence - is
+	// what triggers CodeRetryNotConverging.
+	stall int
+}
+
+// doTask is the entry point into task processing: every caller outside a
+// RecordFlagRetry recursion (Worker.Do, and doNextTask advancing to a new
+// task node) comes through here, which always starts a fresh retry chain.
+// See doTaskAttempt and retryAttempt for the bounded-retry mechanics.
 func (w *Worker) doTask(
 	ctx context.Context,
 	taskNode *TaskNode,
 	b *Batch,
 	acker ackNacker,
+) error {
+	return w.doTaskAttempt(ctx, taskNode, b, acker, nil)
+}
+
+//nolint:gocyclo // TODO: refactor
+func (w *Worker) doTaskAttempt(
+	ctx context.Context,
+	taskNode *TaskNode,
+	b *Batch,
+	acker ackNacker,
+	retry *retryAttempt,
 ) error {
 	t := taskNode.Task
 
@@ -451,7 +570,72 @@ func (w *Worker) doTask(
 			// Retry the sub-batch by passing it to the same task. We need to
 			// mark the records as acked, as that's the default record status.
 			subBatch.Ack(0, len(subBatch.records))
-			err := w.doTask(ctx, taskNode, subBatch, acker)
+
+			size := len(subBatch.records)
+			next := &retryAttempt{count: 1, size: size}
+			if retry != nil {
+				// Invariant 3 (enforcement site, #2726): this is at least the
+				// second consecutive RecordFlagRetry recursion for this task.
+				// If the retry group did not shrink relative to what was fed
+				// into the previous attempt (retry.size), THIS round made no
+				// progress - see retryAttempt's doc comment for why comparing
+				// counts here is an exact test for that, not a heuristic. A
+				// stall run of maxRetryStall consecutive non-shrinking rounds
+				// (see its doc comment for why one round alone isn't enough)
+				// means the processor is a fixpoint: recursing further would
+				// only grow the stack without bound for no benefit (#2726),
+				// so fail the pipeline loudly instead. Nothing in this
+				// sub-batch — or anything after it, since the tainted loop's
+				// idx cursor never advances past a Retry group it recurses
+				// into — has been acked or nacked, so every record here is
+				// redelivered on restart once the pipeline is fixed.
+				stall := retry.stall
+				if size >= retry.size {
+					stall++
+				} else {
+					stall = 0
+				}
+				if stall >= maxRetryStall {
+					ce := conduiterr.New(CodeRetryNotConverging, fmt.Sprintf(
+						"task %s: retry made no progress for %d consecutive attempt(s) "+
+							"(of %d total): %d record(s) were fed to the processor and "+
+							"%d came back with no result at all — not processed, not "+
+							"filtered, not errored",
+						t.ID(), stall, retry.count+1, retry.size, size,
+					))
+					ce.Suggestion = fmt.Sprintf(
+						"task %q returned an empty/unset result for these records rather "+
+							"than a processed record, a filter, or an error. For a "+
+							"standalone (WASM) processor this usually means a malformed or "+
+							"version-mismatched plugin sending a ProcessedRecord with no "+
+							"Record set; check the plugin build and its processor-SDK "+
+							"version. NOTE: a processor that merely returns FEWER records "+
+							"than it received is not this condition — that shrinks the "+
+							"retry group and converges normally. No records were acked; "+
+							"they will be redelivered on restart", t.ID(),
+					)
+					return cerrors.FatalError(ce)
+				}
+				next = &retryAttempt{count: retry.count + 1, size: size, stall: stall}
+			}
+			if next.count > maxRetryAttempts {
+				ce := conduiterr.New(CodeRetryNotConverging, fmt.Sprintf(
+					"task %s: retry exceeded the maximum of %d attempts (%d "+
+						"record(s) still unresolved) before either converging or "+
+						"being detected as stuck; aborting to avoid unbounded "+
+						"recursion", t.ID(), maxRetryAttempts, size,
+				))
+				ce.Suggestion = fmt.Sprintf(
+					"task %q needed more than %d retry attempts to resolve a batch; "+
+						"if it is genuinely converging (shrinking every attempt) on "+
+						"unusually large batches, reduce the source's batch size — "+
+						"no records were acked, they will be redelivered on restart",
+					t.ID(), maxRetryAttempts,
+				)
+				return cerrors.FatalError(ce)
+			}
+
+			err := w.doTaskAttempt(ctx, taskNode, subBatch, acker, next)
 			if err != nil {
 				return err
 			}
@@ -623,7 +807,8 @@ func validateAckPositions(positions []opencdc.Position) error {
 		ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
 			"refusing to ack an empty position (index %d of %d) to the source: "+
 				"acking it would overwrite the durable source position and force a full re-read on restart",
-			i, len(positions)))
+			i, len(positions),
+		))
 		ce.Suggestion = "this usually means a processor split a record and a later processor returned " +
 			"only part of the split run; the records are not acked and will be redelivered, but the " +
 			"pipeline is stopped to protect the source position"
@@ -884,7 +1069,8 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		// which is why validateAckPositions guards the corruption site too.
 		if len(p) == 0 {
 			ce := conduiterr.New(CodeEmptySourcePosition, fmt.Sprintf(
-				"record %d of %d in a fanned-out batch has an empty position", i, len(positions)))
+				"record %d of %d in a fanned-out batch has an empty position", i, len(positions),
+			))
 			ce.Suggestion = "this usually means a processor split a record and a later processor " +
 				"returned only part of the split run; fix the processor chain so split runs stay intact"
 			return nil, ce
@@ -892,7 +1078,8 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		if prev, dup := posIndex[string(p)]; dup {
 			ce := conduiterr.New(CodeDuplicateSourcePosition, fmt.Sprintf(
 				"records %d and %d in the same batch carry the identical position %q; "+
-					"a position must uniquely identify a record", prev, i, p))
+					"a position must uniquely identify a record", prev, i, p,
+			))
 			ce.Suggestion = "if these records came straight from the source, this is a source-connector " +
 				"bug: every record in a batch must carry a distinct, non-empty position"
 			return nil, ce
