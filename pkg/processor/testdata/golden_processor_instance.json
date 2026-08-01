@@ -1,0 +1,18 @@
+{
+  "ID": "golden-processor",
+  "CreatedAt": "2026-06-15T09:30:00Z",
+  "UpdatedAt": "2026-06-15T09:31:00Z",
+  "ProvisionedBy": 1,
+  "Plugin": "builtin:field.set",
+  "Condition": "{{ eq .Metadata[\"key\"] \"value\" }}",
+  "Parent": {
+    "ID": "golden-pipeline",
+    "Type": 2
+  },
+  "Config": {
+    "Settings": {
+      "field": "value"
+    },
+    "Workers": 4
+  }
+}

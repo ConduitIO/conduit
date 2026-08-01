@@ -1,0 +1,25 @@
+{
+  "ID": "golden-source",
+  "Type": 1,
+  "Config": {
+    "Name": "golden-source-connector",
+    "Settings": {
+      "path": "/data/in"
+    }
+  },
+  "PipelineID": "golden-pipeline",
+  "Plugin": "builtin:file",
+  "ProcessorIDs": ["proc-1", "proc-2"],
+  "State": {
+    "Position": "Z29sZGVuLXBvc2l0aW9uLTQy"
+  },
+  "ProvisionedBy": 1,
+  "CreatedAt": "2026-06-15T09:30:00Z",
+  "UpdatedAt": "2026-06-15T09:31:00Z",
+  "LastActiveConfig": {
+    "Name": "golden-source-connector",
+    "Settings": {
+      "path": "/data/in"
+    }
+  }
+}

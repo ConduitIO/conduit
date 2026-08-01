@@ -1,0 +1,22 @@
+{
+  "ID": "golden-pipeline",
+  "Config": {
+    "Name": "golden-pipeline-name",
+    "Description": "golden pipeline for pre-flip format test"
+  },
+  "Error": "",
+  "CreatedAt": "2026-06-15T09:30:00Z",
+  "UpdatedAt": "2026-06-15T09:31:00Z",
+  "ProvisionedBy": 1,
+  "DLQ": {
+    "Plugin": "builtin:log",
+    "Settings": {
+      "level": "warn"
+    },
+    "WindowSize": 101,
+    "WindowNackThreshold": 100
+  },
+  "ConnectorIDs": ["golden-source", "golden-destination"],
+  "ProcessorIDs": ["golden-processor"],
+  "Status": 1
+}
