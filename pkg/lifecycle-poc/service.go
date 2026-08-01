@@ -18,6 +18,7 @@ package lifecycle
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -343,47 +344,115 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// doc.
 		rp.intentionalStop.Store(true)
 
-		// Generalized to N workers (slice 3b): stop every source worker.
-		// intentionalStop is a single, pipeline-wide flag backing a single
-		// terminal status write, so it must stay true as long as AT LEAST
-		// ONE worker genuinely began stopping (w.Stopping() == true) — that
-		// worker's later transient drain error still needs to be classified
-		// as this deliberate stop. Only roll back to false if NOT ONE worker
-		// armed — i.e. every Stop call failed before arming (mirrors the
-		// original single-worker rollback condition: "nothing began
-		// stopping").
+		// H1 (adversarial review of #2734): every worker's Stop call is
+		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
+		// instead of sequentially. ctx carries an ABSOLUTE deadline (see
+		// StopAndWait's O2 bound), so a sequential loop did not give every
+		// worker an equal window to arm: an earlier worker's Stop call could
+		// block for a long time (e.g. waiting on its own processingLock,
+		// held by its own Do goroutine contending for a SLOW sibling's write
+		// on the shared destination via sharedMu - see funnel.Worker.doTask)
+		// and, by the time the loop reached a LATER worker, the deadline had
+		// already mostly or entirely elapsed - so which workers armed
+		// depended on their position in the loop, not on how long they
+		// actually needed. Dispatching concurrently gives every worker the
+		// same wall-clock window.
+		//
+		// This does not eliminate partial arming outright - two sources can
+		// legitimately need different amounts of time to reach a safe stop
+		// point within one bounded deadline - so armed/unarmed status is
+		// still gathered below and a genuine partial result is escalated,
+		// never left as an ambiguous, silently-stuck state.
+		var wg sync.WaitGroup
+		var mu sync.Mutex
 		var errs []error
-		anyArmed := false
+		armed := make([]bool, len(rp.workers))
+		wg.Add(len(rp.workers))
 		for i, w := range rp.workers {
-			err := w.Stop(ctx)
-			if err != nil {
-				errs = append(errs, cerrors.Errorf("source %s: %w", rp.sourceIDs[i], err))
-			}
-			if w.Stopping() {
-				// Stop failed BEFORE arming the worker's stop flag — the only
-				// such path is acquireProcessingLock timing out (see
-				// funnel.Worker.Stop; the O2 drain bound in StopAndWait
-				// passes a deadline-bound ctx here). w.stop was never set for
-				// this worker: it is still genuinely running, unattended,
-				// exactly as before this call.
-				//
-				// Crucially we do NOT roll back when Stop errors but the
-				// worker IS stopping — that is the teardown-failed-after-
-				// w.stop-was-set path (a wedged/dead source), where the
-				// worker really is winding down. Rolling back there would
-				// let the resulting non-fatal Close error fall into
-				// recoverPipeline and auto-restart a pipeline the operator
-				// just stopped — exactly the O3 bug this field exists to
-				// prevent. Found by adversarial review of the drain PR.
-				anyArmed = true
+			go func(i int, w *funnel.Worker) {
+				defer wg.Done()
+				err := w.Stop(ctx)
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, cerrors.Errorf("source %s: %w", rp.sourceIDs[i], err))
+					mu.Unlock()
+				}
+				// See Worker.Stopping's doc: true iff w.stop was set, which
+				// Stop does BEFORE attempting source teardown - so this is
+				// accurate even when Stop itself went on to return an error
+				// (a wedged/dead source's teardown failing AFTER arming).
+				armed[i] = w.Stopping()
+			}(i, w)
+		}
+		wg.Wait()
+
+		var armedSources, unarmedSources []string
+		for i, a := range armed {
+			if a {
+				armedSources = append(armedSources, rp.sourceIDs[i])
+			} else {
+				unarmedSources = append(unarmedSources, rp.sourceIDs[i])
 			}
 		}
-		if !anyArmed {
-			// Clear the marker so a LATER, unrelated transient error is still
-			// eligible for ordinary auto-recovery instead of being
-			// permanently (and incorrectly) treated as an already-completed
-			// user stop.
+
+		switch {
+		case len(armedSources) == 0:
+			// Nothing armed: every worker's Stop call failed BEFORE setting
+			// w.stop (the only such path is acquireProcessingLock losing to
+			// ctx - see funnel.Worker.Stop). No source was torn down; every
+			// worker is still genuinely running, unattended, exactly as
+			// before this call. Clear the marker so a LATER, unrelated
+			// transient error is still eligible for ordinary auto-recovery
+			// instead of being permanently (and incorrectly) treated as an
+			// already-completed user stop. Mirrors the original
+			// single-worker rollback condition ("nothing began stopping"),
+			// generalized to "no worker began stopping".
 			rp.intentionalStop.Store(false)
+		case len(unarmedSources) > 0:
+			// H1 (adversarial review): PARTIAL arming. Some source(s) armed
+			// and tore down their connector; other(s) are still reading.
+			// Leaving this half-done would strand the pipeline reporting
+			// StatusRunning forever: the unarmed workers' Do loops keep
+			// running, workersWg never drains, and runPipeline's cleanup
+			// goroutine (the only thing that writes a terminal status) never
+			// runs. There is no safe "wait longer" option left here - the
+			// deadline this Stop call was given has already elapsed for at
+			// least one source.
+			//
+			// Escalate: force-kill the pipeline's tomb. Its ctx (threaded
+			// into every worker's Do call - see runPipeline) is canceled, so
+			// every still-unarmed worker's blocked Read (or its wait for
+			// sharedMu/processingLock) observes cancellation on its next
+			// check and unwinds via the context.Canceled path in
+			// Worker.doTaskAttempt - guaranteeing workersWg DOES drain and
+			// the cleanup goroutine DOES run, reporting a terminal
+			// (Degraded) status instead of an invisible half-stopped
+			// pipeline. This trades "graceful" for "terminates
+			// deterministically", which is the only safe choice once some
+			// sources are already gone: at-least-once is still intact -
+			// nothing here acks a record, so an interrupted worker's
+			// in-flight, unacked batch simply replays on the next start
+			// (invariant 3). Genuinely wedged I/O that ignores ctx
+			// cancellation entirely is a separate, pre-existing limitation
+			// this does not newly introduce (see DefaultStopAndWaitTimeout's
+			// doc) - it already applied equally to a single-worker pipeline.
+			ce := conduiterr.New(CodePartialGracefulStopEscalated, fmt.Sprintf(
+				"graceful stop of pipeline %q partially completed within the deadline: source(s) %v stopped, "+
+					"but source(s) %v did not - escalating to a forced stop to avoid a pipeline stuck reporting "+
+					"Running with no signal",
+				rp.pipeline.ID, armedSources, unarmedSources,
+			))
+			ce.Suggestion = "check the destination/DLQ and the unarmed source(s) for a stuck write or read; " +
+				"the pipeline is being force-stopped and will reach a Degraded status - restart it once the " +
+				"underlying issue is resolved"
+			rp.t.Kill(cerrors.FatalError(ce))
+			errs = append(errs, ce)
+		default:
+			// Every worker armed: full success. Any per-worker Stop errors
+			// gathered above are still returned (a source can fail its OWN
+			// teardown after arming - see Worker.Stopping's doc - which is
+			// reported but needs neither rollback nor escalation), but there
+			// is nothing more to do here.
 		}
 		return cerrors.Join(errs...)
 	case true:
@@ -522,15 +591,24 @@ const DefaultStopAndWaitTimeout = 30 * time.Second
 // destination Write blocks the batch that holds processingLock forever, which
 // would otherwise hang Stop (and thus StopAndWait, and thus
 // provisioning.Service.ApplyPlanLive) indefinitely. On timeout this returns a
-// CodeStopAndWaitTimeout error and does NOT force-kill anything: whichever
-// step timed out (Stop, the drain wait, or the persistence wait) leaves the
-// pipeline in the exact state connector.Source.Teardown's own bounded-wait
-// fallback already established as safe (source.go's Teardown doc) — at worst
-// a benign duplicate on a later restart, never a gap. If Stop itself times
-// out, the worker's internal stop flag was never actually set (see
-// stopRunnablePipeline's rollback of intentionalStop on that path), so the
-// pipeline is simply still running, unattended, exactly as it was before this
-// call — safe to retry.
+// CodeStopAndWaitTimeout error and, for a single-source pipeline (or an
+// N-source one where EVERY worker's Stop call times out), does NOT
+// force-kill anything: whichever step timed out (Stop, the drain wait, or the
+// persistence wait) leaves the pipeline in the exact state
+// connector.Source.Teardown's own bounded-wait fallback already established
+// as safe (source.go's Teardown doc) — at worst a benign duplicate on a later
+// restart, never a gap. If Stop itself times out with NO worker's stop flag
+// ever set, the pipeline is simply still running, unattended, exactly as it
+// was before this call — safe to retry (stopAndWaitTimeoutErr's "stop" phase).
+//
+// N-source exception (adversarial-review finding H1): if Stop times out with
+// SOME but not all sources' stop flags set, stopRunnablePipeline does NOT
+// leave that ambiguous — it force-kills the pipeline's tomb right there
+// rather than let it strand reporting StatusRunning forever, and this method
+// surfaces that distinctly (stopAndWaitTimeoutErr's "stop-escalated" phase,
+// CodePartialGracefulStopEscalated) instead of the plain "safe to retry,
+// untouched" story that was true pre-3b when a pipeline had exactly one
+// worker. See stopRunnablePipeline's doc for the full escalation rationale.
 //
 // StopAndWait requires the pipeline to already be running (it delegates to
 // Stop, which returns pipeline.ErrPipelineNotRunning-coded errors otherwise)
@@ -544,6 +622,22 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 	defer cancel()
 
 	if err := s.Stop(stopCtx, pipelineID, false); err != nil {
+		// H1 compounding fix (adversarial review of #2734): check for the
+		// N-source partial-arming escalation BEFORE the generic
+		// DeadlineExceeded check below. stopRunnablePipeline already
+		// force-killed the pipeline's tomb the moment it detected some but
+		// not all sources armed within the deadline - the pipeline is on
+		// its way to a terminal (Degraded) status, which is NOT the
+		// "untouched, safe to retry" state the generic "stop" phase message
+		// describes. Without this check first, the join below (per-worker
+		// Stop errors, which for the sources that DIDN'T arm are themselves
+		// wrapped ctx.DeadlineExceeded errors) would still satisfy
+		// cerrors.Is(err, context.DeadlineExceeded) and fall into that
+		// generic branch, surfacing a FALSE "safe to retry" claim for a
+		// pipeline that is actually being force-stopped.
+		if ce, ok := conduiterr.Get(err); ok && ce.Code == CodePartialGracefulStopEscalated {
+			return s.stopAndWaitTimeoutErr(pipelineID, "stop-escalated", err)
+		}
 		if cerrors.Is(err, context.DeadlineExceeded) {
 			return s.stopAndWaitTimeoutErr(pipelineID, "stop", err)
 		}
@@ -568,27 +662,50 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 }
 
 // stopAndWaitTimeoutErr builds the coded, actionable error StopAndWait returns
-// when the bounded drain (O2) elapses during the named phase ("stop", "drain",
-// or "persist"). The end-state note is phase-specific because the phases leave
-// the pipeline in genuinely different states — nothing is ever force-stopped or
-// torn down on any of them, so all three stay at-least-once-safe (never a gap),
-// but only the "stop" phase leaves the pipeline still running and cleanly
-// retriable; after "drain"/"persist" the worker is already stopping, so a
-// literal StopAndWait retry would hit ErrPipelineNotRunning (adversarial-review
-// Finding 2).
+// when the bounded drain (O2) elapses during the named phase ("stop",
+// "stop-escalated", "drain", or "persist"). The end-state note is
+// phase-specific because the phases leave the pipeline in genuinely different
+// states — nothing is ever force-stopped or torn down on "stop"/"drain"/
+// "persist", so those three stay at-least-once-safe (never a gap) with the
+// pipeline either untouched ("stop") or already draining on its own
+// ("drain"/"persist"); "stop-escalated" is the one phase where this call DID
+// already force-kill the pipeline (see stopRunnablePipeline's N-source partial-
+// arming escalation, adversarial-review finding H1) — that pipeline is headed
+// for StatusDegraded, not "safe to retry as if nothing happened". Only the
+// "stop" phase leaves the pipeline still running and cleanly retriable; after
+// "stop-escalated"/"drain"/"persist" the worker is already stopping (or
+// force-stopping), so a literal StopAndWait retry would hit
+// ErrPipelineNotRunning (adversarial-review Finding 2).
 func (s *Service) stopAndWaitTimeoutErr(pipelineID, phase string, cause error) error {
 	var state, suggestion string
 	switch phase {
 	case "stop":
 		state = "the pipeline never began stopping (its worker's stop flag was not set) and is still running, exactly as before this call — safe to retry StopAndWait"
 		suggestion = "check the destination/DLQ for a stuck write holding the processing lock, then retry; the pipeline is untouched and at-least-once is intact"
+	case "stop-escalated":
+		// H1 (adversarial review of #2734): an N-source pipeline where SOME
+		// but not all sources armed within the deadline. Unlike the plain
+		// "stop" phase, this pipeline is NOT untouched: stopRunnablePipeline
+		// already force-killed its tomb the moment it detected the partial
+		// result, specifically so it could never be left stuck reporting
+		// Running with no signal. Retrying StopAndWait immediately will
+		// likely hit ErrPipelineNotRunning as it finishes winding down.
+		state = "a partial graceful stop was detected — source(s) already stopped while other(s) were still running — and this call already escalated it to a forced stop; the pipeline is winding down toward StatusDegraded, not untouched"
+		suggestion = "do not retry StopAndWait immediately; wait for the pipeline to reach StatusDegraded (poll pipeline status or WaitPipeline), check the source(s)/destination named in the cause for what was stuck, then re-apply"
 	default: // "drain" or "persist"
 		state = "the pipeline had already begun stopping and will finish draining on its own; the timeout only means quiescence/durability was not confirmed within the bound"
 		suggestion = "check the destination/DLQ for a stuck write; do not force-restart — let the pipeline reach a stopped state (it is at-least-once-safe, never a gap), then re-apply"
 	}
+	// "stop-escalated" reads grammatically as "...within a partial graceful
+	// stop", not "...to stop-escalated" — everything else keeps the original
+	// "to <phase>" phrasing.
+	verb := phase
+	if phase == "stop-escalated" {
+		verb = "gracefully stop every source"
+	}
 	ce := conduiterr.Wrap(CodeStopAndWaitTimeout, fmt.Sprintf(
 		"timed out waiting for pipeline %q to %s within %s; %s",
-		pipelineID, phase, DefaultStopAndWaitTimeout, state,
+		pipelineID, verb, DefaultStopAndWaitTimeout, state,
 	), cause)
 	ce.Suggestion = suggestion
 	return ce
@@ -710,12 +827,33 @@ func (s *Service) buildRunnablePipeline(
 			return nil, cerrors.Errorf("failed to attach shared sink for source %s: %w", srcTaskSet.sourceID, err)
 		}
 
-		// log the tasks and order for debugging purposes
+		// log the tasks and order for debugging purposes. taskNode.Tasks()
+		// stops at the shared boundary (see TaskNode.MarkSharedBoundary's
+		// doc — a Worker's own Open/Close walk never descends into the
+		// shared sink), so without walking sharedRoots separately this line
+		// would silently omit the destination and any shared pipeline-level
+		// processors from every source's debug output (L4, adversarial
+		// review of #2734) — an operator comparing this log against the
+		// pipeline config would see a task chain that appears to dead-end
+		// before ever reaching a destination. Logged under its own "shared"
+		// key, once per source (cheap, and keeps this one line
+		// self-contained instead of requiring a second log statement
+		// elsewhere to reconstruct the full chain).
 		taskTypes := make([]string, 0)
 		for task := range taskNode.Tasks() {
 			taskTypes = append(taskTypes, fmt.Sprintf("%s(%T)", task.ID(), task))
 		}
-		pipelineLogger.Info(ctx).Str("source_id", srcTaskSet.sourceID).Any("tasks", taskTypes).Msg("pipeline tasks")
+		sharedTaskTypes := make([]string, 0)
+		for _, root := range sharedRoots {
+			for task := range root.Tasks() {
+				sharedTaskTypes = append(sharedTaskTypes, fmt.Sprintf("%s(%T)", task.ID(), task))
+			}
+		}
+		pipelineLogger.Info(ctx).
+			Str("source_id", srcTaskSet.sourceID).
+			Any("tasks", taskTypes).
+			Any("shared", sharedTaskTypes).
+			Msg("pipeline tasks")
 
 		worker, err := funnel.NewWorker(taskNode, dlq, pipelineLogger, timer)
 		if err != nil {
@@ -955,30 +1093,89 @@ func (s *Service) buildProcessorTasks(
 	return tasks, nil
 }
 
+// buildDLQName returns the DLQ connector ID for sourceID within pipeline
+// pipelineID, bounded well under connector.IDLengthLimit regardless of how
+// long pipelineID or sourceID are.
+//
+// L1 (adversarial review of #2734): naming used to be
+// pipelineID+"-"+sourceID+"-dlq". Provisioned connector IDs are already
+// pipelineID+":"+name (see pkg/provisioning/config/enrich.go's
+// enrichConnectors), so that format embedded the pipeline ID TWICE — once
+// directly, once again inside sourceID — and could push a long-but-
+// previously-valid pipeline ID over connector.IDLengthLimit (256), refusing
+// to start a pipeline whose own ID was never too long on its own: a
+// user-facing regression the user never asked for and can't fix by renaming
+// anything they wrote.
+//
+// Fixed by keying on a short, deterministic hash of sourceID instead of its
+// full text: the same sourceID always produces the same hash (stable across
+// restarts — important, since buildDLQ runs again on every recovery restart
+// and must keep addressing the SAME DLQ connector for a given source),
+// collisions across the — typically small — N sources in one pipeline are
+// astronomically unlikely (64 bits of SHA-256), and the result's length no
+// longer depends on how long the source's own name happens to be.
+func buildDLQName(pipelineID, sourceID string) string {
+	h := sha256.Sum256([]byte(sourceID))
+	return fmt.Sprintf("%s-dlq-%x", pipelineID, h[:8])
+}
+
 // buildDLQ builds a per-source DLQ destination connector for sourceID.
 //
 // Slice 3b of the arch-v2 multi-connector epic: pre-3b, a pipeline had
 // exactly one source, so a single DLQ named pl.ID+"-dlq" was unambiguous.
 // With N sources, that fixed name would collide the moment a second source
 // tried to create a connector with the identical ID — so the DLQ is named
-// pl.ID+"-"+sourceID+"-dlq" instead, giving every source its own,
-// independent DLQ (in turn giving every funnel.Worker its own w.DLQ, opened
-// and closed entirely within that worker's own Open/Close — never part of
-// the shared sink; see funnel.Sink's doc).
+// via buildDLQName instead, giving every source its own, independent DLQ (in
+// turn giving every funnel.Worker its own w.DLQ, opened and closed entirely
+// within that worker's own Open/Close — never part of the shared sink; see
+// funnel.Sink's doc).
 //
 // This is not a stored-state migration: the DLQ connector is created with
 // connector.ProvisionTypeDLQ, which connector.Destination.Open/Teardown
 // checks to skip persister.ConnectorStarted/ConnectorStopped — the DLQ
 // connector (and therefore its ID) is never written to the connector store,
-// so no upgrade path needs to reconcile an old pl.ID+"-dlq" record against
-// this new naming scheme; nothing durable ever referenced it.
+// so no upgrade path needs to reconcile an old naming scheme against a new
+// one; nothing durable ever referenced it.
+//
+// M1 (adversarial review, documented not redesigned): windowSize/
+// windowNackThreshold are per-source, not pipeline-wide. Pre-3b, with
+// exactly one source, "halt after 5 nacks" and "halt after 5 nacks from
+// THIS source" were the same statement. With N sources, each gets its OWN
+// funnel.DLQ and therefore its own independent window (see funnel.DLQ's
+// window field) — a pipeline configured with windowNackThreshold: 5 now
+// tolerates up to 5 nacks PER SOURCE (5×N pipeline-wide) before any one of
+// them halts the pipeline, not 5 total. This is a deliberate choice to keep
+// the DLQ genuinely per-source (matching every other per-source DLQ
+// property: naming, the destination connector instance, the ack window) over
+// introducing a NEW piece of shared mutable state across N worker goroutines
+// to preserve the old pipeline-wide count — the latter is a real option (a
+// shared *dlqWindow behind its own mutex) but is not attempted here without
+// a concrete operator need for it, per the "no speculative generality"
+// engineering guideline. Operators who need a pipeline-wide bound today
+// should divide their desired total by the number of sources when setting
+// windowNackThreshold. See
+// docs/design-documents/20260801-archv2-multiconnector-nsource.md, "Per-source
+// DLQ window semantics".
+//
+// M2 (adversarial review, documented not redesigned): N sources' DLQs all
+// share pl.DLQ.Settings — the same target, same credentials, same
+// everything except the connector ID and window. That is harmless for a
+// naturally-concurrent-safe target (builtin:log, most message-queue/object-
+// store DLQs), but a DLQ target that is NOT safe for concurrent writers from
+// independent connector instances (e.g. a local file DLQ, or anything that
+// takes an exclusive lock/handle on Open) will see either interleaved/
+// corrupted writes or an Open failure the moment a second source's DLQ
+// tries to start. There is no per-source Settings override today — operators
+// running N-source pipelines should pick a DLQ plugin known to tolerate
+// concurrent independent instances, or avoid file-based DLQs until a
+// per-source override exists. See the design doc's failure-modes section.
 func (s *Service) buildDLQ(
 	ctx context.Context,
 	pl *pipeline.Instance,
 	sourceID string,
 	logger log.CtxLogger,
 ) (*funnel.DLQ, error) {
-	dlqName := pl.ID + "-" + sourceID + "-dlq"
+	dlqName := buildDLQName(pl.ID, sourceID)
 
 	conn, err := s.connectors.Create(
 		ctx,

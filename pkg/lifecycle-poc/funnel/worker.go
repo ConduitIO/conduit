@@ -444,9 +444,61 @@ func (w *Worker) doTask(
 	if taskNode.sharedBoundary {
 		taskNode.sharedMu.Lock()
 		defer taskNode.sharedMu.Unlock()
+
+		// H2 (adversarial review of #2734): refuse to enter a shared
+		// destination subtree a PREVIOUS pass already poisoned (see the
+		// store below). This Load is guaranteed to observe a fully
+		// committed poison, never a partial/racy one: the store happens
+		// strictly before the OTHER goroutine's sharedMu.Unlock()
+		// (deferred there), and this Load happens strictly after THIS
+		// goroutine's own sharedMu.Lock() above - the mutex's own
+		// release/acquire pair is what makes the poison visible-before-
+		// entry, with no dependency on how fast rp.t.Kill's context
+		// cancellation propagates (which is exactly the race the original
+		// bug exploited: a sibling already contending for sharedMu could
+		// acquire it and call Ack() into a desynchronized stream before
+		// ever observing ctx.Done()).
+		if taskNode.poisoned.Load() {
+			ce := conduiterr.New(CodeSharedDestinationPoisoned, fmt.Sprintf(
+				"task %s: shared destination is poisoned by a previous error that may have left "+
+					"its ack stream desynchronized; refusing to write more records through it to avoid "+
+					"acking the wrong source's records", taskNode.Task.ID(),
+			))
+			ce.Suggestion = "this pipeline needs a full restart to reopen the shared destination with a " +
+				"fresh ack stream; the underlying error that poisoned it should be visible earlier in the logs"
+			return ce
+		}
 	}
 
-	return w.doTaskAttempt(ctx, taskNode, b, acker, nil)
+	err := w.doTaskAttempt(ctx, taskNode, b, acker, nil)
+	if err != nil && taskNode.sharedBoundary {
+		// H2 (adversarial review of #2734): ANY error escaping a pass
+		// through a shared subtree can desynchronize the shared
+		// destination's single gRPC ack stream from this point on - most
+		// critically DestinationTask.Do returning early on an Ack() error,
+		// which leaves whatever acks were still queued behind it UNREAD
+		// (see destination.go). A sibling worker that next acquires
+		// sharedMu would otherwise read THIS worker's leftover acks as its
+		// own: validateAcks' byte-for-byte comparison against ITS OWN
+		// positions can PASS if the two sources' position bytes happen to
+		// collide (positions are only unique WITHIN a source - see
+		// tests/chaos/nsource_child.go's deliberately disjoint posOffset,
+		// which is exactly the collision case this closes) - silently
+		// acking records upstream that were never durably written
+		// (invariant 1).
+		//
+		// Poison it HERE, before the deferred sharedMu.Unlock() above runs,
+		// so no sibling can ever observe an unlocked-but-still-
+		// desynchronized shared destination. This worker still returns err
+		// normally below - runPipeline's caller kills rp.t, which cancels
+		// ctx for every worker - but that cancellation reaching a sibling
+		// already blocked on sharedMu.Lock() is a race (see the Load's doc
+		// above); the poison flag is what closes the window regardless of
+		// that race's outcome.
+		taskNode.poisoned.Store(true)
+	}
+
+	return err
 }
 
 //nolint:gocyclo // TODO: refactor
@@ -501,6 +553,23 @@ func (w *Worker) doTaskAttempt(
 			// it can never fire after an external Stop already armed the
 			// flag (that path is handled by the branch above).
 			//
+			// M3 (adversarial review of #2734): log this transition at Info,
+			// distinctly from an externally-requested Stop, so it is never
+			// indistinguishable from a graceful operator stop in the logs -
+			// an operator reading them needs to be able to tell "this source
+			// decided on its own that it was done" apart from "something
+			// asked it to stop". As of this writing no in-tree connector or
+			// the connector-sdk's Run loop actually returns io.EOF this way
+			// (the SDK only ends Run on ctx-cancel or the plugin stream
+			// closing) - this branch exists defensively for when one does,
+			// and is honestly documented as currently unreachable in
+			// production rather than silently claimed as tested behavior;
+			// see docs/design-documents/20260801-archv2-multiconnector-nsource.md,
+			// "A source finishing gracefully is not a failure".
+			w.logger.Info(ctx).
+				Str("source_id", taskNode.Task.ID()).
+				Msg("source exhausted its records (io.EOF) and is stopping gracefully; sibling sources, if any, are unaffected")
+
 			// Arm w.stop so tearDownSource behaves identically to an
 			// externally-requested Stop (idempotent either way - see
 			// tearDownSource's doc), then return nil so Worker.Do's loop
@@ -937,6 +1006,17 @@ type TaskNode struct {
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
 	sharedMu *sync.Mutex
+	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
+	// review of #2734): set, under sharedMu, by doTask when a pass through
+	// this shared subtree returns an error - which may have left the shared
+	// destination's single gRPC ack stream desynchronized (see
+	// DestinationTask.Do and CodeSharedDestinationPoisoned) - BEFORE
+	// sharedMu is released. Checked by doTask immediately after acquiring
+	// sharedMu, so no later caller can ever read a stream a previous pass
+	// left in an unknown state. Never cleared: the only safe recovery is a
+	// full pipeline restart, which builds a brand new TaskNode (and
+	// therefore a fresh, unpoisoned flag) from scratch.
+	poisoned atomic.Bool
 }
 
 // MarkSharedBoundary marks t as the entry point into a subtree shared by

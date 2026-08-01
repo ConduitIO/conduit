@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (92)
+## 3. Error codes (94)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -635,6 +635,7 @@ Author: Meroxa, Inc.
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |
+| `lifecycle_v2.partial_graceful_stop_escalated` | Aborted | lifecycle v2: partial graceful stop escalated |
 | `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |
 | `orchestrator.connector_has_processors_attached` | FailedPrecondition | CodeConnectorHasProcessorsAttached is raised when a connector cannot be deleted because it still has processors attached. |
 | `orchestrator.immutable_provisioned_by_config` | FailedPrecondition | CodeImmutableProvisionedByConfig is raised when a pipeline, connector, or processor provisioned by a config file is mutated through the API instead of the config file. |
@@ -650,6 +651,7 @@ Author: Meroxa, Inc.
 | `pipeline.not_running` | FailedPrecondition | CodePipelineNotRunning is raised when an operation requires the pipeline to be running, but it is currently stopped. |
 | `pipeline.retry_not_converging` | FailedPrecondition | pipeline: retry not converging |
 | `pipeline.running` | FailedPrecondition | CodePipelineRunning is raised when an operation requires the pipeline to be stopped, but it is currently running. |
+| `pipeline.shared_destination_poisoned` | Aborted | pipeline: shared destination poisoned |
 | `pipeline.split_run_straddles_fanout` | FailedPrecondition | pipeline: split run straddles fanout |
 | `pipelines.init_destination_exists` | AlreadyExists | pipelines: init destination exists |
 | `pipelines.init_template_flags_exclusive` | InvalidArgument | pipelines: init template flags exclusive |

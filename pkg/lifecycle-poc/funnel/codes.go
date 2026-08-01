@@ -109,3 +109,31 @@ var CodeSplitRunStraddlesFanOut = conduiterr.Register("pipeline.split_run_stradd
 // redelivered on restart (invariant 3). No source position is corrupted or
 // skipped (invariant 2).
 var CodeRetryNotConverging = conduiterr.Register("pipeline.retry_not_converging", codes.FailedPrecondition)
+
+// CodeSharedDestinationPoisoned is returned when a worker in an N-source
+// pipeline (slice 3b) tries to enter a shared destination subtree that a
+// PREVIOUS pass already poisoned, after an error left the shared
+// destination's single gRPC ack stream desynchronized. See Worker.doTask's
+// poisoning store/check for the mechanics, and the adversarial-review
+// finding this closes (H2, docs/design-documents/20260801-archv2-multiconnector-nsource.md).
+//
+// This is a Tier-1 invariant-1 backstop, not merely retry hygiene.
+// DestinationTask.Do writes a batch and reads back exactly that many acks
+// off the destination's single gRPC stream, matching each ack to the
+// position it just sent in strict send order; if Do returns early on an
+// Ack() error, whatever acks were still queued behind it are never read by
+// THIS pass. Without this check, the very next worker to acquire the shared
+// boundary's mutex would read those leftover acks as if they were its own -
+// and connector-defined positions are only unique WITHIN a source, so two
+// sources emitting byte-identical position bytes (routine: two file
+// sources, two offset-based connectors, ...) would make validateAcks'
+// byte-for-byte comparison PASS, silently acking records upstream that this
+// worker's own destination write never durably confirmed.
+//
+// Recovering from this requires a full pipeline restart (a fresh Sink, a
+// fresh gRPC stream, and therefore a fresh, unpoisoned TaskNode) - which is
+// exactly what happens once this error propagates through
+// Worker.Do/lifecycle-poc.Service.runPipeline's existing tomb-kill and
+// recovery/degrade classification, so no special-casing is needed beyond
+// returning this error from doTask.
+var CodeSharedDestinationPoisoned = conduiterr.Register("pipeline.shared_destination_poisoned", codes.Aborted)
