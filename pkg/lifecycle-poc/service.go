@@ -112,8 +112,34 @@ func NewService(
 
 type runnablePipeline struct {
 	pipeline *pipeline.Instance
-	w        *funnel.Worker
-	t        *tomb.Tomb
+
+	// workers holds one funnel.Worker per source connector (slice 3b of the
+	// arch-v2 multi-connector epic: N sources, one worker per source). Each
+	// Worker is its own terminal acker bound to its own w.Source (see
+	// funnel.Worker's package doc), and Worker.doTask/doNextTask thread the
+	// CALLING worker's own acker through the shared sink's TaskNode subtree
+	// rather than a separate/shared acker - so as long as (a) there is
+	// exactly one Worker per source (enforced here: buildRunnablePipeline
+	// builds exactly len(sourceIDs) workers) and (b) no shared downstream
+	// component ever calls a source's Ack on behalf of another (upheld by
+	// construction, not by a runtime check - see the doc above), cross-source
+	// ack contamination is impossible. See
+	// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
+	workers []*funnel.Worker
+	// sourceIDs[i] is the connector ID of workers[i]'s source. Parallel to
+	// workers; used for diagnostics only (naming which source a worker's
+	// outcome belongs to in logs/errors).
+	sourceIDs []string
+	// sink owns the shared, destination-side portion of the task graph every
+	// worker's own chain converges on: opened exactly once before any worker
+	// starts, closed exactly once after every worker has exited
+	// (workersWg.Wait() in runPipeline). See funnel.Sink's doc - this is the
+	// crux of slice 3b (shared-sink teardown ordering): closing it any
+	// earlier would tear down a destination a still-running sibling worker
+	// is still writing to.
+	sink *funnel.Sink
+
+	t *tomb.Tomb
 
 	// backoff and recoveryAttempts hold the auto-recovery state. backoff is
 	// seeded per build; recoveryAttempts is carried across restarts by Start so
@@ -124,7 +150,7 @@ type runnablePipeline struct {
 	recoveryAttempts *atomic.Int64
 
 	// intentionalStop is set by stopRunnablePipeline's graceful-stop branch,
-	// before it calls rp.w.Stop, to mark this run as one an operator (or
+	// before it calls Stop on every worker, to mark this run as one an operator (or
 	// provisioning.ApplyPlanLive via StopAndWait) deliberately asked to stop —
 	// as opposed to a spontaneous failure. runPipeline's cleanup goroutine
 	// checks it alongside isGracefulShutdown: a transient (non-fatal) error
@@ -307,35 +333,59 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			Msg("gracefully stopping pipeline")
 
 		// Invariant 3/7: mark this run as an intentional (operator-initiated)
-		// stop BEFORE calling rp.w.Stop, so that if the drain itself surfaces a
-		// transient (non-fatal) error — e.g. a batch already in flight when
-		// Stop was called finishes unwinding with a destination write failure —
-		// runPipeline's cleanup goroutine (see the intentionalStop check there)
-		// finalizes it as StatusUserStopped instead of misreading it as a
-		// spontaneous failure and auto-restarting via recoverPipeline. See the
-		// intentionalStop field doc.
+		// stop BEFORE calling Stop on any worker, so that if a drain itself
+		// surfaces a transient (non-fatal) error — e.g. a batch already in
+		// flight when Stop was called finishes unwinding with a destination
+		// write failure — runPipeline's cleanup goroutine (see the
+		// intentionalStop check there) finalizes it as StatusUserStopped
+		// instead of misreading it as a spontaneous failure and
+		// auto-restarting via recoverPipeline. See the intentionalStop field
+		// doc.
 		rp.intentionalStop.Store(true)
-		err := rp.w.Stop(ctx)
-		if err != nil && !rp.w.Stopping() {
-			// Stop failed BEFORE arming the worker's stop flag — the only such
-			// path is acquireProcessingLock timing out (see funnel.Worker.Stop;
-			// the O2 drain bound in StopAndWait passes a deadline-bound ctx
-			// here). w.stop was never set: the pipeline is still genuinely
-			// running, unattended, exactly as before this call. Clear the
-			// marker so a LATER, unrelated transient error is still eligible for
-			// ordinary auto-recovery instead of being permanently (and
-			// incorrectly) treated as an already-completed user stop.
-			//
-			// Crucially we do NOT roll back when Stop errors but the worker IS
-			// stopping (rp.w.Stopping() == true) — that is the teardown-failed-
-			// after-w.stop-was-set path (a wedged/dead source), where the worker
-			// really is winding down. Rolling back there would let the resulting
-			// non-fatal Close error fall into recoverPipeline and auto-restart a
-			// pipeline the operator just stopped — exactly the O3 bug this field
-			// exists to prevent. Found by adversarial review of the drain PR.
+
+		// Generalized to N workers (slice 3b): stop every source worker.
+		// intentionalStop is a single, pipeline-wide flag backing a single
+		// terminal status write, so it must stay true as long as AT LEAST
+		// ONE worker genuinely began stopping (w.Stopping() == true) — that
+		// worker's later transient drain error still needs to be classified
+		// as this deliberate stop. Only roll back to false if NOT ONE worker
+		// armed — i.e. every Stop call failed before arming (mirrors the
+		// original single-worker rollback condition: "nothing began
+		// stopping").
+		var errs []error
+		anyArmed := false
+		for i, w := range rp.workers {
+			err := w.Stop(ctx)
+			if err != nil {
+				errs = append(errs, cerrors.Errorf("source %s: %w", rp.sourceIDs[i], err))
+			}
+			if w.Stopping() {
+				// Stop failed BEFORE arming the worker's stop flag — the only
+				// such path is acquireProcessingLock timing out (see
+				// funnel.Worker.Stop; the O2 drain bound in StopAndWait
+				// passes a deadline-bound ctx here). w.stop was never set for
+				// this worker: it is still genuinely running, unattended,
+				// exactly as before this call.
+				//
+				// Crucially we do NOT roll back when Stop errors but the
+				// worker IS stopping — that is the teardown-failed-after-
+				// w.stop-was-set path (a wedged/dead source), where the
+				// worker really is winding down. Rolling back there would
+				// let the resulting non-fatal Close error fall into
+				// recoverPipeline and auto-restart a pipeline the operator
+				// just stopped — exactly the O3 bug this field exists to
+				// prevent. Found by adversarial review of the drain PR.
+				anyArmed = true
+			}
+		}
+		if !anyArmed {
+			// Clear the marker so a LATER, unrelated transient error is still
+			// eligible for ordinary auto-recovery instead of being
+			// permanently (and incorrectly) treated as an already-completed
+			// user stop.
 			rp.intentionalStop.Store(false)
 		}
-		return err
+		return cerrors.Join(errs...)
 	case true:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
@@ -579,7 +629,18 @@ func (s *Service) ReconfigureProcessor(_ context.Context, pipelineID, processorI
 		lifecyclev1.ErrProcessorNotLiveReconfigurable, processorID, pipelineID)
 }
 
-// buildRunnablePipeline will build and connect all tasks configured in the pipeline.
+// buildRunnablePipeline will build and connect all tasks configured in the
+// pipeline.
+//
+// Slice 3b of the arch-v2 multi-connector epic: a pipeline may now have N
+// source connectors sharing one destination. Each source gets its own
+// funnel.Worker (its own per-source prefix: the source task plus that
+// source's own connector-specific processors); every worker's prefix is then
+// attached, by pointer, to the SAME shared tail (pipeline-level processors +
+// destination branch(es), built exactly once by buildSharedTail and owned by
+// a single funnel.Sink) — see the funnel.Sink and runnablePipeline.sink field
+// docs for why the shared portion needs its own, separate open/close
+// lifecycle from any individual worker's.
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
 	pl *pipeline.Instance,
@@ -587,11 +648,11 @@ func (s *Service) buildRunnablePipeline(
 	pipelineLogger := s.logger
 	pipelineLogger.Logger = pipelineLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 
-	srcTasks, err := s.buildSourceTasks(ctx, pl, pipelineLogger)
+	srcTaskSets, err := s.buildSourceTasks(ctx, pl, pipelineLogger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to build source tasks: %w", err)
 	}
-	if len(srcTasks) == 0 {
+	if len(srcTaskSets) == 0 {
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
 
@@ -608,38 +669,67 @@ func (s *Service) buildRunnablePipeline(
 		return nil, cerrors.Errorf("failed to build pipeline processor tasks: %w", err)
 	}
 
-	dlq, err := s.buildDLQ(ctx, pl, pipelineLogger)
+	sharedRoots, err := s.buildSharedTail(procTasks, destTasks)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to build DLQ: %w", err)
+		return nil, cerrors.Errorf("failed to build shared sink task graph: %w", err)
 	}
-
-	taskNodes, err := s.buildTaskNodes(srcTasks, procTasks, destTasks)
+	sink, err := funnel.NewSink(sharedRoots...)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to build task nodes: %w", err)
+		return nil, cerrors.Errorf("failed to build shared sink: %w", err)
 	}
 
-	// TODO(multi-connector): when we have multiple connectors we will have more than one task node
-	taskNode := taskNodes[0]
+	timer := measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name)
 
-	// log the tasks and order for debugging purposes
-	taskTypes := make([]string, 0)
-	for task := range taskNode.Tasks() {
-		taskTypes = append(taskTypes, fmt.Sprintf("%s(%T)", task.ID(), task))
-	}
-	pipelineLogger.Info(ctx).Any("tasks", taskTypes).Msg("pipeline tasks")
+	workers := make([]*funnel.Worker, 0, len(srcTaskSets))
+	sourceIDs := make([]string, 0, len(srcTaskSets))
+	for _, srcTaskSet := range srcTaskSets {
+		dlq, err := s.buildDLQ(ctx, pl, srcTaskSet.sourceID, pipelineLogger)
+		if err != nil {
+			return nil, cerrors.Errorf("failed to build DLQ for source %s: %w", srcTaskSet.sourceID, err)
+		}
 
-	worker, err := funnel.NewWorker(
-		taskNode,
-		dlq,
-		pipelineLogger,
-		measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to create worker: %w", err)
+		taskNode := &funnel.TaskNode{Task: srcTaskSet.tasks[0]}
+		tail := taskNode
+		for _, task := range srcTaskSet.tasks[1:] {
+			next := &funnel.TaskNode{Task: task}
+			if err := tail.AppendToEnd(next); err != nil {
+				return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+			}
+			tail = next
+		}
+		// Attach the SAME shared root(s) — by pointer — to this source's own
+		// prefix. N different sources' tail nodes end up with their own Next
+		// field pointing at the identical shared TaskNode instances; that's
+		// safe (Next is just a slice of pointers, and nothing about
+		// attaching it mutates the shared nodes) and is exactly what makes
+		// funnel.Worker.doTask's runtime traversal reach the shared
+		// destination from every worker while Worker.Open/Close (which walk
+		// via the Tasks()/TaskNodes() iterator, not Next directly) stop
+		// before it — see TaskNode.MarkSharedBoundary's doc.
+		if err := tail.AppendToEnd(sharedRoots...); err != nil {
+			return nil, cerrors.Errorf("failed to attach shared sink for source %s: %w", srcTaskSet.sourceID, err)
+		}
+
+		// log the tasks and order for debugging purposes
+		taskTypes := make([]string, 0)
+		for task := range taskNode.Tasks() {
+			taskTypes = append(taskTypes, fmt.Sprintf("%s(%T)", task.ID(), task))
+		}
+		pipelineLogger.Info(ctx).Str("source_id", srcTaskSet.sourceID).Any("tasks", taskTypes).Msg("pipeline tasks")
+
+		worker, err := funnel.NewWorker(taskNode, dlq, pipelineLogger, timer)
+		if err != nil {
+			return nil, cerrors.Errorf("failed to create worker for source %s: %w", srcTaskSet.sourceID, err)
+		}
+		workers = append(workers, worker)
+		sourceIDs = append(sourceIDs, srcTaskSet.sourceID)
 	}
+
 	return &runnablePipeline{
-		pipeline: pl,
-		w:        worker,
+		pipeline:  pl,
+		workers:   workers,
+		sourceIDs: sourceIDs,
+		sink:      sink,
 		// Seed a fresh backoff and attempt counter. Start carries these onto the
 		// next runnablePipeline across a recovery restart. Mirrors
 		// pkg/lifecycle.buildRunnablePipeline; the backoff parameters come from
@@ -654,44 +744,28 @@ func (s *Service) buildRunnablePipeline(
 	}, nil
 }
 
-// buildTaskNodes takes the source, processor and destination tasks and builds
-// a task node graph. The returned slice contains the first task nodes in every
-// branch of the graph. The other task nodes are connected to the first task node
-// in their branch.
+// buildSharedTail builds the TaskNode subtree(s) shared by every source
+// worker in the pipeline: the pipeline-level (shared) processors followed by
+// the destination branch(es). Built exactly once per pipeline — never once
+// per source — and handed to funnel.NewSink, which is what gives it its own
+// open-once/close-once lifecycle independent of any individual
+// funnel.Worker. See funnel.Sink's doc for the full rationale.
 //
-// Slice 3a of the arch-v2 multi-connector epic: destTasks may now contain
-// more than one branch (1 source, M destinations). Each destination's task
-// chain becomes its own branch, and all M branches are attached as the Next
-// of the single shared prefix (source tasks + pipeline processors) in one
-// AppendToEnd call, so funnel.Worker.doNextTask fans the batch out to all of
-// them (see multiAckNacker for the per-record ack/nack accounting that
-// makes that safe). For M=1 this is exactly the previous single-destination
-// behavior.
-//
-// TODO(multi-connector): multiple SOURCE connectors still need their own
-// worker each (see the multi-source guard in buildSourceTasks) — that's a
-// later slice, not this one.
-func (s *Service) buildTaskNodes(
-	srcTasks [][]funnel.Task,
+// Returns a single root when there is at least one shared pipeline-level
+// processor: its own tail already fans out internally to every destination
+// branch via one AppendToEnd call (mirroring the pre-3b, single-source
+// behavior — see slice 3a's doc on the M-destination fan-out this reuses
+// unchanged). Returns len(destTasks) independent roots — one per destination
+// branch — when there are no shared processors, since there is then no
+// single shared node to serve as that fan-out parent; funnel.Sink treats a
+// multi-root case as len(roots) independently-locked shared subtrees, which
+// is not just safe but preferable for M>1 (different destinations can then
+// proceed without blocking on each other — see funnel.Sink's roots field
+// doc).
+func (s *Service) buildSharedTail(
 	procTasks []funnel.Task,
 	destTasks [][]funnel.Task,
 ) ([]*funnel.TaskNode, error) {
-	srcTasksBranch := srcTasks[0] // we only support one source connector for now
-
-	taskNode := &funnel.TaskNode{Task: srcTasksBranch[0]}
-	for _, task := range srcTasksBranch[1:] {
-		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
-		if err != nil {
-			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
-		}
-	}
-	for _, task := range procTasks {
-		err := taskNode.AppendToEnd(&funnel.TaskNode{Task: task})
-		if err != nil {
-			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
-		}
-	}
-
 	destBranches := make([]*funnel.TaskNode, len(destTasks))
 	for i, destTasksBranch := range destTasks {
 		if len(destTasksBranch) == 0 {
@@ -699,33 +773,64 @@ func (s *Service) buildTaskNodes(
 		}
 
 		branchNode := &funnel.TaskNode{Task: destTasksBranch[0]}
+		tail := branchNode
 		for _, task := range destTasksBranch[1:] {
-			err := branchNode.AppendToEnd(&funnel.TaskNode{Task: task})
-			if err != nil {
+			next := &funnel.TaskNode{Task: task}
+			if err := tail.AppendToEnd(next); err != nil {
 				return nil, cerrors.Errorf("failed to append task to destination branch: %w", err)
 			}
+			tail = next
 		}
 		destBranches[i] = branchNode
 	}
 
-	// A single AppendToEnd call with all M branches: the shared prefix's tail
-	// currently has 0 Next (nothing destination-related has been attached
-	// yet), so this sets its Next to destBranches directly rather than
-	// requiring M separate appends (which AppendToEnd can't do once a node
-	// already has more than 1 Next — see its doc).
-	if err := taskNode.AppendToEnd(destBranches...); err != nil {
-		return nil, cerrors.Errorf("failed to attach destination branches to task node list: %w", err)
+	if len(procTasks) == 0 {
+		return destBranches, nil
 	}
 
-	return []*funnel.TaskNode{taskNode}, nil
+	procRoot := &funnel.TaskNode{Task: procTasks[0]}
+	tail := procRoot
+	for _, task := range procTasks[1:] {
+		next := &funnel.TaskNode{Task: task}
+		if err := tail.AppendToEnd(next); err != nil {
+			return nil, cerrors.Errorf("failed to append task to task node list: %w", err)
+		}
+		tail = next
+	}
+	// A single AppendToEnd call with all M branches: procRoot's tail
+	// currently has 0 Next, so this sets its Next to destBranches directly
+	// rather than requiring M separate appends (which AppendToEnd can't do
+	// once a node already has more than 1 Next — see its doc).
+	if err := tail.AppendToEnd(destBranches...); err != nil {
+		return nil, cerrors.Errorf("failed to attach destination branches to shared processor chain: %w", err)
+	}
+
+	return []*funnel.TaskNode{procRoot}, nil
 }
 
+// sourceTaskSet bundles one source connector's task chain (its SourceTask
+// plus that connector's own per-connector processors) with the connector ID
+// it belongs to. buildRunnablePipeline uses sourceID to build this source's
+// dedicated funnel.Worker, its own per-source DLQ (buildDLQ), and to name it
+// in diagnostics/errors.
+type sourceTaskSet struct {
+	sourceID string
+	tasks    []funnel.Task
+}
+
+// buildSourceTasks builds one sourceTaskSet per source connector in the
+// pipeline. Slice 3b of the arch-v2 multi-connector epic: this used to guard
+// against (and reject) more than one source connector — that guard is gone.
+// Every source connector found gets its own entry; buildRunnablePipeline
+// turns each into its own funnel.Worker, which is what makes N sources safe
+// (see runnablePipeline.workers' doc on why one worker per source is what
+// makes cross-source ack contamination structurally impossible).
 func (s *Service) buildSourceTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
 	logger log.CtxLogger,
-) ([][]funnel.Task, error) {
-	var tasks [][]funnel.Task
+) ([]sourceTaskSet, error) {
+	var sets []sourceTaskSet
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := s.connectors.Get(ctx, connID)
@@ -735,11 +840,6 @@ func (s *Service) buildSourceTasks(
 
 		if instance.Type != connector.TypeSource {
 			continue // skip any connector that's not a source
-		}
-
-		if len(tasks) > 0 {
-			// TODO(multi-connector): remove check
-			return nil, cerrors.New("pipelines with multiple source connectors currently not supported, please disable the experimental feature flag")
 		}
 
 		src, err := instance.Connector(ctx, s.connectorPlugins)
@@ -761,13 +861,13 @@ func (s *Service) buildSourceTasks(
 		}
 
 		// Build the slice of tasks for this source
-		srcTasks := make([]funnel.Task, 0)
-		srcTasks = append(srcTasks, srcTask)
-		srcTasks = append(srcTasks, procTasks...)
-		tasks = append(tasks, srcTasks)
+		tasks := make([]funnel.Task, 0, 1+len(procTasks))
+		tasks = append(tasks, srcTask)
+		tasks = append(tasks, procTasks...)
+		sets = append(sets, sourceTaskSet{sourceID: instance.ID, tasks: tasks})
 	}
 
-	return tasks, nil
+	return sets, nil
 }
 
 // buildDestinationTasks builds one task branch per destination connector in
@@ -855,25 +955,45 @@ func (s *Service) buildProcessorTasks(
 	return tasks, nil
 }
 
+// buildDLQ builds a per-source DLQ destination connector for sourceID.
+//
+// Slice 3b of the arch-v2 multi-connector epic: pre-3b, a pipeline had
+// exactly one source, so a single DLQ named pl.ID+"-dlq" was unambiguous.
+// With N sources, that fixed name would collide the moment a second source
+// tried to create a connector with the identical ID — so the DLQ is named
+// pl.ID+"-"+sourceID+"-dlq" instead, giving every source its own,
+// independent DLQ (in turn giving every funnel.Worker its own w.DLQ, opened
+// and closed entirely within that worker's own Open/Close — never part of
+// the shared sink; see funnel.Sink's doc).
+//
+// This is not a stored-state migration: the DLQ connector is created with
+// connector.ProvisionTypeDLQ, which connector.Destination.Open/Teardown
+// checks to skip persister.ConnectorStarted/ConnectorStopped — the DLQ
+// connector (and therefore its ID) is never written to the connector store,
+// so no upgrade path needs to reconcile an old pl.ID+"-dlq" record against
+// this new naming scheme; nothing durable ever referenced it.
 func (s *Service) buildDLQ(
 	ctx context.Context,
 	pl *pipeline.Instance,
+	sourceID string,
 	logger log.CtxLogger,
 ) (*funnel.DLQ, error) {
+	dlqName := pl.ID + "-" + sourceID + "-dlq"
+
 	conn, err := s.connectors.Create(
 		ctx,
-		pl.ID+"-dlq",
+		dlqName,
 		connector.TypeDestination,
 		pl.DLQ.Plugin,
 		pl.ID,
 		connector.Config{
-			Name:     pl.ID + "-dlq",
+			Name:     dlqName,
 			Settings: pl.DLQ.Settings,
 		},
 		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
 	)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
+		return nil, cerrors.Errorf("failed to create DLQ destination for source %s: %w", sourceID, err)
 	}
 
 	dest, err := conn.Connector(ctx, s.connectorPlugins)
@@ -882,7 +1002,7 @@ func (s *Service) buildDLQ(
 	}
 
 	return funnel.NewDLQ(
-		"dlq",
+		"dlq-"+sourceID,
 		dest.(*connector.Destination),
 		logger,
 		s.newDLQMetrics(pl.Config.Name, conn.Plugin),
@@ -891,6 +1011,55 @@ func (s *Service) buildDLQ(
 	), nil
 }
 
+// runPipeline starts every worker in rp.workers plus one cleanup goroutine,
+// all registered on rp.t (see the registered/startupDone barriers below —
+// unchanged in spirit from the pre-3b single-worker version, just generalized
+// to N+1 goroutines instead of 2).
+//
+// Status aggregation (slice 3b of the arch-v2 multi-connector epic): the
+// cleanup goroutine's switch below is UNCHANGED from the pre-3b,
+// single-worker version, and that is deliberate — it generalizes to N
+// workers for free, because every worker's goroutine feeds the SAME tomb
+// (rp.t). Concretely:
+//
+//   - A worker whose Do() returns nil (a graceful stop, or a source that
+//     exhausted its records on its own — see doTask's io.EOF handling) never
+//     calls rp.t.Kill. The tomb stays alive and every sibling worker keeps
+//     running. The pipeline's status is never touched until workersWg.Wait()
+//     unblocks, i.e. it stays Running for as long as ANY worker is still
+//     alive — so "some finished, some still running" is simply not yet a
+//     terminal state at all.
+//   - A worker whose Do()/Close() returns a non-nil error ALWAYS calls
+//     rp.t.Kill(err) (fatal or not — see that call site's doc), which cancels
+//     ctx for every sibling worker. tomb.v2 records only the FIRST error
+//     passed to Kill; every later call (from this same worker's own
+//     bookkeeping, or a sibling reacting to the now-canceled ctx) is a no-op.
+//     So rp.t.Err() below always reflects "the first reason any one source
+//     brought the whole pipeline down" — exactly one error, regardless of N.
+//   - {all graceful} -> rp.t.Err() == tomb.ErrStillAlive -> StatusUserStopped/
+//     StatusSystemStopped (the tomb.ErrStillAlive case below).
+//   - {all fatal} or {some graceful + one fatal} -> rp.t.Err() is that fatal
+//     error -> StatusDegraded (cerrors.IsFatalError case below). A fatal
+//     error in ANY source degrades the WHOLE pipeline, matching v1.
+//   - {some graceful + one transient} or {all transient} -> rp.t.Err() is
+//     that transient error -> the recovery path (the innermost default case
+//     below), which rebuilds every source's worker and the shared sink from
+//     scratch — never a partial-source restart, which is why a transient
+//     error in one source legitimately winds down every sibling first.
+//   - A failure to close the shared sink itself (sinkCloseErr, computed
+//     after workersWg.Wait but before this switch) is folded into err via
+//     the same fatal/transient classification, rather than a fifth case.
+//
+// See docs/design-documents/20260801-archv2-multiconnector-nsource.md,
+// "status aggregation", for the full mapping table and rationale.
+//
+// this shape (see the doc above and doTask's identical existing
+// justification in funnel/worker.go) and is exercised by
+// TestServiceLifecycle_* in service_test.go plus the N-source tests this
+// slice adds; splitting it would trade one clear state machine for several
+// correlated ones without reducing real complexity.
+//
+//nolint:gocyclo // the terminal-status classification switch is inherently
 func (s *Service) runPipeline(rp *runnablePipeline) error {
 	if rp.t != nil && rp.t.Alive() {
 		return pipeline.ErrPipelineRunning
@@ -900,9 +1069,28 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	rp.t = &tomb.Tomb{}
 	ctx := rp.t.Context(nil) //nolint:staticcheck // this is the correct usage of tomb
 
-	err := rp.w.Open(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to open worker: %w", err)
+	// Invariant (crux of slice 3b, shared-sink teardown ordering): the shared
+	// sink is opened exactly once, before any source worker, and — at the
+	// other end of this function — closed exactly once, only after every
+	// worker has exited (workersWg.Wait below). See funnel.Sink's doc.
+	if err := rp.sink.Open(ctx); err != nil {
+		return cerrors.Errorf("failed to open shared sink: %w", err)
+	}
+
+	// Open every worker. On a failure partway through, roll back every
+	// worker already opened (and the sink) before returning — mirrors
+	// funnel.Worker.Open's own all-or-nothing rollback.R behavior, just at
+	// the pipeline level across N workers.
+	opened := make([]*funnel.Worker, 0, len(rp.workers))
+	for i, w := range rp.workers {
+		if err := w.Open(ctx); err != nil {
+			for j := len(opened) - 1; j >= 0; j-- {
+				_ = opened[j].Close(context.Background())
+			}
+			_ = rp.sink.Close(context.Background())
+			return cerrors.Errorf("failed to open worker for source %s: %w", rp.sourceIDs[i], err)
+		}
+		opened = append(opened, w)
 	}
 
 	var workersWg sync.WaitGroup
@@ -922,66 +1110,105 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// repro: `-race -shuffle=on -count=1500` under CPU load caught the two
 	// UpdateStatus calls racing on the same struct.
 	//
-	// Both t.Go calls below stay adjacent (nothing slow between them) so
-	// tomb.alive reaches 2 before either goroutine can possibly finish; ordering
-	// the UpdateStatus calls via this channel instead of via t.Go call order
-	// avoids a second bug that surfaced when this was first tried by
-	// interleaving a synchronous UpdateStatus between the two t.Go calls: if the
-	// worker finishes before that call returns, tomb.alive can hit 0 before the
-	// cleanup goroutine is even registered, and the later t.Go panics with
-	// "tomb.Go called after all goroutines terminated".
+	// Every t.Go call below (N workers + 1 cleanup goroutine) stays adjacent
+	// (nothing slow between them) so tomb.alive reaches N+1 before any
+	// goroutine can possibly finish; ordering the UpdateStatus calls via this
+	// channel instead of via t.Go call order avoids a second bug that
+	// surfaced when this was first tried by interleaving a synchronous
+	// UpdateStatus between the t.Go calls: if a worker finishes before that
+	// call returns, tomb.alive can hit 0 before the cleanup goroutine is even
+	// registered, and a later t.Go panics with "tomb.Go called after all
+	// goroutines terminated".
 	startupDone := make(chan struct{})
 
-	// registered closes once BOTH t.Go calls below have been made. The worker
-	// goroutine waits on it before doing any work, which is what actually makes
-	// the panic above impossible.
+	// registered closes once ALL N+1 t.Go calls below have been made (N
+	// worker goroutines plus the cleanup goroutine). Every worker goroutine
+	// waits on it before doing any work, which is what actually makes the
+	// panic above impossible.
 	//
-	// Adjacency alone is NOT sufficient, despite what the comment above used to
-	// claim: the Go runtime is free to schedule the worker goroutine and run it
-	// to completion in the window between the two t.Go calls. When the worker
-	// fails FAST — precisely what a transient-error recovery scenario induces —
-	// tomb.alive drops back to 0 before the cleanup goroutine is registered, and
-	// the second t.Go panics. Observed in CI on
+	// Adjacency alone is NOT sufficient, despite what the comment above used
+	// to claim: the Go runtime is free to schedule a worker goroutine and run
+	// it to completion in the window between t.Go calls. When a worker fails
+	// FAST — precisely what a transient-error recovery scenario induces —
+	// tomb.alive drops back to 0 before the cleanup goroutine is registered,
+	// and a later t.Go panics. Observed in CI on
 	// TestServiceLifecycle_Recovery_TransientErrorRecovers under -shuffle (the
-	// panic surfaced at this second t.Go, with the connectors never dispensed).
-	// Gating the worker on this channel guarantees alive >= 1 for the entire
-	// window, so the tomb cannot die before both goroutines exist.
+	// panic surfaced at this second t.Go, with the connectors never
+	// dispensed). With N workers this hazard is worse, not better: any one of
+	// N fast-failing workers can trigger it, not just the one. Gating every
+	// worker on this channel guarantees alive >= 1 for the entire window, so
+	// the tomb cannot die before all N+1 goroutines exist.
 	registered := make(chan struct{})
 
-	// TODO(multi-connector): when we have multiple connectors spawn a worker for each source
-	workersWg.Add(1)
-	rp.t.Go(func() error {
-		defer workersWg.Done()
+	for i, w := range rp.workers {
+		sourceID := rp.sourceIDs[i]
+		workersWg.Add(1)
+		rp.t.Go(func() error {
+			defer workersWg.Done()
 
-		// See `registered` above: must not return before the cleanup goroutine
-		// is registered on the tomb.
-		<-registered
+			// See `registered` above: must not return before every other
+			// worker and the cleanup goroutine are registered on the tomb.
+			<-registered
 
-		doErr := rp.w.Do(ctx)
-		s.logger.Err(ctx, doErr).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline worker stopped")
+			doErr := w.Do(ctx)
+			s.logger.Err(ctx, doErr).
+				Str(log.PipelineIDField, rp.pipeline.ID).
+				Str(log.ConnectorIDField, sourceID).
+				Msg("pipeline source worker stopped")
 
-		closeErr := rp.w.Close(context.Background())
-		err := cerrors.Join(doErr, closeErr)
-		if err != nil {
-			err = cerrors.Errorf("worker stopped with error: %w", err)
-			// Record the reason on the tomb synchronously, before returning (and
-			// thus before the deferred workersWg.Done() above fires). Without
-			// this, tomb.v2 only records a t.Go'd function's return value in its
-			// *own* post-return bookkeeping (t.run, after f() returns) — which
-			// races the cleanup goroutine below waking from workersWg.Wait() and
-			// reading rp.t.Err(). Losing that race makes the cleanup goroutine
-			// observe tomb.ErrStillAlive for a pipeline that actually died with a
-			// fatal error, misreporting it as gracefully stopped (status
-			// UserStopped/SystemStopped instead of Degraded, dropping the error
-			// entirely) — confirmed by repro under `-race -count=500`. Kill is
-			// idempotent and safe to call here: t.run's own kill(err) call after
-			// this function returns is then a no-op (reason already set).
-			rp.t.Kill(err)
-			return err
-		}
+			// Invariant (crux of slice 3b): Worker.Close now only tears down
+			// THIS worker's own source and its own per-source DLQ — the
+			// shared sink is excluded from its tree (see
+			// TaskNode.MarkSharedBoundary) and is closed once, separately,
+			// by the cleanup goroutine below, only after every worker here
+			// has returned. A source that finishes here does not touch (and
+			// cannot prematurely tear down) a destination its siblings are
+			// still writing to.
+			closeErr := w.Close(context.Background())
+			err := cerrors.Join(doErr, closeErr)
+			if err != nil {
+				err = cerrors.Errorf("worker for source %s stopped with error: %w", sourceID, err)
+				// Record the reason on the tomb synchronously, before returning (and
+				// thus before the deferred workersWg.Done() above fires). Without
+				// this, tomb.v2 only records a t.Go'd function's return value in its
+				// *own* post-return bookkeeping (t.run, after f() returns) — which
+				// races the cleanup goroutine below waking from workersWg.Wait() and
+				// reading rp.t.Err(). Losing that race makes the cleanup goroutine
+				// observe tomb.ErrStillAlive for a pipeline that actually died with a
+				// fatal error, misreporting it as gracefully stopped (status
+				// UserStopped/SystemStopped instead of Degraded, dropping the error
+				// entirely) — confirmed by repro under `-race -count=500`. Kill is
+				// idempotent and safe to call here (and, with N workers, safe even
+				// if two workers race into it concurrently: tomb.v2 only records
+				// the FIRST reason, and every later Kill call — from this worker's
+				// own t.run bookkeeping or a sibling worker's error — is a no-op).
+				//
+				// Status aggregation (see this slice's design doc): a worker only
+				// reaches this branch on an ACTUAL error. A source that exhausted
+				// its records gracefully (io.EOF — see funnel.Worker.doTask) or
+				// was asked to Stop returns nil from Do, so THAT worker's goroutine
+				// returns nil too and never reaches this Kill call — ctx stays
+				// alive for every sibling worker, which is what keeps the pipeline
+				// Running while some sources have already finished. A fatal error
+				// in any one source Kills the tomb, canceling ctx for every
+				// sibling (matches v1: the single tomb fans a Kill to every
+				// goroutine's ctx) — ALL workers wind down, and the cleanup
+				// goroutine's fatal/transient classification below (unchanged,
+				// generalizing automatically to N workers feeding one tomb) then
+				// degrades the whole pipeline. A non-fatal (transient) error does
+				// the same tomb-wide Kill, but is classified into the recovery
+				// path instead of Degraded — recovery here is pipeline-wide
+				// (rebuilds every source's worker and the shared sink from
+				// scratch), which is why a transient error in ANY source
+				// legitimately winds down every worker rather than leaving
+				// siblings running against a destination about to be rebuilt.
+				rp.t.Kill(err)
+				return err
+			}
 
-		return nil
-	})
+			return nil
+		})
+	}
 
 	rp.t.Go(func() error {
 		// Use fresh context for cleanup function, otherwise the updated status
@@ -989,11 +1216,36 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		ctx := context.Background()
 
 		workersWg.Wait()
+
+		// Invariant 1/3 (enforcement site, crux of slice 3b): close the
+		// shared sink only now that EVERY worker has exited. See
+		// funnel.Sink.Close's doc for the data-loss scenario this ordering
+		// prevents (tearing it down while a sibling worker is still writing
+		// to it).
+		sinkCloseErr := rp.sink.Close(ctx)
+
 		// Wait for the initial StatusRunning write below to fully finish before
 		// this goroutine writes its own terminal status to the same
 		// *pipeline.Instance. See the comment on startupDone above.
 		<-startupDone
 		err := rp.t.Err()
+
+		if err == tomb.ErrStillAlive && sinkCloseErr != nil {
+			// Every worker exited cleanly (no fatal/transient error anywhere),
+			// but tearing down the shared destination itself failed. Fold
+			// this in exactly like a worker's own error would be, so the
+			// same fatal/transient classification below decides degrade vs.
+			// recover instead of this being silently masked as a graceful
+			// stop.
+			err = cerrors.Errorf("failed to close shared sink: %w", sinkCloseErr)
+		} else if sinkCloseErr != nil {
+			// The pipeline is already terminal for some other, unrelated
+			// reason (a worker's own fatal/transient error, or an
+			// intentional stop) — log the sink close failure but don't let
+			// it override that classification.
+			s.logger.Err(ctx, sinkCloseErr).Str(log.PipelineIDField, rp.pipeline.ID).
+				Msg("failed to close shared sink (pipeline already terminal for another reason)")
+		}
 
 		switch err {
 		case tomb.ErrStillAlive:
@@ -1033,7 +1285,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				// Invariant 3/7: an operator (or provisioning.ApplyPlanLive via
 				// StopAndWait) deliberately asked THIS pipeline to stop — see
 				// stopRunnablePipeline, which sets intentionalStop before
-				// calling rp.w.Stop. A transient (non-fatal) error surfacing
+				// calling Stop on every worker. A transient (non-fatal) error surfacing
 				// from that deliberate drain must never be misread as a
 				// spontaneous failure needing recovery: auto-restarting here
 				// would restart a pipeline the operator just stopped, exactly
@@ -1103,10 +1355,11 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return err
 	})
 
-	// Both goroutines are now registered on the tomb, so release the worker: it
-	// can no longer drive tomb.alive to 0 before the cleanup goroutine exists.
-	// This must happen BEFORE the UpdateStatus call below, which is potentially
-	// slow — the worker only needs the registration barrier, not the status
+	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
+	// registered on the tomb, so release the workers: none of them can any
+	// longer drive tomb.alive to 0 before the cleanup goroutine exists. This
+	// must happen BEFORE the UpdateStatus call below, which is potentially
+	// slow — the workers only need the registration barrier, not the status
 	// write (the cleanup goroutine is the one that waits for that, via
 	// startupDone).
 	close(registered)
@@ -1115,7 +1368,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// release the cleanup goroutine to make its own. close(startupDone)
 	// unconditionally, including on error, so the cleanup goroutine (already
 	// blocked on it) is never left hanging.
-	err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	close(startupDone)
 	return err
 }

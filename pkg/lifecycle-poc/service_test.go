@@ -100,17 +100,155 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	is.Equal("", cmp.Diff(pl, got.pipeline, cmpopts.IgnoreUnexported(pipeline.Instance{})))
 
-	wantTasks := []funnel.Task{
-		&funnel.SourceTask{},
-		&funnel.DestinationTask{},
-	}
+	// Slice 3b: a Worker's own FirstTask.Tasks() iterator now stops before the
+	// shared sink (see TaskNode.MarkSharedBoundary) - it only walks tasks the
+	// WORKER itself owns (Open/Close-wise), which for a single, processor-less
+	// source is just the source task. The destination is still reachable at
+	// runtime via Next directly (doTask/doNextTask never use this iterator),
+	// and is verified separately below via got.sink.
+	is.Equal(1, len(got.workers))
+	worker := got.workers[0]
+	wantOwnTasks := []funnel.Task{&funnel.SourceTask{}}
 	i := 0
-	for got := range got.w.FirstTask.Tasks() {
-		want := wantTasks[i]
-		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected task type
+	for task := range worker.FirstTask.Tasks() {
+		want := wantOwnTasks[i]
+		is.Equal(reflect.TypeOf(want), reflect.TypeOf(task)) // unexpected task type
 		i++
 	}
-	is.Equal(got.w.Source.(*connector.Source).Instance, source)
+	is.Equal(len(wantOwnTasks), i)
+	is.Equal(worker.Source.(*connector.Source).Instance, source)
+
+	// The shared sink (destination) is attached to the worker's own tail via
+	// Next, but owned/opened/closed by got.sink, not by this worker.
+	is.True(got.sink != nil)
+	is.Equal(1, len(worker.FirstTask.Next))
+	is.Equal(reflect.TypeOf(&funnel.DestinationTask{}), reflect.TypeOf(worker.FirstTask.Next[0].Task))
+}
+
+// recordingConnectorService wraps testConnectorService and records every
+// Create call's `id` argument, in call order. Used to verify slice 3b's
+// per-source DLQ naming (buildDLQ's pl.ID+"-"+sourceID+"-dlq") actually
+// reaches the connector service - testConnectorService.Create itself ignores
+// every argument but the DLQ lookup key, so it can't tell two differently-
+// named DLQ creations apart on its own.
+type recordingConnectorService struct {
+	testConnectorService
+	mu      sync.Mutex
+	created []string
+}
+
+func (s *recordingConnectorService) Create(
+	ctx context.Context,
+	id string,
+	t connector.Type,
+	plug string,
+	pipelineID string,
+	cfg connector.Config,
+	pt connector.ProvisionType,
+) (*connector.Instance, error) {
+	s.mu.Lock()
+	s.created = append(s.created, id)
+	s.mu.Unlock()
+	return s.testConnectorService.Create(ctx, id, t, plug, pipelineID, cfg, pt)
+}
+
+// TestServiceLifecycle_buildRunnablePipeline_MultipleSources is slice 3b's
+// core buildRunnablePipeline test: N (here 2) source connectors must each
+// get their own funnel.Worker and their own per-source DLQ, while sharing
+// exactly ONE destination TaskNode (by pointer, not by value) via
+// runnablePipeline.sink.
+func TestServiceLifecycle_buildRunnablePipeline_MultipleSources(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	sourceA := dummySource(persister)
+	sourceB := dummySource(persister)
+	destination := dummyDestination(persister)
+	dlq := dummyDestination(persister)
+	pl := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Config: pipeline.Config{Name: "test-pipeline"},
+		DLQ: pipeline.DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{sourceA.ID, sourceB.ID, destination.ID},
+	}
+	pl.SetStatus(pipeline.StatusUserStopped)
+
+	connSvc := &recordingConnectorService{
+		testConnectorService: testConnectorService{
+			sourceA.ID:     sourceA,
+			sourceB.ID:     sourceB,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+	}
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		connSvc,
+		testProcessorService{},
+		testConnectorPluginService{
+			sourceA.Plugin:     pmock.NewDispenser(ctrl),
+			sourceB.Plugin:     pmock.NewDispenser(ctrl),
+			destination.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:         pmock.NewDispenser(ctrl),
+		},
+		testPipelineService{},
+		false,
+	)
+
+	got, err := ls.buildRunnablePipeline(ctx, pl)
+	is.NoErr(err)
+
+	// One worker per source, each tagged with its own source's connector ID.
+	is.Equal(2, len(got.workers))
+	is.Equal(2, len(got.sourceIDs))
+	gotSourceIDs := map[string]bool{got.sourceIDs[0]: true, got.sourceIDs[1]: true}
+	is.True(gotSourceIDs[sourceA.ID])
+	is.True(gotSourceIDs[sourceB.ID])
+	is.True(got.sink != nil)
+
+	// Both workers' own prefix is just their source task (no per-connector
+	// processors configured), and both converge on the IDENTICAL shared
+	// destination TaskNode - the same pointer, not two independently-built
+	// copies of it. This is the shared-sink wiring the crux of this slice
+	// depends on: closing got.sink tears down this ONE node exactly once,
+	// regardless of how many workers point at it.
+	is.Equal(1, len(got.workers[0].FirstTask.Next))
+	is.Equal(1, len(got.workers[1].FirstTask.Next))
+	is.True(got.workers[0].FirstTask.Next[0] == got.workers[1].FirstTask.Next[0])
+	is.Equal(reflect.TypeOf(&funnel.DestinationTask{}), reflect.TypeOf(got.workers[0].FirstTask.Next[0].Task))
+
+	// Each worker's own Source is its own, distinct connector wrapper - never
+	// a sibling's. This is the structural property that makes cross-source
+	// ack contamination impossible (see runnablePipeline.workers' doc):
+	// Worker.Ack always calls THIS field's Ack, and there is exactly one
+	// funnel.Worker per source.
+	is.True(got.workers[0].Source != got.workers[1].Source)
+
+	// Per-source DLQ naming (slice 3b): pl.ID+"-"+sourceID+"-dlq" for EACH
+	// source, never the old, now-collision-prone pl.ID+"-dlq".
+	wantDLQNames := map[string]bool{
+		pl.ID + "-" + sourceA.ID + "-dlq": true,
+		pl.ID + "-" + sourceB.ID + "-dlq": true,
+	}
+	connSvc.mu.Lock()
+	gotCreated := append([]string(nil), connSvc.created...)
+	connSvc.mu.Unlock()
+	is.Equal(2, len(gotCreated))
+	for _, name := range gotCreated {
+		is.True(wantDLQNames[name])
+	}
 }
 
 func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {

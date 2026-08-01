@@ -420,6 +420,32 @@ func (w *Worker) doTask(
 	b *Batch,
 	acker ackNacker,
 ) error {
+	// Invariant 1 (enforcement site): destinations require single-writer,
+	// position-ordered Write/Ack pairing (see DestinationTask.Do, which pairs
+	// each Write with N subsequent Ack reads assuming strict FIFO ordering on
+	// the destination's single gRPC stream) and are unsafe for concurrent
+	// Send/Recv from multiple goroutines. In an N-source, shared-destination
+	// pipeline (slice 3b), every source's Worker runs Do() on its own
+	// goroutine and all of them funnel into the SAME shared TaskNode subtree,
+	// so entry into it must be serialized across workers.
+	//
+	// The lock lives HERE, in the wrapper, and deliberately NOT in
+	// doTaskAttempt. doTaskAttempt is what the bounded-retry recursion calls
+	// directly (see #2726 / retryAttempt), so acquiring a non-reentrant mutex
+	// there would self-deadlock the moment a shared node retried a sub-batch.
+	// Acquiring once at the external entry point instead means the lock is
+	// held across the whole synchronous pass — including every retry
+	// recursion and any doNextTask fan-out beneath it — which is exactly the
+	// guarantee the shared destination needs: one worker's entire pass
+	// completes before another worker's batch can enter.
+	//
+	// See TaskNode.MarkSharedBoundary and
+	// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
+	if taskNode.sharedBoundary {
+		taskNode.sharedMu.Lock()
+		defer taskNode.sharedMu.Unlock()
+	}
+
 	return w.doTaskAttempt(ctx, taskNode, b, acker, nil)
 }
 
@@ -461,6 +487,34 @@ func (w *Worker) doTaskAttempt(
 		if taskNode.IsFirst() && (cerrors.Is(err, context.Canceled) ||
 			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
 			return ctx.Err()
+		}
+		if taskNode.IsFirst() && cerrors.Is(err, io.EOF) && !w.stop.Load() {
+			// A source that has permanently exhausted its records (e.g. a
+			// snapshot-only connector with nothing left to stream) reports it
+			// by returning io.EOF from Read - the same sentinel this package
+			// already uses for "the source's stream has closed" elsewhere
+			// (see isClosedSourceStream). This is NOT a failure (slice 3b of
+			// the arch-v2 multi-connector epic, N-source pipelines): unlike
+			// the branch above, this path is NOT gated on w.stop already
+			// being set, because nothing external asked this worker to stop
+			// - the source decided on its own. Guarded on !w.stop.Load() so
+			// it can never fire after an external Stop already armed the
+			// flag (that path is handled by the branch above).
+			//
+			// Arm w.stop so tearDownSource behaves identically to an
+			// externally-requested Stop (idempotent either way - see
+			// tearDownSource's doc), then return nil so Worker.Do's loop
+			// condition (!w.stop.Load()) exits cleanly on the next check.
+			// This worker's own source teardown happens on its own (per the
+			// crux design: source teardown is per-worker); the pipeline as a
+			// whole - and the shared sink - are unaffected and stay up for
+			// as long as any sibling worker is still running. See
+			// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
+			w.stop.Store(true)
+			if tdErr := w.tearDownSource(ctx); tdErr != nil {
+				return cerrors.Errorf("source finished but failed to tear down: %w", tdErr)
+			}
+			return nil
 		}
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
@@ -865,6 +919,39 @@ type TaskNode struct {
 	Next []*TaskNode
 
 	first bool
+
+	// sharedBoundary marks this node as the entry point into a subtree that
+	// is NOT owned by an individual Worker's Open/Close lifecycle, because it
+	// is shared across N source workers converging on one destination (see
+	// funnel.Sink and slice 3b of the arch-v2 multi-connector epic).
+	//
+	// TaskNode.iterator (which backs Tasks()/TaskNodes(), the only thing
+	// Worker.Open/Close/NewWorker's validateTasks use to walk a tree) stops
+	// BEFORE descending into a child marked sharedBoundary, so a Worker whose
+	// own prefix's tail points at a shared node never opens, closes, or
+	// double-counts it. Worker.doTask's runtime traversal is unaffected -it
+	// walks taskNode.Next directly, never through the iterator - and is what
+	// actually enforces exclusive access via sharedMu (see doTask's lock
+	// acquisition site).
+	sharedBoundary bool
+	// sharedMu is non-nil if and only if sharedBoundary is true. See
+	// MarkSharedBoundary and the lock acquisition in doTask.
+	sharedMu *sync.Mutex
+}
+
+// MarkSharedBoundary marks t as the entry point into a subtree shared by
+// multiple Workers (see the sharedBoundary field doc) and allocates the mutex
+// Worker.doTask uses to serialize entry into it.
+//
+// Call it exactly once per shared root, before building any Worker whose own
+// tree attaches it via AppendToEnd - funnel.NewSink does this for every root
+// it's given. Marking a node that is NOT the single, deliberately-chosen
+// entry point into a shared subtree (e.g. marking every node in the subtree
+// instead of just its root) would still be memory-safe but would silently
+// narrow the serialized region and is a caller bug.
+func (t *TaskNode) MarkSharedBoundary() {
+	t.sharedBoundary = true
+	t.sharedMu = &sync.Mutex{}
 }
 
 // IsFirst returns true if this task is the first task in the pipeline.
@@ -929,8 +1016,15 @@ func (t *TaskNode) iterator() func(yield func(*TaskNode) bool) bool {
 			return false
 		}
 
-		// Then process all children in order.
+		// Then process all children in order, skipping any child that is
+		// itself the root of a shared subtree (see sharedBoundary's doc): a
+		// per-source Worker's own Open/Close walk must stop at the boundary
+		// even though this same tree, walked at runtime by doTask/doNextTask
+		// (which use Next directly, not this iterator), continues past it.
 		for _, next := range t.Next {
+			if next.sharedBoundary {
+				continue
+			}
 			if !next.iterator()(yield) {
 				return false
 			}
