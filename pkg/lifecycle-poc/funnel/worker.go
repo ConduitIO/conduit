@@ -286,7 +286,13 @@ func (w *Worker) Close(ctx context.Context) error {
 func (w *Worker) Do(ctx context.Context) error {
 	for !w.stop.Load() {
 		w.logger.Trace(ctx).Msg("starting next batch")
-		if err := w.doTask(ctx, w.FirstTask, &Batch{}, w); err != nil {
+		// Invariant 1/3 (enforcement site, #2723): wrap the Worker in a fresh
+		// runAckNacker for this batch-read pass. A split run's original
+		// position must not reach w.Ack/w.Nack until every one of its members
+		// is terminal - see run_ledger.go. A fresh instance per pass is
+		// required: run completion state must not leak across independent
+		// batches read from the source.
+		if err := w.doTask(ctx, w.FirstTask, &Batch{}, newRunAckNacker(w)); err != nil {
 			return err
 		}
 		w.logger.Trace(ctx).Msg("batch done")
@@ -531,8 +537,17 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		p := pool.New().WithErrors()
 		for _, nextTask := range taskNode.Next {
 			branchBatch := b.clone()
+			// Invariant 1/3 (enforcement site, #2723): wrap multiAcker in a
+			// FRESH runAckNacker per branch. Each branch's clone can diverge
+			// independently from here on (split further, retry, filter), so
+			// each needs its own run-completion ledger; multiAckNacker itself
+			// stays purely about per-position unanimity ACROSS branches (its
+			// existing job), unaware of any run structure. A branch votes for
+			// a run's original position exactly once - when runAckNacker
+			// forwards it - which is exactly what multiAckNacker's own
+			// one-vote-per-branch-per-position assumption requires.
 			p.Go(func() error {
-				return w.doTask(ctx, nextTask, branchBatch, multiAcker)
+				return w.doTask(ctx, nextTask, branchBatch, newRunAckNacker(multiAcker))
 			})
 		}
 		if err := p.Wait(); err != nil {
