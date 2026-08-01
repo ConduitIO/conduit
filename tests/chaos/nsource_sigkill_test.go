@@ -33,7 +33,23 @@ import (
 // land mid-flight for one source must never affect the other's eventual
 // completeness).
 //
-// This is the load-bearing end-to-end proof for this slice's two central
+// Both sources count their OWN [1, total] position space (nsourceChildConfig
+// no longer gives B a disjoint posOffset - see buildNSourceChildSource's
+// doc): position VALUES are allowed, and in this test's overlapping range
+// [1, min(totalA,totalB)] GUARANTEED, to collide byte-for-byte across A and
+// B. That collision is deliberate, not incidental - it is the exact hazard
+// behind H2 (docs/design-documents/20260801-archv2-multiconnector-
+// nsource.md's H2 section): a worker erroring inside the shared destination
+// subtree can leave unread acks on the shared stream, and a sibling reading
+// them passes validateAcks' byte-for-byte position comparison whenever the
+// bytes happen to match. Proving gapless, correctly-attributed per-source
+// delivery under a REAL collision (not one avoided by construction) is this
+// test's entire reason for existing - see nsourceSourceTagA/B and
+// fanoutDestination.Write for the record-level salt and (sourceID, position)
+// keying that make the two sources' colliding positions distinguishable in
+// the shared deliveryLog without changing the collision itself.
+//
+// This is the load-bearing end-to-end proof for this slice's three central
 // claims:
 //   - Per-source resume independence: source A and source B each persist
 //     and resume from their OWN position, in their OWN on-disk state -
@@ -43,9 +59,17 @@ import (
 //     single deliveryLog ends up gapless for BOTH sources' contributions,
 //     which is only possible if TaskNode.MarkSharedBoundary's serialization
 //     held throughout the run (a lost/corrupted interleaving would show up
-//     as a wrong-position write, caught by deliveryLog's per-position files)
-//     and if Worker.Close/funnel.Sink.Close never tore the shared
-//     destination down while the other source was still writing to it.
+//     as a wrong-(sourceID,position) write, caught by deliveryLog's
+//     per-delivery files) and if Worker.Close/funnel.Sink.Close never tore
+//     the shared destination down while the other source was still writing
+//     to it.
+//   - No cross-source attribution under a genuine position collision: every
+//     delivered record's sourceID (read back from deliveryLog, never
+//     inferred) matches the source that actually produced it, even at
+//     positions where A's and B's records are byte-identical apart from the
+//     salt. See the strict switch below - an unattributed or
+//     wrongly-tagged delivery fails the test immediately, it is never
+//     silently dropped or folded into either source's count.
 func TestSIGKILL_NSource_FastAndSlow_GaplessIndependentResume(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -93,28 +117,33 @@ func TestSIGKILL_NSource_FastAndSlow_GaplessIndependentResume(t *testing.T) {
 	cp2.waitForMarker(t, markerNSourceDone, 45*time.Second)
 	cp2.waitExit(t, 10*time.Second)
 
-	finalDest, err := destLog.Positions()
+	finalDest, err := destLog.PositionsBySource()
 	is.NoErr(err)
 
-	// Source A occupies [1, totalA]; source B occupies
-	// [nsourcePosOffsetB+1, nsourcePosOffsetB+totalB] - a deliberately
-	// disjoint numeric range (see buildNSourceChildSource's doc for why:
-	// chaosPlugin.makeRecord is a pure function of the position number
-	// alone, so without this the two sources would produce byte-for-byte
-	// identical records at the same position, indistinguishable once both
-	// land in the ONE shared deliveryLog). Splitting finalDest back into
-	// each source's own range and checking each independently for gaps is
-	// the real assertion this test exists to make: a gap in EITHER range
-	// would mean a record from that source was never durably written to the
-	// shared destination - a data-loss bug - and the two ranges being
-	// checked separately (rather than as one combined count) is what proves
-	// each source's delivery is independent of the other's.
+	// Source A and source B both count [1, total] independently - their
+	// position VALUES overlap (and, for positions in [1, min(totalA,totalB)],
+	// are byte-identical - see the test's own doc comment for why that
+	// collision is deliberate). sourceID (deliveryLog's (sourceID, position)
+	// key - see Record's doc) is the ONLY thing that can tell a delivery's
+	// origin apart here; splitting finalDest by sourceID and checking each
+	// independently for gaps is the real assertion this test exists to make:
+	// a gap in EITHER source's range would mean a record from that source
+	// was never durably written to the shared destination - a data-loss bug
+	// - and any record whose sourceID is neither A nor B (unattributed, or
+	// attributed to something else entirely) is exactly the misattribution
+	// H2 was about and fails the test immediately rather than being folded
+	// into either count.
 	var gotA, gotB []uint64
-	for _, p := range finalDest {
-		if p > nsourcePosOffsetB {
-			gotB = append(gotB, p-nsourcePosOffsetB)
-		} else {
-			gotA = append(gotA, p)
+	for _, r := range finalDest {
+		switch r.SourceID {
+		case nsourceSourceTagA:
+			gotA = append(gotA, r.Position)
+		case nsourceSourceTagB:
+			gotB = append(gotB, r.Position)
+		default:
+			t.Fatalf("shared destination delivered position %d with unattributed/unexpected source tag %q "+
+				"(want %q or %q) - this is exactly the cross-source misattribution H2 exists to prevent",
+				r.Position, r.SourceID, nsourceSourceTagA, nsourceSourceTagB)
 		}
 	}
 	assertGaplessDelivery(t, "source A (fast)", gotA, totalA)
@@ -134,5 +163,75 @@ func TestSIGKILL_NSource_FastAndSlow_GaplessIndependentResume(t *testing.T) {
 	is.NoErr(err)
 	committedB, err := upstreamB.Committed()
 	is.NoErr(err)
-	is.Equal(uint64(nsourcePosOffsetB+totalB), committedB)
+	is.Equal(uint64(totalB), committedB)
+}
+
+// TestDeliveryLog_PositionsBySource_DistinguishesCollidingSources is a
+// focused unit-level proof that deliveryLog's (sourceID, position) keying
+// actually disambiguates a genuine collision, independent of the full
+// SIGKILL scenario above - i.e. that the assertions in
+// TestSIGKILL_NSource_FastAndSlow_GaplessIndependentResume would genuinely
+// fail if a record's source attribution were ever lost or conflated, not
+// merely that they happen to pass on the current happy path.
+//
+// It durably records the SAME position from two different sourceIDs (the
+// exact shape TestSIGKILL_NSource_FastAndSlow_GaplessIndependentResume's
+// overlapping [1, total] ranges produce) and checks two things a
+// position-only ledger could not:
+//  1. PositionsBySource reports BOTH deliveries, each correctly tagged - not
+//     one delivery silently standing in for (or overwriting) the other.
+//  2. The now-legacy Positions accessor (still used by every single-source
+//     scenario, which never salts records - see its own doc comment) can no
+//     longer serve as a stand-in for source-attributed correctness here: it
+//     collapses both entries down to the bare position number, which is
+//     precisely why the collision scenario needed PositionsBySource instead
+//     of just calling Positions() and being unable to tell A's and B's
+//     contributions apart - the bug this test exists to make impossible to
+//     reintroduce silently.
+func TestDeliveryLog_PositionsBySource_DistinguishesCollidingSources(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+
+	log, err := openDeliveryLog(dir)
+	is.NoErr(err)
+
+	// Source A and source B both durably deliver position 5 - a genuine,
+	// byte-identical-position collision, the same shape produceLoop's
+	// overlapping counters produce end-to-end in the SIGKILL scenario.
+	is.NoErr(log.Record(nsourceSourceTagA, 5))
+	is.NoErr(log.Record(nsourceSourceTagB, 5))
+
+	bySource, err := log.PositionsBySource()
+	is.NoErr(err)
+	is.Equal(len(bySource), 2) // both deliveries present - neither silently overwrote the other on disk
+
+	var sawA, sawB bool
+	for _, r := range bySource {
+		is.Equal(r.Position, uint64(5))
+		switch r.SourceID {
+		case nsourceSourceTagA:
+			sawA = true
+		case nsourceSourceTagB:
+			sawB = true
+		default:
+			t.Fatalf("unexpected sourceID %q in PositionsBySource result", r.SourceID)
+		}
+	}
+	is.True(sawA) // source A's delivery of position 5 is attributed to A
+	is.True(sawB) // source B's delivery of position 5 is attributed to B, not merged into A's
+
+	// Positions (the plain, pre-collision-scenario accessor) legitimately
+	// cannot make this distinction: both on-disk files parse to the same
+	// bare position 5, so it reports position 5 TWICE with no way to tell
+	// whether that means "one source delivered position 5 twice" (an
+	// ordinary at-least-once duplicate, harmless) or "two DIFFERENT sources
+	// each delivered their own position 5 once" (this test's actual
+	// scenario). That ambiguity is exactly the gap PositionsBySource exists
+	// to close - this is not a bug in Positions (every caller of it predates
+	// sourceID and never collides - see its own doc comment), it is the
+	// reason the collision scenario cannot use it, demonstrated directly
+	// rather than merely asserted.
+	plain, err := log.Positions()
+	is.NoErr(err)
+	is.Equal(plain, []uint64{5, 5})
 }

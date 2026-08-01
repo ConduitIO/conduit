@@ -162,14 +162,20 @@ func parseFanoutChildEnv() fanoutChildEnv {
 
 // fanoutDestination adapts a deliveryLog (recovery_child.go) into a
 // funnel.Destination for this scenario. Write durably records each record's
-// position via deliveryLog.Record (an fsync'd, one-file-per-position ledger
-// that survives this process being SIGKILLed - see deliveryLog's doc
-// comment), optionally after an artificial delay (see fanoutChildConfig.
-// destBDelayMS's doc for why). Ack immediately acks everything just written,
-// matching every other synthetic destination in this package
-// (synthDestination, property4_test.go): DestinationTask.Do's polling
-// contract is one Write followed by repeated Ack calls until every written
-// position has been acknowledged.
+// (sourceID, position) via deliveryLog.Record (an fsync'd, one-file-per-
+// delivery ledger that survives this process being SIGKILLed - see
+// deliveryLog's doc comment), optionally after an artificial delay (see
+// fanoutChildConfig.destBDelayMS's doc for why). sourceID is read off each
+// record's metadataSourceKey (upstream.go's makeRecord/chaosPlugin.sourceTag)
+// - "" if absent, which is every scenario except the N-source
+// shared-destination collision case (nsource_child.go): slice 3a's fan-OUT
+// topology (one source, M destinations, each with its own deliveryLog) has
+// nothing to disambiguate, so its records never carry the salt and this is a
+// no-op there. Ack immediately acks everything just written, matching every
+// other synthetic destination in this package (synthDestination,
+// property4_test.go): DestinationTask.Do's polling contract is one Write
+// followed by repeated Ack calls until every written position has been
+// acknowledged.
 type fanoutDestination struct {
 	id    string
 	log   *deliveryLog
@@ -196,7 +202,8 @@ func (d *fanoutDestination) Write(_ context.Context, recs []opencdc.Record) erro
 		if err != nil {
 			return fmt.Errorf("fanoutDestination %s: decode position %s: %w", d.id, r.Position, err)
 		}
-		if err := d.log.Record(pos); err != nil {
+		sourceID := r.Metadata[metadataSourceKey] // "" if this record carries no salt (see type doc)
+		if err := d.log.Record(sourceID, pos); err != nil {
 			return fmt.Errorf("fanoutDestination %s: %w", d.id, err)
 		}
 		d.pending = append(d.pending, connector.DestinationAck{Position: r.Position})

@@ -71,12 +71,18 @@ const (
 	nsourcePluginA     = "chaos-nsource-plugin-a"
 	nsourcePluginB     = "chaos-nsource-plugin-b"
 
-	// nsourcePosOffsetB gives source B its own disjoint position namespace
-	// ([nsourcePosOffsetB+1, nsourcePosOffsetB+totalB]) so its contributions
-	// to the ONE shared destination ledger can never collide in value with
-	// source A's ([1, totalA]) - see buildNSourceChildSource's doc. Source A
-	// keeps offset 0 (its original, pre-3b-test position space).
-	nsourcePosOffsetB = 1_000_000
+	// nsourceSourceTagA/B are the record-level salts (chaosPlugin.sourceTag,
+	// upstream.go's metadataSourceKey) that let the shared destination's
+	// deliveryLog tell source A's and source B's deliveries apart WITHOUT
+	// giving them disjoint position namespaces. Both sources count
+	// [1, total] independently - positions ARE allowed to collide in value
+	// across sources (that is the entire point of this scenario: positions
+	// are connector-defined and unique only WITHIN a source - see H2,
+	// docs/design-documents/20260801-archv2-multiconnector-nsource.md) - the
+	// tag, not the position, is what disambiguates a delivery's origin. See
+	// buildNSourceChildSource's doc.
+	nsourceSourceTagA = "A"
+	nsourceSourceTagB = "B"
 
 	// markerNSourceDone is the graceful "both sources ran to their own total
 	// and stopped cleanly" completion marker - printed only by the restart
@@ -186,24 +192,21 @@ type nsourceChildSource struct {
 // instanceID/plugin name so two independent instances can coexist in one
 // process.
 //
-// posOffset gives this source its own disjoint numeric position namespace:
-// chaosPlugin.makeRecord (upstream.go) is a pure function of the position
-// number alone (deterministic "key-%d"/"record-%d" content, no per-instance
-// salt), so two chaosPlugin instances both counting 1..total would produce
-// byte-for-byte IDENTICAL records at the same position - indistinguishable
-// once they land in the ONE shared deliveryLog this scenario's destination
-// writes into (see fanoutDestination.Write/deliveryLog.Record, which key
-// purely on the numeric position). Seeding a fresh instance's resume
-// position at posOffset (and bounding chaosPlugin.total at posOffset+total,
-// since produceLoop compares its position counter to total as an ABSOLUTE
-// value, not a relative count - see produceLoop's own doc) makes this
-// source's positions occupy [posOffset+1, posOffset+total], disjoint from
-// any other source using a different posOffset, so the parent test can tell
-// the two sources' contributions to the shared ledger apart and verify each
-// is independently gapless. posOffset is only applied when creating a FRESH
-// instance; a resumed instance's persisted position already reflects
-// whatever offset the original run seeded, so it is left untouched.
-func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID, pluginName string, posOffset, total uint64, paceMS int) (*nsourceChildSource, error) {
+// Both sources count their OWN [1, total] position space - positions are
+// deliberately allowed to collide in value across sources (positions are
+// connector-defined and unique only WITHIN a source; see H2,
+// docs/design-documents/20260801-archv2-multiconnector-nsource.md, and the
+// package doc.go). sourceTag (nsourceSourceTagA/B) is what makes two
+// otherwise byte-identical records (chaosPlugin.makeRecord is a pure
+// function of the position number alone: deterministic "key-%d"/"record-%d"
+// content) distinguishable once they land in the ONE shared deliveryLog this
+// scenario's destination writes into - see chaosPlugin.sourceTag's doc and
+// fanoutDestination.Write, which reads the tag back off each record's
+// metadata and keys deliveryLog.Record on (sourceID, position) rather than
+// position alone. This is what lets the parent test tell the two sources'
+// contributions to the shared ledger apart and verify each is independently
+// gapless WITHOUT hiding the collision the way a disjoint namespace would.
+func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID, pluginName, sourceTag string, total uint64, paceMS int) (*nsourceChildSource, error) {
 	logger := log.New(zerolog.Nop()) // keep stdout clean; it is our progress-line channel
 
 	db, err := badger.New(zerolog.Nop(), dbDir)
@@ -217,8 +220,7 @@ func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID
 	switch {
 	case err == nil:
 		// resumed from a previous (possibly killed) run's persisted state -
-		// its position already reflects whatever posOffset the very first
-		// run for this instance seeded; do not touch it.
+		// left untouched, exactly like buildChild's loadOrCreateInstance.
 	case cerrors.Is(err, database.ErrKeyNotExist):
 		instance = &connector.Instance{
 			ID:            instanceID,
@@ -227,7 +229,6 @@ func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID
 			PipelineID:    instancePipe,
 			Plugin:        pluginName,
 			ProvisionedBy: connector.ProvisionTypeAPI,
-			State:         connector.SourceState{Position: encodePosition(posOffset)},
 		}
 	default:
 		fmt.Printf("%s: %v\n", markerCorruptPo, err)
@@ -240,7 +241,7 @@ func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID
 	if err != nil {
 		return nil, fmt.Errorf("open upstream store (%s): %w", instanceID, err)
 	}
-	plugin := &chaosPlugin{store: upstream, total: posOffset + total, paceMS: paceMS}
+	plugin := &chaosPlugin{store: upstream, total: total, paceMS: paceMS, sourceTag: sourceTag}
 
 	fetcher := staticFetcher{pluginName: staticDispenser{source: plugin}}
 	c, err := instance.Connector(ctx, fetcher)
@@ -269,12 +270,12 @@ func runChildNSource() {
 	ctx := context.Background()
 	cfg := parseNSourceChildEnv()
 
-	builtA, err := buildNSourceChildSource(ctx, cfg.dbDirA, cfg.upstreamDirA, nsourceInstanceIDA, nsourcePluginA, 0, cfg.totalA, cfg.paceMSA)
+	builtA, err := buildNSourceChildSource(ctx, cfg.dbDirA, cfg.upstreamDirA, nsourceInstanceIDA, nsourcePluginA, nsourceSourceTagA, cfg.totalA, cfg.paceMSA)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
 	}
-	builtB, err := buildNSourceChildSource(ctx, cfg.dbDirB, cfg.upstreamDirB, nsourceInstanceIDB, nsourcePluginB, nsourcePosOffsetB, cfg.totalB, cfg.paceMSB)
+	builtB, err := buildNSourceChildSource(ctx, cfg.dbDirB, cfg.upstreamDirB, nsourceInstanceIDB, nsourcePluginB, nsourceSourceTagB, cfg.totalB, cfg.paceMSB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
@@ -369,7 +370,7 @@ func runChildNSource() {
 	// fanout_child.go for why reusing that budget here (while both workers
 	// are still actively reading/writing/acking) is the wrong tool.
 	waitNSourceUpstreamCommitted(builtA.upstream, cfg.totalA, doErrA)
-	waitNSourceUpstreamCommitted(builtB.upstream, nsourcePosOffsetB+cfg.totalB, doErrB)
+	waitNSourceUpstreamCommitted(builtB.upstream, cfg.totalB, doErrB)
 
 	if err := workerA.Stop(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: stop worker A: %v\n", markerFatal, err)
