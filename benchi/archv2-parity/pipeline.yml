@@ -1,0 +1,42 @@
+version: "2.2"
+pipelines:
+  - id: archv2-parity
+    status: running
+    name: archv2-parity
+    description: >
+      Reference pipeline for the arch-v2 default-flip throughput gate
+      (docs/architecture-decision-records/20260731-archv2-fanout-ack-model.md).
+      Generator source -> log destination, no external infrastructure, so the
+      measured throughput isolates the engine's own read/process/ack hot path
+      rather than downstream I/O. The SAME pipeline file is used by both the v1
+      and v2 tools: the ONLY difference between the two runs is the
+      --preview.pipeline-arch-v2 flag, which is what makes this a like-for-like
+      engine comparison rather than a pipeline comparison.
+
+      DEFAULT CONFIG IS THE POINT. sdk.batch.size and sdk.batch.delay are
+      deliberately NOT set, so they take their zero defaults. That matters far
+      more than it looks: with batch.size 0 the connector SDK calls
+      readFn(ctx, 1), so arch-v2 reads batches of ONE record. The ~6.3x win in
+      the fan-out ADR was measured on a mocked 1000-record batch, which is not
+      what an out-of-the-box pipeline does. The gate DeVaris pre-committed to
+      (>10% regression on default config blocks the v0.20 flip) is about this
+      configuration, not a tuned one.
+    connectors:
+      - id: archv2-parity:generator-src
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          # No rate limit and no batch settings: throughput is bounded by the
+          # engine, and batching stays at its shipped default.
+      - id: archv2-parity:log-dest
+        type: destination
+        plugin: builtin:log
+        settings:
+          # The log destination has no "off" level; error is the quietest
+          # valid one, minimizing (not eliminating) logging overhead. Both
+          # tools pay this identically, so it cancels in the comparison.
+          level: error
