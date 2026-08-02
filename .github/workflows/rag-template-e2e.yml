@@ -50,17 +50,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out conduit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check out conduit-processor-ai
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ConduitIO/conduit-processor-ai
           ref: ${{ env.PROCESSOR_AI_REF }}
           path: _rag/conduit-processor-ai
 
       - name: Check out conduit-connector-pgvector
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ConduitIO/conduit-connector-pgvector
           ref: ${{ env.PGVECTOR_REF }}
