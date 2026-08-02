@@ -11,7 +11,7 @@ services:
   # the postgres-cdc-kafka template's forced cdcMode=logrepl) without
   # changing behavior for any other existing integration test.
   templates-postgres:
-    image: postgres:17
+    image: postgres:18
     ports:
       - "5442:5432"
     environment:
