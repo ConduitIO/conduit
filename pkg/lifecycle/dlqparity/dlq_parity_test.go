@@ -48,6 +48,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -63,27 +64,61 @@ import (
 
 // -- v1 (pkg/lifecycle/stream.DLQHandlerNode) test harness --------------------
 
-// stubDLQHandler is a v1 stream.DLQHandler that always accepts writes. The
-// point of this test is the window/threshold arithmetic, not DLQ I/O, so the
-// handler itself is trivial.
-type stubDLQHandler struct{}
+// stubDLQHandler is a v1 stream.DLQHandler that always accepts writes and
+// records which record positions actually reached the DLQ.
+//
+// It records rather than discarding because "the two windows agree on the
+// COUNT" is not the property this gate needs to hold. An engine that accepts a
+// nack and then never writes the record anywhere still passes a count-only
+// comparison — and in v2, Worker.Nack acks that position upstream on the
+// strength of the accepted count, so the record is gone for good. Comparing the
+// delivered positions is what makes the gate cover invariant 3.
+type stubDLQHandler struct {
+	written []string
+}
 
-func (stubDLQHandler) Open(context.Context) error                  { return nil }
-func (stubDLQHandler) Write(context.Context, opencdc.Record) error { return nil }
-func (stubDLQHandler) Close(context.Context) error                 { return nil }
+func (*stubDLQHandler) Open(context.Context) error  { return nil }
+func (*stubDLQHandler) Close(context.Context) error { return nil }
+
+func (h *stubDLQHandler) Write(_ context.Context, r opencdc.Record) error {
+	h.written = append(h.written, wrappedPosition(r))
+	return nil
+}
+
+// wrappedPosition digs the FAILED record's position out of a DLQ record.
+//
+// Both engines nest the original in Payload.After via opencdc.Record.Map(),
+// but they disagree on the wrapper's own Position: v1 uses msg.ID()
+// ("<connectorID>/<position>", stream/dlq.go), v2 uses the raw record position
+// (funnel/dlq.go). Comparing the wrapper positions would therefore fail on a
+// formatting difference and say nothing about which records were delivered,
+// so read through to the original. (The wrapper-format divergence is real and
+// worth its own decision, but it is not what this gate is measuring.)
+func wrappedPosition(r opencdc.Record) string {
+	after, ok := r.Payload.After.(opencdc.StructuredData)
+	if !ok {
+		return fmt.Sprintf("UNEXPECTED-PAYLOAD(%T)", r.Payload.After)
+	}
+	pos, ok := after["position"].([]byte)
+	if !ok {
+		return fmt.Sprintf("UNEXPECTED-POSITION(%T)", after["position"])
+	}
+	return string(pos)
+}
 
 // runningV1Node starts a stream.DLQHandlerNode configured with the given
 // window and returns it along with a stop function. Ack/Nack block (via
 // csync.ValueWatcher.Watch) until the node's Run goroutine has flipped its
 // state to "running", so no extra synchronization is needed after starting
 // the goroutine.
-func runningV1Node(t *testing.T, windowSize, windowNackThreshold int) (*stream.DLQHandlerNode, func()) {
+func runningV1Node(t *testing.T, windowSize, windowNackThreshold int) (*stream.DLQHandlerNode, *stubDLQHandler, func()) {
 	t.Helper()
 	is := is.New(t)
 
+	h := &stubDLQHandler{}
 	n := &stream.DLQHandlerNode{
 		Name:                "dlq-parity-v1",
-		Handler:             stubDLQHandler{},
+		Handler:             h,
 		WindowSize:          windowSize,
 		WindowNackThreshold: windowNackThreshold,
 		Timer:               noop.Timer{},
@@ -93,30 +128,48 @@ func runningV1Node(t *testing.T, windowSize, windowNackThreshold int) (*stream.D
 
 	ctx := context.Background()
 	done := make(chan struct{})
+	// Captured, not asserted here: is.NoErr calls t.FailNow, which must run on
+	// the test goroutine. Assert it in stop() instead.
+	var runErr error
 	go func() {
 		defer close(done)
-		err := n.Run(ctx)
-		is.NoErr(err)
+		runErr = n.Run(ctx)
 	}()
 
 	stop := func() {
 		n.Done()
 		<-done
+		is.NoErr(runErr)
 	}
-	return n, stop
+	return n, h, stop
+}
+
+// outcome is what the two engines must agree on, per message.
+//
+// fatal is compared as well as accepted because fatality is not a detail of
+// error formatting - cerrors.IsFatalError is what decides whether a pipeline
+// auto-recovers or goes StatusDegraded (pkg/lifecycle/service.go and
+// pkg/lifecycle-poc/service.go both branch on it). "A pipeline that tolerated
+// its error rate on v1 starts hard-failing after the upgrade" IS a fatality
+// divergence, so a gate that compares only accepted/rejected cannot see the
+// regression it exists to catch.
+type outcome struct {
+	accepted bool
+	fatal    bool
 }
 
 // replayV1 feeds events (true = nack, false = ack) one message at a time
 // through a v1 DLQHandlerNode and records, per event, whether it was
-// accepted (true) or rejected because the nack threshold was exceeded
-// (false). Acks are always "accepted" - Message.Ack has no failure mode.
-func replayV1(t *testing.T, windowSize, windowNackThreshold int, events []bool) []bool {
+// accepted and whether the rejection was fatal. Acks are always accepted and
+// never fatal - Message.Ack has no failure mode. It also returns the record
+// positions that actually reached the DLQ handler.
+func replayV1(t *testing.T, windowSize, windowNackThreshold int, events []bool) ([]outcome, []string) {
 	t.Helper()
 
-	n, stop := runningV1Node(t, windowSize, windowNackThreshold)
+	n, handler, stop := runningV1Node(t, windowSize, windowNackThreshold)
 	defer stop()
 
-	results := make([]bool, len(events))
+	results := make([]outcome, len(events))
 	for i, nack := range events {
 		msg := &stream.Message{
 			Ctx:    context.Background(),
@@ -124,13 +177,13 @@ func replayV1(t *testing.T, windowSize, windowNackThreshold int, events []bool) 
 		}
 		if !nack {
 			n.Ack(msg)
-			results[i] = true
+			results[i] = outcome{accepted: true}
 			continue
 		}
 		err := n.Nack(msg, stream.NackMetadata{Reason: cerrors.New("boom"), NodeID: "dlq-parity"})
-		results[i] = err == nil
+		results[i] = outcome{accepted: err == nil, fatal: cerrors.IsFatalError(err)}
 	}
-	return results
+	return results, handler.written
 }
 
 // -- v2 (pkg/lifecycle-poc/funnel.DLQ) test harness ----------------------------
@@ -140,6 +193,11 @@ func replayV1(t *testing.T, windowSize, windowNackThreshold int, events []bool) 
 // the test isolates window/threshold arithmetic from DLQ I/O.
 type stubDestination struct {
 	pending []opencdc.Position
+	// written accumulates every position ever handed to Write, and is never
+	// drained - pending is transient bookkeeping for Ack, and asserting on it
+	// would only ever observe an empty slice. See stubDLQHandler for why the
+	// delivered set, not just the accepted count, is the property under test.
+	written []string
 }
 
 func (d *stubDestination) ID() string                     { return "dlq-parity-dest" }
@@ -150,6 +208,7 @@ func (d *stubDestination) Errors() <-chan error           { return nil }
 func (d *stubDestination) Write(_ context.Context, recs []opencdc.Record) error {
 	for _, r := range recs {
 		d.pending = append(d.pending, r.Position)
+		d.written = append(d.written, wrappedPosition(r))
 	}
 	return nil
 }
@@ -163,16 +222,17 @@ func (d *stubDestination) Ack(context.Context) ([]connector.DestinationAck, erro
 	return acks, nil
 }
 
-func newV2DLQ(t *testing.T, windowSize, windowNackThreshold int) *funnel.DLQ {
+func newV2DLQ(t *testing.T, windowSize, windowNackThreshold int) (*funnel.DLQ, *stubDestination) {
 	t.Helper()
+	dest := &stubDestination{}
 	return funnel.NewDLQ(
 		"dlq-parity-v2",
-		&stubDestination{},
+		dest,
 		log.Test(t),
 		funnel.NoOpConnectorMetrics{},
 		windowSize,
 		windowNackThreshold,
-	)
+	), dest
 }
 
 // chunker splits a run of runLen homogeneous events (all acks, or all nacks)
@@ -205,14 +265,14 @@ func randomChunks(rng *rand.Rand) chunker {
 // It records, per original message, whether it was accepted (true) or
 // rejected (false), the same shape replayV1 returns, so the two can be
 // compared directly.
-func replayV2(t *testing.T, windowSize, windowNackThreshold int, events []bool, split chunker) []bool {
+func replayV2(t *testing.T, windowSize, windowNackThreshold int, events []bool, split chunker) ([]outcome, []string) {
 	t.Helper()
 	is := is.New(t)
 
-	dlq := newV2DLQ(t, windowSize, windowNackThreshold)
+	dlq, dest := newV2DLQ(t, windowSize, windowNackThreshold)
 	ctx := context.Background()
 
-	results := make([]bool, len(events))
+	results := make([]outcome, len(events))
 	i := 0
 	for i < len(events) {
 		nack := events[i]
@@ -233,7 +293,7 @@ func replayV2(t *testing.T, windowSize, windowNackThreshold int, events []bool, 
 			if !nack {
 				dlq.Ack(ctx, batch)
 				for k := 0; k < c; k++ {
-					results[pos+k] = true
+					results[pos+k] = outcome{accepted: true}
 				}
 			} else {
 				errs := make([]error, c)
@@ -243,23 +303,28 @@ func replayV2(t *testing.T, windowSize, windowNackThreshold int, events []bool, 
 				batch.Nack(0, errs...)
 
 				accepted, err := dlq.Nack(ctx, batch, "dlq-parity")
-				is.True(accepted >= 0 && accepted <= c)
-				if err != nil {
-					// accepted..c-1 were rejected by the window (or, if
-					// accepted==0 and threshold==0, all of them were -
-					// either way err must be non-nil for exactly the
-					// rejected tail.
-					is.True(accepted < c)
+
+				// The contract that actually constrains the caller: a partial
+				// acceptance MUST be reported as an error, because Worker.Nack
+				// acks exactly positions[:accepted] upstream and the rejected
+				// tail has to stop the pipeline rather than vanish. (The old
+				// assertions here - accepted in [0,c], and accepted < c when
+				// err != nil - were tautologies over dlqWindow.store's return
+				// domain and a stub that never fails.)
+				if accepted < c {
+					is.True(err != nil)
 				}
+
+				fatal := cerrors.IsFatalError(err)
 				for k := 0; k < c; k++ {
-					results[pos+k] = k < accepted
+					results[pos+k] = outcome{accepted: k < accepted, fatal: k >= accepted && fatal}
 				}
 			}
 			pos += c
 		}
 		i = j
 	}
-	return results
+	return results, dest.written
 }
 
 // -- differential assertions --------------------------------------------------
@@ -271,19 +336,52 @@ func assertParity(t *testing.T, windowSize, windowNackThreshold int, events []bo
 	t.Helper()
 	is := is.New(t)
 
-	v1 := replayV1(t, windowSize, windowNackThreshold, events)
-	v2 := replayV2(t, windowSize, windowNackThreshold, events, split)
+	v1, v1DLQ := replayV1(t, windowSize, windowNackThreshold, events)
+	v2, v2DLQ := replayV2(t, windowSize, windowNackThreshold, events, split)
 
 	is.Equal(len(v1), len(v2))
 	for i := range events {
 		if v1[i] != v2[i] {
 			t.Fatalf(
 				"DLQ v1/v2 parity DIVERGED at message %d (windowSize=%d windowNackThreshold=%d, nack=%v): "+
-					"v1 accepted=%v v2 accepted=%v\nfull v1=%v\nfull v2=%v",
+					"v1 %+v v2 %+v\nfull v1=%v\nfull v2=%v",
 				i, windowSize, windowNackThreshold, events[i], v1[i], v2[i], v1, v2,
 			)
 		}
 	}
+
+	// Agreeing on which nacks were ACCEPTED is not enough. An engine that
+	// accepts a nack and then writes the record nowhere satisfies every
+	// assertion above, and v2 would still ack that position upstream on the
+	// strength of the accepted count (Worker.Nack) - a silently lost record,
+	// invariant 3, with the gate green. Compare what each engine actually
+	// delivered.
+	//
+	// Sorted, not set-compared: a duplicate delivery is also a divergence
+	// worth failing on, and v1 delivers strictly one record per Nack call
+	// while v2 delivers a whole batch per call.
+	v1Sorted := slices.Clone(v1DLQ)
+	v2Sorted := slices.Clone(v2DLQ)
+	slices.Sort(v1Sorted)
+	slices.Sort(v2Sorted)
+	if !slices.Equal(v1Sorted, v2Sorted) {
+		t.Fatalf(
+			"DLQ v1/v2 DELIVERY DIVERGED (windowSize=%d windowNackThreshold=%d): "+
+				"the engines agreed on which nacks were accepted but not on which records reached the DLQ\n"+
+				"v1 delivered %d: %v\nv2 delivered %d: %v",
+			windowSize, windowNackThreshold, len(v1Sorted), v1Sorted, len(v2Sorted), v2Sorted,
+		)
+	}
+
+	// Guard the guard: if neither engine ever wrote to the DLQ, the comparison
+	// above is vacuously true. Any scenario with an accepted nack must deliver.
+	acceptedNacks := 0
+	for i, nack := range events {
+		if nack && v1[i].accepted {
+			acceptedNacks++
+		}
+	}
+	is.Equal(len(v1Sorted), acceptedNacks)
 }
 
 // scriptedEvents reproduces the exact scenario from

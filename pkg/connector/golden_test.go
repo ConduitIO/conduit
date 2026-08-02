@@ -169,11 +169,15 @@ func TestGolden_DestinationInstance_RoundTrip(t *testing.T) {
 // of these common kinds gets a real value automatically, so the whitelist
 // coverage check actually exercises it.
 //
-// Known limitation: fields of interface, pointer, chan, or func kind are
-// left as their zero value (nothing sensible to synthesize generically).
-// Instance currently has one such field (State any), which callers must set
-// explicitly before/after calling fillNonZero.
-func fillNonZero(v reflect.Value, seed *int) {
+// It FAILS THE TEST on any kind it cannot populate, rather than silently
+// leaving the field zero. Silently skipping is what would make this whole
+// check vacuous: a zero field matches a zero field, so an unhandled kind
+// means a new Instance field of that kind could be missing from PrepareSet's
+// whitelist and the test would still pass — precisely the trap it exists to
+// catch. Callers exclude State (kind interface, set explicitly per subtest)
+// by name before recursing, so reaching an interface here is a real gap.
+func fillNonZero(t *testing.T, v reflect.Value, seed *int) {
+	t.Helper()
 	if !v.CanSet() {
 		return
 	}
@@ -192,16 +196,16 @@ func fillNonZero(v reflect.Value, seed *int) {
 		v.SetBool(true)
 	case reflect.Slice:
 		elem := reflect.New(v.Type().Elem()).Elem()
-		fillNonZero(elem, seed)
+		fillNonZero(t, elem, seed)
 		s := reflect.MakeSlice(v.Type(), 1, 1)
 		s.Index(0).Set(elem)
 		v.Set(s)
 	case reflect.Map:
 		m := reflect.MakeMap(v.Type())
 		key := reflect.New(v.Type().Key()).Elem()
-		fillNonZero(key, seed)
+		fillNonZero(t, key, seed)
 		val := reflect.New(v.Type().Elem()).Elem()
-		fillNonZero(val, seed)
+		fillNonZero(t, val, seed)
 		m.SetMapIndex(key, val)
 		v.Set(m)
 	case reflect.Struct:
@@ -214,14 +218,28 @@ func fillNonZero(v reflect.Value, seed *int) {
 			if v.Type().Field(i).PkgPath != "" {
 				continue // unexported, not serialized, skip
 			}
-			fillNonZero(v.Field(i), seed)
+			fillNonZero(t, v.Field(i), seed)
 		}
-	case reflect.Invalid, reflect.Uintptr, reflect.Float32, reflect.Float64,
-		reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan,
-		reflect.Func, reflect.Interface, reflect.Pointer, reflect.UnsafePointer:
-		// Not synthesized: Instance has no fields of these kinds today
-		// besides State (any), which callers set explicitly. See the doc
-		// comment above.
+	case reflect.Float32, reflect.Float64:
+		*seed++
+		v.SetFloat(float64(*seed) + 0.5)
+	case reflect.Pointer:
+		p := reflect.New(v.Type().Elem())
+		fillNonZero(t, p.Elem(), seed)
+		v.Set(p)
+	case reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			fillNonZero(t, v.Index(i), seed)
+		}
+	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.Interface, reflect.UnsafePointer:
+		t.Fatalf(
+			"fillNonZero: unhandled kind %s (type %s) — this field would be left at its zero "+
+				"value, which makes TestStore_PrepareSet_WhitelistCoversAllFields VACUOUS for it. "+
+				"Either teach fillNonZero to synthesize this kind, or exclude the field by name at "+
+				"the call site with a comment saying why it is safe.",
+			v.Kind(), v.Type(),
+		)
 	}
 }
 
@@ -259,7 +277,7 @@ func TestStore_PrepareSet_WhitelistCoversAllFields(t *testing.T) {
 				case "Type", "State":
 					continue // set explicitly below, must stay consistent with connType
 				}
-				fillNonZero(v.Field(i), &seed)
+				fillNonZero(t, v.Field(i), &seed)
 			}
 			switch connType {
 			case TypeSource:
