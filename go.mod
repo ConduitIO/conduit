@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.6.0
-	github.com/conduitio/conduit-connector-file v0.10.3
+	github.com/conduitio/conduit-connector-file v0.10.8
 	github.com/conduitio/conduit-connector-generator v0.10.4
 	github.com/conduitio/conduit-connector-kafka v0.12.3
 	github.com/conduitio/conduit-connector-log v0.7.3
