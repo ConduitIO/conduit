@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -47,7 +48,7 @@ func TestNewHTTPMetricsHandlerUsesEmbeddedGatherer(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	runtime.newHTTPMetricsHandler().ServeHTTP(
 		recorder,
-		httptest.NewRequest(http.MethodGet, "/metrics", nil),
+		httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil),
 	)
 
 	is.Equal(recorder.Code, http.StatusOK)
