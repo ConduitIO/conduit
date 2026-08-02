@@ -226,8 +226,8 @@ github.com/cohere-ai/cohere-go/v2 v2.14.1/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVp
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
 github.com/conduitio/conduit-commons v0.6.0 h1:UgKXYAMEO3w759R5EmAP0Ax5yFWPGqvPMr/neltfsAI=
 github.com/conduitio/conduit-commons v0.6.0/go.mod h1:n+zdde8QZ+gX4m4tjv7qT1xomZSGZg/dpoTx/JR/fh4=
-github.com/conduitio/conduit-connector-file v0.10.3 h1:AHOCOjVJs9C9GeuQBw85dm3WfckdWPQSKwTD5ocUXUE=
-github.com/conduitio/conduit-connector-file v0.10.3/go.mod h1:uT0WPeOS1K5X4LdLTxK+74mxa+9+2WnubliLHuN1nlY=
+github.com/conduitio/conduit-connector-file v0.10.8 h1:f1UM7DcPDUAlPAQ0kqgQa6p3ZG6Wv1qW8jaYq4J1dvs=
+github.com/conduitio/conduit-connector-file v0.10.8/go.mod h1:U9p1VDXrqIyAVB2o+S8hiRlld97TK4jutivq+Ekalx4=
 github.com/conduitio/conduit-connector-generator v0.10.4 h1:ttwzOV+LwrXo1FwqCgs2EdazUA2PKBKeKmWmRvOu3+U=
 github.com/conduitio/conduit-connector-generator v0.10.4/go.mod h1:3ZvP78kzunn7xzHYj0aK6AsFkTCf/XWjYnD212cCd/Q=
 github.com/conduitio/conduit-connector-kafka v0.12.3 h1:2fGBqeBADmm9IsR2T/sUB5QHRpklaet3B7kYnXcaQEs=
