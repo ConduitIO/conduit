@@ -62,6 +62,12 @@ type Options struct {
 	// definitions still fan values out across every registry in the process.
 	MetricsRegisterer promclient.Registerer
 
+	// MetricsGatherer is served by the embedded HTTP API's /metrics endpoint.
+	// Set it when MetricsRegisterer does not also implement Gatherer, such as
+	// when using WrapRegistererWithPrefix or WrapRegistererWith. It must gather
+	// the metrics registered through MetricsRegisterer.
+	MetricsGatherer promclient.Gatherer
+
 	// DB configures the embedded storage backend. The zero value (Type =="")
 	// defaults to an in-memory store — convenient for examples and tests, but
 	// every pipeline configuration is lost once the Engine stops. A
@@ -374,6 +380,9 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	}
 	if opts.MetricsRegisterer != nil {
 		runtimeOpts = append(runtimeOpts, pkgconduit.WithMetricsRegisterer(opts.MetricsRegisterer))
+	}
+	if opts.MetricsGatherer != nil {
+		runtimeOpts = append(runtimeOpts, pkgconduit.WithMetricsGatherer(opts.MetricsGatherer))
 	}
 
 	return &Engine{

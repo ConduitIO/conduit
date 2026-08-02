@@ -21,27 +21,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/matryer/is"
 	promclient "github.com/prometheus/client_golang/prometheus"
 )
 
-func TestNewHTTPMetricsHandlerUsesEmbeddedGatherer(t *testing.T) {
+func TestNewHTTPMetricsHandlerUsesExplicitGatherer(t *testing.T) {
 	is := is.New(t)
-
 	reg := promclient.NewRegistry()
-	gauge := promclient.NewGauge(promclient.GaugeOpts{
-		Name: "conduit_embedded_http_metrics_test",
-		Help: "Metric used to verify the embedded HTTP metrics gatherer.",
-	})
-	gauge.Set(42)
-	reg.MustRegister(gauge)
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", reg)
 
-	cfg := DefaultConfig()
-	cfg.DB.Type = DBTypeInMemory
-	cfg.API.Enabled = false
-	cfg.Pipelines.Path = t.TempDir()
-
-	runtime, err := NewRuntime(cfg, WithMetricsRegisterer(reg))
+	cfg := newMetricsRuntimeConfig(t)
+	runtime, err := NewRuntime(cfg, WithMetricsRegisterer(wrapped), WithMetricsGatherer(reg))
 	is.NoErr(err)
 	defer runtime.DB.Close()
 
@@ -52,5 +43,48 @@ func TestNewHTTPMetricsHandlerUsesEmbeddedGatherer(t *testing.T) {
 	)
 
 	is.Equal(recorder.Code, http.StatusOK)
-	is.True(strings.Contains(recorder.Body.String(), "conduit_embedded_http_metrics_test 42"))
+	is.True(strings.Contains(recorder.Body.String(), "myapp_conduit_info"))
+}
+
+func TestNewRuntimeRequiresGathererForWrappedRegisterer(t *testing.T) {
+	is := is.New(t)
+	reg := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", reg)
+
+	_, err := NewRuntime(newMetricsRuntimeConfig(t), WithMetricsRegisterer(wrapped))
+	is.True(err != nil)
+	conduitErr, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(conduitErr.Code, conduiterr.CodeInvalidArgument)
+}
+
+func TestNewRuntimeAllowsWrappedRegistererWhenHTTPDisabled(t *testing.T) {
+	is := is.New(t)
+	reg := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", reg)
+	cfg := newMetricsRuntimeConfig(t)
+	cfg.API.Enabled = false
+
+	runtime, err := NewRuntime(cfg, WithMetricsRegisterer(wrapped))
+	is.NoErr(err)
+	defer runtime.DB.Close()
+}
+
+func TestNewRuntimeUsesDefaultGatherer(t *testing.T) {
+	is := is.New(t)
+	cfg := newMetricsRuntimeConfig(t)
+	cfg.API.Enabled = false
+
+	runtime, err := NewRuntime(cfg)
+	is.NoErr(err)
+	defer runtime.DB.Close()
+	is.True(runtime.metricsGatherer == promclient.DefaultGatherer)
+}
+
+func newMetricsRuntimeConfig(t *testing.T) Config {
+	cfg := DefaultConfig()
+	cfg.DB.Type = DBTypeInMemory
+	cfg.API.Enabled = true
+	cfg.Pipelines.Path = t.TempDir()
+	return cfg
 }

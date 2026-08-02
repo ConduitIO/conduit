@@ -164,6 +164,7 @@ func (r *Runtime) CloseDB() error {
 type runtimeOptions struct {
 	logger            *log.CtxLogger
 	metricsRegisterer promclient.Registerer
+	metricsGatherer   promclient.Gatherer
 	dialCtx           context.Context
 }
 
@@ -193,6 +194,10 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 // registered only into the supplied registerer — never
 // promclient.DefaultRegisterer. `conduit run` never passes this option.
 //
+// If reg also implements Gatherer and WithMetricsGatherer is not supplied,
+// the embedded /metrics endpoint serves reg's full contents, including metrics
+// registered by the host application.
+//
 // Known limitation (documented, not fixed by this seam): pkg/foundation/metrics
 // keeps process-global metric *definitions* (metrics.go's `global` slices) —
 // a metric created via metrics.NewCounter et al. (e.g. everything in
@@ -205,6 +210,13 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 // Non-goals).
 func WithMetricsRegisterer(reg promclient.Registerer) RuntimeOption {
 	return func(o *runtimeOptions) { o.metricsRegisterer = reg }
+}
+
+// WithMetricsGatherer supplies the gatherer used by the embedded Runtime's
+// /metrics endpoint. It must expose the metrics registered through the value
+// passed to WithMetricsRegisterer.
+func WithMetricsGatherer(gatherer promclient.Gatherer) RuntimeOption {
+	return func(o *runtimeOptions) { o.metricsGatherer = gatherer }
 }
 
 // WithDialContext supplies the context.Context OpenStore's Postgres/SQLite
@@ -251,6 +263,17 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		opt(&ro)
 	}
 
+	metricsGatherer := ro.metricsGatherer
+	if ro.metricsRegisterer == nil && metricsGatherer != nil {
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, "metrics gatherer requires a metrics registerer")
+	}
+	if ro.metricsRegisterer != nil && metricsGatherer == nil {
+		metricsGatherer, _ = ro.metricsRegisterer.(promclient.Gatherer)
+		if metricsGatherer == nil && cfg.API.Enabled {
+			return nil, conduiterr.New(conduiterr.CodeInvalidArgument,
+				"metrics registerer does not implement Gatherer; provide WithMetricsGatherer")
+		}
+	}
 	var logger log.CtxLogger
 	if ro.logger != nil {
 		// Embed path (AC-5.1): use the pre-built logger as-is instead of
@@ -281,15 +304,15 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	}
 
 	var statsHandler *promgrpc.StatsHandler
-	metricsGatherer := promclient.DefaultGatherer
 	if ro.metricsRegisterer != nil {
 		// Embed path (AC-5.2): isolated per-Runtime metrics, never the
 		// process-global promclient.DefaultRegisterer.
-		statsHandler, metricsGatherer, err = configureEmbeddedMetrics(ro.metricsRegisterer)
+		statsHandler, err = configureEmbeddedMetrics(ro.metricsRegisterer)
 		if err != nil {
 			return nil, err
 		}
 	} else {
+		metricsGatherer = promclient.DefaultGatherer
 		statsHandler = configureMetrics()
 	}
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
@@ -561,34 +584,21 @@ func configureMetrics() *promgrpc.StatsHandler {
 // succeed, so a failed Register (e.g. the name collision this function
 // itself guards against) still leaks reg into pkg/foundation/metrics'
 // process-global bookkeeping — it is never unregistered on this error path.
-func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, promclient.Gatherer, error) {
+func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, error) {
 	reg := prometheus.NewRegistry(nil)
 	metrics.Register(reg) // documented cross-talk limitation, see WithMetricsRegisterer's doc; leak-on-failure tracked as issue #2669
 	if err := registerer.Register(reg); err != nil {
 		wrapped := cerrors.Errorf("failed to register conduit metrics collector: %w", err)
-		return nil, nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
 
 	statsHandler := promgrpc.ServerStatsHandler()
 	if err := registerer.Register(statsHandler); err != nil {
 		wrapped := cerrors.Errorf("failed to register grpc stats collector: %w", err)
-		return nil, nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
 
-	if gatherer, ok := registerer.(promclient.Gatherer); ok {
-		return statsHandler, gatherer, nil
-	}
-
-	gatherer := promclient.NewRegistry()
-	if err := gatherer.Register(reg); err != nil {
-		wrapped := cerrors.Errorf("failed to register conduit metrics in HTTP gatherer: %w", err)
-		return nil, nil, conduiterr.Wrap(conduiterr.CodeInternal, wrapped.Error(), wrapped)
-	}
-	if err := gatherer.Register(statsHandler); err != nil {
-		wrapped := cerrors.Errorf("failed to register grpc stats in HTTP gatherer: %w", err)
-		return nil, nil, conduiterr.Wrap(conduiterr.CodeInternal, wrapped.Error(), wrapped)
-	}
-	return statsHandler, gatherer, nil
+	return statsHandler, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
