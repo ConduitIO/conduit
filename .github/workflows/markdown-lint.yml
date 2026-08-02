@@ -9,7 +9,7 @@ jobs:
   markdownlint-cli2:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Pinned to the v20 commit SHA (markdownlint-cli2 0.18.1 / markdownlint
       # 0.38.0). Keep in sync with MARKDOWNLINT_VERSION in the Makefile — the two
       # must match or local `make markdown-lint`/`make verify` drifts from CI.

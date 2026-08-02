@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out conduit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history so the path detector can diff against the PR base ref.
           fetch-depth: 0
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check out conduit-processor-ai
         if: steps.detect.outputs.run == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ConduitIO/conduit-processor-ai
           ref: ${{ env.PROCESSOR_AI_REF }}

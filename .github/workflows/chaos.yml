@@ -50,7 +50,7 @@ jobs:
     name: tests/chaos (race, x3)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the data-path detector can diff against the PR
           # base ref (a shallow clone would not have base.sha).
