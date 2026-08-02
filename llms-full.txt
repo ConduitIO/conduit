@@ -328,7 +328,7 @@ Author: Meroxa, Inc.
 | `tls.enabled` | bool |  | no | TLSEnabled defines whether TLS is needed to communicate with the Kafka cluster. |  |
 | `topic` | string | {{ index .Metadata "opencdc.collection" }} | no | Topic is the Kafka topic. It can contain a [Go template](https://pkg.go.dev/text/template) that will be executed for each record to determine the topic. By default, the topic is the value of the `opencdc.collection` metadata field. |  |
 
-### log (v0.7.3)
+### log (v0.7.5)
 
 A destination connector that logs all incoming records.
 
