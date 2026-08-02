@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.3)
+### file (v0.10.8)
 
 A file source and destination plugin for Conduit.
 
