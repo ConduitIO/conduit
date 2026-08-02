@@ -540,18 +540,28 @@ func (w *Worker) doTaskAttempt(
 			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
 			return ctx.Err()
 		}
-		if taskNode.IsFirst() && cerrors.Is(err, io.EOF) && !w.stop.Load() {
+		if taskNode.IsFirst() && cerrors.Is(err, io.EOF) {
 			// A source that has permanently exhausted its records (e.g. a
 			// snapshot-only connector with nothing left to stream) reports it
 			// by returning io.EOF from Read - the same sentinel this package
 			// already uses for "the source's stream has closed" elsewhere
 			// (see isClosedSourceStream). This is NOT a failure (slice 3b of
-			// the arch-v2 multi-connector epic, N-source pipelines): unlike
-			// the branch above, this path is NOT gated on w.stop already
-			// being set, because nothing external asked this worker to stop
-			// - the source decided on its own. Guarded on !w.stop.Load() so
-			// it can never fire after an external Stop already armed the
-			// flag (that path is handled by the branch above).
+			// the arch-v2 multi-connector epic, N-source pipelines).
+			//
+			// This branch is deliberately NOT gated on w.stop. An earlier
+			// version guarded it with !w.stop.Load(), reasoning that the
+			// stop-armed case was "handled by the branch above" - it is not.
+			// That branch matches only context.Canceled and
+			// plugin.ErrPluginNotRunning, so a source exhausting at the same
+			// instant an external Stop armed the flag matched NEITHER branch,
+			// fell through to the generic error path, and surfaced as
+			// "failed to read from source: EOF". In the Service that error
+			// reaches rp.t.Kill, so a pipeline that stopped perfectly cleanly
+			// was reported as failed instead of UserStopped. It showed up as
+			// an intermittent failure of the N-source service tests (and once
+			// as a full 10-minute test-timeout hang in CI) before being
+			// tracked down. A source reporting that it is out of records is
+			// graceful whether or not anything else also asked it to stop.
 			//
 			// M3 (adversarial review of #2734): log this transition at Info,
 			// distinctly from an externally-requested Stop, so it is never
@@ -566,8 +576,13 @@ func (w *Worker) doTaskAttempt(
 			// production rather than silently claimed as tested behavior;
 			// see docs/design-documents/20260801-archv2-multiconnector-nsource.md,
 			// "A source finishing gracefully is not a failure".
+			// M3 kept: distinguish self-exhaustion from an externally-requested
+			// stop in the logs. With the guard removed this branch also covers
+			// "exhausted while stopping", so say which one actually happened
+			// rather than always claiming the source decided on its own.
 			w.logger.Info(ctx).
 				Str("source_id", taskNode.Task.ID()).
+				Bool("stop_requested", w.stop.Load()).
 				Msg("source exhausted its records (io.EOF) and is stopping gracefully; sibling sources, if any, are unaffected")
 
 			// Arm w.stop so tearDownSource behaves identically to an
