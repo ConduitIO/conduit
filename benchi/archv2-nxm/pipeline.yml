@@ -1,0 +1,45 @@
+version: "2.2"
+pipelines:
+  - id: archv2-nxm
+    status: running
+    name: archv2-nxm
+    description: >
+      N×M reference pipeline for the arch-v2 default-flip throughput gate:
+      2 sources × 2 destinations, the shape benchi/archv2-parity deliberately
+      did NOT cover. This is where the two engines' designs actually diverge —
+      v1 fans in/out through FaninNode/FanoutNode, while arch-v2 runs one Worker
+      per source and serializes them into a shared destination subtree behind a
+      per-shared-root mutex. A single-connector benchmark cannot see that
+      contention at all.
+
+      Same defaults as archv2-parity: sdk.batch.size/batch.delay unset (so the
+      SDK reads batches of one), no rate limits, log destinations at their
+      quietest valid level. Both engines run this identical file; the only
+      difference is the --preview.pipeline-arch-v2 flag.
+    connectors:
+      - id: archv2-nxm:generator-src-a
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: archv2-nxm:generator-src-b
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: archv2-nxm:log-dest-1
+        type: destination
+        plugin: builtin:log
+        settings:
+          level: error
+      - id: archv2-nxm:log-dest-2
+        type: destination
+        plugin: builtin:log
+        settings:
+          level: error
