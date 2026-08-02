@@ -53,17 +53,36 @@ type Persister struct {
 	bundleCount int
 	batch       map[string]persistData
 	flushTimer  stoppableTimer
-	flushWg     sync.WaitGroup
 
-	// callbackWg tracks every PersistCallback invocation flushNow has
-	// spawned but not yet returned from — distinct from flushWg, which only
-	// tracks flushNow's own function body (the store write). flushNow fires
-	// callbacks in their own goroutines without waiting for them, so a
-	// caller that needs to know a callback's side effects (not just the
-	// store write) have actually happened — e.g. connector.Source's
-	// deferred plugin-ack under Approach A, see source.go's Ack — must wait
-	// on this separately. See WaitPendingWrites.
-	callbackWg sync.WaitGroup
+	// flush is the most recently triggered flush, or nil if none has ever been
+	// triggered. Waiters snapshot this pointer under m and then wait on the
+	// channels it carries.
+	flush *flushState
+}
+
+// flushState is one flush generation: the channels reporting when that specific
+// flush's store write, and then its callbacks, have completed.
+//
+// It replaces two reused sync.WaitGroups (flushWg/callbackWg) whose reuse
+// panicked the process — see WaitPendingWrites for the full account. A
+// WaitGroup forbids a counter-raising Add from running concurrently with a
+// Wait, and that rule is unenforceable here: WaitPendingWrites is called by
+// connectors on their own goroutines with no coordination with whichever other
+// connector happens to trigger a flush at that instant. A per-generation value
+// has no such rule — a waiter reads an immutable snapshot, and a new flush
+// allocates new channels instead of mutating a counter someone may be waiting
+// on.
+type flushState struct {
+	// writeDone closes when flushNow's store write has finished — the point
+	// the old flushWg tracked.
+	writeDone chan struct{}
+	// callbacksDone closes once every PersistCallback this flush spawned has
+	// returned. Distinct from writeDone because flushNow fires callbacks in
+	// their own goroutines without waiting for them, so a caller that needs a
+	// callback's side effects to have actually happened (not just the store
+	// write) — e.g. connector.Source's deferred plugin-ack under Approach A,
+	// see source.go's Ack — needs this one. This is what callbackWg tracked.
+	callbacksDone chan struct{}
 }
 
 // clock abstracts the two time operations the persister needs in order to
@@ -198,8 +217,8 @@ func (p *Persister) Wait() {
 // shared across all pipelines, connWg only reaches zero once every connector
 // on every pipeline has stopped, so calling Wait from a single pipeline's
 // stop-and-drain path would deadlock for as long as any other pipeline stays
-// running. WaitPendingWrites has no such coupling — it only observes flushWg
-// and callbackWg, which a connector's own ConnectorStopped call already
+// running. WaitPendingWrites has no such coupling — it only observes the
+// current flush generation, which a connector's own ConnectorStopped call already
 // increments synchronously (see triggerFlush and flushNow) before that call
 // returns. A caller that calls WaitPendingWrites strictly after learning (e.g.
 // via a WaitGroup/tomb join) that ConnectorStopped has already been called
@@ -208,10 +227,10 @@ func (p *Persister) Wait() {
 // call by construction, and sync.WaitGroup cannot miss a Done that was
 // already pending when Wait was entered.
 //
-// The callbackWg half of this wait matters specifically for
+// The callbacksDone half of this wait matters specifically for
 // connector.Source's Ack (Approach A, see source.go): the plugin-ack it sends
 // is deferred to run *inside* the PersistCallback, once the position is
-// durably flushed. Waiting only on flushWg (as this method did before that
+// durably flushed. Waiting only on the store write (as this method did before that
 // fix) would let a caller proceed — and a graceful shutdown tear down the
 // plugin — after the store write landed but before the plugin was actually
 // told about it, reintroducing an invariant-1 gap on the graceful path even
@@ -224,8 +243,33 @@ func (p *Persister) Wait() {
 // pipelines. See docs/design-documents/20260708-live-server-deploy-apply.md,
 // "Review outcome & required rework", blocker 1.
 func (p *Persister) WaitPendingWrites() {
-	p.flushWg.Wait()
-	p.callbackWg.Wait()
+	// Snapshot the current generation under m, then wait OUTSIDE the lock.
+	//
+	// The lock must not be held across the wait: WaitPendingWritesContext
+	// deliberately returns early on timeout while this goroutine keeps
+	// waiting, so holding m here would let a single stuck flush stall every
+	// connector's Persist process-wide — trading a crash for a global hang.
+	//
+	// This replaces `flushWg.Wait(); callbackWg.Wait()`, which read two
+	// WaitGroups with no lock while triggerFlush/flushNow concurrently raised
+	// them. A WaitGroup Add that lifts the counter off zero during a Wait is
+	// the documented reuse hazard, and it does not merely race — it panics
+	// with "sync: WaitGroup is reused before previous Wait has returned",
+	// killing the process. connector.Service shares ONE Persister across every
+	// connector and Source.Teardown calls WaitPendingWritesContext, so any
+	// pipeline where one source tears down while another still acks hit it.
+	// Confirmed in a shipped binary on ordinary shutdown of a 2-source
+	// pipeline: 3/3 runs under arch-v2 (one Worker per source, so all of them
+	// tear down at once), 1/3 under v1.
+	p.m.Lock()
+	st := p.flush
+	p.m.Unlock()
+
+	if st == nil {
+		return // nothing was ever flushed
+	}
+	<-st.writeDone
+	<-st.callbacksDone
 }
 
 // WaitPendingWritesContext behaves like WaitPendingWrites, but returns early
@@ -297,21 +341,32 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 		return
 	}
 
-	// wait for any running flusher to finish
-	p.flushWg.Wait()
+	// Wait for any running flusher to finish. This blocks while holding m,
+	// exactly as the flushWg.Wait() it replaces did — a flush is serialized
+	// against the next one either way.
+	if p.flush != nil {
+		<-p.flush.writeDone
+	}
 
 	// reset callbacks and bundle count
 	batch := p.batch
 	p.batch = nil
 	p.bundleCount = 0
 
-	p.flushWg.Add(1)
-	go p.flushNow(ctx, batch)
+	// Publish this generation BEFORE starting it, under m, so a concurrent
+	// WaitPendingWrites either misses it entirely (and is correct — it was
+	// called before this flush was triggered) or sees it whole.
+	st := &flushState{
+		writeDone:     make(chan struct{}),
+		callbacksDone: make(chan struct{}),
+	}
+	p.flush = st
+	go p.flushNow(ctx, batch, st)
 }
 
 // flushNow will flush the state to the store.
-func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) {
-	defer p.flushWg.Done()
+func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, st *flushState) {
+	defer close(st.writeDone)
 	start := p.clock.Now()
 
 	tx, ctx, err := p.db.NewTransaction(ctx, true)
@@ -333,20 +388,26 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) 
 	if err == nil {
 		err = tx.Commit()
 	}
-	// Track every callback this flush is about to spawn so WaitPendingWrites
-	// can observe not just "the write landed" but "every side effect the
-	// write's callback performs has also finished" — see callbackWg's field
-	// doc and WaitPendingWrites. Add happens synchronously, before flushNow
-	// returns (and therefore before this flush's flushWg.Done() fires),
-	// which is what makes a subsequent WaitPendingWrites call race-free.
-	p.callbackWg.Add(len(batch))
+	// Track every callback this flush spawns so WaitPendingWrites can observe
+	// not just "the write landed" but "every side effect the write's callback
+	// performs has also finished" — see flushState.callbacksDone. The
+	// WaitGroup here is local to this flush generation and is never waited on
+	// by anyone else, so it cannot be reused underneath a Wait; the closer
+	// goroutine below converts it into a channel close, which is what callers
+	// actually observe.
+	var cbWg sync.WaitGroup
+	cbWg.Add(len(batch))
 	for _, data := range batch {
 		// execute callbacks in go routines to make sure they can't block this function
 		go func(cb PersistCallback) {
-			defer p.callbackWg.Done()
+			defer cbWg.Done()
 			cb(err)
 		}(data.callback)
 	}
+	go func() {
+		cbWg.Wait()
+		close(st.callbacksDone)
+	}()
 
 	p.logger.Debug(ctx).
 		Err(err).
