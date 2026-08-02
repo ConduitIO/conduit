@@ -152,6 +152,17 @@ type fakeDestination struct {
 	blockOn  opencdc.Position
 	blocked  chan struct{}
 	unblockC chan struct{}
+
+	// nackMatch, if set, is consulted for every written record IN ADDITION to
+	// nackErr. nackErr is keyed by raw position bytes, which is fine when
+	// positions are unique across every record this destination ever sees -
+	// but positions are only guaranteed unique WITHIN a single source (see
+	// funnel's package doc on N-source pipelines), so two different sources'
+	// records can carry byte-identical positions. nackMatch lets a test
+	// target ONE specific record by its full identity (e.g. its Key) even
+	// when its position collides with a different source's record - see the
+	// N×M DLQ-attribution-under-collision test in worker_nxm_test.go.
+	nackMatch func(opencdc.Record) error
 }
 
 func newFakeDestination(id string) *fakeDestination {
@@ -185,6 +196,14 @@ func (d *fakeDestination) setNackErr(pos opencdc.Position, err error) {
 	d.nackErr[string(pos)] = err
 }
 
+// setNackMatch installs fn as this destination's nackMatch hook - see the
+// field doc for why this exists alongside setNackErr.
+func (d *fakeDestination) setNackMatch(fn func(opencdc.Record) error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.nackMatch = fn
+}
+
 func (d *fakeDestination) Write(_ context.Context, recs []opencdc.Record) error {
 	d.mu.Lock()
 	blockOn, blocked, unblockC := d.blockOn, d.blocked, d.unblockC
@@ -207,6 +226,9 @@ func (d *fakeDestination) Write(_ context.Context, recs []opencdc.Record) error 
 		var ackErr error
 		if d.nackErr != nil {
 			ackErr = d.nackErr[string(r.Position)]
+		}
+		if ackErr == nil && d.nackMatch != nil {
+			ackErr = d.nackMatch(r)
 		}
 		d.pending = append(d.pending, connector.DestinationAck{Position: r.Position, Error: ackErr})
 	}

@@ -17,6 +17,7 @@ package mock
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,6 +146,80 @@ func DestinationPluginWithRecords(records []opencdc.Record) ConfigurableDestinat
 
 				err = serverStream.Send(pconnector.DestinationRunResponse{Acks: acks})
 				if err != nil {
+					return cerrors.Errorf("destination mock send stream error: %w", err)
+				}
+			}
+		})
+	})
+}
+
+// DestinationPluginWithUnorderedRecords is the concurrent-multi-source
+// sibling of DestinationPluginWithRecords: it accepts the given records in
+// ANY arrival order (matched by position, not by call order) and only
+// requires that, by the time the mock's expectations are checked, every one
+// of them was received exactly once with matching content.
+//
+// DestinationPluginWithRecords' strict positional match (records[offset])
+// assumes a single, ordered producer. That assumption breaks the moment TWO
+// sources share this destination (arch-v2 N-source pipelines): each source's
+// batches arrive over the same stream, but WHICH source's batch lands first
+// is a scheduling race with no defined winner - asserting a fixed order would
+// make the test flaky, not the production code wrong. See
+// pkg/lifecycle-poc's N×M shape-coverage tests, which need this to assert
+// "every expected record arrived, from either source" without pinning an
+// order neither the design nor the operator can rely on.
+func DestinationPluginWithUnorderedRecords(records []opencdc.Record) ConfigurableDestinationPluginOption {
+	return configurableDestinationPluginOptionFunc(func(p *ConfigurableDestinationPlugin) {
+		t := p.ctrl.T.(*testing.T)
+		is := is.New(t)
+
+		var wg csync.WaitGroup
+		wg.Add(1)
+
+		want := make(map[string]opencdc.Record, len(records))
+		for _, r := range records {
+			want[string(r.Position)] = r
+		}
+		var mu sync.Mutex
+
+		t.Cleanup(func() {
+			err := wg.WaitTimeout(context.Background(), time.Second)
+			is.NoErr(err) // run didn't finish
+
+			mu.Lock()
+			remaining := len(want)
+			mu.Unlock()
+			is.Equal(0, remaining) // every expected record must have arrived exactly once
+		})
+
+		p.onRun = append(p.onRun, func() error {
+			defer wg.Done()
+			serverStream := p.Stream.Server()
+
+			for {
+				req, err := serverStream.Recv()
+				if err != nil {
+					if cerrors.Is(err, context.Canceled) || cerrors.Is(err, io.EOF) {
+						return nil // This is expected when the plugin is stopped.
+					}
+					return cerrors.Errorf("destination mock recv stream error: %w", err)
+				}
+
+				acks := make([]pconnector.DestinationRunResponseAck, len(req.Records))
+				mu.Lock()
+				for i, got := range req.Records {
+					wantRec, ok := want[string(got.Position)]
+					if !ok {
+						mu.Unlock()
+						return cerrors.Errorf("destination mock received an unexpected or duplicate record at position %q", got.Position)
+					}
+					is.Equal(got, wantRec)
+					delete(want, string(got.Position))
+					acks[i] = pconnector.DestinationRunResponseAck{Position: got.Position}
+				}
+				mu.Unlock()
+
+				if err := serverStream.Send(pconnector.DestinationRunResponse{Acks: acks}); err != nil {
 					return cerrors.Errorf("destination mock send stream error: %w", err)
 				}
 			}
