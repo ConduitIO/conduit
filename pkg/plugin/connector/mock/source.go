@@ -19,7 +19,9 @@ import (
 	"io"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -111,13 +113,27 @@ func SourcePluginWithRecords(records []opencdc.Record, wantErr error) Configurab
 		t := p.ctrl.T.(*testing.T)
 		is := is.New(t)
 
-		var done atomic.Bool
+		// onRun functions are launched as DETACHED goroutines by the Run
+		// expectation, and nothing joins them. Sampling a flag in t.Cleanup
+		// (this used to be `is.True(done.Load())` over an atomic.Bool) is
+		// therefore a race by construction: it passes only when the sender
+		// goroutine happened to finish first. It failed most often in tests
+		// that kill the pipeline early on purpose, because the sender is then
+		// still blocked in Send on a cancelled stream — which is exactly the
+		// "passes in isolation, fails ~2 in 40 under load" profile tracked in
+		// #2746. WAIT for the goroutine, bounded, matching what
+		// DestinationPluginWithRecords already does. A source that genuinely
+		// never finishes still fails, just correctly and with a timeout to
+		// say so.
+		var wg csync.WaitGroup
+		wg.Add(1)
 		t.Cleanup(func() {
-			is.True(done.Load()) // run didn't finish
+			err := wg.WaitTimeout(context.Background(), time.Second)
+			is.NoErr(err) // run didn't finish
 		})
 
 		p.onRun = append(p.onRun, func() error {
-			defer done.Store(true)
+			defer wg.Done()
 			serverStream := p.Stream.Server()
 			for _, rec := range records {
 				err := serverStream.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}})
@@ -139,14 +155,23 @@ func SourcePluginWithAcks(wantCount int, assertAckCount bool) ConfigurableSource
 		t := p.ctrl.T.(*testing.T)
 		is := is.New(t)
 
+		// Same detached-goroutine hazard as SourcePluginWithRecords above: the
+		// recv loop below runs unjoined, so reading gotCount straight out of
+		// t.Cleanup could observe a count the loop had not finished
+		// accumulating. Wait for the loop to exit first, then assert.
 		var gotCount atomic.Int64
+		var wg csync.WaitGroup
+		wg.Add(1)
 		if assertAckCount {
 			t.Cleanup(func() {
+				err := wg.WaitTimeout(context.Background(), time.Second)
+				is.NoErr(err)                             // ack loop didn't finish
 				is.Equal(int(gotCount.Load()), wantCount) // number of expected acks don't match
 			})
 		}
 
 		p.onRun = append(p.onRun, func() error {
+			defer wg.Done()
 			serverStream := p.Stream.Server()
 			for {
 				_, err := serverStream.Recv()
