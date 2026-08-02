@@ -206,6 +206,17 @@ type chaosPlugin struct {
 	// records.
 	sourceTag string
 
+	// startGate is the H2 ack-stream-injection scenario's determinism knob
+	// (nsource_h2_child.go, nsource_h2_sigkill_test.go): if non-nil,
+	// produceLoop blocks before producing its FIRST record until startGate
+	// is closed. This lets that scenario hold one source back until a fault
+	// injected elsewhere in the shared destination has definitely already
+	// fired, without any wall-clock sleep or race - see
+	// h2FaultDestination.triggered, the channel that scenario passes here.
+	// nil (every scenario before H2 injection) is a complete no-op:
+	// produceLoop's behavior is byte-for-byte unchanged.
+	startGate <-chan struct{}
+
 	mu         sync.Mutex
 	nextToRead uint64 // set by Open, read by the producer goroutine (single-key mode only, see Open)
 
@@ -317,6 +328,12 @@ func (p *chaosPlugin) Run(ctx context.Context, stream pconnector.SourceRunStream
 // kill-timing waits on READ (and, for mid-handoff, HANDOFF) lines, never ACK
 // lines.
 func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start uint64) {
+	if p.startGate != nil {
+		// H2 injection scenario only (see the field doc) - block here,
+		// before producing anything, until the gate closes.
+		<-p.startGate
+	}
+
 	pos := start
 	for {
 		if p.total > 0 && pos >= p.total {

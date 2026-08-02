@@ -38,6 +38,9 @@ func TestMain(m *testing.M) {
 		if os.Getenv(envFanoutMode) == envValueTrue {
 			runChildFanout() // never returns; always os.Exit's - see fanout_child.go
 		}
+		if os.Getenv(envNSourceH2Mode) == envValueTrue {
+			runChildNSourceH2() // never returns; always os.Exit's - see nsource_h2_child.go
+		}
 		if os.Getenv(envNSourceMode) == envValueTrue {
 			runChildNSource() // never returns; always os.Exit's - see nsource_child.go
 		}
