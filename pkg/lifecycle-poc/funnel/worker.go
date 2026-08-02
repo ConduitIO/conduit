@@ -932,9 +932,10 @@ func validateAckPositions(positions []opencdc.Position) error {
 				"acking it would overwrite the durable source position and force a full re-read on restart",
 			i, len(positions),
 		))
-		ce.Suggestion = "this usually means a processor split a record and a later processor returned " +
-			"only part of the split run; the records are not acked and will be redelivered, but the " +
-			"pipeline is stopped to protect the source position"
+		ce.Suggestion = "most often the source connector emitted a record with an empty position — every " +
+			"record must carry a distinct, non-empty position; it can also mean a processor split a record " +
+			"and a later processor returned only part of the split run. The records are not acked and will " +
+			"be redelivered, but the pipeline is stopped to protect the source position"
 		return ce
 	}
 	return nil
@@ -950,19 +951,40 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 		// Invariant 2: positions are monotonic and crash-safe. Same corruption
 		// site as Worker.Ack, reached by a different route — see that method
 		// for why an empty position handed to connector.Source.Ack overwrites
-		// the durable source position with nothing. The route here is a
-		// tail-only sub-batch of a split run: Batch.sub drops splitRecords when
-		// its range holds none of the split originals (a nil position
-		// stringifies to "" and never matches a key), and originalBatch() only
-		// compacts nils when splitRecords is non-empty, so the nils survive.
+		// the durable source position with nothing.
 		//
-		// Failing loud costs a duplicate DLQ write on restart — these n records
-		// are already durably in the DLQ but will not be acked, so they replay
-		// and are DLQ'd again (invariant 3 holds, at-least-once). Acking
-		// instead would force the source to re-read from the beginning, which
-		// is strictly worse.
-		if err := validateAckPositions(originalBatch.positions[:n]); err != nil {
-			return err
+		// The live route is a SOURCE CONNECTOR emitting a record with an empty
+		// position, which then gets nacked: NewBatch copies r.Position verbatim
+		// with no validation, the record was never split so runAckNacker
+		// forwards it straight through, and originalBatch() returns the batch
+		// unchanged because splitRecords is empty. Nothing between the source
+		// and here rejects it. Worker.Ack has guarded its half of this since
+		// before this check existed; the nack path was the remaining hole.
+		//
+		// FATAL, not a plain error. A non-fatal worker error is classified into
+		// the bounded-backoff recovery arm, whose default MaxRetries is
+		// infinite — and this condition is perfectly deterministic, so the
+		// source would re-read the same record, nack it again, and write
+		// another copy to the DLQ on every single iteration, forever. Fatal
+		// degrades the pipeline once, leaving exactly one DLQ copy. This is the
+		// same reasoning DLQ.Nack applies to its own write failure ("recovering
+		// could lead to an endless loop of restarts").
+		//
+		// The n records are already durably in the DLQ and are deliberately not
+		// acked, so they replay on restart (invariant 3 holds, at-least-once).
+		// Acking instead would force the source to re-read from the beginning,
+		// which is strictly worse.
+		if posErr := validateAckPositions(originalBatch.positions[:n]); posErr != nil {
+			// Keep DLQ.Nack's own error in the chain. It is frequently fatal
+			// itself (a partial sendToDLQ success, or the nack threshold being
+			// exceeded), and returning only the position error would discard
+			// the reason the records were being nacked in the first place.
+			// Both are fatal, so classification is unaffected either way — this
+			// is about not throwing away the cause.
+			if err != nil {
+				return cerrors.FatalError(cerrors.Errorf("%w (while handling: %w)", posErr, err))
+			}
+			return cerrors.FatalError(posErr)
 		}
 
 		ackErr := w.Source.Ack(ctx, originalBatch.positions[:n])

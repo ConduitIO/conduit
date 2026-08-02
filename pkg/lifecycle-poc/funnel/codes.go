@@ -51,12 +51,21 @@ var (
 	// re-snapshot for Postgres, offset 0 for file/Kafka. That is an invariant-2
 	// (monotonic, crash-safe positions) violation.
 	//
-	// Unlike CodeDuplicateSourcePosition, this is usually NOT the source
-	// connector's fault. Batch.SplitRecord gives every piece after the first a nil
-	// position, so a sub-batch that covers only the tail of a split run collapses
-	// to nils — which happens when a later processor returns only part of a split
-	// run (a Retry/Filter that does not propagate across the run). The suggestion
-	// therefore points at the processor chain, not the source.
+	// There are two distinct causes, and the suggestion names both because
+	// they call for different fixes.
+	//
+	// The one reachable today is a SOURCE CONNECTOR emitting a record with an
+	// empty position, which is then acked or nacked. Nothing in the read path
+	// validates positions, so it reaches Worker.Ack/Worker.Nack unaltered. Like
+	// CodeDuplicateSourcePosition, that is a connector contract violation —
+	// every record must carry a distinct, non-empty position.
+	//
+	// The second is a processor-chain shape: Batch.SplitRecord gives every piece
+	// after the first a nil position, so a sub-batch covering only the tail of a
+	// split run collapses to nils. On the ack path this is reachable; on the
+	// nack path the run ledger currently withholds split members and forwards
+	// the run's own non-nil origPos instead, so the guard there is a contract
+	// check rather than a live route.
 	CodeEmptySourcePosition = conduiterr.Register("pipeline.empty_source_position", codes.FailedPrecondition)
 
 	// CodeSplitRunStraddlesFanOut is returned when a batch reaching a

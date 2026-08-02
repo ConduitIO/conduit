@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 
@@ -45,11 +46,20 @@ import (
 // monotonic and crash-safe) violated with a far worse blast radius than the
 // records this nack was trying to DLQ.
 //
-// Today validateRunsWholeBeforeFanOut fatally rejects a split run that
-// straddles a fan-out, which masks this path. The "defer the fan-out" run join
-// deliberately makes partial runs legal, which removes that mask — so the guard
-// has to live at the corruption site, not depend on an unrelated check
-// upstream.
+// This test drives Worker.Nack directly, and an earlier version of it claimed
+// the shape was reachable through doTask once the "defer the fan-out" run join
+// lands. That claim was wrong and is withdrawn: doTask never calls Worker.Nack
+// directly — it calls acker.Nack, and runAckNacker.vote credits every split-run
+// member to its run rather than forwarding it, then forwards the completed run
+// as a single record carrying run.origPos, which SplitRecord guarantees is
+// non-nil. So the run ledger, not validateRunsWholeBeforeFanOut, is what keeps
+// nils away from this path, and the join does not obviously change that.
+//
+// It is kept because Worker.Nack is exported within the package and its
+// contract should hold for any caller, and because it pins the exact
+// corruption: without the guard it fails with Ack([<nil> <nil>]). The route
+// that is genuinely live today is covered by the test below, which is the one
+// that makes this a bug fix rather than hardening.
 func TestWorker_Nack_TailOnlySubBatch_RefusesToWipeSourcePosition(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -94,4 +104,61 @@ func TestWorker_Nack_TailOnlySubBatch_RefusesToWipeSourcePosition(t *testing.T) 
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), CodeEmptySourcePosition.Reason())
+	is.True(cerrors.IsFatalError(err))
+}
+
+// TestWorker_Nack_SourceEmittedEmptyPosition_RefusesAndIsFatal covers the route
+// that is actually reachable today, with no split, no fan-out and no run ledger
+// involvement: a source connector emits a record whose Position is empty, and
+// that record is nacked.
+//
+// Nothing between the source and connector.Source.Ack rejects it — NewBatch
+// copies r.Position verbatim with no validation, the record was never split so
+// runAckNacker forwards it straight through rather than withholding it behind a
+// run, and originalBatch() returns the batch unchanged because splitRecords is
+// empty. Source.Ack then executes State.Position = p[len(p)-1] unconditionally,
+// so the durable source position is overwritten with nothing and the source
+// re-reads from scratch on restart. Worker.Ack has guarded its half of this for
+// longer; the nack path was the remaining hole.
+//
+// The error must also be FATAL. Non-fatal would land in the recovery arm, whose
+// default MaxRetries is infinite, and the condition is deterministic — the
+// source would re-read the same record, nack it again, and write another DLQ
+// copy on every iteration, without bound.
+func TestWorker_Nack_SourceEmittedEmptyPosition_RefusesAndIsFatal(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+	ctrl := gomock.NewController(t)
+
+	sourceMock, _, taskNode := newMockTasks(ctrl, "sourceTask", "task1")
+	dlq, dlqDestinationMock := NewMockDLQ(ctrl, logger)
+
+	// Exactly what a misbehaving source connector hands us: a normal record
+	// followed by one with no position at all. No processor is involved.
+	batch := NewBatch([]opencdc.Record{
+		{Position: opencdc.Position("p0")},
+		{Position: nil},
+	})
+	is.Equal(len(batch.splitRecords), 0) // precondition: nothing was split
+
+	nackErr := cerrors.New("destination rejected the record")
+	batch.Nack(0, nackErr, nackErr)
+
+	destinationExpectSuccessfulWrites(is, dlqDestinationMock, batch.records)
+
+	// Without the guard this is called with ["p0", nil] and the nil, being
+	// last, becomes State.Position.
+	sourceMock.EXPECT().Ack(gomock.Any(), gomock.Any()).Times(0)
+
+	worker, err := NewWorker(taskNode, dlq, logger, noop.Timer{})
+	is.NoErr(err)
+
+	err = worker.Nack(ctx, batch, "taskID")
+	is.True(err != nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeEmptySourcePosition.Reason())
+	is.True(cerrors.IsFatalError(err))
 }
