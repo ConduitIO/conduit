@@ -131,6 +131,7 @@ type Runtime struct {
 	// (WithMetricsRegisterer set) it is a fresh, per-Runtime instance
 	// registered only into the supplied registerer — see configureEmbeddedMetrics.
 	metricsGrpcStatsHandler *promgrpc.StatsHandler
+	metricsGatherer         promclient.Gatherer
 
 	// closeDBOnce/closeDBErr make CloseDB idempotent regardless of which of
 	// its (potentially multiple) callers gets there first — see CloseDB's doc.
@@ -280,10 +281,11 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	}
 
 	var statsHandler *promgrpc.StatsHandler
+	metricsGatherer := promclient.DefaultGatherer
 	if ro.metricsRegisterer != nil {
 		// Embed path (AC-5.2): isolated per-Runtime metrics, never the
 		// process-global promclient.DefaultRegisterer.
-		statsHandler, err = configureEmbeddedMetrics(ro.metricsRegisterer)
+		statsHandler, metricsGatherer, err = configureEmbeddedMetrics(ro.metricsRegisterer)
 		if err != nil {
 			return nil, err
 		}
@@ -308,6 +310,7 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 
 		logger:                  logger,
 		metricsGrpcStatsHandler: statsHandler,
+		metricsGatherer:         metricsGatherer,
 	}
 
 	err = createServices(r)
@@ -558,20 +561,34 @@ func configureMetrics() *promgrpc.StatsHandler {
 // succeed, so a failed Register (e.g. the name collision this function
 // itself guards against) still leaks reg into pkg/foundation/metrics'
 // process-global bookkeeping — it is never unregistered on this error path.
-func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, error) {
+func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.StatsHandler, promclient.Gatherer, error) {
 	reg := prometheus.NewRegistry(nil)
 	metrics.Register(reg) // documented cross-talk limitation, see WithMetricsRegisterer's doc; leak-on-failure tracked as issue #2669
 	if err := registerer.Register(reg); err != nil {
 		wrapped := cerrors.Errorf("failed to register conduit metrics collector: %w", err)
-		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+		return nil, nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
 
 	statsHandler := promgrpc.ServerStatsHandler()
 	if err := registerer.Register(statsHandler); err != nil {
 		wrapped := cerrors.Errorf("failed to register grpc stats collector: %w", err)
-		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
+		return nil, nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
-	return statsHandler, nil
+
+	if gatherer, ok := registerer.(promclient.Gatherer); ok {
+		return statsHandler, gatherer, nil
+	}
+
+	gatherer := promclient.NewRegistry()
+	if err := gatherer.Register(reg); err != nil {
+		wrapped := cerrors.Errorf("failed to register conduit metrics in HTTP gatherer: %w", err)
+		return nil, nil, conduiterr.Wrap(conduiterr.CodeInternal, wrapped.Error(), wrapped)
+	}
+	if err := gatherer.Register(statsHandler); err != nil {
+		wrapped := cerrors.Errorf("failed to register grpc stats in HTTP gatherer: %w", err)
+		return nil, nil, conduiterr.Wrap(conduiterr.CodeInternal, wrapped.Error(), wrapped)
+	}
+	return statsHandler, gatherer, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -827,16 +844,8 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 
 // newHTTPMetricsHandler builds the handler served at /metrics (see
 // serveHTTPAPI).
-//
-// Known limitation, accepted for v1 and tracked as
-// https://github.com/ConduitIO/conduit/issues/2670: promhttp.Handler() always
-// serves promclient.DefaultGatherer, not the Registerer/Gatherer an embedder
-// supplied via WithMetricsRegisterer/configureEmbeddedMetrics. An embedded
-// Runtime with Options.API.Enabled and a custom MetricsRegisterer therefore
-// gets a /metrics route that does not reflect what was actually registered
-// into that registerer.
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.Handler()
+	return promhttp.HandlerFor(r.metricsGatherer, promhttp.HandlerOpts{})
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
