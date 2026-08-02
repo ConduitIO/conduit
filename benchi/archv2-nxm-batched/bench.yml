@@ -1,0 +1,59 @@
+# benchi config for the arch-v2 default-flip throughput gate.
+#
+# Compares record throughput between the classic v1 engine (pkg/lifecycle, the
+# current default) and arch-v2 (pkg/lifecycle-poc, behind
+# --preview.pipeline-arch-v2) on one reference pipeline, with everything else
+# held identical: same image, same pipeline.yml, same connectors, same
+# defaults. The only variable is the engine flag.
+#
+# THE GATE: DeVaris pre-committed, before any number existed, that a >10%
+# regression on DEFAULT config means the flip does NOT ship in v0.20. Recording
+# that here so the number arrives with an already-agreed meaning rather than
+# being argued about after the fact.
+#
+# Metrics are ON for the v2 run (no --preview.pipeline-arch-v2-disable-metrics).
+# The flip ships with metrics on, so a number gathered with them off would not
+# describe what users actually get.
+#
+# No infrastructure section: the generator source and log destination both run
+# inside the conduit process, which isolates the engine hot path from any
+# downstream I/O — the same rationale as benchi/ack-hot-path.
+
+tools:
+  conduit-v1:
+    compose: ./tools/compose-conduit-v1.yml
+  conduit-v2:
+    compose: ./tools/compose-conduit-v2.yml
+
+metrics:
+  conduit:
+    collector: conduit
+    tools:
+      - conduit-v1
+      - conduit-v2
+    settings:
+      url: http://localhost:8080/metrics
+      pipelines:
+        - "archv2-nxm-batched"
+  docker:
+    collector: docker
+    settings:
+      containers:
+        - "benchi-conduit"
+
+tests:
+  - name: archv2-nxm-batched
+    # 60s steady state, matching benchi/ack-hot-path. benchi's aggregation
+    # already trims the first/last samples, so no separate warm-up step.
+    duration: 60s
+
+    steps:
+      pre-infrastructure:
+      post-infrastructure:
+      pre-tool:
+      post-tool:
+      pre-test:
+      during:
+      post-test:
+      pre-cleanup:
+      post-cleanup:
