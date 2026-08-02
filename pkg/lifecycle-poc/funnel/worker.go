@@ -946,6 +946,25 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 	if n > 0 {
 		// Successfully nacked n records, let's ack them, as they reached
 		// the end of the pipeline (in this case the DLQ).
+
+		// Invariant 2: positions are monotonic and crash-safe. Same corruption
+		// site as Worker.Ack, reached by a different route — see that method
+		// for why an empty position handed to connector.Source.Ack overwrites
+		// the durable source position with nothing. The route here is a
+		// tail-only sub-batch of a split run: Batch.sub drops splitRecords when
+		// its range holds none of the split originals (a nil position
+		// stringifies to "" and never matches a key), and originalBatch() only
+		// compacts nils when splitRecords is non-empty, so the nils survive.
+		//
+		// Failing loud costs a duplicate DLQ write on restart — these n records
+		// are already durably in the DLQ but will not be acked, so they replay
+		// and are DLQ'd again (invariant 3 holds, at-least-once). Acking
+		// instead would force the source to re-read from the beginning, which
+		// is strictly worse.
+		if err := validateAckPositions(originalBatch.positions[:n]); err != nil {
+			return err
+		}
+
 		ackErr := w.Source.Ack(ctx, originalBatch.positions[:n])
 		if ackErr != nil && !isClosedSourceStream(ackErr) {
 			return cerrors.Errorf("task %s failed to ack %d records in source: %w", taskID, n, ackErr)
