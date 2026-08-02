@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.12.3)
+### kafka (v0.12.5)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
