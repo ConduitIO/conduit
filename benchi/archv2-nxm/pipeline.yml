@@ -35,11 +35,11 @@ pipelines:
           operations: create
       - id: archv2-nxm:log-dest-1
         type: destination
-        plugin: builtin:log
+        plugin: builtin:file
         settings:
-          level: error
+          path: /dev/null
       - id: archv2-nxm:log-dest-2
         type: destination
-        plugin: builtin:log
+        plugin: builtin:file
         settings:
-          level: error
+          path: /dev/null

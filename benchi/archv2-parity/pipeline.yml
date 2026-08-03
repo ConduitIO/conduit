@@ -34,9 +34,11 @@ pipelines:
           # engine, and batching stays at its shipped default.
       - id: archv2-parity:log-dest
         type: destination
-        plugin: builtin:log
+        plugin: builtin:file
         settings:
-          # The log destination has no "off" level; error is the quietest
-          # valid one, minimizing (not eliminating) logging overhead. Both
-          # tools pay this identically, so it cancels in the comparison.
-          level: error
+          # /dev/null: a real write syscall per batch, but no formatting and no
+          # JSON round-trip. builtin:log was previously used here and turned out to
+          # cost ~47% of process CPU (plus 12.7% in zerolog ConsoleWriter
+          # JSON-decoding every line to pretty-print it), which swamped the engine
+          # this benchmark exists to measure.
+          path: /dev/null

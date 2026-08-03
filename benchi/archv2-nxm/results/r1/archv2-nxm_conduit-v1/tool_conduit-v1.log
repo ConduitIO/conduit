@@ -1,0 +1,10 @@
+ Container benchi-conduit Creating 
+ Container benchi-conduit Created 
+Attaching to benchi-conduit
+ Container benchi-conduit Starting 
+ Container benchi-conduit Started 
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-nxm","node_id":"archv2-nxm:archv2-nxm:generator-src-a","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","time":1785710658202,"message":"stopping source connector"}
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-nxm","node_id":"archv2-nxm:archv2-nxm:generator-src-a","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","record_position":"571327","time":1785710658203,"message":"stopping source node"}
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-nxm","node_id":"archv2-nxm:archv2-nxm:generator-src-b","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","time":1785710658203,"message":"stopping source connector"}
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-nxm","node_id":"archv2-nxm:archv2-nxm:generator-src-b","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","record_position":"570088","time":1785710658203,"message":"stopping source node"}
+[Kbenchi-conduit exited with code 0

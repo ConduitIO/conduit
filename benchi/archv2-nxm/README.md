@@ -1,5 +1,10 @@
 # benchi: arch-v2 vs v1 on N×M — the shape the parity benchmark could not see
 
+> **⚠ The numbers in this file are RETRACTED.** They were produced with a metric
+> that is not comparable between engines, and with an effect smaller than the
+> harness's own A/A noise floor. See `benchi/METHODOLOGY.md` for what went wrong
+> and what to do instead. The configs remain useful; the results do not.
+
 Companion to `benchi/archv2-parity`. Same harness, same defaults, same image —
 but **2 sources × 2 destinations** instead of 1×1.
 

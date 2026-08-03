@@ -13,7 +13,7 @@ services:
     # The image is built locally from the working tree and never pushed, so
     # benchi's `docker compose pull` step must not try to fetch it.
     pull_policy: never
-    command: ["/app/conduit", "run"]
+    command: ["/app/conduit", "run", "--log.level", "error", "--log.format", "json"]
     networks:
       - benchi
     ports:

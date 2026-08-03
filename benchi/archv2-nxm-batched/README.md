@@ -1,5 +1,10 @@
 # benchi: N×M with batching — the arch-v2 regression is a batch-size artifact
 
+> **⚠ The numbers in this file are RETRACTED.** They were produced with a metric
+> that is not comparable between engines, and with an effect smaller than the
+> harness's own A/A noise floor. See `benchi/METHODOLOGY.md` for what went wrong
+> and what to do instead. The configs remain useful; the results do not.
+
 Same 2×2 pipeline as `benchi/archv2-nxm`, with one change: the sources set
 `sdk.batch.size: "100"` and `sdk.batch.delay: "10ms"` instead of leaving them at
 their zero defaults.
