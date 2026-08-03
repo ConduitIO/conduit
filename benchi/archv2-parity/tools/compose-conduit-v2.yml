@@ -1,0 +1,28 @@
+# arch-v2 funnel engine (pkg/lifecycle-poc), metrics ON — deliberately NOT --preview.pipeline-arch-v2-disable-metrics, because the flip ships with metrics on and a number gathered with them off would not describe what users get
+#
+# Both tools run the SAME image, built once from the working tree:
+#
+#   docker build -t conduit-bench:archv2-parity .
+#
+# so any throughput difference is attributable to the engine flag alone and
+# not to two separately-built binaries.
+services:
+  conduit:
+    image: conduit-bench:archv2-parity
+    container_name: benchi-conduit
+    # The image is built locally from the working tree and never pushed, so
+    # benchi's `docker compose pull` step must not try to fetch it.
+    pull_policy: never
+    command: ["/app/conduit", "run", "--log.level", "error", "--log.format", "json", "--preview.pipeline-arch-v2"]
+    networks:
+      - benchi
+    ports:
+      - '8080:8080'
+    environment:
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - ../pipeline.yml:/app/pipelines/pipeline.yml
+
+networks:
+  benchi:
+    external: true

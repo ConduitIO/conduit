@@ -1,0 +1,28 @@
+# classic v1 engine (pkg/lifecycle) — the current default, i.e. the baseline the flip must not regress against
+#
+# Both tools run the SAME image, built once from the working tree:
+#
+#   docker build -t conduit-bench:archv2-nxm-batched .
+#
+# so any throughput difference is attributable to the engine flag alone and
+# not to two separately-built binaries.
+services:
+  conduit:
+    image: conduit-bench:archv2-nxm-batched
+    container_name: benchi-conduit
+    # The image is built locally from the working tree and never pushed, so
+    # benchi's `docker compose pull` step must not try to fetch it.
+    pull_policy: never
+    command: ["/app/conduit", "run", "--log.level", "error", "--log.format", "json"]
+    networks:
+      - benchi
+    ports:
+      - '8080:8080'
+    environment:
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - ../pipeline.yml:/app/pipelines/pipeline.yml
+
+networks:
+  benchi:
+    external: true

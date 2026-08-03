@@ -1,0 +1,49 @@
+version: "2.2"
+pipelines:
+  - id: archv2-nxm-batched
+    status: running
+    name: archv2-nxm-batched
+    description: >
+      N×M reference pipeline for the arch-v2 default-flip throughput gate:
+      2 sources x 2 destinations WITH BATCHING ENABLED (sdk.batch.size=100).
+      did NOT cover. This is where the two engines' designs actually diverge —
+      v1 fans in/out through FaninNode/FanoutNode, while arch-v2 runs one Worker
+      per source and serializes them into a shared destination subtree behind a
+      per-shared-root mutex. A single-connector benchmark cannot see that
+      contention at all.
+
+      Batching ON (sdk.batch.size=100, delay=10ms), unlike archv2-nxm. Tests the
+      hypothesis that arch-v2's N×M regression is per-record shared-root mutex
+      traffic that batching amortizes. Both engines run this identical file; the only
+      difference is the --preview.pipeline-arch-v2 flag.
+    connectors:
+      - id: archv2-nxm-batched:generator-src-a
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.batch.size: "100"
+          sdk.batch.delay: "10ms"
+      - id: archv2-nxm-batched:generator-src-b
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.batch.size: "100"
+          sdk.batch.delay: "10ms"
+      - id: archv2-nxm-batched:log-dest-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /dev/null
+      - id: archv2-nxm-batched:log-dest-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /dev/null

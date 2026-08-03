@@ -1,0 +1,8 @@
+ Container benchi-conduit Recreate 
+ Container benchi-conduit Recreated 
+Attaching to benchi-conduit
+ Container benchi-conduit Starting 
+ Container benchi-conduit Started 
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-parity","node_id":"archv2-parity:archv2-parity:generator-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","time":1785710266537,"message":"stopping source connector"}
+benchi-conduit  | {"level":"error","pipeline_id":"archv2-parity","node_id":"archv2-parity:archv2-parity:generator-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","record_position":"1800465","time":1785710266537,"message":"stopping source node"}
+[Kbenchi-conduit exited with code 0

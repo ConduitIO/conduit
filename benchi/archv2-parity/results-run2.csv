@@ -1,0 +1,3 @@
+test,tool,msg-rate-per-second[archv2-parity],msg-megabytes-in-per-second[archv2-parity],msg-megabytes-out-per-second[archv2-parity],cpu-percentage[benchi-conduit],memory-usage[benchi-conduit]
+archv2-parity,conduit-v1,23763.50,0.67,0.67,152.47,123.46
+archv2-parity,conduit-v2,25181.09,0.71,0.71,134.32,127.72
