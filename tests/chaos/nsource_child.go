@@ -206,7 +206,14 @@ type nsourceChildSource struct {
 // position alone. This is what lets the parent test tell the two sources'
 // contributions to the shared ledger apart and verify each is independently
 // gapless WITHOUT hiding the collision the way a disjoint namespace would.
-func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID, pluginName, sourceTag string, total uint64, paceMS int) (*nsourceChildSource, error) {
+//
+// startGate is forwarded to the built source's chaosPlugin (see its own
+// field doc) - nil for every ordinary caller (runChildNSource below), so
+// this parameter is a pure no-op addition for them. The H2 ack-stream-
+// injection scenario (nsource_h2_child.go) is the only caller that passes a
+// non-nil gate, to hold source B back until source A's injected fault has
+// definitely already fired.
+func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID, pluginName, sourceTag string, total uint64, paceMS int, startGate <-chan struct{}) (*nsourceChildSource, error) {
 	logger := log.New(zerolog.Nop()) // keep stdout clean; it is our progress-line channel
 
 	db, err := badger.New(zerolog.Nop(), dbDir)
@@ -241,7 +248,7 @@ func buildNSourceChildSource(ctx context.Context, dbDir, upstreamDir, instanceID
 	if err != nil {
 		return nil, fmt.Errorf("open upstream store (%s): %w", instanceID, err)
 	}
-	plugin := &chaosPlugin{store: upstream, total: total, paceMS: paceMS, sourceTag: sourceTag}
+	plugin := &chaosPlugin{store: upstream, total: total, paceMS: paceMS, sourceTag: sourceTag, startGate: startGate}
 
 	fetcher := staticFetcher{pluginName: staticDispenser{source: plugin}}
 	c, err := instance.Connector(ctx, fetcher)
@@ -270,12 +277,12 @@ func runChildNSource() {
 	ctx := context.Background()
 	cfg := parseNSourceChildEnv()
 
-	builtA, err := buildNSourceChildSource(ctx, cfg.dbDirA, cfg.upstreamDirA, nsourceInstanceIDA, nsourcePluginA, nsourceSourceTagA, cfg.totalA, cfg.paceMSA)
+	builtA, err := buildNSourceChildSource(ctx, cfg.dbDirA, cfg.upstreamDirA, nsourceInstanceIDA, nsourcePluginA, nsourceSourceTagA, cfg.totalA, cfg.paceMSA, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
 	}
-	builtB, err := buildNSourceChildSource(ctx, cfg.dbDirB, cfg.upstreamDirB, nsourceInstanceIDB, nsourcePluginB, nsourceSourceTagB, cfg.totalB, cfg.paceMSB)
+	builtB, err := buildNSourceChildSource(ctx, cfg.dbDirB, cfg.upstreamDirB, nsourceInstanceIDB, nsourcePluginB, nsourceSourceTagB, cfg.totalB, cfg.paceMSB, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
 		os.Exit(exitBadArgs)
