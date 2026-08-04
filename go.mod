@@ -69,7 +69,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7
-	google.golang.org/grpc v1.82.1
+	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
