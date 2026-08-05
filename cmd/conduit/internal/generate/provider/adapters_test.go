@@ -16,13 +16,14 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	json "github.com/goccy/go-json"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/matryer/is"
@@ -64,9 +65,11 @@ func codeIs(t *testing.T, err error, want conduiterr.Code) {
 	}
 }
 
-const anthropicOK = `{"content":[{"type":"text","text":"version: 2.2"}],"usage":{"input_tokens":10,"output_tokens":5}}`
-const ollamaOK = `{"response":"version: 2.2","prompt_eval_count":10,"eval_count":5}`
-const openAIOK = `{"choices":[{"message":{"role":"assistant","content":"version: 2.2"}}],"usage":{"total_tokens":15}}`
+const (
+	anthropicOK = `{"content":[{"type":"text","text":"version: 2.2"}],"usage":{"input_tokens":10,"output_tokens":5}}`
+	ollamaOK    = `{"response":"version: 2.2","prompt_eval_count":10,"eval_count":5}`
+	openAIOK    = `{"choices":[{"message":{"role":"assistant","content":"version: 2.2"}}],"usage":{"total_tokens":15}}`
+)
 
 // Test_Adapters_HappyPath pins that each adapter returns the model's text and
 // only a provider-REPORTED token count. A fabricated count would be

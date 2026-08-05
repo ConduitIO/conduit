@@ -17,10 +17,11 @@ package provider
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
 )
 
 // DefaultAnthropicModel is the recommended default. A code constant, not a doc
