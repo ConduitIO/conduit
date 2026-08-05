@@ -60,12 +60,14 @@ type Options struct {
 	// section — two Engines each get an isolated Registerer/Registry
 	// *object*, but pkg/foundation/metrics' process-global metric
 	// definitions still fan values out across every registry in the process.
+	// When API is enabled, a registerer that does not also implement Gatherer
+	// requires MetricsGatherer or the first Run or Import returns an error.
 	MetricsRegisterer promclient.Registerer
 
 	// MetricsGatherer is served by the embedded HTTP API's /metrics endpoint.
 	// Set it when MetricsRegisterer does not also implement Gatherer, such as
 	// when using WrapRegistererWithPrefix or WrapRegistererWith. It must gather
-	// the metrics registered through MetricsRegisterer.
+	// the metrics registered through MetricsRegisterer and cannot be set alone.
 	MetricsGatherer promclient.Gatherer
 
 	// DB configures the embedded storage backend. The zero value (Type =="")

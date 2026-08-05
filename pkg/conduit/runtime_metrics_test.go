@@ -46,6 +46,29 @@ func TestNewHTTPMetricsHandlerUsesExplicitGatherer(t *testing.T) {
 	is.True(strings.Contains(recorder.Body.String(), "myapp_conduit_info"))
 }
 
+func TestNewHTTPMetricsHandlerUsesRegistererGatherer(t *testing.T) {
+	is := is.New(t)
+	reg := promclient.NewRegistry()
+	hostMetric := promclient.NewGauge(promclient.GaugeOpts{Name: "host_metric"})
+	hostMetric.Set(1)
+	is.NoErr(reg.Register(hostMetric))
+
+	runtime, err := NewRuntime(newMetricsRuntimeConfig(t), WithMetricsRegisterer(reg))
+	is.NoErr(err)
+	defer runtime.DB.Close()
+
+	recorder := httptest.NewRecorder()
+	runtime.newHTTPMetricsHandler().ServeHTTP(
+		recorder,
+		httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil),
+	)
+
+	is.Equal(recorder.Code, http.StatusOK)
+	is.True(strings.Contains(recorder.Body.String(), "host_metric"))
+	is.True(strings.Contains(recorder.Body.String(), "conduit_info"))
+	is.True(strings.Contains(recorder.Body.String(), "promhttp_metric_handler_requests_total"))
+}
+
 func TestNewRuntimeRequiresGathererForWrappedRegisterer(t *testing.T) {
 	is := is.New(t)
 	reg := promclient.NewRegistry()
@@ -68,17 +91,34 @@ func TestNewRuntimeAllowsWrappedRegistererWhenHTTPDisabled(t *testing.T) {
 	runtime, err := NewRuntime(cfg, WithMetricsRegisterer(wrapped))
 	is.NoErr(err)
 	defer runtime.DB.Close()
+	is.True(runtime.metricsGatherer == promclient.DefaultGatherer)
+
+	recorder := httptest.NewRecorder()
+	runtime.newHTTPMetricsHandler().ServeHTTP(
+		recorder,
+		httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil),
+	)
+	is.Equal(recorder.Code, http.StatusOK)
 }
 
 func TestNewRuntimeUsesDefaultGatherer(t *testing.T) {
 	is := is.New(t)
 	cfg := newMetricsRuntimeConfig(t)
-	cfg.API.Enabled = false
 
 	runtime, err := NewRuntime(cfg)
 	is.NoErr(err)
 	defer runtime.DB.Close()
 	is.True(runtime.metricsGatherer == promclient.DefaultGatherer)
+}
+
+func TestNewRuntimeRejectsGathererWithoutRegisterer(t *testing.T) {
+	is := is.New(t)
+
+	_, err := NewRuntime(newMetricsRuntimeConfig(t), WithMetricsGatherer(promclient.NewRegistry()))
+	is.True(err != nil)
+	conduitErr, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(conduitErr.Code, conduiterr.CodeInvalidArgument)
 }
 
 func newMetricsRuntimeConfig(t *testing.T) Config {
