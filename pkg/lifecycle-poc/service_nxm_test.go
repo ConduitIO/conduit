@@ -257,7 +257,7 @@ func TestServiceLifecycle_NxM_StartMovesRecordsStopsCleanly(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -336,7 +336,7 @@ func TestServiceLifecycle_NxM_FatalErrorOneDestination_DegradesWholePipeline(t *
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -456,7 +456,7 @@ func TestServiceLifecycle_NxM_TransientErrorOneSource_RecoversAllSourcesAndDesti
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -574,7 +574,7 @@ func TestServiceLifecycle_NxM_OneSourceExhausts_OtherStreams_BothDestinationsWri
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -673,7 +673,7 @@ func TestServiceLifecycle_NxM_PartialGracefulStop_Escalates(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
