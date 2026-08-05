@@ -369,7 +369,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 
@@ -445,7 +445,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// unrelated concurrently-scheduled tests in the same process. Confirmed by
 	// repro under `-race -shuffle=on -count=1500` under CPU load; the race
 	// detector flags the underlying unsynchronized access to testing.T state.
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 
@@ -545,7 +545,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// without waiting, the persister's background flush goroutine can outlive this
 	// test function (goroutine leak); harmless here since the logger is a no-op and
 	// db is test-local, but kept consistent with the other tests in this file.
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 
@@ -634,7 +634,7 @@ func TestServiceLifecycle_PipelineForceStop(t *testing.T) {
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	// See TestServiceLifecycle_PipelineError's defer: prevents the persister's
 	// background flush goroutine from outliving the test.
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 
@@ -723,7 +723,7 @@ func TestServiceLifecycle_Recovery_TransientErrorRecovers(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -805,7 +805,7 @@ func TestServiceLifecycle_Recovery_MaxRetriesExhausted(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -897,7 +897,7 @@ func TestServiceLifecycle_Recovery_GracefulShutdownDuringBackoff(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -996,7 +996,7 @@ func TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -1144,7 +1144,7 @@ func TestServiceLifecycle_Stop_SourceTeardownFails_NoRecovery(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -1357,7 +1357,7 @@ func TestServiceLifecycle_NSource_PartialGracefulStop_Escalates(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -1490,7 +1490,7 @@ func TestServiceLifecycle_NSource_FatalErrorOneSource_DegradesWholePipeline(t *t
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -1572,7 +1572,7 @@ func TestServiceLifecycle_NSource_TransientErrorOneSource_Recovers(t *testing.T)
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -1662,7 +1662,7 @@ func TestServiceLifecycle_NSource_OneSourceFinishesGracefully_StaysRunningUntilA
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -2247,4 +2247,57 @@ func (s testPipelineService) UpdateStatus(_ context.Context, pipelineID string, 
 	p.SetStatus(status)
 	p.Error = errMsg
 	return nil
+}
+
+// persisterDrainTimeout bounds the deferred persister wait. Generously larger
+// than the 1s flush delay these tests configure, so a legitimate drain always
+// finishes inside it.
+const persisterDrainTimeout = 10 * time.Second
+
+// stopAndWaitPersister cancels the pipeline context and waits for the persister
+// to drain, but only for a bounded time.
+//
+// The bound is the whole point. Persister.Wait blocks on connWg, which only
+// reaches zero once every connector has called ConnectorStopped — and that
+// happens through pipeline teardown (ls.Stop), not through context
+// cancellation. Cancelling first is still right, but it cannot substitute for
+// the stop.
+//
+// On the happy path this is free: the test body already called ls.Stop, so the
+// wait returns at once. The bound only matters when an assertion has ALREADY
+// failed. is.NoErr calls t.FailNow, which is runtime.Goexit: the rest of the
+// test body is skipped — including ls.Stop — so the connectors never stop,
+// connWg never reaches zero, and an unbounded Wait blocks until the
+// package-wide timeout fires.
+//
+// That is #2746. An intermittent one-line assertion failure presented as a
+// 10-minute hang that took the whole `test` job down, with a goroutine dump
+// pointing at the recovery path rather than at the assertion that actually
+// failed. All 13 tests here shared the shape, so ANY failing assertion in this
+// file could produce it.
+//
+// This wait is hygiene, not an assertion — the in-file comments that introduced
+// it say so: it exists to stop the persister's background flush goroutine from
+// outliving the test and logging into a finished t. Bounding it preserves that
+// and gives up the deadlock. If the drain genuinely does not finish, that is
+// reported rather than waited on forever.
+//
+// t.Errorf, never t.Fatalf: this runs as a deferred function, and Fatalf's
+// Goexit inside a defer would abandon the remaining cleanup.
+func stopAndWaitPersister(t *testing.T, killAll context.CancelFunc, p *connector.Persister) {
+	t.Helper()
+	killAll()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.Wait()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(persisterDrainTimeout):
+		t.Errorf("persister did not drain within %s: some connector never reported "+
+			"ConnectorStopped (see #2746)", persisterDrainTimeout)
+	}
 }
