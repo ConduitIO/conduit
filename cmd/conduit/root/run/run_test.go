@@ -80,8 +80,19 @@ func TestRunCommandFlags(t *testing.T) {
 			cf = cmdFlags.Lookup(wantFlag.longName)
 		}
 		if cf == nil {
-			t.Logf("flag %q expected, but not found", wantFlag.longName)
-			t.FailNow()
+			// Errorf + continue, not Fatalf: the explicit continue is the
+			// point. Any "stop here" that relies on the analyser knowing a
+			// testing.T method never returns (FailNow, Fatalf) leaves
+			// staticcheck free to treat cf as possibly-nil below and report
+			// SA5011 — which it does intermittently, because golangci-lint's
+			// parallel package loading does not reliably give it the IR it
+			// would need to infer that. continue needs no inference: there is
+			// no path from here to the dereferences.
+			//
+			// Reporting rather than aborting is also better for a table test
+			// over ~30 flags: one missing flag no longer hides the rest.
+			t.Errorf("flag %q expected, but not found", wantFlag.longName)
+			continue
 		}
 		is.Equal(wantFlag.longName, cf.Name)
 		is.Equal(wantFlag.shortName, cf.Shorthand)
