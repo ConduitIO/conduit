@@ -226,7 +226,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 
@@ -1160,4 +1160,46 @@ func (s testPipelineService) UpdateStatus(_ context.Context, pipelineID string, 
 	p.SetStatus(status)
 	p.Error = errMsg
 	return nil
+}
+
+// persisterDrainTimeout bounds the deferred persister wait. See
+// stopAndWaitPersister.
+const persisterDrainTimeout = 10 * time.Second
+
+// stopAndWaitPersister cancels the pipeline context and waits for the persister
+// to drain, but only for a bounded time.
+//
+// Persister.Wait blocks on connWg, which only reaches zero once every connector
+// has called ConnectorStopped — and that happens through pipeline teardown
+// (ls.Stop), not through context cancellation.
+//
+// On the happy path this is free: the test body already called ls.Stop, so the
+// wait returns at once. The bound only matters when an assertion has ALREADY
+// failed. is.NoErr calls t.FailNow, which is runtime.Goexit: the rest of the
+// test body is skipped — including ls.Stop — so the connectors never stop,
+// connWg never reaches zero, and an unbounded Wait blocks until the
+// package-wide timeout fires. A one-line assertion failure becomes a 10-minute
+// hang whose goroutine dump points at the engine instead of the assertion.
+//
+// See #2746. The same shape existed across pkg/lifecycle-poc; this package had
+// one instance of it.
+//
+// t.Errorf, never t.Fatalf: this runs as a deferred function, and Fatalf's
+// Goexit inside a defer would abandon the remaining cleanup.
+func stopAndWaitPersister(t *testing.T, killAll context.CancelFunc, p *connector.Persister) {
+	t.Helper()
+	killAll()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.Wait()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(persisterDrainTimeout):
+		t.Errorf("persister did not drain within %s: some connector never reported "+
+			"ConnectorStopped (see #2746)", persisterDrainTimeout)
+	}
 }

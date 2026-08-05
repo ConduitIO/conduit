@@ -64,7 +64,7 @@ func TestServiceLifecycle_StopAndWait_DrainsAndPersists(t *testing.T) {
 	const flushDelay = 200 * time.Millisecond
 	db := &delayingDB{DB: &inmemory.DB{}, delay: flushDelay}
 	persister := connector.NewPersister(logger, db, time.Hour, 10000)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -176,7 +176,7 @@ func TestServiceLifecycle_StopAndWait_Timeout(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	defer persister.Wait()
+	defer stopAndWaitPersister(t, killAll, persister)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
