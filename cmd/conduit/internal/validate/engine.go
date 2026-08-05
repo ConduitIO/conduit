@@ -15,8 +15,10 @@
 package validate
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -103,6 +105,43 @@ func RunWithOptions(ctx context.Context, path string, opts Options) (Report, err
 	return buildReport(frs, opts), nil
 }
 
+// DefaultInMemoryName is the label RunBytes uses when the caller supplies
+// none. It is deliberately not a plausible filename: a finding that says
+// `<generated>` cannot be mistaken for one pointing at a file on disk.
+const DefaultInMemoryName = "<generated>"
+
+// RunBytes runs the same parse -> enrich -> validate pipeline as Run over an
+// in-memory document instead of a file on disk.
+//
+// It exists because `conduit generate` must gate a candidate config through
+// THIS engine — not a second validator — before ever showing it to a human,
+// and the candidate only exists in memory. Writing it to a temp file first
+// would mean a config that failed validation still touched the filesystem,
+// and it would put a disk error in the path of a purely in-memory operation.
+// See docs/design-documents/20260722-conduit-generate.md §3, "the disk seam".
+//
+// name labels the findings (see validateReader); empty means
+// DefaultInMemoryName.
+//
+// Unlike Run it returns no error. Run's only hard failure is resolving path,
+// and there is no path here — every parse and validation problem comes back as
+// a Finding, exactly as it does for a file that exists but is unparseable.
+func RunBytes(ctx context.Context, name string, src []byte, opts Options) Report {
+	if name == "" {
+		name = DefaultInMemoryName
+	}
+
+	frs := []fileState{validateReader(ctx, name, bytes.NewReader(src), opts)}
+
+	// Still run the duplicate-ID pass: with one document it cannot find a
+	// CROSS-file collision, but a single file declaring the same pipeline ID
+	// twice is exactly as invalid, and generated configs are a plausible source
+	// of that.
+	checkCrossFileDuplicateIDs(frs)
+
+	return buildReport(frs, opts)
+}
+
 // CodeLintWarning is the stable code carried by every advisory `lint` warning
 // finding. The parser's warnings (deprecated/renamed/unknown fields, version
 // fallback) don't carry per-field conduiterr codes, so lint attaches this one
@@ -128,16 +167,30 @@ type fileState struct {
 // pkg/provisioning.Service.provisionPipeline's ordering at service.go:279-280)
 // over a single file, collecting every finding along the way.
 func validateFile(ctx context.Context, path string, opts Options) fileState {
-	fs := fileState{path: path}
-
 	f, err := os.Open(path)
 	if err != nil {
+		fs := fileState{path: path}
 		ce := conduiterr.Wrap(config.CodeParseError, fmt.Sprintf("could not open file %q: %v", path, err), err)
 		ce.Suggestion = "check that the file exists and is readable"
 		fs.findings = append(fs.findings, findingFromError(ce))
 		return fs
 	}
 	defer f.Close()
+
+	return validateReader(ctx, path, f, opts)
+}
+
+// validateReader is validateFile without the disk. Everything after the open
+// in validateFile only ever touched an io.Reader, so the two share this body
+// rather than the in-memory path re-implementing (and drifting from) the
+// parse -> enrich -> validate ordering.
+//
+// name is what findings report as their file. It is a label, not a path: the
+// in-memory caller has no file, and a finding with an empty location is not
+// actionable.
+func validateReader(ctx context.Context, name string, r io.Reader, opts Options) fileState {
+	fs := fileState{path: name}
+	var err error
 
 	parser := yaml.NewParser(log.Nop())
 
@@ -148,12 +201,12 @@ func validateFile(ctx context.Context, path string, opts Options) fileState {
 	var pipelines []config.Pipeline
 	if opts.Warnings {
 		var warns []yaml.Warning
-		pipelines, warns, err = parser.ParseWithWarnings(ctx, f)
+		pipelines, warns, err = parser.ParseWithWarnings(ctx, r)
 		for _, w := range warns {
 			fs.findings = append(fs.findings, warningFinding(w))
 		}
 	} else {
-		pipelines, err = parser.Parse(ctx, f)
+		pipelines, err = parser.Parse(ctx, r)
 	}
 	// err here is the parser's raw cerrors.Join of per-document failures (no
 	// extra "%w" wrap) — walk it directly with cerrors.ForEach. Wrapping it
