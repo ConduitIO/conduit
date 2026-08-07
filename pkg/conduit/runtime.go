@@ -131,6 +131,8 @@ type Runtime struct {
 	// (WithMetricsRegisterer set) it is a fresh, per-Runtime instance
 	// registered only into the supplied registerer — see configureEmbeddedMetrics.
 	metricsGrpcStatsHandler *promgrpc.StatsHandler
+	metricsRegisterer       promclient.Registerer
+	metricsGatherer         promclient.Gatherer
 
 	// closeDBOnce/closeDBErr make CloseDB idempotent regardless of which of
 	// its (potentially multiple) callers gets there first — see CloseDB's doc.
@@ -163,6 +165,7 @@ func (r *Runtime) CloseDB() error {
 type runtimeOptions struct {
 	logger            *log.CtxLogger
 	metricsRegisterer promclient.Registerer
+	metricsGatherer   promclient.Gatherer
 	dialCtx           context.Context
 }
 
@@ -192,6 +195,11 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 // registered only into the supplied registerer — never
 // promclient.DefaultRegisterer. `conduit run` never passes this option.
 //
+// If reg also implements Gatherer and WithMetricsGatherer is not supplied,
+// the embedded /metrics endpoint serves reg's full contents, including metrics
+// registered by the host application. When the API is enabled, a reg that
+// does not implement Gatherer requires WithMetricsGatherer.
+//
 // Known limitation (documented, not fixed by this seam): pkg/foundation/metrics
 // keeps process-global metric *definitions* (metrics.go's `global` slices) —
 // a metric created via metrics.NewCounter et al. (e.g. everything in
@@ -204,6 +212,13 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 // Non-goals).
 func WithMetricsRegisterer(reg promclient.Registerer) RuntimeOption {
 	return func(o *runtimeOptions) { o.metricsRegisterer = reg }
+}
+
+// WithMetricsGatherer supplies the gatherer used by the embedded Runtime's
+// /metrics endpoint. It must expose the metrics registered through the value
+// passed to WithMetricsRegisterer.
+func WithMetricsGatherer(gatherer promclient.Gatherer) RuntimeOption {
+	return func(o *runtimeOptions) { o.metricsGatherer = gatherer }
 }
 
 // WithDialContext supplies the context.Context OpenStore's Postgres/SQLite
@@ -250,6 +265,20 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		opt(&ro)
 	}
 
+	metricsGatherer := ro.metricsGatherer
+	if ro.metricsRegisterer == nil && metricsGatherer != nil {
+		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, "metrics gatherer requires a metrics registerer")
+	}
+	if ro.metricsRegisterer != nil && metricsGatherer == nil {
+		metricsGatherer, _ = ro.metricsRegisterer.(promclient.Gatherer)
+		if metricsGatherer == nil {
+			if cfg.API.Enabled {
+				return nil, conduiterr.New(conduiterr.CodeInvalidArgument,
+					"metrics registerer does not implement Gatherer; provide WithMetricsGatherer")
+			}
+			metricsGatherer = promclient.DefaultGatherer
+		}
+	}
 	var logger log.CtxLogger
 	if ro.logger != nil {
 		// Embed path (AC-5.1): use the pre-built logger as-is instead of
@@ -279,6 +308,7 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		return nil, err
 	}
 
+	metricsRegisterer := ro.metricsRegisterer
 	var statsHandler *promgrpc.StatsHandler
 	if ro.metricsRegisterer != nil {
 		// Embed path (AC-5.2): isolated per-Runtime metrics, never the
@@ -288,6 +318,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 			return nil, err
 		}
 	} else {
+		metricsRegisterer = promclient.DefaultRegisterer
+		metricsGatherer = promclient.DefaultGatherer
 		statsHandler = configureMetrics()
 	}
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
@@ -308,6 +340,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 
 		logger:                  logger,
 		metricsGrpcStatsHandler: statsHandler,
+		metricsRegisterer:       metricsRegisterer,
+		metricsGatherer:         metricsGatherer,
 	}
 
 	err = createServices(r)
@@ -571,6 +605,7 @@ func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.Stats
 		wrapped := cerrors.Errorf("failed to register grpc stats collector: %w", err)
 		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
+
 	return statsHandler, nil
 }
 
@@ -827,16 +862,11 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 
 // newHTTPMetricsHandler builds the handler served at /metrics (see
 // serveHTTPAPI).
-//
-// Known limitation, accepted for v1 and tracked as
-// https://github.com/ConduitIO/conduit/issues/2670: promhttp.Handler() always
-// serves promclient.DefaultGatherer, not the Registerer/Gatherer an embedder
-// supplied via WithMetricsRegisterer/configureEmbeddedMetrics. An embedded
-// Runtime with Options.API.Enabled and a custom MetricsRegisterer therefore
-// gets a /metrics route that does not reflect what was actually registered
-// into that registerer.
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.Handler()
+	return promhttp.InstrumentMetricHandler(
+		r.metricsRegisterer,
+		promhttp.HandlerFor(r.metricsGatherer, promhttp.HandlerOpts{}),
+	)
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
