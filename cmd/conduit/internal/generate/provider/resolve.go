@@ -116,13 +116,15 @@ func Resolve(in ResolveInput) (string, error) {
 		e := conduiterr.New(CodeNoProviderConfigured, "no generation provider configured")
 		e.Suggestion = fmt.Sprintf(
 			"set one of %s or %s, run a local Ollama server (%s), or select one explicitly with --provider",
-			EnvAnthropicKey, EnvOpenAIKey, DefaultOllamaHost)
+			EnvAnthropicKey, EnvOpenAIKey, DefaultOllamaHost,
+		)
 		return "", e
 	default:
 		e := conduiterr.New(CodeAmbiguousProvider,
 			fmt.Sprintf("more than one generation provider is configured: %s", strings.Join(candidates, ", ")))
 		e.Suggestion = fmt.Sprintf(
-			"choose one with --provider, generate.provider in conduit.yaml, or %s", EnvProvider)
+			"choose one with --provider, generate.provider in conduit.yaml, or %s", EnvProvider,
+		)
 		return "", e
 	}
 }
