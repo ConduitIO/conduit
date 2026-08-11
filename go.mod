@@ -39,7 +39,7 @@ require (
 	github.com/in-toto/attestation v1.2.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jpillora/backoff v1.0.0
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.19.2
 	github.com/matryer/is v1.4.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/modelcontextprotocol/go-sdk v1.7.0
