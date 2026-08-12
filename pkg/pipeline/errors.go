@@ -1,20 +1,10 @@
-// Copyright © 2022 Meroxa, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package pipeline
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors"
+import (
+	"fmt"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+)
 
 var (
 	ErrGracefulShutdown      = cerrors.New("graceful shutdown")
@@ -26,10 +16,22 @@ var (
 	ErrNameMissing           = cerrors.New("must provide a pipeline name")
 	ErrIDMissing             = cerrors.New("must provide a pipeline ID")
 	ErrNameAlreadyExists     = cerrors.New("pipeline name already exists")
-	ErrInvalidCharacters     = cerrors.New("pipeline ID contains invalid characters")
-	ErrNameOverLimit         = cerrors.New("pipeline name is over the character limit (64)")
-	ErrIDOverLimit           = cerrors.New("pipeline ID is over the character limit (64)")
-	ErrDescriptionOverLimit  = cerrors.New("pipeline description is over the character limit (8192)")
-	ErrConnectorIDNotFound   = cerrors.New("connector ID not found")
-	ErrProcessorIDNotFound   = cerrors.New("processor ID not found")
+
+	// ErrInvalidCharacters is returned when a pipeline ID contains invalid characters.
+	ErrInvalidCharacters = fmt.Errorf("pipeline ID contains invalid characters, allowed characters: %s", idRegex.String())
+	// ErrNameOverLimit is returned when a pipeline name is over the character limit.
+	ErrNameOverLimit = fmt.Errorf("pipeline name is over the character limit (%d)", NameLengthLimit)
+	// ErrIDOverLimit is returned when a pipeline ID is over the character limit.
+	ErrIDOverLimit = fmt.Errorf("pipeline ID is over the character limit (%d)", IDLengthLimit)
+	// ErrDescriptionOverLimit is returned when a pipeline description is over the character limit.
+	ErrDescriptionOverLimit = fmt.Errorf("pipeline description is over the character limit (%d)", DescriptionLengthLimit)
+
+	ErrConnectorIDNotFound = cerrors.New("connector ID not found in pipeline")
+	ErrProcessorIDNotFound = cerrors.New("processor ID not found in pipeline")
+
+	// ErrInvalidPipelineStructure is returned when a pipeline has an invalid structure,
+	// e.g. trying to start a pipeline without any source connectors.
+	ErrInvalidPipelineStructure = cerrors.New("invalid pipeline structure")
+	// ErrInvalidDLQConfig is returned when the DLQ configuration is invalid.
+	ErrInvalidDLQConfig = cerrors.New("invalid DLQ configuration")
 )
