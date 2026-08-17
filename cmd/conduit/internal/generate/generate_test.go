@@ -118,7 +118,7 @@ func TestGenerate_HappyPath_ValidatesAndReturnsOnFirstAttempt(t *testing.T) {
 // the output unattributable to what the user asked for.
 func TestGenerate_SendsThePromptVerbatim(t *testing.T) {
 	is := is.New(t)
-	prompt := "stream new orders from postgres into a kafka topic, only orders over $100"
+	prompt := "read from the generator and write every record to the log"
 	p := &fakeProvider{replies: []string{validCandidate}}
 
 	_, err := Generate(context.Background(), Input{Prompt: prompt, Provider: p})
@@ -133,7 +133,7 @@ func TestGenerate_GroundsWithTheCatalog(t *testing.T) {
 	is := is.New(t)
 	p := &fakeProvider{replies: []string{validCandidate}}
 
-	_, err := Generate(context.Background(), Input{Prompt: "anything", Provider: p})
+	_, err := Generate(context.Background(), Input{Prompt: "generator to log", Provider: p})
 
 	is.NoErr(err)
 	is.True(strings.Contains(p.requests[0].System, "builtin:"))
@@ -268,7 +268,7 @@ func TestGenerate_SuccessAlwaysCarriesAPassingReport(t *testing.T) {
 		"Here you go:\n\n" + validCandidate,
 	} {
 		p := &fakeProvider{replies: []string{reply}}
-		res, err := Generate(context.Background(), Input{Prompt: "x", Provider: p})
+		res, err := Generate(context.Background(), Input{Prompt: "generator to log", Provider: p})
 		is.NoErr(err)
 		is.True(res.Report.OK())
 	}

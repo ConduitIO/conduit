@@ -240,6 +240,14 @@ func BuildSystemPrompt(cat []ConnectorInfo) string {
 // connector does not implement the role — an absence the model must know
 // about, since "postgres as a destination" and "log as a source" are exactly
 // the kind of plausible-but-wrong pipeline this grounding exists to prevent.
+//
+// "Not supported" is an INFERENCE from an empty parameter map, not a declared
+// fact: pconnector.Specification carries no capability flag, so emptiness is
+// the only signal available. It is the same inference the eval corpus header
+// documents ("generator is source-only", "log is destination-only"), and it
+// holds for all six built-ins today. A connector with a supported but
+// parameter-less role would be described wrongly here — if one ever ships, the
+// specification needs the flag, not this function a heuristic.
 func writeRole(b *strings.Builder, role string, params []ParamInfo) {
 	if len(params) == 0 {
 		fmt.Fprintf(b, "  %s: not supported\n", role)
