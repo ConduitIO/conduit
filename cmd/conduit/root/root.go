@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
 	"github.com/conduitio/conduit/cmd/conduit/root/docs"
 	"github.com/conduitio/conduit/cmd/conduit/root/doctor"
+	"github.com/conduitio/conduit/cmd/conduit/root/generate"
 	"github.com/conduitio/conduit/cmd/conduit/root/initialize"
 	"github.com/conduitio/conduit/cmd/conduit/root/mcp"
 	"github.com/conduitio/conduit/cmd/conduit/root/open"
@@ -98,6 +99,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&doctor.DoctorCommand{},
 		&doctor.PluginSpecCheckCommand{},
 		&docs.DocsCommand{},
+		&generate.Command{},
 		&initialize.InitCommand{Cfg: &runCmd.Cfg},
 		&mcp.MCPCommand{},
 		&open.OpenCommand{},
