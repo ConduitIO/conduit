@@ -32,26 +32,59 @@ import "github.com/conduitio/conduit/pkg/provisioning/config"
 // everything or nothing gracefully — an eval fixture typo'ing a capability
 // name should show up as a permanent semantic-match failure, not silently
 // pass.
+// Capability tags are a shared vocabulary: the eval corpus names them in
+// requiredCapabilities, intent.go extracts them from a prompt, and this file
+// maps them to the builtin processors that satisfy them. They are declared
+// once here so those three uses cannot drift into three spellings.
+// procFilter is the builtin PROCESSOR PLUGIN named "filter". It shares its
+// spelling with capFilter (the capability tag) and nothing else: one names a
+// plugin the engine can load, the other names an intent the corpus can ask
+// for. They are separate constants so a rename of either cannot silently
+// rewrite the other.
+const procFilter = "filter"
+
+const (
+	capFilter             = "filter"
+	capMask               = "mask"
+	capRename             = "rename"
+	capSet                = "set"
+	capConvert            = "convert"
+	capJSONEncode         = "json-encode"
+	capJSONDecode         = "json-decode"
+	capAvroEncode         = "avro-encode"
+	capAvroDecode         = "avro-decode"
+	capBase64Encode       = "base64-encode"
+	capBase64Decode       = "base64-decode"
+	capUnwrapDebezium     = "unwrap-debezium"
+	capUnwrapKafkaconnect = "unwrap-kafkaconnect"
+	capUnwrapOpencdc      = "unwrap-opencdc"
+	capSplit              = "split"
+	capClone              = "clone"
+	capWebhook            = "webhook"
+	capEmbed              = "embed"
+	capTextgen            = "textgen"
+)
+
 var capabilityProcessors = map[string]map[string]bool{
-	"filter":              {"filter": true},
-	"mask":                {"field.exclude": true},
-	"rename":              {"field.rename": true},
-	"set":                 {"field.set": true},
-	"convert":             {"field.convert": true},
-	"json-encode":         {"json.encode": true},
-	"json-decode":         {"json.decode": true},
-	"avro-encode":         {"avro.encode": true},
-	"avro-decode":         {"avro.decode": true},
-	"base64-encode":       {"base64.encode": true},
-	"base64-decode":       {"base64.decode": true},
-	"unwrap-debezium":     {"unwrap.debezium": true},
-	"unwrap-kafkaconnect": {"unwrap.kafkaconnect": true},
-	"unwrap-opencdc":      {"unwrap.opencdc": true},
-	"split":               {"split": true},
-	"clone":               {"clone": true},
-	"webhook":             {"webhook.http": true},
-	"embed":               {"openai.embed": true, "cohere.embed": true},
-	"textgen":             {"openai.textgen": true, "cohere.command": true, "ollama.request": true},
+	capFilter:             {procFilter: true},
+	capMask:               {"field.exclude": true},
+	capRename:             {"field.rename": true},
+	capSet:                {"field.set": true},
+	capConvert:            {"field.convert": true},
+	capJSONEncode:         {"json.encode": true},
+	capJSONDecode:         {"json.decode": true},
+	capAvroEncode:         {"avro.encode": true},
+	capAvroDecode:         {"avro.decode": true},
+	capBase64Encode:       {"base64.encode": true},
+	capBase64Decode:       {"base64.decode": true},
+	capUnwrapDebezium:     {"unwrap.debezium": true},
+	capUnwrapKafkaconnect: {"unwrap.kafkaconnect": true},
+	capUnwrapOpencdc:      {"unwrap.opencdc": true},
+	capSplit:              {"split": true},
+	capClone:              {"clone": true},
+	capWebhook:            {"webhook.http": true},
+	capEmbed:              {"openai.embed": true, "cohere.embed": true},
+	capTextgen:            {"openai.textgen": true, "cohere.command": true, "ollama.request": true},
 }
 
 // hasCapability reports whether any processor in procs (pipeline-level or

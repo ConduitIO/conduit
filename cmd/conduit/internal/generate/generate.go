@@ -61,6 +61,9 @@ type Attempt struct {
 	Report validate.Report
 	// ParseErr is set when the reply held no usable pipeline YAML.
 	ParseErr error
+	// Semantic is the intent check's verdict for a candidate that passed
+	// validate. Zero when the attempt never got that far.
+	Semantic SemanticResult
 	// Feedback is what was handed to the NEXT attempt, empty on the last one
 	// and on success.
 	Feedback RetryFeedback
@@ -111,6 +114,23 @@ func Generate(ctx context.Context, in Input) (Generation, error) {
 	names := CatalogNames(cat)
 	system := BuildSystemPrompt(cat)
 
+	// Pre-call refusal is deliberately narrow (design §9): only a prompt with
+	// no content, or one that assigns a single role to two different
+	// connectors, is refused before spending a call. A terse or informal
+	// request goes to the model — which reads intent far better than a keyword
+	// table — and is judged on what comes back.
+	intent := ExtractIntent(in.Prompt, names)
+	if strings.TrimSpace(in.Prompt) == "" {
+		e := conduiterr.New(CodeAmbiguousPrompt, "the request is empty")
+		e.Suggestion = `describe the pipeline you want, e.g. "read from postgres and write new rows to s3 as json"`
+		return Generation{}, e
+	}
+	if intent.Contradiction != "" {
+		e := conduiterr.New(CodeAmbiguousPrompt, intent.Contradiction)
+		e.Suggestion = "name one connector as the source and a different one as the destination"
+		return Generation{}, e
+	}
+
 	attempts := in.MaxAttempts
 	switch {
 	case attempts == 0:
@@ -155,8 +175,22 @@ func Generate(ctx context.Context, in Input) (Generation, error) {
 		res.Report = report
 
 		if report.OK() {
+			sem := semanticVerdict(ctx, in.Prompt, intent, candidate)
+			att.Semantic = sem
+			if sem.Match {
+				res.Attempts = append(res.Attempts, att)
+				return res, nil
+			}
+
+			// A candidate that validates but does the wrong thing gets the
+			// same corrective treatment a schema failure does: the mismatch is
+			// named in Conduit's own vocabulary and fed back inside the
+			// budget, rather than surfaced as a failure the user has to
+			// diagnose from a config that looks fine.
+			feedback = FeedbackFromSemantic(sem)
+			att.Feedback = feedback
 			res.Attempts = append(res.Attempts, att)
-			return res, nil
+			continue
 		}
 
 		feedback = FeedbackFromReport(report).
@@ -166,6 +200,53 @@ func Generate(ctx context.Context, in Input) (Generation, error) {
 	}
 
 	return res, exhaustedError(res)
+}
+
+// semanticVerdict judges a validated candidate against what the prompt asked
+// for.
+//
+// Two cases, matching design §9:
+//
+//   - Extraction learned something: the candidate is checked against it
+//     (scoreSemantic), and anything extraction left empty is not judged.
+//   - Extraction learned nothing: the candidate is accepted as long as at
+//     least one of its connectors is traceable to the user's own words. A
+//     pipeline whose source and destination appear NOWHERE in the request is
+//     the post-hoc ambiguous case — the model chose for the user rather than
+//     from what they said.
+//
+// The second case is deliberately generous. A prompt can legitimately name
+// only one side ("get my postgres data somewhere useful"), and failing that
+// candidate would punish exactly the informal phrasing the pre-call rule went
+// out of its way not to refuse.
+func semanticVerdict(ctx context.Context, prompt string, intent Intent, candidate string) SemanticResult {
+	if !intent.IsEmpty() {
+		return scoreSemantic(ctx, intent.Expect(), candidate)
+	}
+
+	source, destination := candidateCategories(ctx, candidate)
+	if promptMentionsConnector(prompt, source) || promptMentionsConnector(prompt, destination) {
+		return SemanticResult{Match: true}
+	}
+
+	return SemanticResult{
+		Match: false,
+		Issues: []string{
+			"the request does not name a connector, and the candidate's connectors (" +
+				orNone(source) + " -> " + orNone(destination) + ") do not appear in it",
+		},
+	}
+}
+
+// candidateCategories returns the builtin source and destination names of a
+// candidate, or empty strings when it does not parse into exactly one
+// judgeable pipeline.
+func candidateCategories(ctx context.Context, candidate string) (source, destination string) {
+	pipelines, err := yamlparser.NewParser(log.Nop()).Parse(ctx, strings.NewReader(candidate))
+	if err != nil || len(pipelines) == 0 {
+		return "", ""
+	}
+	return connectorCategories(pipelines[0])
 }
 
 // candidateValidateOptions is the gate every candidate passes through.
@@ -222,10 +303,32 @@ func exhaustedError(res Generation) error {
 		return e
 	}
 
+	// A candidate that cleared validate but not the intent check is a
+	// different failure with a different fix: the config is usable, it just
+	// isn't what was asked for, so the user's next move is to say what they
+	// meant more precisely — not to debug findings.
+	if last := lastAttempt(res); last != nil && last.Report.OK() && !last.Semantic.Match {
+		msg := "the generated pipeline did not match the request"
+		if len(last.Semantic.Issues) > 0 {
+			msg += ": " + strings.Join(last.Semantic.Issues, "; ")
+		}
+		e := conduiterr.New(CodeSemanticMismatch, msg)
+		e.Suggestion = "name the source and destination explicitly, e.g. \"from postgres into kafka\""
+		return e
+	}
+
 	e := conduiterr.New(CodeValidateFailed,
 		"the generated pipeline did not pass validation within the attempt budget")
 	e.Suggestion = "see the validation findings, adjust the request, or edit the generated configuration directly"
 	return e
+}
+
+// lastAttempt returns the final attempt, or nil when there were none.
+func lastAttempt(res Generation) *Attempt {
+	if len(res.Attempts) == 0 {
+		return nil
+	}
+	return &res.Attempts[len(res.Attempts)-1]
 }
 
 // unknownPlugins returns every builtin plugin reference in candidate whose

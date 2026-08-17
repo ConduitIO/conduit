@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (99)
+## 3. Error codes (101)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -633,10 +633,12 @@ Author: Meroxa, Inc.
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
+| `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.no_provider_configured` | Unauthenticated | CodeNoProviderConfigured: zero resolvable candidates. Unauthenticated (exit 3, environment) rather than InvalidArgument, because the user's command was fine — their environment is not. |
 | `generate.parse_failed` | Internal | CodeParseFailed: the provider replied, but nothing in the reply could be read as a pipeline config within the retry budget. Internal (exit 1, runtime) rather than InvalidArgument, because the user's request was well-formed — the boundary failed, not their input. |
 | `generate.provider_error` | Unavailable | CodeProviderError covers every way the provider call itself failed: network, timeout, rate limit, or an auth rejection from the provider. Unavailable (exit 3, environment) because the user's command was fine. |
+| `generate.semantic_mismatch` | FailedPrecondition | CodeSemanticMismatch: the candidate passed validate but did not do what was asked — wrong connector, swapped direction, a requested filter missing. A schema-valid pipeline that confidently does the wrong thing is the failure mode the semantic checker exists for, so it gets its own code rather than hiding inside validate_failed. |
 | `generate.validate_failed` | FailedPrecondition | CodeValidateFailed: a candidate parsed but never passed validate within the retry budget. FailedPrecondition (exit 2, validation): the request was understood, the artifact it produced is not usable as-is, and the findings say exactly why.  The last attempt's validate.Report travels back on Result.Report — it is never discarded, because the findings are the only thing that tells the user (or an agent) what to change. |
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |

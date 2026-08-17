@@ -43,4 +43,22 @@ var (
 	// never discarded, because the findings are the only thing that tells the
 	// user (or an agent) what to change.
 	CodeValidateFailed = conduiterr.Register("generate.validate_failed", codes.FailedPrecondition)
+
+	// CodeSemanticMismatch: the candidate passed validate but did not do what
+	// was asked — wrong connector, swapped direction, a requested filter
+	// missing. A schema-valid pipeline that confidently does the wrong thing
+	// is the failure mode the semantic checker exists for, so it gets its own
+	// code rather than hiding inside validate_failed.
+	CodeSemanticMismatch = conduiterr.Register("generate.semantic_mismatch", codes.FailedPrecondition)
+
+	// CodeAmbiguousPrompt: the request could not be pinned to a pipeline.
+	//
+	// Raised in two places, deliberately conservative pre-call (design §9):
+	// before any provider call ONLY when the prompt is empty or names one role
+	// for two different connectors; otherwise post-hoc, when a candidate's
+	// connectors cannot be traced to anything the request actually said. A
+	// merely terse request is never refused pre-call — it goes to the model,
+	// which reads intent far better than a keyword table, and the result is
+	// judged the normal way.
+	CodeAmbiguousPrompt = conduiterr.Register("generate.ambiguous_prompt", codes.InvalidArgument)
 )
