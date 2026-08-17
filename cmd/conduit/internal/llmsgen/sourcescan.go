@@ -124,6 +124,28 @@ func scanFileForRegisterCalls(fset *token.FileSet, path, rel string) ([]register
 
 	cmap := ast.NewCommentMap(fset, f, f.Comments)
 
+	// A doc comment on a standalone `var X = Register(...)` attaches to the
+	// GenDecl, not to the ValueSpec inside it — only specs in a `var ( ... )`
+	// block carry their own. Without a fallback the description silently
+	// degrades to the humanized reason, which reads like a placeholder in the
+	// shipped reference.
+	//
+	// The fallback is deliberately limited to single-spec declarations, which
+	// is exactly the case go/ast conflates. A `var ( ... )` block's comment
+	// describes the GROUP, so inheriting it would stamp the same paragraph
+	// onto every uncommented code in the block — worse than no description,
+	// because it reads as if it were written about that specific code.
+	declFor := make(map[*ast.ValueSpec]*ast.GenDecl)
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || len(gd.Specs) != 1 {
+			continue
+		}
+		if vs, ok := gd.Specs[0].(*ast.ValueSpec); ok {
+			declFor[vs] = gd
+		}
+	}
+
 	var out []registeredCode
 	var walkErr error
 
@@ -147,7 +169,7 @@ func scanFileForRegisterCalls(fset *token.FileSet, path, rel string) ([]register
 			}
 			out = append(out, registeredCode{
 				Reason:      reason,
-				Description: docCommentFor(cmap, spec),
+				Description: docCommentFor(cmap, spec, declFor[spec]),
 				File:        rel,
 			})
 		}
@@ -221,14 +243,41 @@ func registerCallReason(call *ast.CallExpr, fset *token.FileSet, rel string) (st
 // go/ast's own comment-association heuristic (ast.NewCommentMap), limited
 // to comment groups that end before spec starts (its leading doc comment,
 // as opposed to a trailing line comment on the same line).
-func docCommentFor(cmap ast.CommentMap, spec *ast.ValueSpec) string {
-	groups := cmap[spec]
-	var texts []string
+//
+// decl is the declaration spec belongs to, and may be nil. It is consulted
+// only when spec itself carries no doc comment: go/ast attaches the comment
+// of a standalone `var X = ...` to the declaration rather than to the single
+// spec inside it, so without this fallback every code declared outside a
+// `var ( ... )` block would render with no description at all.
+func docCommentFor(cmap ast.CommentMap, spec *ast.ValueSpec, decl *ast.GenDecl) string {
+	if text := leadingDoc(cmap[spec], spec.Pos()); text != "" {
+		return text
+	}
+	if decl == nil {
+		return ""
+	}
+	return leadingDoc(cmap[decl], decl.Pos())
+}
+
+// leadingDoc returns the NEAREST comment group in groups that ends before pos
+// — the doc comment, never a trailing line comment on the same line.
+//
+// Nearest, not all of them: a file can carry a detached note above a
+// declaration (a rationale paragraph, a TODO), and go/ast associates every
+// such group with the following node. Concatenating them puts repo-process
+// prose into the shipped, agent-facing error reference.
+func leadingDoc(groups []*ast.CommentGroup, pos token.Pos) string {
+	var nearest *ast.CommentGroup
 	for _, g := range groups {
-		if g.End() >= spec.Pos() {
+		if g.End() >= pos {
 			continue // trailing comment, not a leading doc comment
 		}
-		texts = append(texts, strings.TrimSpace(g.Text()))
+		if nearest == nil || g.End() > nearest.End() {
+			nearest = g
+		}
 	}
-	return strings.Join(texts, " ")
+	if nearest == nil {
+		return ""
+	}
+	return strings.TrimSpace(nearest.Text())
 }
