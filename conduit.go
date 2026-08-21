@@ -68,6 +68,15 @@ type Options struct {
 	// Set it when MetricsRegisterer does not also implement Gatherer, such as
 	// when using WrapRegistererWithPrefix or WrapRegistererWith. It must gather
 	// the metrics registered through MetricsRegisterer and cannot be set alone.
+	//
+	// Security: Conduit's HTTP API is unauthenticated (see API.HTTP's CORS
+	// documentation for what that already implies). Everything this gatherer
+	// exposes is therefore readable by anyone who can reach the API address —
+	// including metrics the host application registered for its own purposes,
+	// and every label on them. If that registry carries tenant identifiers,
+	// customer names, internal hostnames, or anything else you would not
+	// publish, bind the API to loopback, front it with an authenticating
+	// proxy, or pass a registry that holds only what you are happy to serve.
 	MetricsGatherer promclient.Gatherer
 
 	// DB configures the embedded storage backend. The zero value (Type =="")
@@ -375,6 +384,16 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	// database — cfg.Validate() does no I/O of its own.
 	if err := cfg.Validate(); err != nil {
 		return nil, cerrors.Errorf("invalid config: %w", err)
+	}
+
+	// Fail fast on a metrics pairing that cannot work, using the SAME rule
+	// NewRuntime applies later (pkgconduit.ResolveMetricsGatherer). This check
+	// needs no I/O, so deferring it to the first Run or Import would only mean
+	// the caller wires up an Engine, starts a pipeline, and learns about a
+	// typo'd option then — for the same reason cfg.Validate() runs here rather
+	// than at open time.
+	if _, err := pkgconduit.ResolveMetricsGatherer(opts.MetricsRegisterer, opts.MetricsGatherer, cfg.API.Enabled); err != nil {
+		return nil, err
 	}
 
 	runtimeOpts := []pkgconduit.RuntimeOption{

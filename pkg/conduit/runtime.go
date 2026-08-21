@@ -20,6 +20,7 @@ package conduit
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -221,6 +222,59 @@ func WithMetricsGatherer(gatherer promclient.Gatherer) RuntimeOption {
 	return func(o *runtimeOptions) { o.metricsGatherer = gatherer }
 }
 
+// ResolveMetricsGatherer decides which Gatherer the /metrics endpoint serves,
+// and rejects the combinations that cannot work.
+//
+// It is exported so the embed package (github.com/conduitio/conduit) can apply
+// the SAME rule inside New — where the options are already known and no I/O is
+// needed — instead of letting a caller discover a bad pairing on their first
+// Run or Import. Two copies of this rule would eventually disagree, and the
+// symptom would be an Engine that constructs cleanly and then refuses to run.
+//
+// The rules, in order:
+//   - a gatherer with no registerer is rejected: there would be nothing
+//     registering into what it gathers;
+//   - a registerer that also implements Gatherer is used as its own gatherer,
+//     so the endpoint serves everything registered into it, host metrics
+//     included;
+//   - a registerer that does NOT implement Gatherer (prometheus.WrapRegisterer*
+//     returns one of these) needs an explicit gatherer whenever the API is
+//     enabled, because otherwise /metrics would serve unrelated default
+//     metrics — the bug this seam exists to fix;
+//   - with the API disabled there is no /metrics route to be wrong, so the
+//     default gatherer is kept as an inert placeholder.
+func ResolveMetricsGatherer(reg promclient.Registerer, gatherer promclient.Gatherer, apiEnabled bool) (promclient.Gatherer, error) {
+	if reg == nil {
+		if gatherer != nil {
+			e := conduiterr.New(conduiterr.CodeInvalidArgument,
+				"a metrics gatherer was supplied without a metrics registerer")
+			e.Suggestion = "set both: conduit.Options{MetricsRegisterer: reg, MetricsGatherer: gatherer} " +
+				"(pkg/conduit: WithMetricsRegisterer + WithMetricsGatherer)"
+			return nil, e
+		}
+		return nil, nil //nolint:nilnil // no registerer means the caller gets the CLI defaults, decided by NewRuntime
+	}
+
+	if gatherer != nil {
+		return gatherer, nil
+	}
+
+	if g, ok := reg.(promclient.Gatherer); ok {
+		return g, nil
+	}
+
+	if apiEnabled {
+		e := conduiterr.New(conduiterr.CodeInvalidArgument,
+			"the metrics registerer does not implement prometheus.Gatherer, so /metrics cannot serve what it registers")
+		e.Suggestion = "pass the underlying registry as well: " +
+			"conduit.Options{MetricsRegisterer: wrapped, MetricsGatherer: registry} " +
+			"(pkg/conduit: WithMetricsGatherer)"
+		return nil, e
+	}
+
+	return promclient.DefaultGatherer, nil
+}
+
 // WithDialContext supplies the context.Context OpenStore's Postgres/SQLite
 // dial uses instead of context.Background(), so a caller-supplied deadline or
 // cancellation aborts a slow/unreachable database dial promptly instead of
@@ -265,19 +319,9 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		opt(&ro)
 	}
 
-	metricsGatherer := ro.metricsGatherer
-	if ro.metricsRegisterer == nil && metricsGatherer != nil {
-		return nil, conduiterr.New(conduiterr.CodeInvalidArgument, "metrics gatherer requires a metrics registerer")
-	}
-	if ro.metricsRegisterer != nil && metricsGatherer == nil {
-		metricsGatherer, _ = ro.metricsRegisterer.(promclient.Gatherer)
-		if metricsGatherer == nil {
-			if cfg.API.Enabled {
-				return nil, conduiterr.New(conduiterr.CodeInvalidArgument,
-					"metrics registerer does not implement Gatherer; provide WithMetricsGatherer")
-			}
-			metricsGatherer = promclient.DefaultGatherer
-		}
+	metricsGatherer, err := ResolveMetricsGatherer(ro.metricsRegisterer, ro.metricsGatherer, cfg.API.Enabled)
+	if err != nil {
+		return nil, err
 	}
 	var logger log.CtxLogger
 	if ro.logger != nil {
@@ -863,10 +907,54 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 // newHTTPMetricsHandler builds the handler served at /metrics (see
 // serveHTTPAPI).
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.InstrumentMetricHandler(
-		r.metricsRegisterer,
-		promhttp.HandlerFor(r.metricsGatherer, promhttp.HandlerOpts{}),
-	)
+	// ContinueOnError, not the promhttp default: with an embedded Runtime the
+	// gatherer holds the HOST application's collectors too, so one broken host
+	// collector would otherwise turn every scrape into a 500 that also hides
+	// Conduit's own metrics — losing our observability because of someone
+	// else's bug. ErrorLog gives that failure somewhere to be seen; the
+	// default is to discard it.
+	handler := promhttp.HandlerFor(r.metricsGatherer, promhttp.HandlerOpts{
+		ErrorHandling: promhttp.ContinueOnError,
+		ErrorLog:      promLogger{logger: r.logger},
+	})
+	return instrumentMetricHandler(r.logger, r.metricsRegisterer, handler)
+}
+
+// instrumentMetricHandler is promhttp.InstrumentMetricHandler with its panic
+// contained.
+//
+// That function panics on any registration error that is not
+// AlreadyRegisteredError, and r.metricsRegisterer can be supplied by the host
+// application (WithMetricsRegisterer). A host collector whose name collides
+// with promhttp's own — "promhttp_metric_handler_requests_total" with
+// different labels — therefore panics inside serveHTTPAPI, which Run calls
+// synchronously with no recover anywhere in the path: the panic unwinds into
+// the embedding application and takes the process down.
+//
+// Serving /metrics without the handler's own scrape counters is a far better
+// outcome than crashing someone's application, so the panic is caught and the
+// uninstrumented handler is used instead. The recover (rather than
+// pre-registering the two collectors here) also keeps this correct if promhttp
+// grows another panic path.
+func instrumentMetricHandler(logger log.CtxLogger, reg promclient.Registerer, handler http.Handler) (h http.Handler) {
+	defer func() {
+		if p := recover(); p != nil {
+			logger.Warn(context.Background()).
+				Msgf("serving /metrics without handler instrumentation: %v", p)
+			h = handler
+		}
+	}()
+	return promhttp.InstrumentMetricHandler(reg, handler)
+}
+
+// promLogger adapts the runtime logger to promhttp.Logger, so a gather error
+// says something instead of vanishing into a 500 with no explanation.
+type promLogger struct {
+	logger log.CtxLogger
+}
+
+func (l promLogger) Println(v ...any) {
+	l.logger.Warn(context.Background()).Msg(strings.TrimSpace(fmt.Sprintln(v...)))
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {

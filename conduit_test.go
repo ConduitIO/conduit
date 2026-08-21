@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -655,4 +656,61 @@ func TestRun_MalformedPipelinesDir_ReturnsError(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestNew_WrappedRegistererWithoutGatherer_FailsFast proves the metrics
+// pairing is validated at construction, not on the first Run or Import.
+//
+// New already validates config in-memory for exactly this reason, and this
+// check is a type assertion — no I/O. Deferring it would mean an embedder
+// wires up an Engine, starts a pipeline, and only then discovers their
+// registerer cannot back the /metrics endpoint.
+func TestNew_WrappedRegistererWithoutGatherer_FailsFast(t *testing.T) {
+	is := is.New(t)
+	registry := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", registry)
+
+	opts := conduit.Options{
+		PipelinesDir:      t.TempDir(),
+		DB:                conduit.DBOptions{Type: "inmemory"},
+		MetricsRegisterer: wrapped,
+	}
+	opts.API.Enabled = true
+	opts.API.GRPCAddress = "127.0.0.1:0"
+	opts.API.HTTPAddress = "127.0.0.1:0"
+
+	e, err := conduit.New(context.Background(), opts)
+
+	is.True(err != nil)
+	is.True(e == nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+	// The fix has to name a knob this caller can actually reach: an embedder
+	// sees conduit.Options, never pkg/conduit's WithMetricsGatherer.
+	is.True(strings.Contains(ce.Suggestion, "MetricsGatherer"))
+}
+
+// TestNew_PairedRegistererAndGatherer_Succeeds is the other half: the
+// documented migration (pass the underlying registry alongside the wrapper)
+// constructs cleanly.
+func TestNew_PairedRegistererAndGatherer_Succeeds(t *testing.T) {
+	is := is.New(t)
+	registry := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", registry)
+
+	opts := conduit.Options{
+		PipelinesDir:      t.TempDir(),
+		DB:                conduit.DBOptions{Type: "inmemory"},
+		MetricsRegisterer: wrapped,
+		MetricsGatherer:   registry,
+	}
+	opts.API.Enabled = true
+	opts.API.GRPCAddress = "127.0.0.1:0"
+	opts.API.HTTPAddress = "127.0.0.1:0"
+
+	e, err := conduit.New(context.Background(), opts)
+	is.NoErr(err)
+	is.True(e != nil)
 }
