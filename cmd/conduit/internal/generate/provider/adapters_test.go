@@ -282,6 +282,63 @@ func Test_Adapters_RequestModelOverridesAdapterDefault(t *testing.T) {
 	is.Equal(sent.Model, "from-request")
 }
 
+// Test_DefaultMaxTokens_AbsorbsThinkingNotJustOutput pins the actual value,
+// not just that SOME constant is wired through (Test_Adapters_
+// MaxTokensPassedThrough below covers wiring). A generated pipeline config
+// is small — around 350 tokens for a typical candidate in this package's own
+// corpus — so 4096 looks generous for the OUTPUT alone; it is not generous
+// for output PLUS an adaptive/extended think a model can run by default when
+// the request sets no explicit thinking budget (Anthropic's Sonnet 5,
+// DefaultAnthropicModel, shares one max_tokens budget across both). This
+// test fails if the ceiling regresses back toward a value sized for the
+// config text alone.
+func Test_DefaultMaxTokens_AbsorbsThinkingNotJustOutput(t *testing.T) {
+	is := is.New(t)
+	is.Equal(DefaultMaxTokens, 16384)
+}
+
+// Test_Adapters_MaxTokensPassedThrough pins that DefaultMaxTokens actually
+// reaches the request body, for every adapter that has a max-tokens field to
+// set. On a model that runs adaptive/extended thinking by default when the
+// request doesn't set an explicit thinking budget (e.g. Anthropic's Sonnet 5,
+// DefaultAnthropicModel — see DefaultMaxTokens' doc comment), max_tokens caps
+// thinking AND response text together: a ceiling too small for that silently
+// truncates the generated YAML mid-document rather than failing loudly, which
+// is exactly the invisible-truncation bug this constant's value guards
+// against. A regression that drops the field, hardcodes a smaller value, or
+// forgets to wire DefaultMaxTokens into a new adapter's request must fail
+// this test.
+func Test_Adapters_MaxTokensPassedThrough(t *testing.T) {
+	t.Parallel()
+
+	t.Run("anthropic", func(t *testing.T) {
+		is := is.New(t)
+		srv := newCapturing(t, 200, anthropicOK)
+		_, err := (&Anthropic{BaseURL: srv.URL}).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+		is.NoErr(err)
+
+		var sent anthropicRequest
+		is.NoErr(json.Unmarshal(srv.body, &sent))
+		is.Equal(sent.MaxTokens, DefaultMaxTokens)
+	})
+
+	t.Run("openai", func(t *testing.T) {
+		is := is.New(t)
+		srv := newCapturing(t, 200, openAIOK)
+		_, err := (&OpenAI{BaseURL: srv.URL}).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+		is.NoErr(err)
+
+		// Decode just the field this test cares about rather than importing
+		// go-openai's own request struct here — this test asserts what's on
+		// the wire, not the SDK's shape.
+		var sent struct {
+			MaxTokens int `json:"max_tokens"`
+		}
+		is.NoErr(json.Unmarshal(srv.body, &sent))
+		is.Equal(sent.MaxTokens, DefaultMaxTokens)
+	})
+}
+
 // Test_Reachable pins the auto-detection probe, including that it does NOT
 // require a loaded model: a reachable server with no model is still a
 // candidate, and the completion call reports the missing model with a message

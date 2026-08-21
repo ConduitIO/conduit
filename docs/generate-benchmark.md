@@ -27,8 +27,11 @@ is correct — it's what `generate.LoadRequests` and the future CI/scheduled eva
 Per the design doc's §10, a schema-valid pipeline is not the same thing as a _correct_ one, so the
 harness reports two independent numbers, never collapsed into one:
 
-1. **Validate-pass rate** — does the candidate pass `cmd/conduit/internal/validate`'s `Run`, the
-   exact engine `conduit pipelines validate` uses. Committed floor: **>= 90%** of the corpus.
+1. **Validate-pass rate** — does the candidate pass `cmd/conduit/internal/validate`'s engine with
+   the exact `Options` `conduit generate` itself gates a candidate through before ever showing it
+   to a human (`ResolvePlugins` on, so a fabricated builtin plugin name fails here too — not the
+   weaker `Options{}` `conduit pipelines validate` defaults to). Committed floor: **>= 90%** of
+   the corpus.
 2. **Semantic-intent-match rate** — does the candidate's actual source/destination connector
    category and processor set match the request's stated intent (`Expect`), even when it
    validates cleanly. A pipeline can be schema-valid and still point at the wrong connector, swap
@@ -68,9 +71,11 @@ harness checks a candidate against, **not** re-derived from the prompt text by t
 
 Given a candidate pipeline YAML for this request, the scorer:
 
-- Runs `validate.Run` against it (via a private temp-file shim — `validate.Run` has no in-memory
-  entry point yet; see `validate_score.go`'s doc comment and the design doc's "disk seam"
-  discussion, Decision §3).
+- Runs `validate.RunBytes` against it, entirely in memory, with the SAME `Options` `conduit
+  generate` itself gates a candidate through (`ResolvePlugins` on, the builtin connector/processor
+  sets — `candidateValidateOptions` in `generate.go`) — never a weaker check than the shipped
+  command's. See `validate_score.go`'s doc comment and the design doc's "disk seam" discussion,
+  Decision §3, which names this in-memory seam as the preferred resolution.
 - Parses it with the same YAML parser `validate` uses, and checks: does the source connector's
   plugin resolve to the `postgres` builtin category? The destination to `kafka`? Is there a
   processor (anywhere in the pipeline) matching each tag in `requiredCapabilities` — here,
@@ -138,7 +143,7 @@ the six real built-in connectors.
 ## Related
 
 - `docs/design-documents/20260722-conduit-generate.md` — the full design (provider model, the
-  never-auto-apply boundary, the disk-seam decision this harness's temp-file shim implements the
-  fallback for).
+  never-auto-apply boundary, the disk-seam decision this harness implements via the preferred
+  `validate.RunBytes` in-memory seam rather than the temp-file fallback).
 - ROADMAP.md, Agent-native section — the v0.19 Workstream 1 item this PR advances (eval-harness
   path only; the command implementation is v0.20+).

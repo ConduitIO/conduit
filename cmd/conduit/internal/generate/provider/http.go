@@ -37,10 +37,22 @@ var CodeProviderError = conduiterr.Register("generate.provider_error", codes.Una
 // retry loop applies this per ATTEMPT, not to the whole budget.
 const DefaultTimeout = 60 * time.Second
 
-// DefaultMaxTokens bounds the response. A pipeline config is small; the only
-// thing a larger ceiling buys is a bigger bill when a model decides to
-// narrate.
-const DefaultMaxTokens = 4096
+// DefaultMaxTokens bounds the response.
+//
+// A generated pipeline config is small — around 350 tokens for a typical
+// candidate in this package's own corpus — so the ceiling is not sized for
+// the OUTPUT. It exists to absorb THINKING: on a model that runs extended or
+// adaptive reasoning by default when the request omits an explicit thinking
+// budget (e.g. Anthropic's Sonnet 5, DefaultAnthropicModel), max_tokens caps
+// thinking output and response text TOGETHER, sharing one budget. A ceiling
+// sized only for the ~350-token config truncates the model mid-think,
+// mid-YAML — and extractCandidate deliberately tolerates an unterminated
+// fence and hands the partial config to the validator, so the truncation
+// never surfaces as "the model ran out of budget": it looks like an ordinary
+// validation failure, burns a retry, and (in an eval transcript) reads as
+// model error. 16384 is sized to comfortably absorb a normal think for a
+// request this small while still bounding a genuinely wedged/looping model.
+const DefaultMaxTokens = 16384
 
 // Doer is the HTTP seam, matching the two-method shape the `ollama` built-in
 // processor already uses (pkg/plugin/processor/builtin/impl/ollama). Copying

@@ -36,14 +36,14 @@
 //     package's own tests today), ScoreRun/ScoreMedian report TWO separate
 //     numbers, never collapsed into one:
 //
-//     1. Validate-pass rate — does the candidate pass the exact
-//     cmd/conduit/internal/validate engine `conduit pipelines validate`
-//     uses. Because that engine only exposes a path-based Run (there is no
-//     RunBytes/RunReader in-memory seam yet — the design doc's Decision §3
-//     names this exact gap and its two resolutions), this package uses the
-//     documented fallback: a private (0600) temp file, validated, then
-//     removed (validateCandidate in validate_score.go). The day RunBytes
-//     lands, this is the only function that needs to change.
+//     1. Validate-pass rate — does the candidate pass validate.RunBytes with
+//     the SAME Options `conduit generate` itself gates a candidate through
+//     (ResolvePlugins on, the builtin connector/processor sets —
+//     candidateValidateOptions in generate.go), entirely in memory
+//     (validateCandidate in validate_score.go). This is the in-memory seam
+//     the design doc's Decision §3 names as preferred over a temp-file
+//     shim (cmd/conduit/internal/validate/engine.go:129); the package now
+//     touches no disk anywhere.
 //
 //     2. Semantic-intent-match rate — does the candidate's actual source/
 //     destination connector category and processor set match the

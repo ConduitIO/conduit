@@ -109,3 +109,63 @@ func TestBuiltinProcessorRefs_NonEmpty(t *testing.T) {
 
 	is.True(len(BuiltinProcessorRefs()) > 0)
 }
+
+// --- CatalogFingerprint ---
+
+func TestCatalogFingerprint_StableAcrossRepeatedCalls(t *testing.T) {
+	is := is.New(t)
+
+	first := CatalogFingerprint()
+	is.True(first != "")
+	for range 5 {
+		is.Equal(CatalogFingerprint(), first)
+	}
+}
+
+// A synthetic catalog exercises fingerprintCatalog directly — a committed
+// transcript's fingerprint must move when a connector's REQUIRED parameter
+// set actually changes, since that's exactly the case where a previously
+// generated candidate could stop being groundable the same way.
+func TestFingerprintCatalog_ChangesWhenARequiredParamIsAdded(t *testing.T) {
+	is := is.New(t)
+
+	before := []ConnectorInfo{{
+		Name:         "synthetic",
+		Summary:      "a synthetic connector for this test",
+		SourceParams: []ParamInfo{{Key: "host", Type: "string", Required: true}},
+	}}
+	after := []ConnectorInfo{{
+		Name:    "synthetic",
+		Summary: "a synthetic connector for this test",
+		SourceParams: []ParamInfo{
+			{Key: "host", Type: "string", Required: true},
+			{Key: "port", Type: "int", Required: true},
+		},
+	}}
+
+	is.True(fingerprintCatalog(before) != fingerprintCatalog(after))
+}
+
+// Rewording a description, or changing a default, must NOT move the
+// fingerprint — those are exactly the changes CatalogFingerprint is
+// deliberately blind to, so a transcript isn't flagged stale over prose.
+func TestFingerprintCatalog_UnchangedWhenOnlyDescriptionOrDefaultChanges(t *testing.T) {
+	is := is.New(t)
+
+	before := []ConnectorInfo{{
+		Name:    "synthetic",
+		Summary: "original summary",
+		SourceParams: []ParamInfo{
+			{Key: "host", Type: "string", Required: true, Description: "original description", Default: ""},
+		},
+	}}
+	after := []ConnectorInfo{{
+		Name:    "synthetic",
+		Summary: "a completely reworded summary that says something else",
+		SourceParams: []ParamInfo{
+			{Key: "host", Type: "string", Required: true, Description: "a totally different description", Default: "localhost"},
+		},
+	}}
+
+	is.Equal(fingerprintCatalog(before), fingerprintCatalog(after))
+}

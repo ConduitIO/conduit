@@ -15,6 +15,8 @@
 package generate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"sort"
@@ -93,6 +95,74 @@ func BuiltinCatalog() []ConnectorInfo {
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// CatalogFingerprint returns a stable hash over BuiltinCatalog()'s SEMANTIC
+// grounding identity: the sorted (connector, role, paramKey, required)
+// tuples only — deliberately blind to descriptions and defaults, which can
+// be reworded or retuned without changing what a candidate must satisfy to
+// be grounded correctly.
+//
+// It hashes BuiltinCatalog()'s own output rather than re-reading
+// builtin.DefaultBuiltinConnectors a second time, so it can never drift from
+// the prompt it fingerprints: whatever catalog BuildSystemPrompt actually
+// grounded the model on (including MaxOptionalParamsPerRole's cap — an
+// optional parameter beyond the cap was never in the prompt, so it has no
+// business moving this fingerprint) is exactly the catalog fingerprinted
+// here.
+//
+// Purpose: a committed provider transcript records this fingerprint
+// alongside its prompt and output. A later build recomputes
+// CatalogFingerprint() and compares: unequal means a connector's
+// required/optional PARAMETER SET has actually moved and the transcript's
+// grounding is semantically stale against this binary — distinct from a
+// changed description or default, which leaves the fingerprint (and the
+// transcript's validity) untouched.
+func CatalogFingerprint() string {
+	return fingerprintCatalog(BuiltinCatalog())
+}
+
+// fingerprintCatalog is CatalogFingerprint's pure core, taking a catalog
+// directly rather than reading BuiltinCatalog() itself, so it can be
+// exercised in tests against a synthetic catalog without depending on (or
+// being broken by changes to) the real builtin connector registry.
+func fingerprintCatalog(cat []ConnectorInfo) string {
+	type tuple struct {
+		connector string
+		role      string
+		paramKey  string
+		required  bool
+	}
+
+	var tuples []tuple
+	for _, c := range cat {
+		for _, p := range c.SourceParams {
+			tuples = append(tuples, tuple{c.Name, "source", p.Key, p.Required})
+		}
+		for _, p := range c.DestinationParams {
+			tuples = append(tuples, tuple{c.Name, "destination", p.Key, p.Required})
+		}
+	}
+
+	// Deterministic order independent of the catalog's own (already-sorted,
+	// but not a contract this function should rely on) input ordering — the
+	// fingerprint must be stable no matter what order the caller's slice
+	// happens to be in.
+	sort.Slice(tuples, func(i, j int) bool {
+		if tuples[i].connector != tuples[j].connector {
+			return tuples[i].connector < tuples[j].connector
+		}
+		if tuples[i].role != tuples[j].role {
+			return tuples[i].role < tuples[j].role
+		}
+		return tuples[i].paramKey < tuples[j].paramKey
+	})
+
+	h := sha256.New()
+	for _, t := range tuples {
+		fmt.Fprintf(h, "%s|%s|%s|%t\n", t.connector, t.role, t.paramKey, t.required)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // BuiltinConnectorRefs returns every resolvable builtin connector reference —

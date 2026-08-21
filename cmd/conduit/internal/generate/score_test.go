@@ -126,17 +126,23 @@ func TestValidateCandidate_GoodCandidate_Passes(t *testing.T) {
 	is := is.New(t)
 
 	candidate := mustReadCandidate(t, "postgres-cdc-to-kafka-filtered-good.yaml")
-	report, err := validateCandidate(context.Background(), candidate)
-	is.NoErr(err)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK())
+
+	// F2 regression: findings label with the stable InMemoryCandidateName,
+	// never a filesystem path. The prior temp-file shim labeled every
+	// finding with a randomized scratch-file path, which made PR-CI eval
+	// output non-deterministic byte-for-byte across runs — this package
+	// must never touch disk again (see doc.go).
+	is.Equal(len(report.Files), 1)
+	is.Equal(report.Files[0].Path, InMemoryCandidateName)
 }
 
 func TestValidateCandidate_BadSchema_Fails(t *testing.T) {
 	is := is.New(t)
 
 	candidate := mustReadCandidate(t, "postgres-cdc-to-kafka-filtered-bad-schema.yaml")
-	report, err := validateCandidate(context.Background(), candidate)
-	is.NoErr(err) // validateCandidate itself succeeds; the CANDIDATE fails validation
+	report := validateCandidate(context.Background(), candidate)
 	is.True(!report.OK())
 	is.True(report.Summary.Errors > 0)
 }
@@ -149,9 +155,28 @@ func TestValidateCandidate_WrongConnectorButValid_Passes(t *testing.T) {
 	is := is.New(t)
 
 	candidate := mustReadCandidate(t, "kafka-to-postgres-sync-bad-wrong-connector.yaml")
-	report, err := validateCandidate(context.Background(), candidate)
-	is.NoErr(err)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK())
+}
+
+// F1 regression: this harness must measure the SAME gate `conduit generate`
+// ships with, never a weaker one. The candidate's source plugin
+// ("builtin:postgre", a plausible typo of "builtin:postgres") is
+// schema-valid on its own — nothing about its shape is wrong — so it only
+// fails when ResolvePlugins is on and checked against the real builtin
+// connector set, exactly as candidateValidateOptions() (generate.go, the
+// options the shipped command uses) configures it. Before this fix,
+// validateCandidate ran validate.Run with the zero Options
+// (ResolvePlugins off), under which this exact candidate scored
+// validate-PASS — the fabricated-plugin class this feature exists to catch,
+// invisible to the eval harness that is supposed to gate it.
+func TestValidateCandidate_FabricatedBuiltinPlugin_Fails(t *testing.T) {
+	is := is.New(t)
+
+	candidate := mustReadCandidate(t, "postgres-cdc-to-kafka-filtered-bad-fabricated-builtin-plugin.yaml")
+	report := validateCandidate(context.Background(), candidate)
+	is.True(!report.OK())
+	is.True(report.Summary.Errors > 0)
 }
 
 // --- semantic-intent axis ---
@@ -191,8 +216,7 @@ func TestScoreSemantic_WrongConnector_FailsEvenThoughValid(t *testing.T) {
 	candidate := mustReadCandidate(t, "kafka-to-postgres-sync-bad-wrong-connector.yaml")
 
 	// Confirm the premise: this candidate DOES pass validate.
-	report, verr := validateCandidate(context.Background(), candidate)
-	is.NoErr(verr)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK())
 
 	// But it must fail the semantic check: wrong source AND destination.
@@ -237,8 +261,7 @@ func TestScoreSemantic_DroppedFilter_Fails(t *testing.T) {
 
 	candidate := mustReadCandidate(t, "postgres-cdc-to-kafka-filtered-bad-dropped-filter.yaml")
 
-	report, verr := validateCandidate(context.Background(), candidate)
-	is.NoErr(verr)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK()) // still schema-valid
 
 	res := scoreSemantic(context.Background(), req.Expect, candidate)
@@ -255,8 +278,7 @@ func TestScoreSemantic_SwappedDirection_Fails(t *testing.T) {
 
 	candidate := mustReadCandidate(t, "postgres-cdc-to-kafka-filtered-bad-swapped-direction.yaml")
 
-	report, verr := validateCandidate(context.Background(), candidate)
-	is.NoErr(verr)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK())
 
 	res := scoreSemantic(context.Background(), req.Expect, candidate)
@@ -274,8 +296,7 @@ func TestScoreSemantic_UnknownPlugin_NeverFabricatesAMatch(t *testing.T) {
 
 	// A non-builtin plugin reference is schema-valid (validate doesn't
 	// resolve plugin registries without ResolvePlugins).
-	report, verr := validateCandidate(context.Background(), candidate)
-	is.NoErr(verr)
+	report := validateCandidate(context.Background(), candidate)
 	is.True(report.OK())
 
 	res := scoreSemantic(context.Background(), req.Expect, candidate)
