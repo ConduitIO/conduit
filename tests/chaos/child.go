@@ -87,6 +87,14 @@ const (
 	exitOpenOtherError = 4
 	exitCorruptState   = 3
 	exitBadArgs        = 2
+
+	// exitDrainTimeout is deliberately NOT exitOpenOtherError. Running out of
+	// wall clock while the ack path drains says nothing about Open, and
+	// reporting it as an Open error sent an investigation looking for a
+	// resume/recovery defect when the child's own output showed a clean,
+	// strictly monotonic ack sequence with no gap and no corruption. An exit
+	// code is a diagnosis; a wrong one costs more than no code at all.
+	exitDrainTimeout = 5
 )
 
 // isChildInvocation reports whether this process invocation should behave as
@@ -437,9 +445,11 @@ func runChild() {
 	// exactly the same thing (every ACK_ORDER line has actually been
 	// printed) via a different signal.
 	if keyed {
-		if !plugin.waitForAckedCount(cfg.total, 5*time.Second) {
-			fmt.Fprintf(os.Stderr, "%s: timed out waiting for plugin to ack %d positions\n", markerFatal, cfg.total)
-			os.Exit(exitOpenOtherError)
+		if !plugin.waitForAckedCount(cfg.total, drainBudget(cfg.total)) {
+			fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for plugin to ack %d "+
+				"positions. This is a PACING failure, not a correctness one.\n",
+				markerFatal, drainBudget(cfg.total), cfg.total)
+			os.Exit(exitDrainTimeout)
 		}
 	} else {
 		waitForUpstreamCommitted(upstream, cfg.total)
@@ -643,7 +653,7 @@ func waitForUpstreamCommitted(upstream *upstreamStore, total uint64) {
 	if total == 0 {
 		return
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(drainBudget(total))
 	for time.Now().Before(deadline) {
 		committed, err := upstream.Committed()
 		if err == nil && committed >= total {
@@ -656,8 +666,61 @@ func waitForUpstreamCommitted(upstream *upstreamStore, total uint64) {
 	// undermining the very "committed == total" guarantee the parent test's
 	// duplicate-not-gap assertion depends on - so this must exit, not warn
 	// and continue.
-	fmt.Fprintf(os.Stderr, "%s: timed out waiting for upstream to reach position %d\n", markerFatal, total)
-	os.Exit(exitOpenOtherError)
+	committed, _ := upstream.Committed()
+	fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for upstream to reach position %d "+
+		"(committed %d, i.e. %d still draining). This is a PACING failure, not a "+
+		"correctness one: check the ack sequence above for gaps or reordering before "+
+		"suspecting the engine.\n",
+		markerFatal, drainBudget(total), total, committed, total-committed)
+	os.Exit(exitDrainTimeout)
+}
+
+// drainBudget sizes the post-read-loop wait to the amount of work that can
+// still be in flight, rather than to a flat wall-clock guess.
+//
+// The flat 5s this replaced was correct for the case its doc describes -
+// runReadAckLoop has already read AND acked everything, so the wait absorbs a
+// single last async commit. It is wrong whenever a large ack backlog is still
+// draining when the read loop finishes, because then it is the PRIMARY
+// completion wait, not a last-commit drain.
+//
+// That is reachable, and it bit us: property2Cases' "mid-snapshot" is
+// total=500 at paceMS=1 - the fastest pace and the largest total in the set,
+// so the read loop outruns the async ack path by the widest margin of any
+// case. On a contended CI runner under -race, draining the remainder can
+// exceed 5s. Observed in CI with 500 read and 229 acked at the deadline: a
+// strictly monotonic ack sequence with no gap and no corruption marker, i.e.
+// the engine was behaving correctly and simply had not finished.
+//
+// fanout_child.go hit exactly this and wrote it up (see
+// waitFanoutUpstreamCommitted, "9 spurious FATALs in a -race -count=10 run")
+// but fixed it only for its own scenario; this is the same bug in the helper
+// it declined to reuse.
+//
+// 10ms per position is roughly 20x the observed per-position cost under
+// -race, so it absorbs runner contention without becoming a hang: the floor
+// keeps small runs quick and the ceiling keeps a genuinely stuck run from
+// sitting on the 30s parent timeout.
+func drainBudget(total uint64) time.Duration {
+	const (
+		perPosition = 10 * time.Millisecond
+		floor       = 5 * time.Second
+		ceiling     = 25 * time.Second
+	)
+	// Clamp BEFORE converting, not after. total is uint64 and time.Duration
+	// is int64, so multiplying first and bounding afterwards lets a large
+	// enough total overflow into a negative duration - which would make the
+	// deadline already past and turn this budget into no wait at all, the
+	// exact opposite of its purpose. gosec G115 flags the conversion for
+	// this reason and it is right to.
+	if total >= uint64(ceiling/perPosition) {
+		return ceiling
+	}
+	budget := time.Duration(total) * perPosition
+	if budget < floor {
+		return floor
+	}
+	return budget
 }
 
 // containsGapMarker reports whether err is (or wraps) the specific,
