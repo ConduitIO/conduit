@@ -15,6 +15,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -183,4 +184,48 @@ func HTTPStatus(err error) (status int, ok bool) {
 		return se.statusCode, true
 	}
 	return 0, false
+}
+
+// errTimeout marks a provider error whose underlying transport failure was
+// specifically the calling context's deadline expiring (context.
+// DeadlineExceeded) — as opposed to every OTHER transport-level miss
+// HTTPStatus also returns ok=false for: DNS resolution failure, connection
+// refused, a TLS handshake failure, and so on. Nit from the round-2 review
+// of #2814: without this, safeFailureReason (transcript_capture_test.go)
+// collapses all of those to the identical string (CodeProviderError's
+// generic Reason(), no HTTP status to append — none of them ever got a
+// response), which is a real triage regression: "our own deadline expired"
+// (captureWallClockBudget, DefaultTimeout) and "the provider's DNS is
+// broken" call for different remediation and read identically in a
+// committed manifest/tombstone today.
+var errTimeout = cerrors.New("provider call timed out")
+
+// IsTimeout reports whether err was produced by a Do() call that failed
+// because ctx's deadline expired — see errTimeout. False for every other
+// provider error, including a non-timeout network failure.
+func IsTimeout(err error) bool {
+	return cerrors.Is(err, errTimeout)
+}
+
+// timeoutError wraps err to mark it via IsTimeout, transparently: Error()
+// and Unwrap() forward to cause unchanged, so marking never changes what a
+// user or a log line sees.
+type timeoutError struct {
+	cause error
+}
+
+func (e *timeoutError) Error() string        { return e.cause.Error() }
+func (e *timeoutError) Unwrap() error        { return e.cause }
+func (e *timeoutError) Is(target error) bool { return target == errTimeout }
+
+// MarkIfTimeout wraps err (nil-safe, and a no-op if err is already nil or
+// transportErr does not satisfy context.DeadlineExceeded) so IsTimeout(err)
+// reports true — call at the Do() call site, passing the ORIGINAL transport
+// error (transportErr) to test, since providerErrorf's %v-formatted result
+// no longer carries a traversable Unwrap chain back to it.
+func MarkIfTimeout(wrapped error, transportErr error) error {
+	if wrapped == nil || !cerrors.Is(transportErr, context.DeadlineExceeded) {
+		return wrapped
+	}
+	return &timeoutError{cause: wrapped}
 }

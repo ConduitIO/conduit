@@ -95,9 +95,14 @@ func (a *Anthropic) Complete(ctx context.Context, req CompletionRequest) (Comple
 	httpReq.Header.Set("x-api-key", a.APIKey)
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
 
-	resp, err := doer(a.HTTP).Do(httpReq)
-	if err != nil {
-		return CompletionResult{}, providerErrorf(a.Name(), "%v", err)
+	resp, transportErr := doer(a.HTTP).Do(httpReq)
+	if transportErr != nil {
+		// MarkIfTimeout distinguishes "ctx's deadline expired" (DefaultTimeout,
+		// or the capture harness's captureWallClockBudget) from every OTHER
+		// transport-level miss — DNS failure, connection refused, TLS error —
+		// which HTTPStatus also can't discriminate (see errTimeout's doc
+		// comment, provider/http.go).
+		return CompletionResult{}, MarkIfTimeout(providerErrorf(a.Name(), "%v", transportErr), transportErr)
 	}
 	defer resp.Body.Close()
 

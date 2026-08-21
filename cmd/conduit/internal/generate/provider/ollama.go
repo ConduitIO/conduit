@@ -82,9 +82,12 @@ func (o *Ollama) Complete(ctx context.Context, req CompletionRequest) (Completio
 	}
 	httpReq.Header.Set("content-type", "application/json")
 
-	resp, err := doer(o.HTTP).Do(httpReq)
-	if err != nil {
-		return CompletionResult{}, providerErrorf(o.Name(), "%v", err)
+	resp, transportErr := doer(o.HTTP).Do(httpReq)
+	if transportErr != nil {
+		// MarkIfTimeout distinguishes "ctx's deadline expired" from every
+		// OTHER transport-level miss — see errTimeout's doc comment,
+		// provider/http.go.
+		return CompletionResult{}, MarkIfTimeout(providerErrorf(o.Name(), "%v", transportErr), transportErr)
 	}
 	defer resp.Body.Close()
 

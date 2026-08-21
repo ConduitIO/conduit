@@ -111,8 +111,16 @@
 //
 // The redaction gate above is deliberately untouched by any of this: it
 // remains all-or-nothing regardless of how many requests were captured or
-// missing — see scanAndPromoteScratch's own doc comment and
-// TestScanAndPromoteScratch_ViolationBlocksEvenWhenARequestIsMissing.
+// missing — a missing request never reaches scratchDir in the first place
+// (runCapture only calls writeScratchTranscript for a request that DID
+// produce a completion), so scanAndPromoteScratch's per-batch scan is
+// unaffected by how many OTHER requests in the same run were missing. This
+// holds by construction (see scanAndPromoteScratch's own doc comment), but
+// as of this writing no test exercises a batch combining a missing request
+// with a redaction violation among the captured ones directly;
+// TestScanAndPromoteScratch_OneViolationBlocksTheWholeBatch proves the
+// all-or-nothing guarantee itself (one violation blocks an otherwise-clean
+// batch) but its fixture has no missing request at all.
 package generate
 
 import (
@@ -124,6 +132,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -559,9 +568,19 @@ func writeManifest(t *testing.T, destDir string, m Manifest) {
 // The only load-bearing information for a reviewer — enough to tell "this
 // was a rate limit" from "this was a refusal" from "this was an auth
 // failure" — is the conduiterr CODE (conduiterr.Get) plus the HTTP status
-// when checkStatus recorded one (provider.HTTPStatus). Both are safe by
-// construction: a Code.Reason() is a registered, static string, never
-// user- or provider-controlled text, and the status is a bare integer.
+// when checkStatus recorded one (provider.HTTPStatus), or (nit from the
+// round-2 review of #2814) whether the failure was specifically the
+// calling context's deadline expiring (provider.IsTimeout). All three are
+// safe by construction: a Code.Reason() is a registered, static string,
+// never user- or provider-controlled text, the status is a bare integer,
+// and IsTimeout is a bool. Every provider adapter wraps EVERY failure —
+// auth rejection, rate limit, DNS miss, connection refused, our own
+// timeout — under the SAME CodeProviderError (see that var's doc comment,
+// provider/http.go), so without the HTTPStatus/IsTimeout discriminators
+// this reason would read identically for all of them; HTTPStatus alone
+// still can't tell "our own deadline expired" apart from every OTHER
+// transport-level miss (a DNS failure, a connection refused) — none of
+// those ever got far enough to have a status to report.
 //
 // Not every failure this package sees is a conduiterr — captureProvider's
 // own ceiling and wall-clock-deadline errors (transcript_capture_test.go)
@@ -580,8 +599,11 @@ func safeFailureReason(err error) string {
 	}
 	if ce, ok := conduiterr.Get(err); ok {
 		reason := ce.Code.Reason()
-		if status, ok := provider.HTTPStatus(err); ok {
+		switch status, hasStatus := provider.HTTPStatus(err); {
+		case hasStatus:
 			reason = fmt.Sprintf("%s (HTTP %d)", reason, status)
+		case provider.IsTimeout(err):
+			reason = fmt.Sprintf("%s (timeout)", reason)
 		}
 		return reason
 	}
@@ -669,7 +691,19 @@ func TestCaptureTranscripts(t *testing.T) {
 // TestRunCapture_PartialFailure_PreservesGoodTranscripts against a fake
 // provider and a scratch destDir — no live key, no network, and never
 // touching the real committed testdata/transcripts.
-func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captureProvider, providerName, model string, passes int, destDir string) (manifest Manifest, wrote bool) {
+// runCapture's third return value, passRuns, is every full-corpus pass's
+// RunScore — including Result.Missing per request per pass — exactly as
+// ScoreMedian computed it from the SAME Candidates maps runCapture itself
+// built (the manifest's own PassScores is a summary derived from this same
+// data, without RunScore.Results; see PassScore's doc comment for why the
+// committed file doesn't carry that detail). It exists so a test can assert
+// end-to-end on how runCapture's per-request closure populates Candidates —
+// in particular, that a request with no completion gets NO entry at all
+// (see the "absence of data" branch below) — rather than hand-building a
+// Candidates map that only ASSERTS it mirrors that behavior. Nil for a
+// scoped run that never reaches the full-corpus scoring step (wrote ==
+// false).
+func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captureProvider, providerName, model string, passes int, destDir string) (manifest Manifest, passRuns []RunScore, wrote bool) {
 	t.Helper()
 
 	runStart := time.Now().UTC()
@@ -697,6 +731,21 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	lastFailureErr := make(map[string]error)
 
 	var scoreCandidatesList []Candidates
+	// scoreMissingCounts[i] is how many of len(requests) got NO entry in
+	// scoreCandidatesList[i] — i.e. how many corpus requests produced no
+	// completion on that specific pass (see the inline comment below on
+	// why passCandidates omits, rather than empty-strings, those entries).
+	// Kept as a parallel slice, index-aligned with scoreCandidatesList
+	// (and therefore with ms.Runs below), rather than added to
+	// RunScore/ScoreRun: score.go's Result.Missing already carries this
+	// per-request, and re-deriving the per-pass count from passCandidates'
+	// size here is cheaper than plumbing a new field through ScoreRun for
+	// a number runCapture already has for free. This is what lets a
+	// degraded tail pass (a rate-limit storm, or captureWallClockBudget
+	// expiring partway through) be excluded from the median instead of
+	// silently dragging MedianValidatePassRate/MedianSemanticMatchRate
+	// toward zero — see PassScore.MissingCount and Manifest.DegradedPasses.
+	var scoreMissingCounts []int
 	for pass := 1; pass <= passes; pass++ {
 		passCandidates := make(Candidates, len(requests))
 		for _, req := range requests {
@@ -764,6 +813,7 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 		// never per-pass.
 		if len(attempted) == len(requests) {
 			scoreCandidatesList = append(scoreCandidatesList, passCandidates)
+			scoreMissingCounts = append(scoreMissingCounts, len(requests)-len(passCandidates))
 		} else {
 			t.Logf("pass %d: %d/%d requests ran (a -run filter is scoping this to a subset) — "+
 				"excluded from corpus-level scoring and the manifest", pass, len(attempted), len(requests))
@@ -858,24 +908,26 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	if len(scoreCandidatesList) != passes {
 		t.Logf("only %d/%d pass(es) captured the full corpus — skipping manifest.yaml "+
 			"(a scoped -run leaves the existing manifest untouched)", len(scoreCandidatesList), passes)
-		return Manifest{}, false
+		return Manifest{}, nil, false
 	}
 
 	ms := ScoreMedian(ctx, requests, scoreCandidatesList)
-	passScores := make([]PassScore, len(ms.Runs))
-	validateCounts := make([]int, len(ms.Runs))
-	semanticCounts := make([]int, len(ms.Runs))
-	for i, rs := range ms.Runs {
-		passScores[i] = PassScore{
-			Pass:               i + 1,
-			Total:              rs.Total,
-			ValidatePassCount:  rs.ValidatePassCount,
-			ValidatePassRate:   rs.ValidatePassRate,
-			SemanticMatchCount: rs.SemanticMatchCount,
-			SemanticMatchRate:  rs.SemanticMatchRate,
-		}
-		validateCounts[i] = rs.ValidatePassCount
-		semanticCounts[i] = rs.SemanticMatchCount
+	passScores, degradedMedians := summarizePasses(ms.Runs, scoreMissingCounts)
+
+	if len(degradedMedians.degradedPasses) > 0 {
+		// Deliberately a separate Logf, not folded into
+		// reportCaptureCompleteness below: that function's fail/log
+		// threshold (captureCompletenessVerdict) is scoped to REQUESTS
+		// missing from the whole run, and its majority-threshold math
+		// would be wrong applied to PASSES instead — a run can have every
+		// request captured (missingCount == 0, so
+		// reportCaptureCompleteness has nothing to say) while still
+		// having lost a tail pass to rate limiting, which is exactly the
+		// case this exists to surface.
+		t.Logf("pass(es) %v captured fewer than the full corpus (see passScores[].missingCount in the "+
+			"manifest) — excluded from medianValidatePassRate/medianSemanticMatchRate so a wiped tail pass "+
+			"does not silently drag those numbers toward zero; requests affected may still show as captured "+
+			"overall (capturedCount/missingCount) if another pass produced them", degradedMedians.degradedPasses)
 	}
 
 	manifest = Manifest{
@@ -891,11 +943,12 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 		CatalogFingerprint:       catalogFP,
 		SystemPromptSHA256:       systemSHA,
 		Passes:                   passes,
-		MedianValidatePassRate:   ms.ValidatePassRate,
-		MedianSemanticMatchRate:  ms.SemanticMatchRate,
-		MedianValidatePassCount:  medianInt(validateCounts),
-		MedianSemanticMatchCount: medianInt(semanticCounts),
+		MedianValidatePassRate:   degradedMedians.validateRate,
+		MedianSemanticMatchRate:  degradedMedians.semanticRate,
+		MedianValidatePassCount:  degradedMedians.validateCount,
+		MedianSemanticMatchCount: degradedMedians.semanticCount,
 		PassScores:               passScores,
+		DegradedPasses:           degradedMedians.degradedPasses,
 		CapturedCount:            capturedCount,
 		MissingCount:             missingCount,
 		RequestOutcomes:          outcomes,
@@ -903,8 +956,95 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	writeManifest(t, destDir, manifest)
 	t.Logf("wrote manifest: %d/%d captured, %d calls, %d tokens, ~$%.2f estimated, median validate %.1f%%, median semantic %.1f%%",
 		capturedCount, len(attemptOrder), cp.totalCalls(), cp.totalTokens(), manifest.EstimatedCostUSD,
-		ms.ValidatePassRate*100, ms.SemanticMatchRate*100)
-	return manifest, true
+		degradedMedians.validateRate*100, degradedMedians.semanticRate*100)
+	return manifest, ms.Runs, true
+}
+
+// passesSummary is summarizePasses' reduction of a capture run's per-pass
+// RunScores down to the median rates/counts Manifest reports, plus which
+// passes were excluded from that median (see summarizePasses' own doc
+// comment).
+type passesSummary struct {
+	degradedPasses []int
+	validateRate   float64
+	semanticRate   float64
+	validateCount  float64
+	semanticCount  float64
+}
+
+// summarizePasses builds Manifest.PassScores and reduces runs (ms.Runs from
+// ScoreMedian) to the median rates/counts the manifest reports, given
+// missingCounts — index-aligned with runs, how many corpus requests
+// produced NO completion on that specific pass (runCapture's
+// scoreMissingCounts). Split out from runCapture as its own function (kept
+// runCapture's own cyclomatic complexity under gocyclo's threshold, and
+// this reduction is an independently-testable concern in its own right).
+//
+// A pass with missingCounts[i] > 0 is "degraded" (see PassScore.
+// MissingCount and Manifest.DegradedPasses for what that means and why —
+// H2, round-2 review of #2814): it is excluded from the returned median so
+// a wiped tail pass (a rate-limit storm, or captureWallClockBudget
+// expiring partway through) doesn't silently drag
+// MedianValidatePassRate/MedianSemanticMatchRate toward zero under a
+// manifest that otherwise reports MissingCount == 0 (a request captured on
+// an earlier pass but absent from a later one is NOT run-missing — see
+// Manifest.CapturedCount's doc comment — but ScoreRun DOES score the
+// absence on every pass that lacks it). Falls back to the median across
+// ALL passes (identical to this function's pre-H2 behavior, and
+// mathematically identical to ScoreMedian's own reduction) when every
+// single pass is degraded — with no clean pass to prefer, a 0.00 median
+// would be actively misleading.
+func summarizePasses(runs []RunScore, missingCounts []int) ([]PassScore, passesSummary) {
+	passScores := make([]PassScore, len(runs))
+	allValidateRates := make([]float64, len(runs))
+	allSemanticRates := make([]float64, len(runs))
+	allValidateCounts := make([]int, len(runs))
+	allSemanticCounts := make([]int, len(runs))
+
+	var degradedPasses []int
+	var cleanValidateRates, cleanSemanticRates []float64
+	var cleanValidateCounts, cleanSemanticCounts []int
+
+	for i, rs := range runs {
+		passMissing := missingCounts[i]
+		passScores[i] = PassScore{
+			Pass:               i + 1,
+			Total:              rs.Total,
+			ValidatePassCount:  rs.ValidatePassCount,
+			ValidatePassRate:   rs.ValidatePassRate,
+			SemanticMatchCount: rs.SemanticMatchCount,
+			SemanticMatchRate:  rs.SemanticMatchRate,
+			MissingCount:       passMissing,
+		}
+		allValidateRates[i] = rs.ValidatePassRate
+		allSemanticRates[i] = rs.SemanticMatchRate
+		allValidateCounts[i] = rs.ValidatePassCount
+		allSemanticCounts[i] = rs.SemanticMatchCount
+
+		if passMissing > 0 {
+			degradedPasses = append(degradedPasses, i+1)
+			continue
+		}
+		cleanValidateRates = append(cleanValidateRates, rs.ValidatePassRate)
+		cleanSemanticRates = append(cleanSemanticRates, rs.SemanticMatchRate)
+		cleanValidateCounts = append(cleanValidateCounts, rs.ValidatePassCount)
+		cleanSemanticCounts = append(cleanSemanticCounts, rs.SemanticMatchCount)
+	}
+
+	summary := passesSummary{
+		degradedPasses: degradedPasses,
+		validateRate:   median(allValidateRates),
+		semanticRate:   median(allSemanticRates),
+		validateCount:  medianInt(allValidateCounts),
+		semanticCount:  medianInt(allSemanticCounts),
+	}
+	if n := len(cleanValidateRates); n > 0 && n < len(runs) {
+		summary.validateRate = median(cleanValidateRates)
+		summary.semanticRate = median(cleanSemanticRates)
+		summary.validateCount = medianInt(cleanValidateCounts)
+		summary.semanticCount = medianInt(cleanSemanticCounts)
+	}
+	return passScores, summary
 }
 
 // captureCompletenessThreshold is the fraction of ATTEMPTED requests
@@ -1278,7 +1418,7 @@ func TestRunCapture_FullPipeline_FakeProvider(t *testing.T) {
 	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
 	const passes = 2
 
-	manifest, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+	manifest, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
 
 	if !wrote {
 		t.Fatal("expected a full-corpus run over both requests, across both passes, to write a manifest")
@@ -1392,7 +1532,7 @@ func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
 	requests, cp, destDir, infraErr := partialFailureFixture(t)
 	const passes = 3
 
-	manifest, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+	manifest, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
 
 	if !wrote {
 		t.Fatal("expected the manifest to still be written: 1/3 missing is below the run-failing threshold")
@@ -1453,11 +1593,116 @@ func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
 	// The infra error is a plain fmt.Errorf, not a conduiterr — it takes
 	// safeFailureReason's literal-text fallback path (see that function's
 	// doc comment), so its text is preserved verbatim here. This is
-	// distinct from Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest,
+	// distinct from TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest,
 	// which proves the structured (non-fallback) path for a REAL provider
 	// error never carries response-body text at all.
 	if gotReqB.Unusable {
 		t.Fatal("req-b outcome: Unusable = true, want false — a 429 is absence of data, not a billed refusal")
+	}
+}
+
+// flakyAfterFirstCallProvider succeeds the FIRST time it sees a request
+// whose prompt contains marker, then fails every subsequent time — a
+// request that captures cleanly on an early pass and then drops out of
+// every later one, simulating a rate-limit storm or captureWallClockBudget
+// expiring partway through a multi-pass run. Everything else is delegated
+// to the wrapped fakeProvider unchanged.
+type flakyAfterFirstCallProvider struct {
+	*fakeProvider
+	marker string
+	err    error
+
+	mu   sync.Mutex
+	seen int
+}
+
+func (p *flakyAfterFirstCallProvider) Complete(ctx context.Context, req provider.CompletionRequest) (provider.CompletionResult, error) {
+	if strings.Contains(req.Prompt, p.marker) {
+		p.mu.Lock()
+		p.seen++
+		n := p.seen
+		p.mu.Unlock()
+		if n > 1 {
+			return provider.CompletionResult{}, p.err
+		}
+	}
+	return p.fakeProvider.Complete(ctx, req)
+}
+
+// TestRunCapture_DegradedTailPass_ExcludedFromMedian is the regression test
+// for H2 (round-2 review of #2814): a request captured on pass 1 but absent
+// from every later pass is NOT run-missing (runCapture's capturedIDs check
+// only needs ONE pass to have produced it — manifest.MissingCount stays 0
+// here) — but score.go's ScoreRun scores that request as a hard FAIL on
+// every pass that lacks it, dragging medianValidatePassRate/
+// medianSemanticMatchRate toward zero under a manifest that otherwise
+// looks completely clean (MissingCount == 0 means
+// reportCaptureCompleteness has nothing to say, and generate-capture.yml's
+// banner is gated on MISSING, not on this).
+//
+// Unlike M1's weak regression test (transcript_capture_test.go's own review
+// history), this one drives the real runCapture end to end rather than
+// hand-building a Candidates map — reverting the clean-pass-median fix in
+// runCapture (i.e. always using ms.ValidatePassRate/ms.SemanticMatchRate
+// computed over ALL passes) makes this test fail: with req-b flaky on
+// passes 2-3, the naive full-corpus median comes out to 2/3 (0.667), not 1.
+func TestRunCapture_DegradedTailPass_ExcludedFromMedian(t *testing.T) {
+	const flakyMarker = "TRIGGER_TAIL_FLAKE"
+	requests := []Request{
+		capturePipelineRequest("req-a"),
+		{
+			ID:     "req-b",
+			Prompt: "read from the generator and write to the log " + flakyMarker,
+			Expect: Expect{SourceCategory: "generator", DestinationCategory: "log"},
+		},
+		capturePipelineRequest("req-c"),
+	}
+
+	reply := "```yaml\n" + validCandidate + "```"
+	base := &fakeProvider{replies: []string{reply}, tokens: 20}
+	flakyErr := fmt.Errorf("429: rate limited")
+	fp := &flakyAfterFirstCallProvider{fakeProvider: base, marker: flakyMarker, err: flakyErr}
+	cp := &captureProvider{Provider: fp, maxCalls: 1000, maxTokens: 1_000_000}
+
+	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+	const passes = 3
+
+	manifest, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+
+	if !wrote {
+		t.Fatal("expected the manifest to still be written: req-b captured on pass 1, so nothing is run-missing")
+	}
+	if manifest.CapturedCount != 3 {
+		t.Fatalf("manifest.CapturedCount = %d, want 3 (req-b captured on pass 1 counts as captured overall)", manifest.CapturedCount)
+	}
+	if manifest.MissingCount != 0 {
+		t.Fatalf("manifest.MissingCount = %d, want 0 — this is exactly the H2 scenario: run-missing and "+
+			"pass-missing are different things", manifest.MissingCount)
+	}
+
+	wantDegraded := []int{2, 3}
+	if !reflect.DeepEqual(manifest.DegradedPasses, wantDegraded) {
+		t.Fatalf("manifest.DegradedPasses = %v, want %v", manifest.DegradedPasses, wantDegraded)
+	}
+	if len(manifest.PassScores) != passes {
+		t.Fatalf("len(manifest.PassScores) = %d, want %d", len(manifest.PassScores), passes)
+	}
+	wantPassMissing := []int{0, 1, 1}
+	for i, ps := range manifest.PassScores {
+		if ps.MissingCount != wantPassMissing[i] {
+			t.Fatalf("PassScores[%d].MissingCount = %d, want %d", i, ps.MissingCount, wantPassMissing[i])
+		}
+	}
+
+	// The regression this test guards against: only pass 1 is clean (all 3
+	// requests validate), so the median MUST be computed over pass 1 alone
+	// — 1.0 — never diluted by passes 2-3's req-b-scored-as-fail 2/3 rate.
+	if manifest.MedianValidatePassRate != 1 {
+		t.Fatalf("manifest.MedianValidatePassRate = %v, want 1 — a degraded tail pass must not drag this "+
+			"toward zero when MissingCount is 0 (H2)", manifest.MedianValidatePassRate)
+	}
+	if manifest.MedianSemanticMatchRate != 1 {
+		t.Fatalf("manifest.MedianSemanticMatchRate = %v, want 1 — same regression, semantic axis", manifest.MedianSemanticMatchRate)
 	}
 }
 
@@ -1474,7 +1719,7 @@ func TestRunCapture_PartialFailure_TombstoneAndBijection(t *testing.T) {
 	requests, cp, destDir, _ := partialFailureFixture(t)
 	const passes = 3
 
-	_, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+	_, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
 	if !wrote {
 		t.Fatal("expected the manifest to still be written: 1/3 missing is below the run-failing threshold")
 	}
@@ -1500,8 +1745,17 @@ func TestRunCapture_PartialFailure_TombstoneAndBijection(t *testing.T) {
 	}
 }
 
-// Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest is the
-// regression test for the finding that a provider error's raw HTTP response
+// TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest —
+// renamed from Test_RunCapture_... (round-2 review of #2814): the leading
+// underscore after "Test" broke substring matching against a `-run
+// 'TestRunCapture'` filter (Go's `-run` is a regexp match against the test
+// name; "Test_RunCapture" does not contain "TestRunCapture" as a substring
+// because of the underscore), which would silently skip this test — the
+// most important regression test in this file — from any invocation using
+// that pattern. Every other TestRunCapture_* test in this file already used
+// the no-underscore form; this was the one holdout.
+//
+// This is the regression test for the finding that a provider error's raw HTTP response
 // body (readErrorBody, provider/http.go — up to 512 bytes, provider-
 // controlled) could reach RequestOutcome.FailureReason and then
 // manifest.yaml, a committed file, completely unscanned. It drives a REAL
@@ -1514,7 +1768,7 @@ func TestRunCapture_PartialFailure_TombstoneAndBijection(t *testing.T) {
 // key). That text must never appear anywhere in the manifest — only the
 // structured, safe summary (safeFailureReason: a conduiterr code plus the
 // HTTP status) does.
-func Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *testing.T) {
+func TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *testing.T) {
 	const failMarker = "TRIGGER_401"
 	const leakedSecret = "sk-ant-1234567890abcdefghijklmnop"
 	leakedBody := `{"error":{"type":"authentication_error","message":"Incorrect API key provided: ` + leakedSecret + `"}}`
@@ -1551,7 +1805,7 @@ func Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *test
 	cp := &captureProvider{Provider: base, maxCalls: 1000, maxTokens: 1_000_000}
 	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
 
-	manifest, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
+	manifest, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
 	if !wrote {
 		t.Fatal("expected the manifest to be written: 1/2 missing is at, not past, the run-failing threshold")
 	}
@@ -1616,42 +1870,57 @@ func Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *test
 // (empty string on this path) BEFORE checking len(raw) == 0, so the map
 // always carried a key for the id — ScoreRun then saw `ok == true` and
 // scored a 429 as "the model produced a candidate that failed validation"
-// instead of "no candidate was ever produced". This proves runCapture's
-// contract with ScoreRun directly: a Candidates map built the same way
-// runCapture builds it (see the "absence of data" branch in its per-request
-// closure) must have NO entry at all for a request with no completion, so
-// ScoreRun reports Missing.
+// instead of "no candidate was ever produced".
+//
+// M1 (round-2 review of #2814): the previous version of this test never
+// called runCapture at all — it hand-built a Candidates map "mirroring
+// exactly what runCapture's per-request closure does today" and asserted
+// on ScoreRun directly, which is a property that was already true before
+// the fix and stays true if the fix is reverted; it is not a regression
+// test for runCapture's own map-building bug. This version drives the real
+// runCapture end to end (reusing partialFailureFixture's permanently-failing
+// req-b, shared with TestRunCapture_PartialFailure_PreservesGoodTranscripts)
+// and inspects the per-pass RunScore.Results runCapture's own passRuns
+// return value carries — so it fails if runCapture ever again inserts an
+// empty-string entry instead of omitting the key.
 func TestRunCapture_MissingRequest_ScoredAsMissingNotFailedCandidate(t *testing.T) {
-	requests := []Request{capturePipelineRequest("req-ok"), capturePipelineRequest("req-missing")}
+	requests, cp, destDir, _ := partialFailureFixture(t)
+	const passes = 3
 
-	// Mirrors exactly what runCapture's per-request closure does today:
-	// only a request whose raw completions are non-empty gets a
-	// passCandidates entry at all.
-	candidates := Candidates{"req-ok": validCandidate}
+	_, passRuns, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+	if !wrote {
+		t.Fatal("expected the manifest to still be written: 1/3 missing is below the run-failing threshold")
+	}
+	if len(passRuns) != passes {
+		t.Fatalf("len(passRuns) = %d, want %d", len(passRuns), passes)
+	}
 
-	rs := ScoreRun(context.Background(), requests, candidates)
-
-	var gotMissing, gotOK bool
-	for _, res := range rs.Results {
-		switch res.RequestID {
-		case "req-missing":
-			gotMissing = true
-			if !res.Missing {
-				t.Fatal("req-missing: Missing = false, want true — a request with no completion must never be " +
-					"scored as a failed candidate")
-			}
-			if res.ValidatePass {
-				t.Fatal("req-missing: ValidatePass = true, want false")
-			}
-		case "req-ok":
-			gotOK = true
-			if res.Missing {
-				t.Fatal("req-ok: Missing = true, want false")
+	for i, rs := range passRuns {
+		var gotMissing, gotOK bool
+		for _, res := range rs.Results {
+			switch res.RequestID {
+			case "req-b": // permanently fails every pass, per partialFailureFixture
+				gotMissing = true
+				if !res.Missing {
+					t.Fatalf("pass %d: req-b: Missing = false, want true — a request runCapture never got a "+
+						"completion for must never be scored as a failed candidate", i+1)
+				}
+				if res.ValidatePass {
+					t.Fatalf("pass %d: req-b: ValidatePass = true, want false", i+1)
+				}
+				if res.SemanticMatch {
+					t.Fatalf("pass %d: req-b: SemanticMatch = true, want false", i+1)
+				}
+			case "req-a", "req-c":
+				gotOK = true
+				if res.Missing {
+					t.Fatalf("pass %d: %s: Missing = true, want false", i+1, res.RequestID)
+				}
 			}
 		}
-	}
-	if !gotMissing || !gotOK {
-		t.Fatalf("expected results for both req-ok and req-missing, got %+v", rs.Results)
+		if !gotMissing || !gotOK {
+			t.Fatalf("pass %d: expected results for both req-b and the healthy requests, got %+v", i+1, rs.Results)
+		}
 	}
 }
 

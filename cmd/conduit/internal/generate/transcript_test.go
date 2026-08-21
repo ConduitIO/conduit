@@ -314,6 +314,71 @@ func Test_LoadTranscripts_MalformedTombstone_Errors(t *testing.T) {
 	is.True(strings.Contains(err.Error(), "failureCode"))
 }
 
+// Test_LoadTranscripts_EmptyTombstoneFile_Errors is a nit from the round-2
+// review of #2814: Test_LoadTranscripts_MalformedTombstone_Errors above only
+// pins an otherwise-well-formed Tombstone with FailureCode cleared, never a
+// genuinely empty (0-byte) file — e.g. a truncated write, or `touch`'d by a
+// human mid-fix. yaml.Unmarshal on an empty document succeeds (returns a
+// zero-value Tombstone) rather than erroring, so this exercises
+// validateTombstoneShape's FIRST check (schemaVersion) rather than the last
+// (failureCode) — a different code path than the existing test covers.
+func Test_LoadTranscripts_EmptyTombstoneFile_Errors(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "req-b"+tombstoneFileSuffix), nil, 0o600))
+
+	_, err := LoadTranscripts(dir, reqs)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "req-b"+tombstoneFileSuffix))
+	is.True(strings.Contains(err.Error(), "schemaVersion"))
+}
+
+// Test_LoadTranscripts_UnparseableTombstoneFile_Errors is the other half of
+// the same nit: content that isn't valid YAML AT ALL (as opposed to valid
+// YAML missing a required field) must fail at the yaml.Unmarshal step
+// itself (readTombstone's "parsing tombstone" error), never reach
+// validateTombstoneShape.
+func Test_LoadTranscripts_UnparseableTombstoneFile_Errors(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "req-b"+tombstoneFileSuffix), []byte(":::not valid yaml:::["), 0o600))
+
+	_, err := LoadTranscripts(dir, reqs)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "parsing tombstone"))
+}
+
+// Test_LoadTranscripts_OrphanedTombstone_ErrorsNamingTheID is the tombstone
+// analogue of Test_LoadTranscripts_ExtraTranscript_ErrorsNamingTheID above,
+// pinned separately per a nit from the round-2 review of #2814: a
+// "<id>.missing.yaml" for an id absent from the corpus (e.g. a corpus entry
+// renamed, or a request removed outright, with its old tombstone left
+// behind) is exactly as much a bijection violation as an orphaned real
+// transcript — checkBijection's own doc comment says so explicitly ("an
+// ORPHANED tombstone ... is exactly as much a bijection problem as an
+// orphaned transcript"), but no test exercised a tombstone taking this path
+// specifically until now.
+func Test_LoadTranscripts_OrphanedTombstone_ErrorsNamingTheID(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	for _, r := range reqs {
+		writeTranscript(t, dir, r.ID, validTranscript(r))
+	}
+	// An orphaned tombstone — as if req-a-orphan were removed from the
+	// corpus (or renamed) but its tombstone file was left in place.
+	stray := validTombstone(Request{ID: "req-a-orphan", Prompt: "prompt for an orphaned request"})
+	writeTombstoneFixture(t, dir, "req-a-orphan", stray)
+
+	_, err := LoadTranscripts(dir, reqs)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "req-a-orphan"))
+}
+
 // --- corpusPromptSHA256 (AC 1.20): a prompt edited under an unchanged id. ---
 
 // Test_LoadTranscripts_PromptEditedUnderSameID_Errors is AC 1.20: bijection

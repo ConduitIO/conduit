@@ -318,10 +318,15 @@ func Test_Adapters_RespectContextCancellation(t *testing.T) {
 }
 
 // Test_Adapters_TimeoutIsBounded pins that a wedged provider fails rather than
-// hanging an interactive command forever.
+// hanging an interactive command forever, and (round-2 review of #2814,
+// "safeFailureReason collapses DNS failure, connection-refused, timeout...
+// to one string") that the failure is specifically identifiable via
+// IsTimeout — distinguishing "our own deadline expired" from every OTHER
+// transport-level miss (DNS failure, connection refused), which HTTPStatus
+// alone can't tell apart (none of those ever got a response with a status
+// to report).
 func Test_Adapters_TimeoutIsBounded(t *testing.T) {
 	t.Parallel()
-	is := is.New(t)
 
 	// Bounded for the same reason as in the cancellation test above.
 	wedged := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -332,12 +337,62 @@ func Test_Adapters_TimeoutIsBounded(t *testing.T) {
 	}))
 	t.Cleanup(wedged.Close)
 
-	start := time.Now()
-	_, err := (&Ollama{Host: wedged.URL, Timeout: 200 * time.Millisecond}).
-		Complete(context.Background(), CompletionRequest{Prompt: "x"})
-	is.True(err != nil)
-	codeIs(t, err, CodeProviderError)
-	is.True(time.Since(start) < 5*time.Second)
+	for name, build := range map[string]func(url string) Provider{
+		"anthropic": func(u string) Provider { return &Anthropic{BaseURL: u, Timeout: 200 * time.Millisecond} },
+		"ollama":    func(u string) Provider { return &Ollama{Host: u, Timeout: 200 * time.Millisecond} },
+		"openai":    func(u string) Provider { return &OpenAI{BaseURL: u, Timeout: 200 * time.Millisecond} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			start := time.Now()
+			_, err := build(wedged.URL).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+			is.True(err != nil)
+			codeIs(t, err, CodeProviderError)
+			is.True(time.Since(start) < 5*time.Second)
+			is.True(IsTimeout(err))
+			// Never confused with the OTHER thing HTTPStatus/IsUnusableResponse
+			// report false for: no response ever arrived, so neither applies.
+			_, hasStatus := HTTPStatus(err)
+			is.True(!hasStatus)
+			is.True(!IsUnusableResponse(err))
+		})
+	}
+}
+
+// Test_Adapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout is the
+// negative case for IsTimeout: a connection actively refused (not a
+// deadline expiring) must never be misreported as a timeout — the two call
+// for different remediation (retry later vs. check the endpoint/network).
+func Test_Adapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout(t *testing.T) {
+	t.Parallel()
+
+	// A server that accepts and immediately closes the connection is a
+	// reliable, fast way to force "connection refused"/"EOF" rather than a
+	// deadline — no sleeping, no wedged handler.
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("test setup: ResponseWriter does not support hijacking")
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Fatalf("test setup: hijack: %v", err)
+		}
+		conn.Close()
+	}))
+	t.Cleanup(refusing.Close)
+
+	for name, build := range map[string]func(url string) Provider{
+		"anthropic": func(u string) Provider { return &Anthropic{BaseURL: u} },
+		"ollama":    func(u string) Provider { return &Ollama{Host: u} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			_, err := build(refusing.URL).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+			is.True(err != nil)
+			is.True(!IsTimeout(err))
+		})
+	}
 }
 
 // Test_Adapters_RequestModelOverridesAdapterDefault pins the precedence the

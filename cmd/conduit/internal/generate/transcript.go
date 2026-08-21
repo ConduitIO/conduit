@@ -155,6 +155,21 @@ type Outcome struct {
 // transcript_capture_test.go's TestCaptureTranscripts) — LoadTranscripts
 // never reads or requires it, so a missing or malformed manifest.yaml can
 // never block replay.
+// Model, CaptureCommand, and CorpusCommitSHA below carry NO in-process
+// scanTextForSecrets call of their own — the pre-promotion redaction gate
+// (runCapture's reasonFindings check, transcript_capture_test.go) only
+// scans RequestOutcome.FailureReason/Tombstone.FailureCode, the two
+// free-text fields safeFailureReason's doc comment covers. This is
+// deliberate, not an oversight (nit from the round-2 review of #2814,
+// which asked this be made explicit rather than left implicit): all three
+// are derived from inputs the OPERATOR running this capture already
+// controls — Model and CaptureCommand from the CLI flags/env vars that
+// operator set, CorpusCommitSHA from `git log` against this repo's own
+// history — never from provider response text, which is the actual attack
+// surface every OTHER redaction gate in this package exists for. The
+// untagged TestTranscripts_CarryNoSecretMaterial (secrets_scan_test.go)
+// still scans the fully-marshalled manifest.yaml as raw text on every PR
+// as a backstop, independent of this reasoning.
 type Manifest struct {
 	SchemaVersion int    `yaml:"schemaVersion"`
 	Provider      string `yaml:"provider"`
@@ -220,9 +235,22 @@ type Manifest struct {
 	// scored (plan's cost table assumes 3; TestCaptureTranscripts defaults to
 	// 3, overridable via CONDUIT_GENERATE_CAPTURE_PASSES).
 	Passes int `yaml:"passes"`
-	// MedianValidatePassRate and MedianSemanticMatchRate are ScoreMedian's two
-	// rates (fraction 0..1) across Passes independent full-corpus scoring
-	// runs — median, never best-of (CLAUDE.md's benchmarking discipline).
+	// MedianValidatePassRate and MedianSemanticMatchRate are the median of
+	// the two rates (fraction 0..1) across every CLEAN pass — a pass whose
+	// PassScores[i].MissingCount is 0, i.e. it produced a completion for
+	// every corpus request. A DEGRADED pass (PassScores[i].MissingCount >
+	// 0 — a rate-limit storm or captureWallClockBudget expiring partway
+	// through wipes every request from that pass onward) is excluded from
+	// this median: ScoreRun scores a missing candidate as a hard fail on
+	// both axes (score.go), so folding a degraded pass in here would drag
+	// these two headline numbers toward zero even though the requests it
+	// dropped are still recorded elsewhere (RequestOutcomes, and possibly
+	// captured by another pass). Falls back to the median across ALL
+	// passes only when every single pass is degraded (no clean pass
+	// exists to prefer). DegradedPasses names which passes were excluded;
+	// PassScores carries every pass's own rate, degraded or not, for the
+	// detail this field summarizes away. Never best-of (CLAUDE.md's
+	// benchmarking discipline).
 	MedianValidatePassRate  float64 `yaml:"medianValidatePassRate"`
 	MedianSemanticMatchRate float64 `yaml:"medianSemanticMatchRate"`
 	// MedianValidatePassCount and MedianSemanticMatchCount are the median of
@@ -244,19 +272,44 @@ type Manifest struct {
 	// produce a usable, honest result instead of nothing") ---
 
 	// CapturedCount and MissingCount split RequestCount into what this run
-	// actually preserved versus what it could not, after every pass —
+	// actually preserved versus what it could not, ACROSS ALL PASSES —
 	// read together with RequestOutcomes for the per-request detail. A
 	// request counts as captured the moment ANY pass produced a completion
 	// for it (even one whose Transcript.Outcome later failed validate or
 	// semantic scoring — that is DATA, not a missing request; see
 	// RequestOutcome's own doc comment for the distinction this package
-	// draws between the two). MissingCount is never silently absorbed into
-	// RequestCount or the scored rates going quiet about it — see
-	// transcript_capture_test.go's captureCompletenessVerdict for the
-	// threshold that decides when a nonzero MissingCount should fail the
-	// capture run outright rather than merely be noted here.
+	// draws between the two). See transcript_capture_test.go's
+	// captureCompletenessVerdict for the threshold that decides when a
+	// nonzero MissingCount should fail the capture run outright rather
+	// than merely be noted here.
+	//
+	// MissingCount is run-scoped, not pass-scoped: a request captured on
+	// pass 1 but absent from passes 2-3 (a rate-limit storm or
+	// captureWallClockBudget expiring partway through a later pass) counts
+	// as captured here — CapturedCount/MissingCount say nothing about
+	// which INDIVIDUAL passes went on to score it as present. That
+	// per-pass picture, which DOES feed MedianValidatePassRate and
+	// MedianSemanticMatchRate (a pass missing a request scores it as a
+	// hard fail on both axes — score.go's ScoreRun), lives in
+	// PassScores[i].MissingCount and DegradedPasses below. Do not read
+	// MissingCount == 0 as "the scored rates saw a complete corpus on
+	// every pass" — check DegradedPasses for that.
 	CapturedCount int `yaml:"capturedCount"`
 	MissingCount  int `yaml:"missingCount"`
+	// DegradedPasses names (1-indexed) every pass excluded from
+	// MedianValidatePassRate/MedianSemanticMatchRate/
+	// MedianValidatePassCount/MedianSemanticMatchCount because it didn't
+	// produce a completion for the full corpus (PassScores[i].MissingCount
+	// > 0). Empty — and therefore absent from the committed YAML,
+	// `omitempty` — when every pass captured the full corpus, which is the
+	// common case and needs no reader attention. A nonempty list here is
+	// exactly the CapturedCount/MissingCount blind spot documented above
+	// made visible and machine-checkable: generate-capture.yml's "Open the
+	// PR" step greps for this key too, not just MissingCount, so a run
+	// that captured every request overall (MissingCount == 0) but lost a
+	// tail pass to rate limiting or the wall-clock budget still gets the
+	// PR banner instead of a routine title.
+	DegradedPasses []int `yaml:"degradedPasses,omitempty"`
 	// RequestOutcomes is this run's final disposition for every request it
 	// attempted (the full corpus for a normal run, or the single id a
 	// scoped `-run TestCaptureTranscripts/<id>` re-capture names) — in
@@ -327,6 +380,18 @@ type PassScore struct {
 	ValidatePassRate   float64 `yaml:"validatePassRate"`
 	SemanticMatchCount int     `yaml:"semanticMatchCount"`
 	SemanticMatchRate  float64 `yaml:"semanticMatchRate"`
+	// MissingCount is how many corpus requests produced NO completion on
+	// THIS pass specifically (runCapture omits a request from that pass's
+	// Candidates rather than scoring an empty-string stand-in — see
+	// runCapture's inline comment on why — so ValidatePassRate/
+	// SemanticMatchRate above already score every one of these as a fail;
+	// this field is what makes that visible instead of silently baked into
+	// the rate). A request missing here may still be Manifest.Captured (a
+	// different, later pass produced it) — this is per-pass, Manifest.
+	// MissingCount is per-run; do not conflate the two. Nonzero marks this
+	// pass as "degraded": excluded from Manifest.MedianValidatePassRate/
+	// MedianSemanticMatchRate and named in Manifest.DegradedPasses.
+	MissingCount int `yaml:"missingCount"`
 }
 
 // Tombstone is committed as "<id>.missing.yaml" in place of a Transcript for
