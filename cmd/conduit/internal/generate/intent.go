@@ -140,9 +140,36 @@ var (
 )
 
 // cueWindow is how many words before a connector mention are searched for a
-// directional cue. Four covers "from the postgres database" and "into an s3
-// bucket" without reaching back into the previous clause and stealing its cue.
-const cueWindow = 4
+// directional cue. Two is the smallest value that still covers "from the
+// postgres database" and "into an s3 bucket" (both need exactly two words of
+// reach) — and it is deliberately NOT larger than that.
+//
+// A wider window (this was 4 until it produced a false Contradiction, see
+// the regression test for "kafka-connect-unwrap-to-postgres") can walk
+// backward past an intervening connector mention that already consumed the
+// cue lexically meant for it, and reassign that same cue to a second,
+// unrelated mention later in the sentence — e.g. in "...into postgres,
+// unwrapping the kafka connect envelope first", a window of 4 reaches from
+// the second "kafka" mention all the way back to "into", stepping over
+// "postgres" (which is what "into" actually assigns), and manufactures a
+// postgres-vs-kafka destination contradiction that was never in the prompt.
+//
+// Shrinking the window is the conservative fix in the direction this package
+// requires (design §9): a cue just out of reach leaves a role unextracted,
+// which the semantic checker judges later, while a cue reached in error
+// produces a Contradiction that refuses the request before the model ever
+// sees it. An under-reaching window costs accuracy on long noun phrases; an
+// over-reaching one costs correctness. Prefer the former.
+//
+// 2, not 3: a window of 3 still crosses this same class of boundary — e.g.
+// "...write them to kafka, since postgres emits them as a WAL stream" lets a
+// window of 3 reach from the second "postgres" back through "kafka," to the
+// "to" that assigned kafka as the destination, manufacturing the identical
+// kind of false contradiction one word later (see
+// TestExtractIntent_ConnectorMentionedTwiceIsNotAContradiction). 2 is the
+// largest value that does not reach past an intervening connector mention in
+// either regression case, not a number tuned to one prompt.
+const cueWindow = 2
 
 // ExtractIntent reads prompt against the catalog names.
 //
