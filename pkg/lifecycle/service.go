@@ -82,6 +82,24 @@ type Service struct {
 	handlers         []FailureHandler
 	runningPipelines *csync.Map[string, *runnablePipeline]
 
+	// publishMu serializes WRITERS to runningPipelines — the publication in
+	// runPipeline and every compare-and-delete — so the read-compare-delete
+	// in deleteRunningPipelineIfCurrent is atomic with respect to a
+	// concurrent publication. csync.Map has no compare-and-swap primitive, so
+	// without this a stale owner can still erase a newer run's entry by
+	// landing its Delete after another goroutine's Set: measured at 4 in
+	// 200,000 races on the unserialized version, which is rare but is exactly
+	// the bug class #2806 exists to close, so "rare" is not good enough.
+	//
+	// Readers (Get/All) deliberately do NOT take this: csync.Map has its own
+	// RWMutex for memory safety, and a reader that observes a slightly stale
+	// pointer is the pre-existing, acceptable case. This lock exists only to
+	// make write-write ordering deterministic.
+	//
+	// It is never held across I/O or a node operation, so it cannot deadlock
+	// against the stop path.
+	publishMu sync.Mutex
+
 	// terminalErrors holds the terminal error of a pipeline after it has stopped
 	// and been removed from runningPipelines, so WaitPipeline can still report it
 	// to a caller that races the pipeline's own cleanup. Written before the
@@ -222,12 +240,14 @@ func (s *Service) Start(
 	s.terminalErrors.Delete(pipelineID)
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
+	// runPipeline publishes rp into runningPipelines itself, at the point the
+	// run actually goes live — see the Set call there for why that ordering
+	// is load-bearing (#2806) and why this function must not do it after the
+	// fact.
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
-
-	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
 }
@@ -857,8 +877,67 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
+	// Publish this run as THE live run for its pipeline ID, here and not in
+	// Start (#2806, same invariant as pkg/lifecycle-poc's #2746 fix — see
+	// that package's runPipeline for the mirrored comment).
+	//
+	// Invariant established here: at the publication window — from the moment
+	// StatusRunning is observable — runningPipelines[id] is the run that is
+	// actually running.
+	//
+	// Deliberately scoped. It is NOT a general claim that the map always
+	// tracks the live run: during StartWithBackoff's sleep the map holds the
+	// dead pre-recovery run on purpose, for MinDelay..MaxDelay (1s..10m), and
+	// Stop admits StatusRecovering (:299). That window is orders of magnitude
+	// larger than this one and is a separate, pre-existing bug — see the
+	// issue filed alongside this change. Do not read this comment as saying
+	// that one is covered. Every public
+	// entry point resolves a pipeline through this map — Stop, StopAll,
+	// WaitPipeline, StopAndWait (and thus provisioning.ApplyPlanLive) — and
+	// StartWithBackoff's "am I still the live pipeline" guard (:270) is a
+	// pointer comparison against it. A stale entry does not fail loudly: it
+	// makes all of them silently operate on the previous, already-dead run.
+	//
+	// Start used to Set this AFTER runPipeline returned, i.e. after the
+	// UpdateStatus below had already announced StatusRunning. On a recovery
+	// restart the old entry is deliberately left in place until the swap
+	// (see the recovery arm below), so in that window the map still pointed
+	// at the FAILED run. WaitPipeline joined the dead tomb and returned the
+	// pre-recovery error for a pipeline that had just recovered.
+	//
+	// Stop, precisely: it resolves the dead run and returns an error from
+	// SourceNode.Stop ("source node is not running", stream/source.go:193-200,
+	// since a dead run's source is already stopped) — it does NOT silently
+	// report success, and StopAndWait therefore surfaces that error to
+	// provisioning.ApplyPlanLive rather than proceeding. The invariant-7
+	// violation arrives through StopAll instead: it swallows that error into a
+	// log warning (:366-372), runtime then calls ls.Wait(exitTimeout), which
+	// resolves instantly off the dead tomb, and shutdown proceeds to quiesce
+	// the persister and close the DB while the recovered run is still live.
+	//
+	// Unlike v2, this package's cleanup goroutine (below) is registered
+	// AFTER this UpdateStatus call, deliberately — see its comment. That
+	// means, unlike v2, there is a real window here where this entry is
+	// published but nothing yet owns cleaning it up if UpdateStatus fails.
+	// So: roll back explicitly on that error path instead of relying on a
+	// cleanup goroutine that does not exist yet.
+	s.publishMu.Lock()
+	s.runningPipelines.Set(rp.pipeline.ID, rp)
+	s.publishMu.Unlock()
+
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
+		// Roll back the publication above: this run never went live, so it
+		// must not be reachable via Stop/WaitPipeline/the recovery pointer
+		// guard. Compare-and-delete (see deleteRunningPipelineIfCurrent),
+		// not a blind Delete(id): if a different run for this same pipeline
+		// ID were published under this key between the Set above and this
+		// point (e.g. this Start is itself the nested call inside another
+		// run's cleanup goroutine — recoverPipeline -> StartWithBackoff ->
+		// Start — and something else raced a further publish in the
+		// meantime), a blind Delete(id) would remove that OTHER run instead
+		// of just undoing this one's own publication.
+		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 		return err
 	}
 
@@ -926,13 +1005,49 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		// delete leaves no window where neither is observable).
 		s.terminalErrors.Set(rp.pipeline.ID, err)
 
-		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
-		s.runningPipelines.Delete(rp.pipeline.ID)
+		// confirmed that all nodes stopped, we can now remove the pipeline
+		// from the running pipelines — but only if the entry under this ID
+		// is still THIS run (#2806). This goroutine can itself be the one
+		// running synchronously inside an OLDER run's cleanup: recoverPipeline
+		// -> StartWithBackoff -> Start runs a nested runPipeline on the
+		// calling tomb, not a fresh goroutine. If that nested run's own
+		// UpdateStatus above fails, the error propagates back into the
+		// OUTER run's cleanup, which falls through to this same terminal
+		// block. A blind Delete(rp.pipeline.ID) there would delete the
+		// INNER run's freshly-published, still-alive entry — orphaning it,
+		// unreachable via Stop/WaitPipeline, exactly the bug class this
+		// fix closes. See deleteRunningPipelineIfCurrent.
+		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 
 		s.notify(rp.pipeline.ID, err)
 		return err
 	})
 	return nil
+}
+
+// deleteRunningPipelineIfCurrent removes id's entry from runningPipelines
+// only if it still holds exactly rp — a compare-and-delete rather than a
+// delete-by-key (#2806). This is what stops a stale owner (an older run's
+// publish-rollback or its cleanup goroutine) from erasing a newer run's
+// published entry, which is the bug class #2806 fixes: a superseded run
+// falling through to an unconditional Delete(id) and taking a live run down
+// with it.
+//
+// csync.Map exposes no compare-and-swap primitive, so the read-compare-delete
+// is made atomic the only way available: publishMu serializes it against the
+// publication in runPipeline, which is the only other writer. Without that
+// lock this is a genuine TOCTOU — a concurrent Set(id, newer) landing between
+// the Get and the Delete makes a stale owner erase a live run — measured at 4
+// occurrences in 200,000 races during review, and it is reachable without any
+// recovery chain: an operator Stop leaves the status UserStopped, which admits
+// a concurrent Start, whose Set can land inside a departing cleanup's window.
+func (s *Service) deleteRunningPipelineIfCurrent(id string, rp *runnablePipeline) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+
+	if current, ok := s.runningPipelines.Get(id); ok && current == rp {
+		s.runningPipelines.Delete(id)
+	}
 }
 
 // recoverPipeline attempts to recover a pipeline that has stopped running.
