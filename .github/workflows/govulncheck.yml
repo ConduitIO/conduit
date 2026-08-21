@@ -76,10 +76,27 @@ jobs:
         # shape is not a stable contract. Parsing it to decide whether the
         # build passes would make this gate depend on formatting.
         #
-        # No `set -o pipefail` shortcut and no reliance on the exit code:
-        # govulncheck exits nonzero when it finds ANYTHING, which is not the
-        # question this gate asks. The comparison below is the gate.
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 -format json ./... > govulncheck.json || true
+        # govulncheck exits nonzero whenever it finds ANYTHING, which is not
+        # the question this gate asks - the comparison step below is the gate.
+        # So a nonzero exit cannot fail this step... but it must not be
+        # swallowed blindly either, because then a scan that DIED (proxy down,
+        # OOM, a pinned version that stopped supporting the toolchain) is
+        # indistinguishable from a scan that found nothing.
+        #
+        # Only govulncheck's two documented outcomes are tolerated: 0 (no
+        # vulnerabilities) and 3 (vulnerabilities found). Anything else is a
+        # broken run and fails here. The comparison step independently refuses
+        # output with no `config` message, so a scan that dies while still
+        # exiting 0 or 3 is caught there. Two checks, because this is the one
+        # way the gate could pass while gating nothing.
+        run: |
+          set -uo pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 -format json ./... > govulncheck.json
+          status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            echo "::error::govulncheck exited $status - it did not complete. This is a broken scan, not a clean result." >&2
+            exit 1
+          fi
 
       - name: Compare against the baseline
         run: |
