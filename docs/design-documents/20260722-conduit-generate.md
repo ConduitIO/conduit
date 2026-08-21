@@ -612,11 +612,41 @@ New codes, registered the existing way (`conduiterr.Register`, one `codes.go` in
 | `generate.parse_failed` | `Internal` | 1 (runtime) | The provider replied, but the response could not be parsed into a pipeline config after retries — an unclassified failure of the boundary, not a bad user request. |
 | `generate.validate_failed` | `FailedPrecondition` | 2 | The parsed candidate never passed `validate` within `--max-retries` attempts. The **last** attempt's `validate.Report` is attached in full (never discarded). |
 | `generate.semantic_mismatch` | `FailedPrecondition` | 2 | The candidate passed `validate` but failed the semantic-intent checker (§4 of the generation pipeline, e.g. wrong direction, a clearly-requested connector/filter missing) within the retry budget. |
+| `generate.destination_exists` | `AlreadyExists` | 2 | The resolved output path already exists and `--force` was not passed. Added by amendment (see below); the `Suggestion` names `--force` and `--out`. |
 
 Exit codes fall out of the existing classifier (`fromGRPCCode`, `pkg/conduit/exitcode/exitcode.go`)
 verbatim — no new bucket, no new mapping logic, matching CLAUDE.md's "errors are API" and the
 existing convention that every code carries a stable reason, a gRPC category, and (via
 `Suggestion`) an actionable fix.
+
+#### Amendment 2026-08-21: `generate.destination_exists`
+
+The taxonomy above was written before the command existed and did not cover its one filesystem
+failure: the output path already exists and `--force` was not passed. The implementation
+(#2791) shipped it as the foundational `common.invalid_argument`, deliberately, because this
+document is a frozen contract and inventing an unlisted `generate.*` code inside an
+implementation PR would extend a public contract outside the document that defines it. This
+amendment adds the code so that decision can be reversed the right way round.
+
+**Why a dedicated code rather than keeping `common.invalid_argument`.** Errors are API, and the
+consumer here is frequently an agent. `common.invalid_argument` on "that file already exists" is
+indistinguishable from "you passed a bad `--provider`" — one is fixed by re-running with
+`--force` or a different `--out`, the other by changing the request. A caller that cannot tell
+those apart from the code alone has to parse the message, which is exactly what stable codes
+exist to prevent.
+
+**Why not a shared `common.destination_exists`.** The tree already carries two domain-scoped
+versions of this idea — `pipelines.init_destination_exists` and `pkg/scaffold`'s
+`CodeDestinationExists` for connector/processor scaffolding. Unifying all three would deprecate
+two shipped codes (announce → warn → remove, minimum two minor versions) for no consumer
+benefit, since a caller already branches per command. A third domain-scoped code is consistent
+with a pattern this repo set twice.
+
+**Compatibility.** `codes.AlreadyExists` lands in the same `Validation` bucket as
+`InvalidArgument` (`pkg/conduit/exitcode/exitcode.go`, `fromGRPCCode`), so the process exit code
+for this case stays **2**. Nothing that branches on the exit code changes; only the reason string
+a machine reads becomes more specific. That makes this an additive change to the error contract,
+not a breaking one.
 
 ### 9. Semantic-intent checking — deterministic heuristics, not an LLM judge
 
