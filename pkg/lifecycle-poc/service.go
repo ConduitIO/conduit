@@ -1120,10 +1120,21 @@ func (s *Service) buildDestinationTasks(
 			return nil, cerrors.Errorf("failed to build destination processor tasks: %w", err)
 		}
 
-		// Build the slice of tasks for this destination
-		destTasks := make([]funnel.Task, 0)
-		destTasks = append(destTasks, destTask)
+		// Build the slice of tasks for this destination.
+		//
+		// #2736: the destination's own (connector-scoped) processors must run
+		// BEFORE the destination task, not after - mirrors pkg/lifecycle's
+		// buildDestinationNodes, which chains a destination connector's
+		// processor nodes between `prev` and the destination node. Appending
+		// destTask first (as this used to do) put the write ahead of the
+		// processors in buildSharedTail's chain, so a destination-scoped
+		// processor transformed a copy of the record whose output fed only
+		// the acker and nowhere else - the destination received the
+		// UNTRANSFORMED record. Silent: no error, no warning, just a no-op
+		// processor and (for a redaction processor) a data-exposure bug.
+		destTasks := make([]funnel.Task, 0, 1+len(procTasks))
 		destTasks = append(destTasks, procTasks...)
+		destTasks = append(destTasks, destTask)
 		tasks = append(tasks, destTasks)
 	}
 
