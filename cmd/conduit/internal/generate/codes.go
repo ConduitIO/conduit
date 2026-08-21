@@ -61,4 +61,20 @@ var (
 	// which reads intent far better than a keyword table, and the result is
 	// judged the normal way.
 	CodeAmbiguousPrompt = conduiterr.Register("generate.ambiguous_prompt", codes.InvalidArgument)
+
+	// CodeDestinationExists: the resolved output path already exists and
+	// --force was not passed (design §8, amended 2026-08-21).
+	//
+	// It is a code of its own rather than the foundational
+	// common.invalid_argument because the consumer is frequently an agent, and
+	// "that file already exists" is fixed by re-running with --force or a
+	// different --out, while a generic invalid-argument is fixed by changing
+	// the request. A caller that cannot tell those apart from the code has to
+	// parse the message.
+	//
+	// AlreadyExists shares the Validation exit bucket with InvalidArgument
+	// (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process
+	// still exits 2, only the reason string a machine reads gets more
+	// specific.
+	CodeDestinationExists = conduiterr.Register("generate.destination_exists", codes.AlreadyExists)
 )

@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (101)
+## 3. Error codes (102)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -635,6 +635,7 @@ Author: Meroxa, Inc.
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
+| `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |
 | `generate.no_provider_configured` | Unauthenticated | CodeNoProviderConfigured: zero resolvable candidates. Unauthenticated (exit 3, environment) rather than InvalidArgument, because the user's command was fine — their environment is not. |
 | `generate.parse_failed` | Internal | CodeParseFailed: the provider replied, but nothing in the reply could be read as a pipeline config within the retry budget. Internal (exit 1, runtime) rather than InvalidArgument, because the user's request was well-formed — the boundary failed, not their input. |
 | `generate.provider_error` | Unavailable | CodeProviderError covers every way the provider call itself failed: network, timeout, rate limit, or an auth rejection from the provider. Unavailable (exit 3, environment) because the user's command was fine. |
