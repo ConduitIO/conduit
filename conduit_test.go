@@ -658,14 +658,15 @@ func TestRun_MalformedPipelinesDir_ReturnsError(t *testing.T) {
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
 }
 
-// TestNew_WrappedRegistererWithoutGatherer_FailsFast proves the metrics
-// pairing is validated at construction, not on the first Run or Import.
+// TestNew_WrappedRegistererWithoutGatherer_Degrades proves the pairing rule is
+// applied at construction — but as a WARNING, not a refusal.
 //
-// New already validates config in-memory for exactly this reason, and this
-// check is a type assertion — no I/O. Deferring it would mean an embedder
-// wires up an Engine, starts a pipeline, and only then discovers their
-// registerer cannot back the /metrics endpoint.
-func TestNew_WrappedRegistererWithoutGatherer_FailsFast(t *testing.T) {
+// Such a configuration started in earlier releases. Turning it into a startup
+// failure would kill an operator's application on upgrade over a scrape target
+// that is wrong but harmless, which inverts the cost; the deprecation policy
+// (announce, warn, remove) exists for exactly this. The next minor makes it an
+// error.
+func TestNew_WrappedRegistererWithoutGatherer_Degrades(t *testing.T) {
 	is := is.New(t)
 	registry := promclient.NewRegistry()
 	wrapped := promclient.WrapRegistererWithPrefix("myapp_", registry)
@@ -680,6 +681,22 @@ func TestNew_WrappedRegistererWithoutGatherer_FailsFast(t *testing.T) {
 	opts.API.HTTPAddress = "127.0.0.1:0"
 
 	e, err := conduit.New(context.Background(), opts)
+
+	is.NoErr(err)
+	is.True(e != nil)
+}
+
+// TestNew_GathererWithoutRegisterer_FailsFast: this pairing IS rejected,
+// because MetricsGatherer is new API — there is no existing configuration to
+// break — and a gatherer with nothing registering into it cannot work.
+func TestNew_GathererWithoutRegisterer_FailsFast(t *testing.T) {
+	is := is.New(t)
+
+	e, err := conduit.New(context.Background(), conduit.Options{
+		PipelinesDir:    t.TempDir(),
+		DB:              conduit.DBOptions{Type: "inmemory"},
+		MetricsGatherer: promclient.NewRegistry(),
+	})
 
 	is.True(err != nil)
 	is.True(e == nil)

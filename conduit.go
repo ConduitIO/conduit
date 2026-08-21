@@ -61,7 +61,9 @@ type Options struct {
 	// *object*, but pkg/foundation/metrics' process-global metric
 	// definitions still fan values out across every registry in the process.
 	// When API is enabled, a registerer that does not also implement Gatherer
-	// requires MetricsGatherer or the first Run or Import returns an error.
+	// cannot back /metrics. Conduit warns and keeps serving the default
+	// Prometheus registry for this release; the next minor turns that into an
+	// error (issue #2800). Set MetricsGatherer to fix it — see that field.
 	MetricsRegisterer promclient.Registerer
 
 	// MetricsGatherer is served by the embedded HTTP API's /metrics endpoint.
@@ -386,14 +388,18 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	// Fail fast on a metrics pairing that cannot work, using the SAME rule
-	// NewRuntime applies later (pkgconduit.ResolveMetricsGatherer). This check
-	// needs no I/O, so deferring it to the first Run or Import would only mean
-	// the caller wires up an Engine, starts a pipeline, and learns about a
-	// typo'd option then — for the same reason cfg.Validate() runs here rather
-	// than at open time.
-	if _, err := pkgconduit.ResolveMetricsGatherer(opts.MetricsRegisterer, opts.MetricsGatherer, cfg.API.Enabled); err != nil {
+	// Apply the SAME metrics rule NewRuntime applies later
+	// (pkgconduit.ResolveMetricsGatherer), here where the options are already
+	// known and no I/O is needed — for the same reason cfg.Validate() runs here
+	// rather than at open time. A rejected pairing fails New; a degraded one
+	// warns now rather than at first Run, so the operator sees it while they
+	// are still looking at their own wiring code.
+	metricsResolution, err := pkgconduit.ResolveMetricsGatherer(opts.MetricsRegisterer, opts.MetricsGatherer, cfg.API.Enabled)
+	if err != nil {
 		return nil, err
+	}
+	if metricsResolution.Degraded {
+		logger.Warn(pkgconduit.MetricsDegradedWarning)
 	}
 
 	runtimeOpts := []pkgconduit.RuntimeOption{

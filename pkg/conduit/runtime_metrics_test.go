@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +24,10 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 	promclient "github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 )
 
 func TestNewHTTPMetricsHandlerUsesExplicitGatherer(t *testing.T) {
@@ -70,16 +73,66 @@ func TestNewHTTPMetricsHandlerUsesRegistererGatherer(t *testing.T) {
 	is.True(strings.Contains(recorder.Body.String(), "promhttp_metric_handler_requests_total"))
 }
 
-func TestNewRuntimeRequiresGathererForWrappedRegisterer(t *testing.T) {
+// A registerer that cannot back /metrics DEGRADES rather than failing: the
+// configuration started in previous releases, and killing a running system on
+// upgrade over a wrong-but-harmless scrape target inverts the cost. The warning
+// is the mitigation, so it is asserted, not assumed — see
+// TestNewRuntimeWarnsWhenMetricsResolutionDegrades.
+func TestNewRuntimeDegradesForWrappedRegisterer(t *testing.T) {
 	is := is.New(t)
 	reg := promclient.NewRegistry()
 	wrapped := promclient.WrapRegistererWithPrefix("myapp_", reg)
 
-	_, err := NewRuntime(newMetricsRuntimeConfig(t), WithMetricsRegisterer(wrapped))
-	is.True(err != nil)
-	conduitErr, ok := conduiterr.Get(err)
-	is.True(ok)
-	is.Equal(conduitErr.Code, conduiterr.CodeInvalidArgument)
+	runtime, err := NewRuntime(newMetricsRuntimeConfig(t), WithMetricsRegisterer(wrapped))
+	is.NoErr(err)
+	defer runtime.DB.Close()
+
+	// Serving the default registry is wrong, and is exactly what the warning
+	// says out loud. It is the pre-existing behavior, not a new one.
+	is.True(runtime.metricsGatherer == promclient.DefaultGatherer)
+
+	resolution, err := ResolveMetricsGatherer(wrapped, nil, true)
+	is.NoErr(err)
+	is.True(resolution.Degraded)
+}
+
+// The warning is the ENTIRE mitigation for this release, so an operator has to
+// actually receive it. Without this test the degrade path is silent and nobody
+// finds out until a dashboard is empty.
+func TestNewRuntimeWarnsWhenMetricsResolutionDegrades(t *testing.T) {
+	is := is.New(t)
+	reg := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", reg)
+
+	var buf bytes.Buffer
+	logger := log.New(zerolog.New(&buf).Level(zerolog.WarnLevel))
+
+	runtime, err := NewRuntime(
+		newMetricsRuntimeConfig(t),
+		WithMetricsRegisterer(wrapped),
+		WithLogger(logger),
+	)
+	is.NoErr(err)
+	defer runtime.DB.Close()
+
+	logged := buf.String()
+	is.True(strings.Contains(logged, "does not implement prometheus.Gatherer"))
+	is.True(strings.Contains(logged, "MetricsGatherer"))         // names the fix
+	is.True(strings.Contains(logged, "error in the next minor")) // and the deadline
+}
+
+// The degrade is scoped to the case that can actually mislead. With the API
+// disabled there is no /metrics route, so there is nothing to warn about and a
+// warning would just be noise in every embedded run that never serves HTTP.
+func TestResolveMetricsGathererDoesNotDegradeWithoutTheAPI(t *testing.T) {
+	is := is.New(t)
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", promclient.NewRegistry())
+
+	resolution, err := ResolveMetricsGatherer(wrapped, nil, false)
+
+	is.NoErr(err)
+	is.True(!resolution.Degraded)
+	is.True(resolution.Gatherer == promclient.DefaultGatherer)
 }
 
 func TestNewRuntimeAllowsWrappedRegistererWhenHTTPDisabled(t *testing.T) {
