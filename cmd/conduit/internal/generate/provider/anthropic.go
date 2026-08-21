@@ -107,7 +107,7 @@ func (a *Anthropic) Complete(ctx context.Context, req CompletionRequest) (Comple
 
 	var out anthropicResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return CompletionResult{}, providerErrorf(a.Name(), "decode response: %v", err)
+		return CompletionResult{}, markUnusableResponse(providerErrorf(a.Name(), "decode response: %v", err))
 	}
 
 	// Concatenate every text block. A response split across blocks is valid,
@@ -119,12 +119,18 @@ func (a *Anthropic) Complete(ctx context.Context, req CompletionRequest) (Comple
 		}
 	}
 	text := sb.String()
+	tokensUsed := out.Usage.InputTokens + out.Usage.OutputTokens
 	if strings.TrimSpace(text) == "" {
-		return CompletionResult{}, providerErrorf(a.Name(), "empty response")
+		// A refusal is still a BILLED call: out.Usage decoded successfully
+		// above even though the content array came back empty, so the
+		// token count IS known here — carried on CompletionResult even
+		// though this returns an error, so a caller that inspects it on
+		// error (captureProvider.Complete) never undercounts real spend.
+		return CompletionResult{TokensUsed: tokensUsed}, markUnusableResponse(providerErrorf(a.Name(), "empty response"))
 	}
 
 	return CompletionResult{
 		Text:       text,
-		TokensUsed: out.Usage.InputTokens + out.Usage.OutputTokens,
+		TokensUsed: tokensUsed,
 	}, nil
 }

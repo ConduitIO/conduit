@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"google.golang.org/grpc/codes"
 )
@@ -89,13 +90,97 @@ func readErrorBody(r io.Reader) string {
 	return strings.Join(strings.Fields(string(b)), " ")
 }
 
+// errUnusableResponse marks a provider error that occurred AFTER an HTTP
+// response was already in hand — a body that doesn't decode, or a
+// well-formed but empty completion (a refusal) — as distinct from a
+// transport-level failure (network error, timeout, non-2xx status) where no
+// usable response ever arrived. The distinction matters: a refusal is a
+// BILLED, attempted call and must never be reported the same way as
+// absence of data the way an unreachable endpoint or a rate limit is (see
+// IsUnusableResponse and RequestOutcome.Unusable,
+// transcript_capture_test.go / transcript.go).
+var errUnusableResponse = cerrors.New("provider response could not be used")
+
+// IsUnusableResponse reports whether err was produced by a call that DID
+// receive an HTTP response but could not turn it into a usable completion —
+// see errUnusableResponse. False for every other provider error, including
+// one produced by checkStatus (a non-2xx status means no usable response
+// was ever obtained in the first place, which is a different failure mode
+// entirely).
+func IsUnusableResponse(err error) bool {
+	return cerrors.Is(err, errUnusableResponse)
+}
+
+// unusableResponseError wraps err to mark it via IsUnusableResponse,
+// transparently: Error() and Unwrap() forward to cause unchanged, so
+// marking never changes what a user or a log line sees.
+type unusableResponseError struct {
+	cause error
+}
+
+func (e *unusableResponseError) Error() string        { return e.cause.Error() }
+func (e *unusableResponseError) Unwrap() error        { return e.cause }
+func (e *unusableResponseError) Is(target error) bool { return target == errUnusableResponse }
+
+// markUnusableResponse wraps err (nil-safe) so IsUnusableResponse(err)
+// reports true. Use only for a failure detected strictly AFTER a 2xx
+// response was already parsed — never for a transport or status failure.
+func markUnusableResponse(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &unusableResponseError{cause: err}
+}
+
 // checkStatus converts a non-2xx response into a provider error.
+//
+// The returned error is wrapped in *httpStatusError so a caller can recover
+// the numeric status via HTTPStatus without parsing message text — see that
+// function's doc comment for why this exists.
 func checkStatus(name string, resp *http.Response) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
+	var err error
 	if body := readErrorBody(resp.Body); body != "" {
-		return providerErrorf(name, "HTTP %d: %s", resp.StatusCode, body)
+		err = providerErrorf(name, "HTTP %d: %s", resp.StatusCode, body)
+	} else {
+		err = providerErrorf(name, "HTTP %d", resp.StatusCode)
 	}
-	return providerErrorf(name, "HTTP %d", resp.StatusCode)
+	return &httpStatusError{cause: err, statusCode: resp.StatusCode}
+}
+
+// httpStatusError carries checkStatus's numeric HTTP status alongside the
+// provider error it wraps, transparently: Error() and Unwrap() forward to
+// cause unchanged, so wrapping never changes what a user or a log line
+// sees — only what a caller doing HTTPStatus(err) can recover.
+type httpStatusError struct {
+	cause      error
+	statusCode int
+}
+
+func (e *httpStatusError) Error() string { return e.cause.Error() }
+func (e *httpStatusError) Unwrap() error { return e.cause }
+
+// HTTPStatus extracts the response status code from err, when err (or
+// something it wraps) came from checkStatus. ok is false for every other
+// provider error — a network failure, a decode failure, an empty response —
+// because none of those had a response WITH a status code worth reporting,
+// either because no response ever arrived (network error, timeout) or
+// because it arrived with a 2xx and failed for a reason checkStatus never
+// saw.
+//
+// This is the structured half of the fix for storing a provider error's raw
+// text in a committed file (transcript_capture_test.go's
+// safeFailureReason): the status code is the load-bearing part of a
+// checkStatus failure (invariant documented on readErrorBody above) and is
+// safe to persist verbatim, unlike the response body readErrorBody embeds
+// into the human-readable message, which may echo back caller-supplied or
+// provider-controlled content (e.g. a 401 body quoting the rejected key).
+func HTTPStatus(err error) (status int, ok bool) {
+	var se *httpStatusError
+	if cerrors.As(err, &se) {
+		return se.statusCode, true
+	}
+	return 0, false
 }

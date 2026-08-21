@@ -68,7 +68,10 @@ func (o *OpenAI) Complete(ctx context.Context, req CompletionRequest) (Completio
 		return CompletionResult{}, providerErrorf(o.Name(), "%v", err)
 	}
 	if len(resp.Choices) == 0 || strings.TrimSpace(resp.Choices[0].Message.Content) == "" {
-		return CompletionResult{}, providerErrorf(o.Name(), "empty response")
+		// resp decoded successfully (CreateChatCompletion returned no
+		// error), so resp.Usage is known even though there is no usable
+		// choice — see anthropic.go's identical comment.
+		return CompletionResult{TokensUsed: resp.Usage.TotalTokens}, markUnusableResponse(providerErrorf(o.Name(), "empty response"))
 	}
 
 	return CompletionResult{

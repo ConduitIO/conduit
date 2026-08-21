@@ -186,6 +186,80 @@ func Test_Adapters_EmptyResponseIsAnError(t *testing.T) {
 	}
 }
 
+// Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens is the
+// regression test for the finding that a refusal (a 2xx with an empty
+// completion) was reported identically to absence of data (a 429, a
+// timeout) and its tokens were silently dropped from cost accounting: the
+// response DID decode, so the provider-reported usage is known even though
+// the completion is unusable, and that must survive on CompletionResult
+// even though Complete returns an error — a caller that only inspects the
+// error return (as code used to) would otherwise undercount real spend.
+func Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		body       string
+		build      func(url string) Provider
+		wantTokens int
+	}{
+		"anthropic": {
+			`{"content":[],"usage":{"input_tokens":7,"output_tokens":3}}`,
+			func(u string) Provider { return &Anthropic{BaseURL: u} }, 10,
+		},
+		"ollama": {
+			`{"response":"","prompt_eval_count":7,"eval_count":3}`,
+			func(u string) Provider { return &Ollama{Host: u} }, 10,
+		},
+		"openai": {
+			`{"choices":[],"usage":{"total_tokens":10}}`,
+			func(u string) Provider { return &OpenAI{BaseURL: u} }, 10,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			srv := newCapturing(t, 200, tc.body)
+			got, err := tc.build(srv.URL).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+			is.True(err != nil)
+			is.True(IsUnusableResponse(err)) // a refusal, not absence of data
+			is.Equal(got.TokensUsed, tc.wantTokens)
+			_, hasStatus := HTTPStatus(err)
+			is.True(!hasStatus) // a 2xx has no failing status to report
+		})
+	}
+}
+
+// Test_Adapters_HTTPErrorsCarryHTTPStatus pins the structured half of a
+// checkStatus failure: the numeric status is recoverable via HTTPStatus
+// without parsing message text, and such an error is never marked
+// IsUnusableResponse (a non-2xx means no usable response was obtained at
+// all, a different failure mode than a refusal).
+//
+// openai is deliberately excluded: it wraps the vendored goopenai SDK
+// client rather than calling checkStatus directly (see openai.go's own doc
+// comment on why), so an HTTP error from it never carries a *httpStatusError
+// today — a real gap, but a pre-existing one this fix does not widen, and
+// out of scope here since the live capture harness (transcript_capture_test.go)
+// only ever drives the anthropic adapter.
+func Test_Adapters_HTTPErrorsCarryHTTPStatus(t *testing.T) {
+	t.Parallel()
+
+	for name, build := range map[string]func(url string) Provider{
+		"anthropic": func(u string) Provider { return &Anthropic{BaseURL: u} },
+		"ollama":    func(u string) Provider { return &Ollama{Host: u} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			srv := newCapturing(t, 429, `{"error":"nope"}`)
+			_, err := build(srv.URL).Complete(context.Background(), CompletionRequest{Prompt: "x"})
+			is.True(err != nil)
+			status, ok := HTTPStatus(err)
+			is.True(ok)
+			is.Equal(status, 429)
+			is.True(!IsUnusableResponse(err))
+		})
+	}
+}
+
 // Test_Anthropic_ConcatenatesTextBlocks pins that a response split across
 // blocks is joined. Taking only the first block would silently truncate the
 // generated config — which would then fail validation for the wrong reason.

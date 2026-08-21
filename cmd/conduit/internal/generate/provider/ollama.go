@@ -94,15 +94,18 @@ func (o *Ollama) Complete(ctx context.Context, req CompletionRequest) (Completio
 
 	var out ollamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return CompletionResult{}, providerErrorf(o.Name(), "decode response: %v", err)
+		return CompletionResult{}, markUnusableResponse(providerErrorf(o.Name(), "decode response: %v", err))
 	}
+	tokensUsed := out.PromptEvalCount + out.EvalCount
 	if strings.TrimSpace(out.Response) == "" {
-		return CompletionResult{}, providerErrorf(o.Name(), "empty response")
+		// See anthropic.go's identical comment: out decoded successfully,
+		// so the token count is known even though the response is unusable.
+		return CompletionResult{TokensUsed: tokensUsed}, markUnusableResponse(providerErrorf(o.Name(), "empty response"))
 	}
 
 	return CompletionResult{
 		Text:       out.Response,
-		TokensUsed: out.PromptEvalCount + out.EvalCount,
+		TokensUsed: tokensUsed,
 	}, nil
 }
 
