@@ -222,12 +222,14 @@ func (s *Service) Start(
 	s.terminalErrors.Delete(pipelineID)
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
+	// runPipeline publishes rp into runningPipelines itself, at the point the
+	// run actually goes live — see the Set call there for why that ordering
+	// is load-bearing (#2806) and why this function must not do it after the
+	// fact.
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
-
-	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
 }
@@ -857,8 +859,49 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
+	// Publish this run as THE live run for its pipeline ID, here and not in
+	// Start (#2806, same invariant as pkg/lifecycle-poc's #2746 fix — see
+	// that package's runPipeline for the mirrored comment).
+	//
+	// Invariant: whenever a caller can observe the pipeline as running,
+	// runningPipelines[id] is the run that is actually running. Every public
+	// entry point resolves a pipeline through this map — Stop, StopAll,
+	// WaitPipeline, StopAndWait (and thus provisioning.ApplyPlanLive) — and
+	// StartWithBackoff's "am I still the live pipeline" guard (:270) is a
+	// pointer comparison against it. A stale entry does not fail loudly: it
+	// makes all of them silently operate on the previous, already-dead run.
+	//
+	// Start used to Set this AFTER runPipeline returned, i.e. after the
+	// UpdateStatus below had already announced StatusRunning. On a recovery
+	// restart the old entry is deliberately left in place until the swap
+	// (see the recovery arm below), so in that window the map still pointed
+	// at the FAILED run: WaitPipeline joined the dead tomb and returned the
+	// pre-recovery error for a pipeline that had just recovered, and Stop
+	// stopped the dead run while the recovered one kept running — connectors
+	// never torn down, persister never quiesced, a drain reported complete
+	// that never happened (invariant 7).
+	//
+	// Unlike v2, this package's cleanup goroutine (below) is registered
+	// AFTER this UpdateStatus call, deliberately — see its comment. That
+	// means, unlike v2, there is a real window here where this entry is
+	// published but nothing yet owns cleaning it up if UpdateStatus fails.
+	// So: roll back explicitly on that error path instead of relying on a
+	// cleanup goroutine that does not exist yet.
+	s.runningPipelines.Set(rp.pipeline.ID, rp)
+
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
+		// Roll back the publication above: this run never went live, so it
+		// must not be reachable via Stop/WaitPipeline/the recovery pointer
+		// guard. Compare-and-delete (see deleteRunningPipelineIfCurrent),
+		// not a blind Delete(id): if a different run for this same pipeline
+		// ID were published under this key between the Set above and this
+		// point (e.g. this Start is itself the nested call inside another
+		// run's cleanup goroutine — recoverPipeline -> StartWithBackoff ->
+		// Start — and something else raced a further publish in the
+		// meantime), a blind Delete(id) would remove that OTHER run instead
+		// of just undoing this one's own publication.
+		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 		return err
 	}
 
@@ -926,13 +969,48 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		// delete leaves no window where neither is observable).
 		s.terminalErrors.Set(rp.pipeline.ID, err)
 
-		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
-		s.runningPipelines.Delete(rp.pipeline.ID)
+		// confirmed that all nodes stopped, we can now remove the pipeline
+		// from the running pipelines — but only if the entry under this ID
+		// is still THIS run (#2806). This goroutine can itself be the one
+		// running synchronously inside an OLDER run's cleanup: recoverPipeline
+		// -> StartWithBackoff -> Start runs a nested runPipeline on the
+		// calling tomb, not a fresh goroutine. If that nested run's own
+		// UpdateStatus above fails, the error propagates back into the
+		// OUTER run's cleanup, which falls through to this same terminal
+		// block. A blind Delete(rp.pipeline.ID) there would delete the
+		// INNER run's freshly-published, still-alive entry — orphaning it,
+		// unreachable via Stop/WaitPipeline, exactly the bug class this
+		// fix closes. See deleteRunningPipelineIfCurrent.
+		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 
 		s.notify(rp.pipeline.ID, err)
 		return err
 	})
 	return nil
+}
+
+// deleteRunningPipelineIfCurrent removes id's entry from runningPipelines
+// only if it still holds exactly rp — a compare-and-delete rather than a
+// delete-by-key (#2806). This is what stops a stale owner (an older run's
+// publish-rollback or its cleanup goroutine) from erasing a newer run's
+// published entry, which is the bug class #2806 fixes: a superseded run
+// falling through to an unconditional Delete(id) and taking a live run down
+// with it.
+//
+// This is NOT atomic. csync.Map exposes Get/Set/Delete/Len/Keys/Values/
+// Clear/Copy and no compare-and-swap primitive, so this is a plain
+// Get-then-compare-then-Delete with no lock held across the three steps. It
+// narrows the window relative to a blind Delete(id) — the common failure
+// mode this fixes requires the stale owner to still be current at Get time,
+// which a blind Delete doesn't even check — but it does not close it: a
+// concurrent Set(id, newer) can still land in the gap between this Get
+// returning a match and the Delete call that follows it, in which case this
+// still deletes that newer entry. Do not read this as airtight CAS; it is a
+// narrower TOCTOU, not the absence of one.
+func (s *Service) deleteRunningPipelineIfCurrent(id string, rp *runnablePipeline) {
+	if current, ok := s.runningPipelines.Get(id); ok && current == rp {
+		s.runningPipelines.Delete(id)
+	}
 }
 
 // recoverPipeline attempts to recover a pipeline that has stopped running.
