@@ -16,10 +16,13 @@ package mcp
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
@@ -76,6 +79,22 @@ func TestExecute_NoHTTPFlag_UsesStdioTransport(t *testing.T) {
 
 	c := &MCPCommand{flags: MCPFlags{}}
 
+	// Hold stdin open for the duration of the test (#2774). Two reasons,
+	// both load-bearing:
+	//
+	//  1. Determinism. Under `go test` the real os.Stdin is /dev/null, which
+	//     is at EOF immediately, so the SDK session ends on its own the
+	//     instant Run starts it — making BOTH cases of Run's internal select
+	//     ready and the outcome random (see stdioResult's doc). An open pipe
+	//     never EOFs, so the session stays alive and cancellation is the only
+	//     ready case: Run takes the ctx.Done() branch every time.
+	//  2. Isolation. StdioTransport hands the SDK the process's real
+	//     os.Stdin and the SDK closes it on shutdown. Without this swap the
+	//     test permanently closes stdin for every other test in the binary,
+	//     which is what turned `-count`/`-shuffle` runs into "read
+	//     /dev/stdin: file already closed" failures.
+	stdinPipe(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled: the stdio path must return promptly
 
@@ -89,4 +108,67 @@ func TestExecute_NoHTTPFlag_UsesStdioTransport(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Execute did not return promptly on the no-HTTP path; it may not be taking the stdio branch")
 	}
+}
+
+// stdinPipe replaces os.Stdin with the read end of a fresh pipe that is never
+// written to (so it blocks rather than reaching EOF) and restores the
+// original at test end. The write end is deliberately kept open until
+// cleanup: closing it would put the read end at EOF and reintroduce exactly
+// the race this guards against.
+func stdinPipe(t *testing.T) {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = orig
+		_ = w.Close()
+		_ = r.Close()
+	})
+}
+
+// TestStdioResult_CancellationIsDeterministic is the #2774 regression test.
+//
+// It pins the property the flaky Execute test was only usually observing:
+// whatever sdkmcp.Server.Run's internal select happens to pick, a cancelled
+// stdio run reports cancellation — and therefore exits 0. Without
+// stdioResult, the "session closed" cases below return nil and the PathError
+// respectively, and the PathError case exits 1 on a clean operator-initiated
+// shutdown.
+func TestStdioResult_CancellationIsDeterministic(t *testing.T) {
+	// The three values sdkmcp.Server.Run can return for the same cancelled
+	// shutdown, depending only on which ready select case Go picks.
+	stdinClosed := &fs.PathError{Op: "read", Path: "/dev/stdin", Err: os.ErrClosed}
+	runOutcomes := []error{
+		context.Canceled, // ctx.Done() branch won
+		nil,              // session-closed branch won, stdin was at EOF
+		stdinClosed,      // session-closed branch won, after Run closed stdin
+	}
+
+	t.Run("cancelled ctx always reports cancellation", func(t *testing.T) {
+		is := is.New(t)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		for _, runErr := range runOutcomes {
+			got := stdioResult(ctx, runErr)
+			is.True(cerrors.Is(got, context.Canceled))
+			// The property an operator/supervisor actually observes.
+			is.Equal(exitcode.ExitCode(got), exitcode.OK)
+		}
+	})
+
+	t.Run("live ctx propagates Run's result unchanged", func(t *testing.T) {
+		is := is.New(t)
+
+		ctx := context.Background()
+
+		is.NoErr(stdioResult(ctx, nil))
+		is.Equal(stdioResult(ctx, stdinClosed), error(stdinClosed))
+	})
 }

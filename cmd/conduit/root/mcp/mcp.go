@@ -178,7 +178,7 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 	if c.flags.HTTP == "" {
 		// stdio only — the common case: the agent owns this process, so no
 		// separate auth is needed (design doc §5).
-		return srv.Run(ctx, &sdkmcp.StdioTransport{})
+		return stdioResult(ctx, srv.Run(ctx, &sdkmcp.StdioTransport{}))
 	}
 
 	httpSrv, err := c.newHTTPServer(srv, c.httpLogger())
@@ -208,6 +208,40 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 	})
 
 	return grp.Wait()
+}
+
+// stdioResult reports what the stdio transport should surface to the CLI
+// entrypoint once srv.Run has returned, making a cancelled shutdown report
+// cancellation deterministically.
+//
+// sdkmcp.Server.Run ends in a select between ctx.Done() and an internal
+// session-closed channel. On a cancelled context BOTH cases become ready:
+// Run's own ss.Close() closes the connection, and StdioTransport hands the
+// SDK os.Stdin/os.Stdout directly (mcp/transport.go: `newIOConn(rwc{os.Stdin,
+// ...})`), so closing it makes the read loop fail and the session end within
+// tens of microseconds of the cancellation. Go picks uniformly at random
+// among ready select cases, so the exact same graceful SIGINT/SIGTERM
+// shutdown could return any of three values:
+//
+//   - context.Canceled      -> exitcode.OK (0), the intended outcome
+//   - nil                   -> exit 0, but silently (the session-closed case
+//     winning on a stdin that was already at EOF)
+//   - *fs.PathError "read /dev/stdin: file already closed" -> classified as
+//     exitcode.Runtime (1)
+//
+// That last one is the bug: a clean, operator-initiated shutdown of `conduit
+// mcp` would intermittently exit 1 and print a spurious error, which a
+// supervisor (systemd/Kubernetes) reads as a crash. Cancellation is the
+// reason we are returning, so report ctx.Err() and let pkg/conduit/exitcode
+// map it to 0 — the same graceful-shutdown convention `conduit run` uses.
+//
+// A transport error that is NOT concurrent with cancellation still
+// propagates unchanged; only the shutdown window is normalized.
+func stdioResult(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
 }
 
 // httpLogger builds the log.CtxLogger the --http path uses for its startup/
