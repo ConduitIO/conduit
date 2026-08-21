@@ -20,6 +20,7 @@ package conduit
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -131,6 +132,8 @@ type Runtime struct {
 	// (WithMetricsRegisterer set) it is a fresh, per-Runtime instance
 	// registered only into the supplied registerer — see configureEmbeddedMetrics.
 	metricsGrpcStatsHandler *promgrpc.StatsHandler
+	metricsRegisterer       promclient.Registerer
+	metricsGatherer         promclient.Gatherer
 
 	// closeDBOnce/closeDBErr make CloseDB idempotent regardless of which of
 	// its (potentially multiple) callers gets there first — see CloseDB's doc.
@@ -163,6 +166,7 @@ func (r *Runtime) CloseDB() error {
 type runtimeOptions struct {
 	logger            *log.CtxLogger
 	metricsRegisterer promclient.Registerer
+	metricsGatherer   promclient.Gatherer
 	dialCtx           context.Context
 }
 
@@ -192,6 +196,17 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 // registered only into the supplied registerer — never
 // promclient.DefaultRegisterer. `conduit run` never passes this option.
 //
+// If reg also implements Gatherer and WithMetricsGatherer is not supplied,
+// the embedded /metrics endpoint serves reg's full contents, including metrics
+// registered by the host application.
+//
+// A reg that does NOT implement Gatherer (prometheus.WrapRegistererWithPrefix
+// and friends return one of these) cannot back /metrics. With the API enabled,
+// Conduit logs MetricsDegradedWarning and keeps serving the process-global
+// default registry — the pre-existing, wrong-but-harmless behavior — for this
+// release. The next minor makes it an error (issue #2800). Supply WithMetricsGatherer with
+// the underlying registry to fix it.
+//
 // Known limitation (documented, not fixed by this seam): pkg/foundation/metrics
 // keeps process-global metric *definitions* (metrics.go's `global` slices) —
 // a metric created via metrics.NewCounter et al. (e.g. everything in
@@ -205,6 +220,101 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 func WithMetricsRegisterer(reg promclient.Registerer) RuntimeOption {
 	return func(o *runtimeOptions) { o.metricsRegisterer = reg }
 }
+
+// WithMetricsGatherer supplies the gatherer used by the embedded Runtime's
+// /metrics endpoint. It must expose the metrics registered through the value
+// passed to WithMetricsRegisterer.
+func WithMetricsGatherer(gatherer promclient.Gatherer) RuntimeOption {
+	return func(o *runtimeOptions) { o.metricsGatherer = gatherer }
+}
+
+// MetricsResolution is what ResolveMetricsGatherer decided.
+type MetricsResolution struct {
+	// Gatherer is what /metrics serves. Never nil once a registerer was
+	// supplied.
+	Gatherer promclient.Gatherer
+
+	// Degraded reports that Gatherer is NOT backed by the supplied registerer:
+	// the registerer does not implement prometheus.Gatherer, so /metrics falls
+	// back to the process-global default and shows metrics unrelated to what
+	// this Runtime registered. The caller is expected to warn — loudly — since
+	// nothing else about the process looks wrong.
+	Degraded bool
+}
+
+// ResolveMetricsGatherer decides which Gatherer the /metrics endpoint serves.
+//
+// It is exported so the embed package (github.com/conduitio/conduit) can apply
+// the SAME rule inside New — where the options are already known and no I/O is
+// needed — instead of letting a caller discover a bad pairing on their first
+// Run or Import. Two copies of this rule would eventually disagree, and the
+// symptom would be an Engine that behaves differently depending on which entry
+// point constructed it.
+//
+// The rules, in order:
+//   - a gatherer with no registerer is REJECTED. MetricsGatherer is new API, so
+//     there is no existing configuration to break, and the pairing is
+//     nonsensical: nothing would be registering into what it gathers.
+//   - an explicit gatherer is used as given.
+//   - a registerer that also implements Gatherer is used as its own gatherer,
+//     so the endpoint serves everything registered into it, host metrics
+//     included.
+//   - a registerer that does NOT implement Gatherer (prometheus.WrapRegisterer*
+//     returns one of these) is DEGRADED, not rejected: /metrics keeps serving
+//     the default gatherer, exactly as it did before this seam existed, and the
+//     caller warns.
+//
+// # Why the degraded case warns instead of failing
+//
+// Rejecting it outright was the original behavior of this change and is the
+// more obviously correct-looking option: the endpoint is demonstrably serving
+// the wrong metrics, and refusing to start says so. It was rejected anyway.
+//
+// Such a configuration STARTED in previous releases. Turning it into a startup
+// failure means an operator who upgrades Conduit finds their application dead
+// on boot, over a scrape target that is wrong but harmless — nothing about it
+// risks data. Killing a running system to correct an observability defect
+// inverts the cost. The project's deprecation policy (announce, then warn, then
+// remove, over at least two minor versions) exists for precisely this, and a
+// wrong /metrics payload is exactly the kind of defect it was written to pace.
+//
+// The warning is therefore load-bearing, not decorative: it is the entire
+// mitigation for one release. It must name the fix, and it must be impossible
+// to miss in a log. The next minor turns this into an error (tracked in issue
+// #2800); the godoc on
+// WithMetricsRegisterer and conduit.Options.MetricsGatherer both say so.
+func ResolveMetricsGatherer(reg promclient.Registerer, gatherer promclient.Gatherer, apiEnabled bool) (MetricsResolution, error) {
+	if reg == nil {
+		if gatherer != nil {
+			e := conduiterr.New(conduiterr.CodeInvalidArgument,
+				"a metrics gatherer was supplied without a metrics registerer")
+			e.Suggestion = "set both: conduit.Options{MetricsRegisterer: reg, MetricsGatherer: gatherer} " +
+				"(pkg/conduit: WithMetricsRegisterer + WithMetricsGatherer)"
+			return MetricsResolution{}, e
+		}
+		// No registerer: the caller gets the CLI defaults, decided by NewRuntime.
+		return MetricsResolution{}, nil
+	}
+
+	if gatherer != nil {
+		return MetricsResolution{Gatherer: gatherer}, nil
+	}
+
+	if g, ok := reg.(promclient.Gatherer); ok {
+		return MetricsResolution{Gatherer: g}, nil
+	}
+
+	// With the API disabled there is no /metrics route at all, so nothing is
+	// being served wrongly and there is nothing to warn about.
+	return MetricsResolution{Gatherer: promclient.DefaultGatherer, Degraded: apiEnabled}, nil
+}
+
+// MetricsDegradedWarning is the text logged when ResolveMetricsGatherer
+// degrades. It is a constant so the embed package and NewRuntime say the same
+// thing, and so a test can assert the operator is actually told.
+const MetricsDegradedWarning = "the metrics registerer does not implement prometheus.Gatherer, so /metrics is serving " +
+	"the default Prometheus registry instead of the metrics Conduit registered; pass the underlying registry too " +
+	"(conduit.Options.MetricsGatherer, or pkg/conduit's WithMetricsGatherer). This becomes an error in the next minor release."
 
 // WithDialContext supplies the context.Context OpenStore's Postgres/SQLite
 // dial uses instead of context.Background(), so a caller-supplied deadline or
@@ -250,6 +360,11 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		opt(&ro)
 	}
 
+	metricsResolution, err := ResolveMetricsGatherer(ro.metricsRegisterer, ro.metricsGatherer, cfg.API.Enabled)
+	if err != nil {
+		return nil, err
+	}
+	metricsGatherer := metricsResolution.Gatherer
 	var logger log.CtxLogger
 	if ro.logger != nil {
 		// Embed path (AC-5.1): use the pre-built logger as-is instead of
@@ -268,6 +383,15 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		zerolog.DefaultContextLogger = &logger.Logger
 	}
 
+	// Warn as soon as there is a logger to warn with. This is the ENTIRE
+	// mitigation for a degraded resolution — /metrics will serve plausible but
+	// unrelated numbers, and nothing else about the process looks wrong — so it
+	// must not be conditional on anything further down, and it must survive an
+	// early return from OpenStore below.
+	if metricsResolution.Degraded {
+		logger.Warn(context.Background()).Msg(MetricsDegradedWarning)
+	}
+
 	dialCtx := context.Background()
 	if ro.dialCtx != nil {
 		// AC-5.4: let an embedder bound/cancel the store dial.
@@ -279,6 +403,7 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		return nil, err
 	}
 
+	metricsRegisterer := ro.metricsRegisterer
 	var statsHandler *promgrpc.StatsHandler
 	if ro.metricsRegisterer != nil {
 		// Embed path (AC-5.2): isolated per-Runtime metrics, never the
@@ -288,6 +413,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 			return nil, err
 		}
 	} else {
+		metricsRegisterer = promclient.DefaultRegisterer
+		metricsGatherer = promclient.DefaultGatherer
 		statsHandler = configureMetrics()
 	}
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
@@ -308,6 +435,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 
 		logger:                  logger,
 		metricsGrpcStatsHandler: statsHandler,
+		metricsRegisterer:       metricsRegisterer,
+		metricsGatherer:         metricsGatherer,
 	}
 
 	err = createServices(r)
@@ -571,6 +700,7 @@ func configureEmbeddedMetrics(registerer promclient.Registerer) (*promgrpc.Stats
 		wrapped := cerrors.Errorf("failed to register grpc stats collector: %w", err)
 		return nil, conduiterr.Wrap(conduiterr.CodeInvalidArgument, wrapped.Error(), wrapped)
 	}
+
 	return statsHandler, nil
 }
 
@@ -827,16 +957,55 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 
 // newHTTPMetricsHandler builds the handler served at /metrics (see
 // serveHTTPAPI).
-//
-// Known limitation, accepted for v1 and tracked as
-// https://github.com/ConduitIO/conduit/issues/2670: promhttp.Handler() always
-// serves promclient.DefaultGatherer, not the Registerer/Gatherer an embedder
-// supplied via WithMetricsRegisterer/configureEmbeddedMetrics. An embedded
-// Runtime with Options.API.Enabled and a custom MetricsRegisterer therefore
-// gets a /metrics route that does not reflect what was actually registered
-// into that registerer.
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.Handler()
+	// ContinueOnError, not the promhttp default: with an embedded Runtime the
+	// gatherer holds the HOST application's collectors too, so one broken host
+	// collector would otherwise turn every scrape into a 500 that also hides
+	// Conduit's own metrics — losing our observability because of someone
+	// else's bug. ErrorLog gives that failure somewhere to be seen; the
+	// default is to discard it.
+	handler := promhttp.HandlerFor(r.metricsGatherer, promhttp.HandlerOpts{
+		ErrorHandling: promhttp.ContinueOnError,
+		ErrorLog:      promLogger{logger: r.logger},
+	})
+	return instrumentMetricHandler(r.logger, r.metricsRegisterer, handler)
+}
+
+// instrumentMetricHandler is promhttp.InstrumentMetricHandler with its panic
+// contained.
+//
+// That function panics on any registration error that is not
+// AlreadyRegisteredError, and r.metricsRegisterer can be supplied by the host
+// application (WithMetricsRegisterer). A host collector whose name collides
+// with promhttp's own — "promhttp_metric_handler_requests_total" with
+// different labels — therefore panics inside serveHTTPAPI, which Run calls
+// synchronously with no recover anywhere in the path: the panic unwinds into
+// the embedding application and takes the process down.
+//
+// Serving /metrics without the handler's own scrape counters is a far better
+// outcome than crashing someone's application, so the panic is caught and the
+// uninstrumented handler is used instead. The recover (rather than
+// pre-registering the two collectors here) also keeps this correct if promhttp
+// grows another panic path.
+func instrumentMetricHandler(logger log.CtxLogger, reg promclient.Registerer, handler http.Handler) (h http.Handler) {
+	defer func() {
+		if p := recover(); p != nil {
+			logger.Warn(context.Background()).
+				Msgf("serving /metrics without handler instrumentation: %v", p)
+			h = handler
+		}
+	}()
+	return promhttp.InstrumentMetricHandler(reg, handler)
+}
+
+// promLogger adapts the runtime logger to promhttp.Logger, so a gather error
+// says something instead of vanishing into a 500 with no explanation.
+type promLogger struct {
+	logger log.CtxLogger
+}
+
+func (l promLogger) Println(v ...any) {
+	l.logger.Warn(context.Background()).Msg(strings.TrimSpace(fmt.Sprintln(v...)))
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {

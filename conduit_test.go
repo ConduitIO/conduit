@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -655,4 +656,78 @@ func TestRun_MalformedPipelinesDir_ReturnsError(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestNew_WrappedRegistererWithoutGatherer_Degrades proves the pairing rule is
+// applied at construction — but as a WARNING, not a refusal.
+//
+// Such a configuration started in earlier releases. Turning it into a startup
+// failure would kill an operator's application on upgrade over a scrape target
+// that is wrong but harmless, which inverts the cost; the deprecation policy
+// (announce, warn, remove) exists for exactly this. The next minor makes it an
+// error.
+func TestNew_WrappedRegistererWithoutGatherer_Degrades(t *testing.T) {
+	is := is.New(t)
+	registry := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", registry)
+
+	opts := conduit.Options{
+		PipelinesDir:      t.TempDir(),
+		DB:                conduit.DBOptions{Type: "inmemory"},
+		MetricsRegisterer: wrapped,
+	}
+	opts.API.Enabled = true
+	opts.API.GRPCAddress = "127.0.0.1:0"
+	opts.API.HTTPAddress = "127.0.0.1:0"
+
+	e, err := conduit.New(context.Background(), opts)
+
+	is.NoErr(err)
+	is.True(e != nil)
+}
+
+// TestNew_GathererWithoutRegisterer_FailsFast: this pairing IS rejected,
+// because MetricsGatherer is new API — there is no existing configuration to
+// break — and a gatherer with nothing registering into it cannot work.
+func TestNew_GathererWithoutRegisterer_FailsFast(t *testing.T) {
+	is := is.New(t)
+
+	e, err := conduit.New(context.Background(), conduit.Options{
+		PipelinesDir:    t.TempDir(),
+		DB:              conduit.DBOptions{Type: "inmemory"},
+		MetricsGatherer: promclient.NewRegistry(),
+	})
+
+	is.True(err != nil)
+	is.True(e == nil)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+	// The fix has to name a knob this caller can actually reach: an embedder
+	// sees conduit.Options, never pkg/conduit's WithMetricsGatherer.
+	is.True(strings.Contains(ce.Suggestion, "MetricsGatherer"))
+}
+
+// TestNew_PairedRegistererAndGatherer_Succeeds is the other half: the
+// documented migration (pass the underlying registry alongside the wrapper)
+// constructs cleanly.
+func TestNew_PairedRegistererAndGatherer_Succeeds(t *testing.T) {
+	is := is.New(t)
+	registry := promclient.NewRegistry()
+	wrapped := promclient.WrapRegistererWithPrefix("myapp_", registry)
+
+	opts := conduit.Options{
+		PipelinesDir:      t.TempDir(),
+		DB:                conduit.DBOptions{Type: "inmemory"},
+		MetricsRegisterer: wrapped,
+		MetricsGatherer:   registry,
+	}
+	opts.API.Enabled = true
+	opts.API.GRPCAddress = "127.0.0.1:0"
+	opts.API.HTTPAddress = "127.0.0.1:0"
+
+	e, err := conduit.New(context.Background(), opts)
+	is.NoErr(err)
+	is.True(e != nil)
 }

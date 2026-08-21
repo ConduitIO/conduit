@@ -99,16 +99,11 @@
 // as a follow-up; see pkg/conduit.WithMetricsRegisterer's doc and
 // TestTwoEngines_MetricsCrossTalk_KnownLimitation.
 //
-// Two sharper instances of the same root cause are tracked separately, also
-// accepted for v1: a failed metrics registration during ensureRuntime (first
-// Run or Import, not New — see this package's lazy-open fast-follow above)
-// still leaks a registry into pkg/foundation/metrics' process-global
-// bookkeeping
+// A failed metrics registration during ensureRuntime (first Run or Import,
+// not New — see this package's lazy-open fast-follow above) still leaks a
+// registry into pkg/foundation/metrics' process-global bookkeeping
 // (https://github.com/ConduitIO/conduit/issues/2669, see
-// pkg/conduit.configureEmbeddedMetrics' doc), and the HTTP /metrics route
-// serves promclient.DefaultGatherer rather than a host-supplied
-// MetricsRegisterer (https://github.com/ConduitIO/conduit/issues/2670, see
-// pkg/conduit.(*Runtime).newHTTPMetricsHandler's doc).
+// pkg/conduit.configureEmbeddedMetrics' doc).
 //
 // # Package boundary / deprecation policy
 //

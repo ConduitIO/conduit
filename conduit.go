@@ -60,7 +60,26 @@ type Options struct {
 	// section — two Engines each get an isolated Registerer/Registry
 	// *object*, but pkg/foundation/metrics' process-global metric
 	// definitions still fan values out across every registry in the process.
+	// When API is enabled, a registerer that does not also implement Gatherer
+	// cannot back /metrics. Conduit warns and keeps serving the default
+	// Prometheus registry for this release; the next minor turns that into an
+	// error (issue #2800). Set MetricsGatherer to fix it — see that field.
 	MetricsRegisterer promclient.Registerer
+
+	// MetricsGatherer is served by the embedded HTTP API's /metrics endpoint.
+	// Set it when MetricsRegisterer does not also implement Gatherer, such as
+	// when using WrapRegistererWithPrefix or WrapRegistererWith. It must gather
+	// the metrics registered through MetricsRegisterer and cannot be set alone.
+	//
+	// Security: Conduit's HTTP API is unauthenticated (see API.HTTP's CORS
+	// documentation for what that already implies). Everything this gatherer
+	// exposes is therefore readable by anyone who can reach the API address —
+	// including metrics the host application registered for its own purposes,
+	// and every label on them. If that registry carries tenant identifiers,
+	// customer names, internal hostnames, or anything else you would not
+	// publish, bind the API to loopback, front it with an authenticating
+	// proxy, or pass a registry that holds only what you are happy to serve.
+	MetricsGatherer promclient.Gatherer
 
 	// DB configures the embedded storage backend. The zero value (Type =="")
 	// defaults to an in-memory store — convenient for examples and tests, but
@@ -369,11 +388,28 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
+	// Apply the SAME metrics rule NewRuntime applies later
+	// (pkgconduit.ResolveMetricsGatherer), here where the options are already
+	// known and no I/O is needed — for the same reason cfg.Validate() runs here
+	// rather than at open time. A rejected pairing fails New; a degraded one
+	// warns now rather than at first Run, so the operator sees it while they
+	// are still looking at their own wiring code.
+	metricsResolution, err := pkgconduit.ResolveMetricsGatherer(opts.MetricsRegisterer, opts.MetricsGatherer, cfg.API.Enabled)
+	if err != nil {
+		return nil, err
+	}
+	if metricsResolution.Degraded {
+		logger.Warn(pkgconduit.MetricsDegradedWarning)
+	}
+
 	runtimeOpts := []pkgconduit.RuntimeOption{
 		pkgconduit.WithLogger(ctxLogger),
 	}
 	if opts.MetricsRegisterer != nil {
 		runtimeOpts = append(runtimeOpts, pkgconduit.WithMetricsRegisterer(opts.MetricsRegisterer))
+	}
+	if opts.MetricsGatherer != nil {
+		runtimeOpts = append(runtimeOpts, pkgconduit.WithMetricsGatherer(opts.MetricsGatherer))
 	}
 
 	return &Engine{
