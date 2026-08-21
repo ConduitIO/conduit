@@ -142,6 +142,7 @@ import (
 	json "github.com/goccy/go-json"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/yaml/v3"
 )
@@ -432,7 +433,21 @@ func buildTranscript(req Request, gen Generation, raw []provider.CompletionResul
 	var outcome Outcome
 	if last := lastAttempt(gen); last != nil {
 		outcome = Outcome{
-			ValidatePass:   last.Report.OK(),
+			// last.Candidate == "" means extraction failed on this (the
+			// LAST) attempt — every attempt failed to produce parseable
+			// pipeline YAML, generate.go never calls validate.RunBytes, and
+			// last.Report is left at its zero value. Report.OK() on a zero
+			// Report reads true (Errors == 0: there was nothing to find a
+			// problem WITH), which would otherwise commit this transcript's
+			// own Outcome.ValidatePass as a PASS for a request that never
+			// produced anything usable (B2, round-3 review of #2814) — the
+			// same trap ScoreRun (score.go) guards against for the scoring
+			// harness's own numbers. Guard on Candidate rather than trusting
+			// Report.OK() alone; SemanticMatch needs no equivalent guard —
+			// generate.go only ever sets att.Semantic after a candidate
+			// clears validate, so its zero value (Match: false) is already
+			// correct here.
+			ValidatePass:   last.Candidate != "" && last.Report.OK(),
 			SemanticMatch:  last.Semantic.Match,
 			SemanticIssues: last.Semantic.Issues,
 		}
@@ -610,6 +625,60 @@ func safeFailureReason(err error) string {
 	return err.Error()
 }
 
+// TestSafeFailureReason_Timeout is the regression test for N4 (round-3
+// review of #2814): safeFailureReason's `(timeout)` suffix was never
+// asserted anywhere on its own — only exercised transitively by tests that
+// go through a real *testing.T end to end. provider.MarkIfTimeout is what a
+// real adapter calls at its ctx.Err() == context.DeadlineExceeded branch
+// (anthropic.go, ollama.go, openai.go), so this constructs the exact shape
+// those call sites produce rather than a hand-rolled stand-in.
+func TestSafeFailureReason_Timeout(t *testing.T) {
+	wrapped := conduiterr.New(provider.CodeProviderError, "anthropic: context deadline exceeded")
+	err := provider.MarkIfTimeout(wrapped, context.DeadlineExceeded)
+
+	got := safeFailureReason(err)
+	if !strings.HasSuffix(got, "(timeout)") {
+		t.Fatalf("safeFailureReason(timeout error) = %q, want a string ending in %q", got, "(timeout)")
+	}
+	if strings.Contains(got, "context deadline exceeded") {
+		t.Fatalf("safeFailureReason(timeout error) = %q, leaked the raw error text (must carry only the "+
+			"registered Code.Reason() plus the (timeout) suffix)", got)
+	}
+}
+
+// TestSafeFailureReason_HTTPStatus_NeverLeaksAndNil round out the axes
+// TestSafeFailureReason_Timeout covers alone: nil (the one branch with no
+// conduiterr at all), and a real HTTP-status-carrying error built the same
+// way TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest's
+// httptest server produces one, asserting directly on safeFailureReason's
+// own return value rather than only on the manifest field it ends up in.
+func TestSafeFailureReason_HTTPStatus_NeverLeaksAndNil(t *testing.T) {
+	if got := safeFailureReason(nil); got != "no completion recorded" {
+		t.Fatalf("safeFailureReason(nil) = %q, want %q", got, "no completion recorded")
+	}
+
+	const leakedSecret = "sk-ant-1234567890abcdefghijklmnop"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"error":{"type":"authentication_error","message":"Incorrect API key provided: `+leakedSecret+`"}}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	base := &provider.Anthropic{BaseURL: srv.URL}
+	_, err := base.Complete(context.Background(), provider.CompletionRequest{Prompt: "x"})
+	if err == nil {
+		t.Fatal("expected the 401 response to produce an error")
+	}
+
+	got := safeFailureReason(err)
+	if !strings.Contains(got, "HTTP 401") {
+		t.Fatalf("safeFailureReason(401 error) = %q, want it to name HTTP 401", got)
+	}
+	if strings.Contains(got, leakedSecret) {
+		t.Fatalf("safeFailureReason(401 error) = %q, leaked the response body's secret", got)
+	}
+}
+
 // writeTombstone commits a Tombstone for a corpus request whose capture
 // never produced a transcript on any pass — see the Tombstone type doc
 // comment (transcript.go) for why LoadTranscripts' bijection check needs an
@@ -676,14 +745,20 @@ func TestCaptureTranscripts(t *testing.T) {
 // care) and the directory to promote into, it runs every pass, builds and
 // scratch-writes each request's transcript, redaction-scans and promotes the
 // batch, and — for a run that attempted the FULL corpus (never scoped by a
-// `-run` filter to a subset) — scores the run (ScoreMedian) and writes
-// manifest.yaml, INCLUDING for a run where some requests never produced a
-// completion at all (see the file's "Partial results" doc comment):
-// whatever a pass DID capture is promoted and recorded regardless, and
-// captureCompletenessVerdict decides only how loud the `go test` signal is,
-// never whether anything gets preserved. A scoped `-run` (a targeted
-// re-capture of one id) still writes no manifest.yaml, unchanged from
-// before — that file always describes the whole corpus, never a subset.
+// `-run` filter to a subset) — scores the run (ScoreMedian) and writes a
+// FRESH manifest.yaml, INCLUDING for a run where some requests never
+// produced a completion at all (see the file's "Partial results" doc
+// comment): whatever a pass DID capture is promoted and recorded
+// regardless, and captureCompletenessVerdict decides only how loud the
+// `go test` signal is, never whether anything gets preserved. A scoped
+// `-run` (a targeted re-capture of one id) never computes new
+// medians/PassScores (there is no full-corpus data to compute them from),
+// but it DOES patch the scoped id(s)' own RequestOutcomes/CapturedCount/
+// MissingCount into whatever manifest.yaml the last full run left behind
+// (patchManifestForScopedRun, M1 fix — round-3 review of #2814) — leaving
+// it untouched entirely, as this used to, meant a re-capture that turned a
+// previously-tombstoned id back into real data left the committed
+// manifest.yaml contradicting the tree it describes.
 //
 // Split out from TestCaptureTranscripts so the FULL pipeline (transcript
 // construction, the redaction-scan-then-promote gate, scoring, manifest
@@ -701,8 +776,14 @@ func TestCaptureTranscripts(t *testing.T) {
 // in particular, that a request with no completion gets NO entry at all
 // (see the "absence of data" branch below) — rather than hand-building a
 // Candidates map that only ASSERTS it mirrors that behavior. Nil for a
-// scoped run that never reaches the full-corpus scoring step (wrote ==
-// false).
+// scoped run that never reaches the full-corpus scoring step — that is
+// independent of wrote (below), which a scoped run can still report true
+// for if it patched an existing manifest.yaml (patchManifestForScopedRun).
+//
+// wrote is true whenever manifest.yaml was written OR patched on disk —
+// not only for a fresh, full-corpus write. It is false only when there was
+// truly nothing to do: a scoped run with no prior manifest.yaml to patch
+// (patchManifestForScopedRun's own ok == false).
 func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captureProvider, providerName, model string, passes int, destDir string) (manifest Manifest, passRuns []RunScore, wrote bool) {
 	t.Helper()
 
@@ -731,20 +812,27 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	lastFailureErr := make(map[string]error)
 
 	var scoreCandidatesList []Candidates
-	// scoreMissingCounts[i] is how many of len(requests) got NO entry in
-	// scoreCandidatesList[i] — i.e. how many corpus requests produced no
-	// completion on that specific pass (see the inline comment below on
-	// why passCandidates omits, rather than empty-strings, those entries).
-	// Kept as a parallel slice, index-aligned with scoreCandidatesList
-	// (and therefore with ms.Runs below), rather than added to
-	// RunScore/ScoreRun: score.go's Result.Missing already carries this
-	// per-request, and re-deriving the per-pass count from passCandidates'
-	// size here is cheaper than plumbing a new field through ScoreRun for
-	// a number runCapture already has for free. This is what lets a
-	// degraded tail pass (a rate-limit storm, or captureWallClockBudget
-	// expiring partway through) be excluded from the median instead of
-	// silently dragging MedianValidatePassRate/MedianSemanticMatchRate
-	// toward zero — see PassScore.MissingCount and Manifest.DegradedPasses.
+	// scoreMissingCounts[i] is how many of len(requests) contributed NO
+	// USABLE candidate to scoreCandidatesList[i] — either no completion was
+	// ever recorded on that pass (no map entry — see the inline comment
+	// below on why passCandidates omits, rather than empty-strings, those
+	// entries) OR a completion WAS recorded but never extracted into
+	// pipeline YAML (an empty/whitespace-only entry: Generate exhausted
+	// every attempt without ever producing a candidate — B2, round-3 review
+	// of #2814). requestsMissingUsableCandidate treats both the same way
+	// ScoreRun (score.go) itself does — a pass full of unparseable
+	// completions is exactly as degraded as one the provider never answered
+	// at all. Kept as a parallel slice, index-aligned with
+	// scoreCandidatesList (and therefore with ms.Runs below), rather than
+	// added to RunScore/ScoreRun: score.go's Result.Missing already carries
+	// the no-completion half of this per-request, and re-deriving the
+	// per-pass count from passCandidates here is cheaper than plumbing a
+	// new field through ScoreRun for a number runCapture already has for
+	// free. This is what lets a degraded tail pass (a rate-limit storm, or
+	// captureWallClockBudget expiring partway through) be excluded from the
+	// median instead of silently dragging
+	// MedianValidatePassRate/MedianSemanticMatchRate toward zero — see
+	// PassScore.MissingCount and Manifest.DegradedPasses.
 	var scoreMissingCounts []int
 	for pass := 1; pass <= passes; pass++ {
 		passCandidates := make(Candidates, len(requests))
@@ -774,11 +862,24 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 					//
 					// passCandidates deliberately gets NO entry for req.ID
 					// here (never a key with an empty value) — ScoreRun
-					// (score.go) reports a MISSING key as Result.Missing;
-					// setting an empty-string candidate instead would score
-					// this exactly like a model that produced a candidate
-					// and failed validation, which is a different, wrong
-					// story for a request the provider never even answered.
+					// (score.go) reports a MISSING key as Result.Missing.
+					// Storing an empty-string candidate instead would flip
+					// Result.Missing to false — scoring this as DATA (a
+					// request the provider answered, however badly) rather
+					// than as absence of data, which is the wrong story for
+					// a request whose provider call never even returned a
+					// response. (B2, round-3 review of #2814, corrects this
+					// comment's prior claim that an empty-string candidate
+					// here "would score this exactly like a model that
+					// produced a candidate and failed validation" — false as
+					// written: before ScoreRun's own empty-candidate guard
+					// existed, an empty string scored a validate PASS, not a
+					// failed validation, which was the actual bug. ScoreRun
+					// now hard-fails an empty candidate on both axes either
+					// way — the choice to omit the key HERE is still right,
+					// but for this reason: it is Result.Missing, not the
+					// pass/fail verdict, that an empty string here would get
+					// wrong.)
 					lastFailureErr[req.ID] = genErr
 					t.Logf("pass %d: %q produced no completion (absence of data): %v", pass, req.ID, genErr)
 					return
@@ -813,7 +914,7 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 		// never per-pass.
 		if len(attempted) == len(requests) {
 			scoreCandidatesList = append(scoreCandidatesList, passCandidates)
-			scoreMissingCounts = append(scoreMissingCounts, len(requests)-len(passCandidates))
+			scoreMissingCounts = append(scoreMissingCounts, requestsMissingUsableCandidate(requests, passCandidates))
 		} else {
 			t.Logf("pass %d: %d/%d requests ran (a -run filter is scoping this to a subset) — "+
 				"excluded from corpus-level scoring and the manifest", pass, len(attempted), len(requests))
@@ -906,15 +1007,44 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	reportCaptureCompleteness(t, len(attemptOrder), capturedCount, missingCount, outcomes)
 
 	if len(scoreCandidatesList) != passes {
-		t.Logf("only %d/%d pass(es) captured the full corpus — skipping manifest.yaml "+
-			"(a scoped -run leaves the existing manifest untouched)", len(scoreCandidatesList), passes)
-		return Manifest{}, nil, false
+		// A scoped `-run TestCaptureTranscripts/<id>` re-capture — split
+		// out into finishScopedRun to keep THIS function's own cyclomatic
+		// complexity under gocyclo's threshold (the same reason
+		// summarizePasses was split out for H2, round-2 review of #2814).
+		return finishScopedRun(t, destDir, outcomes, len(scoreCandidatesList), passes)
 	}
 
 	ms := ScoreMedian(ctx, requests, scoreCandidatesList)
 	passScores, degradedMedians := summarizePasses(ms.Runs, scoreMissingCounts)
 
-	if len(degradedMedians.degradedPasses) > 0 {
+	switch {
+	case degradedMedians.allDegraded:
+		// B1 fix (round-3 review of #2814): every one of `passes` passes
+		// lost the full corpus (a rate-limit storm, or
+		// captureWallClockBudget expiring partway through and wiping every
+		// pass from that point on) — summarizePasses has no clean pass
+		// left to compute a median FROM, so validateRate/semanticRate below
+		// are its all-passes fallback, which scores every missing request
+		// as a hard fail with nothing to dilute it. Treated as a hard
+		// failure of this `go test` run, the same class of thing
+		// captureCompletenessVerdict already does for attemptedCount == 0:
+		// t.Errorf (not t.Fatalf) so the manifest below still gets written
+		// with whatever WAS captured (see captureCompletenessVerdict's own
+		// doc comment on why a true verdict there does not mean nothing is
+		// preserved — the same reasoning applies here), but the `go test`
+		// exit code goes nonzero, which generate-capture.yml's `capture`
+		// job turns into CAPTURE_RESULT != "success" — the [!WARNING]
+		// PARTIAL-capture banner and title, not the routine [!NOTE] one.
+		// Manifest.MediansUnreliable (set below) carries the same fact
+		// into the committed file for a reader who never sees the PR body.
+		t.Errorf("every one of %d capture pass(es) was degraded (see passScores[].missingCount) — no pass "+
+			"produced a completion for the full corpus, so medianValidatePassRate (%.3f) and "+
+			"medianSemanticMatchRate (%.3f) below are a fallback computed across ALL passes, with every "+
+			"missing request scored as a hard fail and no clean pass to dilute that — NOT a reliable "+
+			"median, and must not be used as this run's baseline. Whatever WAS captured is still promoted "+
+			"and recorded below (capturedCount/missingCount/requestOutcomes).",
+			passes, degradedMedians.validateRate, degradedMedians.semanticRate)
+	case len(degradedMedians.degradedPasses) > 0:
 		// Deliberately a separate Logf, not folded into
 		// reportCaptureCompleteness below: that function's fail/log
 		// threshold (captureCompletenessVerdict) is scoped to REQUESTS
@@ -923,7 +1053,10 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 		// request captured (missingCount == 0, so
 		// reportCaptureCompleteness has nothing to say) while still
 		// having lost a tail pass to rate limiting, which is exactly the
-		// case this exists to surface.
+		// case this exists to surface. Only reached when at least one
+		// OTHER pass was clean (the allDegraded case above is handled
+		// separately), so "excluded... so a wiped tail pass does not
+		// silently drag those numbers toward zero" is actually true here.
 		t.Logf("pass(es) %v captured fewer than the full corpus (see passScores[].missingCount in the "+
 			"manifest) — excluded from medianValidatePassRate/medianSemanticMatchRate so a wiped tail pass "+
 			"does not silently drag those numbers toward zero; requests affected may still show as captured "+
@@ -947,6 +1080,8 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 		MedianSemanticMatchRate:  degradedMedians.semanticRate,
 		MedianValidatePassCount:  degradedMedians.validateCount,
 		MedianSemanticMatchCount: degradedMedians.semanticCount,
+		MedianSampleSize:         degradedMedians.sampleSize,
+		MediansUnreliable:        degradedMedians.allDegraded,
 		PassScores:               passScores,
 		DegradedPasses:           degradedMedians.degradedPasses,
 		CapturedCount:            capturedCount,
@@ -960,6 +1095,197 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	return manifest, ms.Runs, true
 }
 
+// finishScopedRun is runCapture's return path for a scoped
+// `-run TestCaptureTranscripts/<id>` re-capture — one that never attempted
+// the full corpus (capturedPasses != passes), so there is no full-corpus
+// data to compute new medians/PassScores from. Split out from runCapture
+// (kept its own cyclomatic complexity under gocyclo's threshold, the same
+// reason summarizePasses was split out for H2 — round-2 review of #2814).
+//
+// The tree itself was already mutated by the caller before this runs
+// (promoted, and any stale tombstone removed, or a fresh tombstone
+// written) — this only decides what happens to manifest.yaml. M1 fix
+// (round-3 review of #2814): patch the EXISTING manifest.yaml's own
+// RequestOutcomes/CapturedCount/MissingCount for just the scoped id(s)
+// rather than leaving it untouched — before this fix, a re-capture that
+// turned a previously-tombstoned id back into real data left the tree with
+// "<id>.yaml" and no tombstone (correct) while manifest.yaml still said
+// captured: false for that id, with a stale failureReason and stale counts
+// nothing else ever caught (LoadTranscripts never reads the manifest).
+// Medians and PassScores are left exactly as the last FULL run recorded
+// them — see patchManifestForScopedRun's own doc comment for why.
+func finishScopedRun(t *testing.T, destDir string, outcomes []RequestOutcome, capturedPasses, passes int) (Manifest, []RunScore, bool) {
+	t.Helper()
+	t.Logf("only %d/%d pass(es) captured the full corpus — a scoped -run limits scoring to a subset",
+		capturedPasses, passes)
+
+	patched, ok := patchManifestForScopedRun(t, destDir, outcomes)
+	if !ok {
+		t.Logf("no existing manifest.yaml in %q to patch — a scoped run before any full run has "+
+			"nothing to patch and correctly leaves nothing behind", destDir)
+		return Manifest{}, nil, false
+	}
+	t.Logf("patched manifest.yaml's requestOutcomes/capturedCount/missingCount for %d scoped request(s); "+
+		"medians/passScores still describe the last full run", len(outcomes))
+	return patched, nil, true
+}
+
+// patchManifestForScopedRun updates an EXISTING manifest.yaml in destDir
+// with a scoped re-capture's own RequestOutcomes (M1, round-3 review of
+// #2814). Before this fix, runCapture promoted/tombstoned files for a
+// scoped `-run TestCaptureTranscripts/<id>` re-capture (mutating the tree)
+// and then returned early WITHOUT ever touching manifest.yaml — so
+// re-capturing a previously-tombstoned id back into real data left the
+// committed tree with "<id>.yaml" and no tombstone (correct — H3's own
+// fix), while manifest.yaml still said captured: false for that id, with a
+// stale failureReason and stale CapturedCount/MissingCount that nothing
+// else ever catches (LoadTranscripts never reads the manifest at all — see
+// its own doc comment). The tree loaded fine; the committed manifest.yaml
+// just quietly contradicted it.
+//
+// Only scopedOutcomes' own ids are patched into RequestOutcomes — every
+// OTHER entry, and the medians/PassScores (which this scoped run has no
+// full-corpus data to recompute — see runCapture's own check on
+// len(scoreCandidatesList) != passes), are left exactly as the last FULL
+// run recorded them: a single re-captured request says nothing new about
+// what the other requests scored. CapturedCount/MissingCount ARE
+// recomputed (from the patched RequestOutcomes list), since those two
+// fields exist specifically to summarize it.
+//
+// Returns ok == false when there is no existing manifest.yaml to patch —
+// LoadManifest's own not-exist error — which is correct, not a fallback:
+// a scoped run before any full run has ever completed has nothing to
+// patch, and correctly leaves nothing behind (unchanged from this
+// function's absence).
+func patchManifestForScopedRun(t *testing.T, destDir string, scopedOutcomes []RequestOutcome) (Manifest, bool) {
+	t.Helper()
+
+	path := filepath.Join(destDir, manifestFileName)
+	existing, err := LoadManifest(path)
+	if err != nil {
+		if cerrors.Is(err, os.ErrNotExist) {
+			return Manifest{}, false
+		}
+		t.Fatalf("loading existing manifest %q to patch: %v", path, err)
+	}
+
+	// Built append-only from a zero-length slice (never make'd with a
+	// non-zero length and appended onto afterward — golangci's makezero
+	// linter flags exactly that pattern), even though every existing
+	// entry is expected to be replaced or carried through unchanged.
+	patched := make([]RequestOutcome, 0, len(existing.RequestOutcomes)+len(scopedOutcomes))
+
+	byID := make(map[string]RequestOutcome, len(scopedOutcomes))
+	for _, o := range scopedOutcomes {
+		byID[o.RequestID] = o
+	}
+	for _, o := range existing.RequestOutcomes {
+		if updated, ok := byID[o.RequestID]; ok {
+			patched = append(patched, updated)
+			delete(byID, o.RequestID)
+			continue
+		}
+		patched = append(patched, o)
+	}
+	// Any scoped id not found in the existing manifest at all (unusual —
+	// every corpus request should already be present from the last full
+	// run) is appended rather than silently dropped, in corpus order
+	// relative to scopedOutcomes.
+	for _, o := range scopedOutcomes {
+		if _, stillPending := byID[o.RequestID]; stillPending {
+			patched = append(patched, o)
+		}
+	}
+
+	captured, missing := 0, 0
+	for _, o := range patched {
+		if o.Captured {
+			captured++
+		} else {
+			missing++
+		}
+	}
+
+	existing.RequestOutcomes = patched
+	existing.CapturedCount = captured
+	existing.MissingCount = missing
+	writeManifest(t, destDir, existing)
+	return existing, true
+}
+
+// TestPatchManifestForScopedRun_NoExistingManifest_ReturnsFalse covers the
+// one patchManifestForScopedRun branch nothing else here exercises: no
+// prior manifest.yaml at all (a scoped run before any full run ever
+// completed). ok must come back false, and nothing should be written to
+// destDir — asserted directly, since a bug that wrote an empty/partial
+// manifest.yaml here would be exactly the "manifest contradicts the tree"
+// class of defect M1 exists to prevent.
+func TestPatchManifestForScopedRun_NoExistingManifest_ReturnsFalse(t *testing.T) {
+	destDir := t.TempDir()
+
+	_, ok := patchManifestForScopedRun(t, destDir, []RequestOutcome{{RequestID: "req-a", Captured: true}})
+	if ok {
+		t.Fatal("ok = true, want false — there was no existing manifest.yaml to patch")
+	}
+	if _, err := os.Stat(filepath.Join(destDir, manifestFileName)); !os.IsNotExist(err) {
+		t.Fatalf("expected no manifest.yaml to have been written, stat err = %v", err)
+	}
+}
+
+// TestPatchManifestForScopedRun_AppendsUnknownID covers the defensive
+// "scoped id not already in the existing manifest" branch: unusual (every
+// corpus request should already be present from the last full run), but
+// must append rather than silently drop the id.
+func TestPatchManifestForScopedRun_AppendsUnknownID(t *testing.T) {
+	destDir := t.TempDir()
+	writeManifest(t, destDir, Manifest{
+		SchemaVersion: TranscriptSchemaVersion,
+		RequestCount:  1,
+		CapturedCount: 1,
+		RequestOutcomes: []RequestOutcome{
+			{RequestID: "req-a", Captured: true},
+		},
+	})
+
+	patched, ok := patchManifestForScopedRun(t, destDir, []RequestOutcome{
+		{RequestID: "req-new", Captured: false, FailureReason: "generate.provider_error (HTTP 429)"},
+	})
+	if !ok {
+		t.Fatal("ok = false, want true — an existing manifest.yaml was there to patch")
+	}
+	if len(patched.RequestOutcomes) != 2 {
+		t.Fatalf("len(patched.RequestOutcomes) = %d, want 2 (req-a carried through, req-new appended)",
+			len(patched.RequestOutcomes))
+	}
+	if patched.CapturedCount != 1 || patched.MissingCount != 1 {
+		t.Fatalf("patched CapturedCount/MissingCount = %d/%d, want 1/1", patched.CapturedCount, patched.MissingCount)
+	}
+}
+
+// requestsMissingUsableCandidate counts, for one pass's passCandidates, how
+// many corpus requests contributed no USABLE candidate — either no
+// completion was ever recorded for that request this pass (no map entry:
+// passCandidates[req.ID] then reads as Go's zero value for string, "",
+// exactly like an explicit empty entry would) or a completion WAS recorded
+// but every attempt failed to extract pipeline YAML from it (an explicit
+// empty or whitespace-only entry — B2, round-3 review of #2814: see
+// runCapture's own inline comment on why passCandidates gets that empty
+// entry rather than omitting the key in this case). Both cases are scored
+// identically by ScoreRun (score.go) — a hard fail on both axes — so they
+// are counted identically here too: a pass where the model replied with
+// nothing but unparseable garbage for every request is exactly as degraded,
+// for Manifest.DegradedPasses/MedianValidatePassRate purposes, as one the
+// provider never answered at all.
+func requestsMissingUsableCandidate(requests []Request, passCandidates Candidates) int {
+	missing := 0
+	for _, req := range requests {
+		if strings.TrimSpace(passCandidates[req.ID]) == "" {
+			missing++
+		}
+	}
+	return missing
+}
+
 // passesSummary is summarizePasses' reduction of a capture run's per-pass
 // RunScores down to the median rates/counts Manifest reports, plus which
 // passes were excluded from that median (see summarizePasses' own doc
@@ -970,6 +1296,24 @@ type passesSummary struct {
 	semanticRate   float64
 	validateCount  float64
 	semanticCount  float64
+	// sampleSize is how many passes actually contributed to
+	// validateRate/semanticRate/validateCount/semanticCount above — the
+	// number of clean passes ordinarily, or every pass (len(runs)) when
+	// allDegraded's fallback is in effect. N3 (round-3 review of #2814):
+	// exposed via Manifest.MedianSampleSize so a reader isn't left
+	// inferring "how many passes is this median actually over" from
+	// Passes minus len(DegradedPasses) — a median over 1 pass and a median
+	// over 3 both render as one number without this.
+	sampleSize int
+	// allDegraded is true when every pass in runs was degraded (no pass
+	// produced a completion for the full corpus) AND at least one of those
+	// passes was WIPED (missing every single corpus request, not just
+	// some) — see summarizePasses' doc comment for why both conditions are
+	// required, and for what the four fields above mean in that case.
+	// runCapture treats this as a hard failure (B1, round-3 review of
+	// #2814), the same class of thing captureCompletenessVerdict already
+	// does for attemptedCount == 0.
+	allDegraded bool
 }
 
 // summarizePasses builds Manifest.PassScores and reduces runs (ms.Runs from
@@ -989,11 +1333,37 @@ type passesSummary struct {
 // manifest that otherwise reports MissingCount == 0 (a request captured on
 // an earlier pass but absent from a later one is NOT run-missing — see
 // Manifest.CapturedCount's doc comment — but ScoreRun DOES score the
-// absence on every pass that lacks it). Falls back to the median across
-// ALL passes (identical to this function's pre-H2 behavior, and
-// mathematically identical to ScoreMedian's own reduction) when every
-// single pass is degraded — with no clean pass to prefer, a 0.00 median
-// would be actively misleading.
+// absence on every pass that lacks it).
+//
+// When every single pass is degraded, there is no clean pass left to
+// exclude anything FROM — the returned validateRate/semanticRate/
+// validateCount/semanticCount fall back to the median across ALL passes
+// (identical to this function's pre-H2 behavior, and mathematically
+// identical to ScoreMedian's own reduction), which is NOT "the median
+// across every clean pass" those fields otherwise mean, because
+// scoreMissingCounts still scores every missing request as a hard fail on
+// both axes (score.go's ScoreRun) with no clean pass to dilute that.
+//
+// That fallback is not automatically UNTRUSTWORTHY, though: a single
+// request that is chronically missing across every pass (the same one
+// request, every time — ordinary live-provider noise, already handled as a
+// routine partial result by captureCompletenessVerdict below its majority
+// threshold) leaves every pass's own rate identical and stable, so the
+// all-passes median equals what a "clean-pass" median would have shown
+// too. The case that IS misleading is B1 (round-3 review of #2814): one or
+// more passes WIPED entirely (missing every single corpus request, not
+// just one) — the signature of captureWallClockBudget expiring before a
+// pass even started, or a rate-limit storm eating the whole pass — which
+// contributes a raw, uninformative 0 to the median regardless of how well
+// the requests that WERE captured actually scored. Reproduced: 3 passes,
+// 2 wiped down to zero after a wall-clock budget expiry midway through
+// pass 1, computes a median of 0.00 even though every request captured on
+// pass 1 validated cleanly — the fallback IS what produces that
+// misleadingly low number, not a defense against one. allDegraded (below)
+// is true only when BOTH conditions hold (no clean pass AND at least one
+// wiped pass), so the caller can fail the run for the actual failure mode
+// without also failing on ordinary single-request flakiness — see
+// runCapture's own handling and Manifest.MediansUnreliable.
 func summarizePasses(runs []RunScore, missingCounts []int) ([]PassScore, passesSummary) {
 	passScores := make([]PassScore, len(runs))
 	allValidateRates := make([]float64, len(runs))
@@ -1004,6 +1374,7 @@ func summarizePasses(runs []RunScore, missingCounts []int) ([]PassScore, passesS
 	var degradedPasses []int
 	var cleanValidateRates, cleanSemanticRates []float64
 	var cleanValidateCounts, cleanSemanticCounts []int
+	var anyPassWiped bool
 
 	for i, rs := range runs {
 		passMissing := missingCounts[i]
@@ -1023,6 +1394,18 @@ func summarizePasses(runs []RunScore, missingCounts []int) ([]PassScore, passesS
 
 		if passMissing > 0 {
 			degradedPasses = append(degradedPasses, i+1)
+			// A WIPED pass (missing every single corpus request — Total > 0
+			// and passMissing == Total) is what makes the all-passes
+			// fallback below untrustworthy (see allDegraded): it is the
+			// signature of captureWallClockBudget expiring before the pass
+			// even started, or a rate-limit storm that ate the whole pass,
+			// not ordinary per-request noise (one chronically-flaky
+			// request, present in every OTHER pass's missingCounts too,
+			// still leaves each pass's rate a stable, meaningful number —
+			// see allDegraded's own doc comment).
+			if rs.Total > 0 && passMissing == rs.Total {
+				anyPassWiped = true
+			}
 			continue
 		}
 		cleanValidateRates = append(cleanValidateRates, rs.ValidatePassRate)
@@ -1037,13 +1420,30 @@ func summarizePasses(runs []RunScore, missingCounts []int) ([]PassScore, passesS
 		semanticRate:   median(allSemanticRates),
 		validateCount:  medianInt(allValidateCounts),
 		semanticCount:  medianInt(allSemanticCounts),
+		sampleSize:     len(runs),
 	}
-	if n := len(cleanValidateRates); n > 0 && n < len(runs) {
+	n := len(cleanValidateRates)
+	if n > 0 && n < len(runs) {
 		summary.validateRate = median(cleanValidateRates)
 		summary.semanticRate = median(cleanSemanticRates)
 		summary.validateCount = medianInt(cleanValidateCounts)
 		summary.semanticCount = medianInt(cleanSemanticCounts)
+		summary.sampleSize = n
 	}
+	// allDegraded requires BOTH no clean pass (n == 0) AND at least one
+	// WIPED pass — n == 0 alone is not enough: a single request that is
+	// chronically missing across every pass (present in no pass's
+	// candidates at all, but the SAME one request every time) also leaves
+	// n == 0, yet every pass's rate is identical and stable — reporting the
+	// all-passes median in that case is not misleading, it is the true
+	// answer, and this is exactly the "normal partial result" scenario
+	// captureCompletenessVerdict already treats as routine below its
+	// majority threshold. Requiring a wiped pass too narrows this to the
+	// actual failure mode B1 (round-3 review of #2814) found: one or more
+	// passes contributing a raw, uninformative 0 because they captured
+	// NOTHING, dragging the median toward zero in a way no individual
+	// pass's own rate would suggest.
+	summary.allDegraded = n == 0 && anyPassWiped
 	return passScores, summary
 }
 
@@ -1121,11 +1521,16 @@ func reportCaptureCompleteness(sink completenessSink, attemptedCount, capturedCo
 //
 // At or past a strict majority missing, something systemic broke — a
 // revoked key, a provider outage, a ceiling misconfigured too low (plan §10
-// failure modes #7-9) — and the artifact is no longer representative of the
-// corpus it claims to measure. fail is true. Note that a true verdict does
-// NOT mean nothing gets preserved: runCapture promotes and writes the
-// manifest for whatever WAS captured regardless of this verdict — this
-// function controls only how loud the `go test` signal is.
+// failure modes #7-9), or systematic model refusal (RequestOutcome.Unusable
+// — the provider responded on every attempt, but with a decode failure or a
+// well-formed, empty completion; N8, round-3 review of #2814: named as its
+// own cause now that Unusable exists to distinguish it from the other
+// three, which are transport-level misses where no response arrived at
+// all) — and the artifact is no longer representative of the corpus it
+// claims to measure. fail is true. Note that a true verdict does NOT mean
+// nothing gets preserved: runCapture promotes and writes the manifest for
+// whatever WAS captured regardless of this verdict — this function
+// controls only how loud the `go test` signal is.
 func captureCompletenessVerdict(attemptedCount, capturedCount, missingCount int, outcomes []RequestOutcome) (fail bool, message string) {
 	if attemptedCount == 0 {
 		return true, fmt.Sprintf(
@@ -1151,8 +1556,10 @@ func captureCompletenessVerdict(attemptedCount, capturedCount, missingCount int,
 		return true, fmt.Sprintf(
 			"most of this run failed to capture anything: %d/%d captured, %d/%d missing (%.0f%%) — "+
 				"this is not a usable partial artifact; investigate before re-running (a revoked key, a "+
-				"provider outage, or a ceiling set too low are the likely causes — plan §10 failure modes "+
-				"#7-9). Whatever WAS captured is still promoted and recorded below. missing: %s",
+				"provider outage, a ceiling set too low, or systematic model refusal are the likely causes — "+
+				"plan §10 failure modes #7-9, and check requestOutcomes[].unusable in the manifest below to "+
+				"tell a refusal apart from the other three). Whatever WAS captured is still promoted and "+
+				"recorded below. missing: %s",
 			capturedCount, attemptedCount, missingCount, attemptedCount, missingFrac*100, strings.Join(missingIDs, ", "),
 		)
 	}
@@ -1704,6 +2111,12 @@ func TestRunCapture_DegradedTailPass_ExcludedFromMedian(t *testing.T) {
 	if manifest.MedianSemanticMatchRate != 1 {
 		t.Fatalf("manifest.MedianSemanticMatchRate = %v, want 1 — same regression, semantic axis", manifest.MedianSemanticMatchRate)
 	}
+	// N3 (round-3 review of #2814): the median above is over exactly 1
+	// clean pass, not all 3 — MedianSampleSize is what lets a reader see
+	// that without computing Passes - len(DegradedPasses) themselves.
+	if manifest.MedianSampleSize != 1 {
+		t.Fatalf("manifest.MedianSampleSize = %d, want 1 (only pass 1 was clean)", manifest.MedianSampleSize)
+	}
 }
 
 // TestRunCapture_PartialFailure_TombstoneAndBijection is
@@ -1863,6 +2276,104 @@ func TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *testi
 	}
 }
 
+// TestRunCapture_UnusableResponse_SetsRequestOutcomeUnusable is the other
+// half of N4 (round-3 review of #2814): TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest
+// above proves the transport-miss (401) path leaves RequestOutcome.Unusable
+// false, but nothing exercised the OTHER branch end to end — a response
+// that DID arrive (a real 200) but decoded to no usable completion at all,
+// which provider.IsUnusableResponse (and therefore captureProvider.Complete,
+// which is what actually sets manifest-level Unusable) treats as a
+// distinct, BILLED case from a 429/timeout/ceiling. Reuses the real
+// Anthropic adapter against an httptest server, exactly like the 401 test,
+// rather than hand-building a fake error that only ASSERTS it matches the
+// real shape.
+func TestRunCapture_UnusableResponse_SetsRequestOutcomeUnusable(t *testing.T) {
+	const emptyMarker = "TRIGGER_EMPTY_RESPONSE"
+
+	okBody, err := json.Marshal(map[string]any{
+		"content": []map[string]string{{"type": "text", "text": "```yaml\n" + validCandidate + "```"}},
+		"usage":   map[string]int{"input_tokens": 5, "output_tokens": 5},
+	})
+	if err != nil {
+		t.Fatalf("marshaling ok response fixture: %v", err)
+	}
+	// A 200 with an EMPTY content array: a real, arrived response that
+	// anthropic.go's adapter itself marks unusable ("empty response") -
+	// never a transport-level miss.
+	emptyBody, err := json.Marshal(map[string]any{
+		"content": []map[string]string{},
+		"usage":   map[string]int{"input_tokens": 5, "output_tokens": 0},
+	})
+	if err != nil {
+		t.Fatalf("marshaling empty response fixture: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		if strings.Contains(string(body), emptyMarker) {
+			_, _ = w.Write(emptyBody)
+			return
+		}
+		_, _ = w.Write(okBody)
+	}))
+	t.Cleanup(srv.Close)
+
+	requests := []Request{
+		capturePipelineRequest("req-ok"),
+		{
+			ID:     "req-empty",
+			Prompt: "read from the generator and write to the log " + emptyMarker,
+			Expect: Expect{SourceCategory: "generator", DestinationCategory: "log"},
+		},
+	}
+	base := &provider.Anthropic{BaseURL: srv.URL}
+	cp := &captureProvider{Provider: base, maxCalls: 1000, maxTokens: 1_000_000}
+	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+
+	manifest, _, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
+	if !wrote {
+		t.Fatal("expected the manifest to be written: 1/2 missing is at, not past, the run-failing threshold")
+	}
+
+	var gotReqEmpty RequestOutcome
+	found := false
+	for _, o := range manifest.RequestOutcomes {
+		if o.RequestID == "req-empty" {
+			gotReqEmpty, found = o, true
+		}
+	}
+	if !found {
+		t.Fatal("expected an outcome for req-empty")
+	}
+	if gotReqEmpty.Captured {
+		t.Fatal("req-empty: Captured = true, want false — an empty completion is still absence of data")
+	}
+	// The core regression: a response that DID arrive but decoded to
+	// nothing usable must be flagged Unusable, distinguishing it from a
+	// transport-level miss (429/timeout/ceiling) that never got a response
+	// at all — RequestOutcome's own doc comment on why the two must never
+	// share a code path (a BILLED, attempted call vs. one that never
+	// reached the provider).
+	if !gotReqEmpty.Unusable {
+		t.Fatal("req-empty: Unusable = false, want true — the provider responded (200) but decoded to no usable completion")
+	}
+
+	// The 401 case (this test's own sibling,
+	// TestRunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest)
+	// proves the negative for a transport miss; a healthy request in THIS
+	// same run proves the positive is not just "always true".
+	var gotReqOK RequestOutcome
+	for _, o := range manifest.RequestOutcomes {
+		if o.RequestID == "req-ok" {
+			gotReqOK = o
+		}
+	}
+	if !gotReqOK.Captured || gotReqOK.Unusable {
+		t.Fatalf("req-ok outcome = %+v, want Captured=true and Unusable=false", gotReqOK)
+	}
+}
+
 // TestRunCapture_MissingRequest_ScoredAsMissingNotFailedCandidate is the
 // regression test for a request with no completion being scored as a
 // failed model candidate rather than Missing (score.go's Result.Missing).
@@ -1922,6 +2433,301 @@ func TestRunCapture_MissingRequest_ScoredAsMissingNotFailedCandidate(t *testing.
 			t.Fatalf("pass %d: expected results for both req-b and the healthy requests, got %+v", i+1, rs.Results)
 		}
 	}
+}
+
+// refusesMarkedRequestProvider replies with well-formed, non-empty text
+// that never extracts into pipeline YAML ("I'm sorry, I can't help with
+// that.") for any request whose prompt contains marker, and a normal
+// fenced, extractable reply for every other request — modeling systematic
+// model refusal on ONE request alongside an otherwise-healthy pass (B2,
+// round-3 review of #2814), as distinct from a transport-level miss where
+// no response arrives at all (flakyAfterFirstCallProvider, above).
+type refusesMarkedRequestProvider struct {
+	marker     string
+	validReply string
+}
+
+func (p refusesMarkedRequestProvider) Name() string { return "refuses-marked" }
+
+func (p refusesMarkedRequestProvider) Complete(_ context.Context, req provider.CompletionRequest) (provider.CompletionResult, error) {
+	if strings.Contains(req.Prompt, p.marker) {
+		return provider.CompletionResult{Text: "I'm sorry, I can't help with that.", TokensUsed: 5}, nil
+	}
+	return provider.CompletionResult{Text: p.validReply, TokensUsed: 20}, nil
+}
+
+// TestRunCapture_SystematicRefusal_ScoresValidateFailNotPass is the
+// end-to-end regression test for B2 (round-3 review of #2814): a provider
+// that replies with well-formed but unparseable text for every attempt on
+// one request (systematic refusal) produces a completion recorded as raw
+// data — never Missing, since runCapture's "absence of data" branch never
+// fires when a real completion WAS recorded — but Generate never extracts
+// a candidate from it. Before this fix, ScoreRun scored the resulting
+// empty candidate a validate PASS (validate.RunBytes on zero bytes finds
+// nothing wrong), buildTranscript committed the same false PASS into the
+// refused request's own Transcript.Outcome, and the pass was never marked
+// degraded — inflating the headline numbers with exactly the failure this
+// corpus exists to measure. A second, healthy request is included so the
+// pass is merely degraded (not wiped), keeping this test isolated from B1's
+// separate allDegraded failure path (TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable).
+func TestRunCapture_SystematicRefusal_ScoresValidateFailNotPass(t *testing.T) {
+	const marker = "TRIGGER_REFUSAL"
+	requests := []Request{
+		{
+			ID:     "req-refused",
+			Prompt: "read from the generator and write to the log " + marker,
+			Expect: Expect{SourceCategory: "generator", DestinationCategory: "log"},
+		},
+		capturePipelineRequest("req-ok"),
+	}
+	fake := refusesMarkedRequestProvider{marker: marker, validReply: "```yaml\n" + validCandidate + "```"}
+	cp := &captureProvider{Provider: fake, maxCalls: 1000, maxTokens: 1_000_000}
+	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+
+	manifest, passRuns, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
+	if !wrote {
+		t.Fatal("expected the manifest to be written: both requests were attempted and a completion was recorded for each")
+	}
+
+	// Both requests must be reported as CAPTURED (a completion was recorded
+	// for each — this is data, not absence of data), never Missing.
+	if manifest.CapturedCount != 2 || manifest.MissingCount != 0 {
+		t.Fatalf("manifest CapturedCount/MissingCount = %d/%d, want 2/0 — a refused-but-recorded completion is "+
+			"captured DATA, not a missing request", manifest.CapturedCount, manifest.MissingCount)
+	}
+
+	if len(passRuns) != 1 || len(passRuns[0].Results) != 2 {
+		t.Fatalf("unexpected passRuns shape: %+v", passRuns)
+	}
+	var gotRefused bool
+	for _, res := range passRuns[0].Results {
+		if res.RequestID != "req-refused" {
+			continue
+		}
+		gotRefused = true
+		if res.Missing {
+			t.Fatal("res.Missing = true, want false — a completion WAS recorded, this is not absence of data")
+		}
+		// The core regression: the empty candidate must score a hard fail
+		// on BOTH axes, not a validate PASS.
+		if res.ValidatePass {
+			t.Fatal("res.ValidatePass = true, want false — an empty/unparseable candidate must never score a validate PASS")
+		}
+		if res.SemanticMatch {
+			t.Fatal("res.SemanticMatch = true, want false")
+		}
+	}
+	if !gotRefused {
+		t.Fatalf("expected a result for req-refused, got %+v", passRuns[0].Results)
+	}
+
+	// The pass must be marked degraded — a request whose only completions
+	// never extracted a candidate is exactly as uninformative, for this
+	// purpose, as one the provider never answered at all.
+	if len(manifest.PassScores) != 1 || manifest.PassScores[0].MissingCount == 0 {
+		t.Fatalf("manifest.PassScores = %+v, want PassScores[0].MissingCount > 0", manifest.PassScores)
+	}
+	if len(manifest.DegradedPasses) == 0 {
+		t.Fatal("manifest.DegradedPasses is empty, want the one pass named")
+	}
+	if manifest.MediansUnreliable {
+		t.Fatal("manifest.MediansUnreliable = true, want false — req-ok keeps this pass merely degraded, not wiped")
+	}
+
+	// The committed transcript's own Outcome must not claim a pass either
+	// (B2's buildTranscript half of the fix).
+	data, err := os.ReadFile(filepath.Join(destDir, "req-refused.yaml"))
+	if err != nil {
+		t.Fatalf("reading committed transcript: %v", err)
+	}
+	var tr Transcript
+	if err := yaml.Unmarshal(data, &tr); err != nil {
+		t.Fatalf("unmarshaling transcript: %v", err)
+	}
+	if tr.Outcome.ValidatePass {
+		t.Fatal("committed Transcript.Outcome.ValidatePass = true, want false — the model never produced a usable candidate")
+	}
+}
+
+// TestRunCapture_ScopedRecapture_PatchesExistingManifest is the end-to-end
+// regression test for M1 (round-3 review of #2814): a scoped
+// `-run TestCaptureTranscripts/<id>` re-capture that turns a
+// previously-tombstoned id back into real data must patch that id's own
+// RequestOutcome (and CapturedCount/MissingCount) into the manifest.yaml
+// the last full run left behind — before this fix, runCapture mutated the
+// TREE (promoted the new transcript, removed the stale tombstone — H3's own
+// fix) but returned early without ever touching manifest.yaml, leaving a
+// committed file that still said captured: false for an id the tree now
+// has real data for.
+//
+// Scoping only happens via the real `go test -run` mechanism (Go's testing
+// package decides which t.Run(req.ID, ...) closures execute BEFORE
+// runCapture's own code ever sees it — there is no in-process way to
+// simulate "only 1 of 2 requests attempted" against a real *testing.T), so
+// this re-execs the already-built test binary the same way
+// TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable does,
+// filtered to just the req-b subtest.
+func TestRunCapture_ScopedRecapture_PatchesExistingManifest(t *testing.T) {
+	const helperEnv = "CONDUIT_TEST_SCOPEDPATCH_HELPER"
+	const destDirEnv = "CONDUIT_TEST_SCOPEDPATCH_DESTDIR"
+
+	if os.Getenv(helperEnv) == "1" {
+		runScopedRecaptureHelper(t, os.Getenv(destDirEnv))
+		return
+	}
+
+	destDir := t.TempDir()
+	seedManifestForScopedRecapture(t, destDir)
+
+	cmd := exec.CommandContext(
+		context.Background(),
+		os.Args[0],
+		"-test.run=^TestRunCapture_ScopedRecapture_PatchesExistingManifest$/^req-b$",
+		"-test.v",
+	)
+	cmd.Env = append(os.Environ(), helperEnv+"=1", destDirEnv+"="+destDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("subprocess (scoped re-capture of req-b) failed: %v\noutput:\n%s", err, out)
+	}
+
+	// req-b.yaml must be promoted and its tombstone gone (H3's own fix,
+	// unaffected by M1 — asserted here too since M1's fix sits right next
+	// to that code).
+	if _, err := os.Stat(filepath.Join(destDir, "req-b.yaml")); err != nil {
+		t.Fatalf("expected req-b.yaml to be promoted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destDir, "req-b"+tombstoneFileSuffix)); !os.IsNotExist(err) {
+		t.Fatalf("expected req-b's tombstone to be removed, stat err = %v", err)
+	}
+
+	data, rerr := os.ReadFile(filepath.Join(destDir, manifestFileName))
+	if rerr != nil {
+		t.Fatalf("reading patched manifest: %v", rerr)
+	}
+	var manifest Manifest
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("unmarshaling patched manifest: %v", err)
+	}
+
+	// The core regression: req-b's OWN outcome must now say captured, with
+	// no stale failure reason, and the summary counts must reflect it.
+	var gotReqB, gotReqA bool
+	for _, o := range manifest.RequestOutcomes {
+		switch o.RequestID {
+		case "req-b":
+			gotReqB = true
+			if !o.Captured {
+				t.Fatal("patched req-b RequestOutcome.Captured = false, want true")
+			}
+			if o.FailureReason != "" {
+				t.Fatalf("patched req-b RequestOutcome.FailureReason = %q, want empty (stale reason must be cleared)",
+					o.FailureReason)
+			}
+		case "req-a":
+			gotReqA = true
+			if !o.Captured {
+				t.Fatal("req-a RequestOutcome.Captured = false, want true — untouched by this scoped run")
+			}
+		}
+	}
+	if !gotReqB || !gotReqA {
+		t.Fatalf("expected RequestOutcomes for both req-a and req-b, got %+v", manifest.RequestOutcomes)
+	}
+	if manifest.CapturedCount != 2 || manifest.MissingCount != 0 {
+		t.Fatalf("manifest CapturedCount/MissingCount = %d/%d, want 2/0 after the scoped re-capture",
+			manifest.CapturedCount, manifest.MissingCount)
+	}
+	// Medians/PassScores describe the LAST FULL run and must be untouched
+	// by a scoped run that has no full-corpus data to recompute them from.
+	if manifest.MedianValidatePassRate != 0.5 {
+		t.Fatalf("manifest.MedianValidatePassRate = %v, want 0.5 (untouched from the seeded full run)",
+			manifest.MedianValidatePassRate)
+	}
+}
+
+// seedManifestForScopedRecapture writes destDir into the state a prior FULL
+// run (req-a captured, req-b permanently missing) would have left it in:
+// req-a's committed transcript, req-b's tombstone, and a manifest.yaml
+// whose RequestOutcomes/counts/medians describe exactly that.
+func seedManifestForScopedRecapture(t *testing.T, destDir string) {
+	t.Helper()
+
+	reqA := capturePipelineRequest("req-a")
+	tr := Transcript{
+		SchemaVersion:      TranscriptSchemaVersion,
+		RequestID:          reqA.ID,
+		Provider:           "anthropic",
+		Model:              "claude-sonnet-5-test",
+		CapturedAt:         time.Now().UTC(),
+		CorpusPromptSHA256: sha256Hex(reqA.Prompt),
+		SystemPromptSHA256: sha256Hex(BuildSystemPrompt(BuiltinCatalog())),
+		CatalogFingerprint: CatalogFingerprint(),
+		Turns: []Turn{{
+			N: 1, UserPromptSHA256: sha256Hex(reqA.Prompt), TokensUsed: 20,
+			CompletionText: "```yaml\n" + validCandidate + "```",
+		}},
+		Outcome: Outcome{ValidatePass: true, SemanticMatch: true},
+	}
+	data, err := yaml.Marshal(tr)
+	if err != nil {
+		t.Fatalf("marshaling seed transcript: %v", err)
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatalf("creating %q: %v", destDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(destDir, "req-a.yaml"), data, 0o600); err != nil {
+		t.Fatalf("writing seed transcript: %v", err)
+	}
+
+	writeTombstone(t, destDir, Tombstone{
+		SchemaVersion:      TranscriptSchemaVersion,
+		RequestID:          "req-b",
+		CorpusPromptSHA256: sha256Hex("read from the generator and write to the log TRIGGER_SCOPED_RECAPTURE"),
+		FailureCode:        "generate.provider_error (HTTP 429)",
+		CapturedAt:         time.Now().UTC(),
+	})
+
+	writeManifest(t, destDir, Manifest{
+		SchemaVersion:           TranscriptSchemaVersion,
+		Provider:                "anthropic",
+		Model:                   "claude-sonnet-5-test",
+		CapturedAt:              time.Now().UTC(),
+		RequestCount:            2,
+		Passes:                  1,
+		MedianValidatePassRate:  0.5,
+		MedianSemanticMatchRate: 0.5,
+		PassScores:              []PassScore{{Pass: 1, Total: 2, ValidatePassCount: 1, ValidatePassRate: 0.5, SemanticMatchCount: 1, SemanticMatchRate: 0.5}},
+		CapturedCount:           1,
+		MissingCount:            1,
+		RequestOutcomes: []RequestOutcome{
+			{RequestID: "req-a", Captured: true},
+			{RequestID: "req-b", Captured: false, FailureReason: "generate.provider_error (HTTP 429)"},
+		},
+	})
+}
+
+// runScopedRecaptureHelper is the real scenario
+// TestRunCapture_ScopedRecapture_PatchesExistingManifest runs inside its
+// re-exec'd subprocess, filtered to ONLY req-b's subtest (the requests
+// slice still names both — Go's own `-run` filtering is what makes this a
+// genuinely scoped run, exactly as a real `-run TestCaptureTranscripts/<id>`
+// invocation would): req-b now succeeds, simulating a clean re-capture of a
+// previously-failing request.
+func runScopedRecaptureHelper(t *testing.T, destDir string) {
+	t.Helper()
+	requests := []Request{
+		capturePipelineRequest("req-a"),
+		{
+			ID:     "req-b",
+			Prompt: "read from the generator and write to the log TRIGGER_SCOPED_RECAPTURE",
+			Expect: Expect{SourceCategory: "generator", DestinationCategory: "log"},
+		},
+	}
+	fake := &fakeProvider{replies: []string{"```yaml\n" + validCandidate + "```"}, tokens: 20}
+	cp := &captureProvider{Provider: fake, maxCalls: 1000, maxTokens: 1_000_000}
+
+	runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
 }
 
 // TestCaptureCompletenessVerdict proves the threshold decision directly and
@@ -2096,6 +2902,234 @@ func TestReportCaptureCompleteness(t *testing.T) {
 			t.Fatal("expected neither Errorf nor Logf for a clean, fully-attempted run")
 		}
 	})
+}
+
+// TestSummarizePasses_AllDegraded_FlagsUnreliableFallback is the regression
+// test for B1 (round-3 review of #2814), reproducing the review's own
+// scenario directly against summarizePasses (no *testing.T-failing side
+// effects, so this test can safely assert the bad behavior is gone without
+// itself needing to fail): 5 requests, 3 capture passes, a provider that
+// dies after 3 successful calls (captureWallClockBudget expiring 60% into
+// pass 1, in the language of runCapture's own doc comment) — pass 1 captures
+// req-1..req-3 (which validate cleanly) and is missing req-4/req-5; passes 2
+// and 3 capture nothing at all. Every pass is therefore degraded
+// (missingCounts all > 0), which is exactly the case the pre-fix code
+// treated as "fall back to the median across every pass" — computing 0.00
+// even though the requests that WERE captured validated 3/3.
+//
+// Reverting the allDegraded field (and the fallback-is-unreliable framing in
+// summarizePasses' doc comment) does not change what this test asserts —
+// what it guards is the CALLER'S ability to tell the two cases apart, so the
+// meaningful regression coverage is that allDegraded comes back true here;
+// see TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable below
+// for the end-to-end proof that runCapture actually acts on it.
+func TestSummarizePasses_AllDegraded_FlagsUnreliableFallback(t *testing.T) {
+	requests := []Request{
+		capturePipelineRequest("req-1"),
+		capturePipelineRequest("req-2"),
+		capturePipelineRequest("req-3"),
+		capturePipelineRequest("req-4"),
+		capturePipelineRequest("req-5"),
+	}
+	// Candidates map values here are ScoreRun/validateCandidate input
+	// directly (validate.RunBytes), never the fenced markdown a live
+	// provider reply would carry — that fence-stripping is extractCandidate's
+	// job inside Generate, a layer these summarizePasses unit tests bypass
+	// entirely (c.f. diesAfterNCallsProvider below, which DOES go through
+	// Generate and so DOES need the fence).
+
+	// Mirrors runCapture's own candidate map construction: a pass that never
+	// produced a completion for a request omits that key entirely (score.go's
+	// Result.Missing), never an empty-string stand-in.
+	pass1 := Candidates{"req-1": validCandidate, "req-2": validCandidate, "req-3": validCandidate}
+	pass2 := Candidates{}
+	pass3 := Candidates{}
+	missingCounts := []int{2, 5, 5} // req-4/req-5 missing pass 1; everything missing passes 2-3
+
+	ctx := context.Background()
+	ms := ScoreMedian(ctx, requests, []Candidates{pass1, pass2, pass3})
+	_, summary := summarizePasses(ms.Runs, missingCounts)
+
+	if !summary.allDegraded {
+		t.Fatal("summary.allDegraded = false, want true — every one of 3 passes had a nonzero missingCount")
+	}
+	if len(summary.degradedPasses) != 3 {
+		t.Fatalf("summary.degradedPasses = %v, want all 3 passes named", summary.degradedPasses)
+	}
+	// The regression this test exists to catch: the requests that WERE
+	// captured (pass 1's req-1..req-3) validate 3/3, but with no clean pass
+	// to compute a median from, the all-passes fallback still comes out to
+	// 0 (median of [0.6, 0, 0] == 0) — this is summarizePasses' documented
+	// fallback behavior, not a bug in this test; what matters is that
+	// allDegraded is true so the caller knows not to trust it.
+	if summary.validateRate != 0 {
+		t.Fatalf("summary.validateRate = %v, want 0 (median of [0.6, 0, 0]) — if this changed, update the "+
+			"scenario or the assertion, but confirm allDegraded is still what the caller relies on", summary.validateRate)
+	}
+}
+
+// TestSummarizePasses_ChronicSingleMissingRequest_NotAllDegraded is the
+// negative counterpart to TestSummarizePasses_AllDegraded_FlagsUnreliableFallback:
+// a single request that is chronically missing on EVERY pass (never any
+// OTHER request, and never a whole pass wiped) must NOT set allDegraded,
+// even though — same as the all-degraded case — no individual pass is
+// "clean" (missingCount == 0 for every one of them). This is exactly
+// TestRunCapture_PartialFailure_PreservesGoodTranscripts's own scenario
+// (req-b permanently rate-limited, req-a/req-c always captured) reduced to
+// summarizePasses directly: an over-broad allDegraded condition (n == 0
+// alone, without also requiring a wiped pass) would flip this ordinary,
+// below-threshold partial result — the exact case captureCompletenessVerdict
+// exists to treat as routine — into a hard failure of the whole capture run,
+// which is the regression this test guards against.
+func TestSummarizePasses_ChronicSingleMissingRequest_NotAllDegraded(t *testing.T) {
+	requests := []Request{
+		capturePipelineRequest("req-a"),
+		capturePipelineRequest("req-b"),
+		capturePipelineRequest("req-c"),
+	}
+	// req-b is missing from every pass; req-a/req-c are captured and valid
+	// on every pass — identical, stable degradation, not a wipeout.
+	pass := Candidates{"req-a": validCandidate, "req-c": validCandidate}
+	missingCounts := []int{1, 1, 1}
+
+	ctx := context.Background()
+	ms := ScoreMedian(ctx, requests, []Candidates{pass, pass, pass})
+	_, summary := summarizePasses(ms.Runs, missingCounts)
+
+	if summary.allDegraded {
+		t.Fatal("summary.allDegraded = true, want false — one chronically-missing request among three is " +
+			"ordinary partial-result noise (captureCompletenessVerdict's territory), not a wiped pass")
+	}
+	if len(summary.degradedPasses) != 3 {
+		t.Fatalf("summary.degradedPasses = %v, want all 3 passes named (missingCount 1 > 0 on every one)",
+			summary.degradedPasses)
+	}
+	// The fallback (median across all passes) is still what gets published
+	// here — but it is the SAME number a clean-pass median would have shown
+	// (every pass identically 2/3), which is why allDegraded correctly
+	// stays false: nothing about this number is misleading.
+	if want := 2.0 / 3.0; summary.validateRate != want {
+		t.Fatalf("summary.validateRate = %v, want %v", summary.validateRate, want)
+	}
+}
+
+// TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable is the
+// end-to-end regression test for B1: runCapture itself, given the review's
+// exact "provider dies partway through pass 1" scenario, must (a) fail its
+// own `go test` run (t.Errorf — the same class of failure
+// captureCompletenessVerdict already uses for attemptedCount == 0) rather
+// than exit clean under a misleading 0.00 baseline, and (b) still write a
+// manifest.yaml — with MediansUnreliable: true — for whatever WAS captured
+// (req-1..req-3, which validate 3/3).
+//
+// Asserting "this call makes *testing.T fail" cannot be done in-process:
+// once ANY subtest calls t.Errorf, Go's testing package propagates that
+// failure to every ancestor including the top-level test binary (verified
+// empirically — there is no way to catch and discard it, which is exactly
+// why reportCaptureCompleteness above is tested through the fakeCompletenessSink
+// indirection instead of a real *testing.T). runCapture cannot take that same
+// indirection: its per-request t.Run(req.ID, ...) subtests are what let a
+// scoped `-run TestCaptureTranscripts/<id>` re-capture work at all (file
+// header), which requires a concrete *testing.T. So this test re-execs the
+// already-built test binary (os.Args[0], the standard os/exec-style pattern
+// for asserting a process exits nonzero) as a subprocess, lets THAT process's
+// real *testing.T take the real Errorf, and asserts on the parent side that
+// the subprocess failed and left the expected manifest on disk.
+func TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable(t *testing.T) {
+	const helperEnv = "CONDUIT_TEST_ALLDEGRADED_HELPER"
+	const destDirEnv = "CONDUIT_TEST_ALLDEGRADED_DESTDIR"
+
+	if os.Getenv(helperEnv) == "1" {
+		runAllPassesDegradedHelper(t, os.Getenv(destDirEnv))
+		return
+	}
+
+	destDir := t.TempDir()
+	cmd := exec.CommandContext(
+		context.Background(),
+		os.Args[0],
+		"-test.run=^TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable$",
+		"-test.v",
+	)
+	cmd.Env = append(os.Environ(), helperEnv+"=1", destDirEnv+"="+destDir)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected the subprocess (runCapture with every pass degraded) to exit nonzero via t.Errorf; "+
+			"output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "every one of 3 capture pass(es) was degraded") {
+		t.Fatalf("subprocess failed as expected, but not for the reason this test checks — output:\n%s", out)
+	}
+
+	data, rerr := os.ReadFile(filepath.Join(destDir, manifestFileName))
+	if rerr != nil {
+		t.Fatalf("expected manifest.yaml to still be written despite the failure: %v\nsubprocess output:\n%s", rerr, out)
+	}
+	var manifest Manifest
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("unmarshaling manifest: %v", err)
+	}
+	if !manifest.MediansUnreliable {
+		t.Fatal("manifest.MediansUnreliable = false, want true")
+	}
+	if manifest.CapturedCount != 3 {
+		t.Fatalf("manifest.CapturedCount = %d, want 3 (req-1..req-3 captured on pass 1)", manifest.CapturedCount)
+	}
+	if manifest.MissingCount != 2 {
+		t.Fatalf("manifest.MissingCount = %d, want 2 (req-4/req-5 never captured on any pass)", manifest.MissingCount)
+	}
+	if len(manifest.DegradedPasses) != 3 {
+		t.Fatalf("manifest.DegradedPasses = %v, want all 3 passes named", manifest.DegradedPasses)
+	}
+}
+
+// diesAfterNCallsProvider returns a valid, passing completion for its first
+// n calls and errors on every call after that — modeling
+// captureWallClockBudget expiring (or a rate-limit storm starting) partway
+// through a multi-pass run, across every request rather than just one (c.f.
+// flakyAfterFirstCallProvider above, which flakes a single marked request).
+type diesAfterNCallsProvider struct {
+	n     int
+	reply string
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (p *diesAfterNCallsProvider) Name() string { return "dies-after-n-calls" }
+
+func (p *diesAfterNCallsProvider) Complete(_ context.Context, _ provider.CompletionRequest) (provider.CompletionResult, error) {
+	p.mu.Lock()
+	p.calls++
+	n := p.calls
+	p.mu.Unlock()
+	if n > p.n {
+		return provider.CompletionResult{}, fmt.Errorf("capture ceiling: wall-clock deadline exceeded (simulated)")
+	}
+	return provider.CompletionResult{Text: p.reply, TokensUsed: 20}, nil
+}
+
+// runAllPassesDegradedHelper is the real scenario
+// TestRunCapture_AllPassesDegraded_FailsTheRunAndFlagsUnreliable runs inside
+// its re-exec'd subprocess: 5 requests, 3 passes, a provider that dies after
+// 3 successful calls — so pass 1 captures req-1..req-3 and is missing
+// req-4/req-5, and passes 2-3 capture nothing (the provider is already dead
+// by the time they start). This calls runCapture on the subprocess's OWN
+// real *testing.T, so the t.Errorf inside it (B1's fix) really does fail
+// this subprocess — that is the behavior under test.
+func runAllPassesDegradedHelper(t *testing.T, destDir string) {
+	t.Helper()
+	requests := []Request{
+		capturePipelineRequest("req-1"),
+		capturePipelineRequest("req-2"),
+		capturePipelineRequest("req-3"),
+		capturePipelineRequest("req-4"),
+		capturePipelineRequest("req-5"),
+	}
+	fake := &diesAfterNCallsProvider{n: 3, reply: "```yaml\n" + validCandidate + "```"}
+	cp := &captureProvider{Provider: fake, maxCalls: 1000, maxTokens: 1_000_000}
+
+	runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 3, destDir)
 }
 
 // TestScanAndPromoteScratch_OneViolationBlocksTheWholeBatch proves plan §5 /

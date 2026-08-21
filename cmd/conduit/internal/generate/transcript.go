@@ -245,12 +245,23 @@ type Manifest struct {
 	// both axes (score.go), so folding a degraded pass in here would drag
 	// these two headline numbers toward zero even though the requests it
 	// dropped are still recorded elsewhere (RequestOutcomes, and possibly
-	// captured by another pass). Falls back to the median across ALL
-	// passes only when every single pass is degraded (no clean pass
-	// exists to prefer). DegradedPasses names which passes were excluded;
-	// PassScores carries every pass's own rate, degraded or not, for the
-	// detail this field summarizes away. Never best-of (CLAUDE.md's
-	// benchmarking discipline).
+	// captured by another pass).
+	//
+	// That "median across every CLEAN pass" description holds only when
+	// MediansUnreliable is false. When every single pass is degraded (no
+	// clean pass exists), these two fields fall back to the median across
+	// ALL passes instead — every missing request still scored as a hard
+	// fail, with no clean pass left to dilute that — and MediansUnreliable
+	// is true. B1 (round-3 review of #2814): that fallback is not a
+	// defense against a misleading number, it is what PRODUCES one — do
+	// not read these fields as this run's baseline when MediansUnreliable
+	// is true; runCapture also fails the `go test` run outright in that
+	// case (t.Errorf) for the same reason. DegradedPasses names which
+	// passes were excluded (or, when MediansUnreliable is true, which
+	// passes the fallback had no alternative but to include); PassScores
+	// carries every pass's own rate, degraded or not, for the detail this
+	// field summarizes away. Never best-of (CLAUDE.md's benchmarking
+	// discipline).
 	MedianValidatePassRate  float64 `yaml:"medianValidatePassRate"`
 	MedianSemanticMatchRate float64 `yaml:"medianSemanticMatchRate"`
 	// MedianValidatePassCount and MedianSemanticMatchCount are the median of
@@ -262,6 +273,47 @@ type Manifest struct {
 	// (odd), where this is always a whole number in practice.
 	MedianValidatePassCount  float64 `yaml:"medianValidatePassCount"`
 	MedianSemanticMatchCount float64 `yaml:"medianSemanticMatchCount"`
+	// MedianSampleSize is how many of Passes actually contributed to the
+	// four median fields above — the number of CLEAN passes ordinarily, or
+	// every pass (== Passes) when MediansUnreliable's fallback is in
+	// effect. N3 (round-3 review of #2814): a median is only as meaningful
+	// as its sample size, and that size is not otherwise stated anywhere
+	// in this file — a reader would have to compute
+	// Passes - len(DegradedPasses) themselves (and get it wrong when
+	// MediansUnreliable is true, since that fallback counts every pass,
+	// not the clean ones) to know whether a given median came from 1 pass
+	// or 3.
+	MedianSampleSize int `yaml:"medianSampleSize"`
+	// MediansUnreliable is true when BOTH: every one of Passes capture
+	// passes was degraded (PassScores[i].MissingCount > 0 for all of them —
+	// see DegradedPasses), AND at least one of those passes was WIPED
+	// (PassScores[i].MissingCount == PassScores[i].Total — it captured
+	// NOTHING at all, the signature of captureWallClockBudget expiring
+	// before a pass even started, or a rate-limit storm eating the whole
+	// pass). There was no clean pass left for MedianValidatePassRate/
+	// MedianSemanticMatchRate/MedianValidatePassCount/
+	// MedianSemanticMatchCount to be computed from, so those four fields
+	// fall back to a median across ALL passes with every missing request
+	// scored as a hard fail and nothing to dilute it (see
+	// MedianValidatePassRate's own doc comment) — and because at least one
+	// pass contributed a raw, uninformative 0, that fallback is not just
+	// unlabeled, it is actively misleading (B1, round-3 review of #2814).
+	// The second condition matters: a single request that is chronically
+	// missing across every pass (never wiping a WHOLE pass) also leaves no
+	// pass "clean", but every pass's own rate is then identical and stable
+	// — the fallback equals what a clean-pass median would have shown too,
+	// and this field correctly stays false for that ordinary, sub-threshold
+	// partial result (captureCompletenessVerdict's job, not this field's).
+	//
+	// Omitted (`omitempty`, false is the common case) rather than always
+	// present, so its mere presence in a committed manifest.yaml is itself
+	// the signal something is wrong — the same convention DegradedPasses
+	// already uses. A run that sets this true also fails its own
+	// `go test` invocation (runCapture, t.Errorf), which generate-capture.yml
+	// turns into a PARTIAL-capture PR with a [!WARNING] banner rather than a
+	// routine one; this field is what keeps that fact true for a reader
+	// looking at the file alone, without the PR body.
+	MediansUnreliable bool `yaml:"mediansUnreliable,omitempty"`
 	// PassScores is every pass's own RunScore rollup (counts AND rates, plan
 	// §8.1's "three passes, median never best-of" made auditable) — the
 	// median fields above are the headline, this is the detail a regression
@@ -441,7 +493,21 @@ type Tombstone struct {
 // transcripts. It is independent of LoadTranscripts — nothing in bijection or
 // prompt-hash validation depends on a manifest existing or parsing.
 func LoadManifest(path string) (Manifest, error) {
-	data, err := os.ReadFile(path)
+	// path is caller-controlled (a repo-relative
+	// testdata/transcripts/.../manifest.yaml path or a test's own
+	// t.TempDir()), never externally-supplied/attacker-controlled input —
+	// this package never runs against untrusted paths (see doc.go's
+	// invariants); same trust boundary every other os.ReadFile call in
+	// this package already operates under. Gosec's taint analysis only
+	// flags this when the package is built with `-tags=generate_capture`
+	// (the tag that pulls in transcript_capture_test.go's own
+	// patchManifestForScopedRun caller) — real CI's golangci-lint job
+	// does not pass that tag, so `#nosec` (gosec's own native suppression
+	// syntax, which golangci's nolintlint does not police for
+	// "unused" the way it does //nolint directives) is what stays quiet
+	// in both configurations rather than flip-flopping between "needed"
+	// and "unused".
+	data, err := os.ReadFile(path) // #nosec G703
 	if err != nil {
 		return Manifest{}, cerrors.Errorf("reading manifest %q: %w", path, err)
 	}

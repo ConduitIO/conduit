@@ -71,10 +71,10 @@ const (
 	openAIOK    = `{"choices":[{"message":{"role":"assistant","content":"version: 2.2"}}],"usage":{"total_tokens":15}}`
 )
 
-// Test_Adapters_HappyPath pins that each adapter returns the model's text and
+// TestAdapters_HappyPath pins that each adapter returns the model's text and
 // only a provider-REPORTED token count. A fabricated count would be
 // indistinguishable from a real one in --json output users may bill against.
-func Test_Adapters_HappyPath(t *testing.T) {
+func TestAdapters_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	t.Run("anthropic", func(t *testing.T) {
@@ -128,10 +128,10 @@ func Test_Adapters_HappyPath(t *testing.T) {
 	})
 }
 
-// Test_Adapters_HTTPErrorsAreProviderErrors pins the error code and that the
+// TestAdapters_HTTPErrorsAreProviderErrors pins the error code and that the
 // message names the provider and status. A user seeing this needs to know
 // which provider failed and why — not a stack trace from inside an HTTP client.
-func Test_Adapters_HTTPErrorsAreProviderErrors(t *testing.T) {
+func TestAdapters_HTTPErrorsAreProviderErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, status := range []int{401, 429, 500} {
@@ -160,10 +160,10 @@ func Test_Adapters_HTTPErrorsAreProviderErrors(t *testing.T) {
 	}
 }
 
-// Test_Adapters_EmptyResponseIsAnError pins that a 200 with no text fails
+// TestAdapters_EmptyResponseIsAnError pins that a 200 with no text fails
 // loudly. Returning an empty string would send the generation loop into a
 // parse failure that blames the wrong layer.
-func Test_Adapters_EmptyResponseIsAnError(t *testing.T) {
+func TestAdapters_EmptyResponseIsAnError(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -186,7 +186,7 @@ func Test_Adapters_EmptyResponseIsAnError(t *testing.T) {
 	}
 }
 
-// Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens is the
+// TestAdapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens is the
 // regression test for the finding that a refusal (a 2xx with an empty
 // completion) was reported identically to absence of data (a 429, a
 // timeout) and its tokens were silently dropped from cost accounting: the
@@ -194,7 +194,7 @@ func Test_Adapters_EmptyResponseIsAnError(t *testing.T) {
 // the completion is unusable, and that must survive on CompletionResult
 // even though Complete returns an error — a caller that only inspects the
 // error return (as code used to) would otherwise undercount real spend.
-func Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens(t *testing.T) {
+func TestAdapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -228,7 +228,7 @@ func Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens(t *testing.T) 
 	}
 }
 
-// Test_Adapters_HTTPErrorsCarryHTTPStatus pins the structured half of a
+// TestAdapters_HTTPErrorsCarryHTTPStatus pins the structured half of a
 // checkStatus failure: the numeric status is recoverable via HTTPStatus
 // without parsing message text, and such an error is never marked
 // IsUnusableResponse (a non-2xx means no usable response was obtained at
@@ -240,7 +240,7 @@ func Test_Adapters_EmptyResponseIsMarkedUnusable_AndCarriesTokens(t *testing.T) 
 // today — a real gap, but a pre-existing one this fix does not widen, and
 // out of scope here since the live capture harness (transcript_capture_test.go)
 // only ever drives the anthropic adapter.
-func Test_Adapters_HTTPErrorsCarryHTTPStatus(t *testing.T) {
+func TestAdapters_HTTPErrorsCarryHTTPStatus(t *testing.T) {
 	t.Parallel()
 
 	for name, build := range map[string]func(url string) Provider{
@@ -274,9 +274,9 @@ func Test_Anthropic_ConcatenatesTextBlocks(t *testing.T) {
 	is.Equal(got.Text, "version: 2.2") // joined, and non-text blocks skipped
 }
 
-// Test_Adapters_RespectContextCancellation pins that a caller's cancellation
+// TestAdapters_RespectContextCancellation pins that a caller's cancellation
 // aborts promptly rather than waiting out the per-call timeout.
-func Test_Adapters_RespectContextCancellation(t *testing.T) {
+func TestAdapters_RespectContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	// The wait is BOUNDED. httptest.Server.Close waits for in-flight handlers,
@@ -317,7 +317,7 @@ func Test_Adapters_RespectContextCancellation(t *testing.T) {
 	}
 }
 
-// Test_Adapters_TimeoutIsBounded pins that a wedged provider fails rather than
+// TestAdapters_TimeoutIsBounded pins that a wedged provider fails rather than
 // hanging an interactive command forever, and (round-2 review of #2814,
 // "safeFailureReason collapses DNS failure, connection-refused, timeout...
 // to one string") that the failure is specifically identifiable via
@@ -325,7 +325,7 @@ func Test_Adapters_RespectContextCancellation(t *testing.T) {
 // transport-level miss (DNS failure, connection refused), which HTTPStatus
 // alone can't tell apart (none of those ever got a response with a status
 // to report).
-func Test_Adapters_TimeoutIsBounded(t *testing.T) {
+func TestAdapters_TimeoutIsBounded(t *testing.T) {
 	t.Parallel()
 
 	// Bounded for the same reason as in the cancellation test above.
@@ -359,24 +359,36 @@ func Test_Adapters_TimeoutIsBounded(t *testing.T) {
 	}
 }
 
-// Test_Adapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout is the
+// TestAdapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout is the
 // negative case for IsTimeout: a connection actively refused (not a
 // deadline expiring) must never be misreported as a timeout — the two call
 // for different remediation (retry later vs. check the endpoint/network).
-func Test_Adapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout(t *testing.T) {
+func TestAdapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout(t *testing.T) {
 	t.Parallel()
 
 	// A server that accepts and immediately closes the connection is a
 	// reliable, fast way to force "connection refused"/"EOF" rather than a
 	// deadline — no sleeping, no wedged handler.
+	//
+	// N5 (round-3 review of #2814): this handler runs on net/http's OWN
+	// per-request goroutine, never the test goroutine — calling
+	// t.Fatal/t.Fatalf here was an invalid use of *testing.T (its docs:
+	// "FailNow must be called from the goroutine running the test... function,
+	// not from other goroutines"). Neither branch below is expected to
+	// ever actually fire against httptest's server transport (its
+	// ResponseWriter always implements Hijacker, and Hijack on a fresh
+	// connection does not fail), so panicking is the correct "this should
+	// never happen" signal here: net/http recovers a per-connection panic
+	// and logs it (visible with `go test -v`) without the goroutine-safety
+	// hazard a *testing.T call would carry.
 	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
 		if !ok {
-			t.Fatal("test setup: ResponseWriter does not support hijacking")
+			panic("test setup: ResponseWriter does not support hijacking")
 		}
 		conn, _, err := hj.Hijack()
 		if err != nil {
-			t.Fatalf("test setup: hijack: %v", err)
+			panic(fmt.Sprintf("test setup: hijack: %v", err))
 		}
 		conn.Close()
 	}))
@@ -395,9 +407,9 @@ func Test_Adapters_NonTimeoutTransportErrorIsNotMarkedAsTimeout(t *testing.T) {
 	}
 }
 
-// Test_Adapters_RequestModelOverridesAdapterDefault pins the precedence the
+// TestAdapters_RequestModelOverridesAdapterDefault pins the precedence the
 // --model flag depends on.
-func Test_Adapters_RequestModelOverridesAdapterDefault(t *testing.T) {
+func TestAdapters_RequestModelOverridesAdapterDefault(t *testing.T) {
 	t.Parallel()
 	is := is.New(t)
 
@@ -412,7 +424,7 @@ func Test_Adapters_RequestModelOverridesAdapterDefault(t *testing.T) {
 }
 
 // Test_DefaultMaxTokens_AbsorbsThinkingNotJustOutput pins the actual value,
-// not just that SOME constant is wired through (Test_Adapters_
+// not just that SOME constant is wired through (TestAdapters_
 // MaxTokensPassedThrough below covers wiring). A generated pipeline config
 // is small — around 350 tokens for a typical candidate in this package's own
 // corpus — so 4096 looks generous for the OUTPUT alone; it is not generous
@@ -426,7 +438,7 @@ func Test_DefaultMaxTokens_AbsorbsThinkingNotJustOutput(t *testing.T) {
 	is.Equal(DefaultMaxTokens, 16384)
 }
 
-// Test_Adapters_MaxTokensPassedThrough pins that DefaultMaxTokens actually
+// TestAdapters_MaxTokensPassedThrough pins that DefaultMaxTokens actually
 // reaches the request body, for every adapter that has a max-tokens field to
 // set. On a model that runs adaptive/extended thinking by default when the
 // request doesn't set an explicit thinking budget (e.g. Anthropic's Sonnet 5,
@@ -437,7 +449,7 @@ func Test_DefaultMaxTokens_AbsorbsThinkingNotJustOutput(t *testing.T) {
 // against. A regression that drops the field, hardcodes a smaller value, or
 // forgets to wire DefaultMaxTokens into a new adapter's request must fail
 // this test.
-func Test_Adapters_MaxTokensPassedThrough(t *testing.T) {
+func TestAdapters_MaxTokensPassedThrough(t *testing.T) {
 	t.Parallel()
 
 	t.Run("anthropic", func(t *testing.T) {
