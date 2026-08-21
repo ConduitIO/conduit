@@ -97,6 +97,84 @@ func TestExtractIntent_ContradictionIsDetected(t *testing.T) {
 	is.True(got.Contradiction != "")
 }
 
+// A prompt that names the same connector twice — once as part of a format
+// description, once as the actual endpoint — must not be read as two
+// different connectors claiming the same role. This is the regression for
+// the "kafka-connect-unwrap-to-postgres" corpus row (testdata/
+// eval_requests.yaml), which ExtractIntent refused before ever calling a
+// provider: cueWindow was wide enough to walk backward from the second
+// "kafka" mention (in "unwrapping the kafka connect envelope") past the
+// intervening "postgres" and steal the "into" cue that actually belonged to
+// postgres, manufacturing a postgres-vs-kafka destination contradiction.
+//
+// Sibling phrasings that name a connector as part of a *format* rather than
+// an endpoint are included here because they are the same class of bug, not
+// because "kafka connect" is special-cased: the fix (narrowing cueWindow)
+// must generalize to any wording, not just the literal corpus string.
+func TestExtractIntent_ConnectorMentionedTwiceIsNotAContradiction(t *testing.T) {
+	is := is.New(t)
+	names := CatalogNames(BuiltinCatalog())
+
+	for _, tc := range []struct {
+		name        string
+		prompt      string
+		source      string
+		destination string
+	}{{
+		name:        "the exact corpus prompt (kafka-connect-unwrap-to-postgres)",
+		prompt:      "consume kafka connect formatted messages from a topic and upsert them into postgres, unwrapping the kafka connect envelope first",
+		destination: "postgres",
+	}, {
+		name:        "same prompt without the comma before the participial clause",
+		prompt:      "consume kafka connect formatted messages from a topic and upsert them into postgres unwrapping the kafka connect envelope first",
+		destination: "postgres",
+	}, {
+		// "postgres" opens the sentence with nothing before it, so this
+		// heuristic cannot reach a source cue for it either way — that is
+		// an existing, acceptable under-extraction (the semantic checker
+		// judges it later), not a regression. What matters here is that
+		// naming "debezium" as the envelope format doesn't collide with
+		// anything: it is not a catalog connector alias at all, so it can
+		// never contend for a role.
+		name:        "debezium envelope named as a format, not an endpoint",
+		prompt:      "capture postgres change data and publish it to kafka, unwrapping the debezium envelope so the topic only has the actual row data",
+		destination: "kafka",
+	}, {
+		name:        "connector name repeated in a trailing clause describing the source format",
+		prompt:      "read change events from postgres and write them to kafka, since postgres emits them as a WAL stream",
+		source:      "postgres",
+		destination: "kafka",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractIntent(tc.prompt, names)
+			is.Equal(got.Contradiction, "")
+			is.Equal(got.Source, tc.source)
+			is.Equal(got.Destination, tc.destination)
+		})
+	}
+}
+
+// The corpus (testdata/eval_requests.yaml) is the spec for what `generate`
+// is for (design §9); a corpus row that ExtractIntent refuses before a
+// provider is ever called is our own heuristic being wrong, not the
+// fixture. This must fail the build the moment it regresses, rather than
+// being discovered by spending money on a live transcript capture run.
+func TestExtractIntent_CorpusNeverProducesAContradiction(t *testing.T) {
+	is := is.New(t)
+	names := CatalogNames(BuiltinCatalog())
+
+	requests, err := LoadRequests("testdata/eval_requests.yaml")
+	is.NoErr(err)
+	is.True(len(requests) > 0)
+
+	for _, r := range requests {
+		got := ExtractIntent(r.Prompt, names)
+		if got.Contradiction != "" {
+			t.Errorf("id=%q: ExtractIntent found a false contradiction: %s\n  prompt=%q", r.ID, got.Contradiction, r.Prompt)
+		}
+	}
+}
+
 // Every alias must name a connector this binary actually has, or the checker
 // would demand a connector the model cannot legally produce.
 func TestConnectorAliases_ResolveToRealConnectors(t *testing.T) {
