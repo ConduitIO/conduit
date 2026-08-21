@@ -1410,6 +1410,14 @@ func TestServiceLifecycle_RunPipeline_UpdateStatusRunningFails_RollsBackPublicat
 	logger := log.New(zerolog.Nop())
 	injectedErr := cerrors.New("status store: write timeout")
 
+	// Captured inside the hook, which fires BEFORE the wrapped UpdateStatus.
+	// Asserting only the absence afterwards would pass just as well against
+	// code that never published at all — i.e. it would keep passing if
+	// someone deleted the Set and reintroduced #2806 wholesale. Two-sided:
+	// published before the status write, gone after the failure.
+	var publishedDuringStatusWrite bool
+	var rp *runnablePipeline
+
 	rec := newStatusRecorder(testPipelineService{})
 	rec.onUpdate = func(status pipeline.Status, _ int) error {
 		if status == pipeline.StatusRunning {
@@ -1427,7 +1435,7 @@ func TestServiceLifecycle_RunPipeline_UpdateStatusRunningFails_RollsBackPublicat
 		rec,
 	)
 
-	rp := &runnablePipeline{
+	rp = &runnablePipeline{
 		pipeline: &pipeline.Instance{
 			ID:     uuid.NewString(),
 			Config: pipeline.Config{Name: "test-pipeline"},
@@ -1436,11 +1444,26 @@ func TestServiceLifecycle_RunPipeline_UpdateStatusRunningFails_RollsBackPublicat
 		recoveryAttempts: &atomic.Int64{},
 	}
 
+	// Re-point the hook now that rp exists, so it can observe the map at the
+	// instant the status write is attempted.
+	rec.onUpdate = func(status pipeline.Status, _ int) error {
+		if status == pipeline.StatusRunning {
+			got, ok := ls.runningPipelines.Get(rp.pipeline.ID)
+			publishedDuringStatusWrite = ok && got == rp
+			return injectedErr
+		}
+		return nil
+	}
+
 	err := ls.runPipeline(context.Background(), rp)
 	is.True(cerrors.Is(err, injectedErr))
 
+	// The publication must have happened BEFORE the status write ...
+	is.True(publishedDuringStatusWrite)
+
+	// ... and must have been rolled back after it failed (#2806).
 	_, ok := ls.runningPipelines.Get(rp.pipeline.ID)
-	is.True(!ok) // a failed UpdateStatus must leave no entry in runningPipelines (#2806)
+	is.True(!ok)
 }
 
 // TestServiceLifecycle_Recovery_NestedStartFailureDoesNotCorruptRunningPipelines
