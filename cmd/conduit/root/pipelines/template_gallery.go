@@ -246,7 +246,7 @@ func galleryCatalogSpec() []GalleryTemplate {
 				"Run the pipeline with pipeline architecture v2 (`--preview.pipeline-arch-v2`, or " +
 					"`preview.pipeline-arch-v2: true` in the config). The chunking processor fans one source " +
 					"record into many chunk records, and record fan-out is only supported by architecture v2; " +
-					"on the default engine the pipeline refuses to run at the chunk step with a " +
+					"on the default engine the pipeline fails at the chunk step with a " +
 					"`pipeline.fanout_requires_arch_v2` error (FailedPrecondition) naming this flag. Architecture " +
 					"v2 is a preview engine — see its status before relying on it in production.",
 				"pgvector destination: NOT installable from the registry yet — " +

@@ -39,7 +39,7 @@ gate compares this build's `conduit-connector-protocol` module version (a connec
 version) against each processor's `minProtocolVersion`, rather than an actual processor-protocol
 version — tracked as [issue #2818](https://github.com/ConduitIO/conduit/issues/2818).
 `--bundle` is not a workaround: it applies the identical version algebra offline. A registry install
-for the pgvector destination is separately, permanently impossible today for an unrelated
+for the pgvector destination is separately impossible today for an unrelated
 reason — `conduit-connector-pgvector` has not cut a tagged release, so there is no version for
 `conduit connectors install` to resolve. Until both are fixed, all three non-built-in plugins this
 template needs must be built from source (see the table above). `conduit pipelines init --template
@@ -50,7 +50,7 @@ is scaffolded.
 
 The chunking processor fans one source record into **many** chunk records (one per chunk). Record
 fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; the default engine is
-one-record-in-one-record-out and refuses to run, at the chunk step, with a
+one-record-in-one-record-out and fails, at the chunk step, with a
 `pipeline.fanout_requires_arch_v2` error (`FailedPrecondition`) naming this flag. Run this pipeline
 with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true` in the config). Architecture v2
 is currently a **preview** engine — it is more allocation-efficient than the default but does not yet

@@ -39,6 +39,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -453,8 +454,20 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 // plugin's install command falsely described as working). This version
 // asserts the specific facts a reader needs for ai.chunk/ai.embed —
 // published, currently blocked, why, and the actual working fallback —
-// instead of a substring both the true and false prose would contain. It is
-// intentionally hand-maintained per plugin rather than table/map-driven:
+// instead of a substring both the true and false prose would contain.
+//
+// Be precise about the limit of that, because it is easy to read this guard
+// as stronger than it is: every assertion below is a PRESENCE check. It
+// catches a fact being removed or reworded away — which is how the original
+// bug happened, and how the eventual "#2818 is fixed" edit will look, since
+// that rewrite necessarily drops `registry.incompatible_version`. It does
+// NOT catch a contradicting clause ADDED alongside facts that all still
+// hold: prose asserting "...#2818 — now fixed, both installs succeed" next
+// to every currently-asserted string passes this test. Detecting that would
+// mean parsing intent out of English, which a unit test cannot do; the
+// mitigation is that the realistic edit trips the guard anyway.
+//
+// It is intentionally hand-maintained per plugin rather than table/map-driven:
 // this guard's whole job is to catch prose making a false claim about ONE
 // specific plugin's install path, which a generic per-name loop (matching
 // on a name->bool ground-truth map) cannot distinguish from a differently
@@ -513,7 +526,7 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 	// authored entirely in this repo (template_gallery.go) — not a general
 	// claim that substring matching soundly detects "is this a working
 	// instruction or a warning."
-	t.Run("pgvector", func(t *testing.T) {
+	t.Run("pgvector_not_registry_installable", func(t *testing.T) {
 		is := is.New(t)
 		is.True(!strings.Contains(joined, "connectors install pgvector"))
 		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector"))
@@ -525,6 +538,36 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 	// gate that reads the CONNECTOR protocol module instead of a processor
 	// protocol version). Assert the specific facts, not a phrase the old
 	// false prose also contained.
+	// (4) The template README mirrors this prose for a reader who never runs
+	// `pipelines init`. Nothing enforced that mirror before this check, while
+	// the PR that introduced it claimed the two "cannot drift apart
+	// silently" — README/source drift being the exact bug class this guard
+	// exists to catch, one level up. Assert the load-bearing facts appear in
+	// both, so correcting one file and forgetting the other fails here.
+	//
+	// The test's working directory is the package directory, so this relative
+	// path is stable under `go test ./...` from anywhere in the repo.
+	t.Run("readme_mirrors_the_prerequisites", func(t *testing.T) {
+		is := is.New(t)
+		readme, err := os.ReadFile(filepath.Join(
+			"templates", templateNamePostgresPgvectorRAG, "README.md"))
+		is.NoErr(err)
+		text := string(readme)
+
+		for _, fact := range []string{
+			"0.1.0",                                  // the published processor version
+			"registry.incompatible_version",          // why the hosted install fails
+			"2818",                                   // the tracking issue
+			"go build -o conduit-connector-pgvector", // the pgvector fallback
+			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback
+			"pipeline.fanout_requires_arch_v2",       // the real arch-v2 error
+		} {
+			is.True(strings.Contains(text, fact)) // README must state this fact too
+		}
+		// Same never-claim rule as (2), applied to the README.
+		is.True(!strings.Contains(text, "connectors install pgvector`"))
+	})
+
 	t.Run("ai.chunk_ai.embed_published_but_blocked", func(t *testing.T) {
 		is := is.New(t)
 		for _, name := range []string{"ai.chunk", "ai.embed"} {
