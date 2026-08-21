@@ -229,22 +229,32 @@ func galleryCatalogSpec() []GalleryTemplate {
 			// (init.go's InitResult.Prerequisites / Render) so the command
 			// never emits a bare YAML that fails opaquely on first
 			// `conduit run` — see this field's doc comment.
+			//
+			// The pgvector and processor entries below must each state
+			// their registry-availability truthfully — see
+			// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality
+			// in template_gallery_test.go for the drift guard and the
+			// exact condition under which it (and this comment) should be
+			// revisited: github.com/conduitio/conduit-connector-pgvector
+			// cutting its first tagged release.
 			Prerequisites: []string{
 				"Run the pipeline with pipeline architecture v2 (`--preview.pipeline-arch-v2`, or " +
 					"`preview.pipeline-arch-v2: true` in the config). The chunking processor fans one source " +
 					"record into many chunk records, and record fan-out is only supported by architecture v2; " +
 					"on the default engine the pipeline fails at the chunk step with an \"unknown record type\" " +
 					"error. Architecture v2 is a preview engine — see its status before relying on it in production.",
-				"Install the pgvector destination connector: `conduit connectors install pgvector@<version>` " +
-					"(run `conduit connectors search pgvector` to see available versions).",
-				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are " +
-					"standalone WASM plugins, installed with `conduit processor-plugins install ai.chunk` " +
-					"and `conduit processor-plugins install ai.embed`. Once conduit-processor-ai publishes " +
-					"signed artifacts to the registry, those commands fetch and verify them directly; until " +
-					"the registry serves processors, install from a signed bundle with `--bundle <path>`, or " +
-					"for local development build them from a github.com/conduitio/conduit-processor-ai " +
-					"checkout (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, " +
-					"likewise `./cmd/embedding`) and place the .wasm files under --processors.path.",
+				"pgvector destination: NOT installable from the registry yet — " +
+					"github.com/conduitio/conduit-connector-pgvector has no tagged release, so there is no " +
+					"version to pass to `conduit connectors install`. Build it yourself: clone the repo and " +
+					"run `go build -o conduit-connector-pgvector ./cmd/connector`, then place the binary under " +
+					"the directory --connectors.path points at (defaults to `connectors/` next to " +
+					"conduit.yaml). Switch to the registry install once that repo cuts a tagged release.",
+				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors ARE " +
+					"published to the signed registry — install them with `conduit processor-plugins install " +
+					"ai.chunk` and `conduit processor-plugins install ai.embed`. To test an unreleased change " +
+					"instead, build from a github.com/conduitio/conduit-processor-ai checkout " +
+					"(`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, likewise " +
+					"`./cmd/embedding`) and place the .wasm files under --processors.path.",
 			},
 		},
 	}

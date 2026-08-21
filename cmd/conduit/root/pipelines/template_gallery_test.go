@@ -39,6 +39,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -379,9 +380,12 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // that fails opaquely on first `conduit run` because a plugin isn't
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
-// human-readable Render output, naming the exact `conduit connectors
-// install pgvector@<version>` command and the `conduit processor-plugins
-// install ai.chunk`/`ai.embed` commands for the two WASM processors.
+// human-readable Render output, naming the working `conduit
+// processor-plugins install ai.chunk`/`ai.embed` commands for the two WASM
+// processors and pointing at a local build for pgvector (which is not
+// registry-installable — see
+// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality for the
+// drift guard on that claim).
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -403,7 +407,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	is.True(len(result.Prerequisites) >= 2)
 
 	joined := strings.Join(result.Prerequisites, "\n")
-	is.True(strings.Contains(joined, "conduit connectors install pgvector@"))
+	is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector ./cmd/connector"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.chunk"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.embed"))
 
@@ -414,8 +418,94 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	cmd2.SetOut(&out2)
 	cmd2.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--force"})
 	is.NoErr(cmd2.Execute())
-	is.True(strings.Contains(out2.String(), "conduit connectors install pgvector@"))
+	is.True(strings.Contains(out2.String(), "go build -o conduit-connector-pgvector ./cmd/connector"))
 }
+
+// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality is a
+// drift guard for a docs-honesty bug that shipped in two opposite
+// directions at once: the pgvector prerequisite told users to run
+// `conduit connectors install pgvector@<version>`, a command that can never
+// succeed (github.com/conduitio/conduit-connector-pgvector has zero git
+// tags and zero releases, so there is no version to resolve), while the
+// processor prerequisite said the hosted install "goes live once
+// conduit-processor-ai publishes signed artifacts" when ai.chunk@0.1.0 and
+// ai.embed@0.1.0 were already live in the registry index (verified against
+// ConduitIO/conduit-connector-registry@main's index/index.json, version 10,
+// 2026-08-21T19:26:17Z: both carry a real artifact + slsaProvenance entry;
+// pgvector is entirely absent from the published connectors list).
+//
+// There is no offline way for a unit test to query the live registry index,
+// so this test does two things instead:
+//
+//  1. Generically: every non-built-in plugin postgres-pgvector-rag's own
+//     pipeline.yaml references must be named somewhere in the prerequisite
+//     note, so a plugin silently dropped from the prose (the OTHER possible
+//     drift) fails here too.
+//  2. Specifically, per plugin: knownPublishedRegistryPlugins below is a
+//     manually maintained ground-truth snapshot. A plugin listed there must
+//     have its working install command documented; a plugin NOT listed
+//     (currently just pgvector) must NOT have `conduit connectors install
+//     <name>` written as an instruction to run.
+//
+// DELETE the pgvector special-case below (and add "pgvector": true to
+// knownPublishedRegistryPlugins) the moment
+// github.com/conduitio/conduit-connector-pgvector cuts a tagged release
+// that ConduitIO/conduit-connector-registry's index.json picks up — at
+// that point `conduit connectors install pgvector@<version>` becomes a
+// claim this test should REQUIRE, not forbid, and template_gallery.go's
+// Prerequisites/README.md's table should switch back to the registry
+// install path.
+func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testing.T) {
+	is := is.New(t)
+
+	var tmpl *GalleryTemplate
+	for i := range galleryTemplates {
+		if galleryTemplates[i].Name == templateNamePostgresPgvectorRAG {
+			tmpl = &galleryTemplates[i]
+		}
+	}
+	is.True(tmpl != nil)
+
+	joined := strings.Join(tmpl.Prerequisites, "\n")
+
+	pluginRefs := galleryTemplatePluginNameRE.FindAllStringSubmatch(tmpl.YAML, -1)
+	is.True(len(pluginRefs) > 0) // the regex itself must still match the fixture's plugin lines
+
+	// knownPublishedRegistryPlugins: verified live against
+	// ConduitIO/conduit-connector-registry@main's index/index.json (version
+	// 10, 2026-08-21T19:26:17Z). Keep in sync with reality, not aspiration.
+	knownPublishedRegistryPlugins := map[string]bool{
+		"ai.chunk": true,
+		"ai.embed": true,
+		// pgvector: deliberately absent, see the "DELETE" comment above.
+	}
+
+	for _, m := range pluginRefs {
+		kind, name := m[1], m[2]
+		if kind == "builtin" {
+			continue // built-ins need no install step
+		}
+
+		// (1) Every non-built-in plugin referenced by the shipped YAML must
+		// be named in the prerequisite prose somewhere.
+		is.True(strings.Contains(joined, name))
+
+		// (2) A plugin without evidence of being published must not have a
+		// `conduit connectors install <name>` instruction in the prose; a
+		// plugin with evidence must have ITS install command documented.
+		installInstruction := "connectors install " + name
+		if knownPublishedRegistryPlugins[name] {
+			is.True(strings.Contains(joined, "install "+name)) // ai.chunk/ai.embed use `processor-plugins install`
+		} else {
+			is.True(!strings.Contains(joined, installInstruction))
+		}
+	}
+}
+
+// galleryTemplatePluginNameRE extracts "plugin: \"kind:name\"" references
+// from a rendered pipeline.yaml fixture, e.g. `plugin: "standalone:pgvector"`
+// -> kind="standalone", name="pgvector".
+var galleryTemplatePluginNameRE = regexp.MustCompile(`plugin:\s*"?(builtin|standalone):([A-Za-z0-9_.-]+)"?`)
 
 // TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites is
 // the converse: a built-in-only template (generator-log) must never carry a

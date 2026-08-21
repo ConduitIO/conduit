@@ -29,15 +29,17 @@ is):
 
 | Plugin | Kind | Install |
 | --- | --- | --- |
-| `standalone:pgvector` (destination) | Registry-installed Go connector (`conduit-connector-pgvector`) | `conduit connectors install pgvector@<version>` |
-| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.chunk` once it's published to the signed registry; until then `conduit processor-plugins install --bundle <signed.tgz>`, or build `./cmd/chunking` (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`) and place the `.wasm` under `--processors.path`. |
-| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.embed` (same options as above; build `./cmd/embedding`). |
+| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | **Not yet in the registry** — the repo has no tagged release, so there is no version to pass to `conduit connectors install`. Build it: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. Switch to the registry install once a tagged release ships. |
+| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.chunk` — published to the signed registry now. For an unreleased change, build `./cmd/chunking` (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`) and place the `.wasm` under `--processors.path`. |
+| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.embed` — published to the signed registry now (same local-build option as above; build `./cmd/embedding`). |
 
-The `conduit processor-plugins install` / `uninstall` commands exist, and
-`conduit pipelines init --template postgres-pgvector-rag` names them in its prerequisite note every
-time this template is scaffolded. The hosted `install ai.chunk` / `install ai.embed` fetch goes live
-once `conduit-processor-ai` publishes signed processor artifacts to the registry; until then use the
-offline `--bundle` path or a local build.
+The `conduit processor-plugins install` / `uninstall` commands exist and are live against the
+signed registry: `ai.chunk` and `ai.embed` both resolve today. A registry install for the pgvector
+destination is not yet possible — `conduit-connector-pgvector` has not cut a tagged release, so there
+is no version for `conduit connectors install` to resolve — so the only working path for the
+destination connector is a local build (see the table above). `conduit pipelines init --template
+postgres-pgvector-rag` names both realities in its prerequisite note every time this template is
+scaffolded.
 
 ## Requires pipeline architecture v2
 
