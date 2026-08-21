@@ -42,6 +42,15 @@ const TranscriptSchemaVersion = 1
 // redaction scanner both skip it by name when listing a directory.
 const manifestFileName = "manifest.yaml"
 
+// tombstoneFileSuffix marks a legitimately-missing transcript: a corpus
+// request that was attempted but never produced a single completion on any
+// pass (RequestOutcome.Captured == false, runCapture in
+// transcript_capture_test.go) gets a "<id>.missing.yaml" file committed in
+// place of "<id>.yaml". See the Tombstone type doc comment for why
+// LoadTranscripts needs this rather than tolerating a missing file
+// outright.
+const tombstoneFileSuffix = ".missing.yaml"
+
 // Transcript is one committed provider transcript: everything replay needs
 // to answer Generate's calls for exactly one corpus Request, plus the
 // metadata needed to decide whether it is still meaningful (design doc §10;
@@ -146,6 +155,21 @@ type Outcome struct {
 // transcript_capture_test.go's TestCaptureTranscripts) — LoadTranscripts
 // never reads or requires it, so a missing or malformed manifest.yaml can
 // never block replay.
+// Model, CaptureCommand, and CorpusCommitSHA below carry NO in-process
+// scanTextForSecrets call of their own — the pre-promotion redaction gate
+// (runCapture's reasonFindings check, transcript_capture_test.go) only
+// scans RequestOutcome.FailureReason/Tombstone.FailureCode, the two
+// free-text fields safeFailureReason's doc comment covers. This is
+// deliberate, not an oversight (nit from the round-2 review of #2814,
+// which asked this be made explicit rather than left implicit): all three
+// are derived from inputs the OPERATOR running this capture already
+// controls — Model and CaptureCommand from the CLI flags/env vars that
+// operator set, CorpusCommitSHA from `git log` against this repo's own
+// history — never from provider response text, which is the actual attack
+// surface every OTHER redaction gate in this package exists for. The
+// untagged TestTranscripts_CarryNoSecretMaterial (secrets_scan_test.go)
+// still scans the fully-marshalled manifest.yaml as raw text on every PR
+// as a backstop, independent of this reasoning.
 type Manifest struct {
 	SchemaVersion int    `yaml:"schemaVersion"`
 	Provider      string `yaml:"provider"`
@@ -211,9 +235,33 @@ type Manifest struct {
 	// scored (plan's cost table assumes 3; TestCaptureTranscripts defaults to
 	// 3, overridable via CONDUIT_GENERATE_CAPTURE_PASSES).
 	Passes int `yaml:"passes"`
-	// MedianValidatePassRate and MedianSemanticMatchRate are ScoreMedian's two
-	// rates (fraction 0..1) across Passes independent full-corpus scoring
-	// runs — median, never best-of (CLAUDE.md's benchmarking discipline).
+	// MedianValidatePassRate and MedianSemanticMatchRate are the median of
+	// the two rates (fraction 0..1) across every CLEAN pass — a pass whose
+	// PassScores[i].MissingCount is 0, i.e. it produced a completion for
+	// every corpus request. A DEGRADED pass (PassScores[i].MissingCount >
+	// 0 — a rate-limit storm or captureWallClockBudget expiring partway
+	// through wipes every request from that pass onward) is excluded from
+	// this median: ScoreRun scores a missing candidate as a hard fail on
+	// both axes (score.go), so folding a degraded pass in here would drag
+	// these two headline numbers toward zero even though the requests it
+	// dropped are still recorded elsewhere (RequestOutcomes, and possibly
+	// captured by another pass).
+	//
+	// That "median across every CLEAN pass" description holds only when
+	// MediansUnreliable is false. When every single pass is degraded (no
+	// clean pass exists), these two fields fall back to the median across
+	// ALL passes instead — every missing request still scored as a hard
+	// fail, with no clean pass left to dilute that — and MediansUnreliable
+	// is true. B1 (round-3 review of #2814): that fallback is not a
+	// defense against a misleading number, it is what PRODUCES one — do
+	// not read these fields as this run's baseline when MediansUnreliable
+	// is true; runCapture also fails the `go test` run outright in that
+	// case (t.Errorf) for the same reason. DegradedPasses names which
+	// passes were excluded (or, when MediansUnreliable is true, which
+	// passes the fallback had no alternative but to include); PassScores
+	// carries every pass's own rate, degraded or not, for the detail this
+	// field summarizes away. Never best-of (CLAUDE.md's benchmarking
+	// discipline).
 	MedianValidatePassRate  float64 `yaml:"medianValidatePassRate"`
 	MedianSemanticMatchRate float64 `yaml:"medianSemanticMatchRate"`
 	// MedianValidatePassCount and MedianSemanticMatchCount are the median of
@@ -225,11 +273,152 @@ type Manifest struct {
 	// (odd), where this is always a whole number in practice.
 	MedianValidatePassCount  float64 `yaml:"medianValidatePassCount"`
 	MedianSemanticMatchCount float64 `yaml:"medianSemanticMatchCount"`
+	// MedianSampleSize is how many of Passes actually contributed to the
+	// four median fields above — the number of CLEAN passes ordinarily, or
+	// every pass (== Passes) when MediansUnreliable's fallback is in
+	// effect. N3 (round-3 review of #2814): a median is only as meaningful
+	// as its sample size, and that size is not otherwise stated anywhere
+	// in this file — a reader would have to compute
+	// Passes - len(DegradedPasses) themselves (and get it wrong when
+	// MediansUnreliable is true, since that fallback counts every pass,
+	// not the clean ones) to know whether a given median came from 1 pass
+	// or 3.
+	MedianSampleSize int `yaml:"medianSampleSize"`
+	// MediansUnreliable is true when BOTH: every one of Passes capture
+	// passes was degraded (PassScores[i].MissingCount > 0 for all of them —
+	// see DegradedPasses), AND at least one of those passes was WIPED
+	// (PassScores[i].MissingCount == PassScores[i].Total — it captured
+	// NOTHING at all, the signature of captureWallClockBudget expiring
+	// before a pass even started, or a rate-limit storm eating the whole
+	// pass). There was no clean pass left for MedianValidatePassRate/
+	// MedianSemanticMatchRate/MedianValidatePassCount/
+	// MedianSemanticMatchCount to be computed from, so those four fields
+	// fall back to a median across ALL passes with every missing request
+	// scored as a hard fail and nothing to dilute it (see
+	// MedianValidatePassRate's own doc comment) — and because at least one
+	// pass contributed a raw, uninformative 0, that fallback is not just
+	// unlabeled, it is actively misleading (B1, round-3 review of #2814).
+	// The second condition matters: a single request that is chronically
+	// missing across every pass (never wiping a WHOLE pass) also leaves no
+	// pass "clean", but every pass's own rate is then identical and stable
+	// — the fallback equals what a clean-pass median would have shown too,
+	// and this field correctly stays false for that ordinary, sub-threshold
+	// partial result (captureCompletenessVerdict's job, not this field's).
+	//
+	// Omitted (`omitempty`, false is the common case) rather than always
+	// present, so its mere presence in a committed manifest.yaml is itself
+	// the signal something is wrong — the same convention DegradedPasses
+	// already uses. A run that sets this true also fails its own
+	// `go test` invocation (runCapture, t.Errorf), which generate-capture.yml
+	// turns into a PARTIAL-capture PR with a [!WARNING] banner rather than a
+	// routine one; this field is what keeps that fact true for a reader
+	// looking at the file alone, without the PR body.
+	MediansUnreliable bool `yaml:"mediansUnreliable,omitempty"`
 	// PassScores is every pass's own RunScore rollup (counts AND rates, plan
 	// §8.1's "three passes, median never best-of" made auditable) — the
 	// median fields above are the headline, this is the detail a regression
 	// investigation needs.
 	PassScores []PassScore `yaml:"passScores"`
+
+	// --- Partial-results follow-up (WS1 A5a-3, "make a partial capture
+	// produce a usable, honest result instead of nothing") ---
+
+	// CapturedCount and MissingCount split RequestCount into what this run
+	// actually preserved versus what it could not, ACROSS ALL PASSES —
+	// read together with RequestOutcomes for the per-request detail. A
+	// request counts as captured the moment ANY pass produced a completion
+	// for it (even one whose Transcript.Outcome later failed validate or
+	// semantic scoring — that is DATA, not a missing request; see
+	// RequestOutcome's own doc comment for the distinction this package
+	// draws between the two). See transcript_capture_test.go's
+	// captureCompletenessVerdict for the threshold that decides when a
+	// nonzero MissingCount should fail the capture run outright rather
+	// than merely be noted here.
+	//
+	// MissingCount is run-scoped, not pass-scoped: a request captured on
+	// pass 1 but absent from passes 2-3 (a rate-limit storm or
+	// captureWallClockBudget expiring partway through a later pass) counts
+	// as captured here — CapturedCount/MissingCount say nothing about
+	// which INDIVIDUAL passes went on to score it as present. That
+	// per-pass picture, which DOES feed MedianValidatePassRate and
+	// MedianSemanticMatchRate (a pass missing a request scores it as a
+	// hard fail on both axes — score.go's ScoreRun), lives in
+	// PassScores[i].MissingCount and DegradedPasses below. Do not read
+	// MissingCount == 0 as "the scored rates saw a complete corpus on
+	// every pass" — check DegradedPasses for that.
+	CapturedCount int `yaml:"capturedCount"`
+	MissingCount  int `yaml:"missingCount"`
+	// DegradedPasses names (1-indexed) every pass excluded from
+	// MedianValidatePassRate/MedianSemanticMatchRate/
+	// MedianValidatePassCount/MedianSemanticMatchCount because it didn't
+	// produce a completion for the full corpus (PassScores[i].MissingCount
+	// > 0). Empty — and therefore absent from the committed YAML,
+	// `omitempty` — when every pass captured the full corpus, which is the
+	// common case and needs no reader attention. A nonempty list here is
+	// exactly the CapturedCount/MissingCount blind spot documented above
+	// made visible and machine-checkable: generate-capture.yml's "Open the
+	// PR" step greps for this key too, not just MissingCount, so a run
+	// that captured every request overall (MissingCount == 0) but lost a
+	// tail pass to rate limiting or the wall-clock budget still gets the
+	// PR banner instead of a routine title.
+	DegradedPasses []int `yaml:"degradedPasses,omitempty"`
+	// RequestOutcomes is this run's final disposition for every request it
+	// attempted (the full corpus for a normal run, or the single id a
+	// scoped `-run TestCaptureTranscripts/<id>` re-capture names) — in
+	// corpus order. It is the field a PR reviewer reads to see "27
+	// captured, 1 failed for reason X" without inferring it from a missing
+	// file in the diff.
+	RequestOutcomes []RequestOutcome `yaml:"requestOutcomes"`
+}
+
+// RequestOutcome is one corpus request's final disposition within a capture
+// run, distinguishing the two ways a request can end up with no promoted
+// transcript from the one way it can fail and still be perfectly good data:
+//
+//   - Captured = true: at least one pass produced a completion for this
+//     request, so a transcript exists in testdata/transcripts. Whether that
+//     transcript's own Transcript.Outcome.ValidatePass/SemanticMatch is true
+//     or false is irrelevant here — a request whose generation legitimately
+//     failed (the model never produced a passing candidate) is still DATA,
+//     arguably the most interesting data the benchmark has, and is recorded
+//     as captured with its real (failing) Outcome, never as missing.
+//   - Captured = false: NO pass ever produced a single completion for this
+//     request — a transport error (429, timeout), a tripped ceiling, or a
+//     pre-call refusal reached before the provider was ever called. This is
+//     absence of data, not a disagreement about what the data says, and
+//     FailureReason carries the last such error seen across every pass so a
+//     reader knows why without re-running anything.
+type RequestOutcome struct {
+	RequestID string `yaml:"requestID"`
+	Captured  bool   `yaml:"captured"`
+	// FailureReason is set only when Captured is false — see the type doc
+	// comment. Always empty when Captured is true.
+	//
+	// This is manifest-safe by construction (safeFailureReason,
+	// transcript_capture_test.go): a conduiterr code plus an HTTP status
+	// when known, NEVER the provider's own error text — a provider error
+	// message may embed up to 512 bytes of raw response body
+	// (readErrorBody, provider/http.go), which can echo back
+	// caller-supplied or provider-controlled content (e.g. a 401 body
+	// quoting the rejected key, a *url.Error carrying credentials embedded
+	// in a base URL). manifest.yaml is a committed file with no
+	// content-based redaction of its own — TestTranscripts_CarryNoSecretMaterial
+	// (secrets_scan_test.go) scans it as raw text specifically because a
+	// struct-shaped scan would never look at this field — so nothing that
+	// reaches here may ever be raw, unscanned provider text.
+	FailureReason string `yaml:"failureReason,omitempty"`
+	// Unusable is true when Captured is false AND the underlying failure
+	// was a response that DID arrive from the provider but could not be
+	// turned into a completion — a decode failure, or a well-formed but
+	// empty completion (a refusal) — as opposed to a transport-level
+	// failure (network error, timeout, non-2xx status, a tripped ceiling)
+	// where no response ever arrived at all (provider.IsUnusableResponse).
+	// This is the distinction a 429 and a refusal must never share: both
+	// leave Captured false, but only a refusal was a BILLED, attempted
+	// call whose tokens are already counted in Manifest.TotalTokensUsed —
+	// see captureProvider.Complete (transcript_capture_test.go). Always
+	// false when Captured is true.
+	Unusable bool `yaml:"unusable,omitempty"`
 }
 
 // PassScore is one capture pass's corpus-level score, mirroring RunScore
@@ -243,13 +432,82 @@ type PassScore struct {
 	ValidatePassRate   float64 `yaml:"validatePassRate"`
 	SemanticMatchCount int     `yaml:"semanticMatchCount"`
 	SemanticMatchRate  float64 `yaml:"semanticMatchRate"`
+	// MissingCount is how many corpus requests produced NO completion on
+	// THIS pass specifically (runCapture omits a request from that pass's
+	// Candidates rather than scoring an empty-string stand-in — see
+	// runCapture's inline comment on why — so ValidatePassRate/
+	// SemanticMatchRate above already score every one of these as a fail;
+	// this field is what makes that visible instead of silently baked into
+	// the rate). A request missing here may still be Manifest.Captured (a
+	// different, later pass produced it) — this is per-pass, Manifest.
+	// MissingCount is per-run; do not conflate the two. Nonzero marks this
+	// pass as "degraded": excluded from Manifest.MedianValidatePassRate/
+	// MedianSemanticMatchRate and named in Manifest.DegradedPasses.
+	MissingCount int `yaml:"missingCount"`
+}
+
+// Tombstone is committed as "<id>.missing.yaml" in place of a Transcript for
+// a corpus request that was attempted but never produced a single
+// completion on any capture pass (RequestOutcome.Captured == false; see
+// runCapture's "Partial results" doc comment, transcript_capture_test.go).
+//
+// It exists so LoadTranscripts' bijection check (checkBijection) can tell
+// "this id was legitimately attempted and came back with nothing" apart
+// from "this id was renamed out from under its transcript" WITHOUT
+// weakening bijection into blanket tolerance for a missing file —
+// LoadTranscripts' own doc comment explains why silently tolerating an
+// absent transcript would let a renamed corpus id quietly turn a
+// 28-request corpus into a passing 27/28. A tombstone is the explicit,
+// reviewable, committed artifact that makes "this id has no data, and
+// here's why" a fact checkBijection can see, instead of an absence
+// checkBijection has to guess about.
+//
+// It also survives a lost or stale manifest.yaml (LoadTranscripts never
+// reads the manifest at all): bijection stays correct even if
+// manifest.yaml is deleted, corrupted, or never committed for some reason,
+// because the tombstone — not the manifest — is what checkBijection
+// consults.
+type Tombstone struct {
+	SchemaVersion int `yaml:"schemaVersion"`
+	// RequestID must equal the corpus Request.ID this tombstone was written
+	// for, AND the file's own basename (minus ".missing.yaml") —
+	// LoadTranscripts hard-errors if either disagrees with the other, the
+	// same discipline Transcript.RequestID follows.
+	RequestID string `yaml:"requestID"`
+	// CorpusPromptSHA256 is checked the exact same way a real Transcript's
+	// is (LoadTranscripts): a request edited under an unchanged id must
+	// still be caught even when that id has no data at all.
+	CorpusPromptSHA256 string `yaml:"corpusPromptSHA256"`
+	// FailureCode is the manifest-safe reason this id has no transcript —
+	// see RequestOutcome.FailureReason's doc comment for what "safe" means
+	// here (a conduiterr code plus an HTTP status when known, never the
+	// provider's own error text). Required: a tombstone with no reason is
+	// as useless as an absent file was.
+	FailureCode string `yaml:"failureCode"`
+	// CapturedAt is when the capture run that produced this tombstone
+	// ran — same meaning as Transcript.CapturedAt.
+	CapturedAt time.Time `yaml:"capturedAt"`
 }
 
 // LoadManifest reads the manifest.yaml committed alongside one capture run's
 // transcripts. It is independent of LoadTranscripts — nothing in bijection or
 // prompt-hash validation depends on a manifest existing or parsing.
 func LoadManifest(path string) (Manifest, error) {
-	data, err := os.ReadFile(path)
+	// path is caller-controlled (a repo-relative
+	// testdata/transcripts/.../manifest.yaml path or a test's own
+	// t.TempDir()), never externally-supplied/attacker-controlled input —
+	// this package never runs against untrusted paths (see doc.go's
+	// invariants); same trust boundary every other os.ReadFile call in
+	// this package already operates under. Gosec's taint analysis only
+	// flags this when the package is built with `-tags=generate_capture`
+	// (the tag that pulls in transcript_capture_test.go's own
+	// patchManifestForScopedRun caller) — real CI's golangci-lint job
+	// does not pass that tag, so `#nosec` (gosec's own native suppression
+	// syntax, which golangci's nolintlint does not police for
+	// "unused" the way it does //nolint directives) is what stays quiet
+	// in both configurations rather than flip-flopping between "needed"
+	// and "unused".
+	data, err := os.ReadFile(path) // #nosec G703
 	if err != nil {
 		return Manifest{}, cerrors.Errorf("reading manifest %q: %w", path, err)
 	}
@@ -327,12 +585,24 @@ type LoadedTranscript struct {
 // by request id, already validated against requests.
 type LoadResult struct {
 	ByID map[string]LoadedTranscript
+	// Tombstoned holds every corpus id whose capture legitimately produced
+	// no transcript (a committed "<id>.missing.yaml", Tombstone), keyed by
+	// request id. checkBijection already proved every corpus id is
+	// accounted for by exactly one of ByID or Tombstoned — a caller (the
+	// replay/eval consumer) skips a tombstoned id rather than treating its
+	// absence from ByID as an error.
+	Tombstoned map[string]Tombstone
 }
 
 // LoadTranscripts reads every committed transcript in dir (one file per
 // corpus request, "<requestID>.yaml"; manifestFileName is skipped, never
 // treated as a malformed transcript) and validates it against requests
 // BEFORE returning anything a caller could score.
+//
+// A corpus id may also be satisfied by a committed "<requestID>.missing.yaml"
+// Tombstone instead of a transcript — see the Tombstone type doc comment for
+// why that is a distinct, explicit case, never absorbed the way a plain
+// missing file would be.
 //
 // ScoreRun counts a request with no candidate as a fail on BOTH metrics —
 // correct for a live run, where "no candidate" really does mean the model
@@ -343,51 +613,50 @@ type LoadResult struct {
 // a smaller and differently-shaped corpus than the one actually committed.
 // So LoadTranscripts hard-errors, never skips, on:
 //
-//  1. Bijection — every requests[i].ID has exactly one transcript file in
-//     dir, and every transcript file's id has a matching entry in requests.
-//     Both directions are checked and the error names every offending id, not
-//     just the first (AC 1.19).
-//  2. corpusPromptSHA256 equality — a transcript's recorded hash of the
-//     corpus prompt it was captured against must equal
+//  1. Bijection — every requests[i].ID has exactly one transcript OR
+//     tombstone file in dir, and every transcript/tombstone file's id has a
+//     matching entry in requests. Both directions are checked and the error
+//     names every offending id, not just the first (AC 1.19). A corpus id
+//     with NEITHER a transcript nor a tombstone is still a hard "missing"
+//     error — a renamed id is never silently tolerated just because
+//     tombstones exist.
+//  2. corpusPromptSHA256 equality — a transcript's (or tombstone's) recorded
+//     hash of the corpus prompt it was captured against must equal
 //     sha256Hex(requests[i].Prompt) for that SAME id today. This is what
 //     catches a request's prompt text edited under an id nobody renamed (AC
 //     1.20) — bijection alone would pass that case, since the id itself
 //     never moved.
+//  3. An id carrying BOTH a transcript and a tombstone — self-contradictory
+//     (RequestOutcome can only ever report one disposition per id per
+//     capture run) and always a hard error rather than a guess about which
+//     file to trust.
 //
-// Grounding staleness (Staleness) is computed and returned on every result
-// but is never a reason to fail this call — see Staleness's doc comment.
+// Grounding staleness (Staleness) is computed and returned on every
+// transcript result but is never a reason to fail this call — see
+// Staleness's doc comment.
 //
 // Malformed transcripts (missing required fields, a requestID that disagrees
 // with its own filename, an unrecognized schemaVersion) are also hard
 // errors, matching LoadRequests' "never silently drops a malformed entry"
-// discipline (fixture.go).
+// discipline (fixture.go). The same applies to a malformed tombstone.
 func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
-	entries, err := os.ReadDir(dir)
+	byID, tombstones, err := scanTranscriptsDir(dir)
 	if err != nil {
-		return LoadResult{}, cerrors.Errorf("reading transcripts directory %q: %w", dir, err)
+		return LoadResult{}, err
 	}
 
-	byID := make(map[string]Transcript, len(entries))
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") || e.Name() == manifestFileName {
-			continue
+	// An id can never legitimately carry both — that would mean a capture
+	// run somehow recorded two different final dispositions for the same
+	// request. Caught here, before bijection even runs, rather than
+	// silently preferring one file over the other.
+	for id := range tombstones {
+		if _, ok := byID[id]; ok {
+			return LoadResult{}, cerrors.Errorf(
+				"transcripts directory %q: %q has BOTH a transcript (%s.yaml) and a tombstone (%s%s) — "+
+					"exactly one may exist per id; delete the stale one",
+				dir, id, id, id, tombstoneFileSuffix,
+			)
 		}
-
-		id := strings.TrimSuffix(e.Name(), ".yaml")
-		path := filepath.Join(dir, e.Name())
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return LoadResult{}, cerrors.Errorf("reading transcript %q: %w", path, err)
-		}
-		var t Transcript
-		if err := yaml.Unmarshal(data, &t); err != nil {
-			return LoadResult{}, cerrors.Errorf("parsing transcript %q: %w", path, err)
-		}
-		if err := validateTranscriptShape(t, path, id); err != nil {
-			return LoadResult{}, err
-		}
-		byID[id] = t
 	}
 
 	corpusIDs := make(map[string]bool, len(requests))
@@ -397,10 +666,116 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 		promptByID[r.ID] = r.Prompt
 	}
 
-	if err := checkBijection(dir, corpusIDs, byID); err != nil {
+	if err := checkBijection(dir, corpusIDs, byID, tombstones); err != nil {
+		return LoadResult{}, err
+	}
+	if err := checkTombstonePrompts(tombstones, promptByID); err != nil {
 		return LoadResult{}, err
 	}
 
+	out, err := loadedTranscriptsFor(byID, promptByID)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	return LoadResult{ByID: out, Tombstoned: tombstones}, nil
+}
+
+// scanTranscriptsDir reads dir and classifies every entry: manifestFileName
+// is skipped, an "<id>.missing.yaml" file is parsed and validated as a
+// Tombstone, and every other "<id>.yaml" file is parsed and validated as a
+// Transcript. Split out from LoadTranscripts to keep that function's own
+// cyclomatic complexity down — this is the one part of loading that is pure
+// I/O and per-file shape validation, with no corpus-comparison logic at all.
+func scanTranscriptsDir(dir string) (byID map[string]Transcript, tombstones map[string]Tombstone, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil, cerrors.Errorf("reading transcripts directory %q: %w", dir, err)
+	}
+
+	byID = make(map[string]Transcript, len(entries))
+	tombstones = make(map[string]Tombstone, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == manifestFileName {
+			continue
+		}
+
+		switch {
+		case strings.HasSuffix(e.Name(), tombstoneFileSuffix):
+			id := strings.TrimSuffix(e.Name(), tombstoneFileSuffix)
+			ts, err := readTombstone(filepath.Join(dir, e.Name()), id)
+			if err != nil {
+				return nil, nil, err
+			}
+			tombstones[id] = ts
+
+		case strings.HasSuffix(e.Name(), ".yaml"):
+			id := strings.TrimSuffix(e.Name(), ".yaml")
+			t, err := readTranscript(filepath.Join(dir, e.Name()), id)
+			if err != nil {
+				return nil, nil, err
+			}
+			byID[id] = t
+		}
+	}
+	return byID, tombstones, nil
+}
+
+// readTranscript reads, parses, and shape-validates one "<id>.yaml" file.
+func readTranscript(path, id string) (Transcript, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Transcript{}, cerrors.Errorf("reading transcript %q: %w", path, err)
+	}
+	var t Transcript
+	if err := yaml.Unmarshal(data, &t); err != nil {
+		return Transcript{}, cerrors.Errorf("parsing transcript %q: %w", path, err)
+	}
+	if err := validateTranscriptShape(t, path, id); err != nil {
+		return Transcript{}, err
+	}
+	return t, nil
+}
+
+// readTombstone reads, parses, and shape-validates one "<id>.missing.yaml"
+// file.
+func readTombstone(path, id string) (Tombstone, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Tombstone{}, cerrors.Errorf("reading tombstone %q: %w", path, err)
+	}
+	var ts Tombstone
+	if err := yaml.Unmarshal(data, &ts); err != nil {
+		return Tombstone{}, cerrors.Errorf("parsing tombstone %q: %w", path, err)
+	}
+	if err := validateTombstoneShape(ts, path, id); err != nil {
+		return Tombstone{}, err
+	}
+	return ts, nil
+}
+
+// checkTombstonePrompts is the tombstone half of AC 1.20: a tombstone's
+// recorded corpusPromptSHA256 must match the corpus prompt for that SAME id
+// today, exactly the check loadedTranscriptsFor runs for a real Transcript —
+// a request edited under an unchanged id must still be caught even when
+// that id has no data at all.
+func checkTombstonePrompts(tombstones map[string]Tombstone, promptByID map[string]string) error {
+	for id, ts := range tombstones {
+		wantPromptSHA256 := sha256Hex(promptByID[id])
+		if ts.CorpusPromptSHA256 != wantPromptSHA256 {
+			return cerrors.Errorf(
+				"tombstone %q: corpusPromptSHA256 %q does not match the corpus prompt for id %q today (%q) — "+
+					"the request was edited under an unchanged id; re-capture this transcript",
+				id, ts.CorpusPromptSHA256, id, wantPromptSHA256,
+			)
+		}
+	}
+	return nil
+}
+
+// loadedTranscriptsFor checks AC 1.20 for every real Transcript (mirroring
+// checkTombstonePrompts for a Tombstone) and pairs each with its Staleness
+// against the CURRENT binary's grounding.
+func loadedTranscriptsFor(byID map[string]Transcript, promptByID map[string]string) (map[string]LoadedTranscript, error) {
 	currentSystemPromptSHA256 := sha256Hex(BuildSystemPrompt(BuiltinCatalog()))
 	currentCatalogFingerprint := CatalogFingerprint()
 
@@ -408,7 +783,7 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 	for id, t := range byID {
 		wantPromptSHA256 := sha256Hex(promptByID[id])
 		if t.CorpusPromptSHA256 != wantPromptSHA256 {
-			return LoadResult{}, cerrors.Errorf(
+			return nil, cerrors.Errorf(
 				"transcript %q: corpusPromptSHA256 %q does not match the corpus prompt for id %q today (%q) — "+
 					"the request was edited under an unchanged id; re-capture this transcript",
 				id, t.CorpusPromptSHA256, id, wantPromptSHA256,
@@ -420,22 +795,31 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 			Staleness:  classifyStaleness(t, currentSystemPromptSHA256, currentCatalogFingerprint),
 		}
 	}
-
-	return LoadResult{ByID: out}, nil
+	return out, nil
 }
 
-// checkBijection reports every corpus id with no transcript AND every
-// transcript id with no corpus entry, in one error naming all of them — AC
-// 1.19 requires each direction to name the offending id, not just detect that
-// SOME mismatch exists.
-func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Transcript) error {
+// checkBijection reports every corpus id with neither a transcript nor a
+// tombstone, AND every transcript/tombstone id with no corpus entry, in one
+// error naming all of them — AC 1.19 requires each direction to name the
+// offending id, not just detect that SOME mismatch exists. A tombstoned id
+// satisfies the corpus side exactly like a transcript does; an ORPHANED
+// tombstone (no corpus entry) is exactly as much a bijection problem as an
+// orphaned transcript.
+func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Transcript, tombstones map[string]Tombstone) error {
 	var missing, extra []string
 	for id := range corpusIDs {
-		if _, ok := byID[id]; !ok {
+		_, hasTranscript := byID[id]
+		_, hasTombstone := tombstones[id]
+		if !hasTranscript && !hasTombstone {
 			missing = append(missing, id)
 		}
 	}
 	for id := range byID {
+		if !corpusIDs[id] {
+			extra = append(extra, id)
+		}
+	}
+	for id := range tombstones {
 		if !corpusIDs[id] {
 			extra = append(extra, id)
 		}
@@ -450,10 +834,10 @@ func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Trans
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "transcripts directory %q is not a bijection with the corpus", dir)
 	if len(missing) > 0 {
-		fmt.Fprintf(&msg, "; corpus id(s) with no transcript: %s", strings.Join(missing, ", "))
+		fmt.Fprintf(&msg, "; corpus id(s) with no transcript or tombstone: %s", strings.Join(missing, ", "))
 	}
 	if len(extra) > 0 {
-		fmt.Fprintf(&msg, "; transcript id(s) with no corpus entry: %s", strings.Join(extra, ", "))
+		fmt.Fprintf(&msg, "; transcript/tombstone id(s) with no corpus entry: %s", strings.Join(extra, ", "))
 	}
 	return cerrors.New(msg.String())
 }
@@ -495,6 +879,28 @@ func validateTranscriptShape(t Transcript, path, expectedID string) error {
 		if turn.CompletionText == "" {
 			return cerrors.Errorf("transcript %q: turn %d has no completion text", path, turn.N)
 		}
+	}
+	return nil
+}
+
+// validateTombstoneShape hard-errors on a malformed tombstone before it
+// ever reaches the bijection or prompt-hash checks — mirrors
+// validateTranscriptShape's discipline for Transcript.
+func validateTombstoneShape(ts Tombstone, path, expectedID string) error {
+	if ts.SchemaVersion != TranscriptSchemaVersion {
+		return cerrors.Errorf("tombstone %q: schemaVersion %d, want %d", path, ts.SchemaVersion, TranscriptSchemaVersion)
+	}
+	if ts.RequestID == "" {
+		return cerrors.Errorf("tombstone %q: no requestID", path)
+	}
+	if ts.RequestID != expectedID {
+		return cerrors.Errorf("tombstone %q: requestID %q does not match its filename id %q", path, ts.RequestID, expectedID)
+	}
+	if ts.CorpusPromptSHA256 == "" {
+		return cerrors.Errorf("tombstone %q: no corpusPromptSHA256", path)
+	}
+	if ts.FailureCode == "" {
+		return cerrors.Errorf("tombstone %q: no failureCode", path)
 	}
 	return nil
 }

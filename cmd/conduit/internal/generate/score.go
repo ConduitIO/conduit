@@ -17,6 +17,7 @@ package generate
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/validate"
 )
@@ -58,6 +59,22 @@ type RunScore struct {
 // from candidates is recorded as Result.Missing and counts as a fail on
 // BOTH metrics — never silently dropped from the denominator (see doc.go's
 // invariants). requests order is preserved in RunScore.Results.
+//
+// A candidate that IS present but empty or whitespace-only is a different,
+// narrower case than Missing (B2, round-3 review of #2814): the Candidates
+// map had an entry — Result.Missing stays false, per its own doc comment —
+// but there is nothing in it to score. This happens when a model's raw
+// completions were all recorded (so runCapture, transcript_capture_test.go,
+// treats them as real DATA, never as an absent request) yet none of them
+// ever extracted into pipeline YAML. Left to validateCandidate,
+// validate.RunBytes on zero bytes reports zero findings — nothing to find a
+// problem WITH — so Report.OK() reads true: a validate PASS for a request
+// the model never produced anything usable for, inflating
+// MedianValidatePassRate by exactly the failure the corpus exists to
+// measure. This function is the one place both axes are computed for a
+// request, so it is where that gets caught for both — not pushed down into
+// validateCandidate (which only ever sees the validate axis) or scoreSemantic
+// (which only ever sees the semantic axis).
 func ScoreRun(ctx context.Context, requests []Request, candidates Candidates) RunScore {
 	rs := RunScore{Total: len(requests), Results: make([]Result, 0, len(requests))}
 
@@ -65,10 +82,18 @@ func ScoreRun(ctx context.Context, requests []Request, candidates Candidates) Ru
 		res := Result{RequestID: req.ID}
 
 		candidate, ok := candidates[req.ID]
-		if !ok {
+		switch {
+		case !ok:
 			res.Missing = true
 			res.SemanticIssues = []string{"no candidate provided for this request"}
-		} else {
+		case strings.TrimSpace(candidate) == "":
+			// Hard fail on both axes — ValidatePass and SemanticMatch stay
+			// at their false zero values, deliberately never routed through
+			// validateCandidate/scoreSemantic (see the func doc comment).
+			res.SemanticIssues = []string{
+				"the candidate is empty or whitespace-only — no usable pipeline was ever extracted for this request",
+			}
+		default:
 			report := validateCandidate(ctx, candidate)
 			res.ValidateReport = report
 			res.ValidatePass = report.OK()
