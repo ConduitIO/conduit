@@ -233,16 +233,22 @@ func galleryCatalogSpec() []GalleryTemplate {
 			// The pgvector and processor entries below must each state
 			// their registry-availability truthfully — see
 			// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality
-			// in template_gallery_test.go for the drift guard and the
-			// exact condition under which it (and this comment) should be
-			// revisited: github.com/conduitio/conduit-connector-pgvector
-			// cutting its first tagged release.
+			// in template_gallery_test.go for the drift guard. Two independent
+			// conditions retire two independent claims here: the pgvector
+			// entry is revisited when
+			// github.com/conduitio/conduit-connector-pgvector cuts its first
+			// tagged release; the processor entry is revisited when
+			// https://github.com/ConduitIO/conduit/issues/2818 is fixed
+			// (today, `conduit processor-plugins install` refuses every
+			// processor on every build — see that issue and the entry
+			// below).
 			Prerequisites: []string{
 				"Run the pipeline with pipeline architecture v2 (`--preview.pipeline-arch-v2`, or " +
 					"`preview.pipeline-arch-v2: true` in the config). The chunking processor fans one source " +
 					"record into many chunk records, and record fan-out is only supported by architecture v2; " +
-					"on the default engine the pipeline fails at the chunk step with an \"unknown record type\" " +
-					"error. Architecture v2 is a preview engine — see its status before relying on it in production.",
+					"on the default engine the pipeline refuses to run at the chunk step with a " +
+					"`pipeline.fanout_requires_arch_v2` error (FailedPrecondition) naming this flag. Architecture " +
+					"v2 is a preview engine — see its status before relying on it in production.",
 				"pgvector destination: NOT installable from the registry yet — " +
 					"github.com/conduitio/conduit-connector-pgvector has no tagged release, so there is no " +
 					"version to pass to `conduit connectors install`. Build it yourself: clone the repo and " +
@@ -250,11 +256,16 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"the directory --connectors.path points at (defaults to `connectors/` next to " +
 					"conduit.yaml). Switch to the registry install once that repo cuts a tagged release.",
 				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors ARE " +
-					"published to the signed registry — install them with `conduit processor-plugins install " +
-					"ai.chunk` and `conduit processor-plugins install ai.embed`. To test an unreleased change " +
-					"instead, build from a github.com/conduitio/conduit-processor-ai checkout " +
-					"(`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, likewise " +
-					"`./cmd/embedding`) and place the .wasm files under --processors.path.",
+					"published to the signed registry at 0.1.0 — but `conduit processor-plugins install " +
+					"ai.chunk` and `conduit processor-plugins install ai.embed` currently refuse both, on " +
+					"every build, with a `registry.incompatible_version` error: the compatibility gate " +
+					"compares this build's conduit-connector-protocol module version against each " +
+					"processor's minProtocolVersion instead of an actual processor-protocol version — a " +
+					"bug tracked as https://github.com/ConduitIO/conduit/issues/2818. `--bundle` is not a " +
+					"workaround; it applies the identical version check offline. Until #2818 is fixed, " +
+					"build the processors yourself from a github.com/conduitio/conduit-processor-ai " +
+					"checkout (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, " +
+					"likewise `./cmd/embedding`) and place the .wasm files under --processors.path.",
 			},
 		},
 	}
