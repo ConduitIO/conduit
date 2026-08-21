@@ -23,7 +23,9 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	gen "github.com/conduitio/conduit/cmd/conduit/internal/generate"
 	"github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
+	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/matryer/is"
 )
@@ -182,6 +184,16 @@ func TestWriteCandidate_RefusesToClobberWithoutForce(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.True(ce.Suggestion != "") // says how to proceed
+
+	// The code is specific enough for a caller to act on WITHOUT reading the
+	// message: "the file is in the way" (retry with --force or --out) is a
+	// different fix from a generic invalid argument, which is why this is its
+	// own code (design §8, amended).
+	is.Equal(ce.Code, gen.CodeDestinationExists)
+	// Additive, not breaking: AlreadyExists shares the Validation bucket with
+	// InvalidArgument, so this case still exits 2 exactly as it did before the
+	// code became specific.
+	is.Equal(exitcode.ExitCode(err), exitcode.Validation)
 
 	kept, err := os.ReadFile(path)
 	is.NoErr(err)

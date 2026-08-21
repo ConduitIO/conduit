@@ -276,13 +276,12 @@ func writeCandidate(path, candidate string, force bool) error {
 	f, err := os.OpenFile(path, flags, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
-			// Deliberately a FOUNDATIONAL code rather than a new
-			// generate.destination_exists: design §8's taxonomy is a frozen
-			// contract that does not list one for this case, and the provider
-			// package took the same decision for its unknown-provider case
-			// (codeUnknownProvider). If a dedicated code is wanted it belongs
-			// in §8 first, then here.
-			e := conduiterr.Wrap(conduiterr.CodeInvalidArgument,
+			// gen.CodeDestinationExists, not the foundational
+			// common.invalid_argument: an agent can act on "the file is in the
+			// way" (retry with --force or --out) but not on a generic invalid
+			// argument. Added to design §8 by amendment BEFORE this code — the
+			// taxonomy is a public contract, so it moves first.
+			e := conduiterr.Wrap(gen.CodeDestinationExists,
 				fmt.Sprintf("%s already exists", path), err)
 			e.Suggestion = "pass --force to overwrite it, or --out to write somewhere else"
 			return e
