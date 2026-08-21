@@ -1,0 +1,108 @@
+name: govulncheck
+
+# Dependency vulnerability scan (CLAUDE.md "PR review process" automated gates
+# list / Process maturity table row "dependency vulnerability scan").
+#
+# WHY govulncheck AND NOT A GENERIC SCANNER (Trivy/Snyk/osv-scanner): those
+# flag every CVE in every transitive dependency regardless of whether the
+# vulnerable function is ever called. govulncheck is Go's own scanner and does
+# reachability analysis on the real call graph, so it reports a vulnerability
+# only when this codebase can actually reach the vulnerable symbol. For a
+# dependency tree this size a non-reachability-aware scanner would produce a
+# permanently-red, mostly-irrelevant report - training people to ignore it,
+# which is the exact failure this gate exists to prevent.
+#
+# HOW THIS BLOCKS: it is a RATCHET, not a threshold and not a report-only job.
+# The baseline in .github/govulncheck-allowlist.txt lists the 24 called-level
+# vulnerabilities reachable on main as of 2026-08-21. A scan that finds an ID
+# NOT in that file FAILS. Pre-existing findings do not fail the build; a new
+# one does.
+#
+# Both simpler designs are worse, and it is worth saying why since the obvious
+# instinct is to pick one of them:
+#   * Fail on ANY finding - fails every PR for 24 problems unrelated to its
+#     own diff. A check that is always red is a check nobody reads.
+#   * Report-only (continue-on-error) - always green, so the only signal is a
+#     job summary nobody opens on a green run. Silent by construction.
+# The ratchet is the version that bites: the count cannot go up quietly, and
+# every accepted finding has a written justification next to it in the
+# allowlist rather than living in someone's memory.
+#
+# NOT PATH-FILTERED, matching chaos.yml's rationale (see that file's header):
+# a required check must report a conclusion on every PR or it blocks merges
+# forever. Even before this becomes required, building it path-filtered would
+# set the wrong precedent for the day it does. The scan is whole-module and
+# cheap, so there is no cost argument for filtering either.
+#
+# SCHEDULED as well as per-PR: a new advisory can be published against a
+# dependency this repo already uses, with no local change at all. A PR-only
+# trigger would let a newly-published, already-reachable vulnerability sit
+# unreported until someone happened to touch an unrelated file. Nightly, offset
+# from the other scheduled workflows (trigger-nightly 0:00, flake-hunt 3:30,
+# chaos 4:45) so they do not contend for runners.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Scan
+        # Version pinned (not @latest) so a CI run is reproducible and a new
+        # govulncheck release cannot turn the tree red on its own - the same
+        # reason golangci-lint is pinned via tools/go.mod. Bump deliberately.
+        # `go run pkg@version` does not add golang.org/x/vuln to go.mod/go.sum;
+        # it is a one-off tool invocation, not a module dependency.
+        #
+        # -format json, not the text output: the text is for humans and its
+        # shape is not a stable contract. Parsing it to decide whether the
+        # build passes would make this gate depend on formatting.
+        #
+        # Requires exit 0, and that is stricter than it looks. In TEXT mode
+        # govulncheck exits nonzero when it finds anything, so a naive guard
+        # here would have to tolerate that and could not tell "found
+        # vulnerabilities" from "died". In `-format json` mode it does not:
+        # measured against this repo at 24 reachable findings, `-format json`
+        # exits 0 while the same scan in text mode exits 1.
+        #
+        # So under -format json the exit status carries exactly one meaning -
+        # did govulncheck run - which is the question worth asking here.
+        # Findings are the comparison step's business, not this step's.
+        # ANY nonzero status is therefore a broken scan (proxy down, OOM, a
+        # pinned version that stopped supporting the toolchain), and a broken
+        # scan must never reach the comparison, where an empty file would
+        # otherwise read as "nothing found".
+        #
+        # The comparison independently refuses output with no `config`
+        # message, catching a scan that dies while still exiting 0. Two checks,
+        # because this is the one way the gate could pass while gating nothing.
+        run: |
+          set -uo pipefail
+          if ! go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 -format json ./... > govulncheck.json; then
+            echo "::error::govulncheck exited nonzero under -format json, which means it did not complete. This is a broken scan, not a clean result." >&2
+            exit 1
+          fi
+
+      - name: Compare against the baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/govulncheck_ratchet.py \
+            govulncheck.json .github/govulncheck-allowlist.txt >> "$GITHUB_STEP_SUMMARY"

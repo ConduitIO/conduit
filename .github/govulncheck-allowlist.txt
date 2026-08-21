@@ -1,0 +1,101 @@
+# govulncheck baseline — vulnerabilities this codebase's call graph can REACH today.
+#
+# This file is the gate. .github/workflows/govulncheck.yml fails when a scan
+# finds a called-level vulnerability that is NOT listed here. Pre-existing
+# findings do not fail the build; a NEW one does.
+#
+# That is deliberate. Flipping straight to "fail on any finding" with 24 open
+# would have failed every PR for problems unrelated to its diff, and a check
+# that is always red is a check nobody reads. A report-only job has the
+# opposite failure: it is always green, so the only signal is a job summary
+# nobody opens on a green run. The ratchet is the version that actually bites:
+# it cannot go up silently.
+#
+# WHEN A SCAN FAILS: a new vulnerability became reachable. Fix it if you can
+# (bump the dependency, bump the toolchain, stop calling the vulnerable path).
+# Only add an ID here if it genuinely cannot be fixed right now, and write the
+# reason on the line above it. An entry with no justification is a bug.
+#
+# WHEN THE COUNT DROPS: the job says so and asks you to delete the cleared
+# lines. It does not fail — a shrinking list is the point — but leaving stale
+# entries lets a fixed vulnerability silently come back.
+#
+# Format: one GO-XXXX-NNNN per line. `#` comments and blank lines ignored.
+#
+# Baseline captured 2026-08-21 against main.
+
+# ---------------------------------------------------------------------------
+# Go standard library (20 findings)
+#
+# Every one of these is fixed by a Go toolchain patch release; none needs a
+# code change. go.mod currently pins go 1.25.8. Clearing this whole block is a
+# single toolchain bump, and it is the cheapest large win available here.
+# ---------------------------------------------------------------------------
+# JsBraceDepth Context Tracking Bugs (XSS) in html/template
+GO-2026-4865
+# Unbounded allocation for old GNU sparse in archive/tar
+GO-2026-4869
+# Unauthenticated TLS 1.3 KeyUpdate record can cause persistent connection retention and DoS in crypto/tls
+GO-2026-4870
+# Infinite loop in HTTP/2 transport when given bad SETTINGS_MAX_FRAME_SIZE in net/http/internal/http2 in golang.org/x/net
+GO-2026-4918
+# Inefficient policy validation in crypto/x509
+GO-2026-4946
+# Unexpected work during chain building in crypto/x509
+GO-2026-4947
+# Root escape via symlink plus trailing slash in os
+GO-2026-4970
+# Panic in Dial and LookupPort when handling NUL byte on Windows in net
+GO-2026-4971
+# Escaper bypass leads to XSS in html/template
+GO-2026-4980
+# Bypass of meta content URL escaping causes XSS in html/template
+GO-2026-4982
+# Invoking failure to reject ASCII-only Punycode-encoded labels in golang.org/x/net/idna
+GO-2026-5026
+# Inefficient candidate hostname parsing in crypto/x509
+GO-2026-5037
+# Arbitrary inputs are included in errors without any escaping in net/textproto
+GO-2026-5039
+# Invoking Encrypted Client Hello privacy leak in crypto/tls
+GO-2026-5856
+# Enforce maximum recursion depth in encoding/asn1
+GO-2026-5972
+# Add recursion depth guard during decode in encoding/xml
+GO-2026-6088
+# Apply ReadHeaderTimeout when doing unencrypted HTTP/2 check in net/http
+GO-2026-6089
+# Limit handshake messages we are willing to accept post-handshake in crypto/tls
+GO-2026-6090
+# Fix Javascript regexp context tracking in html/template
+GO-2026-6091
+# Avoid quadratic complexity in resolvePath in net/url
+GO-2026-6218
+
+# ---------------------------------------------------------------------------
+# github.com/hamba/avro/v2 (3 findings) — UNFIXABLE, tracked in #2817
+#
+# All three are decoder-side (CPU exhaustion, integer overflow, unbounded map
+# allocation) and all are "Fixed in: N/A". Upstream ARCHIVED the repository on
+# 2026-01-18; v2.31.0 is final. Reached via conduit-commons/schema/avro from
+# the built-in Avro processor, so this is data-path code decoding untrusted
+# input. #2817 tracks the decision: fork, replace the codec, bound the input at
+# the call site, or accept and document. Do not remove these lines until that
+# issue is resolved — they are the reason the issue exists.
+# ---------------------------------------------------------------------------
+# CPU exhaustion in Avro decoder in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
+GO-2026-5046
+# Integer overflow in Avro decoder in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
+GO-2026-5047
+# Denial of service via unbounded map allocations in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
+GO-2026-5048
+
+# ---------------------------------------------------------------------------
+# golang.org/x/crypto (1 finding)
+#
+# The openpgp package is unmaintained and "unsafe by design" per its own
+# advisory — there is no fixed version, only "stop using it." Indirect; needs
+# tracing to whichever dependency pulls it in before it can be dropped.
+# ---------------------------------------------------------------------------
+# The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design, and has known security issues
+GO-2026-5932
