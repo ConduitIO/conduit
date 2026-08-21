@@ -39,11 +39,20 @@ name: generate-capture
 #
 # The go test itself (transcript_capture_test.go's runCapture) writes to a
 # scratch directory, redaction-scans every file (redact.go's
-# ScanTranscriptForSecrets, plan §5), and only copies the batch into
-# testdata/transcripts/ if the scan is clean - all failures abort the WHOLE
-# batch, never a partial promotion. If that scan ever finds something, the
-# `capture` job fails before an artifact is even uploaded, and `publish`
-# never runs.
+# ScanTranscriptForSecrets, plan §5) - and, separately, scans every
+# manifest-bound failure reason it computed (safeFailureReason) - and only
+# copies anything into testdata/transcripts/ if BOTH scans are clean - all
+# failures abort the WHOLE batch, never a partial promotion. The `capture`
+# job's own steps below ("Check whether any transcript changed", "Upload
+# captured transcripts") run even after that failure (`if: ${{ !cancelled()
+# }}`, see the "Partial results" section further down) rather than being
+# skipped outright - but since nothing was ever promoted into
+# testdata/transcripts/, `git status --porcelain` sees no change, "changed"
+# resolves to `false`, the upload step's own `if` condition on `changed ==
+# 'true'` is false so no artifact is uploaded, and `publish`'s `if` (which
+# requires `needs.capture.outputs.changed == 'true'`) never runs either. The
+# conclusion - a redaction violation never reaches a published PR - still
+# holds; it is reached via `changed=false`, not via the job stopping outright.
 #
 # # Partial results are preserved, not discarded (WS1 A5a-3 follow-up)
 #
@@ -110,6 +119,12 @@ jobs:
     timeout-minutes: 35 # go test's own -timeout 30m below, plus setup/checkout headroom
     outputs:
       changed: ${{ steps.check-changes.outputs.changed }}
+      # manifest_path is the manifest.yaml THIS RUN wrote, if any - never
+      # re-derived by `publish` searching the checked-out tree, which may
+      # already carry a manifest.yaml committed by an EARLIER run (see the
+      # "Summarize the manifest" step below for why that distinction
+      # matters). Empty for a scoped --request_id run, which writes none.
+      manifest_path: ${{ steps.check-changes.outputs.manifest_path }}
     steps:
       - uses: actions/checkout@v7
 
@@ -161,11 +176,22 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          if git status --porcelain -- cmd/conduit/internal/generate/testdata/transcripts | grep -q .; then
+          changes=$(git status --porcelain -- cmd/conduit/internal/generate/testdata/transcripts || true)
+          if [ -n "$changes" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # The manifest.yaml path THIS RUN itself wrote or modified, if
+          # any - a scoped --request_id run writes none (runCapture returns
+          # wrote=false), and `git status --porcelain` over a clean
+          # checkout only ever shows files this run's own `go test`
+          # invocation touched, so an empty result here is unambiguous
+          # (never confused with a manifest.yaml already committed by an
+          # earlier run sitting untouched in the checkout).
+          manifest_path=$(printf '%s\n' "$changes" | awk '{print $2}' | grep -E '/manifest\.yaml$' | head -1 || true)
+          echo "manifest_path=${manifest_path}" >> "$GITHUB_OUTPUT"
 
       - name: Upload captured transcripts
         if: ${{ !cancelled() && steps.check-changes.outputs.changed == 'true' }}
@@ -204,24 +230,43 @@ jobs:
 
       - name: Summarize the manifest
         id: summary
+        env:
+          # Passed through from `capture` rather than re-derived by
+          # searching the checked-out tree here: a `find` over this job's
+          # own checkout would happily match a manifest.yaml already
+          # committed by an EARLIER run and render ITS numbers under a
+          # heading that calls them "the headline numbers" for THIS run -
+          # exactly what happens on a scoped --request_id run, which writes
+          # no manifest.yaml of its own (runCapture returns wrote=false).
+          MANIFEST_PATH: ${{ needs.capture.outputs.manifest_path }}
         run: |
           set -euo pipefail
-          manifest=$(find cmd/conduit/internal/generate/testdata/transcripts -maxdepth 2 -name manifest.yaml | head -1)
-          if [ -z "$manifest" ]; then
+          if [ -z "$MANIFEST_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
             echo "summary=no manifest.yaml in this run's artifact (a scoped --request_id run does not write one)" >> "$GITHUB_OUTPUT"
+            echo "missing=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           {
             echo "summary<<EOF"
-            grep -E '^(provider|model|requestCount|capturedCount|missingCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$manifest" || true
+            grep -E '^(provider|model|requestCount|capturedCount|missingCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$MANIFEST_PATH" || true
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+          # missing is its own output (not just embedded in the summary
+          # text block) so "Open the PR" can gate the banner and title on
+          # it directly, per the fix below: a missingCount > 0 run that
+          # still reports CAPTURE_RESULT == success (ordinary live-provider
+          # noise below captureCompletenessVerdict's threshold) must not
+          # look routine just because the job itself didn't fail.
+          missing=$(grep -E '^missingCount:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          echo "missing=${missing:-0}" >> "$GITHUB_OUTPUT"
 
       - name: Open the PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.run_id }}
           SUMMARY: ${{ steps.summary.outputs.summary }}
+          MISSING: ${{ steps.summary.outputs.missing }}
           REQUEST_ID: ${{ inputs.request_id }}
           # Set by `!cancelled()` above even when `capture` FAILED (see the
           # file header's "Partial results" section) - 'failure' here means
@@ -229,6 +274,16 @@ jobs:
           # something else in the job broke), never that nothing was
           # captured: `changed == 'true'` (this job's own `if`) already
           # proved something worth publishing landed on disk.
+          #
+          # CAPTURE_RESULT alone is NOT the right signal for "does this PR
+          # need a reader's attention": captureCompletenessVerdict only
+          # fails the job past a STRICT MAJORITY missing (>50%). The likely
+          # degraded case - say 13/28 (46%) missing from ordinary rate
+          # limiting - reports CAPTURE_RESULT == success and would open a
+          # routinely-titled PR with a green check, with the only trace
+          # being a `missingCount: 13` line inside a fenced code block. The
+          # banner and title below are gated on CAPTURE_RESULT != success
+          # OR MISSING > 0, not on CAPTURE_RESULT alone.
           CAPTURE_RESULT: ${{ needs.capture.result }}
         run: |
           set -euo pipefail
@@ -247,6 +302,16 @@ jobs:
           > something else in the job failed. Everything below IS still what got captured and redaction-scanned
           > clean - it is safe to review, but treat this as an incident to investigate, not a routine partial
           > result.
+
+          "
+          elif [ "${MISSING:-0}" -gt 0 ]; then
+            title="chore(generate): capture provider transcripts, ${MISSING} missing (run ${RUN_ID})"
+            banner="> [!NOTE]
+          > ${MISSING} request(s) are missing from this capture, below captureCompletenessVerdict's run-failing
+          > threshold - \`capture\` reported success, and this IS a routine partial result (ordinary live-provider
+          > noise: a 429, a timeout), not an incident. Review each \`requestOutcomes\` reason in the diff before
+          > relying on this batch for eval; re-capture the missing id(s) cheaply with
+          > \`-run TestCaptureTranscripts/<id>\`.
 
           "
           elif [ -n "$REQUEST_ID" ]; then
