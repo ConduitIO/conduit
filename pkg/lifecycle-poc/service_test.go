@@ -791,6 +791,134 @@ func TestServiceLifecycle_Recovery_TransientErrorRecovers(t *testing.T) {
 	})
 }
 
+// TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus is the
+// #2746 regression test.
+//
+// The invariant: whenever a caller can observe the pipeline as running,
+// runningPipelines[id] is the run that is ACTUALLY running. Everything
+// public resolves a pipeline through that map — Stop, StopAll, WaitPipeline,
+// StopAndWait (and so provisioning.ApplyPlanLive) — and StartWithBackoff's
+// "am I still the live pipeline" guard is a pointer comparison against it.
+//
+// Start used to publish the new run only AFTER runPipeline returned, i.e.
+// after runPipeline had already announced StatusRunning. On a recovery
+// restart the previous entry is deliberately left in place until that swap,
+// so in the gap the map pointed at the FAILED run: WaitPipeline joined the
+// dead tomb and returned the pre-recovery error for a pipeline that had just
+// recovered, and Stop stopped the dead run while the recovered one kept
+// running — a pipeline nobody could stop, and a persister that never
+// quiesced (which is the 10-minute hang in #2746, not just its fast
+// assertion failure).
+//
+// This does not try to catch that gap by racing it, which is what made the
+// original symptom intermittent. It HOLDS the lifecycle inside the gap:
+// statusRecorder.onUpdate blocks in the middle of the post-recovery
+// StatusRunning write — the exact instant an observer first learns the
+// pipeline is running again — and the assertions run there. Pre-fix that is
+// a deterministic failure, not a probabilistic one.
+func TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	transientErr := cerrors.New("lost connection to source")
+	healthyRecords := generateRecords(3)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := sourceRecoversAfterTransientError(ctrl, persister, healthyRecords, transientErr)
+	destination, destDispenser := destinationRecovers(ctrl, persister, healthyRecords)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	// inWindow closes when the recovered run is mid-announcement; release
+	// unblocks it once the assertions below have run.
+	inWindow := make(chan struct{})
+	release := make(chan struct{})
+	rec := newStatusRecorder(ps)
+	rec.onUpdate = func(status pipeline.Status, nth int) {
+		// The 2nd StatusRunning is the recovery restart (the 1st is the
+		// initial run). Fire once: a later run must not re-block.
+		if status == pipeline.StatusRunning && nth == 2 {
+			close(inWindow)
+			<-release
+		}
+	}
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		rec,
+		false,
+	)
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+
+	<-inWindow
+
+	// The assertion, taken while the lifecycle is frozen in the window: the
+	// entry a caller would resolve right now must be the live run, not the
+	// one that just failed. Reading rp.t directly (rather than going through
+	// Stop/WaitPipeline, both of which legitimately BLOCK on a live tomb and
+	// so cannot distinguish "correct" from "hung" here) is what keeps this
+	// deterministic. Pre-fix, ok is true but the entry is the pre-recovery
+	// runnablePipeline, whose tomb was killed by transientErr.
+	rp, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok) // no live entry at all while the pipeline reports Running
+	is.True(rp.t != nil)
+	if !rp.t.Alive() {
+		t.Fatalf(
+			"runningPipelines[%s] is a DEAD run at the moment the pipeline announces StatusRunning "+
+				"(tomb err: %v) - Stop/WaitPipeline/StopAndWait would all operate on the failed "+
+				"pre-recovery run instead of the recovered one (#2746)",
+			pl.ID, rp.t.Err(),
+		)
+	}
+
+	close(release)
+
+	// Behavioural half: with the live entry published in time, the recovered
+	// run is the one a caller can actually drive to a clean stop - no
+	// pre-recovery error resurfacing from a dead tomb, and no orphaned run
+	// left behind (which is what stopAndWaitPersister above would hang on).
+	waitForRecordsAcked(t, source, healthyRecords)
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	is.NoErr(ls.Stop(ctx, pl.ID, false))
+	is.NoErr(ls.WaitPipeline(pl.ID))
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+
+	is.Equal(rec.snapshot(), []pipeline.Status{
+		pipeline.StatusRunning,
+		pipeline.StatusRecovering,
+		pipeline.StatusRunning,
+		pipeline.StatusUserStopped,
+	})
+}
+
 // TestServiceLifecycle_Recovery_MaxRetriesExhausted proves the bounded-retry
 // path (design-doc path: running → recovering → degraded). With a finite
 // MaxRetries and a source that fails on every run, the pipeline attempts exactly
@@ -1755,6 +1883,16 @@ type statusRecorder struct {
 	PipelineService
 	mu       sync.Mutex
 	statuses []pipeline.Status
+
+	// onUpdate, if set, is called from inside UpdateStatus — after the status
+	// has been recorded (so a concurrent snapshot/waitForRecovered already
+	// sees it) but before the wrapped service applies it. It is the seam that
+	// lets a test hold the lifecycle inside the "run is going live" window
+	// and inspect it, instead of trying to catch that window by racing it.
+	// The argument is the status being written and its 1-based occurrence
+	// count for that status, so a hook can distinguish e.g. the initial
+	// StatusRunning from the post-recovery one.
+	onUpdate func(status pipeline.Status, nth int)
 }
 
 func newStatusRecorder(inner PipelineService) *statusRecorder {
@@ -1764,7 +1902,18 @@ func newStatusRecorder(inner PipelineService) *statusRecorder {
 func (r *statusRecorder) UpdateStatus(ctx context.Context, id string, status pipeline.Status, errMsg string) error {
 	r.mu.Lock()
 	r.statuses = append(r.statuses, status)
+	nth := 0
+	for _, s := range r.statuses {
+		if s == status {
+			nth++
+		}
+	}
+	hook := r.onUpdate
 	r.mu.Unlock()
+
+	if hook != nil {
+		hook(status, nth)
+	}
 	return r.PipelineService.UpdateStatus(ctx, id, status, errMsg)
 }
 

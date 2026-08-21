@@ -270,12 +270,14 @@ func (s *Service) Start(
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running pipeline")
 
+	// runPipeline publishes rp into runningPipelines itself, at the exact
+	// point the run goes live — see the Set call there for why that ordering
+	// is load-bearing (#2746) and why this function must not do it after the
+	// fact.
 	if err := s.runPipeline(rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
-
-	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
 }
@@ -1656,6 +1658,37 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// write (the cleanup goroutine is the one that waits for that, via
 	// startupDone).
 	close(registered)
+
+	// Publish this run as THE live run for its pipeline ID, here and not in
+	// Start (#2746).
+	//
+	// Invariant: whenever a caller can observe the pipeline as running,
+	// runningPipelines[id] is the run that is actually running. Every public
+	// entry point resolves a pipeline through this map — Stop, StopAll,
+	// WaitPipeline, StopAndWait (and thus provisioning.ApplyPlanLive) — and
+	// StartWithBackoff's "am I still the live pipeline" guard is a pointer
+	// comparison against it. A stale entry does not fail loudly; it makes all
+	// of them operate on the previous, already-dead run.
+	//
+	// Start used to Set this AFTER runPipeline returned, i.e. after the
+	// UpdateStatus below had already announced StatusRunning. On a recovery
+	// restart the old entry is deliberately left in place until the swap (see
+	// runPipeline's recovery arm), so in that window the map still pointed at
+	// the FAILED run: WaitPipeline joined the dead tomb and returned the
+	// pre-recovery error for a pipeline that had just recovered, and Stop
+	// stopped the dead run while the recovered one kept going — leaving a
+	// pipeline nobody could stop and a persister that never quiesced.
+	//
+	// This is the correct publish point, and it needs no rollback on error:
+	//   - every earlier return in this function (sink Open, worker Open)
+	//     fails before any goroutine is on the tomb, so nothing is published;
+	//   - from here on the tomb owns termination, and its cleanup goroutine
+	//     performs the matching runningPipelines.Delete — including when the
+	//     UpdateStatus below fails;
+	//   - that cleanup goroutine blocks on startupDone (closed below), so it
+	//     can never Delete before this Set, which would strand a live run
+	//     outside the map.
+	s.runningPipelines.Set(rp.pipeline.ID, rp)
 
 	// It's now safe to make the potentially slow UpdateStatus call and then
 	// release the cleanup goroutine to make its own. close(startupDone)
