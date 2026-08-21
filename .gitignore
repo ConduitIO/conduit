@@ -76,3 +76,7 @@ golangci-report.xml
 # Claude Code local state
 .claude/worktrees/
 .claude/settings.local.json
+
+# Python bytecode (the CI helper scripts under .github/scripts are run, not imported)
+__pycache__/
+*.pyc
