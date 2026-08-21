@@ -58,6 +58,17 @@
 // single violating file aborts promoting ALL of them, so a violating
 // transcript can never reach the working tree.
 //
+// manifest.yaml and every "<id>.missing.yaml" tombstone (below) get the SAME
+// guarantee for a different reason: neither is a Transcript, so
+// ScanTranscriptForSecrets' struct-shaped scan cannot see their own free-text
+// fields at all (RequestOutcome.FailureReason, Tombstone.FailureCode). Those
+// fields are held to a stricter rule instead — safeFailureReason NEVER
+// returns a provider's own error text (only a conduiterr code plus an HTTP
+// status, see its own doc comment) — and the result is still scanned
+// (reasonFindings, below) before anything is promoted, and again by
+// TestTranscripts_CarryNoSecretMaterial (secrets_scan_test.go) as raw text on
+// every PR, independent of this test ever having run.
+//
 // # Partial results
 //
 // A per-request failure is one of two very different things, and this
@@ -81,6 +92,23 @@
 //     which request(s) are missing and why (Manifest.RequestOutcomes),
 //     rather than requiring a reader to infer it from an absent file.
 //
+// Absence of data itself splits further, via RequestOutcome.Unusable
+// (provider.IsUnusableResponse): a transport-level miss (no response ever
+// arrived — a 429, a timeout, a tripped ceiling) is reported separately from
+// a response that DID arrive but was unusable (a decode failure, or a
+// well-formed but empty completion — a refusal). The second case is a
+// BILLED, attempted call — captureProvider.Complete counts its tokens toward
+// Manifest.TotalTokensUsed even though it produced no transcript — and must
+// never be reported the same way a rate limit is.
+//
+// A request that ends this run still missing (of either kind) gets a
+// committed "<id>.missing.yaml" Tombstone (transcript.go) in place of a
+// transcript — the artifact that lets LoadTranscripts' bijection check tell
+// "this id was attempted and legitimately came back empty" apart from "this
+// id was renamed out from under its transcript", the same distinction
+// Manifest.RequestOutcomes makes for a human reading the diff, now made for
+// the code that enforces the corpus's shape too.
+//
 // The redaction gate above is deliberately untouched by any of this: it
 // remains all-or-nothing regardless of how many requests were captured or
 // missing — see scanAndPromoteScratch's own doc comment and
@@ -90,6 +118,9 @@ package generate
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,7 +130,10 @@ import (
 	"testing"
 	"time"
 
+	json "github.com/goccy/go-json"
+
 	"github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/yaml/v3"
 )
 
@@ -292,6 +326,20 @@ func (c *captureProvider) Complete(ctx context.Context, req provider.CompletionR
 
 	res, err := c.Provider.Complete(ctx, req)
 	if err != nil {
+		// A call that reached the provider and got billed — a refusal
+		// (provider.IsUnusableResponse) — still reports its token usage on
+		// res even though it also returns an error (see anthropic.go's
+		// "empty response" branch and its siblings): that usage counts
+		// toward BOTH this run's cumulative token ceiling and
+		// Manifest.TotalTokensUsed exactly like a successful call's does.
+		// It is never appended to c.recorded, though — recorded backs
+		// buildTranscript's Turns, and a refusal produced no completion
+		// text worth committing as a turn.
+		if res.TokensUsed > 0 {
+			c.mu.Lock()
+			c.tokens += res.TokensUsed
+			c.mu.Unlock()
+		}
 		return res, err
 	}
 
@@ -497,6 +545,67 @@ func writeManifest(t *testing.T, destDir string, m Manifest) {
 	}
 }
 
+// safeFailureReason summarizes err for a value that ends up committed to
+// manifest.yaml (RequestOutcome.FailureReason) or a tombstone
+// (Tombstone.FailureCode) forever. It NEVER returns the provider's own
+// error text: a provider error message may embed up to 512 bytes of raw
+// response body (readErrorBody, provider/http.go) that can echo back
+// caller-supplied or provider-controlled content — a 401 body quoting the
+// rejected key, a *url.Error carrying credentials embedded in a base URL —
+// and this package's manifest.yaml has no content-based redaction of its
+// own before this fix (TestTranscripts_CarryNoSecretMaterial used to skip
+// it by name).
+//
+// The only load-bearing information for a reviewer — enough to tell "this
+// was a rate limit" from "this was a refusal" from "this was an auth
+// failure" — is the conduiterr CODE (conduiterr.Get) plus the HTTP status
+// when checkStatus recorded one (provider.HTTPStatus). Both are safe by
+// construction: a Code.Reason() is a registered, static string, never
+// user- or provider-controlled text, and the status is a bare integer.
+//
+// Not every failure this package sees is a conduiterr — captureProvider's
+// own ceiling and wall-clock-deadline errors (transcript_capture_test.go)
+// are plain fmt.Errorf values built entirely from static text and integers
+// this test computed itself, never provider-controlled content — so those
+// fall back to their literal Error() text. Callers still run
+// scanTextForSecrets over the RESULT before trusting it (see runCapture's
+// reasonFindings check): not because this function is expected to leak
+// (it never touches a conduiterr's Error()/message text, only its Code),
+// but because that fallback text has never technically been proven safe
+// the way the structured path has, and the same scan gates everything else
+// destined for a committed file.
+func safeFailureReason(err error) string {
+	if err == nil {
+		return "no completion recorded"
+	}
+	if ce, ok := conduiterr.Get(err); ok {
+		reason := ce.Code.Reason()
+		if status, ok := provider.HTTPStatus(err); ok {
+			reason = fmt.Sprintf("%s (HTTP %d)", reason, status)
+		}
+		return reason
+	}
+	return err.Error()
+}
+
+// writeTombstone commits a Tombstone for a corpus request whose capture
+// never produced a transcript on any pass — see the Tombstone type doc
+// comment (transcript.go) for why LoadTranscripts' bijection check needs an
+// explicit file here rather than tolerating a missing one.
+func writeTombstone(t *testing.T, destDir string, ts Tombstone) {
+	t.Helper()
+	data, err := yaml.Marshal(ts)
+	if err != nil {
+		t.Fatalf("marshaling tombstone %q: %v", ts.RequestID, err)
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatalf("creating %q: %v", destDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(destDir, ts.RequestID+tombstoneFileSuffix), data, 0o600); err != nil {
+		t.Fatalf("writing tombstone %q: %v", ts.RequestID, err)
+	}
+}
+
 // TestCaptureTranscripts is the entry point described in the file-level doc
 // comment above. It is a thin shell around runCapture: guard-check, resolve
 // config, build the live provider, then hand off — see runCapture's doc
@@ -574,15 +683,18 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	// this run actually exercised — the full corpus for a normal run, or
 	// the one id a scoped `-run TestCaptureTranscripts/<id>` re-capture
 	// names (t.Run never invokes the closure below for a filtered-out id,
-	// so both maps stay accurate for free). lastFailureReason holds, per
-	// request id, the most recent "no completion recorded" error seen
-	// across every pass — overwritten on every occurrence and deleted the
+	// so both maps stay accurate for free). lastFailureErr holds, per
+	// request id, the most recent error seen for a pass that recorded NO
+	// completion at all — overwritten on every occurrence and deleted the
 	// moment a pass DOES capture that id, so it reflects only the reason a
 	// STILL-missing request is missing, never a transient blip a later pass
-	// recovered from.
+	// recovered from. It stores the raw error (not a string): the string
+	// destined for a committed file is computed later, by safeFailureReason,
+	// deliberately never from err.Error() directly — see that function's
+	// doc comment.
 	var attemptOrder []Request
 	attempted := make(map[string]bool, len(requests))
-	lastFailureReason := make(map[string]string)
+	lastFailureErr := make(map[string]error)
 
 	var scoreCandidatesList []Candidates
 	for pass := 1; pass <= passes; pass++ {
@@ -597,7 +709,6 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 				cp.startRequest()
 				gen, genErr := Generate(ctx, Input{Prompt: req.Prompt, Provider: cp, Model: model})
 				raw := cp.recordedTurns()
-				passCandidates[req.ID] = gen.Candidate
 
 				if len(raw) == 0 {
 					// Absence of data (see the file-level "Partial results"
@@ -611,15 +722,20 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 					// fail the whole go test run and discard every OTHER
 					// transcript already captured; captureCompletenessVerdict
 					// below is what decides when enough of these should.
-					reason := "no completion recorded"
-					if genErr != nil {
-						reason = genErr.Error()
-					}
-					lastFailureReason[req.ID] = reason
+					//
+					// passCandidates deliberately gets NO entry for req.ID
+					// here (never a key with an empty value) — ScoreRun
+					// (score.go) reports a MISSING key as Result.Missing;
+					// setting an empty-string candidate instead would score
+					// this exactly like a model that produced a candidate
+					// and failed validation, which is a different, wrong
+					// story for a request the provider never even answered.
+					lastFailureErr[req.ID] = genErr
 					t.Logf("pass %d: %q produced no completion (absence of data): %v", pass, req.ID, genErr)
 					return
 				}
-				delete(lastFailureReason, req.ID)
+				delete(lastFailureErr, req.ID)
+				passCandidates[req.ID] = gen.Candidate
 
 				tr := buildTranscript(req, gen, raw, providerName, model, systemSHA, catalogFP, time.Now().UTC())
 				writeScratchTranscript(t, scratchDir, tr)
@@ -636,12 +752,44 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 			})
 		}
 
-		if len(passCandidates) == len(requests) {
+		// attempted is checked AFTER every pass rather than passCandidates'
+		// size: passCandidates now deliberately omits a key for any request
+		// with no completion this pass (see above), so its size no longer
+		// says anything about whether the FULL corpus was attempted — only
+		// about how many of the attempted requests produced a candidate.
+		// attempted is unconditional (set at the top of the t.Run closure
+		// regardless of outcome) and, once a full-corpus run's first pass
+		// completes, stays at len(requests) for every later pass too — a
+		// `-run` filter's scope is fixed for the whole `go test` invocation,
+		// never per-pass.
+		if len(attempted) == len(requests) {
 			scoreCandidatesList = append(scoreCandidatesList, passCandidates)
 		} else {
 			t.Logf("pass %d: %d/%d requests ran (a -run filter is scoping this to a subset) — "+
-				"excluded from corpus-level scoring and the manifest", pass, len(passCandidates), len(requests))
+				"excluded from corpus-level scoring and the manifest", pass, len(attempted), len(requests))
 		}
+	}
+
+	// Every still-missing request's manifest-safe failure reason is
+	// computed BEFORE anything is promoted, so a redaction-scan hit here
+	// aborts the whole batch — nothing gets promoted, no manifest, no
+	// tombstone — exactly like a violation found inside a transcript's own
+	// content does (scanAndPromoteScratch below). safeFailureReason itself
+	// never returns raw provider text, but the scan runs over its result
+	// anyway as the same defence-in-depth every other field destined for a
+	// committed file gets; see safeFailureReason's doc comment for why.
+	safeReasons := make(map[string]string, len(lastFailureErr))
+	unusable := make(map[string]bool, len(lastFailureErr))
+	var reasonFindings []string
+	for id, ferr := range lastFailureErr {
+		reason := safeFailureReason(ferr)
+		reasonFindings = append(reasonFindings, scanTextForSecrets(reason)...)
+		safeReasons[id] = reason
+		unusable[id] = provider.IsUnusableResponse(ferr)
+	}
+	if len(reasonFindings) > 0 {
+		t.Fatalf("redaction scan found %d issue(s) in a request's failure reason — refusing to promote ANY captured "+
+			"transcript into %q:\n%s", len(reasonFindings), destDir, strings.Join(reasonFindings, "\n"))
 	}
 
 	moved, findings := scanAndPromoteScratch(ctx, t, scratchDir, destDir)
@@ -667,26 +815,45 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 	for i, req := range attemptOrder {
 		captured := capturedIDs[req.ID]
 		outcomes[i] = RequestOutcome{RequestID: req.ID, Captured: captured}
+
+		tombstonePath := filepath.Join(destDir, req.ID+tombstoneFileSuffix)
 		if captured {
 			capturedCount++
+			// A previous run's tombstone for this id, if any, is now
+			// stale — this id has real data again, and LoadTranscripts
+			// hard-errors on an id carrying both a transcript and a
+			// tombstone (transcript.go).
+			if err := os.Remove(tombstonePath); err != nil && !os.IsNotExist(err) {
+				t.Fatalf("removing stale tombstone %q: %v", tombstonePath, err)
+			}
 			continue
 		}
+
 		missingCount++
-		reason := lastFailureReason[req.ID]
+		reason := safeReasons[req.ID]
 		if reason == "" {
 			reason = "no completion recorded"
 		}
 		outcomes[i].FailureReason = reason
+		outcomes[i].Unusable = unusable[req.ID]
+
+		if _, err := os.Stat(filepath.Join(destDir, req.ID+".yaml")); err == nil {
+			// An earlier run already committed a real transcript for this
+			// id; THIS run's failure to reproduce it does not retroactively
+			// invalidate that data — never overwrite a real transcript
+			// with a tombstone.
+			continue
+		}
+		writeTombstone(t, destDir, Tombstone{
+			SchemaVersion:      TranscriptSchemaVersion,
+			RequestID:          req.ID,
+			CorpusPromptSHA256: sha256Hex(req.Prompt),
+			FailureCode:        reason,
+			CapturedAt:         runStart,
+		})
 	}
 
-	if missingCount > 0 {
-		fail, msg := captureCompletenessVerdict(len(attemptOrder), capturedCount, missingCount, outcomes)
-		if fail {
-			t.Errorf("%s", msg)
-		} else {
-			t.Logf("%s", msg)
-		}
-	}
+	reportCaptureCompleteness(t, len(attemptOrder), capturedCount, missingCount, outcomes)
 
 	if len(scoreCandidatesList) != passes {
 		t.Logf("only %d/%d pass(es) captured the full corpus — skipping manifest.yaml "+
@@ -749,14 +916,60 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 // discard 27 already-paid-for transcripts.
 const captureCompletenessThreshold = 0.5
 
-// captureCompletenessVerdict is runCapture's threshold decision for a
-// nonzero missingCount, pure and directly testable
-// (TestCaptureCompletenessVerdict) without a fake provider or *testing.T:
-// given the final captured/missing split for whatever requests this run
-// actually attempted, it reports whether the run should be failed and the
-// message that failure (or note) should carry — always naming both what WAS
-// captured and what was NOT (missing id and reason), per the requirement
-// that a reader never has to infer a failure from an absent file.
+// completenessSink is the minimal *testing.T surface
+// reportCaptureCompleteness needs. It exists so a test can supply a fake
+// implementation and observe whether the fail branch fired, without needing
+// a real *testing.T — a hand-constructed &testing.T{} is not safe to use
+// (its internal state is only valid when created by the testing package's
+// own Run), so there is no other way to exercise this wiring's fail path
+// without also failing whatever test triggers it.
+type completenessSink interface {
+	Errorf(format string, args ...any)
+	Logf(format string, args ...any)
+}
+
+// reportCaptureCompleteness wraps captureCompletenessVerdict's decision and
+// reports it to sink — split out from runCapture so both the fail and
+// no-fail branches are directly testable (TestReportCaptureCompleteness)
+// without spending a real *testing.T's failure on a scenario that is
+// SUPPOSED to fail.
+//
+// It calls captureCompletenessVerdict whenever there is anything to report
+// on — a nonzero missingCount, OR attemptedCount itself being zero (see that
+// function's doc comment for why zero attempted must never be silently
+// treated as "nothing to report"). The only case that reports nothing at
+// all is a clean, fully-attempted run.
+func reportCaptureCompleteness(sink completenessSink, attemptedCount, capturedCount, missingCount int, outcomes []RequestOutcome) {
+	if attemptedCount > 0 && missingCount == 0 {
+		return
+	}
+	fail, msg := captureCompletenessVerdict(attemptedCount, capturedCount, missingCount, outcomes)
+	if fail {
+		sink.Errorf("%s", msg)
+	} else {
+		sink.Logf("%s", msg)
+	}
+}
+
+// captureCompletenessVerdict is runCapture's threshold decision, pure and
+// directly testable (TestCaptureCompletenessVerdict) without a fake
+// provider or *testing.T: given the final captured/missing split for
+// whatever requests this run actually attempted, it reports whether the run
+// should be failed and the message that failure (or note) should carry —
+// always naming both what WAS captured and what was NOT (missing id and
+// reason), per the requirement that a reader never has to infer a failure
+// from an absent file.
+//
+// attemptedCount == 0 is ALWAYS a hard failure, regardless of
+// missingCount (which is also always 0 in that case — capturedCount +
+// missingCount == attemptedCount is an invariant of how runCapture builds
+// outcomes). A `-run` pattern or a `request_id` workflow input that matches
+// nothing in the corpus (a typo, or an id no longer in
+// testdata/eval_requests.yaml) attempts ZERO requests — the OLD unconditional
+// `attemptedCount == 0 || missingCount == 0 -> return false, ""` guard let a
+// run like that exit clean with an empty message, which reportCaptureCompleteness
+// would then treat as "nothing to report" and generate-capture.yml's `capture`
+// job would exit green having captured and published nothing at all.
 //
 // Below the threshold — including one flaky 429, one pass tripping a
 // ceiling, or a single rate-limited request — this is ordinary live-provider
@@ -774,7 +987,15 @@ const captureCompletenessThreshold = 0.5
 // manifest for whatever WAS captured regardless of this verdict — this
 // function controls only how loud the `go test` signal is.
 func captureCompletenessVerdict(attemptedCount, capturedCount, missingCount int, outcomes []RequestOutcome) (fail bool, message string) {
-	if attemptedCount == 0 || missingCount == 0 {
+	if attemptedCount == 0 {
+		return true, fmt.Sprintf(
+			"0/%d captured, %d/%d missing (zero requests were attempted) — the run captured nothing to report "+
+				"on; check the -run pattern or request_id input (one that matches nothing in the corpus silently "+
+				"attempts zero requests) and the corpus file itself",
+			attemptedCount, missingCount, attemptedCount,
+		)
+	}
+	if missingCount == 0 {
 		return false, ""
 	}
 
@@ -1138,9 +1359,16 @@ func (p *failOnPromptProvider) Complete(ctx context.Context, req provider.Comple
 // so an unexpected Errorf here would fail this test too) while still
 // promoting the two good transcripts and recording req-b's absence
 // honestly, both in the promoted files and in the manifest.
-func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
+// partialFailureFixture builds the shared 3-request, 1-permanent-failure
+// scenario TestRunCapture_PartialFailure_PreservesGoodTranscripts and
+// TestRunCapture_PartialFailure_TombstoneAndBijection both drive runCapture
+// with — split into its own function (rather than duplicated) so the two
+// tests stay independently under gocyclo's complexity limit while still
+// exercising the identical setup.
+func partialFailureFixture(t *testing.T) (requests []Request, cp *captureProvider, destDir string, infraErr error) {
+	t.Helper()
 	const failMarker = "TRIGGER_INFRA_FAILURE"
-	requests := []Request{
+	requests = []Request{
 		capturePipelineRequest("req-a"),
 		{
 			ID:     "req-b",
@@ -1152,11 +1380,16 @@ func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
 
 	reply := "```yaml\n" + validCandidate + "```"
 	base := &fakeProvider{replies: []string{reply}, tokens: 20}
-	infraErr := fmt.Errorf("429: rate limited")
+	infraErr = fmt.Errorf("429: rate limited")
 	fp := &failOnPromptProvider{fakeProvider: base, marker: failMarker, err: infraErr}
-	cp := &captureProvider{Provider: fp, maxCalls: 1000, maxTokens: 1_000_000}
+	cp = &captureProvider{Provider: fp, maxCalls: 1000, maxTokens: 1_000_000}
 
-	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+	destDir = filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+	return requests, cp, destDir, infraErr
+}
+
+func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
+	requests, cp, destDir, infraErr := partialFailureFixture(t)
 	const passes = 3
 
 	manifest, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
@@ -1216,6 +1449,210 @@ func TestRunCapture_PartialFailure_PreservesGoodTranscripts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(destDir, manifestFileName)); err != nil {
 		t.Fatalf("expected manifest.yaml to have been written despite the partial failure: %v", err)
 	}
+
+	// The infra error is a plain fmt.Errorf, not a conduiterr — it takes
+	// safeFailureReason's literal-text fallback path (see that function's
+	// doc comment), so its text is preserved verbatim here. This is
+	// distinct from Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest,
+	// which proves the structured (non-fallback) path for a REAL provider
+	// error never carries response-body text at all.
+	if gotReqB.Unusable {
+		t.Fatal("req-b outcome: Unusable = true, want false — a 429 is absence of data, not a billed refusal")
+	}
+}
+
+// TestRunCapture_PartialFailure_TombstoneAndBijection is
+// TestRunCapture_PartialFailure_PreservesGoodTranscripts's sibling, split
+// out to keep both functions under gocyclo's complexity limit rather than
+// packing every assertion for this one scenario into a single test: it
+// proves the tombstone half of the SAME scenario — req-b (permanently
+// failing) gets a committed "<id>.missing.yaml" and req-a/req-c (captured)
+// get none — and that LoadTranscripts then loads the resulting directory
+// cleanly, which is the integration proof that findings 1/2/4/6 actually
+// compose into a corpus a consumer can load.
+func TestRunCapture_PartialFailure_TombstoneAndBijection(t *testing.T) {
+	requests, cp, destDir, _ := partialFailureFixture(t)
+	const passes = 3
+
+	_, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", passes, destDir)
+	if !wrote {
+		t.Fatal("expected the manifest to still be written: 1/3 missing is below the run-failing threshold")
+	}
+
+	if _, err := os.Stat(filepath.Join(destDir, "req-b"+tombstoneFileSuffix)); err != nil {
+		t.Fatalf("expected a tombstone for req-b: %v", err)
+	}
+	for _, id := range []string{"req-a", "req-c"} {
+		if _, err := os.Stat(filepath.Join(destDir, id+tombstoneFileSuffix)); !os.IsNotExist(err) {
+			t.Fatalf("expected NO tombstone for captured id %q, stat err = %v", id, err)
+		}
+	}
+
+	loaded, err := LoadTranscripts(destDir, requests)
+	if err != nil {
+		t.Fatalf("LoadTranscripts(%q) = %v, want no error", destDir, err)
+	}
+	if len(loaded.ByID) != 2 {
+		t.Fatalf("LoadTranscripts: len(ByID) = %d, want 2", len(loaded.ByID))
+	}
+	if _, ok := loaded.Tombstoned["req-b"]; !ok {
+		t.Fatal("LoadTranscripts: expected req-b in Tombstoned")
+	}
+}
+
+// Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest is the
+// regression test for the finding that a provider error's raw HTTP response
+// body (readErrorBody, provider/http.go — up to 512 bytes, provider-
+// controlled) could reach RequestOutcome.FailureReason and then
+// manifest.yaml, a committed file, completely unscanned. It drives a REAL
+// provider.Anthropic against an httptest server: one request always
+// succeeds (so the run stays at 1/2 = 50% missing, AT the run-failing
+// threshold but not past it — captureCompletenessVerdict's own "exactly
+// half missing" boundary case — so runCapture never calls t.Errorf on this
+// test's own *t), the other always gets a 401 whose body is deliberately
+// shaped like a real leak (echoing back what looks like a rejected API
+// key). That text must never appear anywhere in the manifest — only the
+// structured, safe summary (safeFailureReason: a conduiterr code plus the
+// HTTP status) does.
+func Test_RunCapture_ProviderHTTPErrorNeverLeaksResponseBodyIntoManifest(t *testing.T) {
+	const failMarker = "TRIGGER_401"
+	const leakedSecret = "sk-ant-1234567890abcdefghijklmnop"
+	leakedBody := `{"error":{"type":"authentication_error","message":"Incorrect API key provided: ` + leakedSecret + `"}}`
+
+	okBody, err := json.Marshal(map[string]any{
+		"content": []map[string]string{{"type": "text", "text": "```yaml\n" + validCandidate + "```"}},
+		"usage":   map[string]int{"input_tokens": 5, "output_tokens": 5},
+	})
+	if err != nil {
+		t.Fatalf("marshaling ok response fixture: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), failMarker) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, leakedBody)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(okBody)
+	}))
+	t.Cleanup(srv.Close)
+
+	requests := []Request{
+		capturePipelineRequest("req-ok"),
+		{
+			ID:     "req-401",
+			Prompt: "read from the generator and write to the log " + failMarker,
+			Expect: Expect{SourceCategory: "generator", DestinationCategory: "log"},
+		},
+	}
+	base := &provider.Anthropic{BaseURL: srv.URL}
+	cp := &captureProvider{Provider: base, maxCalls: 1000, maxTokens: 1_000_000}
+	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
+
+	manifest, wrote := runCapture(context.Background(), t, requests, cp, "anthropic", "claude-sonnet-5-test", 1, destDir)
+	if !wrote {
+		t.Fatal("expected the manifest to be written: 1/2 missing is at, not past, the run-failing threshold")
+	}
+
+	data, err := os.ReadFile(filepath.Join(destDir, manifestFileName))
+	if err != nil {
+		t.Fatalf("reading manifest: %v", err)
+	}
+	if strings.Contains(string(data), leakedSecret) {
+		t.Fatalf("manifest.yaml carries the leaked secret verbatim:\n%s", data)
+	}
+	if strings.Contains(string(data), "Incorrect API key") {
+		t.Fatalf("manifest.yaml carries the raw provider response body:\n%s", data)
+	}
+
+	var gotReq401 RequestOutcome
+	found := false
+	for _, o := range manifest.RequestOutcomes {
+		if o.RequestID == "req-401" {
+			gotReq401, found = o, true
+		}
+	}
+	if !found {
+		t.Fatal("expected an outcome for req-401")
+	}
+	if gotReq401.Captured {
+		t.Fatal("req-401: Captured = true, want false")
+	}
+	if strings.Contains(gotReq401.FailureReason, leakedSecret) {
+		t.Fatalf("req-401: FailureReason carries the leaked secret: %q", gotReq401.FailureReason)
+	}
+	// The structured summary IS present and useful: the code plus the HTTP
+	// status, which is exactly what a reviewer needs to triage a 401
+	// without ever seeing the response body.
+	if !strings.Contains(gotReq401.FailureReason, "HTTP 401") {
+		t.Fatalf("req-401: FailureReason = %q, want it to name the HTTP status", gotReq401.FailureReason)
+	}
+
+	// req-401 also gets a tombstone, and the tombstone is subject to
+	// exactly the same guarantee — it is the other place a manifest-safe
+	// (never raw) reason gets committed.
+	tsData, err := os.ReadFile(filepath.Join(destDir, "req-401"+tombstoneFileSuffix))
+	if err != nil {
+		t.Fatalf("reading tombstone for req-401: %v", err)
+	}
+	if strings.Contains(string(tsData), leakedSecret) {
+		t.Fatalf("tombstone for req-401 carries the leaked secret verbatim:\n%s", tsData)
+	}
+
+	// And the redaction test itself (secrets_scan_test.go) must also catch
+	// this if the structured path is ever bypassed — it scans manifest.yaml
+	// and every tombstone as raw text, not as a parsed Transcript.
+	if findings := scanTextForSecrets(string(data)); len(findings) > 0 {
+		t.Fatalf("scanTextForSecrets found findings in a manifest that should already be clean: %v", findings)
+	}
+}
+
+// TestRunCapture_MissingRequest_ScoredAsMissingNotFailedCandidate is the
+// regression test for a request with no completion being scored as a
+// failed model candidate rather than Missing (score.go's Result.Missing).
+// Before the fix, runCapture set passCandidates[req.ID] = gen.Candidate
+// (empty string on this path) BEFORE checking len(raw) == 0, so the map
+// always carried a key for the id — ScoreRun then saw `ok == true` and
+// scored a 429 as "the model produced a candidate that failed validation"
+// instead of "no candidate was ever produced". This proves runCapture's
+// contract with ScoreRun directly: a Candidates map built the same way
+// runCapture builds it (see the "absence of data" branch in its per-request
+// closure) must have NO entry at all for a request with no completion, so
+// ScoreRun reports Missing.
+func TestRunCapture_MissingRequest_ScoredAsMissingNotFailedCandidate(t *testing.T) {
+	requests := []Request{capturePipelineRequest("req-ok"), capturePipelineRequest("req-missing")}
+
+	// Mirrors exactly what runCapture's per-request closure does today:
+	// only a request whose raw completions are non-empty gets a
+	// passCandidates entry at all.
+	candidates := Candidates{"req-ok": validCandidate}
+
+	rs := ScoreRun(context.Background(), requests, candidates)
+
+	var gotMissing, gotOK bool
+	for _, res := range rs.Results {
+		switch res.RequestID {
+		case "req-missing":
+			gotMissing = true
+			if !res.Missing {
+				t.Fatal("req-missing: Missing = false, want true — a request with no completion must never be " +
+					"scored as a failed candidate")
+			}
+			if res.ValidatePass {
+				t.Fatal("req-missing: ValidatePass = true, want false")
+			}
+		case "req-ok":
+			gotOK = true
+			if res.Missing {
+				t.Fatal("req-ok: Missing = true, want false")
+			}
+		}
+	}
+	if !gotMissing || !gotOK {
+		t.Fatalf("expected results for both req-ok and req-missing, got %+v", rs.Results)
+	}
 }
 
 // TestCaptureCompletenessVerdict proves the threshold decision directly and
@@ -1272,6 +1709,17 @@ func TestCaptureCompletenessVerdict(t *testing.T) {
 			outcomes: outcomesFor("only-request"),
 			wantFail: true,
 		},
+		{
+			// The regression case: a typo'd -run pattern or request_id
+			// input matches nothing in the corpus, so NOTHING is attempted
+			// at all — the old `attemptedCount == 0 || missingCount == 0`
+			// guard treated this identically to a clean, fully-successful
+			// run (false, ""), which is how a capture job could exit green
+			// having captured nothing.
+			name:      "zero attempted -> explicit failure, never a silent green",
+			attempted: 0, captured: 0, missing: 0,
+			wantFail: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1313,54 +1761,72 @@ func idRange(n int, prefix string) []string {
 	return ids
 }
 
-// TestScanAndPromoteScratch_ViolationBlocksEvenWhenARequestIsMissing proves
-// requirement 4 of the partial-results follow-up: the redaction gate stays
-// all-or-nothing even in exactly the shape partial-capture support
-// introduces — fewer scratch files than corpus requests, because one
-// request never produced a completion. A missing request must never be
-// mistaken for "one fewer file to scan" in a way that lets the OTHER two
-// promote despite a secret in one of them.
-func TestScanAndPromoteScratch_ViolationBlocksEvenWhenARequestIsMissing(t *testing.T) {
-	cleanReply := "```yaml\n" + validCandidate + "```"
-	secretReply := "```yaml\n" + validCandidate + "```\nnote: sk-ant-1234567890abcdefghijklmnop"
+// fakeCompletenessSink implements completenessSink without a *testing.T, so
+// TestReportCaptureCompleteness can exercise BOTH of
+// reportCaptureCompleteness's branches — including the one that calls
+// Errorf — without failing the test doing the exercising.
+type fakeCompletenessSink struct {
+	errorfCalled bool
+	logfCalled   bool
+	lastMsg      string
+}
 
-	// Three corpus requests, but only two ever produce a transcript —
-	// req-missing is simulated absence of data: it has NO file in
-	// scratchDir at all, exactly what a permanently-failing request leaves
-	// behind under the new partial-capture handling.
-	requests := []Request{capturePipelineRequest("req-clean"), capturePipelineRequest("req-secret")}
-	fake := &fakeProvider{replies: []string{cleanReply, secretReply}, tokens: 10}
-	cp := &captureProvider{Provider: fake, maxCalls: 1000, maxTokens: 1_000_000}
+func (f *fakeCompletenessSink) Errorf(format string, args ...any) {
+	f.errorfCalled = true
+	f.lastMsg = fmt.Sprintf(format, args...)
+}
 
-	system := BuildSystemPrompt(BuiltinCatalog())
-	systemSHA := sha256Hex(system)
-	catalogFP := CatalogFingerprint()
+func (f *fakeCompletenessSink) Logf(format string, args ...any) {
+	f.logfCalled = true
+	f.lastMsg = fmt.Sprintf(format, args...)
+}
 
-	scratchDir := t.TempDir()
-	for _, req := range requests {
-		cp.startRequest()
-		gen, genErr := Generate(context.Background(), Input{Prompt: req.Prompt, Provider: cp, Model: "claude-sonnet-5-test"})
-		raw := cp.recordedTurns()
-		if len(raw) == 0 {
-			t.Fatalf("setup: no completion recorded for %q: %v", req.ID, genErr)
+// TestReportCaptureCompleteness is the regression test for the previously
+// untested "if fail { t.Errorf } else { t.Logf }" wiring in runCapture: both
+// halves are exercised directly here via fakeCompletenessSink, including the
+// fail branch, which could never be exercised through runCapture itself
+// without also failing whichever test called it.
+func TestReportCaptureCompleteness(t *testing.T) {
+	t.Run("below threshold logs, never errors", func(t *testing.T) {
+		sink := &fakeCompletenessSink{}
+		reportCaptureCompleteness(sink, 28, 27, 1, []RequestOutcome{
+			{RequestID: "kafka-connect-unwrap-to-postgres", FailureReason: "generate.provider_error (HTTP 429)"},
+		})
+		if sink.errorfCalled {
+			t.Fatalf("Errorf called for a below-threshold miss: %q", sink.lastMsg)
 		}
-		tr := buildTranscript(req, gen, raw, "anthropic", "claude-sonnet-5-test", systemSHA, catalogFP, time.Now().UTC())
-		writeScratchTranscript(t, scratchDir, tr)
-	}
-	// req-missing deliberately gets no writeScratchTranscript call at all.
+		if !sink.logfCalled {
+			t.Fatal("expected Logf to be called")
+		}
+	})
 
-	destDir := filepath.Join(t.TempDir(), "anthropic", "claude-sonnet-5-test")
-	moved, findings := scanAndPromoteScratch(context.Background(), t, scratchDir, destDir)
+	t.Run("past threshold errors", func(t *testing.T) {
+		sink := &fakeCompletenessSink{}
+		outcomes := make([]RequestOutcome, 20)
+		for i := range outcomes {
+			outcomes[i] = RequestOutcome{RequestID: fmt.Sprintf("req-%d", i), FailureReason: "generate.provider_error"}
+		}
+		reportCaptureCompleteness(sink, 28, 8, 20, outcomes)
+		if !sink.errorfCalled {
+			t.Fatal("expected Errorf to be called for a past-threshold miss")
+		}
+	})
 
-	if len(findings) == 0 {
-		t.Fatal("expected the secret-carrying transcript to produce at least one finding")
-	}
-	if len(moved) != 0 {
-		t.Fatalf("expected NOTHING promoted (not even req-clean) when any finding exists, got %v", moved)
-	}
-	if _, err := os.Stat(destDir); !os.IsNotExist(err) {
-		t.Fatalf("expected destDir %q to never have been created, stat err = %v", destDir, err)
-	}
+	t.Run("zero attempted errors, never silently reports nothing", func(t *testing.T) {
+		sink := &fakeCompletenessSink{}
+		reportCaptureCompleteness(sink, 0, 0, 0, nil)
+		if !sink.errorfCalled {
+			t.Fatal("expected Errorf to be called when zero requests were attempted")
+		}
+	})
+
+	t.Run("nothing missing calls neither", func(t *testing.T) {
+		sink := &fakeCompletenessSink{}
+		reportCaptureCompleteness(sink, 28, 28, 0, nil)
+		if sink.errorfCalled || sink.logfCalled {
+			t.Fatal("expected neither Errorf nor Logf for a clean, fully-attempted run")
+		}
+	})
 }
 
 // TestScanAndPromoteScratch_OneViolationBlocksTheWholeBatch proves plan §5 /

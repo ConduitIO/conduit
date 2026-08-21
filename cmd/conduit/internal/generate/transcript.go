@@ -42,6 +42,15 @@ const TranscriptSchemaVersion = 1
 // redaction scanner both skip it by name when listing a directory.
 const manifestFileName = "manifest.yaml"
 
+// tombstoneFileSuffix marks a legitimately-missing transcript: a corpus
+// request that was attempted but never produced a single completion on any
+// pass (RequestOutcome.Captured == false, runCapture in
+// transcript_capture_test.go) gets a "<id>.missing.yaml" file committed in
+// place of "<id>.yaml". See the Tombstone type doc comment for why
+// LoadTranscripts needs this rather than tolerating a missing file
+// outright.
+const tombstoneFileSuffix = ".missing.yaml"
+
 // Transcript is one committed provider transcript: everything replay needs
 // to answer Generate's calls for exactly one corpus Request, plus the
 // metadata needed to decide whether it is still meaningful (design doc §10;
@@ -279,7 +288,32 @@ type RequestOutcome struct {
 	Captured  bool   `yaml:"captured"`
 	// FailureReason is set only when Captured is false — see the type doc
 	// comment. Always empty when Captured is true.
+	//
+	// This is manifest-safe by construction (safeFailureReason,
+	// transcript_capture_test.go): a conduiterr code plus an HTTP status
+	// when known, NEVER the provider's own error text — a provider error
+	// message may embed up to 512 bytes of raw response body
+	// (readErrorBody, provider/http.go), which can echo back
+	// caller-supplied or provider-controlled content (e.g. a 401 body
+	// quoting the rejected key, a *url.Error carrying credentials embedded
+	// in a base URL). manifest.yaml is a committed file with no
+	// content-based redaction of its own — TestTranscripts_CarryNoSecretMaterial
+	// (secrets_scan_test.go) scans it as raw text specifically because a
+	// struct-shaped scan would never look at this field — so nothing that
+	// reaches here may ever be raw, unscanned provider text.
 	FailureReason string `yaml:"failureReason,omitempty"`
+	// Unusable is true when Captured is false AND the underlying failure
+	// was a response that DID arrive from the provider but could not be
+	// turned into a completion — a decode failure, or a well-formed but
+	// empty completion (a refusal) — as opposed to a transport-level
+	// failure (network error, timeout, non-2xx status, a tripped ceiling)
+	// where no response ever arrived at all (provider.IsUnusableResponse).
+	// This is the distinction a 429 and a refusal must never share: both
+	// leave Captured false, but only a refusal was a BILLED, attempted
+	// call whose tokens are already counted in Manifest.TotalTokensUsed —
+	// see captureProvider.Complete (transcript_capture_test.go). Always
+	// false when Captured is true.
+	Unusable bool `yaml:"unusable,omitempty"`
 }
 
 // PassScore is one capture pass's corpus-level score, mirroring RunScore
@@ -293,6 +327,49 @@ type PassScore struct {
 	ValidatePassRate   float64 `yaml:"validatePassRate"`
 	SemanticMatchCount int     `yaml:"semanticMatchCount"`
 	SemanticMatchRate  float64 `yaml:"semanticMatchRate"`
+}
+
+// Tombstone is committed as "<id>.missing.yaml" in place of a Transcript for
+// a corpus request that was attempted but never produced a single
+// completion on any capture pass (RequestOutcome.Captured == false; see
+// runCapture's "Partial results" doc comment, transcript_capture_test.go).
+//
+// It exists so LoadTranscripts' bijection check (checkBijection) can tell
+// "this id was legitimately attempted and came back with nothing" apart
+// from "this id was renamed out from under its transcript" WITHOUT
+// weakening bijection into blanket tolerance for a missing file —
+// LoadTranscripts' own doc comment explains why silently tolerating an
+// absent transcript would let a renamed corpus id quietly turn a
+// 28-request corpus into a passing 27/28. A tombstone is the explicit,
+// reviewable, committed artifact that makes "this id has no data, and
+// here's why" a fact checkBijection can see, instead of an absence
+// checkBijection has to guess about.
+//
+// It also survives a lost or stale manifest.yaml (LoadTranscripts never
+// reads the manifest at all): bijection stays correct even if
+// manifest.yaml is deleted, corrupted, or never committed for some reason,
+// because the tombstone — not the manifest — is what checkBijection
+// consults.
+type Tombstone struct {
+	SchemaVersion int `yaml:"schemaVersion"`
+	// RequestID must equal the corpus Request.ID this tombstone was written
+	// for, AND the file's own basename (minus ".missing.yaml") —
+	// LoadTranscripts hard-errors if either disagrees with the other, the
+	// same discipline Transcript.RequestID follows.
+	RequestID string `yaml:"requestID"`
+	// CorpusPromptSHA256 is checked the exact same way a real Transcript's
+	// is (LoadTranscripts): a request edited under an unchanged id must
+	// still be caught even when that id has no data at all.
+	CorpusPromptSHA256 string `yaml:"corpusPromptSHA256"`
+	// FailureCode is the manifest-safe reason this id has no transcript —
+	// see RequestOutcome.FailureReason's doc comment for what "safe" means
+	// here (a conduiterr code plus an HTTP status when known, never the
+	// provider's own error text). Required: a tombstone with no reason is
+	// as useless as an absent file was.
+	FailureCode string `yaml:"failureCode"`
+	// CapturedAt is when the capture run that produced this tombstone
+	// ran — same meaning as Transcript.CapturedAt.
+	CapturedAt time.Time `yaml:"capturedAt"`
 }
 
 // LoadManifest reads the manifest.yaml committed alongside one capture run's
@@ -377,12 +454,24 @@ type LoadedTranscript struct {
 // by request id, already validated against requests.
 type LoadResult struct {
 	ByID map[string]LoadedTranscript
+	// Tombstoned holds every corpus id whose capture legitimately produced
+	// no transcript (a committed "<id>.missing.yaml", Tombstone), keyed by
+	// request id. checkBijection already proved every corpus id is
+	// accounted for by exactly one of ByID or Tombstoned — a caller (the
+	// replay/eval consumer) skips a tombstoned id rather than treating its
+	// absence from ByID as an error.
+	Tombstoned map[string]Tombstone
 }
 
 // LoadTranscripts reads every committed transcript in dir (one file per
 // corpus request, "<requestID>.yaml"; manifestFileName is skipped, never
 // treated as a malformed transcript) and validates it against requests
 // BEFORE returning anything a caller could score.
+//
+// A corpus id may also be satisfied by a committed "<requestID>.missing.yaml"
+// Tombstone instead of a transcript — see the Tombstone type doc comment for
+// why that is a distinct, explicit case, never absorbed the way a plain
+// missing file would be.
 //
 // ScoreRun counts a request with no candidate as a fail on BOTH metrics —
 // correct for a live run, where "no candidate" really does mean the model
@@ -393,51 +482,50 @@ type LoadResult struct {
 // a smaller and differently-shaped corpus than the one actually committed.
 // So LoadTranscripts hard-errors, never skips, on:
 //
-//  1. Bijection — every requests[i].ID has exactly one transcript file in
-//     dir, and every transcript file's id has a matching entry in requests.
-//     Both directions are checked and the error names every offending id, not
-//     just the first (AC 1.19).
-//  2. corpusPromptSHA256 equality — a transcript's recorded hash of the
-//     corpus prompt it was captured against must equal
+//  1. Bijection — every requests[i].ID has exactly one transcript OR
+//     tombstone file in dir, and every transcript/tombstone file's id has a
+//     matching entry in requests. Both directions are checked and the error
+//     names every offending id, not just the first (AC 1.19). A corpus id
+//     with NEITHER a transcript nor a tombstone is still a hard "missing"
+//     error — a renamed id is never silently tolerated just because
+//     tombstones exist.
+//  2. corpusPromptSHA256 equality — a transcript's (or tombstone's) recorded
+//     hash of the corpus prompt it was captured against must equal
 //     sha256Hex(requests[i].Prompt) for that SAME id today. This is what
 //     catches a request's prompt text edited under an id nobody renamed (AC
 //     1.20) — bijection alone would pass that case, since the id itself
 //     never moved.
+//  3. An id carrying BOTH a transcript and a tombstone — self-contradictory
+//     (RequestOutcome can only ever report one disposition per id per
+//     capture run) and always a hard error rather than a guess about which
+//     file to trust.
 //
-// Grounding staleness (Staleness) is computed and returned on every result
-// but is never a reason to fail this call — see Staleness's doc comment.
+// Grounding staleness (Staleness) is computed and returned on every
+// transcript result but is never a reason to fail this call — see
+// Staleness's doc comment.
 //
 // Malformed transcripts (missing required fields, a requestID that disagrees
 // with its own filename, an unrecognized schemaVersion) are also hard
 // errors, matching LoadRequests' "never silently drops a malformed entry"
-// discipline (fixture.go).
+// discipline (fixture.go). The same applies to a malformed tombstone.
 func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
-	entries, err := os.ReadDir(dir)
+	byID, tombstones, err := scanTranscriptsDir(dir)
 	if err != nil {
-		return LoadResult{}, cerrors.Errorf("reading transcripts directory %q: %w", dir, err)
+		return LoadResult{}, err
 	}
 
-	byID := make(map[string]Transcript, len(entries))
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") || e.Name() == manifestFileName {
-			continue
+	// An id can never legitimately carry both — that would mean a capture
+	// run somehow recorded two different final dispositions for the same
+	// request. Caught here, before bijection even runs, rather than
+	// silently preferring one file over the other.
+	for id := range tombstones {
+		if _, ok := byID[id]; ok {
+			return LoadResult{}, cerrors.Errorf(
+				"transcripts directory %q: %q has BOTH a transcript (%s.yaml) and a tombstone (%s%s) — "+
+					"exactly one may exist per id; delete the stale one",
+				dir, id, id, id, tombstoneFileSuffix,
+			)
 		}
-
-		id := strings.TrimSuffix(e.Name(), ".yaml")
-		path := filepath.Join(dir, e.Name())
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return LoadResult{}, cerrors.Errorf("reading transcript %q: %w", path, err)
-		}
-		var t Transcript
-		if err := yaml.Unmarshal(data, &t); err != nil {
-			return LoadResult{}, cerrors.Errorf("parsing transcript %q: %w", path, err)
-		}
-		if err := validateTranscriptShape(t, path, id); err != nil {
-			return LoadResult{}, err
-		}
-		byID[id] = t
 	}
 
 	corpusIDs := make(map[string]bool, len(requests))
@@ -447,10 +535,116 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 		promptByID[r.ID] = r.Prompt
 	}
 
-	if err := checkBijection(dir, corpusIDs, byID); err != nil {
+	if err := checkBijection(dir, corpusIDs, byID, tombstones); err != nil {
+		return LoadResult{}, err
+	}
+	if err := checkTombstonePrompts(tombstones, promptByID); err != nil {
 		return LoadResult{}, err
 	}
 
+	out, err := loadedTranscriptsFor(byID, promptByID)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	return LoadResult{ByID: out, Tombstoned: tombstones}, nil
+}
+
+// scanTranscriptsDir reads dir and classifies every entry: manifestFileName
+// is skipped, an "<id>.missing.yaml" file is parsed and validated as a
+// Tombstone, and every other "<id>.yaml" file is parsed and validated as a
+// Transcript. Split out from LoadTranscripts to keep that function's own
+// cyclomatic complexity down — this is the one part of loading that is pure
+// I/O and per-file shape validation, with no corpus-comparison logic at all.
+func scanTranscriptsDir(dir string) (byID map[string]Transcript, tombstones map[string]Tombstone, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil, cerrors.Errorf("reading transcripts directory %q: %w", dir, err)
+	}
+
+	byID = make(map[string]Transcript, len(entries))
+	tombstones = make(map[string]Tombstone, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == manifestFileName {
+			continue
+		}
+
+		switch {
+		case strings.HasSuffix(e.Name(), tombstoneFileSuffix):
+			id := strings.TrimSuffix(e.Name(), tombstoneFileSuffix)
+			ts, err := readTombstone(filepath.Join(dir, e.Name()), id)
+			if err != nil {
+				return nil, nil, err
+			}
+			tombstones[id] = ts
+
+		case strings.HasSuffix(e.Name(), ".yaml"):
+			id := strings.TrimSuffix(e.Name(), ".yaml")
+			t, err := readTranscript(filepath.Join(dir, e.Name()), id)
+			if err != nil {
+				return nil, nil, err
+			}
+			byID[id] = t
+		}
+	}
+	return byID, tombstones, nil
+}
+
+// readTranscript reads, parses, and shape-validates one "<id>.yaml" file.
+func readTranscript(path, id string) (Transcript, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Transcript{}, cerrors.Errorf("reading transcript %q: %w", path, err)
+	}
+	var t Transcript
+	if err := yaml.Unmarshal(data, &t); err != nil {
+		return Transcript{}, cerrors.Errorf("parsing transcript %q: %w", path, err)
+	}
+	if err := validateTranscriptShape(t, path, id); err != nil {
+		return Transcript{}, err
+	}
+	return t, nil
+}
+
+// readTombstone reads, parses, and shape-validates one "<id>.missing.yaml"
+// file.
+func readTombstone(path, id string) (Tombstone, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Tombstone{}, cerrors.Errorf("reading tombstone %q: %w", path, err)
+	}
+	var ts Tombstone
+	if err := yaml.Unmarshal(data, &ts); err != nil {
+		return Tombstone{}, cerrors.Errorf("parsing tombstone %q: %w", path, err)
+	}
+	if err := validateTombstoneShape(ts, path, id); err != nil {
+		return Tombstone{}, err
+	}
+	return ts, nil
+}
+
+// checkTombstonePrompts is the tombstone half of AC 1.20: a tombstone's
+// recorded corpusPromptSHA256 must match the corpus prompt for that SAME id
+// today, exactly the check loadedTranscriptsFor runs for a real Transcript —
+// a request edited under an unchanged id must still be caught even when
+// that id has no data at all.
+func checkTombstonePrompts(tombstones map[string]Tombstone, promptByID map[string]string) error {
+	for id, ts := range tombstones {
+		wantPromptSHA256 := sha256Hex(promptByID[id])
+		if ts.CorpusPromptSHA256 != wantPromptSHA256 {
+			return cerrors.Errorf(
+				"tombstone %q: corpusPromptSHA256 %q does not match the corpus prompt for id %q today (%q) — "+
+					"the request was edited under an unchanged id; re-capture this transcript",
+				id, ts.CorpusPromptSHA256, id, wantPromptSHA256,
+			)
+		}
+	}
+	return nil
+}
+
+// loadedTranscriptsFor checks AC 1.20 for every real Transcript (mirroring
+// checkTombstonePrompts for a Tombstone) and pairs each with its Staleness
+// against the CURRENT binary's grounding.
+func loadedTranscriptsFor(byID map[string]Transcript, promptByID map[string]string) (map[string]LoadedTranscript, error) {
 	currentSystemPromptSHA256 := sha256Hex(BuildSystemPrompt(BuiltinCatalog()))
 	currentCatalogFingerprint := CatalogFingerprint()
 
@@ -458,7 +652,7 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 	for id, t := range byID {
 		wantPromptSHA256 := sha256Hex(promptByID[id])
 		if t.CorpusPromptSHA256 != wantPromptSHA256 {
-			return LoadResult{}, cerrors.Errorf(
+			return nil, cerrors.Errorf(
 				"transcript %q: corpusPromptSHA256 %q does not match the corpus prompt for id %q today (%q) — "+
 					"the request was edited under an unchanged id; re-capture this transcript",
 				id, t.CorpusPromptSHA256, id, wantPromptSHA256,
@@ -470,22 +664,31 @@ func LoadTranscripts(dir string, requests []Request) (LoadResult, error) {
 			Staleness:  classifyStaleness(t, currentSystemPromptSHA256, currentCatalogFingerprint),
 		}
 	}
-
-	return LoadResult{ByID: out}, nil
+	return out, nil
 }
 
-// checkBijection reports every corpus id with no transcript AND every
-// transcript id with no corpus entry, in one error naming all of them — AC
-// 1.19 requires each direction to name the offending id, not just detect that
-// SOME mismatch exists.
-func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Transcript) error {
+// checkBijection reports every corpus id with neither a transcript nor a
+// tombstone, AND every transcript/tombstone id with no corpus entry, in one
+// error naming all of them — AC 1.19 requires each direction to name the
+// offending id, not just detect that SOME mismatch exists. A tombstoned id
+// satisfies the corpus side exactly like a transcript does; an ORPHANED
+// tombstone (no corpus entry) is exactly as much a bijection problem as an
+// orphaned transcript.
+func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Transcript, tombstones map[string]Tombstone) error {
 	var missing, extra []string
 	for id := range corpusIDs {
-		if _, ok := byID[id]; !ok {
+		_, hasTranscript := byID[id]
+		_, hasTombstone := tombstones[id]
+		if !hasTranscript && !hasTombstone {
 			missing = append(missing, id)
 		}
 	}
 	for id := range byID {
+		if !corpusIDs[id] {
+			extra = append(extra, id)
+		}
+	}
+	for id := range tombstones {
 		if !corpusIDs[id] {
 			extra = append(extra, id)
 		}
@@ -500,10 +703,10 @@ func checkBijection(dir string, corpusIDs map[string]bool, byID map[string]Trans
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "transcripts directory %q is not a bijection with the corpus", dir)
 	if len(missing) > 0 {
-		fmt.Fprintf(&msg, "; corpus id(s) with no transcript: %s", strings.Join(missing, ", "))
+		fmt.Fprintf(&msg, "; corpus id(s) with no transcript or tombstone: %s", strings.Join(missing, ", "))
 	}
 	if len(extra) > 0 {
-		fmt.Fprintf(&msg, "; transcript id(s) with no corpus entry: %s", strings.Join(extra, ", "))
+		fmt.Fprintf(&msg, "; transcript/tombstone id(s) with no corpus entry: %s", strings.Join(extra, ", "))
 	}
 	return cerrors.New(msg.String())
 }
@@ -545,6 +748,28 @@ func validateTranscriptShape(t Transcript, path, expectedID string) error {
 		if turn.CompletionText == "" {
 			return cerrors.Errorf("transcript %q: turn %d has no completion text", path, turn.N)
 		}
+	}
+	return nil
+}
+
+// validateTombstoneShape hard-errors on a malformed tombstone before it
+// ever reaches the bijection or prompt-hash checks — mirrors
+// validateTranscriptShape's discipline for Transcript.
+func validateTombstoneShape(ts Tombstone, path, expectedID string) error {
+	if ts.SchemaVersion != TranscriptSchemaVersion {
+		return cerrors.Errorf("tombstone %q: schemaVersion %d, want %d", path, ts.SchemaVersion, TranscriptSchemaVersion)
+	}
+	if ts.RequestID == "" {
+		return cerrors.Errorf("tombstone %q: no requestID", path)
+	}
+	if ts.RequestID != expectedID {
+		return cerrors.Errorf("tombstone %q: requestID %q does not match its filename id %q", path, ts.RequestID, expectedID)
+	}
+	if ts.CorpusPromptSHA256 == "" {
+		return cerrors.Errorf("tombstone %q: no corpusPromptSHA256", path)
+	}
+	if ts.FailureCode == "" {
+		return cerrors.Errorf("tombstone %q: no failureCode", path)
 	}
 	return nil
 }

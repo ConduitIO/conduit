@@ -69,6 +69,31 @@ func twoRequestCorpus() []Request {
 	}
 }
 
+// validTombstone returns a well-formed Tombstone for request r, hashed
+// against r.Prompt — a fixture LoadTranscripts accepts as satisfying
+// bijection for r.ID, before any test perturbs it.
+func validTombstone(r Request) Tombstone {
+	return Tombstone{
+		SchemaVersion:      TranscriptSchemaVersion,
+		RequestID:          r.ID,
+		CorpusPromptSHA256: sha256Hex(r.Prompt),
+		FailureCode:        "generate.provider_error (HTTP 429)",
+		CapturedAt:         time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	}
+}
+
+// writeTombstoneFixture marshals ts to dir/<id>.missing.yaml.
+func writeTombstoneFixture(t *testing.T, dir, id string, ts Tombstone) {
+	t.Helper()
+	data, err := yaml.Marshal(ts)
+	if err != nil {
+		t.Fatalf("marshaling tombstone %q: %v", id, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+tombstoneFileSuffix), data, 0o600); err != nil {
+		t.Fatalf("writing tombstone %q: %v", id, err)
+	}
+}
+
 // Test_LoadTranscripts_HappyPath pins that a well-formed, complete transcript
 // directory loads cleanly and every entry classifies StalenessFresh — the
 // baseline every perturbation test below is a deviation from.
@@ -172,9 +197,121 @@ func Test_LoadTranscripts_RenamedCorpusID_ErrorsOnBothSides(t *testing.T) {
 
 	_, err := LoadTranscripts(dir, renamed)
 	is.True(err != nil)
-	is.True(strings.Contains(err.Error(), "no transcript: req-a-v2"))    // corpus id with no transcript
-	is.True(strings.Contains(err.Error(), "no corpus entry: req-a"))     // transcript id with no corpus entry (not the "req-a-v2" substring)
-	is.True(!strings.Contains(err.Error(), "no corpus entry: req-a-v2")) // the extra id is req-a, never req-a-v2
+	is.True(strings.Contains(err.Error(), "no transcript or tombstone: req-a-v2")) // corpus id with no transcript
+	is.True(strings.Contains(err.Error(), "no corpus entry: req-a"))               // transcript id with no corpus entry (not the "req-a-v2" substring)
+	is.True(!strings.Contains(err.Error(), "no corpus entry: req-a-v2"))           // the extra id is req-a, never req-a-v2
+}
+
+// --- Tombstones: a legitimately-missing transcript satisfies bijection,
+// but a RENAMED corpus id must still hard-error even when tombstones exist
+// elsewhere in the same directory. This is the load-bearing distinction the
+// partial-results follow-up needs: a tombstone is an explicit, reviewable
+// "this id was attempted and came back empty" fact, never a blanket
+// tolerance for an absent file. ---
+
+// Test_LoadTranscripts_TombstonedID_LoadsCleanly proves the core of the
+// fix: a corpus id with a committed "<id>.missing.yaml" instead of a
+// transcript loads without error, is reported via LoadResult.Tombstoned,
+// and is NOT present in ByID.
+func Test_LoadTranscripts_TombstonedID_LoadsCleanly(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	writeTombstoneFixture(t, dir, "req-b", validTombstone(reqs[1]))
+
+	got, err := LoadTranscripts(dir, reqs)
+	is.NoErr(err)
+	is.Equal(len(got.ByID), 1)
+	_, ok := got.ByID["req-a"]
+	is.True(ok)
+	_, ok = got.ByID["req-b"]
+	is.True(!ok) // req-b has no transcript, only a tombstone
+
+	is.Equal(len(got.Tombstoned), 1)
+	ts, ok := got.Tombstoned["req-b"]
+	is.True(ok)
+	is.Equal(ts.FailureCode, "generate.provider_error (HTTP 429)")
+}
+
+// Test_LoadTranscripts_RenamedCorpusID_StillErrors_EvenWithATombstonePresent
+// is the test that distinguishes the two cases a tombstone must never
+// blur together: renaming req-a to req-a-v2 in the corpus, with req-b
+// legitimately tombstoned, must still hard-error naming req-a-v2 as
+// missing — a tombstone existing for a DIFFERENT id must never be read as
+// "some id in this directory accounts for the gap".
+func Test_LoadTranscripts_RenamedCorpusID_StillErrors_EvenWithATombstonePresent(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	writeTombstoneFixture(t, dir, "req-b", validTombstone(reqs[1]))
+
+	renamed := []Request{
+		{ID: "req-a-v2", Prompt: reqs[0].Prompt}, // req-a renamed, transcript left behind under "req-a"
+		reqs[1],                                  // req-b unchanged, still tombstoned
+	}
+
+	_, err := LoadTranscripts(dir, renamed)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "no transcript or tombstone: req-a-v2"))
+	is.True(strings.Contains(err.Error(), "no corpus entry: req-a"))
+}
+
+// Test_LoadTranscripts_TombstonePromptEditedUnderSameID_Errors mirrors AC
+// 1.20 for a tombstone: a request's prompt edited without a re-capture must
+// still be caught even when the id in question has no transcript at all.
+func Test_LoadTranscripts_TombstonePromptEditedUnderSameID_Errors(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	writeTombstoneFixture(t, dir, "req-b", validTombstone(reqs[1]))
+
+	edited := []Request{
+		reqs[0],
+		{ID: "req-b", Prompt: "a completely different prompt text, edited without a re-capture"},
+	}
+
+	_, err := LoadTranscripts(dir, edited)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "req-b"))
+	is.True(strings.Contains(err.Error(), "corpusPromptSHA256"))
+}
+
+// Test_LoadTranscripts_TombstoneAndTranscriptBothPresent_Errors proves an
+// id can never carry both a transcript and a tombstone — a
+// self-contradictory commit state that must never resolve by silently
+// preferring one file over the other.
+func Test_LoadTranscripts_TombstoneAndTranscriptBothPresent_Errors(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	writeTranscript(t, dir, "req-b", validTranscript(reqs[1]))
+	writeTombstoneFixture(t, dir, "req-b", validTombstone(reqs[1]))
+
+	_, err := LoadTranscripts(dir, reqs)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "req-b"))
+	is.True(strings.Contains(err.Error(), "BOTH a transcript"))
+}
+
+// Test_LoadTranscripts_MalformedTombstone_Errors mirrors
+// Test_LoadTranscripts_WrongSchemaVersion_Errors for a tombstone: never
+// silently absorbed as "missing".
+func Test_LoadTranscripts_MalformedTombstone_Errors(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	reqs := twoRequestCorpus()
+	writeTranscript(t, dir, "req-a", validTranscript(reqs[0]))
+	bad := validTombstone(reqs[1])
+	bad.FailureCode = ""
+	writeTombstoneFixture(t, dir, "req-b", bad)
+
+	_, err := LoadTranscripts(dir, reqs)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "failureCode"))
 }
 
 // --- corpusPromptSHA256 (AC 1.20): a prompt edited under an unchanged id. ---
