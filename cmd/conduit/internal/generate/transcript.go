@@ -142,9 +142,10 @@ type Outcome struct {
 // Manifest is the per-<provider>/<model> capture-run summary committed
 // alongside its transcripts (plan §3.1, AC 1.23's "manifest records measured
 // tokens and cost"). Its schema is defined here because it is part of the
-// committed layout; WRITING one is the capture tool's job (A5a-3, not this
-// slice) — LoadTranscripts never reads or requires it, so a missing or
-// malformed manifest.yaml can never block replay.
+// committed layout; WRITING one is the capture tool's job (A5a-3:
+// transcript_capture_test.go's TestCaptureTranscripts) — LoadTranscripts
+// never reads or requires it, so a missing or malformed manifest.yaml can
+// never block replay.
 type Manifest struct {
 	SchemaVersion int    `yaml:"schemaVersion"`
 	Provider      string `yaml:"provider"`
@@ -153,15 +154,95 @@ type Manifest struct {
 	// Transcript.CapturedAt.
 	CapturedAt   time.Time `yaml:"capturedAt"`
 	RequestCount int       `yaml:"requestCount"`
-	// TotalTokensUsed sums every Turn.TokensUsed across every transcript this
-	// run produced — MEASURED, from providers' own reported usage, per
-	// provider.CompletionResult's "never estimated" invariant.
+	// TotalTokensUsed sums every Turn.TokensUsed the ENTIRE capture run
+	// produced — every pass, every request, whether or not that pass ended up
+	// promoted into testdata/transcripts — MEASURED, from providers' own
+	// reported usage, per provider.CompletionResult's "never estimated"
+	// invariant. This is deliberately the real total spend for the `go test`
+	// invocation this manifest describes, not just the tokens behind the
+	// (single, most-recent-successful-pass) transcripts actually committed,
+	// because AC 1.23's "measured tokens and cost" is a cost-accounting
+	// figure, not a per-file rollup.
+	//
+	// provider.CompletionResult carries only a COMBINED input+output count
+	// (see its own doc comment and every adapter's Complete) — there is no
+	// per-direction split anywhere in the Provider seam. A field here named
+	// InputTokensUsed/OutputTokensUsed would have to be either always zero
+	// (misleading — indistinguishable from "the provider reported zero") or
+	// fabricated by assuming a split (exactly the "never estimated" rule this
+	// field's doc exists to hold the line on). Splitting the count would
+	// require a shipped-adapter change (each adapter's anthropicResponse-style
+	// struct would need to keep Usage.InputTokens/OutputTokens separately
+	// instead of summing them into CompletionResult.TokensUsed) — out of
+	// scope for a maintenance-only capture tool; deferred alongside the
+	// cache_control adapter change plan §4 already defers to v0.21.
 	TotalTokensUsed int `yaml:"totalTokensUsed"`
-	// EstimatedCostUSD is TotalTokensUsed priced at the provider's list rate
-	// at capture time — an estimate (the field name says so), because actual
-	// billed cost depends on rate-card details (cached-prefix discounts,
-	// promotional pricing) this package has no way to observe.
+	// EstimatedCostUSD prices TotalTokensUsed at anthropicBlendedRatePerMTokUSD
+	// — an estimate (the field name says so, and unlike TotalTokensUsed this
+	// field is allowed to be one): actual billed cost depends on rate-card
+	// details (cached-prefix discounts, promotional pricing) this package has
+	// no way to observe, AND on the real input/output split, which
+	// TotalTokensUsed's own doc comment explains this package cannot measure.
 	EstimatedCostUSD float64 `yaml:"estimatedCostUSD"`
+
+	// --- A5a-3 additions: capture provenance and corpus-level scoring ---
+
+	// CaptureCommand is the (secret-redacted) invocation that produced this
+	// manifest — plan §4's methodology line, recorded rather than
+	// re-documented, so a manifest a year from now is self-describing without
+	// cross-referencing whatever the plan doc said at the time.
+	CaptureCommand string `yaml:"captureCommand"`
+	// CorpusCommitSHA is `git log -1 --format=%H` for
+	// testdata/eval_requests.yaml at capture time — the commit that last
+	// touched the corpus, not repo HEAD (which would drift on every unrelated
+	// commit even when the corpus itself never changed). "unknown" when git
+	// is unavailable or the lookup fails — capture must not fail (money
+	// already spent) just because provenance couldn't be recorded.
+	CorpusCommitSHA string `yaml:"corpusCommitSha"`
+	// CatalogFingerprint is CatalogFingerprint() at capture time — the same
+	// value every individual Transcript.CatalogFingerprint in this run
+	// carries, recorded once more here so a reader can confirm the whole run
+	// shared one grounding identity without opening every transcript file.
+	CatalogFingerprint string `yaml:"catalogFingerprint"`
+	// SystemPromptSHA256 is sha256Hex(BuildSystemPrompt(BuiltinCatalog())) at
+	// capture time, matching every Transcript.SystemPromptSHA256 in this run.
+	SystemPromptSHA256 string `yaml:"systemPromptSha256"`
+	// Passes is how many full-corpus capture passes this run performed and
+	// scored (plan's cost table assumes 3; TestCaptureTranscripts defaults to
+	// 3, overridable via CONDUIT_GENERATE_CAPTURE_PASSES).
+	Passes int `yaml:"passes"`
+	// MedianValidatePassRate and MedianSemanticMatchRate are ScoreMedian's two
+	// rates (fraction 0..1) across Passes independent full-corpus scoring
+	// runs — median, never best-of (CLAUDE.md's benchmarking discipline).
+	MedianValidatePassRate  float64 `yaml:"medianValidatePassRate"`
+	MedianSemanticMatchRate float64 `yaml:"medianSemanticMatchRate"`
+	// MedianValidatePassCount and MedianSemanticMatchCount are the median of
+	// the two RAW COUNTS (not rates) across the same Passes runs — carried
+	// alongside the rates so neither metric is ever collapsed into a single
+	// percentage (task requirement: "as counts and percentages, never
+	// collapsed into one number"). float64 because the median of an
+	// even-length series can fall between two integers; Passes defaults to 3
+	// (odd), where this is always a whole number in practice.
+	MedianValidatePassCount  float64 `yaml:"medianValidatePassCount"`
+	MedianSemanticMatchCount float64 `yaml:"medianSemanticMatchCount"`
+	// PassScores is every pass's own RunScore rollup (counts AND rates, plan
+	// §8.1's "three passes, median never best-of" made auditable) — the
+	// median fields above are the headline, this is the detail a regression
+	// investigation needs.
+	PassScores []PassScore `yaml:"passScores"`
+}
+
+// PassScore is one capture pass's corpus-level score, mirroring RunScore
+// (score.go) but without RunScore.Results — the manifest is a summary, not a
+// second copy of every per-request finding (those live in each committed
+// Transcript.Outcome).
+type PassScore struct {
+	Pass               int     `yaml:"pass"`
+	Total              int     `yaml:"total"`
+	ValidatePassCount  int     `yaml:"validatePassCount"`
+	ValidatePassRate   float64 `yaml:"validatePassRate"`
+	SemanticMatchCount int     `yaml:"semanticMatchCount"`
+	SemanticMatchRate  float64 `yaml:"semanticMatchRate"`
 }
 
 // LoadManifest reads the manifest.yaml committed alongside one capture run's

