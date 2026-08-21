@@ -133,14 +133,23 @@ and for their agents._
 ### Connector registry
 
 - [x] Public registry (signed): `conduit connectors install`/`uninstall`/`audit`/`bundle` — shipped
-      in v0.18 with a signed registry and seed connectors; issue #2625 should close
+      in v0.18 with a signed registry and seed connectors; issue #2625 should close.
+      **Operational note (2026-08-21):** the published index must be re-signed inside the client's
+      7-day freshness window or every `install` fails with `registry.index_stale`. Nothing re-signed
+      it unattended, so installs are refusing today — the heartbeat and a 72-hour staleness alarm are
+      in `conduit-connector-registry#28`
 - [ ] Community publishing via GitHub Action + signing
 - [ ] Registry web UI with search, verified badges, download stats
 
 ### Templates
 
-- [ ] Template gallery shipped with the registry: `postgres-iceberg`, `mysql-snowflake`,
-      `postgres-pgvector-rag`, `shopify-warehouse`, `kafka-clickhouse`, and more
+- [ ] Template gallery shipped with the registry — _partial_: `conduit pipelines init --template`
+      ships five templates (`generator-log`, `generator-file`, `postgres-s3`, `postgres-cdc-kafka`,
+      `postgres-pgvector-rag`). Of the templates named when this line was written, only
+      `postgres-pgvector-rag` exists; `postgres-iceberg`, `mysql-snowflake`, `shopify-warehouse` and
+      `kafka-clickhouse` are still outstanding, and Iceberg is itself a Phase-2 item below.
+      `postgres-pgvector-rag` also depends on `conduit connectors install pgvector`, which needs a
+      registry index inside its freshness window — see the note under _Public registry_
 - [ ] Community-contributed templates with the same publishing flow as connectors
 
 ### Deployment fundamentals (12-factor citizenship — the universal answer)
