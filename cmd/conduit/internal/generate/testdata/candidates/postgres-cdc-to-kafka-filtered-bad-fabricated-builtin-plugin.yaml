@@ -1,0 +1,23 @@
+version: "2.2"
+pipelines:
+  - id: orders-to-kafka-fabricated
+    status: running
+    name: orders-to-kafka-fabricated
+    connectors:
+      - id: pg-source
+        type: source
+        # A plausible-but-nonexistent builtin plugin name (typo'd "postgres").
+        # Schema-valid on its own; only ResolvePlugins catches it.
+        plugin: builtin:postgre
+        settings:
+          table: orders
+      - id: kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          topic: orders
+        processors:
+          - id: amount-filter
+            plugin: filter
+            settings:
+              expression: "amount > 100"

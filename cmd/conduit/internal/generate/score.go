@@ -38,12 +38,6 @@ type Result struct {
 
 	ValidatePass   bool
 	ValidateReport validate.Report
-	// ValidateErr is non-nil only when validateCandidate itself could not
-	// run (e.g. a temp-file I/O failure) — distinct from the candidate
-	// simply failing validation, which shows up as findings inside
-	// ValidateReport with ValidatePass false and ValidateErr nil.
-	ValidateErr error
-
 	SemanticMatch  bool
 	SemanticIssues []string
 }
@@ -75,10 +69,9 @@ func ScoreRun(ctx context.Context, requests []Request, candidates Candidates) Ru
 			res.Missing = true
 			res.SemanticIssues = []string{"no candidate provided for this request"}
 		} else {
-			report, err := validateCandidate(ctx, candidate)
+			report := validateCandidate(ctx, candidate)
 			res.ValidateReport = report
-			res.ValidateErr = err
-			res.ValidatePass = err == nil && report.OK()
+			res.ValidatePass = report.OK()
 
 			sem := scoreSemantic(ctx, req.Expect, candidate)
 			res.SemanticMatch = sem.Match

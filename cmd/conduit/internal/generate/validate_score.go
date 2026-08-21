@@ -16,51 +16,31 @@ package generate
 
 import (
 	"context"
-	"os"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/validate"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// validateCandidate runs the exact engine `conduit pipelines validate` uses
-// (validate.Run) against a candidate pipeline-config YAML document held only
-// in memory.
+// validateCandidate runs the exact gate `conduit generate` itself runs
+// against a candidate pipeline-config YAML document held only in memory:
+// validate.RunBytes with candidateValidateOptions() (ResolvePlugins on, the
+// builtin connector/processor sets — see generate.go's doc comment on
+// candidateValidateOptions for why that option is not the zero value).
 //
-// validate.Run/RunWithOptions take a file path and read the config from
-// disk — there is no in-memory (RunBytes/RunReader) entry point today (see
-// docs/design-documents/20260722-conduit-generate.md, Decision §3, "the
-// disk seam"). That design doc names the in-memory seam as the PREFERRED
-// resolution and a temp-file+cleanup shim as the fallback if the seam
-// proves infeasible at generate's build time. This eval harness needs an
-// answer now, before that command is built, so it takes the fallback:
-// write the candidate to a private (0600) temp file, run validate.Run
-// against it, and remove the file before returning — win or lose, on every
-// return path (defer, not a final explicit call, so a panic mid-Run still
-// cleans up).
+// This used to differ from the shipped command: it called validate.Run
+// (Options{}, ResolvePlugins off) against a private temp file, because
+// RunBytes did not exist yet (see docs/design-documents/20260722-conduit-
+// generate.md, Decision §3, "the disk seam", and this function's own prior
+// doc comment naming RunBytes as the trigger to change). That gap meant a
+// candidate referencing a fabricated builtin plugin (e.g.
+// `builtin:postgre`) scored validate-PASS in this harness while the real
+// command would have scored it validate-FAIL — the harness was measuring a
+// strictly weaker gate than the one it exists to benchmark, in exactly the
+// failure class (a plausible-looking fabricated plugin name) this feature
+// must never ship to a user.
 //
-// This is deliberately the ONLY place in this package that touches disk.
-// If/when validate gains RunBytes, this function's body is the only thing
-// that needs to change — every caller (ScoreRun) is unaffected.
-func validateCandidate(ctx context.Context, candidate string) (validate.Report, error) {
-	f, err := os.CreateTemp("", "conduit-generate-eval-*.yaml")
-	if err != nil {
-		return validate.Report{}, cerrors.Errorf("creating temp file for candidate validation: %w", err)
-	}
-	path := f.Name()
-	// Best-effort cleanup of a private scratch file; nothing downstream
-	// depends on the removal succeeding (a leaked temp file in the OS temp
-	// dir is a cleanup nuisance, never a correctness or security issue,
-	// since it was never a user-visible candidate — see doc.go's "the ONLY
-	// place in this package that touches disk").
-	defer func() { _ = os.Remove(path) }()
-
-	if _, err := f.WriteString(candidate); err != nil {
-		_ = f.Close()
-		return validate.Report{}, cerrors.Errorf("writing candidate to temp file %q: %w", path, err)
-	}
-	if err := f.Close(); err != nil {
-		return validate.Report{}, cerrors.Errorf("closing temp file %q: %w", path, err)
-	}
-
-	return validate.Run(ctx, path)
+// Now that RunBytes exists (cmd/conduit/internal/validate/engine.go:129),
+// this function is the ONLY thing that needed to change, exactly as
+// promised — no disk write, no temp file, no caller (ScoreRun) touched.
+func validateCandidate(ctx context.Context, candidate string) validate.Report {
+	return validate.RunBytes(ctx, InMemoryCandidateName, []byte(candidate), candidateValidateOptions())
 }
