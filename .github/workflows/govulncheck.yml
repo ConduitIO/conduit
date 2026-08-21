@@ -1,51 +1,45 @@
 name: govulncheck
 
-# Dependency vulnerability scan (CLAUDE.md "PR review process" automated
-# gates list / Process maturity table row "dependency vulnerability scan").
+# Dependency vulnerability scan (CLAUDE.md "PR review process" automated gates
+# list / Process maturity table row "dependency vulnerability scan").
 #
 # WHY govulncheck AND NOT A GENERIC SCANNER (Trivy/Snyk/osv-scanner): those
-# tools flag every CVE in every transitive dependency regardless of whether
-# the vulnerable function is ever called. govulncheck is Go's own scanner
-# and does reachability analysis on the actual call graph, so it only
-# reports a vulnerability when this codebase's compiled binaries can
-# actually reach the vulnerable symbol. For a dependency tree this size
-# (conduit-connector-protocol, AWS SDK v2, multiple LLM provider clients,
-# etc.) a non-reachability-aware scanner would produce a permanently-red,
-# mostly-irrelevant report - training people to ignore it, which is the
-# exact failure mode this gate exists to prevent. That distinction is why
-# this is the right tool for this repo.
+# flag every CVE in every transitive dependency regardless of whether the
+# vulnerable function is ever called. govulncheck is Go's own scanner and does
+# reachability analysis on the real call graph, so it reports a vulnerability
+# only when this codebase can actually reach the vulnerable symbol. For a
+# dependency tree this size a non-reachability-aware scanner would produce a
+# permanently-red, mostly-irrelevant report - training people to ignore it,
+# which is the exact failure this gate exists to prevent.
 #
-# NON-BLOCKING (report-only) AS LANDED. A baseline run against main
-# (2026-08-21) found 24 reachable vulnerabilities: 20 in the Go standard
-# library (fixed by a toolchain patch bump, e.g. go1.25.8 -> go1.25.12),
-# 1 in golang.org/x/crypto's openpgp package (indirect dep, unmaintained
-# per the advisory), and 3 separate advisories against the single
-# github.com/hamba/avro/v2 indirect dependency. Making this gate blocking
-# today would fail every PR for pre-existing findings unrelated to that
-# PR's own diff - training people to ignore a red check, which is exactly
-# what CLAUDE.md's PR review process warns against for a freshly-added
-# gate. So: `continue-on-error: true` on the scan step keeps the job green
-# (this workflow is NOT a required status check), while the job summary on
-# every run always states the current finding count so it stays visible
-# instead of silently passing. See CLAUDE.md's Process maturity table for
-# what has to happen before this flips to blocking + required: bump the Go
-# toolchain, and drop/upgrade golang.org/x/crypto (openpgp) and
-# github.com/hamba/avro/v2's vulnerable paths.
+# HOW THIS BLOCKS: it is a RATCHET, not a threshold and not a report-only job.
+# The baseline in .github/govulncheck-allowlist.txt lists the 24 called-level
+# vulnerabilities reachable on main as of 2026-08-21. A scan that finds an ID
+# NOT in that file FAILS. Pre-existing findings do not fail the build; a new
+# one does.
 #
-# NOT PATH-FILTERED, matching chaos.yml's rationale (see that file's
-# header): a required check must report a conclusion on every PR or it
-# blocks merges forever, and even before this becomes required, a
-# path-filtered workflow here would set the wrong precedent for the day it
-# does. The scan itself is cheap (whole-module analysis, not proportional
-# to the PR diff) so there's no cost reason to filter it either.
+# Both simpler designs are worse, and it is worth saying why since the obvious
+# instinct is to pick one of them:
+#   * Fail on ANY finding - fails every PR for 24 problems unrelated to its
+#     own diff. A check that is always red is a check nobody reads.
+#   * Report-only (continue-on-error) - always green, so the only signal is a
+#     job summary nobody opens on a green run. Silent by construction.
+# The ratchet is the version that bites: the count cannot go up quietly, and
+# every accepted finding has a written justification next to it in the
+# allowlist rather than living in someone's memory.
 #
-# SCHEDULED in addition to pull_request/push: a new advisory can be
-# published against a dependency this repo already uses without any local
-# code change, so a PR-only trigger would let a newly-published,
-# already-reachable vulnerability sit unreported until someone happens to
-# touch an unrelated file. Nightly cron, offset from the other three
-# scheduled workflows (trigger-nightly.yml 0:00, flake-hunt.yml 3:30,
-# chaos.yml 4:45) so they don't contend for runners.
+# NOT PATH-FILTERED, matching chaos.yml's rationale (see that file's header):
+# a required check must report a conclusion on every PR or it blocks merges
+# forever. Even before this becomes required, building it path-filtered would
+# set the wrong precedent for the day it does. The scan is whole-module and
+# cheap, so there is no cost argument for filtering either.
+#
+# SCHEDULED as well as per-PR: a new advisory can be published against a
+# dependency this repo already uses, with no local change at all. A PR-only
+# trigger would let a newly-published, already-reachable vulnerability sit
+# unreported until someone happened to touch an unrelated file. Nightly, offset
+# from the other scheduled workflows (trigger-nightly 0:00, flake-hunt 3:30,
+# chaos 4:45) so they do not contend for runners.
 
 on:
   push:
@@ -55,10 +49,14 @@ on:
     - cron: '15 5 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -67,35 +65,24 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Run govulncheck
-        # Version pinned (not @latest) for reproducible CI runs, the same
-        # way golangci-lint's version is pinned via tools/go.mod rather than
-        # resolved at run time - bump this deliberately. `go run pkg@version`
-        # does not add golang.org/x/vuln to go.mod/go.sum; it's a one-off
-        # tool invocation, not a module dependency, so it needs no
-        # tools/go.mod entry.
+      - name: Scan
+        # Version pinned (not @latest) so a CI run is reproducible and a new
+        # govulncheck release cannot turn the tree red on its own - the same
+        # reason golangci-lint is pinned via tools/go.mod. Bump deliberately.
+        # `go run pkg@version` does not add golang.org/x/vuln to go.mod/go.sum;
+        # it is a one-off tool invocation, not a module dependency.
         #
-        # continue-on-error: this gate is report-only until the baseline
-        # findings above are cleared - see the workflow header.
-        id: govulncheck
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 ./... 2>&1 | tee govulncheck-output.txt
+        # -format json, not the text output: the text is for humans and its
+        # shape is not a stable contract. Parsing it to decide whether the
+        # build passes would make this gate depend on formatting.
+        #
+        # No `set -o pipefail` shortcut and no reliance on the exit code:
+        # govulncheck exits nonzero when it finds ANYTHING, which is not the
+        # question this gate asks. The comparison below is the gate.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 -format json ./... > govulncheck.json || true
 
-      - name: Job summary
-        if: always()
+      - name: Compare against the baseline
         run: |
-          {
-            echo '### govulncheck (report-only, does not block merge)'
-            echo
-            if [ "${{ steps.govulncheck.outcome }}" = "success" ]; then
-              echo 'No reachable vulnerabilities found.'
-            else
-              echo 'Reachable vulnerabilities found. This does NOT fail the build - see the workflow header in `.github/workflows/govulncheck.yml` for why, and CLAUDE.md Process maturity for the plan to make it blocking.'
-              echo
-              echo '```'
-              cat govulncheck-output.txt
-              echo '```'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          python3 .github/scripts/govulncheck_ratchet.py \
+            govulncheck.json .github/govulncheck-allowlist.txt >> "$GITHUB_STEP_SUMMARY"
