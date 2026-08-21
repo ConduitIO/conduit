@@ -230,6 +230,56 @@ type Manifest struct {
 	// median fields above are the headline, this is the detail a regression
 	// investigation needs.
 	PassScores []PassScore `yaml:"passScores"`
+
+	// --- Partial-results follow-up (WS1 A5a-3, "make a partial capture
+	// produce a usable, honest result instead of nothing") ---
+
+	// CapturedCount and MissingCount split RequestCount into what this run
+	// actually preserved versus what it could not, after every pass —
+	// read together with RequestOutcomes for the per-request detail. A
+	// request counts as captured the moment ANY pass produced a completion
+	// for it (even one whose Transcript.Outcome later failed validate or
+	// semantic scoring — that is DATA, not a missing request; see
+	// RequestOutcome's own doc comment for the distinction this package
+	// draws between the two). MissingCount is never silently absorbed into
+	// RequestCount or the scored rates going quiet about it — see
+	// transcript_capture_test.go's captureCompletenessVerdict for the
+	// threshold that decides when a nonzero MissingCount should fail the
+	// capture run outright rather than merely be noted here.
+	CapturedCount int `yaml:"capturedCount"`
+	MissingCount  int `yaml:"missingCount"`
+	// RequestOutcomes is this run's final disposition for every request it
+	// attempted (the full corpus for a normal run, or the single id a
+	// scoped `-run TestCaptureTranscripts/<id>` re-capture names) — in
+	// corpus order. It is the field a PR reviewer reads to see "27
+	// captured, 1 failed for reason X" without inferring it from a missing
+	// file in the diff.
+	RequestOutcomes []RequestOutcome `yaml:"requestOutcomes"`
+}
+
+// RequestOutcome is one corpus request's final disposition within a capture
+// run, distinguishing the two ways a request can end up with no promoted
+// transcript from the one way it can fail and still be perfectly good data:
+//
+//   - Captured = true: at least one pass produced a completion for this
+//     request, so a transcript exists in testdata/transcripts. Whether that
+//     transcript's own Transcript.Outcome.ValidatePass/SemanticMatch is true
+//     or false is irrelevant here — a request whose generation legitimately
+//     failed (the model never produced a passing candidate) is still DATA,
+//     arguably the most interesting data the benchmark has, and is recorded
+//     as captured with its real (failing) Outcome, never as missing.
+//   - Captured = false: NO pass ever produced a single completion for this
+//     request — a transport error (429, timeout), a tripped ceiling, or a
+//     pre-call refusal reached before the provider was ever called. This is
+//     absence of data, not a disagreement about what the data says, and
+//     FailureReason carries the last such error seen across every pass so a
+//     reader knows why without re-running anything.
+type RequestOutcome struct {
+	RequestID string `yaml:"requestID"`
+	Captured  bool   `yaml:"captured"`
+	// FailureReason is set only when Captured is false — see the type doc
+	// comment. Always empty when Captured is true.
+	FailureReason string `yaml:"failureReason,omitempty"`
 }
 
 // PassScore is one capture pass's corpus-level score, mirroring RunScore

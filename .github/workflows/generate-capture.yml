@@ -44,6 +44,34 @@ name: generate-capture
 # batch, never a partial promotion. If that scan ever finds something, the
 # `capture` job fails before an artifact is even uploaded, and `publish`
 # never runs.
+#
+# # Partial results are preserved, not discarded (WS1 A5a-3 follow-up)
+#
+# The first live run made 27/28 requests, one failed on all 3 passes, and
+# `go test` exited nonzero - which, combined with `set -euo pipefail`,
+# skipped every step after "Run the live capture", so the 27 good
+# transcripts (already paid for) were never uploaded and never published.
+# That is fixed two ways, together:
+#
+#  1. runCapture (transcript_capture_test.go) now only fails the `go test`
+#     process outright when a STRICT MAJORITY of the attempted requests
+#     produced no completion at all (captureCompletenessVerdict) - a single
+#     429 or a handful of flaky requests is recorded in manifest.yaml
+#     (CapturedCount/MissingCount/RequestOutcomes) and logged, never
+#     Errorf'd. This is the common case and needs no workflow help: the job
+#     succeeds normally and every step below already runs.
+#  2. For the rarer case where the test STILL fails (majority missing, or
+#     the wrong reason - a compile error, a panic), "Check whether any
+#     transcript changed" and "Upload captured transcripts" carry
+#     `if: ${{ !cancelled() }}` so they run even after a failed previous
+#     step, and `publish`'s own `if` does not implicitly require `capture`
+#     to have succeeded either. Whatever landed on disk before the failure
+#     - which, since runCapture promotes and writes manifest.yaml BEFORE
+#     ever calling t.Errorf, is everything captureCompletenessVerdict saw -
+#     still gets uploaded and opened as a PR. The `capture` job still shows
+#     red in that case (on purpose - see captureCompletenessVerdict's own
+#     doc comment for why "most of the corpus missing" must be loud), but
+#     red no longer means "nothing was kept."
 
 on:
   workflow_dispatch:
@@ -119,8 +147,18 @@ jobs:
             -run "$RUN_PATTERN" \
             ./cmd/conduit/internal/generate/...
 
+      # `if: ${{ !cancelled() }}` (not the default implicit success()-only
+      # gate): "Run the live capture" can now fail while STILL having
+      # promoted good transcripts and written manifest.yaml to disk before
+      # captureCompletenessVerdict decided to Errorf (see the file header's
+      # "Partial results" section) - this step, and the upload step below,
+      # must still run in that case so nothing already captured is thrown
+      # away. `!cancelled()` runs after either success OR failure, but
+      # (unlike `always()`) still skips if the workflow run itself was
+      # cancelled.
       - name: Check whether any transcript changed
         id: check-changes
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           if git status --porcelain -- cmd/conduit/internal/generate/testdata/transcripts | grep -q .; then
@@ -130,7 +168,7 @@ jobs:
           fi
 
       - name: Upload captured transcripts
-        if: steps.check-changes.outputs.changed == 'true'
+        if: ${{ !cancelled() && steps.check-changes.outputs.changed == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: generate-transcripts
@@ -139,7 +177,15 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.repository == 'ConduitIO/conduit' && needs.capture.outputs.changed == 'true'
+    # `!cancelled()` (rather than the default implicit "needs.capture must
+    # have succeeded") deliberately lets this job run when `capture` FAILED
+    # too - the whole point of the partial-results fix (file header) is that
+    # a majority-missing capture run still uploads whatever it captured, and
+    # `publish` still opens a PR for it as long as `changed` is true. A
+    # `capture` job that was itself skipped (the `if: github.repository ==`
+    # guard on a fork) never sets `changed`, so this still correctly no-ops
+    # on a fork without an extra check.
+    if: ${{ !cancelled() && github.repository == 'ConduitIO/conduit' && needs.capture.outputs.changed == 'true' }}
     needs: capture
     name: publish (opens a PR, no key)
     runs-on: ubuntu-latest
@@ -167,7 +213,7 @@ jobs:
           fi
           {
             echo "summary<<EOF"
-            grep -E '^(provider|model|requestCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$manifest" || true
+            grep -E '^(provider|model|requestCount|capturedCount|missingCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$manifest" || true
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -177,6 +223,13 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           SUMMARY: ${{ steps.summary.outputs.summary }}
           REQUEST_ID: ${{ inputs.request_id }}
+          # Set by `!cancelled()` above even when `capture` FAILED (see the
+          # file header's "Partial results" section) - 'failure' here means
+          # captureCompletenessVerdict crossed the majority-missing floor (or
+          # something else in the job broke), never that nothing was
+          # captured: `changed == 'true'` (this job's own `if`) already
+          # proved something worth publishing landed on disk.
+          CAPTURE_RESULT: ${{ needs.capture.result }}
         run: |
           set -euo pipefail
           branch="generate-capture/$(date -u +%Y%m%d)-run${RUN_ID}"
@@ -184,7 +237,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git add cmd/conduit/internal/generate/testdata/transcripts
-          if [ -n "$REQUEST_ID" ]; then
+
+          banner=""
+          if [ "$CAPTURE_RESULT" != "success" ]; then
+            title="chore(generate): PARTIAL capture, review before merging (run ${RUN_ID})"
+            banner="> [!WARNING]
+          > \`capture\` did NOT finish cleanly (job result: \`${CAPTURE_RESULT}\`). Either a strict majority of
+          > requests never produced a completion (captureCompletenessVerdict, transcript_capture_test.go) or
+          > something else in the job failed. Everything below IS still what got captured and redaction-scanned
+          > clean - it is safe to review, but treat this as an incident to investigate, not a routine partial
+          > result.
+
+          "
+          elif [ -n "$REQUEST_ID" ]; then
             title="chore(generate): re-capture transcript for ${REQUEST_ID}"
           else
             title="chore(generate): capture provider transcripts (run ${RUN_ID})"
@@ -194,7 +259,7 @@ jobs:
           gh pr create \
             --title "$title" \
             --body "$(cat <<EOF
-          Opened by \`.github/workflows/generate-capture.yml\` (run ${RUN_ID}), never pushed to main.
+          ${banner}Opened by \`.github/workflows/generate-capture.yml\` (run ${RUN_ID}), never pushed to main.
 
           ## Manifest
 
@@ -202,11 +267,16 @@ jobs:
           ${SUMMARY}
           \`\`\`
 
+          \`capturedCount\`/\`missingCount\` above are the headline numbers; \`manifest.yaml\`'s
+          \`requestOutcomes\` (in the diff) names every missing request id and why.
+
           ## Review checklist
 
           - [ ] \`TestTranscripts_CarryNoSecretMaterial\` is green on this PR (untagged, runs on every PR already)
           - [ ] Manifest numbers look sane against the last capture (see \`docs/generate-benchmark.md\` once A5b lands)
           - [ ] Diff is scoped to \`cmd/conduit/internal/generate/testdata/transcripts/\` only
+          - [ ] If \`missingCount\` > 0, review each \`requestOutcomes\` reason; re-capture cheaply with
+                \`-run TestCaptureTranscripts/<id>\` before relying on this batch for eval
 
           🤖 Generated by the \`generate-capture\` workflow, live-capture job holds the key and cannot write to the
           repo (\`contents: read\`) - this job has no key and only opens the PR.
