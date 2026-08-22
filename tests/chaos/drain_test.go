@@ -48,7 +48,7 @@ func TestClassifyDrain_DistinguishesWedgedFromSlow(t *testing.T) {
 		// than any fixed budget is TOLERATED for as long as it keeps moving.
 		// 500 fsyncs on a contended CI filesystem is exactly this case, and
 		// it is the flake this whole change exists to stop misreporting.
-		{"slow but advancing is not a failure", 499, time.Second, 19 * time.Second, drainContinue},
+		{"slow but advancing is not a failure", 499, time.Second, ackDrainHardCap - time.Second, drainContinue},
 
 		{"stopped advancing is a wedge", 100, ackDrainStallBudget, 6 * time.Second, drainStalled},
 		{"advancing but past the cap", 499, time.Second, ackDrainHardCap, drainTooSlow},
@@ -68,30 +68,91 @@ func TestClassifyDrain_DistinguishesWedgedFromSlow(t *testing.T) {
 	}
 }
 
-// The hard cap must stay clear of the parent's waitExit timeout. If the
-// child can outlive the parent's patience, the parent reports "timed out
-// waiting for child to exit" and the child's own precise diagnosis is lost —
-// which is the regression this change exists to prevent, arriving by a
-// different door. The previous ceiling was 25s against a 30s parent timeout
-// and nothing pinned the relationship.
-func TestAckDrainHardCap_StaysUnderTheParentWaitExitTimeout(t *testing.T) {
-	const parentWaitExit = 30 * time.Second // property2_test.go / sigkill_test.go
+// classifyDrain must never report drainTooSlow for a stallBudget larger than
+// ackDrainHardCap, even if the caller forgot to clamp it: since sinceProgress
+// <= sinceStart by construction (drainTracker.observe never lets progress get
+// ahead of start), an oversized stallBudget makes sinceStart reach the cap
+// before sinceProgress could ever reach it, so the stalled branch - checked
+// first - would never fire. A watermark frozen since drain entry (the
+// clearest possible wedge) would then be reported as pacing: the
+// false-exoneration mirror of a false wedge, and worse, because it dismisses
+// a real defect instead of merely misnaming a benign one.
+//
+// drainStallBudget (the only production caller of classifyDrain, via
+// drainTracker) already clamps before this - see
+// TestDrainStallBudget_ClampsToTheHardCap - but that only proves the ONE
+// caller is well-behaved. This pins the invariant where it actually has to
+// hold, independent of any caller.
+func TestClassifyDrain_UnclampedStallBudgetNeverReportsTooSlowAsAWedge(t *testing.T) {
+	const total = 500
+	oversized := ackDrainHardCap * 10
 
-	if ackDrainHardCap >= parentWaitExit {
-		t.Fatalf("ackDrainHardCap %s must be less than the parent's waitExit %s",
-			ackDrainHardCap, parentWaitExit)
+	got := classifyDrain(100, total, ackDrainHardCap, ackDrainHardCap, oversized)
+	if got == drainTooSlow {
+		t.Fatalf("classifyDrain with stallBudget=%s (> ackDrainHardCap=%s) reported drainTooSlow "+
+			"for a watermark frozen since drain entry; that dismisses a real wedge as pacing",
+			oversized, ackDrainHardCap)
 	}
-	// Teardown, WaitPendingWrites and process exit all happen after the drain
-	// and before the parent gives up, so the cap needs real headroom, not a
-	// bare inequality.
-	if margin := parentWaitExit - ackDrainHardCap; margin < 5*time.Second {
-		t.Fatalf("only %s between the drain hard cap and the parent's waitExit; too tight for "+
-			"Teardown and process exit", margin)
+	if got != drainStalled {
+		t.Fatalf("classifyDrain(...) = %s, want drainStalled", got)
+	}
+}
+
+// The hard cap must stay clear of the parent's waitExit timeout, with real
+// margin for everything that happens between the cap firing and the parent
+// giving up.
+//
+// The previous version of this test modeled that margin as a bare
+// subtraction (parentWaitExit - ackDrainHardCap >= 5s) and called the result
+// "headroom for Teardown and process exit". That is not what the 5s
+// represents: the child's OWN read loop runs to completion BEFORE the drain
+// even starts, and it is not free (upstreamStore.Commit's fsync happens
+// there too, once per position). property2_test.go's "mid-position-write"
+// case is total=400 at paceMS=15 - a read loop worth ~6s on its own - so the
+// bare subtraction was silently spending headroom the read loop had already
+// used. maxReadLoop below is derived from the actual scenario tables
+// (sigkillCases, property2Cases) rather than a hand-picked number, so this
+// test can't drift from what the tree actually runs.
+func TestAckDrainHardCap_StaysUnderTheParentWaitExitTimeout(t *testing.T) {
+	maxReadLoop := maxReadLoopInTree(t)
+	const teardownAllowance = 5 * time.Second // Teardown, WaitPendingWrites, process start/exit, badger open
+
+	if total := maxReadLoop + ackDrainHardCap + teardownAllowance; total > parentWaitExit {
+		t.Fatalf("maxReadLoop(%s) + ackDrainHardCap(%s) + teardownAllowance(%s) = %s exceeds the "+
+			"parent's waitExit(%s); a pathologically slow run would hit the parent's blunt "+
+			"\"timed out waiting for child to exit\" instead of this cap's precise diagnosis",
+			maxReadLoop, ackDrainHardCap, teardownAllowance, total, parentWaitExit)
 	}
 	if ackDrainStallBudget >= ackDrainHardCap {
 		t.Fatalf("stall budget %s must be shorter than the hard cap %s, or a wedge would be "+
 			"reported as slowness", ackDrainStallBudget, ackDrainHardCap)
 	}
+}
+
+// maxReadLoopInTree returns the slowest read loop (total x paceMS) among the
+// scenario tables that actually run a graceful child through this drain path
+// (sigkillCases, property2Cases - see their own callers' use of
+// waitForUpstreamCommitted). Computed from those tables, not hand-copied,
+// so a new or resized case is automatically reflected here instead of
+// silently invalidating TestAckDrainHardCap_StaysUnderTheParentWaitExitTimeout's
+// model.
+func maxReadLoopInTree(t *testing.T) time.Duration {
+	t.Helper()
+	var slowest time.Duration
+	for _, tc := range sigkillCases {
+		if d := time.Duration(tc.total) * time.Duration(tc.paceMS) * time.Millisecond; d > slowest {
+			slowest = d
+		}
+	}
+	for _, tc := range property2Cases {
+		if d := time.Duration(tc.total) * time.Duration(tc.paceMS) * time.Millisecond; d > slowest {
+			slowest = d
+		}
+	}
+	if slowest == 0 {
+		t.Fatal("maxReadLoopInTree computed 0; sigkillCases/property2Cases must be non-empty with a positive total*paceMS")
+	}
+	return slowest
 }
 
 // The assertion that would have caught the previous fix being a no-op.
@@ -109,11 +170,16 @@ func TestDrain_ToleratesADrainSlowerThanTheOldFlatBudget(t *testing.T) {
 		observedMax = 5 * time.Second // 9.9ms/position x 500, measured under -race
 	)
 
-	// Twice the worst locally-observed drain, still advancing throughout.
+	// Twice the worst locally-observed (idle-SSD) drain, still advancing
+	// throughout. NOT the tree's global worst: a separate, forced-contention
+	// run recorded up to ~12.5s for the same total=500
+	// (TestDrainTracker_MonotonicProgressIsNeverAWedge's comment) - this is
+	// 2x the idle-machine number, not 2x that one.
 	slow := 2 * observedMax
 	if got := classifyDrain(total-1, total, 50*time.Millisecond, slow, ackDrainStallBudget); got != drainContinue {
-		t.Fatalf("a drain still advancing after %s (2x the worst measured) was judged %s, want "+
-			"drainContinue; a bound that gives up here has not fixed the flake", slow, got)
+		t.Fatalf("a drain still advancing after %s (2x the worst locally-observed, idle-SSD draw) "+
+			"was judged %s, want drainContinue; a bound that gives up here has not fixed the flake",
+			slow, got)
 	}
 
 	// And the specific regression: whatever bounds a still-advancing drain
@@ -207,6 +273,80 @@ func TestDrainTracker_StallBudgetClearsThePersisterDebounce(t *testing.T) {
 	}
 }
 
+// effectivePersistDelay had no test in either direction. A mutation making
+// it ignore cfg.persistDelayMS entirely (always returning the default)
+// survives the whole suite: every unit-level drain test below hands
+// drainStallBudget/drainTracker/classifyDrain an already-computed duration
+// rather than routing through this function. That mutation also silently
+// disarms sigkill_test.go's mid-snapshot precondition - the 600_000ms
+// override exists to guarantee no persister flush lands before the kill,
+// and without it actually taking effect that guarantee becomes
+// probabilistic, caught only by watermarkAtKill != 0, which can pass on a
+// fast machine even while the override is being silently ignored.
+func TestEffectivePersistDelay(t *testing.T) {
+	if got, want := effectivePersistDelay(childEnv{persistDelayMS: 6000}), 6*time.Second; got != want {
+		t.Fatalf("effectivePersistDelay(persistDelayMS=6000) = %s, want %s (the override)", got, want)
+	}
+	if got, want := effectivePersistDelay(childEnv{}), connector.DefaultPersisterDelayThreshold; got != want {
+		t.Fatalf("effectivePersistDelay(persistDelayMS=0) = %s, want %s (the default)", got, want)
+	}
+}
+
+// No test executed waitForUpstreamCommitted at all before this seam existed.
+// TestDrainStallBudget_IncludesThePersisterDebounce tests drainStallBudget,
+// the function; TestDrainTracker_StallBudgetClearsThePersisterDebounce is
+// HANDED an already-computed budget rather than letting the wait compute one
+// itself. A mutation at the call site this function replaces (child.go's
+// `stallBudget := drainStallBudget(persistDelay)` -> `:= ackDrainStallBudget`,
+// dropping the derivation entirely) left every one of those tests green,
+// because none of them exercise the wiring that connects persistDelay to the
+// budget actually used by a running drain.
+//
+// drainLoop is that wiring, with the upstream read and the clock injected.
+// This test drives it with persistDelay=6s and a reader that commits nothing
+// until 6s of (fake) time has passed - the real shape of a healthy child's
+// tail, since deferred acks are not released until the persister flushes -
+// then advances to total. Under the mutation above (budget hardcoded to the
+// bare 5s ackDrainStallBudget), sinceProgress crosses that budget while the
+// reader is still idle inside its own debounce window, well before it ever
+// starts advancing, and the loop reports drainStalled on a perfectly healthy
+// drain instead of the drainDone this test requires.
+func TestDrainLoop_DerivesTheBudgetFromPersistDelayNotTheBareConstant(t *testing.T) {
+	const total = 10
+	persistDelay := 6 * time.Second
+
+	base := time.Unix(0, 0)
+	var elapsed time.Duration
+	const step = 500 * time.Millisecond
+	now := func() time.Time {
+		elapsed += step
+		return base.Add(elapsed)
+	}
+
+	var committed uint64
+	read := func() (uint64, error) {
+		if elapsed < persistDelay {
+			return 0, nil
+		}
+		if committed < total {
+			committed++
+		}
+		return committed, nil
+	}
+
+	verdict, tracker := drainLoop(read, now, total, persistDelay)
+	if verdict != drainDone {
+		t.Fatalf("drainLoop classified a healthy, debounce-delayed drain as %s (committed=%d after "+
+			"%s of fake time); a stall budget that ignores persistDelay (using the bare %s "+
+			"ackDrainStallBudget instead of persistDelay+ackDrainStallBudget) would report %s here, "+
+			"because the %s idle window blows a bare %s budget before the reader ever advances",
+			verdict, tracker.last, elapsed, ackDrainStallBudget, drainStalled, persistDelay, ackDrainStallBudget)
+	}
+	if tracker.last != total {
+		t.Fatalf("drainLoop returned committed=%d, want %d", tracker.last, total)
+	}
+}
+
 // String makes failures name the verdict instead of an integer.
 func (d drainVerdict) String() string {
 	switch d {
@@ -227,11 +367,22 @@ func (d drainVerdict) String() string {
 // the persistDelay term is a one-token mutation that leaves every
 // tracker-level test green — they are handed a budget rather than computing
 // one — so the derivation needs its own assertion.
+//
+// This used to also cover sigkill_test.go's 600_000ms (600s) override, and
+// asserted drainStallBudget(600s) == 605s - i.e. it actively blessed a budget
+// nearly 40x ackDrainHardCap, which would have made classifyDrain's stalled
+// branch unreachable for that child (see TestClassifyDrain_
+// UnclampedStallBudgetNeverReportsTooSlowAsAWedge). That override applies
+// only to sigkill_test.go's KILLED first child, which never reaches this
+// drain (see this PR's own description for the correction) - but the
+// derivation must still be safe for any persistDelay it could ever be
+// called with, not just the ones that happen to reach it today. The 600s
+// case now lives in TestDrainStallBudget_ClampsToTheHardCap, asserting the
+// clamp instead of the unclamped (and unsafe) value.
 func TestDrainStallBudget_IncludesThePersisterDebounce(t *testing.T) {
 	for _, debounce := range []time.Duration{
 		connector.DefaultPersisterDelayThreshold,
-		6 * time.Second,   // the value that produced a false wedge
-		600 * time.Second, // sigkill_test.go's override for the killed child
+		6 * time.Second, // the value that produced a false wedge
 	} {
 		got := drainStallBudget(debounce)
 		if got <= debounce {
@@ -242,5 +393,54 @@ func TestDrainStallBudget_IncludesThePersisterDebounce(t *testing.T) {
 		if want := debounce + ackDrainStallBudget; got != want {
 			t.Fatalf("drainStallBudget(%s) = %s, want %s", debounce, got, want)
 		}
+	}
+}
+
+// The derived budget must never reach, let alone exceed, ackDrainHardCap:
+// past that point classifyDrain's stalled branch becomes unreachable (see
+// its own doc comment and TestClassifyDrain_
+// UnclampedStallBudgetNeverReportsTooSlowAsAWedge) and a real wedge gets
+// reported as pacing instead - the false-exoneration mirror of the false
+// wedge this whole change exists to stop.
+func TestDrainStallBudget_ClampsToTheHardCap(t *testing.T) {
+	got := drainStallBudget(600 * time.Second) // sigkill_test.go's killed-child override
+	if got >= ackDrainHardCap {
+		t.Fatalf("drainStallBudget(600s) = %s, which does not clear the hard cap %s; the stalled "+
+			"branch in classifyDrain becomes unreachable past that point", got, ackDrainHardCap)
+	}
+	if want := ackDrainHardCap - time.Second; got != want {
+		t.Fatalf("drainStallBudget(600s) = %s, want the clamp value %s", got, want)
+	}
+}
+
+// The safety argument for this whole change, stated as an assertion rather
+// than left in a PR description: the new bound is strictly weaker than
+// main's, so this change cannot fail a run main would have passed.
+//
+// main's drain wait was a flat drainEntry + 5s. This change's stall arm
+// cannot fire before sinceProgress >= stallBudget, and stallBudget =
+// persistDelay + ackDrainStallBudget always exceeds ackDrainStallBudget
+// alone, because every persistDelay actually reachable in this tree is
+// strictly positive (effectivePersistDelay floors at
+// connector.DefaultPersisterDelayThreshold, 1s - never 0; see
+// minPersistDelay below for why even a near-zero one still holds). Since
+// sinceProgress <= sinceStart by construction (drainTracker.observe), every
+// new stall failure implies sinceStart > ackDrainStallBudget - the exact
+// point at which main's flat 5s budget had already failed.
+func TestNewStallBoundIsStrictlyWeakerThanMainsFlatBudget(t *testing.T) {
+	const oldFlatBudget = 5 * time.Second // main's drainEntry + 5s
+
+	// The theoretical floor, not the practical one (1s): even a persistDelay
+	// this close to zero must still leave the new bound strictly above
+	// main's, or the safety argument depends on no scenario ever configuring
+	// a smaller one - which is exactly the kind of coupling this PR exists
+	// to remove.
+	const minPersistDelay = time.Millisecond
+
+	if got := ackDrainStallBudget + minPersistDelay; got <= oldFlatBudget {
+		t.Fatalf("ackDrainStallBudget(%s) + a near-zero persistDelay(%s) = %s does not exceed "+
+			"main's flat budget %s; this change could then fail a run main would have passed, "+
+			"which defeats its entire safety argument", ackDrainStallBudget, minPersistDelay, got,
+			oldFlatBudget)
 	}
 }

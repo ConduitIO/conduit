@@ -244,7 +244,7 @@ func TestSIGKILL_RecoveryLoop_CrashDuringBackoff(t *testing.T) {
 		minDelayMS: 10, maxDelayMS: 10, graceful: true,
 	}
 	second := spawnLCChild(t, restart)
-	second.waitExit(t, 30*time.Second)
+	second.waitExit(t, parentWaitExit)
 	_, done := second.line(markerLCDone)
 	is.True(done)
 
@@ -305,7 +305,7 @@ func TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun(t *testing.T) {
 		minDelayMS: 10, maxDelayMS: 10, graceful: true,
 	}
 	second := spawnLCChild(t, restart)
-	second.waitExit(t, 30*time.Second)
+	second.waitExit(t, parentWaitExit)
 	_, done := second.line(markerLCDone)
 	is.True(done)
 

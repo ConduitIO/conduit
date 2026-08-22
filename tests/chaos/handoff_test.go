@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/matryer/is"
 )
@@ -60,7 +59,7 @@ func TestSnapshotStreamHandoff_CleanRun_Smoke(t *testing.T) {
 	}
 
 	cp := spawnChild(t, cfg)
-	cp.waitExit(t, 30*time.Second)
+	cp.waitExit(t, parentWaitExit)
 
 	_, done := cp.line(markerDone)
 	is.True(done) // the run completed end to end without any crash
