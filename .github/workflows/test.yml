@@ -68,21 +68,44 @@ jobs:
         # CONDUIT_GENERATE_CAPTURE=1, which is never set here, so
         # TestCaptureTranscripts itself would no-op even if named) -
         # everything else in the tagged file that does NOT need a live
-        # provider or network access: the pure decision/scoring functions
-        # (summarizePasses, captureCompletenessVerdict,
-        # requestsMissingUsableCandidate via TestSummarizePasses*,
-        # decideCaptureGuard, capturePassCount, captureCallCeiling), the
-        # fake-provider end-to-end paths (TestRunCapture_*,
-        # TestCaptureProvider_Ceilings), the promotion/redaction gate
-        # (TestScanAndPromoteScratch*), the manifest-patch helper
-        # (TestPatchManifest*), and the failure-reason sanitizer
-        # (TestSafeFailureReason*, TestReportCaptureCompleteness). No
-        # ANTHROPIC_API_KEY is in scope for this step, by design - it must
-        # never be able to reach a live provider.
+        # provider or network access. No ANTHROPIC_API_KEY is in scope for
+        # this step, by design - it must never be able to reach a live
+        # provider.
+        #
+        # LOW-1 (round-5 review of #2814): `go build` compiles the package
+        # but never runs its tests, so it is a no-op verification of a
+        # `_test.go` file - `go build` never compiles `_test.go` files at
+        # all, tagged or not. Verified: a planted syntax error in
+        # transcript_capture_test.go left `go build -tags=generate_capture
+        # ./...` green while `go vet`/`go test` correctly failed. `go vet`
+        # DOES compile (and type-check) `_test.go` files, so it is the
+        # right cheap pre-flight for a compile break, scoped to just this
+        # package rather than `./...` since that is the only tree this tag
+        # touches; the `go test` line below still provides the real
+        # coverage this step exists for.
+        #
+        # LOW-3 (round-5 review of #2814): a `-run` allowlist regex is
+        # fail-OPEN by construction - a future test named outside its listed
+        # prefixes runs nowhere, `go test` still exits 0, and CI stays green
+        # while silently not covering it. This PR's own new regression
+        # tests (TestPreserveMediansIfNothingPromoted_ShapeMismatch_...,
+        # TestRequestIsCaptured_RejectsContentMismatch) do not match ANY of
+        # the 11 prefixes the prior allowlist named - they would have
+        # silently never run in this gate. `-skip` naming just the one live
+        # test to exclude is fail-SAFE instead: every other test in the
+        # file, present or future, runs unless explicitly excluded.
+        #
+        # LOW-4 (round-5 review of #2814): `-race` added - green locally in
+        # under 4s, and this package's own regression tests
+        # (flakyAfterFirstCallProvider, diesAfterNCallsProvider) use
+        # goroutine-shared counters guarded by sync.Mutex specifically
+        # because runCapture drives concurrent-looking per-request work;
+        # the race detector is the check that actually verifies those
+        # guards, not just that they exist.
         run: |
-          go build -tags=generate_capture ./...
-          go test -tags=generate_capture -count=1 -v \
-            -run 'TestRunCapture|TestSummarizePasses|TestScanAndPromote|TestCaptureCompleteness|TestPatchManifest|TestSafeFailureReason|TestDecideCaptureGuard|TestCaptureProvider|TestCapturePassCount|TestCaptureCallCeiling|TestReportCaptureCompleteness' \
+          go vet -tags=generate_capture ./cmd/conduit/internal/generate/...
+          go test -tags=generate_capture -count=1 -race -v \
+            -skip '^TestCaptureTranscripts$' \
             ./cmd/conduit/internal/generate/...
 
   build-cross:

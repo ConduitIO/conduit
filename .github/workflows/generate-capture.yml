@@ -372,24 +372,45 @@ jobs:
           # a later one (a rate-limit storm or captureWallClockBudget
           # expiring partway through) does not raise missingCount at all -
           # runCapture's CapturedCount/MissingCount only require ONE pass
-          # to have produced a request - but DOES drag
+          # to have produced a request - but CAN drag
           # medianValidatePassRate/medianSemanticMatchRate down (that
           # degraded pass scores the request as a hard fail on both axes -
           # score.go's ScoreRun), which the routine-title/no-banner path
-          # would otherwise publish silently. `degradedPasses` is a YAML
-          # LIST field with `omitempty` - entirely absent from the file
-          # when no pass was degraded, so its presence as a top-level key
-          # (not the count of items under it) is the boolean signal here.
+          # would otherwise publish silently.
           #
-          # A run where EVERY pass was degraded (Manifest.MediansUnreliable
-          # - B1 fix, round-3 review of #2814) never reaches this line with
-          # CAPTURE_RESULT == success in the first place: runCapture fails
-          # that `go test` run outright (t.Errorf), so "Open the PR"'s
-          # CAPTURE_RESULT != "success" branch handles it with the
-          # [!WARNING] PARTIAL-capture title before this DEGRADED signal is
-          # ever consulted.
-          degraded=$(grep -c '^degradedPasses:' "$MANIFEST_PATH" || true)
-          echo "degraded=${degraded:-0}" >> "$GITHUB_OUTPUT"
+          # M1-3 (round-5 review of #2814): degraded used to be
+          # `grep -c '^degradedPasses:'` - whether that KEY is present at
+          # all, not whether anything was actually excluded from the
+          # median. That is fail-open in the misleading direction: a run
+          # can have degradedPasses non-empty while summarizePasses'
+          # all-passes fallback folded every degraded pass in WITHOUT
+          # excluding it (every degraded pass missed the exact same,
+          # reliably-attributed request(s) - manifest.yaml's own
+          # medianSampleSize equals passes in that case, same as a run with
+          # NO degraded passes at all) - the old grep fired the DEGRADED
+          # banner and title regardless, claiming an exclusion that never
+          # happened. medianSampleSize < passes is the actual signal that
+          # real exclusion occurred (see Manifest.MedianSampleSize's own
+          # doc comment, transcript.go) - compare the two fields directly
+          # instead of checking degradedPasses' mere presence.
+          #
+          # A run where EVERY pass was degraded AND unreliable
+          # (Manifest.MediansUnreliable - B1 fix round-3, generalized H1
+          # round-4, H1 x H2 interaction and the preserveMediansIfNothing-
+          # Promoted shape-mismatch case both round-5, review of #2814)
+          # never reaches this line with CAPTURE_RESULT == success in the
+          # first place: runCapture fails that `go test` run outright
+          # (t.Errorf), so "Open the PR"'s CAPTURE_RESULT != "success"
+          # branch handles it with the [!WARNING] PARTIAL-capture title
+          # before this DEGRADED signal is ever consulted.
+          median_sample_size=$(grep -E '^medianSampleSize:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          manifest_passes=$(grep -E '^passes:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          degraded=0
+          if [ -n "${median_sample_size:-}" ] && [ -n "${manifest_passes:-}" ] \
+             && [ "${median_sample_size}" -lt "${manifest_passes}" ]; then
+            degraded=1
+          fi
+          echo "degraded=${degraded}" >> "$GITHUB_OUTPUT"
 
       - name: Open the PR
         env:

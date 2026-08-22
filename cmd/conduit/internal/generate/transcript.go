@@ -247,21 +247,34 @@ type Manifest struct {
 	// dropped are still recorded elsewhere (RequestOutcomes, and possibly
 	// captured by another pass).
 	//
-	// That "median across every CLEAN pass" description holds only when
-	// MediansUnreliable is false. When every single pass is degraded (no
-	// clean pass exists), these two fields fall back to the median across
-	// ALL passes instead — every missing request still scored as a hard
-	// fail, with no clean pass left to dilute that — and MediansUnreliable
-	// is true. B1 (round-3 review of #2814): that fallback is not a
-	// defense against a misleading number, it is what PRODUCES one — do
-	// not read these fields as this run's baseline when MediansUnreliable
+	// That "median across every CLEAN pass" description holds whenever at
+	// least one pass was clean (MedianSampleSize is then the clean-pass
+	// count, less than Passes). When every single pass is degraded instead
+	// (no clean pass exists — MedianSampleSize == Passes here too, but
+	// because nothing was excluded, not because everything was), these two
+	// fields fall back to the median across ALL passes instead — every
+	// missing request still scored as a hard fail, with no clean pass left
+	// to dilute that. M1-3 (round-5 review of #2814): that fallback runs
+	// whenever no pass was clean, REGARDLESS of whether MediansUnreliable
+	// ends up true or false for the run — a prior version of this comment
+	// tied the two together ("holds only when MediansUnreliable is false
+	// ... and MediansUnreliable is true" for the fallback), which is wrong:
+	// a single request chronically missing on every pass also has no clean
+	// pass (the same fallback runs), yet MediansUnreliable correctly stays
+	// false there, because that fallback's number equals what a clean-pass
+	// median would have shown anyway (see MediansUnreliable's own doc
+	// comment for the full condition, including the H1 x H2 carry-forward
+	// interaction round-5 added to it). B1 (round-3 review of #2814): the
+	// fallback is not a defense against a misleading number on its OWN —
+	// whether it is misleading is exactly what MediansUnreliable decides;
+	// do not read these fields as this run's baseline when MediansUnreliable
 	// is true; runCapture also fails the `go test` run outright in that
 	// case (t.Errorf) for the same reason. DegradedPasses names which
-	// passes were excluded (or, when MediansUnreliable is true, which
-	// passes the fallback had no alternative but to include); PassScores
-	// carries every pass's own rate, degraded or not, for the detail this
-	// field summarizes away. Never best-of (CLAUDE.md's benchmarking
-	// discipline).
+	// passes were excluded (or, when the fallback ran without being
+	// misleading, which passes the fallback had no alternative but to
+	// include); PassScores carries every pass's own rate, degraded or not,
+	// for the detail this field summarizes away. Never best-of (CLAUDE.md's
+	// benchmarking discipline).
 	MedianValidatePassRate  float64 `yaml:"medianValidatePassRate"`
 	MedianSemanticMatchRate float64 `yaml:"medianSemanticMatchRate"`
 	// MedianValidatePassCount and MedianSemanticMatchCount are the median of
@@ -275,20 +288,39 @@ type Manifest struct {
 	MedianSemanticMatchCount float64 `yaml:"medianSemanticMatchCount"`
 	// MedianSampleSize is how many of Passes actually contributed to the
 	// four median fields above — the number of CLEAN passes ordinarily, or
-	// every pass (== Passes) when MediansUnreliable's fallback is in
-	// effect. N3 (round-3 review of #2814): a median is only as meaningful
-	// as its sample size, and that size is not otherwise stated anywhere
-	// in this file — a reader would have to compute
-	// Passes - len(DegradedPasses) themselves (and get it wrong when
-	// MediansUnreliable is true, since that fallback counts every pass,
-	// not the clean ones) to know whether a given median came from 1 pass
-	// or 3.
+	// every pass (== Passes) whenever NO pass was clean, i.e. the
+	// all-passes fallback ran (see MedianValidatePassRate's own doc comment
+	// — M1-3, round-5 review of #2814: that fallback, and therefore
+	// MedianSampleSize == Passes, is NOT exclusive to a run with
+	// MediansUnreliable true). MedianSampleSize < Passes is the reliable
+	// signal that real exclusion happened; generate-capture.yml's banner
+	// gates on exactly that comparison, not on DegradedPasses' mere
+	// presence, for this reason. N3 (round-3 review of #2814): a median is
+	// only as meaningful as its sample size, and that size is not otherwise
+	// stated anywhere in this file — a reader would have to compute
+	// Passes - len(DegradedPasses) themselves (and get it wrong whenever
+	// the fallback ran, since it counts every pass, not the clean ones) to
+	// know whether a given median came from 1 pass or 3.
 	MedianSampleSize int `yaml:"medianSampleSize"`
 	// MediansUnreliable is true when BOTH: every one of Passes capture
 	// passes was degraded (PassScores[i].MissingCount > 0 for all of them —
-	// see DegradedPasses), AND those degraded passes do not all miss the
-	// SAME set of request ids (allMissingSetsEqual,
-	// transcript_capture_test.go). There was no clean pass left for
+	// see DegradedPasses), AND missingSetsAreReliable
+	// (transcript_capture_test.go) is false for those degraded passes'
+	// missing sets — which requires BOTH that they all miss the SAME set of
+	// request ids (allMissingSetsEqual) AND that none of those ids is
+	// captured overall ONLY through requestIsCaptured's on-disk
+	// carry-forward (H1 x H2, round-5 review of #2814 — see
+	// missingSetsAreReliable's own doc comment for the interaction and a
+	// worked repro: a request 429ing on every pass of a re-capture run has
+	// an identical missing set every time, but if an EARLIER run already
+	// committed a real transcript for it, MissingCount stays 0 and this
+	// field would have stayed false too without that second check — with
+	// nothing else in the file recording that the median silently
+	// dropped). preserveMediansIfNothingPromoted also sets this field
+	// directly (M4, round-5 review of #2814), independent of the above,
+	// when a run that promoted nothing new finds an existing manifest whose
+	// own shape (RequestCount/Passes) does not match this run's — see that
+	// function's doc comment. There was no clean pass left for
 	// MedianValidatePassRate/MedianSemanticMatchRate/MedianValidatePassCount/
 	// MedianSemanticMatchCount to be computed from, so those four fields
 	// fall back to a median across ALL passes with every missing request
@@ -365,22 +397,29 @@ type Manifest struct {
 	// every pass" — check DegradedPasses for that.
 	CapturedCount int `yaml:"capturedCount"`
 	MissingCount  int `yaml:"missingCount"`
-	// DegradedPasses names (1-indexed) every pass excluded from
-	// MedianValidatePassRate/MedianSemanticMatchRate/
-	// MedianValidatePassCount/MedianSemanticMatchCount because it didn't
-	// contribute a usable candidate for the full corpus
-	// (PassScores[i].MissingCount > 0 — see that field's own doc comment:
-	// this covers both "no completion at all" and "a completion arrived
-	// but nothing extracted into pipeline YAML", M1 round-4 review of
-	// #2814). Empty — and therefore absent from the committed YAML,
-	// `omitempty` — when every pass captured the full corpus, which is the
-	// common case and needs no reader attention. A nonempty list here is
-	// exactly the CapturedCount/MissingCount blind spot documented above
-	// made visible and machine-checkable: generate-capture.yml's "Open the
-	// PR" step greps for this key too, not just MissingCount, so a run
-	// that captured every request overall (MissingCount == 0) but lost a
-	// tail pass to rate limiting or the wall-clock budget still gets the
-	// PR banner instead of a routine title.
+	// DegradedPasses names (1-indexed) every pass that didn't contribute a
+	// usable candidate for the full corpus (PassScores[i].MissingCount > 0
+	// — see that field's own doc comment: this covers both "no completion
+	// at all" and "a completion arrived but nothing extracted into pipeline
+	// YAML", M1 round-4 review of #2814) — NOT necessarily every pass
+	// excluded from the four median fields above (M1-3, round-5 review of
+	// #2814: a prior version of this comment claimed the two always
+	// coincide; MedianSampleSize < Passes is the field that actually says
+	// whether exclusion happened — see its own doc comment — since a
+	// degraded pass can still be folded into the all-passes fallback
+	// without being misleading). Empty — and therefore absent from the
+	// committed YAML, `omitempty` — when every pass captured the full
+	// corpus, which is the common case and needs no reader attention. A
+	// nonempty list here is exactly the CapturedCount/MissingCount blind
+	// spot documented above made visible and machine-checkable:
+	// generate-capture.yml's "Open the PR" step computes its DEGRADED
+	// banner signal from MedianSampleSize vs Passes (M1-3, round-5 review
+	// of #2814 — a prior version grepped for this key's mere presence
+	// instead, which fired even when the fallback had folded the degraded
+	// pass in WITHOUT excluding anything), so a run that captured every
+	// request overall (MissingCount == 0) but genuinely lost a tail pass to
+	// rate limiting or the wall-clock budget still gets the PR banner
+	// instead of a routine title.
 	DegradedPasses []int `yaml:"degradedPasses,omitempty"`
 	// RequestOutcomes is this run's final disposition for every request it
 	// attempted (the full corpus for a normal run, or the single id a
@@ -395,24 +434,45 @@ type Manifest struct {
 // run, distinguishing the two ways a request can end up with no promoted
 // transcript from the one way it can fail and still be perfectly good data:
 //
-//   - Captured = true: at least one pass produced a completion for this
-//     request, so a transcript exists in testdata/transcripts. Whether that
+//   - Captured = true: a VALID transcript exists in testdata/transcripts for
+//     this request — either a pass THIS run made produced a completion, or
+//     an earlier run already committed a real, still-matching transcript
+//     for it that this run's own attempt(s) failed to reproduce
+//     (requestIsCaptured's on-disk carry-forward, H2 fix round-4 review of
+//     #2814, hardened M5 round-5 to require the on-disk transcript's own
+//     requestID/corpusPromptSHA256 still match — a stale file left behind
+//     by an edited-but-unrenamed request does not count). Whether that
 //     transcript's own Transcript.Outcome.ValidatePass/SemanticMatch is true
 //     or false is irrelevant here — a request whose generation legitimately
 //     failed (the model never produced a passing candidate) is still DATA,
 //     arguably the most interesting data the benchmark has, and is recorded
 //     as captured with its real (failing) Outcome, never as missing.
-//   - Captured = false: NO pass ever produced a single completion for this
-//     request — a transport error (429, timeout), a tripped ceiling, or a
-//     pre-call refusal reached before the provider was ever called. This is
-//     absence of data, not a disagreement about what the data says, and
-//     FailureReason carries the last such error seen across every pass so a
-//     reader knows why without re-running anything.
+//     FailureReason is still set in the specific case where Captured is
+//     true ONLY through carry-forward AND this run's own attempt(s) also
+//     produced no completion for it (M2, round-5 review of #2814) — see
+//     that field's own doc comment.
+//   - Captured = false: NO pass THIS run made produced a completion, AND
+//     no valid transcript from an earlier run exists on disk for this id —
+//     a transport error (429, timeout, a tripped ceiling), a pre-call
+//     refusal reached before the provider was ever called, or (M5) an
+//     on-disk transcript whose own requestID/corpusPromptSHA256 no longer
+//     matches this id's current corpus entry. This is absence of USABLE
+//     data, not a disagreement about what the data says, and FailureReason
+//     carries the last such error seen across every pass this run made so
+//     a reader knows why without re-running anything.
 type RequestOutcome struct {
 	RequestID string `yaml:"requestID"`
 	Captured  bool   `yaml:"captured"`
-	// FailureReason is set only when Captured is false — see the type doc
-	// comment. Always empty when Captured is true.
+	// FailureReason is set when Captured is false — see the type doc
+	// comment — and also (M2, round-5 review of #2814) in the one case
+	// where Captured is true but only through requestIsCaptured's on-disk
+	// carry-forward AND this run's own attempt(s) for the id still produced
+	// no completion: H2's carry-forward fix (round-4 review of #2814)
+	// silently dropped that fact entirely, leaving manifest.yaml — the only
+	// committed record of why a run could not reproduce a request — with no
+	// trace that this run ever tried and failed. Empty in every other case,
+	// in particular whenever Captured is true because THIS run itself
+	// reproduced the request on at least one pass.
 	//
 	// This is manifest-safe by construction (safeFailureReason,
 	// transcript_capture_test.go): a conduiterr code plus an HTTP status
@@ -528,12 +588,22 @@ func LoadManifest(path string) (Manifest, error) {
 	// this package already operates under. Gosec's taint analysis only
 	// flags this when the package is built with `-tags=generate_capture`
 	// (the tag that pulls in transcript_capture_test.go's own
-	// patchManifestForScopedRun caller) — real CI's golangci-lint job
-	// does not pass that tag, so `#nosec` (gosec's own native suppression
-	// syntax, which golangci's nolintlint does not police for
-	// "unused" the way it does //nolint directives) is what stays quiet
-	// in both configurations rather than flip-flopping between "needed"
-	// and "unused".
+	// patchManifestForScopedRun caller) — and, since .golangci.yml's own
+	// `run.build-tags: [generate_capture]` (M2, round-4 review of #2814),
+	// real CI's golangci-lint job now DOES build with that tag on every
+	// PR, so this taint path is live in the actual required gate, not a
+	// hypothetical only reachable with a manual flag. LOW-2 (round-5
+	// review of #2814): a prior version of this comment justified `#nosec`
+	// by claiming the opposite ("real CI's golangci-lint job does not pass
+	// that tag") — that stopped being true the moment build-tags landed in
+	// the SAME round-4 PR that added this reasoning, so the conclusion
+	// below was right for the wrong, already-stale reason. The suppression
+	// itself is still correct (this remains a false positive under the
+	// trust boundary above); `#nosec` (gosec's own native suppression
+	// syntax, which golangci's nolintlint does not police for "unused" the
+	// way it does //nolint directives) is what stays quiet whether or not
+	// a given local invocation happens to pass the tag, which is the
+	// property that actually matters now that the real gate always does.
 	data, err := os.ReadFile(path) // #nosec G703
 	if err != nil {
 		return Manifest{}, cerrors.Errorf("reading manifest %q: %w", path, err)

@@ -12,8 +12,11 @@ run:
   # patchManifestForScopedRun is in the build - remove that #nosec and
   # `--build-tags=generate_capture` reports `G703: Path traversal via
   # taint analysis` while an untagged run reports zero issues, verified
-  # empirically. Add a tag here, add the matching `go build`/`go test`
-  # step to .github/workflows/test.yml's `test` job in the same PR.
+  # empirically. Add a tag here, add the matching `go vet`/`go test`
+  # step to .github/workflows/test.yml's `test` job in the same PR (LOW-1,
+  # round-5 review of #2814: `go vet`, not `go build` - `go build` never
+  # compiles `_test.go` files at all and so cannot catch a break in this
+  # tagged _test.go file; see that step's own comment).
   build-tags:
     - generate_capture
 linters:
