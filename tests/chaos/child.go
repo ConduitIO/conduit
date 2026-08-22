@@ -88,13 +88,25 @@ const (
 	exitCorruptState   = 3
 	exitBadArgs        = 2
 
-	// exitDrainTimeout is deliberately NOT exitOpenOtherError. Running out of
-	// wall clock while the ack path drains says nothing about Open, and
-	// reporting it as an Open error sent an investigation looking for a
-	// resume/recovery defect when the child's own output showed a clean,
-	// strictly monotonic ack sequence with no gap and no corruption. An exit
-	// code is a diagnosis; a wrong one costs more than no code at all.
-	exitDrainTimeout = 5
+	// exitDrainStalled and exitDrainTooSlow are deliberately NOT
+	// exitOpenOtherError: neither says anything about Open, and reporting a
+	// drain problem as an Open error sent an investigation looking for a
+	// resume defect. An exit code is a diagnosis; a wrong one costs more than
+	// no code at all.
+	//
+	// They are also deliberately distinct from each other, because they mean
+	// opposite things and only one of them is benign:
+	//
+	//   exitDrainStalled  - commits STOPPED advancing. The ack path is
+	//                       wedged. This is a real defect and must be
+	//                       investigated, not re-run.
+	//   exitDrainTooSlow  - commits were still advancing when the absolute
+	//                       cap expired. Genuinely a pacing problem.
+	//
+	// Collapsing them into one code (or into one "this is a pacing failure"
+	// message) is how a wedge gets dismissed as slowness.
+	exitDrainStalled = 6
+	exitDrainTooSlow = 5
 )
 
 // isChildInvocation reports whether this process invocation should behave as
@@ -445,11 +457,13 @@ func runChild() {
 	// exactly the same thing (every ACK_ORDER line has actually been
 	// printed) via a different signal.
 	if keyed {
-		if !plugin.waitForAckedCount(cfg.total, drainBudget(cfg.total)) {
+		if !plugin.waitForAckedCount(cfg.total, ackedCountBudget) {
 			fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for plugin to ack %d "+
-				"positions. This is a PACING failure, not a correctness one.\n",
-				markerFatal, drainBudget(cfg.total), cfg.total)
-			os.Exit(exitDrainTimeout)
+				"positions. Unlike the unkeyed path this waits on an in-memory counter with no "+
+				"fsync per position, so a timeout here is far more likely to be a wedge than "+
+				"slowness.\n",
+				markerFatal, ackedCountBudget, cfg.total)
+			os.Exit(exitDrainStalled)
 		}
 	} else {
 		waitForUpstreamCommitted(upstream, cfg.total)
@@ -643,84 +657,135 @@ func waitForUpstreamAtLeast(upstream *upstreamStore, target uint64, timeout time
 	return err == nil && committed >= target
 }
 
-// waitForUpstreamCommitted blocks briefly until the upstream store reports
-// total positions committed, so this process doesn't exit while
-// chaosPlugin.ackLoop's goroutine still has an in-flight, not-yet-durable
-// commit for the very last ack this run just sent. See its call site for
-// why this is needed. A no-op when total is 0 (unbounded runs never reach
-// this graceful-exit path in the first place).
+// Drain bounds. These are NOT a per-position budget: the point of the loop
+// below is that it does not need one.
+//
+// The previous implementation was a flat wall-clock deadline, and the first
+// attempt to fix it merely made the wall clock a function of total. Both are
+// guesses about how fast a machine is, and both share the defect that
+// matters: a drain that has STOPPED and a drain that is merely SLOW expire
+// the same deadline and produce the same message. That is precisely the
+// distinction anyone reading a chaos failure needs.
+//
+// What actually costs time here is upstreamStore.Commit: open + write +
+// fsync + rename, once per position, serialized inside chaosPlugin.ackLoop.
+// 500 positions is 500 sequential fsyncs. That is why this is invisible on a
+// local NVMe and flaky on a CI runner's filesystem, and it is why no
+// per-position constant derived on one machine transfers to the other.
+//
+// Bounding on lack of forward progress removes the machine-speed dependency
+// entirely: a slow disk still advances, so it is tolerated for as long as it
+// keeps advancing; a wedged ack path advances not at all and is caught in
+// five seconds regardless of hardware.
+const (
+	// ackDrainStallBudget is how long the committed watermark may fail to
+	// move AT ALL before this is called a wedge rather than slowness.
+	ackDrainStallBudget = 5 * time.Second
+
+	// ackDrainHardCap bounds even a continuously-advancing drain, so a
+	// pathologically slow run fails here with a precise message rather than
+	// hitting the parent's waitExit timeout, which reports only "timed out
+	// waiting for child to exit" and loses the child's diagnosis.
+	// Deliberately well under that 30s.
+	ackDrainHardCap = 20 * time.Second
+
+	// ackedCountBudget is the keyed path's bound. It is a flat wall clock on
+	// purpose: waitForAckedCount waits on an atomic counter incremented after
+	// a Printf, with no disk I/O at all, so it pays none of the fsync cost
+	// above and has no drain to stall.
+	ackedCountBudget = 5 * time.Second
+)
+
+// drainVerdict is the decision the drain loop makes on each poll. Split out
+// from the loop so the decision is unit-testable without a real upstream
+// store, a real ack loop, or real elapsed time.
+type drainVerdict int
+
+const (
+	drainContinue drainVerdict = iota
+	drainDone
+	drainStalled
+	drainTooSlow
+)
+
+// classifyDrain decides whether a drain is finished, wedged, too slow, or
+// simply still working.
+//
+// Order matters and is load-bearing: done is checked before stalled so a
+// drain that completes on the same poll it would otherwise be judged on is
+// never reported as wedged, and stalled is checked before tooSlow so a wedge
+// that happens to coincide with the hard cap is reported as a wedge - the
+// more serious of the two diagnoses wins.
+func classifyDrain(committed, total uint64, sinceProgress, sinceStart time.Duration) drainVerdict {
+	switch {
+	case committed >= total:
+		return drainDone
+	case sinceProgress >= ackDrainStallBudget:
+		return drainStalled
+	case sinceStart >= ackDrainHardCap:
+		return drainTooSlow
+	default:
+		return drainContinue
+	}
+}
+
+// waitForUpstreamCommitted blocks until the upstream store reports total
+// positions committed, so this process doesn't exit while
+// chaosPlugin.ackLoop's goroutine still has in-flight, not-yet-durable
+// commits. A no-op when total is 0 (unbounded runs never reach this
+// graceful-exit path in the first place).
+//
+// Exits rather than returning on any non-success, because falling through
+// would let the caller proceed to Teardown/DONE while commits are still in
+// flight, silently undermining the "committed == total" guarantee the
+// parent's duplicate-not-gap assertion depends on.
 func waitForUpstreamCommitted(upstream *upstreamStore, total uint64) {
 	if total == 0 {
 		return
 	}
-	deadline := time.Now().Add(drainBudget(total))
-	for time.Now().Before(deadline) {
+	start := time.Now()
+	lastProgress := start
+	var last uint64
+
+	for {
 		committed, err := upstream.Committed()
-		if err == nil && committed >= total {
+		if err != nil {
+			// A corrupt commit marker is not a pacing problem and must not be
+			// reported as one. upstreamStore.readLocked's own doc says to
+			// surface this loudly rather than treat it as "nothing committed"
+			// - swallowing it here would render a corrupt marker as
+			// "committed 0, i.e. N still draining".
+			fmt.Fprintf(os.Stderr, "%s: upstream commit marker unreadable while draining: %v\n",
+				markerFatal, err)
+			os.Exit(exitCorruptState)
+		}
+		if committed > last {
+			last = committed
+			lastProgress = time.Now()
+		}
+
+		switch classifyDrain(committed, total, time.Since(lastProgress), time.Since(start)) {
+		case drainDone:
 			return
+		case drainStalled:
+			fmt.Fprintf(os.Stderr, "%s: ack drain STALLED at %d/%d - the committed watermark has "+
+				"not advanced for %s. This is a wedge, not slowness: the ack path stopped, it did "+
+				"not merely fall behind. Do NOT re-run and move on. Start with the unbuffered "+
+				"errs channel in pkg/connector/source.go, which this harness never reads.\n",
+				markerFatal, committed, total, ackDrainStallBudget)
+			os.Exit(exitDrainStalled)
+		case drainTooSlow:
+			fmt.Fprintf(os.Stderr, "%s: ack drain still advancing at %d/%d after %s, but past the "+
+				"hard cap. Commits WERE progressing, so this is a pacing failure rather than a "+
+				"correctness one - a claim this message can make because progress was measured, "+
+				"not assumed. Each position costs an fsync (upstreamStore.Commit), so a slow or "+
+				"contended filesystem is the first thing to check.\n",
+				markerFatal, committed, total, ackDrainHardCap)
+			os.Exit(exitDrainTooSlow)
+		case drainContinue:
 		}
 		time.Sleep(time.Millisecond)
 	}
-	// Falling through here would let the caller proceed to Teardown/DONE
-	// while the plugin's last commit is still in flight, silently
-	// undermining the very "committed == total" guarantee the parent test's
-	// duplicate-not-gap assertion depends on - so this must exit, not warn
-	// and continue.
-	committed, _ := upstream.Committed()
-	fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for upstream to reach position %d "+
-		"(committed %d, i.e. %d still draining). This is a PACING failure, not a "+
-		"correctness one: check the ack sequence above for gaps or reordering before "+
-		"suspecting the engine.\n",
-		markerFatal, drainBudget(total), total, committed, total-committed)
-	os.Exit(exitDrainTimeout)
-}
-
-// drainBudget sizes the post-read-loop wait to the amount of work that can
-// still be in flight, rather than to a flat wall-clock guess.
-//
-// The flat 5s this replaced was correct for the case its doc describes -
-// runReadAckLoop has already read AND acked everything, so the wait absorbs a
-// single last async commit. It is wrong whenever a large ack backlog is still
-// draining when the read loop finishes, because then it is the PRIMARY
-// completion wait, not a last-commit drain.
-//
-// That is reachable, and it bit us: property2Cases' "mid-snapshot" is
-// total=500 at paceMS=1 - the fastest pace and the largest total in the set,
-// so the read loop outruns the async ack path by the widest margin of any
-// case. On a contended CI runner under -race, draining the remainder can
-// exceed 5s. Observed in CI with 500 read and 229 acked at the deadline: a
-// strictly monotonic ack sequence with no gap and no corruption marker, i.e.
-// the engine was behaving correctly and simply had not finished.
-//
-// fanout_child.go hit exactly this and wrote it up (see
-// waitFanoutUpstreamCommitted, "9 spurious FATALs in a -race -count=10 run")
-// but fixed it only for its own scenario; this is the same bug in the helper
-// it declined to reuse.
-//
-// 10ms per position is roughly 20x the observed per-position cost under
-// -race, so it absorbs runner contention without becoming a hang: the floor
-// keeps small runs quick and the ceiling keeps a genuinely stuck run from
-// sitting on the 30s parent timeout.
-func drainBudget(total uint64) time.Duration {
-	const (
-		perPosition = 10 * time.Millisecond
-		floor       = 5 * time.Second
-		ceiling     = 25 * time.Second
-	)
-	// Clamp BEFORE converting, not after. total is uint64 and time.Duration
-	// is int64, so multiplying first and bounding afterwards lets a large
-	// enough total overflow into a negative duration - which would make the
-	// deadline already past and turn this budget into no wait at all, the
-	// exact opposite of its purpose. gosec G115 flags the conversion for
-	// this reason and it is right to.
-	if total >= uint64(ceiling/perPosition) {
-		return ceiling
-	}
-	budget := time.Duration(total) * perPosition
-	if budget < floor {
-		return floor
-	}
-	return budget
 }
 
 // containsGapMarker reports whether err is (or wraps) the specific,
