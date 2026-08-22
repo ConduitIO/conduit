@@ -379,7 +379,7 @@ func (c *childProcess) sigterm(t *testing.T, timeout time.Duration) {
 // drain_test.go) is checked against the SAME number every one of those call
 // sites actually uses - a literal 30*time.Second repeated at each call site
 // could drift from the constant the test pins without either side noticing.
-const parentWaitExit = 30 * time.Second
+const parentWaitExit = 40 * time.Second
 
 // waitExit blocks until the child exits on its own (the "let it run to
 // completion" restart run), failing the test if it doesn't within timeout or

@@ -700,7 +700,7 @@ const (
 	// drain even starts) plus Teardown/WaitPendingWrites/process exit - see
 	// TestAckDrainHardCap_StaysUnderTheParentWaitExitTimeout, which models
 	// all three rather than just subtracting this from the parent timeout.
-	ackDrainHardCap = 15 * time.Second
+	ackDrainHardCap = 20 * time.Second
 
 	// ackDrainPollInterval is how often the drain loop re-reads the
 	// committed watermark. Not 1ms: upstreamStore.Committed() takes the
@@ -797,6 +797,27 @@ func drainStallBudget(persistDelay time.Duration) time.Duration {
 	return budget
 }
 
+// drainBudgetsAreCoherent reports whether this child's debounce is short
+// enough for the wedge/slow distinction to survive the clamp.
+//
+// The clamp above buys that distinction for short debounces by capping the
+// budget, but it inverts past a threshold: once persistDelay reaches
+// ackDrainHardCap-1s, the budget is no longer greater than the debounce, so
+// a HEALTHY child is guaranteed to be called wedged before its own first
+// flush - the exact false accusation the derivation exists to prevent, made
+// certain rather than merely possible. Silently clamping into that regime
+// would hand the engine an exitDrainStalled ("a real defect, must be
+// investigated, not re-run") for what is actually a harness
+// misconfiguration.
+//
+// Not reachable today - the largest debounce that reaches this drain
+// anywhere in the tree is the 1s default - so this is a guard on a
+// hypothetical, which is precisely why it should refuse loudly rather than
+// wait to be discovered as a mystery wedge.
+func drainBudgetsAreCoherent(persistDelay time.Duration) bool {
+	return drainStallBudget(persistDelay) > persistDelay
+}
+
 // drainTracker holds the mutable bookkeeping the drain loop needs, so the
 // decision AND the state feeding it are both testable.
 //
@@ -855,14 +876,34 @@ func (d *drainTracker) observe(committed, total uint64, now time.Time) drainVerd
 // the loop), plus the tracker that produced it, so the caller can report the
 // actual elapsed times it measured rather than the budget/cap constants.
 func drainLoop(read func() (uint64, error), now func() time.Time, total uint64, persistDelay time.Duration) (drainVerdict, *drainTracker) {
+	if !drainBudgetsAreCoherent(persistDelay) {
+		fmt.Fprintf(os.Stderr, "%s: HARNESS MISCONFIGURATION, not an engine fault: this child's "+
+			"persister debounce is %s, but the drain's hard cap is %s, so the stall budget clamps "+
+			"to %s - at or below the debounce. A healthy child commits nothing until its first "+
+			"flush, so it would be reported as wedged every time. Raise ackDrainHardCap or lower "+
+			"this scenario's persistDelayMS; do not read the resulting failure as an ack-path "+
+			"defect.\n",
+			markerFatal, persistDelay, ackDrainHardCap, drainStallBudget(persistDelay))
+		os.Exit(exitBadArgs)
+	}
+
 	stallBudget := drainStallBudget(persistDelay)
 	tracker := newDrainTracker(now(), stallBudget)
 	for {
 		committed, err := read()
-		if err == nil {
-			if verdict := tracker.observe(committed, total, now()); verdict != drainContinue {
+		if err != nil {
+			// Still consult the clock on the error path. main's version
+			// polled against a deadline, so a persistent read error there
+			// eventually terminated; observing with the last known watermark
+			// keeps the stall budget and hard cap bounding this loop instead
+			// of spinning forever. Unreachable in production - the closure
+			// os.Exits on error first - but an unbounded loop in a harness
+			// whose job is to bound things is worth not writing.
+			if verdict := tracker.observe(tracker.last, total, now()); verdict != drainContinue {
 				return verdict, tracker
 			}
+		} else if verdict := tracker.observe(committed, total, now()); verdict != drainContinue {
+			return verdict, tracker
 		}
 		time.Sleep(ackDrainPollInterval)
 	}

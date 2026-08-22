@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/matryer/is"
 )
 
 // The drain bound must distinguish a WEDGED ack path from a merely slow one.
@@ -430,17 +431,116 @@ func TestDrainStallBudget_ClampsToTheHardCap(t *testing.T) {
 func TestNewStallBoundIsStrictlyWeakerThanMainsFlatBudget(t *testing.T) {
 	const oldFlatBudget = 5 * time.Second // main's drainEntry + 5s
 
-	// The theoretical floor, not the practical one (1s): even a persistDelay
-	// this close to zero must still leave the new bound strictly above
-	// main's, or the safety argument depends on no scenario ever configuring
-	// a smaller one - which is exactly the kind of coupling this PR exists
-	// to remove.
-	const minPersistDelay = time.Millisecond
+	// Asserted over the REAL function, across every debounce that can reach
+	// it, plus the clamp regime beyond them.
+	//
+	// The previous version of this test read `ackDrainStallBudget +
+	// minPersistDelay > oldFlatBudget`, i.e. `5s + 1ms > 5s`. It named the
+	// two constants and never called drainStallBudget, classifyDrain,
+	// drainTracker or drainLoop - so gutting drainStallBudget to `return
+	// ackDrainStallBudget`, deleting the debounce term the whole safety
+	// argument rests on, left it green. A test the PR body presents as the
+	// change's safety proof, which passes under the mutation that breaks
+	// that safety, is how three prior rounds happened.
+	for _, persistDelay := range []time.Duration{
+		time.Millisecond, // theoretical floor
+		10 * time.Millisecond,
+		connector.DefaultPersisterDelayThreshold, // 1s, the practical case
+		6 * time.Second,
+		9 * time.Second,   // last debounce below the clamp
+		600 * time.Second, // deep in the clamp regime
+	} {
+		if got := drainStallBudget(persistDelay); got <= oldFlatBudget {
+			t.Fatalf("drainStallBudget(%s) = %s, which does not exceed main's flat budget %s; "+
+				"this change could then fail a run main would have passed, defeating its entire "+
+				"safety argument", persistDelay, got, oldFlatBudget)
+		}
+	}
 
-	if got := ackDrainStallBudget + minPersistDelay; got <= oldFlatBudget {
-		t.Fatalf("ackDrainStallBudget(%s) + a near-zero persistDelay(%s) = %s does not exceed "+
-			"main's flat budget %s; this change could then fail a run main would have passed, "+
-			"which defeats its entire safety argument", ackDrainStallBudget, minPersistDelay, got,
-			oldFlatBudget)
+	// The other arm has to clear it too: tooSlow fires at the hard cap, so a
+	// cap at or below main's budget would reintroduce the same regression by
+	// the other door.
+	if ackDrainHardCap <= oldFlatBudget {
+		t.Fatalf("ackDrainHardCap %s does not exceed main's flat budget %s", ackDrainHardCap, oldFlatBudget)
+	}
+}
+
+// The only test that executes waitForUpstreamCommitted and its call sites.
+//
+// Everything else here tests a piece: drainStallBudget, classifyDrain,
+// drainTracker, drainLoop. Three review rounds in a row, the untested
+// boundary simply moved out one layer — round 3 caught a one-line mutation
+// inside drainLoop, round 4 caught the same shape at the call site above it
+// (`waitForUpstreamCommitted(upstream, cfg.total, effectivePersistDelay(cfg))`
+// → `0`), which left the FULL suite green at -race -shuffle=on -count=3. No
+// unit test can close that, because the bug is in the wiring rather than in
+// any tested unit.
+//
+// So this drives a real child with a debounce longer than the bare stall
+// constant. Deferred acks are not released until the persister flushes, so
+// for the whole 6s debounce a perfectly healthy child commits NOTHING. If
+// the budget reaching drainLoop is not derived from THIS child's debounce,
+// the drain calls that silence a wedge and the child exits 6.
+//
+// ~6s per subtest, which is the price of covering the wiring at all.
+func TestDrainProbe_LongDebounceGracefulChildIsNotAWedge(t *testing.T) {
+	const longDebounce = 6000 // ms; exceeds ackDrainStallBudget on its own
+
+	for _, tc := range []struct {
+		name    string
+		numKeys int
+	}{
+		// The unkeyed path: waitForUpstreamCommitted -> drainLoop.
+		{name: "unkeyed watermark drain", numKeys: 0},
+		// The keyed path: waitForAckedCount, whose budget is derived from
+		// the same debounce. Its acks are gated on the same persister flush,
+		// so it has the same silent window.
+		{name: "keyed acked-count drain", numKeys: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			dir := t.TempDir()
+
+			cp := spawnChild(t, childConfig{
+				dbDir:          dir + "/db",
+				upstreamDir:    dir + "/upstream",
+				prune:          false,
+				paceMS:         1,
+				total:          20,
+				numKeys:        tc.numKeys,
+				persistDelayMS: longDebounce,
+			})
+			cp.waitExit(t, parentWaitExit)
+
+			// waitExit already fails on a non-zero exit, so reaching here
+			// means the child was not accused of a wedge. DONE additionally
+			// proves it drained to completion rather than exiting early.
+			_, done := cp.line(markerDone)
+			is.True(done)
+		})
+	}
+}
+
+// The clamp inverts above a threshold, and past it a healthy child would be
+// called wedged before its own first flush. That has to refuse loudly rather
+// than clamp silently into an accusation.
+func TestDrainBudgetsAreCoherent_RefusesADebounceTheClampCannotClear(t *testing.T) {
+	for _, tc := range []struct {
+		persistDelay time.Duration
+		want         bool
+	}{
+		{time.Millisecond, true},
+		{connector.DefaultPersisterDelayThreshold, true}, // 1s, the only value in the tree
+		{6 * time.Second, true},
+		// The boundary: budget clamps to ackDrainHardCap-1s, so once the
+		// debounce reaches that, the budget no longer clears it.
+		{ackDrainHardCap - 2*time.Second, true},
+		{ackDrainHardCap - time.Second, false},
+		{600 * time.Second, false},
+	} {
+		if got := drainBudgetsAreCoherent(tc.persistDelay); got != tc.want {
+			t.Fatalf("drainBudgetsAreCoherent(%s) = %v, want %v (budget %s vs debounce %s)",
+				tc.persistDelay, got, tc.want, drainStallBudget(tc.persistDelay), tc.persistDelay)
+		}
 	}
 }
