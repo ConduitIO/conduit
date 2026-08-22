@@ -1104,10 +1104,53 @@ func runCapture(ctx context.Context, t *testing.T, requests []Request, cp *captu
 // complexity under gocyclo's threshold, the same reason finishScopedRun,
 // summarizePasses, and preserveMediansIfNothingPromoted were split out for
 // earlier rounds).
-func logDegradedPassSummary(t *testing.T, degradedMedians passesSummary, passes int) {
-	t.Helper()
+// degradedSummaryArm names which explanation logDegradedPassSummary owes the
+// reader. Extracted from the switch so the CHOICE is testable, not just the
+// prose it selects.
+//
+// Round 6's review found the arm selection had zero coverage: reverting the
+// `sampleSize < passes` gate to the old `len(degradedPasses) > 0` left the
+// whole suite green, silently restoring the false "excluded ... so not dragged
+// toward zero" claim on a run where nothing was excluded. That claim being
+// wrong is the defect rounds 5 and 6 were both about, so it is the last thing
+// that should rest on a comment.
+type degradedSummaryArm int
+
+const (
+	// degradedSummaryNone: no pass was degraded; nothing to explain.
+	degradedSummaryNone degradedSummaryArm = iota
+	// degradedSummaryUnreliable: no pass saw the whole corpus and the
+	// fallback median cannot be trusted. Fails the run.
+	degradedSummaryUnreliable
+	// degradedSummaryExcluded: a genuine clean-pass median — the degraded
+	// passes really were left out, so "excluded" is a true claim.
+	degradedSummaryExcluded
+	// degradedSummaryFallbackEqual: every degraded pass missed the same
+	// reliably-attributed requests, so the all-pass fallback equals what a
+	// clean-pass median would have shown. Nothing was excluded, and saying
+	// otherwise would be the false claim.
+	degradedSummaryFallbackEqual
+)
+
+func chooseDegradedSummaryArm(degradedMedians passesSummary, passes int) degradedSummaryArm {
 	switch {
 	case degradedMedians.allDegraded:
+		return degradedSummaryUnreliable
+	case degradedMedians.sampleSize < passes:
+		return degradedSummaryExcluded
+	case len(degradedMedians.degradedPasses) > 0:
+		return degradedSummaryFallbackEqual
+	default:
+		return degradedSummaryNone
+	}
+}
+
+func logDegradedPassSummary(t *testing.T, degradedMedians passesSummary, passes int) {
+	t.Helper()
+	switch chooseDegradedSummaryArm(degradedMedians, passes) {
+	case degradedSummaryNone:
+		return
+	case degradedSummaryUnreliable:
 		// B1 fix (round-3 review of #2814), generalized by H1 (round-4
 		// review of #2814) and H1 x H2 (round-5 review of #2814): every one
 		// of `passes` passes lost the full corpus AND missingSetsAreReliable
@@ -1142,7 +1185,7 @@ func logDegradedPassSummary(t *testing.T, degradedMedians passesSummary, passes 
 			"median, and must not be used as this run's baseline. Whatever WAS captured is still promoted "+
 			"and recorded below (capturedCount/missingCount/requestOutcomes).",
 			passes, degradedMedians.validateRate, degradedMedians.semanticRate)
-	case degradedMedians.sampleSize < passes:
+	case degradedSummaryExcluded:
 		// A real, clean-pass-only median: degradedMedians.sampleSize (the
 		// clean-pass count) is strictly less than passes, meaning the
 		// degraded pass(es) named below were genuinely excluded from
@@ -1160,7 +1203,7 @@ func logDegradedPassSummary(t *testing.T, degradedMedians passesSummary, passes 
 			"manifest) — excluded from medianValidatePassRate/medianSemanticMatchRate so a wiped tail pass "+
 			"does not silently drag those numbers toward zero; requests affected may still show as captured "+
 			"overall (capturedCount/missingCount) if another pass produced them", degradedMedians.degradedPasses)
-	case len(degradedMedians.degradedPasses) > 0:
+	case degradedSummaryFallbackEqual:
 		// H1 (round-5 review of #2814): degradedMedians.sampleSize == passes
 		// here (the case above did NOT match), so — unlike the case above —
 		// nothing was actually excluded from the median: summarizePasses'
@@ -1236,7 +1279,13 @@ func finishScopedRun(t *testing.T, destDir string, outcomes []RequestOutcome, ca
 // rejects the moment anything actually loads it (corpusPromptSHA256
 // mismatch). Now this reads and parses the file exactly like readTranscript
 // does and requires RequestID and CorpusPromptSHA256 to still match req —
-// the same two checks LoadTranscripts itself runs — so a stale or
+// the two checks that can disagree with the CURRENT corpus. It does NOT
+// re-run validateTranscriptShape (SchemaVersion, Provider, Model,
+// SystemPromptSHA256, CatalogFingerprint, non-empty Turns and
+// CompletionText); LoadTranscripts covers those at load time. Nothing this
+// harness writes can fail them — buildTranscript always populates them — so
+// the split is deliberate rather than an oversight, and saying "the same
+// checks" would overstate it. So a stale or
 // content-mismatched file is never silently counted as captured. When it
 // returns false for an id that DOES have a file on disk, runCapture's
 // caller falls through to the missing/tombstone branch, which writes
@@ -4143,5 +4192,64 @@ func TestScanAndPromoteScratch_OneViolationBlocksTheWholeBatch(t *testing.T) {
 	}
 	if _, err := os.Stat(destDir); !os.IsNotExist(err) {
 		t.Fatalf("expected destDir %q to never have been created (nothing was ever promoted into it), stat err = %v", destDir, err)
+	}
+}
+
+// The arm logDegradedPassSummary picks IS the claim the reader acts on, so it
+// gets a test rather than a comment.
+//
+// Round 6's review found this selection had zero coverage: reverting the
+// `sampleSize < passes` gate to the old `len(degradedPasses) > 0` left the
+// entire suite green while restoring the false "excluded ... so not dragged
+// toward zero" message on a run where nothing was excluded. That exact false
+// claim is what rounds 5 and 6 were about, and it had recurred in five
+// consecutive rounds as a comment that drifted from the code. This is the
+// assertion that makes it fail loudly instead.
+func TestChooseDegradedSummaryArm(t *testing.T) {
+	const passes = 3
+
+	for _, tc := range []struct {
+		name    string
+		summary passesSummary
+		want    degradedSummaryArm
+	}{{
+		name:    "no degraded passes says nothing",
+		summary: passesSummary{sampleSize: passes},
+		want:    degradedSummaryNone,
+	}, {
+		// The medians cannot be trusted at all; this fails the run.
+		name:    "all degraded outranks everything",
+		summary: passesSummary{allDegraded: true, degradedPasses: []int{1, 2, 3}, sampleSize: passes},
+		want:    degradedSummaryUnreliable,
+	}, {
+		// Genuine exclusion: one clean pass carried the median, so the
+		// "excluded" wording is true.
+		name:    "a real clean-pass median may claim exclusion",
+		summary: passesSummary{degradedPasses: []int{2, 3}, sampleSize: 1},
+		want:    degradedSummaryExcluded,
+	}, {
+		// The regression: sampleSize == passes means the all-pass fallback
+		// ran and NOTHING was excluded. Claiming exclusion here is the false
+		// statement HIGH-1 was filed for.
+		name:    "fallback median must not claim exclusion",
+		summary: passesSummary{degradedPasses: []int{1, 2, 3}, sampleSize: passes},
+		want:    degradedSummaryFallbackEqual,
+	}, {
+		// Round 5's vacuous-truth case: a single-pass run cannot have
+		// excluded anything from its own median.
+		name:    "single degraded pass out of one cannot have excluded anything",
+		summary: passesSummary{degradedPasses: []int{1}, sampleSize: 1},
+		want:    degradedSummaryFallbackEqual,
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := passes
+			if tc.name == "single degraded pass out of one cannot have excluded anything" {
+				p = 1
+			}
+			if got := chooseDegradedSummaryArm(tc.summary, p); got != tc.want {
+				t.Fatalf("chooseDegradedSummaryArm(%+v, passes=%d) = %d, want %d",
+					tc.summary, p, got, tc.want)
+			}
+		})
 	}
 }

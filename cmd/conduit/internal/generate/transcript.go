@@ -43,12 +43,20 @@ const TranscriptSchemaVersion = 1
 const manifestFileName = "manifest.yaml"
 
 // tombstoneFileSuffix marks a legitimately-missing transcript: a corpus
-// request that was attempted but never produced a single completion on any
-// pass (RequestOutcome.Captured == false, runCapture in
-// transcript_capture_test.go) gets a "<id>.missing.yaml" file committed in
-// place of "<id>.yaml". See the Tombstone type doc comment for why
-// LoadTranscripts needs this rather than tolerating a missing file
-// outright.
+// request that gets a "<id>.missing.yaml" file committed in place of
+// "<id>.yaml". Two causes, not one:
+//
+//   - the request was attempted and never produced a single completion on
+//     any pass (RequestOutcome.Captured == false), or
+//   - an "<id>.yaml" IS on disk from an earlier run but no longer matches
+//     the current corpus (requestIsCaptured rejects it on RequestID or
+//     corpusPromptSHA256, M5 of #2814's round-5 review). That case
+//     deliberately leaves BOTH files in place, because LoadTranscripts
+//     hard-errors on an id carrying both — a loud, specific failure rather
+//     than a silently wrong manifest.
+//
+// See the Tombstone type doc comment for why LoadTranscripts needs this
+// rather than tolerating a missing file outright.
 const tombstoneFileSuffix = ".missing.yaml"
 
 // Transcript is one committed provider transcript: everything replay needs
