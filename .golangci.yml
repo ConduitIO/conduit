@@ -1,4 +1,21 @@
 version: "2"
+run:
+  # M2 (round-4 review of #2814): without this, golangci-lint never even
+  # SEES cmd/conduit/internal/generate/transcript_capture_test.go (its
+  # `//go:build generate_capture` tag excludes it from every untagged
+  # build/lint, and generate-capture.yml's live-capture job is the only
+  # place in CI that ever passes `-tags=generate_capture` - and that job
+  # runs `go test`, never `golangci-lint run`). This is not redundant with
+  # `go vet`/compilation catching a break: gosec's own taint analysis on
+  # transcript.go's LoadManifest (the `#nosec G703` on its os.ReadFile)
+  # only sees a tainted call site at all once this file's own
+  # patchManifestForScopedRun is in the build - remove that #nosec and
+  # `--build-tags=generate_capture` reports `G703: Path traversal via
+  # taint analysis` while an untagged run reports zero issues, verified
+  # empirically. Add a tag here, add the matching `go build`/`go test`
+  # step to .github/workflows/test.yml's `test` job in the same PR.
+  build-tags:
+    - generate_capture
 linters:
   default: none
   enable:

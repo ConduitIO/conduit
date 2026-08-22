@@ -43,6 +43,48 @@ jobs:
         # in production, on the wire, to a user or agent.
         run: go test ./pkg/http/api/status/... -run 'Codes|Registry' -v -race
 
+      - name: generate_capture build+lint gate (M2, round-4 review of #2814)
+        # cmd/conduit/internal/generate/transcript_capture_test.go
+        # (`//go:build generate_capture`) is ~3,200 lines carrying every
+        # regression test this package's capture-preservation fixes rest
+        # on (B1/B2/H1/H2/M1-M3 across rounds 2-4 of #2814's review) - but
+        # the ONLY thing in CI that ever builds with this tag is
+        # generate-capture.yml's live-capture job, and that job only runs
+        # `-run "^TestCaptureTranscripts$"` against a real Anthropic
+        # account on workflow_dispatch. Nothing untagged ever compiles this
+        # file (a normal `go build ./...`/`go vet ./...` skips it - the tag
+        # excludes it from the build entirely, not just from running), so a
+        # compile break in it is invisible until a live run - which costs
+        # real money - is already in flight, and golangci-lint (lint.yml)
+        # never lints it at all (see .golangci.yml's `run.build-tags`,
+        # added in the same PR as this step, for the other half of this
+        # fix - gosec's taint analysis only sees this file's
+        # patchManifestForScopedRun caller under this tag, so an untagged
+        # lint run cannot verify transcript.go's `#nosec G703` annotation
+        # still matches a real violation).
+        #
+        # This step runs the same non-live tests generate-capture.yml
+        # already excludes from ITS run (decideCaptureGuard refuses without
+        # CONDUIT_GENERATE_CAPTURE=1, which is never set here, so
+        # TestCaptureTranscripts itself would no-op even if named) -
+        # everything else in the tagged file that does NOT need a live
+        # provider or network access: the pure decision/scoring functions
+        # (summarizePasses, captureCompletenessVerdict,
+        # requestsMissingUsableCandidate via TestSummarizePasses*,
+        # decideCaptureGuard, capturePassCount, captureCallCeiling), the
+        # fake-provider end-to-end paths (TestRunCapture_*,
+        # TestCaptureProvider_Ceilings), the promotion/redaction gate
+        # (TestScanAndPromoteScratch*), the manifest-patch helper
+        # (TestPatchManifest*), and the failure-reason sanitizer
+        # (TestSafeFailureReason*, TestReportCaptureCompleteness). No
+        # ANTHROPIC_API_KEY is in scope for this step, by design - it must
+        # never be able to reach a live provider.
+        run: |
+          go build -tags=generate_capture ./...
+          go test -tags=generate_capture -count=1 -v \
+            -run 'TestRunCapture|TestSummarizePasses|TestScanAndPromote|TestCaptureCompleteness|TestPatchManifest|TestSafeFailureReason|TestDecideCaptureGuard|TestCaptureProvider|TestCapturePassCount|TestCaptureCallCeiling|TestReportCaptureCompleteness' \
+            ./cmd/conduit/internal/generate/...
+
   build-cross:
     # Cross-compile for the 32-bit release target. Regular CI only builds on
     # 64-bit, so a dependency that fails to compile on 32-bit (e.g. one using

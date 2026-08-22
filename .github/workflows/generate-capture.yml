@@ -309,17 +309,30 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$MANIFEST_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
+            # L2 (round-4 review of #2814): `degraded` defaults to 0 (routine)
+            # for the two EXPECTED reasons this branch is reached (a
+            # not-clean capture, already flagged via CAPTURE_RESULT below
+            # regardless of this value; or a scoped run with nothing to
+            # patch). The third arm - success, the tree changed, yet no
+            # manifest.yaml at all - is NOT expected, and "Open the PR"
+            # below only escalates past a routine [!NOTE]-or-nothing title
+            # when MISSING>0 or DEGRADED>0: without setting degraded=1 here,
+            # that anomaly would open with the plain
+            # "chore(generate): capture provider transcripts" title and no
+            # banner at all, identical to a totally unremarkable run.
+            anomaly_degraded=0
             if [ "$CAPTURE_RESULT" != "success" ]; then
               summary_msg="capture did not finish cleanly and left no manifest.yaml in this run's artifact - likely a crash (panic, or a -timeout kill) between promoting transcripts and writing/patching the manifest, not a routine scoped re-capture; review the raw job log. Whatever WAS promoted above is still safe to use."
             elif [ -n "$REQUEST_ID" ]; then
               summary_msg="no manifest.yaml in this run's artifact (a scoped --request_id run patches an EXISTING manifest.yaml when one is there to patch, and writes none when there isn't - see runCapture's patchManifestForScopedRun)"
             else
               summary_msg="no manifest.yaml in this run's artifact even though capture reported success and the tree changed - unexpected for a full (non-scoped) run; review the raw job log"
+              anomaly_degraded=1
             fi
             {
               echo "summary=${summary_msg}"
               echo "missing=0"
-              echo "degraded=0"
+              echo "degraded=${anomaly_degraded}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi

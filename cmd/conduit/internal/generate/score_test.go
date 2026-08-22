@@ -380,6 +380,22 @@ func TestScoreRun_EmptyCandidate_FailsBothMetrics(t *testing.T) {
 		is.True(!rs.Results[0].SemanticMatch)
 		is.Equal(rs.ValidatePassRate, 0.0)
 		is.Equal(rs.SemanticMatchRate, 0.0)
+
+		// L1 (round-4 review of #2814): ValidatePass/SemanticMatch being
+		// false alone does not prove THIS branch ran — validateCandidate's
+		// own empty-candidate guard (TestValidateCandidate_EmptyCandidate_Fails)
+		// would fail ValidatePass on its own, and scoreSemantic("") happens
+		// to report no match too, so a neutered version of ScoreRun's guard
+		// (score.go, the "default" case delegating straight to
+		// validateCandidate/scoreSemantic instead of short-circuiting)
+		// would still pass every assertion above. This exact message is
+		// only ever produced by ScoreRun's own guard (score.go), never by
+		// validateCandidate or scoreSemantic — pinning it is what actually
+		// exercises this branch instead of merely being consistent with it.
+		wantIssue := "the candidate is empty or whitespace-only — no usable pipeline was ever extracted for this request"
+		if len(rs.Results[0].SemanticIssues) != 1 || rs.Results[0].SemanticIssues[0] != wantIssue {
+			t.Fatalf("SemanticIssues = %v, want exactly [%q]", rs.Results[0].SemanticIssues, wantIssue)
+		}
 	}
 }
 

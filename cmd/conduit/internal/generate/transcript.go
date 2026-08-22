@@ -286,24 +286,41 @@ type Manifest struct {
 	MedianSampleSize int `yaml:"medianSampleSize"`
 	// MediansUnreliable is true when BOTH: every one of Passes capture
 	// passes was degraded (PassScores[i].MissingCount > 0 for all of them —
-	// see DegradedPasses), AND at least one of those passes was WIPED
-	// (PassScores[i].MissingCount == PassScores[i].Total — it captured
-	// NOTHING at all, the signature of captureWallClockBudget expiring
-	// before a pass even started, or a rate-limit storm eating the whole
-	// pass). There was no clean pass left for MedianValidatePassRate/
-	// MedianSemanticMatchRate/MedianValidatePassCount/
+	// see DegradedPasses), AND those degraded passes do not all miss the
+	// SAME set of request ids (allMissingSetsEqual,
+	// transcript_capture_test.go). There was no clean pass left for
+	// MedianValidatePassRate/MedianSemanticMatchRate/MedianValidatePassCount/
 	// MedianSemanticMatchCount to be computed from, so those four fields
 	// fall back to a median across ALL passes with every missing request
 	// scored as a hard fail and nothing to dilute it (see
-	// MedianValidatePassRate's own doc comment) — and because at least one
-	// pass contributed a raw, uninformative 0, that fallback is not just
+	// MedianValidatePassRate's own doc comment) — and when the passes
+	// disagree about WHICH requests they missed, that fallback is not just
 	// unlabeled, it is actively misleading (B1, round-3 review of #2814).
 	// The second condition matters: a single request that is chronically
-	// missing across every pass (never wiping a WHOLE pass) also leaves no
-	// pass "clean", but every pass's own rate is then identical and stable
-	// — the fallback equals what a clean-pass median would have shown too,
-	// and this field correctly stays false for that ordinary, sub-threshold
-	// partial result (captureCompletenessVerdict's job, not this field's).
+	// missing across every pass (the SAME request, every time — the
+	// missing-id set is then identical pass to pass, whether that set has
+	// one member or is the whole corpus) also leaves no pass "clean", but
+	// every pass's own rate is then identical and stable — the fallback
+	// equals what a clean-pass median would have shown too, and this field
+	// correctly stays false for that ordinary, sub-threshold partial result
+	// (captureCompletenessVerdict's job, not this field's).
+	//
+	// H1 (round-4 review of #2814): an earlier version of this condition
+	// checked "at least one pass was WIPED (missing every request)"
+	// instead of "the missing sets disagree" — that proxy is wrong: five
+	// passes rotating which single request they capture (pass p captures
+	// only request p, missing the other four every time) has NO wiped pass
+	// (every pass captures exactly one request) and NO stable missing set
+	// (a different request each time), yet the old condition read this as
+	// reliable and published a 0.20 median for a corpus whose true quality
+	// was 1.00. Comparing the missing-id SETS, not just whether any one of
+	// them happens to be everything, is what tells a genuinely stable
+	// partial result apart from this one. A run where every pass is wiped
+	// identically (missing the whole corpus every time) still has equal
+	// missing sets under this rule and so does NOT set MediansUnreliable —
+	// that catastrophic case is caught separately, by
+	// captureCompletenessVerdict's own majority-missing threshold on the
+	// run as a whole.
 	//
 	// Omitted (`omitempty`, false is the common case) rather than always
 	// present, so its mere presence in a committed manifest.yaml is itself
@@ -351,8 +368,11 @@ type Manifest struct {
 	// DegradedPasses names (1-indexed) every pass excluded from
 	// MedianValidatePassRate/MedianSemanticMatchRate/
 	// MedianValidatePassCount/MedianSemanticMatchCount because it didn't
-	// produce a completion for the full corpus (PassScores[i].MissingCount
-	// > 0). Empty — and therefore absent from the committed YAML,
+	// contribute a usable candidate for the full corpus
+	// (PassScores[i].MissingCount > 0 — see that field's own doc comment:
+	// this covers both "no completion at all" and "a completion arrived
+	// but nothing extracted into pipeline YAML", M1 round-4 review of
+	// #2814). Empty — and therefore absent from the committed YAML,
 	// `omitempty` — when every pass captured the full corpus, which is the
 	// common case and needs no reader attention. A nonempty list here is
 	// exactly the CapturedCount/MissingCount blind spot documented above
@@ -432,13 +452,20 @@ type PassScore struct {
 	ValidatePassRate   float64 `yaml:"validatePassRate"`
 	SemanticMatchCount int     `yaml:"semanticMatchCount"`
 	SemanticMatchRate  float64 `yaml:"semanticMatchRate"`
-	// MissingCount is how many corpus requests produced NO completion on
-	// THIS pass specifically (runCapture omits a request from that pass's
-	// Candidates rather than scoring an empty-string stand-in — see
-	// runCapture's inline comment on why — so ValidatePassRate/
-	// SemanticMatchRate above already score every one of these as a fail;
-	// this field is what makes that visible instead of silently baked into
-	// the rate). A request missing here may still be Manifest.Captured (a
+	// MissingCount is how many corpus requests contributed no USABLE
+	// candidate on THIS pass specifically — either no completion was ever
+	// recorded (runCapture omits the request from that pass's Candidates
+	// rather than scoring an empty-string stand-in — see runCapture's
+	// inline comment on why) OR a completion WAS recorded but never
+	// extracted into pipeline YAML (an explicit empty/whitespace-only
+	// entry — B2, round-3 review of #2814; this field's name and this
+	// comment previously said "produced NO completion", which stopped
+	// being accurate the moment that second case was added — M1, round-4
+	// review of #2814). Either way ValidatePassRate/SemanticMatchRate
+	// above already score every one of these as a fail (score.go's
+	// ScoreRun treats both cases identically); this field is what makes
+	// that visible instead of silently baked into the rate. A request
+	// missing here may still be Manifest.Captured (a
 	// different, later pass produced it) — this is per-pass, Manifest.
 	// MissingCount is per-run; do not conflate the two. Nonzero marks this
 	// pass as "degraded": excluded from Manifest.MedianValidatePassRate/
