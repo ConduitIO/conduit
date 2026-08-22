@@ -955,7 +955,11 @@ func runChildLifecycle() {
 	// markerLCDone and exit while that final commit is still in flight,
 	// producing a false-positive "off by one" gap that has nothing to do with
 	// the recovery loop under test.
-	waitForUpstreamCommitted(built.upstream, cfg.total)
+	// This child never overrides the debounce (lcChildEnv has no
+	// persistDelayMS - see the comment above about deliberately using the
+	// production-matching default to time a kill), so the stall budget is
+	// derived from that default.
+	waitForUpstreamCommitted(built.upstream, cfg.total, connector.DefaultPersisterDelayThreshold)
 
 	fmt.Println(markerLCDone)
 	os.Exit(exitOK)

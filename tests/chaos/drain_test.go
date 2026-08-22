@@ -17,6 +17,8 @@ package chaos
 import (
 	"testing"
 	"time"
+
+	"github.com/conduitio/conduit/pkg/connector"
 )
 
 // The drain bound must distinguish a WEDGED ack path from a merely slow one.
@@ -57,9 +59,9 @@ func TestClassifyDrain_DistinguishesWedgedFromSlow(t *testing.T) {
 		{"done wins over wedge", total, ackDrainStallBudget, ackDrainHardCap, drainDone},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := classifyDrain(tc.committed, total, tc.sinceProgress, tc.sinceStart)
+			got := classifyDrain(tc.committed, total, tc.sinceProgress, tc.sinceStart, ackDrainStallBudget)
 			if got != tc.want {
-				t.Fatalf("classifyDrain(committed=%d, total=%d, sinceProgress=%s, sinceStart=%s) = %d, want %d",
+				t.Fatalf("classifyDrain(committed=%d, total=%d, sinceProgress=%s, sinceStart=%s) = %s, want %s",
 					tc.committed, total, tc.sinceProgress, tc.sinceStart, got, tc.want)
 			}
 		})
@@ -109,8 +111,8 @@ func TestDrain_ToleratesADrainSlowerThanTheOldFlatBudget(t *testing.T) {
 
 	// Twice the worst locally-observed drain, still advancing throughout.
 	slow := 2 * observedMax
-	if got := classifyDrain(total-1, total, 50*time.Millisecond, slow); got != drainContinue {
-		t.Fatalf("a drain still advancing after %s (2x the worst measured) was judged %d, want "+
+	if got := classifyDrain(total-1, total, 50*time.Millisecond, slow, ackDrainStallBudget); got != drainContinue {
+		t.Fatalf("a drain still advancing after %s (2x the worst measured) was judged %s, want "+
 			"drainContinue; a bound that gives up here has not fixed the flake", slow, got)
 	}
 
@@ -119,5 +121,126 @@ func TestDrain_ToleratesADrainSlowerThanTheOldFlatBudget(t *testing.T) {
 	if ackDrainHardCap <= oldFlat {
 		t.Fatalf("ackDrainHardCap %s does not exceed the old flat %s, so total=%d gets no more "+
 			"room than before", ackDrainHardCap, oldFlat, total)
+	}
+}
+
+// The test that would have caught the previous attempt.
+//
+// classifyDrain is pure and well-pinned, but the bookkeeping that feeds it -
+// refreshing lastProgress when the watermark moves - lived inline in the loop
+// with zero coverage. Deleting that single line collapsed sinceProgress into
+// sinceStart, turning the whole thing back into a flat wall clock from drain
+// entry, and all three existing tests still passed. Under contention that
+// mutant reported "ack drain STALLED at 268/500" on a perfectly healthy
+// child - the original flake, now with a false wedge accusation attached.
+//
+// Driving drainTracker with a fake clock is what closes that gap.
+func TestDrainTracker_MonotonicProgressIsNeverAWedge(t *testing.T) {
+	const total = 500
+	base := time.Unix(0, 0)
+	tracker := newDrainTracker(base, ackDrainStallBudget)
+
+	// One position every 100ms for 12s: far slower than any measured drain
+	// (worst observed is ~12.5s for the whole 500 under forced contention),
+	// and comfortably past the old flat 5s budget. It advances the entire
+	// time, so it must never be judged a wedge.
+	now := base
+	for committed := uint64(1); committed <= 120; committed++ {
+		now = now.Add(100 * time.Millisecond)
+		if got := tracker.observe(committed, total, now); got == drainStalled {
+			t.Fatalf("steady progress at %d/%d after %s was judged a wedge; the tracker is not "+
+				"refreshing lastProgress, so sinceProgress has collapsed into sinceStart",
+				committed, total, now.Sub(base))
+		}
+	}
+	if elapsed := now.Sub(base); elapsed <= 5*time.Second {
+		t.Fatalf("this test only proves something past the old flat 5s budget; it ran %s", elapsed)
+	}
+}
+
+// The mirror image: once the watermark genuinely stops, the tracker must
+// notice within the budget rather than waiting out the hard cap.
+func TestDrainTracker_StoppedProgressIsAWedge(t *testing.T) {
+	const total = 500
+	base := time.Unix(0, 0)
+	tracker := newDrainTracker(base, ackDrainStallBudget)
+
+	now := base.Add(time.Second)
+	if got := tracker.observe(100, total, now); got != drainContinue {
+		t.Fatalf("first observation judged %s, want drainContinue", got)
+	}
+	// Watermark frozen at 100 from here on.
+	now = now.Add(ackDrainStallBudget - time.Millisecond)
+	if got := tracker.observe(100, total, now); got != drainContinue {
+		t.Fatalf("just inside the budget judged %s, want drainContinue", got)
+	}
+	now = now.Add(2 * time.Millisecond)
+	if got := tracker.observe(100, total, now); got != drainStalled {
+		t.Fatalf("frozen watermark past the budget judged %s, want drainStalled", got)
+	}
+}
+
+// The stall budget is derived from the child's own persister debounce, not
+// assumed to be the default. Deferred acks are not released until the
+// persister flushes, so a healthy child commits NOTHING for one debounce
+// period after its read loop ends. persistDelayMS is a per-child knob
+// (sigkill_test.go already sets 600_000 for the killed child); at 6s against
+// a bare 5s budget it made a healthy graceful child report a wedge.
+func TestDrainTracker_StallBudgetClearsThePersisterDebounce(t *testing.T) {
+	const total = 500
+	longDebounce := 6 * time.Second
+	base := time.Unix(0, 0)
+	tracker := newDrainTracker(base, drainStallBudget(longDebounce))
+
+	// The whole debounce elapses with nothing committed - the real shape of a
+	// healthy child waiting for its first flush.
+	now := base.Add(longDebounce)
+	if got := tracker.observe(0, total, now); got == drainStalled {
+		t.Fatalf("a child idle for its own %s debounce was judged a wedge; the budget must be "+
+			"derived from the debounce, not fixed at %s", longDebounce, ackDrainStallBudget)
+	}
+	// And it still catches a genuine stall past the derived budget.
+	now = now.Add(ackDrainStallBudget + time.Second)
+	if got := tracker.observe(0, total, now); got != drainStalled {
+		t.Fatalf("no progress for %s past a %s budget judged %s, want drainStalled",
+			now.Sub(base), longDebounce+ackDrainStallBudget, got)
+	}
+}
+
+// String makes failures name the verdict instead of an integer.
+func (d drainVerdict) String() string {
+	switch d {
+	case drainContinue:
+		return "drainContinue"
+	case drainDone:
+		return "drainDone"
+	case drainStalled:
+		return "drainStalled"
+	case drainTooSlow:
+		return "drainTooSlow"
+	default:
+		return "drainVerdict(?)"
+	}
+}
+
+// The budget must be DERIVED from the child's debounce, not fixed. Dropping
+// the persistDelay term is a one-token mutation that leaves every
+// tracker-level test green — they are handed a budget rather than computing
+// one — so the derivation needs its own assertion.
+func TestDrainStallBudget_IncludesThePersisterDebounce(t *testing.T) {
+	for _, debounce := range []time.Duration{
+		connector.DefaultPersisterDelayThreshold,
+		6 * time.Second,   // the value that produced a false wedge
+		600 * time.Second, // sigkill_test.go's override for the killed child
+	} {
+		got := drainStallBudget(debounce)
+		if got <= debounce {
+			t.Fatalf("drainStallBudget(%s) = %s, which does not clear the debounce itself; a "+
+				"healthy child commits nothing for one debounce period after its read loop ends",
+				debounce, got)
+		}
+		if want := debounce + ackDrainStallBudget; got != want {
+			t.Fatalf("drainStallBudget(%s) = %s, want %s", debounce, got, want)
+		}
 	}
 }

@@ -78,7 +78,9 @@ const (
 	envValueTrue = "true"
 )
 
-// exitCode values the parent harness distinguishes between. An OPEN_GAP_ERROR
+// exitCode values the child uses. The parent (harness.go's waitExit) only
+// distinguishes zero from non-zero; these codes and the stderr marker lines
+// that accompany them are what actually carry the diagnosis. An OPEN_GAP_ERROR
 // (chaosPlugin.Open refusing a stale resume) exits with exitOK: it is a
 // clean, expected-shape outcome for the pruning-upstream scenario, and the
 // printed marker line - not the exit code - is what carries the verdict.
@@ -354,10 +356,7 @@ func buildChild(ctx context.Context, cfg childEnv) (*childBuilt, error) {
 		return nil, fmt.Errorf("open badger db: %w", err)
 	}
 
-	persistDelay := connector.DefaultPersisterDelayThreshold
-	if cfg.persistDelayMS > 0 {
-		persistDelay = time.Duration(cfg.persistDelayMS) * time.Millisecond
-	}
+	persistDelay := effectivePersistDelay(cfg)
 	persister := connector.NewPersister(logger, db, persistDelay, connector.DefaultPersisterBundleCountThreshold)
 	store := connector.NewStore(db, logger)
 
@@ -466,7 +465,7 @@ func runChild() {
 			os.Exit(exitDrainStalled)
 		}
 	} else {
-		waitForUpstreamCommitted(upstream, cfg.total)
+		waitForUpstreamCommitted(upstream, cfg.total, effectivePersistDelay(cfg))
 	}
 
 	// Graceful path: only reached when this run was allowed to finish
@@ -716,11 +715,11 @@ const (
 // never reported as wedged, and stalled is checked before tooSlow so a wedge
 // that happens to coincide with the hard cap is reported as a wedge - the
 // more serious of the two diagnoses wins.
-func classifyDrain(committed, total uint64, sinceProgress, sinceStart time.Duration) drainVerdict {
+func classifyDrain(committed, total uint64, sinceProgress, sinceStart, stallBudget time.Duration) drainVerdict {
 	switch {
 	case committed >= total:
 		return drainDone
-	case sinceProgress >= ackDrainStallBudget:
+	case sinceProgress >= stallBudget:
 		return drainStalled
 	case sinceStart >= ackDrainHardCap:
 		return drainTooSlow
@@ -739,48 +738,113 @@ func classifyDrain(committed, total uint64, sinceProgress, sinceStart time.Durat
 // would let the caller proceed to Teardown/DONE while commits are still in
 // flight, silently undermining the "committed == total" guarantee the
 // parent's duplicate-not-gap assertion depends on.
-func waitForUpstreamCommitted(upstream *upstreamStore, total uint64) {
+// effectivePersistDelay is the debounce this child's persister actually uses.
+// Shared by buildChild and by the drain wait, so the stall budget is derived
+// from the same value rather than assuming the default.
+func effectivePersistDelay(cfg childEnv) time.Duration {
+	if cfg.persistDelayMS > 0 {
+		return time.Duration(cfg.persistDelayMS) * time.Millisecond
+	}
+	return connector.DefaultPersisterDelayThreshold
+}
+
+// drainStallBudget is how long the committed watermark may fail to move
+// before the drain is called wedged, for a child with the given persister
+// debounce.
+//
+// Extracted so the derivation itself is testable. Inlined as
+// `persistDelay + ackDrainStallBudget` at the call site it was invisible to
+// tests: a mutation dropping the persistDelay term left every test green
+// while restoring the false-wedge bug this term exists to prevent.
+func drainStallBudget(persistDelay time.Duration) time.Duration {
+	return persistDelay + ackDrainStallBudget
+}
+
+// drainTracker holds the mutable bookkeeping the drain loop needs, so the
+// decision AND the state feeding it are both testable.
+//
+// Splitting this out is not tidiness. Round 2 of this PR had the state inline
+// in the loop, and deleting the single line that refreshed lastProgress
+// collapsed sinceProgress into sinceStart - silently restoring the flat wall
+// clock this change exists to remove. All three tests still passed, because
+// they only ever exercised the pure classifier. That is the same "the test
+// asserted the bug and nobody noticed" failure this PR is on its third
+// attempt to stop making.
+type drainTracker struct {
+	start        time.Time
+	lastProgress time.Time
+	last         uint64
+	stallBudget  time.Duration
+}
+
+func newDrainTracker(now time.Time, stallBudget time.Duration) *drainTracker {
+	return &drainTracker{start: now, lastProgress: now, stallBudget: stallBudget}
+}
+
+// observe records a committed watermark reading and returns the verdict.
+// Takes now explicitly so tests can drive it with a fake clock.
+func (d *drainTracker) observe(committed, total uint64, now time.Time) drainVerdict {
+	if committed > d.last {
+		d.last = committed
+		d.lastProgress = now
+	}
+	return classifyDrain(committed, total, now.Sub(d.lastProgress), now.Sub(d.start), d.stallBudget)
+}
+
+func waitForUpstreamCommitted(upstream *upstreamStore, total uint64, persistDelay time.Duration) {
 	if total == 0 {
 		return
 	}
-	start := time.Now()
-	lastProgress := start
-	var last uint64
-
+	// The stall budget must clear the persister's debounce, because deferred
+	// acks are not released until the persister flushes: for one debounce
+	// period after the read loop ends, a perfectly healthy child commits
+	// NOTHING. With the 1s default that idle window measures 390-485ms, but
+	// persistDelayMS is a per-child knob (sigkill_test.go already sets it to
+	// 600_000 for the killed child), and at 6s it makes a healthy graceful
+	// child report a wedge. Deriving the bound from the child's own delay
+	// removes the coupling instead of hoping nobody trips it.
+	stallBudget := drainStallBudget(persistDelay)
+	tracker := newDrainTracker(time.Now(), stallBudget)
 	for {
 		committed, err := upstream.Committed()
 		if err != nil {
-			// A corrupt commit marker is not a pacing problem and must not be
-			// reported as one. upstreamStore.readLocked's own doc says to
-			// surface this loudly rather than treat it as "nothing committed"
-			// - swallowing it here would render a corrupt marker as
-			// "committed 0, i.e. N still draining".
+			// Commit and Committed share u.mu and the rename is atomic, so a
+			// torn read is not reachable and a parse failure here really does
+			// mean corruption. Other errno values (EMFILE, EIO) are possible
+			// and are NOT corruption - the errno is printed so an investigator
+			// can tell, but the exit code cannot distinguish them.
 			fmt.Fprintf(os.Stderr, "%s: upstream commit marker unreadable while draining: %v\n",
 				markerFatal, err)
 			os.Exit(exitCorruptState)
 		}
-		if committed > last {
-			last = committed
-			lastProgress = time.Now()
-		}
 
-		switch classifyDrain(committed, total, time.Since(lastProgress), time.Since(start)) {
+		switch tracker.observe(committed, total, time.Now()) {
 		case drainDone:
 			return
 		case drainStalled:
-			fmt.Fprintf(os.Stderr, "%s: ack drain STALLED at %d/%d - the committed watermark has "+
-				"not advanced for %s. This is a wedge, not slowness: the ack path stopped, it did "+
-				"not merely fall behind. Do NOT re-run and move on. Start with the unbuffered "+
-				"errs channel in pkg/connector/source.go, which this harness never reads.\n",
-				markerFatal, committed, total, ackDrainStallBudget)
+			// States the evidence, not a conclusion. Two reachable causes
+			// produce this without the engine being wedged at all - a
+			// persister debounce longer than the budget, and a harness bug in
+			// the progress bookkeeping - so telling the reader to stop
+			// looking would be the same mistake the tooSlow branch was
+			// already corrected for.
+			fmt.Fprintf(os.Stderr, "%s: ack drain made NO progress for %s, stuck at %d/%d "+
+				"(persister debounce for this child is %s; the budget is that plus %s). "+
+				"A wedge is the likeliest explanation: start with the unbuffered errs channel "+
+				"in pkg/connector/source.go, which this harness never reads. If this child's "+
+				"debounce exceeds the budget, that alone explains it.\n",
+				markerFatal, stallBudget, committed, total, persistDelay, ackDrainStallBudget)
 			os.Exit(exitDrainStalled)
 		case drainTooSlow:
-			fmt.Fprintf(os.Stderr, "%s: ack drain still advancing at %d/%d after %s, but past the "+
-				"hard cap. Commits WERE progressing, so this is a pacing failure rather than a "+
-				"correctness one - a claim this message can make because progress was measured, "+
-				"not assumed. Each position costs an fsync (upstreamStore.Commit), so a slow or "+
+			// This branch CAN assert pacing, and here is why: drainStalled is
+			// evaluated first, so reaching the cap means the watermark
+			// advanced within the last stallBudget of the run. Progress was
+			// measured, not assumed.
+			fmt.Fprintf(os.Stderr, "%s: ack drain still advancing at %d/%d after %s, but past "+
+				"the hard cap. Progress was observed within the last %s, so this is pacing, not "+
+				"a wedge. Each position costs an fsync (upstreamStore.Commit), so a slow or "+
 				"contended filesystem is the first thing to check.\n",
-				markerFatal, committed, total, ackDrainHardCap)
+				markerFatal, committed, total, ackDrainHardCap, stallBudget)
 			os.Exit(exitDrainTooSlow)
 		case drainContinue:
 		}
