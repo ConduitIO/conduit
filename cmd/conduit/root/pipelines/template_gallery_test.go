@@ -390,11 +390,11 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
 // human-readable Render output, citing the `conduit
-// processor-plugins install ai.chunk`/`ai.embed` commands (which currently
-// refuse both processors — see
+// processor-plugins install ai.chunk`/`ai.embed` commands (installable as of
+// issue #2818's fix, still gated on minConduitVersion 0.20.0 — see
 // TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality) and
-// pointing at a local build for all three non-built-in plugins (pgvector,
-// ai.chunk, ai.embed).
+// pointing at a local build as the fallback for pgvector (always) and
+// ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -459,13 +459,21 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 // Be precise about the limit of that, because it is easy to read this guard
 // as stronger than it is: every assertion below is a PRESENCE check. It
 // catches a fact being removed or reworded away — which is how the original
-// bug happened, and how the eventual "#2818 is fixed" edit will look, since
-// that rewrite necessarily drops `registry.incompatible_version`. It does
-// NOT catch a contradicting clause ADDED alongside facts that all still
-// hold: prose asserting "...#2818 — now fixed, both installs succeed" next
-// to every currently-asserted string passes this test. Detecting that would
-// mean parsing intent out of English, which a unit test cannot do; the
-// mitigation is that the realistic edit trips the guard anyway.
+// bug happened. Detecting a contradicting clause added alongside facts that
+// all still hold would mean parsing intent out of English, which a unit
+// test cannot do.
+//
+// UPDATE (issue #2818 fixed): the ai.chunk/ai.embed block below was
+// rewritten once `conduit processor-plugins install ai.chunk`/`ai.embed`
+// actually succeeded against a real running build (see
+// pkg/registry/resolve_realindex_test.go for the resolution-level proof,
+// and this package's own manual verification: `conduit processor-plugins
+// install ai.chunk --dry-run --json` against the live index). The
+// remaining, still-real constraint is minConduitVersion 0.20.0: a v0.19.0
+// stable Conduit is correctly refused, a v0.20.0 nightly or later is not.
+// `registry.incompatible_version` is still asserted below — it is still
+// the code returned for that legitimate refusal, just no longer the code
+// returned unconditionally on every build regardless of version.
 //
 // It is intentionally hand-maintained per plugin rather than table/map-driven:
 // this guard's whole job is to catch prose making a false claim about ONE
@@ -487,10 +495,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 // point `conduit connectors install pgvector@<version>` becomes a claim
 // this test should REQUIRE, not forbid, and template_gallery.go's
 // Prerequisites/README.md's table should switch back to the registry
-// install path. REVISIT the ai.chunk/ai.embed block the moment
-// https://github.com/ConduitIO/conduit/issues/2818 is fixed and
-// `conduit processor-plugins install ai.chunk`/`ai.embed` actually succeed
-// against a real running build.
+// install path.
 func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testing.T) {
 	is := is.New(t)
 
@@ -533,11 +538,12 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 	})
 
 	// (3) ai.chunk/ai.embed: published to the signed registry (0.1.0 per the
-	// live index, see doc comment above) BUT currently refused on every build
-	// via registry.incompatible_version (#2818 — a processor compatibility
-	// gate that reads the CONNECTOR protocol module instead of a processor
-	// protocol version). Assert the specific facts, not a phrase the old
-	// false prose also contained.
+	// live index, see doc comment above) and installable via
+	// `conduit processor-plugins install` (#2818's always-false protocol
+	// comparison is fixed) — but still genuinely gated on minConduitVersion
+	// 0.20.0, so registry.incompatible_version remains the correct code for
+	// a too-old running Conduit. Assert the specific facts, not a phrase the
+	// old false prose also contained.
 	// (4) The template README mirrors this prose for a reader who never runs
 	// `pipelines init`. Nothing enforced that mirror before this check, while
 	// the PR that introduced it claimed the two "cannot drift apart
@@ -556,10 +562,12 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 
 		for _, fact := range []string{
 			"0.1.0",                                  // the published processor version
-			"registry.incompatible_version",          // why the hosted install fails
-			"2818",                                   // the tracking issue
+			"minConduitVersion",                      // the real, still-enforced requirement
+			"0.20.0",                                 // its actual value
+			"registry.incompatible_version",          // the code for a too-old Conduit
+			"2818",                                   // the tracking issue, now fixed
 			"go build -o conduit-connector-pgvector", // the pgvector fallback
-			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback
+			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback, for pre-0.20.0 builds
 			"pipeline.fanout_requires_arch_v2",       // the real arch-v2 error
 		} {
 			is.True(strings.Contains(text, fact)) // README must state this fact too
@@ -568,18 +576,21 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 		is.True(!strings.Contains(text, "connectors install pgvector`"))
 	})
 
-	t.Run("ai.chunk_ai.embed_published_but_blocked", func(t *testing.T) {
+	t.Run("ai.chunk_ai.embed_published_and_installable", func(t *testing.T) {
 		is := is.New(t)
 		for _, name := range []string{"ai.chunk", "ai.embed"} {
-			// The command that currently fails is still cited, so a user who
-			// hits the error recognizes it — but see check (4) below for what
-			// must accompany it.
+			// The install command is cited as a WORKING instruction now, not
+			// a doomed one — but see check (4) below for what must
+			// accompany it.
 			is.True(strings.Contains(joined, "conduit processor-plugins install "+name))
 		}
 		is.True(strings.Contains(joined, "0.1.0"))                         // the published version, not just "published"
-		is.True(strings.Contains(joined, "registry.incompatible_version")) // the actual error code
-		is.True(strings.Contains(joined, "2818"))                          // the tracking issue
-		is.True(strings.Contains(joined, "GOOS=wasip1 GOARCH=wasm"))       // the real, working fallback
+		is.True(strings.Contains(joined, "minConduitVersion"))             // the real, still-enforced requirement
+		is.True(strings.Contains(joined, "0.20.0"))                        // its actual value
+		is.True(strings.Contains(joined, "registry.incompatible_version")) // the code for a too-old Conduit
+		is.True(strings.Contains(joined, "2818"))                          // the tracking issue, now fixed
+		is.True(strings.Contains(joined, "fixed"))                         // must say so, not just cite the issue number
+		is.True(strings.Contains(joined, "GOOS=wasip1 GOARCH=wasm"))       // the fallback for pre-0.20.0 builds
 		is.True(strings.Contains(joined, "./cmd/chunking"))
 		is.True(strings.Contains(joined, "./cmd/embedding"))
 		// --bundle hits the identical version algebra offline (bundle.go), so

@@ -43,7 +43,25 @@ type ResolveOptions struct {
 	// own "development" build-info fallback for a locally built binary) is
 	// treated as satisfying every compatibility check — a local dev build
 	// must not hard-refuse every install just because it has no embedded
-	// version.
+	// version. RunningConduitVersion additionally goes through
+	// checkMinConduitVersion, which treats a PRERELEASE of the exact
+	// minimum version as satisfying it (see that function's doc) — so a
+	// nightly build can install something gated to the release it is
+	// building toward. RunningProtocolVersion does NOT get that treatment
+	// — see checkMinConduitVersion's doc for why the deviation must stay
+	// scoped to the Conduit-core gate and not the protocol gate.
+	//
+	// RunningProtocolVersion is the conduit-connector-protocol module
+	// version, and is meaningful ONLY for connector resolution
+	// (checkCompatible, below) — connectors genuinely speak that protocol.
+	// Processor resolution (checkProcessorCompatible,
+	// resolveprocessor.go) does NOT compare it: there is no
+	// conduit-processor-protocol module for it to represent, and a
+	// processor entry's minProtocolVersion is a copied connector-SDK
+	// version that corresponds to nothing real (issue #2818). The field
+	// stays on this shared struct because InstallOptions/ResolveOptions is
+	// shared between the two entry points; it is simply never read on the
+	// processor path.
 	RunningConduitVersion  string
 	RunningProtocolVersion string
 }
@@ -169,8 +187,22 @@ func resolveNewestCompatible(conn *index.Connector, opts ResolveOptions) (*Resol
 
 // checkCompatible refuses a candidate version whose MinConduitVersion or
 // MinProtocolVersion exceeds the running build's own versions.
+//
+// The two comparisons deliberately use DIFFERENT functions:
+// checkMinConduitVersion (nightly-train prerelease carve-out; see its doc)
+// for MinConduitVersion, and plain checkMinVersion (no carve-out) for
+// MinProtocolVersion. They were briefly a single shared function during
+// the #2818 fix, which — undetected until #2822's review — silently
+// widened the protocol gate too: an rc build of conduit-connector-protocol
+// would have satisfied a stable minProtocolVersion pin it doesn't actually
+// implement. The nightly-train rationale (a build can install something
+// gated to the release IT is building toward) has no analogue for a wire
+// protocol: conduit-connector-protocol does not track the Conduit core
+// version or its nightly cadence, so there is no "protocol prerelease this
+// build is building toward" for the carve-out to legitimately mean. Keep
+// these two calls on separate functions — do not re-merge them.
 func checkCompatible(name string, v index.ConnectorVersion, opts ResolveOptions) error {
-	if err := checkMinVersion("minConduitVersion", v.MinConduitVersion, opts.RunningConduitVersion); err != nil {
+	if err := checkMinConduitVersion(v.MinConduitVersion, opts.RunningConduitVersion); err != nil {
 		return newIncompatibleError(name, v, opts)
 	}
 	if err := checkMinVersion("minProtocolVersion", v.MinProtocolVersion, opts.RunningProtocolVersion); err != nil {
@@ -179,9 +211,18 @@ func checkCompatible(name string, v index.ConnectorVersion, opts ResolveOptions)
 	return nil
 }
 
-// checkMinVersion reports whether running satisfies >= minVer. An
-// unparsable running version (e.g. "development") is treated as satisfying
-// every check — see ResolveOptions's doc for why.
+// checkMinVersion reports whether running satisfies >= minVer under
+// ORDINARY semver precedence — no deviation, no carve-out. An unparsable
+// running version (e.g. "development") is treated as satisfying every
+// check — see ResolveOptions's doc for why.
+//
+// This is the strict comparison. It is used directly for minProtocolVersion
+// (checkCompatible, above — processors never compare minProtocolVersion at
+// all, see checkProcessorCompatible in resolveprocessor.go) and internally
+// by checkMinConduitVersion once its prerelease carve-out doesn't apply.
+// Do NOT add the nightly-train prerelease carve-out here — that would
+// silently widen the protocol gate again exactly as #2822's review found.
+// The carve-out belongs only in checkMinConduitVersion.
 func checkMinVersion(label, minVer, running string) error {
 	minV, err := NormalizeVersion(minVer)
 	if err != nil {
@@ -195,6 +236,84 @@ func checkMinVersion(label, minVer, running string) error {
 		return fmt.Errorf("%s %s not satisfied by running %s", label, minVer, running)
 	}
 	return nil
+}
+
+// checkMinConduitVersion is checkMinVersion specialized for
+// minConduitVersion — and ONLY minConduitVersion; see checkMinVersion's doc
+// and checkCompatible's doc for why minProtocolVersion must stay on the
+// strict comparison. It is shared, as-is, by checkCompatible (connectors,
+// above) and checkProcessorCompatible (processors, resolveprocessor.go):
+// the nightly-train testability problem this exists to fix is identical
+// for both artifact kinds (a connector pinned to the in-flight release's
+// minConduitVersion is exactly as unresolvable on a nightly as a processor
+// is), so that half of the fix legitimately lives once, here.
+//
+// Deliberate semver deviation: a PRERELEASE of the exact minimum version
+// satisfies it. Plain semver precedence ranks any prerelease below its
+// associated release for the same (major, minor, patch) — e.g.
+// "0.20.0-nightly.20260805" < "0.20.0" — so a strict comparison here would
+// mean no nightly build could ever install a connector/processor gated on
+// the release currently in flight. That makes the nightly train
+// permanently untestable for anything version-gated to the release it is
+// building toward, which is exactly the bug in
+// https://github.com/ConduitIO/conduit/issues/2818: the published
+// postgres-pgvector-rag processors pin minConduitVersion 0.20.0, so
+// v0.20.0-nightly.* builds — the only builds that exist before v0.20.0
+// ships — were refused by every one of them. Nobody caught it earlier
+// because the failure only reproduces against a real build's version
+// string, not the synthetic ones prior unit tests used.
+//
+// Scope is intentionally narrow: this widens compatibility only within the
+// SAME (major, minor, patch) core. "0.20.0-pre" satisfies ">= 0.20.0" but
+// must NOT satisfy ">= 0.20.1" or ">= 0.21.0" — running genuinely lacks
+// that unreleased code, and ordinary numeric precedence (which already
+// ranks a higher-core prerelease above a lower-core release, e.g.
+// "0.21.0-pre" > "0.20.0") is left untouched. A minVer that itself carries
+// a prerelease (an index entry pinned to a prerelease minimum) is also
+// left on ordinary precedence between same-core prereleases, so
+// "0.20.0-rc.0" still fails to satisfy ">= 0.20.0-rc.1". See
+// checkminversion_test.go for a table exercising each of these boundaries
+// directly against this function (added after #2822's review found the
+// prior test suite — Resolve/ResolveProcessor happy-path tests only —
+// stayed green under four separate mutations of the guard below).
+//
+// Accepted risk (documented, not fixed — inherent to comparing against
+// only (major, minor, patch)): within the prerelease window for a given
+// core version, minConduitVersion cannot discriminate BY DATE. A binary
+// stamped v0.20.0-nightly.20260101 satisfies minConduitVersion 0.20.0 just
+// as readily as one stamped v0.20.0-nightly.20260801 — including
+// installing a processor that was published seven months after the older
+// nightly was built. There is no core-version-only fix for this; it is the
+// necessary cost of the carve-out existing at all.
+//
+// The one available discriminator an index publisher can reach for is
+// pinning a PRERELEASE minimum instead of a release one: e.g.
+// minConduitVersion "0.20.0-nightly.20260701" correctly refuses
+// "0.20.0-nightly.20260601" (ordinary same-core prerelease precedence,
+// untouched by the carve-out above; the running date is genuinely lower).
+// But it is reliable only for TAG-EXACT nightlies. `git describe`'s
+// commits-ahead-of-tag suffix (e.g.
+// "v0.20.0-nightly.20260822-2-g974fda9") defeats it: per the semver spec,
+// a purely-numeric prerelease identifier always sorts BELOW an
+// alphanumeric one at the same dot-separated position, so a build with any
+// non-numeric suffix segment outranks a same-dated numeric-only one —
+//
+//	min=0.20.0-nightly.20260901  running=v0.20.0-nightly.20260822-2-g974fda9  -> SATISFIED (wrong)
+//
+// even though the running build predates the minimum by ten days. This is
+// plain upstream semver precedence, not something this function adds or
+// could reasonably special-case away — but anyone reaching for a
+// prerelease minConduitVersion as a stronger nightly gate should know it
+// only holds for tag-exact (no commits-ahead) nightly builds.
+func checkMinConduitVersion(minVer, running string) error {
+	minV, minErr := NormalizeVersion(minVer)
+	runV, runErr := NormalizeVersion(running)
+	if minErr == nil && runErr == nil &&
+		runV.Prerelease() != "" && minV.Prerelease() == "" &&
+		runV.Major() == minV.Major() && runV.Minor() == minV.Minor() && runV.Patch() == minV.Patch() {
+		return nil // prerelease of the exact minimum version: see doc above
+	}
+	return checkMinVersion("minConduitVersion", minVer, running)
 }
 
 // newIncompatibleError builds the actionable CodeIncompatibleVersion error:

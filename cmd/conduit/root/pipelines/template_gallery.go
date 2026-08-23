@@ -233,15 +233,15 @@ func galleryCatalogSpec() []GalleryTemplate {
 			// The pgvector and processor entries below must each state
 			// their registry-availability truthfully — see
 			// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality
-			// in template_gallery_test.go for the drift guard. Two independent
-			// conditions retire two independent claims here: the pgvector
+			// in template_gallery_test.go for the drift guard. The pgvector
 			// entry is revisited when
 			// github.com/conduitio/conduit-connector-pgvector cuts its first
-			// tagged release; the processor entry is revisited when
-			// https://github.com/ConduitIO/conduit/issues/2818 is fixed
-			// (today, `conduit processor-plugins install` refuses every
-			// processor on every build — see that issue and the entry
-			// below).
+			// tagged release. The processor entry was revisited when
+			// https://github.com/ConduitIO/conduit/issues/2818 was fixed:
+			// `conduit processor-plugins install` no longer refuses every
+			// processor on every build — it now correctly requires
+			// minConduitVersion 0.20.0 (a real requirement these processors
+			// declare), not an always-false protocol-version comparison.
 			Prerequisites: []string{
 				"Run the pipeline with pipeline architecture v2 (`--preview.pipeline-arch-v2`, or " +
 					"`preview.pipeline-arch-v2: true` in the config). The chunking processor fans one source " +
@@ -255,17 +255,19 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"run `go build -o conduit-connector-pgvector ./cmd/connector`, then place the binary under " +
 					"the directory --connectors.path points at (defaults to `connectors/` next to " +
 					"conduit.yaml). Switch to the registry install once that repo cuts a tagged release.",
-				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors ARE " +
-					"published to the signed registry at 0.1.0 — but `conduit processor-plugins install " +
-					"ai.chunk` and `conduit processor-plugins install ai.embed` currently refuse both, on " +
-					"every build, with a `registry.incompatible_version` error: the compatibility gate " +
-					"compares this build's conduit-connector-protocol module version against each " +
-					"processor's minProtocolVersion instead of an actual processor-protocol version — a " +
-					"bug tracked as https://github.com/ConduitIO/conduit/issues/2818. `--bundle` is not a " +
-					"workaround; it applies the identical version check offline. Until #2818 is fixed, " +
-					"build the processors yourself from a github.com/conduitio/conduit-processor-ai " +
-					"checkout (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, " +
-					"likewise `./cmd/embedding`) and place the .wasm files under --processors.path.",
+				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are " +
+					"published to the signed registry at 0.1.0 and install via `conduit processor-plugins " +
+					"install ai.chunk` / `conduit processor-plugins install ai.embed` — the " +
+					"`registry.incompatible_version` refusal tracked as " +
+					"https://github.com/ConduitIO/conduit/issues/2818 is fixed. Both still genuinely require " +
+					"minConduitVersion 0.20.0: a v0.19.0 stable Conduit is correctly refused with " +
+					"`registry.incompatible_version` (it really is too old), while a v0.20.0 nightly (this " +
+					"project's nightly train) or the eventual v0.20.0 stable release satisfies it. `--bundle` " +
+					"applies the identical version algebra offline, so it is not a workaround for the version " +
+					"requirement either. If you're running an older Conduit and cannot upgrade, build the " +
+					"processors yourself from a github.com/conduitio/conduit-processor-ai checkout " +
+					"(`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, likewise " +
+					"`./cmd/embedding`) and place the .wasm files under --processors.path.",
 			},
 		},
 	}

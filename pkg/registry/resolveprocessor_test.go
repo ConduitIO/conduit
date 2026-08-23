@@ -171,6 +171,43 @@ func TestResolveProcessor_NoCompatibleVersion(t *testing.T) {
 	requireCode(t, err, registry.CodeIncompatibleVersion)
 }
 
+// TestResolveProcessor_IgnoresMinProtocolVersion is issue #2818's Gate 1,
+// unit-tested directly: a version whose MinProtocolVersion is impossibly
+// high (99.9.9 — no running value could ever satisfy it under a real
+// comparison) must still resolve successfully, because processor
+// compatibility never compares it at all. See checkProcessorCompatible's
+// doc for why: there is no meaningful processor-protocol version to compare
+// against.
+func TestResolveProcessor_IgnoresMinProtocolVersion(t *testing.T) {
+	v := procVersion("1.0.0")
+	v.MinProtocolVersion = "99.9.9"
+	payload := procIndex("ai.embed", okPublisher(), v)
+
+	res, err := registry.ResolveProcessor(payload, registry.ResolveOptions{
+		Name: "ai.embed", Version: "1.0.0",
+		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "0.0.1", // wildly below MinProtocolVersion
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0", res.Version.Version)
+}
+
+// TestResolveProcessor_PrereleaseOfExactMinimumSatisfies mirrors
+// TestResolve_PrereleaseOfExactMinimumSatisfies for the processor path: a
+// nightly build (a prerelease of the exact minConduitVersion) must be able
+// to install a processor gated to the release it is building toward.
+func TestResolveProcessor_PrereleaseOfExactMinimumSatisfies(t *testing.T) {
+	v := procVersion("0.1.0")
+	v.MinConduitVersion = "0.20.0"
+	payload := procIndex("ai.chunk", okPublisher(), v)
+
+	res, err := registry.ResolveProcessor(payload, registry.ResolveOptions{
+		Name: "ai.chunk", Version: "0.1.0",
+		RunningConduitVersion: "0.20.0-nightly.20260805", RunningProtocolVersion: "0.9.5",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "0.1.0", res.Version.Version)
+}
+
 // TestResolveProcessor_SearchesProcessorsNotConnectors proves the two
 // collections are independent: a name present only in connectors[] is NOT
 // found by ResolveProcessor, and vice versa (design doc failure mode 4).
