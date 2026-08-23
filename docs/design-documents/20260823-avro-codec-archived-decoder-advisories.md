@@ -15,15 +15,29 @@ all about decoding untrusted input, all `Fixed in: N/A`:
 
 **Decision: replace the codec by switching the module import from `github.com/hamba/avro/v2` to
 `github.com/iskorotkov/avro/v2`** (an actively maintained fork that has fixed all three
-advisories), **and keep the input-bounding mitigation from
+advisories), **and keep the opt-in input-bounding mitigation from
 [`ConduitIO/conduit-commons#278`](https://github.com/ConduitIO/conduit-commons/pull/278) as
-permanent defense-in-depth regardless of codec.** Self-forking is rejected (permanent maintenance
-burden a solo maintainer should not take on when a maintained alternative exists). Replacing with
-`linkedin/goavro` is rejected (that project has declared itself in maintenance mode and its own
-maintainers moved to hamba/avro — the thing we're trying to get away from). An official Apache
-Avro Go SDK does not exist to evaluate. Accepting the risk indefinitely without replacing is
-rejected as a terminal state, though it is exactly the right _near-term_ action, which is why the
-mitigation PR already shipped it independently of this decision.
+permanent, optional defense-in-depth regardless of codec.** Self-forking is rejected (permanent
+maintenance burden a solo maintainer should not take on when a maintained alternative exists).
+Replacing with `linkedin/goavro` is rejected (that project has declared itself in maintenance mode
+and its own maintainers moved to hamba/avro — the thing we're trying to get away from). An
+official Apache Avro Go SDK does not exist to evaluate. Accepting the risk indefinitely without
+replacing is rejected as a terminal state, though it is exactly the right _near-term_ action, which
+is why the mitigation PR already shipped it independently of this decision.
+
+**This is not a choice between a settled industry standard and a risky alternative — the Go Avro
+ecosystem itself has a gap, and that gap is why this decision is hard.** Checked directly, not
+assumed: Apache ships no Go Avro implementation at all (`apache/avro`'s `lang/` directory has
+`c++, c, csharp, java, js, perl, php, py, ruby, rust` — no `go`). `linkedin/goavro` is the
+most-starred Go Avro library in the ecosystem (1,071 stars) but its own README says LinkedIn moved
+_to_ hamba/avro internally for performance and declares goavro itself "in maintenance mode."
+hamba/avro (509 stars) _was_ the de facto standard, filling the gap Apache left, and is now
+archived with no successor announced by its maintainer. `actgardner/gogen-avro` is a schema-driven
+code generator, not a runtime decoder like the other three — a different tool for a different job
+— and last saw a push in February 2024, over two years before this doc. There is no fifth option
+this research surfaced. `iskorotkov/avro` is the least-bad available option in a gapped ecosystem,
+not a promotion to some pre-existing "real" standard — see "Re-evaluation trigger" below for what
+happens if it goes stale too, because unlike this decision, that one has no fallback to retreat to.
 
 This doc covers the replace decision. #278 (already open, not merged) covers the mitigation and
 is not gated on this doc landing — the two are independently useful.
@@ -106,8 +120,22 @@ option, in exchange for the largest possible migration cost, is a bad trade:
 
 Checked `apache/avro`'s `lang/` directory directly: `c++, c, csharp, java, js, perl, php, py,
 ruby, rust`. No `go`. Apache does not maintain a Go Avro implementation; there is nothing here to
-evaluate. (This is why hamba/avro became the de facto standard in the first place — it filled a
-gap Apache never covered for Go.)
+evaluate. (This is why hamba/avro — 509 stars, less than a third of goavro's — became the de facto
+standard in the first place: it filled a gap Apache never covered for Go, not because it displaced
+a larger incumbent.)
+
+Also checked and rejected on a different axis: `actgardner/gogen-avro` is a schema-driven code
+generator, not a runtime decoder like the other three options here — it produces Go source from an
+`.avsc` schema at build time rather than decoding arbitrary Avro bytes against a schema known only
+at runtime, which is what `Serde.Unmarshal` needs. Different tool for a different job, and its own
+repository last saw a push in February 2024 — over two years before this doc — so it would not
+even be a candidate on maintenance grounds alone.
+
+**The pattern across 2a/2b here is the actual finding, not a throat-clear before the recommendation:
+there is no maintained, general-purpose, runtime Avro decoder for Go outside the hamba/avro
+lineage.** This is an ecosystem-wide gap, not a Conduit-specific problem, and it means Option 2c
+below is not "picking the best of several solid alternatives" — it's picking the only one that
+exists. That changes what "re-evaluate later" has to mean; see "Re-evaluation trigger" under 2c.
 
 ### 2c. Replace with `github.com/iskorotkov/avro/v2` — recommended
 
@@ -150,14 +178,35 @@ Verified, not assumed:
     PR (update the test expectation; audit whether any consumer branches on nil-vs-empty for a
     decoded empty array — the built-in Avro processor and connector SDK are the places to check),
     not a "purely mechanical, zero-risk" swap.
-  - **Forward-compatible with the #278 mitigation as written.** The fork's `Config` struct is a
-    superset of hamba's — it adds `MaxMapAllocSize` (the exact knob GO-2026-5048's advisory says
-    is the fix, opt-in, defaulting to unbounded) alongside the existing `MaxByteSliceSize` and
-    `MaxSliceAllocSize`. `limits.go`'s `avro.Config{MaxByteSliceSize: ..., MaxSliceAllocSize:
-    ...}.Freeze()` compiles unchanged against the fork (Go struct literals with named fields
-    tolerate new fields elsewhere), and gains a real path to closing the map-cardinality gap by
-    adding one more field — which #278 could not do against hamba/avro because the field didn't
-    exist there.
+  - **Forward-compatible with the #278 mitigation, with one gap confirmed still open.** The fork's
+    `Config` struct is a superset of hamba's — it adds `MaxMapAllocSize` (the exact knob
+    GO-2026-5048's advisory says is the fix, opt-in, defaulting to unbounded) alongside the
+    existing `MaxByteSliceSize` and `MaxSliceAllocSize`. `limits.go`'s
+    `avro.Config{MaxByteSliceSize: ...}.Freeze()` compiles unchanged against the fork (Go struct
+    literals with named fields tolerate new fields elsewhere), and gains a real path to closing the
+    map-cardinality gap by adding one more field — which #278 could not do against hamba/avro
+    because the field didn't exist there. Verified directly, not assumed: `Reader.ReadBlockHeader`'s
+    `math.MinInt64`-negation overflow (GO-2026-5047) is fixed unconditionally at the source in the
+    fork (`length64 <= math.MinInt` is checked and rejected before negating), independent of any
+    `Config` value — confirmed by running #278's own crafted 11-byte reproduction against
+    `v2.34.0` and getting an error instead of a corrupted negative-length slice.
+
+    **Not forward-compatible, and worth being direct about: the array decoder's
+    element-count-vs-byte-budget behavior is unchanged in the fork.** `MaxSliceAllocSize` bounds a
+    declared array's cumulative _element count_, not its _byte size_, in both hamba/avro and the
+    fork — the fork restructured the check (compares the current block's declared length against
+    remaining budget before growing, closing a related but distinct cumulative-overflow risk across
+    multiple blocks) but kept the same unit. Confirmed by running #278's crafted reproduction (a
+    handful of wire bytes declaring an absurd element count) against the fork with the exact same
+    `MaxSliceAllocSize` value #278 uses: it reproduces identically, `err == nil`, a full-size
+    allocation from a few bytes. This is why #278's `WithMaxInputSize` option derives its own
+    array-allocation ceiling from the caller's configured input-size limit rather than deferring to
+    the codec — that mitigation is not superseded by this migration and should not be removed once
+    it lands. It also means this migration does not fully close GO-2026-5047 in the sense the
+    advisory's "integer overflow in cumulative-size arithmetic" summary implies — the negation
+    overflow (the crash/corruption case) is fixed; the element-count-vs-byte-budget confusion that
+    the same cumulative-size arithmetic enables is a distinct, still-open gap on the fork, worth
+    filing upstream against `iskorotkov/avro` once this repo depends on it.
   - **Toolchain bump.** The fork's `go.mod` declares `go 1.24.13` (`conduit-commons` currently pins
     `go 1.24.2`). Routine, but real — `go.mod`'s `go` directive is a minimum toolchain constraint,
     and this is one more line item for the migration PR, not a blocker.
@@ -175,24 +224,39 @@ would move this from "acceptable risk" to "act now."
 This is what #278 already does, and it remains the correct thing to have shipped immediately
 regardless of this decision — it reduces real exposure today without waiting on a codec
 migration, and #278's `limits.go` documents in detail which of hamba/avro's advisories are and
-aren't addressable this way (short version: input-size and array-allocation bounds are
-enforceable via `Config`; map-cardinality and recursion-depth bounds are not, because no such
-`Config` field exists in any hamba/avro release). What this option rejects is treating that as the
-_final_ state: it leaves Conduit's own built-in processor permanently carrying three
-un-clearable vulnerability-scanner findings, with the most severe of the three (unbounded map
-allocation) mitigated only by bounding blast radius, never closed. With Option 2c available at
-near-zero cost, there's no reason to settle for "bounded but permanently vulnerable" as the end
-state.
+aren't addressable this way. As of #278's third revision (after an adversarial review found the
+first two versions' input-size ceiling either broke legitimate records or guessed a number with no
+telemetry to back it), the honest short version is narrower than earlier drafts of this doc stated:
+`MaxInputSize` is **opt-in and unlimited by default** — this repo has no visibility into real-world
+Conduit record shapes, and nothing on the data path bounds record size today (see #278's PR body),
+so shipping any default ceiling means silently breaking a legitimate record the day one exceeds it.
+An operator who knows their own record shapes can opt in via `WithMaxInputSize`, which also
+tightens the array-allocation ceiling to that configured value — sound only once opted in, because
+only then is total input length itself bounded by something an attacker can't inflate by padding
+(confirmed: deriving the array bound from an _observed_ call's length, rather than a configured
+ceiling, is defeatable by padding a small malicious payload with irrelevant trailing bytes). With no
+ceiling configured — the default — neither the input-size nor the array-allocation bound applies at
+all. Map-cardinality and recursion-depth bounds are not addressable via `Config` at any input-size
+policy, because no such `Config` field exists in any hamba/avro release. What this option rejects is
+treating any of that as the _final_ state: it leaves Conduit's own built-in processor permanently
+carrying three un-clearable vulnerability-scanner findings, with the most severe of the three
+(unbounded map allocation) unmitigated by default and, even opted in, unreachable by any `Config`
+knob at all. With Option 2c available at near-zero cost, there's no reason to settle for that as the
+end state.
 
 ## Decision
 
 **Replace `github.com/hamba/avro/v2` with `github.com/iskorotkov/avro/v2` across
 `conduit-commons/schema/avro`, `conduit`'s built-in Avro processor, and any other direct
-consumers.** Keep #278's `MaxInputSize` / tightened `Config` bounds in place afterward as
-permanent defense-in-depth — they cost nothing to keep, and "the codec we depend on is well
-maintained" is not a reason to stop bounding untrusted input. Once on the fork, add
-`MaxMapAllocSize` to `decodeAPI` in `limits.go`, closing the one gap #278 could not close against
-hamba/avro.
+consumers.** Keep #278's opt-in `WithMaxInputSize` / tightened `Config` bounds in place afterward
+as permanent, optional defense-in-depth — they cost nothing to keep, and "the codec we depend on
+is well maintained" is not a reason to remove the option for an operator who wants to bound
+untrusted input on top of it. Once on the fork, add `MaxMapAllocSize` to the frozen decode API in
+`limits.go`, gated the same way `MaxSliceAllocSize` is (only set when an operator has opted into
+`WithMaxInputSize`, for the same "don't guess a default" reasoning — see #278), closing the one
+map-cardinality gap #278 could not close against hamba/avro at all, for operators who opt in. Note
+this migration does not, on its own, close the array element-count-vs-byte-budget gap documented
+under Option 2c above — that remains #278's job (for an operator who opts in) regardless of codec.
 
 This is a **Tier 1** change per `CLAUDE.md` (data path: it changes what decodes every Avro record
 flowing through the engine) and requires a design doc — this one — plus DeVaris's sign-off before
@@ -214,14 +278,23 @@ the migration PR, and chaos/upgrade tests updated or justified as unaffected (se
    transitively through the SDK's schema support — that path updates automatically once
    `conduit-commons` is bumped, no separate connector-side change expected, but should be
    confirmed with a real build+test run, not assumed).
-4. Add `MaxMapAllocSize` to `limits.go`'s `decodeAPI`, with a justified value following the same
-   pattern as the existing `MaxByteSliceSize`/`MaxSliceAllocSize` comments.
+4. Add `MaxMapAllocSize` to `limits.go`'s frozen decode API, set only when an operator has opted
+   into `WithMaxInputSize` (mirroring `MaxSliceAllocSize`'s gating as of #278's third revision —
+   see #278's `limits.go` for why an ungated default is not defensible here either), with a value
+   derived the same way `MaxSliceAllocSize` is (from the configured `maxInputSize`, not a fixed
+   constant or anything derived from a specific call's observed input).
 
 ### Re-evaluation trigger
 
-Revisit this decision (most likely toward forking `iskorotkov/avro` ourselves, since by then the
-diff from a common ancestor will be small and well understood, rather than starting a fresh
-fork-vs-replace search) if any of the following happens:
+**There is no fallback if `iskorotkov/avro` goes stale too.** Section "How it was found" through
+Option 2b above establish that this is not a standing shortlist with a next-best pick waiting —
+Apache has no Go implementation, goavro's own stewards moved away from maintaining it, and
+gogen-avro solves a different problem. If the trigger below fires, forking becomes the only
+remaining option, not one of several — plan and budget for that eventuality accordingly rather than
+assuming "we'll just switch to something else" the way this doc itself was able to when hamba/avro
+was archived. Revisit this decision (toward forking `iskorotkov/avro` ourselves at that point,
+since the diff from a common ancestor will by then be small and well understood, which is real
+consolation but not a second option) if any of the following happens:
 
 - `iskorotkov/avro` goes 6 months without a commit, or
 - A new advisory is filed against it with no fix landed within a normal patch cadence (weeks, not
@@ -245,8 +318,8 @@ surface the "new advisory, no fix" case automatically.
    by: it's a fork, not a rewrite, so the surface of genuinely new code is small (mostly the fixed
    advisories plus incidental refactors like the json-iterator removal); the existing
    `schema/avro` test suite and the built-in processor's acceptance tests exercise the shared
-   decode path either way; and #278's input-bounding mitigation stays in place as a backstop
-   regardless of which codec is behind it.
+   decode path either way; and #278's opt-in input-bounding mitigation stays available as a
+   backstop regardless of which codec is behind it, for an operator who has configured it.
 3. **`iskorotkov/avro` is later archived too.** Covered by the re-evaluation trigger above — not
    a silent failure, since `govulncheck` (once #2816 lands) or routine dependency review surfaces
    an unmaintained-with-open-advisory state the same way it surfaced hamba/avro's.
@@ -273,8 +346,9 @@ surface the "new advisory, no fix" case automatically.
   either direction — this is purely a code-dependency change, not a state-format change, so none
   of the position/checkpoint versioning machinery in `CLAUDE.md`'s backward-compatibility section
   applies here.
-- **`MaxInputSize` and the rest of #278 are independent of this decision** and need no rollback
-  consideration tied to it — they work identically against either codec.
+- **`WithMaxInputSize` and the rest of #278 are independent of this decision** and need no rollback
+  consideration tied to it — they work identically (opt-in, unlimited by default) against either
+  codec.
 
 ## Observability
 
