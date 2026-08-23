@@ -45,10 +45,11 @@ is not gated on this doc landing — the two are independently useful.
 ## Implementation status (added after DeVaris's sign-off)
 
 **Implemented.** The migration PR against `conduit-commons`
-(`feat/avro-codec-fork-swap`, stacked on `fix/avro-decoder-input-bounds` / #278) does the
-module-path swap and adds `MaxMapAllocSize`, as this doc's "Decision" and "Scope of the migration
-PR" sections called for below — but corrects one thing this doc got wrong before implementation
-started, and it matters enough to put at the top rather than leave buried in "Scope."
+([`ConduitIO/conduit-commons#279`](https://github.com/ConduitIO/conduit-commons/pull/279), stacked
+on `fix/avro-decoder-input-bounds` / #278) does the module-path swap and adds `MaxMapAllocSize`, as
+this doc's "Decision" and "Scope of the migration PR" sections called for below — but corrects one
+thing this doc got wrong before implementation started, and it matters enough to put at the top
+rather than leave buried in "Scope."
 
 **This doc's "Decision" section (below, unedited) said `MaxMapAllocSize` should be gated the same
 way `MaxSliceAllocSize` is — set only when an operator has opted into `WithMaxInputSize`.** That
@@ -334,8 +335,9 @@ the migration PR, and chaos/upgrade tests updated or justified as unaffected (se
 
 ### Scope of the migration PR (separate from this doc)
 
-> **Status: items 1 and 4 implemented** in `feat/avro-codec-fork-swap` (stacked on
-> `fix/avro-decoder-input-bounds` / #278). Item 4's gating direction was corrected during
+> **Status: items 1 and 4 implemented** in
+> [`ConduitIO/conduit-commons#279`](https://github.com/ConduitIO/conduit-commons/pull/279)
+> (stacked on `fix/avro-decoder-input-bounds` / #278). Item 4's gating direction was corrected during
 > implementation — see "Implementation status" above and the correction note under "Decision."
 > Items 2 and 3 (bumping `conduit`'s dependency, the org-wide `go mod why` sweep) remain open,
 > tracked as this doc's rollout steps 3–4 below.
@@ -460,7 +462,8 @@ surface the "new advisory, no fix" case automatically.
 1. **Done.** This doc → DeVaris Tier-1 sign-off on the replace decision (fork target:
    `iskorotkov/avro/v2`).
 2. **Implemented, pending review.** Migration PR against `conduit-commons`
-   (`feat/avro-codec-fork-swap`, stacked on `fix/avro-decoder-input-bounds` / #278): module-path
+   ([`ConduitIO/conduit-commons#279`](https://github.com/ConduitIO/conduit-commons/pull/279),
+   stacked on `fix/avro-decoder-input-bounds` / #278): module-path
    swap, fix the known test divergence, audit for others (clean — see "Implementation status"),
    bump `go.mod`'s `go` directive to 1.24.13, add `MaxMapAllocSize` to `limits.go` with real
    defaults (not gated behind `WithMaxInputSize` as originally scoped — see the correction under
