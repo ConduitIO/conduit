@@ -230,7 +230,7 @@ func runSigtermDrainCase(t *testing.T, persistDelayMS int) {
 		paceMS:      1,
 		total:       committedAfter + 10,
 	})
-	third.waitExit(t, 30*time.Second)
+	third.waitExit(t, parentWaitExit)
 
 	resumeLine, ok := third.line("RESUME_POSITION")
 	is.True(ok)

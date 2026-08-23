@@ -146,10 +146,20 @@ type Processor struct {
 // asserts Kind == "wasm-processor" and (OS, Arch) == ("wasip1", "wasm") and
 // never consults runtime.GOOS/GOARCH.
 type ProcessorVersion struct {
-	Version            string     `json:"version"`
-	ReleasedAt         *time.Time `json:"releasedAt,omitempty"`
-	MinConduitVersion  string     `json:"minConduitVersion"`
-	MinProtocolVersion string     `json:"minProtocolVersion"`
+	Version           string     `json:"version"`
+	ReleasedAt        *time.Time `json:"releasedAt,omitempty"`
+	MinConduitVersion string     `json:"minConduitVersion"`
+	// MinProtocolVersion is part of the frozen schema and every published
+	// entry carries it, but it is NOT consulted by processor resolution
+	// (registry.checkProcessorCompatible): there is no
+	// conduit-processor-protocol module for a processor build to report a
+	// version of, so there is nothing honest to compare it against (issue
+	// #2818). It is present-but-ignored deliberately, rather than removed
+	// from the type, so this stays a pure additive/client-side fix: dropping
+	// the field would require re-signing every already-published entry
+	// (a role:root-gated, maintainer-approved operation), where ignoring it
+	// on read does not.
+	MinProtocolVersion string `json:"minProtocolVersion"`
 	// Artifact is the single arch-neutral (wasip1/wasm) build for this version,
 	// with Kind == "wasm-processor". Not a list: see the type doc.
 	Artifact       Artifact       `json:"artifact"`

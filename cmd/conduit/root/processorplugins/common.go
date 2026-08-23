@@ -34,8 +34,18 @@ const envPrefix = "CONDUIT"
 // runningProtocolVersion reports the conduit-connector-protocol module version
 // this binary was built against, via Go's embedded build info (avoiding a
 // hand-maintained constant that could drift from go.mod). Falls back to
-// "development" (which resolve.go's compatibility check treats as satisfying
-// every minProtocolVersion) when build info isn't available, e.g. `go run`.
+// "development" when build info isn't available, e.g. `go run`.
+//
+// Its result is still plumbed into InstallOptions/ResolveOptions.
+// RunningProtocolVersion for structural parity with the connector package
+// (they share the same options types), but registry.checkProcessorCompatible
+// no longer reads it: a processor has no meaningful protocol version to
+// compare against connector-protocol at all (issue #2818 — see
+// resolveprocessor.go's doc). Keeping this call, rather than passing a
+// hand-picked sentinel, avoids adding a second, divergent notion of "no
+// protocol value" to the shared options type for no behavioral benefit — the
+// value is simply inert on this path now.
+//
 // Duplicated deliberately from the connectors package rather than exported: it
 // is a trivial, self-contained helper, and coupling the two command packages on
 // it would buy nothing.

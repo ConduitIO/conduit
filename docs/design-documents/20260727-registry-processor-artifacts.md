@@ -127,10 +127,17 @@ os/arch, is a schema/validation error, not a silent skip.
 
 ### D3 — Resolution and the install pipeline
 
-`Resolve` gains a processor path that iterates `payload.Processors` by exact name (anti-typosquat, no
-fuzzy match), newest-non-yanked-compatible when `@version` is omitted, refusing revoked publisher /
-yanked pinned version / incompatible min-versions — the _same_ logic as connectors, over the
-processor collection. The install pipeline is parameterized (target dir `--processors.path`, filename
+`Resolve` gains a processor path (`ResolveProcessor`) that iterates `payload.Processors` by exact name
+(anti-typosquat, no fuzzy match), newest-non-yanked-compatible when `@version` is omitted, refusing
+revoked publisher / yanked pinned version / incompatible min-versions — over the processor collection,
+using the same building blocks as connectors, with one deliberate divergence: `minProtocolVersion`
+stays present in a processor entry's schema but is never compared for compatibility
+(`checkProcessorCompatible` in `resolveprocessor.go` drops the comparison entirely — there is no
+`conduit-processor-protocol` module for a processor's copied
+`minProtocolVersion` value to mean anything against; see issue #2818). `minConduitVersion` is compared
+identically for both artifact kinds, including a shared prerelease carve-out
+(`checkMinConduitVersion`, `resolve.go`) so a nightly build can install something gated to the release
+it is building toward. The install pipeline is parameterized (target dir `--processors.path`, filename
 prefix `conduit-processor-`, artifact kind, audit label `processor_install`) per the ADR; the
 download → verify → atomic-rename → manifest core is shared. See the `processor-plugins install` plan
 for the pipeline generalization and install-time WASM validation.

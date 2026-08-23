@@ -41,3 +41,22 @@ const (
 func CacheMetaForTest(connectorsPath, digestHex string) (CacheMeta, error) {
 	return cacheMetaFor(connectorsPath, digestHex)
 }
+
+// CheckMinConduitVersionForTest exposes checkMinConduitVersion (resolve.go)
+// — the minConduitVersion-specific comparison that carries the nightly-train
+// prerelease carve-out — to the external registry_test package. Added for
+// PR #2822's review Finding 1: the prior test suite only exercised this
+// logic indirectly through Resolve/ResolveProcessor happy paths, which
+// mutation testing showed left the carve-out's guard conditions
+// unenforced (checkminversion_test.go tests this function directly against
+// each of those mutations).
+func CheckMinConduitVersionForTest(minVer, running string) error {
+	return checkMinConduitVersion(minVer, running)
+}
+
+// CheckMinVersionForTest exposes the strict, no-carve-out checkMinVersion
+// (resolve.go) — used to prove minProtocolVersion never receives the
+// prerelease carve-out after PR #2822's review Finding 2 scope fix.
+func CheckMinVersionForTest(label, minVer, running string) error {
+	return checkMinVersion(label, minVer, running)
+}

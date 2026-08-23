@@ -29,25 +29,35 @@ is):
 
 | Plugin | Kind | Install |
 | --- | --- | --- |
-| `standalone:pgvector` (destination) | Registry-installed Go connector (`conduit-connector-pgvector`) | `conduit connectors install pgvector@<version>` |
-| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.chunk` once it's published to the signed registry; until then `conduit processor-plugins install --bundle <signed.tgz>`, or build `./cmd/chunking` (`GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`) and place the `.wasm` under `--processors.path`. |
-| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | `conduit processor-plugins install ai.embed` (same options as above; build `./cmd/embedding`). |
+| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | **Not yet in the registry** — the repo has no tagged release, so there is no version to pass to `conduit connectors install`. Build it: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. Switch to the registry install once a tagged release ships. |
+| `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.chunk` (the `registry.incompatible_version` refusal tracked as [#2818](https://github.com/ConduitIO/conduit/issues/2818) is fixed). Requires a running Conduit that satisfies `minConduitVersion` **0.20.0** (a v0.20.0 nightly or later; v0.19.0 stable is correctly refused as too old). On an older Conduit, build it yourself: clone `conduit-processor-ai`, `GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, and place the `.wasm` under `--processors.path`. |
+| `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.embed`, same `minConduitVersion` 0.20.0 requirement as `ai.chunk`. On an older Conduit, build it the same way (`./cmd/embedding`). |
 
-The `conduit processor-plugins install` / `uninstall` commands exist, and
-`conduit pipelines init --template postgres-pgvector-rag` names them in its prerequisite note every
-time this template is scaffolded. The hosted `install ai.chunk` / `install ai.embed` fetch goes live
-once `conduit-processor-ai` publishes signed processor artifacts to the registry; until then use the
-offline `--bundle` path or a local build.
+`ai.chunk` and `ai.embed` ARE published to the signed registry (0.1.0) and ARE installable via
+`conduit processor-plugins install`: the compatibility gate used to compare this build's
+`conduit-connector-protocol` module version (a connector protocol version) against each
+processor's `minProtocolVersion`, refusing every install regardless of build — tracked as
+[issue #2818](https://github.com/ConduitIO/conduit/issues/2818), now fixed. What remains is the
+processors' genuine `minConduitVersion: 0.20.0` requirement: a v0.19.0 stable Conduit is still
+correctly refused with `registry.incompatible_version` (it really predates the release these
+processors target), while any v0.20.0 nightly or the eventual v0.20.0 stable release installs
+them successfully. `--bundle` applies the identical version algebra offline, so it is not a
+workaround for that version requirement. A registry install for the pgvector destination is
+separately impossible today for an unrelated reason — `conduit-connector-pgvector` has not cut a
+tagged release, so there is no version for `conduit connectors install` to resolve; that plugin
+still needs to be built from source (see the table above). `conduit pipelines init --template
+postgres-pgvector-rag` names all three realities in its prerequisite note every time this template
+is scaffolded.
 
 ## Requires pipeline architecture v2
 
 The chunking processor fans one source record into **many** chunk records (one per chunk). Record
 fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; the default engine is
-one-record-in-one-record-out and rejects a fan-out with an `"unknown record type"` error at the
-chunk step. Run this pipeline with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true`
-in the config). Architecture v2 is currently a **preview** engine — it is more allocation-efficient
-than the default but does not yet have automatic error-recovery parity; review its status before
-depending on it for production data.
+one-record-in-one-record-out and fails, at the chunk step, with a
+`pipeline.fanout_requires_arch_v2` error (`FailedPrecondition`) naming this flag. Run this pipeline
+with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true` in the config). Architecture v2
+is currently a **preview** engine — it is more allocation-efficient than the default but does not yet
+have automatic error-recovery parity; review its status before depending on it for production data.
 
 You'll also need the pgvector target table created ahead of time, matching the `dimension` you
 configure (768 for the template's default `nomic-embed-text` model):

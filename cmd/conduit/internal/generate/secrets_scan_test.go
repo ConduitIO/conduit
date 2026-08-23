@@ -30,6 +30,22 @@ import (
 // committed anywhere under testdata/transcripts is scanned
 // (ScanTranscriptForSecrets, redact.go) and must carry no secret material.
 //
+// manifest.yaml and any "<id>.missing.yaml" tombstone (transcript.go) are
+// NOT parsed into a Transcript and skipped from there on — a struct-shaped
+// scan is only as good as ScanTranscriptForSecrets' knowledge of
+// Transcript's fields, and Manifest/Tombstone carry their own free-text-
+// shaped fields (RequestOutcome.FailureReason, Tombstone.FailureCode) that
+// Transcript has no field for at all, so unmarshaling either into a
+// Transcript would silently scan zero of them (Transcript.Turns would just
+// come back empty). Both are instead scanned as RAW TEXT via
+// scanTextForSecrets directly — deliberately the one check in this package
+// with no schema-shaped blind spot: it catches a secret in a field added to
+// either type tomorrow even if nothing else here is ever updated for it.
+// This is the regression test for the incident where a provider's raw HTTP
+// error body (readErrorBody, provider/http.go) could reach
+// RequestOutcome.FailureReason and then manifest.yaml completely unscanned,
+// because this test used to skip manifest.yaml by name.
+//
 // Deliberately UNTAGGED — no `//go:build` line — so it runs in the normal
 // `test` job on every PR, over WHATEVER transcripts exist today. That is
 // none: A5a-3 (a later PR) is what captures the first 28 real transcripts,
@@ -51,7 +67,7 @@ func TestTranscripts_CarryNoSecretMaterial(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".yaml") || d.Name() == manifestFileName {
+		if d.IsDir() || !strings.HasSuffix(path, ".yaml") {
 			return nil
 		}
 
@@ -59,6 +75,15 @@ func TestTranscripts_CarryNoSecretMaterial(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("reading %q: %w", path, err)
 		}
+
+		if d.Name() == manifestFileName || strings.HasSuffix(d.Name(), tombstoneFileSuffix) {
+			checked++
+			if findings := scanTextForSecrets(string(data)); len(findings) > 0 {
+				t.Errorf("%s carries secret-scan findings:\n  %s", path, strings.Join(findings, "\n  "))
+			}
+			return nil
+		}
+
 		var tr Transcript
 		if err := yaml.Unmarshal(data, &tr); err != nil {
 			return fmt.Errorf("parsing %q: %w", path, err)

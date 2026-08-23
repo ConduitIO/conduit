@@ -187,7 +187,7 @@ func assertProperty2Case(t *testing.T, tc property2Case, prune bool) {
 	is.NoErr(err)
 
 	second := spawnChild(t, cfg)
-	second.waitExit(t, 30*time.Second)
+	second.waitExit(t, parentWaitExit)
 
 	resumeLine, ok := second.line("RESUME_POSITION")
 	is.True(ok)

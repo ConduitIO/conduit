@@ -39,6 +39,8 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -53,6 +55,14 @@ import (
 	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
+
+// galleryTemplatePluginNameRE extracts "plugin: \"kind:name\"" references
+// from a rendered pipeline.yaml fixture, e.g. `plugin: "standalone:pgvector"`
+// -> kind="standalone", name="pgvector". Anchored to the start of the line
+// (ignoring leading whitespace, (?m)^\s*) so a commented-out fixture line
+// (`# plugin: "standalone:pgvector"`) does NOT match — the `#` prefix means
+// "plugin:" is no longer the first token on the line.
+var galleryTemplatePluginNameRE = regexp.MustCompile(`(?m)^\s*plugin:\s*"?(builtin|standalone):([A-Za-z0-9_.-]+)"?`)
 
 // TestGalleryCatalog_Valid proves the real, shipped catalog satisfies every
 // structural invariant validateGalleryCatalog enforces — redundant with the
@@ -379,9 +389,12 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // that fails opaquely on first `conduit run` because a plugin isn't
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
-// human-readable Render output, naming the exact `conduit connectors
-// install pgvector@<version>` command and the `conduit processor-plugins
-// install ai.chunk`/`ai.embed` commands for the two WASM processors.
+// human-readable Render output, citing the `conduit
+// processor-plugins install ai.chunk`/`ai.embed` commands (installable as of
+// issue #2818's fix, still gated on minConduitVersion 0.20.0 — see
+// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality) and
+// pointing at a local build as the fallback for pgvector (always) and
+// ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -403,9 +416,10 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	is.True(len(result.Prerequisites) >= 2)
 
 	joined := strings.Join(result.Prerequisites, "\n")
-	is.True(strings.Contains(joined, "conduit connectors install pgvector@"))
+	is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector ./cmd/connector"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.chunk"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.embed"))
+	is.True(strings.Contains(joined, "GOOS=wasip1 GOARCH=wasm"))
 
 	// The human-readable Render path must surface the same note, not just
 	// the --json payload.
@@ -414,7 +428,178 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	cmd2.SetOut(&out2)
 	cmd2.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--force"})
 	is.NoErr(cmd2.Execute())
-	is.True(strings.Contains(out2.String(), "conduit connectors install pgvector@"))
+	is.True(strings.Contains(out2.String(), "go build -o conduit-connector-pgvector ./cmd/connector"))
+}
+
+// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality is a
+// drift guard for a docs-honesty bug that shipped in two opposite directions
+// at once: the pgvector prerequisite told users to run `conduit connectors
+// install pgvector@<version>`, a command that can never succeed
+// (github.com/conduitio/conduit-connector-pgvector has zero git tags and
+// zero releases, so there is no version to resolve), while the processor
+// prerequisite said the hosted install "goes live once conduit-processor-ai
+// publishes signed artifacts" when ai.chunk@0.1.0 and ai.embed@0.1.0 were
+// already live in the registry index (verified against
+// ConduitIO/conduit-connector-registry@main's index/index.json, version 10,
+// 2026-08-21T19:26:17Z: both carry a real artifact + slsaProvenance entry;
+// pgvector is entirely absent from the published connectors list).
+//
+// A prior version of this guard replaced a stale phrase check
+// (`strings.Contains(joined, "install "+name)`) that a false claim could
+// satisfy just as easily as a true one: the ORIGINAL buggy prose also
+// contained the literal text "install ai.chunk" — the lie was in the
+// surrounding clause ("goes live once..."), not the command name. That is
+// why the guard caught only ONE direction of the bug (a plugin told to
+// `connectors install` something unpublished) and never the other (a
+// plugin's install command falsely described as working). This version
+// asserts the specific facts a reader needs for ai.chunk/ai.embed —
+// published, currently blocked, why, and the actual working fallback —
+// instead of a substring both the true and false prose would contain.
+//
+// Be precise about the limit of that, because it is easy to read this guard
+// as stronger than it is: every assertion below is a PRESENCE check. It
+// catches a fact being removed or reworded away — which is how the original
+// bug happened. Detecting a contradicting clause added alongside facts that
+// all still hold would mean parsing intent out of English, which a unit
+// test cannot do.
+//
+// UPDATE (issue #2818 fixed): the ai.chunk/ai.embed block below was
+// rewritten once `conduit processor-plugins install ai.chunk`/`ai.embed`
+// actually succeeded against a real running build (see
+// pkg/registry/resolve_realindex_test.go for the resolution-level proof,
+// and this package's own manual verification: `conduit processor-plugins
+// install ai.chunk --dry-run --json` against the live index). The
+// remaining, still-real constraint is minConduitVersion 0.20.0: a v0.19.0
+// stable Conduit is correctly refused, a v0.20.0 nightly or later is not.
+// `registry.incompatible_version` is still asserted below — it is still
+// the code returned for that legitimate refusal, just no longer the code
+// returned unconditionally on every build regardless of version.
+//
+// It is intentionally hand-maintained per plugin rather than table/map-driven:
+// this guard's whole job is to catch prose making a false claim about ONE
+// specific plugin's install path, which a generic per-name loop (matching
+// on a name->bool ground-truth map) cannot distinguish from a differently
+// false claim that still satisfies a generic "is it mentioned" check — see
+// TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites's history
+// for exactly that failure mode. A fourth non-built-in plugin would need
+// its own explicit block added below; the generic loop immediately below
+// only catches it being silently DROPPED from the prose, not a false claim
+// about its specific install path — that gap is accepted, not enforced,
+// because there is no offline way for a unit test to query the live
+// registry index and confirm what "true" would even mean for an unknown
+// future plugin.
+//
+// REVISIT the pgvector block below the moment
+// github.com/conduitio/conduit-connector-pgvector cuts a tagged release
+// that ConduitIO/conduit-connector-registry's index.json picks up — at that
+// point `conduit connectors install pgvector@<version>` becomes a claim
+// this test should REQUIRE, not forbid, and template_gallery.go's
+// Prerequisites/README.md's table should switch back to the registry
+// install path.
+func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testing.T) {
+	is := is.New(t)
+
+	tmpl, ok := lookupGalleryTemplate(templateNamePostgresPgvectorRAG)
+	is.True(ok)
+
+	joined := strings.Join(tmpl.Prerequisites, "\n")
+
+	pluginRefs := galleryTemplatePluginNameRE.FindAllStringSubmatch(tmpl.YAML, -1)
+	is.True(len(pluginRefs) > 0) // the regex itself must still match the fixture's plugin lines
+
+	// (1) Generic, name-agnostic check: every non-built-in plugin the shipped
+	// YAML references must be named somewhere in the prerequisite prose, so a
+	// plugin silently DROPPED from the prose (the other possible drift) fails
+	// here too. Run per-plugin via t.Run so a failure names the plugin
+	// instead of reporting only a line number.
+	for _, m := range pluginRefs {
+		kind, name := m[1], m[2]
+		if kind == "builtin" {
+			continue // built-ins need no install step
+		}
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			is.True(strings.Contains(joined, name))
+		})
+	}
+
+	// (2) pgvector: no tagged release exists anywhere, so a registry install
+	// can never succeed — the prose must never claim otherwise. This substring
+	// check is a heuristic, not a proof: a truthful sentence that happened to
+	// read "do not run `conduit connectors install pgvector`" would also trip
+	// it. That is an accepted, narrow false-positive risk given the prose is
+	// authored entirely in this repo (template_gallery.go) — not a general
+	// claim that substring matching soundly detects "is this a working
+	// instruction or a warning."
+	t.Run("pgvector_not_registry_installable", func(t *testing.T) {
+		is := is.New(t)
+		is.True(!strings.Contains(joined, "connectors install pgvector"))
+		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector"))
+	})
+
+	// (3) ai.chunk/ai.embed: published to the signed registry (0.1.0 per the
+	// live index, see doc comment above) and installable via
+	// `conduit processor-plugins install` (#2818's always-false protocol
+	// comparison is fixed) — but still genuinely gated on minConduitVersion
+	// 0.20.0, so registry.incompatible_version remains the correct code for
+	// a too-old running Conduit. Assert the specific facts, not a phrase the
+	// old false prose also contained.
+	// (4) The template README mirrors this prose for a reader who never runs
+	// `pipelines init`. Nothing enforced that mirror before this check, while
+	// the PR that introduced it claimed the two "cannot drift apart
+	// silently" — README/source drift being the exact bug class this guard
+	// exists to catch, one level up. Assert the load-bearing facts appear in
+	// both, so correcting one file and forgetting the other fails here.
+	//
+	// The test's working directory is the package directory, so this relative
+	// path is stable under `go test ./...` from anywhere in the repo.
+	t.Run("readme_mirrors_the_prerequisites", func(t *testing.T) {
+		is := is.New(t)
+		readme, err := os.ReadFile(filepath.Join(
+			"templates", templateNamePostgresPgvectorRAG, "README.md"))
+		is.NoErr(err)
+		text := string(readme)
+
+		for _, fact := range []string{
+			"0.1.0",                                  // the published processor version
+			"minConduitVersion",                      // the real, still-enforced requirement
+			"0.20.0",                                 // its actual value
+			"registry.incompatible_version",          // the code for a too-old Conduit
+			"2818",                                   // the tracking issue, now fixed
+			"go build -o conduit-connector-pgvector", // the pgvector fallback
+			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback, for pre-0.20.0 builds
+			"pipeline.fanout_requires_arch_v2",       // the real arch-v2 error
+		} {
+			is.True(strings.Contains(text, fact)) // README must state this fact too
+		}
+		// Same never-claim rule as (2), applied to the README.
+		is.True(!strings.Contains(text, "connectors install pgvector`"))
+	})
+
+	t.Run("ai.chunk_ai.embed_published_and_installable", func(t *testing.T) {
+		is := is.New(t)
+		for _, name := range []string{"ai.chunk", "ai.embed"} {
+			// The install command is cited as a WORKING instruction now, not
+			// a doomed one — but see check (4) below for what must
+			// accompany it.
+			is.True(strings.Contains(joined, "conduit processor-plugins install "+name))
+		}
+		is.True(strings.Contains(joined, "0.1.0"))                         // the published version, not just "published"
+		is.True(strings.Contains(joined, "minConduitVersion"))             // the real, still-enforced requirement
+		is.True(strings.Contains(joined, "0.20.0"))                        // its actual value
+		is.True(strings.Contains(joined, "registry.incompatible_version")) // the code for a too-old Conduit
+		is.True(strings.Contains(joined, "2818"))                          // the tracking issue, now fixed
+		is.True(strings.Contains(joined, "fixed"))                         // must say so, not just cite the issue number
+		is.True(strings.Contains(joined, "GOOS=wasip1 GOARCH=wasm"))       // the fallback for pre-0.20.0 builds
+		is.True(strings.Contains(joined, "./cmd/chunking"))
+		is.True(strings.Contains(joined, "./cmd/embedding"))
+		// --bundle hits the identical version algebra offline (bundle.go), so
+		// the prose must say so explicitly rather than offer it as an
+		// unqualified escape hatch (a positive assertion, not a bare
+		// "--bundle" absence check — the fact IS worth stating, just not as
+		// a working alternative).
+		is.True(strings.Contains(joined, "not a workaround"))
+	})
 }
 
 // TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites is

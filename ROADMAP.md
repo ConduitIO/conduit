@@ -148,8 +148,10 @@ and for their agents._
       `postgres-pgvector-rag`). Of the templates named when this line was written, only
       `postgres-pgvector-rag` exists; `postgres-iceberg`, `mysql-snowflake`, `shopify-warehouse` and
       `kafka-clickhouse` are still outstanding, and Iceberg is itself a Phase-2 item below.
-      `postgres-pgvector-rag` also depends on `conduit connectors install pgvector`, which needs a
-      registry index inside its freshness window — see the note under _Public registry_
+      `postgres-pgvector-rag` also depends on a pgvector destination connector that is not yet
+      registry-installable at all — `conduit-connector-pgvector` has no tagged release, not just a
+      stale index — so today the template's prerequisite note points at a local build instead of
+      `conduit connectors install pgvector`. Revisit once that repo cuts a first tagged release.
 - [ ] Community-contributed templates with the same publishing flow as connectors
 
 ### Deployment fundamentals (12-factor citizenship — the universal answer)

@@ -372,6 +372,15 @@ func (c *childProcess) sigterm(t *testing.T, timeout time.Duration) {
 	c.waitExit(t, timeout)
 }
 
+// parentWaitExit is the timeout every scenario that runs a graceful child
+// through the ack-drain path (child.go's waitForUpstreamCommitted) gives
+// waitExit for that child to finish on its own. Shared so ackDrainHardCap's
+// headroom against it (TestAckDrainHardCap_StaysUnderTheParentWaitExitTimeout,
+// drain_test.go) is checked against the SAME number every one of those call
+// sites actually uses - a literal 30*time.Second repeated at each call site
+// could drift from the constant the test pins without either side noticing.
+const parentWaitExit = 40 * time.Second
+
 // waitExit blocks until the child exits on its own (the "let it run to
 // completion" restart run), failing the test if it doesn't within timeout or
 // exits with an unexpected non-zero code.

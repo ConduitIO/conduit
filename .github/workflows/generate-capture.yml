@@ -39,11 +39,60 @@ name: generate-capture
 #
 # The go test itself (transcript_capture_test.go's runCapture) writes to a
 # scratch directory, redaction-scans every file (redact.go's
-# ScanTranscriptForSecrets, plan §5), and only copies the batch into
-# testdata/transcripts/ if the scan is clean - all failures abort the WHOLE
-# batch, never a partial promotion. If that scan ever finds something, the
-# `capture` job fails before an artifact is even uploaded, and `publish`
-# never runs.
+# ScanTranscriptForSecrets, plan §5) - and, separately, scans every
+# manifest-bound failure reason it computed (safeFailureReason) - and only
+# copies anything into testdata/transcripts/ if BOTH scans are clean - all
+# failures abort the WHOLE batch, never a partial promotion. The `capture`
+# job's own steps below ("Check whether any transcript changed", "Upload
+# captured transcripts") run even after that failure (`if: ${{ !cancelled()
+# }}`, see the "Partial results" section further down) rather than being
+# skipped outright - and, given a PRISTINE checkout (the common case: a
+# fresh `actions/checkout@v7` at the top of this job, nothing else in the
+# job writes under testdata/transcripts/), nothing was ever promoted into
+# testdata/transcripts/ means `git status --porcelain -uall` sees no
+# change either, so "changed" resolves to `false`, the upload step's own
+# `if` condition on `changed == 'true'` is false so no artifact is
+# uploaded, and `publish`'s `if` (which requires
+# `needs.capture.outputs.changed == 'true'`) never runs either. (N2, round-3
+# review of #2814: this is conditional on that pristine-checkout premise,
+# not an unconditional guarantee - `-uall`, unlike the `-unormal` default,
+# also surfaces any UNRELATED stray untracked file already sitting under
+# testdata/transcripts/ before this run, which would make `changed=true`
+# even though this run's own redaction gate aborted and promoted nothing;
+# that is not a redaction violation escaping, just a normal git-status
+# artifact of a non-pristine starting tree, and worth knowing about before
+# assuming "changed" always means "runCapture promoted something".) The
+# conclusion - a redaction violation never reaches a published PR on a
+# pristine checkout - still holds; it is reached via `changed=false`, not
+# via the job stopping outright.
+#
+# # Partial results are preserved, not discarded (WS1 A5a-3 follow-up)
+#
+# The first live run made 27/28 requests, one failed on all 3 passes, and
+# `go test` exited nonzero - which, combined with `set -euo pipefail`,
+# skipped every step after "Run the live capture", so the 27 good
+# transcripts (already paid for) were never uploaded and never published.
+# That is fixed two ways, together:
+#
+#  1. runCapture (transcript_capture_test.go) now only fails the `go test`
+#     process outright when a STRICT MAJORITY of the attempted requests
+#     produced no completion at all (captureCompletenessVerdict) - a single
+#     429 or a handful of flaky requests is recorded in manifest.yaml
+#     (CapturedCount/MissingCount/RequestOutcomes) and logged, never
+#     Errorf'd. This is the common case and needs no workflow help: the job
+#     succeeds normally and every step below already runs.
+#  2. For the rarer case where the test STILL fails (majority missing, or
+#     the wrong reason - a compile error, a panic), "Check whether any
+#     transcript changed" and "Upload captured transcripts" carry
+#     `if: ${{ !cancelled() }}` so they run even after a failed previous
+#     step, and `publish`'s own `if` does not implicitly require `capture`
+#     to have succeeded either. Whatever landed on disk before the failure
+#     - which, since runCapture promotes and writes manifest.yaml BEFORE
+#     ever calling t.Errorf, is everything captureCompletenessVerdict saw -
+#     still gets uploaded and opened as a PR. The `capture` job still shows
+#     red in that case (on purpose - see captureCompletenessVerdict's own
+#     doc comment for why "most of the corpus missing" must be loud), but
+#     red no longer means "nothing was kept."
 
 on:
   workflow_dispatch:
@@ -82,6 +131,16 @@ jobs:
     timeout-minutes: 35 # go test's own -timeout 30m below, plus setup/checkout headroom
     outputs:
       changed: ${{ steps.check-changes.outputs.changed }}
+      # manifest_path is the manifest.yaml THIS RUN wrote OR PATCHED, if
+      # any - never re-derived by `publish` searching the checked-out
+      # tree, which may already carry a manifest.yaml committed by an
+      # EARLIER run (see the "Summarize the manifest" step below for why
+      # that distinction matters). Empty for a scoped --request_id run
+      # ONLY when there was no prior manifest.yaml to patch
+      # (runCapture's patchManifestForScopedRun, M1 fix - round-3 review
+      # of #2814); otherwise a scoped run patches the existing one in
+      # place, which sets this exactly like a fresh write does.
+      manifest_path: ${{ steps.check-changes.outputs.manifest_path }}
     steps:
       - uses: actions/checkout@v7
 
@@ -95,10 +154,16 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id }}
         run: |
           set -euo pipefail
+          # N7 (round-3 review of #2814): `-run` is an UNANCHORED regexp
+          # per path segment, so `-run TestCaptureTranscripts/req-a` also
+          # matches subtest "req-abc" - anchoring each segment with ^...$
+          # makes this scope to EXACTLY the named test/id, never a prefix
+          # match on real corpus request ids (e.g. a future
+          # "kafka-to-postgres-sync" vs "kafka-to-postgres-sync-v2").
           if [ -n "$REQUEST_ID" ]; then
-            echo "pattern=TestCaptureTranscripts/${REQUEST_ID}" >> "$GITHUB_OUTPUT"
+            echo "pattern=^TestCaptureTranscripts\$/^${REQUEST_ID}\$" >> "$GITHUB_OUTPUT"
           else
-            echo "pattern=TestCaptureTranscripts" >> "$GITHUB_OUTPUT"
+            echo "pattern=^TestCaptureTranscripts\$" >> "$GITHUB_OUTPUT"
           fi
 
       # The ONE narrowly-scoped invocation plan §4/§7.2 requires: this exact
@@ -119,18 +184,71 @@ jobs:
             -run "$RUN_PATTERN" \
             ./cmd/conduit/internal/generate/...
 
+      # `if: ${{ !cancelled() }}` (not the default implicit success()-only
+      # gate): "Run the live capture" can now fail while STILL having
+      # promoted good transcripts and written manifest.yaml to disk before
+      # captureCompletenessVerdict decided to Errorf (see the file header's
+      # "Partial results" section) - this step, and the upload step below,
+      # must still run in that case so nothing already captured is thrown
+      # away. `!cancelled()` runs after either success OR failure, but
+      # (unlike `always()`) still skips if the workflow run itself was
+      # cancelled.
       - name: Check whether any transcript changed
         id: check-changes
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          if git status --porcelain -- cmd/conduit/internal/generate/testdata/transcripts | grep -q .; then
+          # `-uall`, not the `-unormal` default: plain `git status --porcelain`
+          # collapses a WHOLLY UNTRACKED directory into a single `?? dir/`
+          # entry instead of listing the files inside it. The very first
+          # capture run (or any run that captures a brand-new
+          # provider/model dir via CONDUIT_GENERATE_CAPTURE_MODEL) writes
+          # into testdata/transcripts/<provider>/<model>/, which does not
+          # exist on main yet - so without `-uall` this collapses to one
+          # `?? testdata/transcripts/anthropic/` line, the manifest.yaml
+          # grep below matches nothing, and manifest_path silently comes
+          # back empty even though a manifest WAS written. Reproduced in a
+          # scratch repo: default `-unormal` yields the single collapsed
+          # line, `-uall` lists every file including manifest.yaml.
+          changes=$(git status --porcelain -uall -- cmd/conduit/internal/generate/testdata/transcripts || true)
+          if [ -n "$changes" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # The manifest.yaml path THIS RUN itself wrote or modified, if
+          # any - `git status --porcelain -uall` over a clean checkout only
+          # ever shows files this run's own `go test` invocation touched,
+          # so an empty result here is unambiguous (never confused with a
+          # manifest.yaml already committed by an earlier run sitting
+          # untouched in the checkout). Tracked, unmodified files never
+          # appear in `git status` regardless of the `-u` mode, so that
+          # guarantee does not depend on `-uall` - only the
+          # untracked-directory collapse above does. A scoped --request_id
+          # run writes none of its own ONLY when there was no prior
+          # manifest.yaml to patch (runCapture's patchManifestForScopedRun,
+          # M1 fix - round-3 review of #2814); otherwise it patches the
+          # EXISTING one in place, which shows up here exactly like a fresh
+          # write does.
+          manifest_lines=$(printf '%s\n' "$changes" | awk '{print $2}' | grep -E '/manifest\.yaml$' || true)
+          manifest_count=$(printf '%s\n' "$manifest_lines" | grep -c . || true)
+          if [ "${manifest_count:-0}" -gt 1 ]; then
+            # N1 (round-3 review of #2814): this run's own `go test`
+            # invocation should only ever touch ONE provider/model's
+            # manifest.yaml. More than one match is unexpected (and the
+            # naive `awk '{print $2}'` split below is not quote-aware, so a
+            # path porcelain quotes would also land here) - surface it
+            # loudly rather than silently picking the first and hiding the
+            # ambiguity from a reviewer.
+            echo "::warning::found ${manifest_count} modified manifest.yaml paths in this run, expected at most 1 - using the first; review the diff:"
+            printf '%s\n' "$manifest_lines"
+          fi
+          manifest_path=$(printf '%s\n' "$manifest_lines" | head -1)
+          echo "manifest_path=${manifest_path}" >> "$GITHUB_OUTPUT"
+
       - name: Upload captured transcripts
-        if: steps.check-changes.outputs.changed == 'true'
+        if: ${{ !cancelled() && steps.check-changes.outputs.changed == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: generate-transcripts
@@ -139,7 +257,15 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.repository == 'ConduitIO/conduit' && needs.capture.outputs.changed == 'true'
+    # `!cancelled()` (rather than the default implicit "needs.capture must
+    # have succeeded") deliberately lets this job run when `capture` FAILED
+    # too - the whole point of the partial-results fix (file header) is that
+    # a majority-missing capture run still uploads whatever it captured, and
+    # `publish` still opens a PR for it as long as `changed` is true. A
+    # `capture` job that was itself skipped (the `if: github.repository ==`
+    # guard on a fork) never sets `changed`, so this still correctly no-ops
+    # on a fork without an extra check.
+    if: ${{ !cancelled() && github.repository == 'ConduitIO/conduit' && needs.capture.outputs.changed == 'true' }}
     needs: capture
     name: publish (opens a PR, no key)
     runs-on: ubuntu-latest
@@ -158,33 +284,270 @@ jobs:
 
       - name: Summarize the manifest
         id: summary
+        env:
+          # Passed through from `capture` rather than re-derived by
+          # searching the checked-out tree here: a `find` over this job's
+          # own checkout would happily match a manifest.yaml already
+          # committed by an EARLIER run and render ITS numbers under a
+          # heading that calls them "the headline numbers" for THIS run -
+          # exactly what happens on a scoped --request_id run with no
+          # PRIOR manifest.yaml to patch (runCapture's own
+          # patchManifestForScopedRun, M1 fix - round-3 review of #2814 -
+          # writes none in that one case; otherwise it patches the
+          # existing one, and this DOES get set).
+          MANIFEST_PATH: ${{ needs.capture.outputs.manifest_path }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          # Also-fix "end state 5" (round-3 review of #2814): distinguishes
+          # "no manifest.yaml because this was a scoped run with nothing to
+          # patch" (routine) from "no manifest.yaml even though the tree
+          # changed" (a `go test` crash - panic, or a -timeout kill -
+          # between promoting transcripts and writing/patching the
+          # manifest; see the file header's "Partial results" section).
+          # Both leave MANIFEST_PATH empty; CAPTURE_RESULT is what tells
+          # them apart.
+          CAPTURE_RESULT: ${{ needs.capture.result }}
         run: |
           set -euo pipefail
-          manifest=$(find cmd/conduit/internal/generate/testdata/transcripts -maxdepth 2 -name manifest.yaml | head -1)
-          if [ -z "$manifest" ]; then
-            echo "summary=no manifest.yaml in this run's artifact (a scoped --request_id run does not write one)" >> "$GITHUB_OUTPUT"
+          if [ -z "$MANIFEST_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
+            # L2 (round-4 review of #2814): `degraded` defaults to 0 (routine)
+            # for the two EXPECTED reasons this branch is reached (a
+            # not-clean capture, already flagged via CAPTURE_RESULT below
+            # regardless of this value; or a scoped run with nothing to
+            # patch). The third arm - success, the tree changed, yet no
+            # manifest.yaml at all - is NOT expected, and "Open the PR"
+            # below only escalates past a routine [!NOTE]-or-nothing title
+            # when MISSING>0 or DEGRADED>0: without setting degraded=1 here,
+            # that anomaly would open with the plain
+            # "chore(generate): capture provider transcripts" title and no
+            # banner at all, identical to a totally unremarkable run.
+            anomaly_degraded=0
+            if [ "$CAPTURE_RESULT" != "success" ]; then
+              summary_msg="capture did not finish cleanly and left no manifest.yaml in this run's artifact - likely a crash (panic, or a -timeout kill) between promoting transcripts and writing/patching the manifest, not a routine scoped re-capture; review the raw job log. Whatever WAS promoted above is still safe to use."
+            elif [ -n "$REQUEST_ID" ]; then
+              summary_msg="no manifest.yaml in this run's artifact (a scoped --request_id run patches an EXISTING manifest.yaml when one is there to patch, and writes none when there isn't - see runCapture's patchManifestForScopedRun)"
+            else
+              summary_msg="no manifest.yaml in this run's artifact even though capture reported success and the tree changed - unexpected for a full (non-scoped) run; review the raw job log"
+              anomaly_degraded=1
+            fi
+            {
+              echo "summary=${summary_msg}"
+              echo "missing=0"
+              echo "degraded=${anomaly_degraded}"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           {
             echo "summary<<EOF"
-            grep -E '^(provider|model|requestCount|passes|medianValidatePassRate|medianSemanticMatchRate|totalTokensUsed|estimatedCostUSD|corpusCommitSha):' "$manifest" || true
+            # M2 (round-3 review of #2814): a plain line-anchored grep on
+            # `degradedPasses:` only ever prints the (empty) key line -
+            # conduitio/yaml/v3 emits a YAML list's items on FOLLOWING
+            # indented lines, which the anchor (correctly) does not match,
+            # so the banner told readers to check a field this rendered
+            # nothing of. The awk state machine below keeps every other
+            # field's line-anchored, top-level-only matching EXACTLY as it
+            # was (in particular, passScores[].missingCount stays excluded -
+            # only the top-level `missingCount:` matches) and additionally
+            # follows `degradedPasses:` through its own indented list
+            # items, stopping at the next top-level (unindented) key.
+            awk '
+              /^(provider|model|requestCount|capturedCount|missingCount|passes|medianValidatePassRate|medianSemanticMatchRate|medianSampleSize|mediansUnreliable|totalTokensUsed|estimatedCostUSD|corpusCommitSha):/ { print; in_degraded=0; next }
+              /^degradedPasses:/ { print; in_degraded=1; next }
+              in_degraded && /^[[:space:]]/ { print; next }
+              { in_degraded=0 }
+            ' "$MANIFEST_PATH" || true
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+          # missing is its own output (not just embedded in the summary
+          # text block) so "Open the PR" can gate the banner and title on
+          # it directly, per the fix below: a missingCount > 0 run that
+          # still reports CAPTURE_RESULT == success (ordinary live-provider
+          # noise below captureCompletenessVerdict's threshold) must not
+          # look routine just because the job itself didn't fail.
+          missing=$(grep -E '^missingCount:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          echo "missing=${missing:-0}" >> "$GITHUB_OUTPUT"
+
+          # degraded is a SEPARATE signal from missing (H2, round-2 review
+          # of #2814): a request captured on an early pass but absent from
+          # a later one (a rate-limit storm or captureWallClockBudget
+          # expiring partway through) does not raise missingCount at all -
+          # runCapture's CapturedCount/MissingCount only require ONE pass
+          # to have produced a request - but CAN drag
+          # medianValidatePassRate/medianSemanticMatchRate down (that
+          # degraded pass scores the request as a hard fail on both axes -
+          # score.go's ScoreRun), which the routine-title/no-banner path
+          # would otherwise publish silently.
+          #
+          # M1-3 (round-5 review of #2814): degraded used to be
+          # `grep -c '^degradedPasses:'` - whether that KEY is present at
+          # all, not whether anything was actually excluded from the
+          # median. That is fail-open in the misleading direction: a run
+          # can have degradedPasses non-empty while summarizePasses'
+          # all-passes fallback folded every degraded pass in WITHOUT
+          # excluding it (every degraded pass missed the exact same,
+          # reliably-attributed request(s) - manifest.yaml's own
+          # medianSampleSize equals passes in that case, same as a run with
+          # NO degraded passes at all) - the old grep fired the DEGRADED
+          # banner and title regardless, claiming an exclusion that never
+          # happened. medianSampleSize < passes is the actual signal that
+          # real exclusion occurred (see Manifest.MedianSampleSize's own
+          # doc comment, transcript.go) - compare the two fields directly
+          # instead of checking degradedPasses' mere presence.
+          #
+          # A run where EVERY pass was degraded AND unreliable
+          # (Manifest.MediansUnreliable - B1 fix round-3, generalized H1
+          # round-4, H1 x H2 interaction and the preserveMediansIfNothing-
+          # Promoted shape-mismatch case both round-5, review of #2814)
+          # never reaches this line with CAPTURE_RESULT == success in the
+          # first place: runCapture fails that `go test` run outright
+          # (t.Errorf), so "Open the PR"'s CAPTURE_RESULT != "success"
+          # branch handles it with the [!WARNING] PARTIAL-capture title
+          # before this DEGRADED signal is ever consulted.
+          median_sample_size=$(grep -E '^medianSampleSize:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          manifest_passes=$(grep -E '^passes:' "$MANIFEST_PATH" | awk '{print $2}' || true)
+          degraded=0
+          if [ -n "${median_sample_size:-}" ] && [ -n "${manifest_passes:-}" ] \
+             && [ "${median_sample_size}" -lt "${manifest_passes}" ]; then
+            degraded=1
+          fi
+          echo "degraded=${degraded}" >> "$GITHUB_OUTPUT"
 
       - name: Open the PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.run_id }}
           SUMMARY: ${{ steps.summary.outputs.summary }}
+          MISSING: ${{ steps.summary.outputs.missing }}
+          DEGRADED: ${{ steps.summary.outputs.degraded }}
           REQUEST_ID: ${{ inputs.request_id }}
+          # Set by `!cancelled()` above even when `capture` FAILED (see the
+          # file header's "Partial results" section) - 'failure' here means
+          # captureCompletenessVerdict crossed the majority-missing floor (or
+          # something else in the job broke), never that nothing was
+          # captured: `changed == 'true'` (this job's own `if`) already
+          # proved something worth publishing landed on disk.
+          #
+          # CAPTURE_RESULT alone is NOT the right signal for "does this PR
+          # need a reader's attention": captureCompletenessVerdict only
+          # fails the job past a STRICT MAJORITY missing (>50%). The likely
+          # degraded case - say 13/28 (46%) missing from ordinary rate
+          # limiting - reports CAPTURE_RESULT == success and would open a
+          # routinely-titled PR with a green check, with the only trace
+          # being a `missingCount: 13` line inside a fenced code block. The
+          # banner and title below are gated on CAPTURE_RESULT != success
+          # OR MISSING > 0 OR DEGRADED > 0, not on CAPTURE_RESULT alone.
+          #
+          # DEGRADED (H2, round-2 review of #2814) catches a run MISSING
+          # alone cannot: a request captured on an early pass but absent
+          # from a later one leaves MissingCount at 0 (some pass produced
+          # it) while still dragging medianValidatePassRate/
+          # medianSemanticMatchRate toward zero (a degraded pass scores
+          # that request as a hard fail on both axes). Without this, a
+          # capture that lost its tail passes to rate limiting or
+          # captureWallClockBudget expiring would show MISSING=0 and a
+          # routine title while publishing a 0.00-adjacent median as the
+          # new baseline the next run gets compared against.
+          CAPTURE_RESULT: ${{ needs.capture.result }}
         run: |
           set -euo pipefail
           branch="generate-capture/$(date -u +%Y%m%d)-run${RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add cmd/conduit/internal/generate/testdata/transcripts
-          if [ -n "$REQUEST_ID" ]; then
+
+          # H3 fix (round-2 review of #2814): a promoted "<id>.yaml" makes
+          # any "<id>.missing.yaml" tombstone for the SAME id stale.
+          # runCapture (transcript_capture_test.go) already `os.Remove`s
+          # that tombstone the moment it promotes real data for an id - but
+          # only in the `capture` job's OWN checkout. The artifact
+          # `capture` uploads is a copy of the directory, which cannot
+          # represent a deletion; `download-artifact` above only overlays
+          # files onto this job's checkout of `main` (which may still carry
+          # the tombstone from an earlier run), so a blind `git add` would
+          # stage the new transcript but never stage the tombstone's
+          # removal - landing a tree with BOTH files, which LoadTranscripts
+          # (transcript.go) hard-errors on for every consumer until a human
+          # manually deletes the stale file. Explicitly `git rm` every
+          # tombstone whose id now also has a real transcript, so the
+          # deletion this job's checkout never saw gets staged here
+          # instead.
+          transcripts_dir="cmd/conduit/internal/generate/testdata/transcripts"
+          while IFS= read -r -d '' transcript; do
+            id_dir=$(dirname "$transcript")
+            id=$(basename "$transcript" .yaml)
+            tombstone="$id_dir/$id.missing.yaml"
+            if [ -f "$tombstone" ]; then
+              echo "removing stale tombstone for promoted id: $tombstone"
+              # M3 (round-3 review of #2814): --ignore-unmatch, not a bare
+              # `git rm`. `capture` and `publish` each run their OWN
+              # checkout, and publish's can land on a newer `main` than
+              # capture's - if some other, unrelated merge already removed
+              # this same tombstone from git's tree in the meantime,
+              # download-artifact's overlay still re-creates the FILE on
+              # disk (from capture's uploaded snapshot) but it is untracked
+              # in publish's own checkout, so a bare `git rm` fails
+              # ("did not match any files") and, under `set -euo pipefail`,
+              # aborts this whole step at exit 128 - after `git checkout -b`
+              # but before `git push` - so NOTHING publishes, even though
+              # everything captured is still safe on disk. --ignore-unmatch
+              # makes this a no-op instead: there is nothing left to stage
+              # a removal for, which is exactly correct.
+              git rm -q --ignore-unmatch "$tombstone"
+            fi
+          done < <(find "$transcripts_dir" -type f -name '*.yaml' ! -name 'manifest.yaml' ! -name '*.missing.yaml' -print0)
+
+          git add "$transcripts_dir"
+
+          banner=""
+          if [ "$CAPTURE_RESULT" != "success" ]; then
+            title="chore(generate): PARTIAL capture, review before merging (run ${RUN_ID})"
+            banner="> [!WARNING]
+          > \`capture\` did NOT finish cleanly (job result: \`${CAPTURE_RESULT}\`). Either a strict majority of
+          > requests never produced a completion (captureCompletenessVerdict, transcript_capture_test.go) or
+          > something else in the job failed. Everything below IS still what got captured and redaction-scanned
+          > clean - it is safe to review, but treat this as an incident to investigate, not a routine partial
+          > result.
+
+          "
+          elif [ "${MISSING:-0}" -gt 0 ] || [ "${DEGRADED:-0}" -gt 0 ]; then
+            if [ "${MISSING:-0}" -gt 0 ]; then
+              title="chore(generate): capture provider transcripts, ${MISSING} missing (run ${RUN_ID})"
+            else
+              title="chore(generate): capture provider transcripts, degraded pass(es) (run ${RUN_ID})"
+            fi
+            # M2 nit (round-3 review of #2814): the banner used to open
+            # with "> [!NOTE]\n> " unconditionally, then glue the MISSING
+            # text onto that trailing "> " - fine when MISSING fires, but
+            # when only DEGRADED fires the next block below prepends its
+            # OWN leading blank line, landing "> [!NOTE]\n> \n> At least
+            # one..." - an empty quoted paragraph GitHub renders as a
+            # visible blank line before the real content. Each block below
+            # now prepends its own "\n> " only when IT actually fires, so
+            # there is never an empty quoted line regardless of which
+            # combination of MISSING/DEGRADED is set.
+            banner="> [!NOTE]"
+            if [ "${MISSING:-0}" -gt 0 ]; then
+              banner="${banner}
+          > ${MISSING} request(s) are missing from this capture, below captureCompletenessVerdict's
+          > run-failing threshold - \`capture\` reported success, and this IS a routine partial result (ordinary
+          > live-provider noise: a 429, a timeout), not an incident. Review each \`requestOutcomes\` reason in the
+          > diff before relying on this batch for eval; re-capture the missing id(s) cheaply with
+          > \`-run TestCaptureTranscripts/<id>\`."
+            fi
+            if [ "${DEGRADED:-0}" -gt 0 ]; then
+              banner="${banner}
+          > At least one capture pass (manifest's \`degradedPasses\`) did not produce a completion for the whole
+          > corpus - a request captured on an earlier pass but absent from a later one (ordinary rate-limit noise,
+          > or \`captureWallClockBudget\` expiring partway through) still counts as this run's own kind of routine
+          > partial result: \`capturedCount\`/\`missingCount\` may both look clean while
+          > \`medianValidatePassRate\`/\`medianSemanticMatchRate\` were computed excluding the degraded pass(es) so
+          > they are not silently dragged toward zero. Check \`passScores[].missingCount\` in the diff before
+          > relying on this batch for eval."
+            fi
+            banner="${banner}
+
+          "
+          elif [ -n "$REQUEST_ID" ]; then
             title="chore(generate): re-capture transcript for ${REQUEST_ID}"
           else
             title="chore(generate): capture provider transcripts (run ${RUN_ID})"
@@ -194,7 +557,7 @@ jobs:
           gh pr create \
             --title "$title" \
             --body "$(cat <<EOF
-          Opened by \`.github/workflows/generate-capture.yml\` (run ${RUN_ID}), never pushed to main.
+          ${banner}Opened by \`.github/workflows/generate-capture.yml\` (run ${RUN_ID}), never pushed to main.
 
           ## Manifest
 
@@ -202,11 +565,16 @@ jobs:
           ${SUMMARY}
           \`\`\`
 
+          \`capturedCount\`/\`missingCount\` above are the headline numbers; \`manifest.yaml\`'s
+          \`requestOutcomes\` (in the diff) names every missing request id and why.
+
           ## Review checklist
 
           - [ ] \`TestTranscripts_CarryNoSecretMaterial\` is green on this PR (untagged, runs on every PR already)
           - [ ] Manifest numbers look sane against the last capture (see \`docs/generate-benchmark.md\` once A5b lands)
           - [ ] Diff is scoped to \`cmd/conduit/internal/generate/testdata/transcripts/\` only
+          - [ ] If \`missingCount\` > 0, review each \`requestOutcomes\` reason; re-capture cheaply with
+                \`-run TestCaptureTranscripts/<id>\` before relying on this batch for eval
 
           🤖 Generated by the \`generate-capture\` workflow, live-capture job holds the key and cannot write to the
           repo (\`contents: read\`) - this job has no key and only opens the PR.

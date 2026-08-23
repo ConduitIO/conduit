@@ -179,6 +179,26 @@ func TestValidateCandidate_FabricatedBuiltinPlugin_Fails(t *testing.T) {
 	is.True(report.Summary.Errors > 0)
 }
 
+// TestValidateCandidate_EmptyCandidate_Fails is the regression test for B2
+// (round-3 review of #2814): validate.RunBytes on zero bytes reports zero
+// findings (there is nothing in an empty document to find a problem WITH),
+// so before this fix validateCandidate("").OK() read true — a validate PASS
+// for a candidate that is empty because Generate exhausted every attempt
+// without ever extracting pipeline YAML (runCapture stores gen.Candidate
+// verbatim in its Candidates map in exactly that case — see
+// transcript_capture_test.go's inline comment on why an empty string, never
+// an omitted key). Whitespace-only is covered too (a candidate consisting
+// entirely of spaces/newlines is exactly as uninformative as "").
+func TestValidateCandidate_EmptyCandidate_Fails(t *testing.T) {
+	is := is.New(t)
+
+	for _, candidate := range []string{"", "   \n\t  "} {
+		report := validateCandidate(context.Background(), candidate)
+		is.True(!report.OK())
+		is.True(report.Summary.Errors > 0)
+	}
+}
+
 // --- semantic-intent axis ---
 
 func TestScoreSemantic_GoodCandidate_Matches(t *testing.T) {
@@ -334,6 +354,49 @@ func TestScoreRun_MissingCandidate_FailsBothMetrics(t *testing.T) {
 	is.True(rs.Results[0].Missing)
 	is.Equal(rs.ValidatePassRate, 0.0)
 	is.Equal(rs.SemanticMatchRate, 0.0)
+}
+
+// TestScoreRun_EmptyCandidate_FailsBothMetrics is the regression test for B2
+// (round-3 review of #2814): a request WITH an entry in the Candidates map
+// (Missing must stay false — the map DID have something for this id) whose
+// value is empty or whitespace-only must score a hard fail on BOTH axes,
+// never a validate PASS. Before this fix, ScoreRun delegated straight to
+// validateCandidate("") (report.OK() == true — nothing to find a problem
+// WITH) and scored this exactly like a real, passing candidate.
+func TestScoreRun_EmptyCandidate_FailsBothMetrics(t *testing.T) {
+	is := is.New(t)
+
+	requests := []Request{
+		{ID: "a", Prompt: "x", Expect: Expect{SourceCategory: "file", DestinationCategory: "log"}},
+	}
+	for _, candidate := range []string{"", "   \n\t  "} {
+		rs := ScoreRun(context.Background(), requests, Candidates{"a": candidate})
+
+		is.Equal(rs.Total, 1)
+		is.Equal(rs.ValidatePassCount, 0)
+		is.Equal(rs.SemanticMatchCount, 0)
+		is.True(!rs.Results[0].Missing) // the map DID have an entry for "a"
+		is.True(!rs.Results[0].ValidatePass)
+		is.True(!rs.Results[0].SemanticMatch)
+		is.Equal(rs.ValidatePassRate, 0.0)
+		is.Equal(rs.SemanticMatchRate, 0.0)
+
+		// L1 (round-4 review of #2814): ValidatePass/SemanticMatch being
+		// false alone does not prove THIS branch ran — validateCandidate's
+		// own empty-candidate guard (TestValidateCandidate_EmptyCandidate_Fails)
+		// would fail ValidatePass on its own, and scoreSemantic("") happens
+		// to report no match too, so a neutered version of ScoreRun's guard
+		// (score.go, the "default" case delegating straight to
+		// validateCandidate/scoreSemantic instead of short-circuiting)
+		// would still pass every assertion above. This exact message is
+		// only ever produced by ScoreRun's own guard (score.go), never by
+		// validateCandidate or scoreSemantic — pinning it is what actually
+		// exercises this branch instead of merely being consistent with it.
+		wantIssue := "the candidate is empty or whitespace-only — no usable pipeline was ever extracted for this request"
+		if len(rs.Results[0].SemanticIssues) != 1 || rs.Results[0].SemanticIssues[0] != wantIssue {
+			t.Fatalf("SemanticIssues = %v, want exactly [%q]", rs.Results[0].SemanticIssues, wantIssue)
+		}
+	}
 }
 
 func TestScoreRun_MixedResults_ComputesRatesOverFullDenominator(t *testing.T) {

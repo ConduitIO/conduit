@@ -172,6 +172,73 @@ func TestResolve_DevBuildSkipsCompatibilityCheck(t *testing.T) {
 	assert.Equal(t, "0.15.0", rv.Version.Version)
 }
 
+// TestResolve_PrereleaseOfExactMinimumSatisfies is the nightly-train
+// scenario from issue #2818: a running CONDUIT version that is a
+// PRERELEASE of the exact minConduitVersion must satisfy it, even though
+// plain semver precedence ranks any prerelease below its associated
+// release.
+//
+// RunningProtocolVersion is deliberately "0.14.0" (an ordinary, exact,
+// non-prerelease match) rather than mirroring RunningConduitVersion's
+// prerelease — before PR #2822's review (Finding 2), this test used
+// "0.14.0-nightly.1" for BOTH, which meant it was — unnoticed — also
+// asserting that a PRERELEASE protocol version satisfies its exact
+// minProtocolVersion. That was true only because checkMinVersion was, at
+// the time, shared between the minConduitVersion and minProtocolVersion
+// call sites: the carve-out this test exists to check leaked onto the
+// protocol gate too, and this test's use of an identical prerelease string
+// for both fields masked exactly that leak. Now that minProtocolVersion
+// goes through checkMinVersion directly (no carve-out — see
+// checkMinConduitVersion's doc, resolve.go), reusing the prerelease string
+// here would fail for the correct reason: this test is about the
+// CONDUIT-version carve-out specifically, so RunningProtocolVersion is
+// pinned to a value that satisfies MinProtocolVersion ordinarily, with no
+// carve-out required to make the point.
+// TestResolve_MinProtocolVersionNeverGetsPrereleaseCarveOut
+// (checkminversion_test.go) is the test that positively exercises the
+// leak scenario this one used to mask.
+func TestResolve_PrereleaseOfExactMinimumSatisfies(t *testing.T) {
+	rv, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.14.1", // MinConduitVersion 0.14.0, MinProtocolVersion 0.14.0
+		RunningConduitVersion: "0.14.0-nightly.1", RunningProtocolVersion: "0.14.0",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "0.14.1", rv.Version.Version)
+}
+
+// TestResolve_PrereleaseDoesNotSatisfyHigherMinimum bounds the deviation:
+// a prerelease only widens compatibility within the SAME (major, minor,
+// patch) core as the minimum. A prerelease of a version whose core is still
+// BELOW the requirement must not be let through — running truly lacks that
+// unreleased code.
+func TestResolve_PrereleaseDoesNotSatisfyHigherMinimum(t *testing.T) {
+	// 0.15.0 requires MinConduitVersion 99.0.0; a 0.15.0 prerelease's core
+	// (0.15.0) is nowhere near that, so this must still refuse exactly as a
+	// non-prerelease 0.15.0 would.
+	_, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.15.0",
+		RunningConduitVersion: "0.15.0-rc.1", RunningProtocolVersion: "0.15.0-rc.1",
+	})
+	require.Error(t, err)
+	ce, ok := conduiterr.Get(err)
+	require.True(t, ok)
+	assert.Equal(t, registry.CodeIncompatibleVersion, ce.Code)
+}
+
+// TestResolve_HigherCorePrereleaseAlreadySatisfiesOrdinarily is a sanity
+// check that ordinary semver precedence (untouched by the deviation) already
+// does the right thing when the running prerelease's core EXCEEDS the
+// minimum: "0.14.1-rc.1" > "0.14.0" under plain semver (core compared
+// first), with no special-casing required.
+func TestResolve_HigherCorePrereleaseAlreadySatisfiesOrdinarily(t *testing.T) {
+	rv, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.14.1", // MinConduitVersion 0.14.0
+		RunningConduitVersion: "0.14.1-rc.1", RunningProtocolVersion: "0.14.1-rc.1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "0.14.1", rv.Version.Version)
+}
+
 func TestResolve_DeprecatedIsNotRefused(t *testing.T) {
 	// Deprecated is a soft, informational flag (plan-v2 §7) — never a
 	// refusal reason, and no error code exists for it in the canonical
