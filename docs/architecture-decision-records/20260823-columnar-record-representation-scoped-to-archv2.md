@@ -51,10 +51,31 @@ why DuckDB, DataFusion and comparable engines are Arrow-based, and the reasoning
   versioning process, and `opencdc.Record` is exported by `conduit-commons`, which the SDK and every
   connector import. A greenfield project pays none of this; we have a registry with published
   connectors.
-- **No measurement yet.** CLAUDE.md forbids performance claims without reproducible benchi runs.
-  "Columnar is cheaper to move and process" is true in general. Whether it is true for CDC-shaped
-  traffic at Conduit's batch sizes is a different, measurable claim, and the numbers motivating the
-  suggestion come from analytics-shaped bulk reads.
+- **The measurements that motivated the suggestion quantify why it does not transfer.** They come
+  from PCS (<https://nassor.github.io/pcs/benchmarks/>, recorded 2026-08-22), which is careful work
+  — published configs, exact compiler flags, a reproduction script, and its own negative results
+  reported rather than hidden. It is worth reading. Three of its findings bear directly on Conduit:
+
+  - **"Processing 100 000 rows one at a time costs 325x the wall time of processing them in a
+    single batch."** Conduit's model _is_ one at a time: per-record acks, per-source-partition
+    ordering. That single number is the strongest available evidence that the columnar win is a
+    function of batch size, not of representation.
+  - **One-row checkpoints show 118x encoding overhead** versus a row-oriented format, attributed to
+    Arrow IPC framing; and the framework's per-item floor is **247 ns**. Both are small-batch
+    penalties, and small batches are where CDC lives.
+  - It is **not uniformly faster even in its own domain**: TPC-H Q1 aggregation comes out **2.18x
+    slower** than the scalar baseline, alongside a 13.54x win on Q6.
+
+  Two confounds make the headline numbers a poor predictor for us. PCS is **Rust**, built with
+  `-C target-cpu=native`, `opt-level=3`, thin LTO and mimalloc, so much of the win is SIMD that Go
+  cannot portably reach (see the SIMD note below). And the workload is **TPC-H Q1/Q6 over 100K-1M
+  row sets** — bulk analytics — with no comparison against Conduit, Kafka Connect, or any CDC
+  system.
+
+  None of this says columnar is wrong for Conduit. It says the case has to be made at Conduit's
+  batch sizes, on CDC-shaped data, in Go — which is what the benchi gate below is for. CLAUDE.md
+  forbids performance claims without reproducible benchi runs, and borrowing someone else's numbers
+  from a different language and a different workload would be exactly that.
 
 **Two related observations, recorded so they are not rediscovered.** WASI Preview 3 streams would
 reduce host↔guest copying for standalone processors; Conduit already instantiates WASM modules
