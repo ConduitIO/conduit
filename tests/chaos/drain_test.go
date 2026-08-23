@@ -510,13 +510,31 @@ func TestDrainProbe_LongDebounceGracefulChildIsNotAWedge(t *testing.T) {
 				numKeys:        tc.numKeys,
 				persistDelayMS: longDebounce,
 			})
+			start := time.Now()
 			cp.waitExit(t, parentWaitExit)
+			elapsed := time.Since(start)
 
 			// waitExit already fails on a non-zero exit, so reaching here
 			// means the child was not accused of a wedge. DONE additionally
 			// proves it drained to completion rather than exiting early.
 			_, done := cp.line(markerDone)
 			is.True(done)
+
+			// Vacuity guard. This probe only discriminates because the
+			// child's silent window (~6s of debounce) exceeds the bare
+			// ackDrainStallBudget (5s) - a margin of about one second that
+			// depends on facts stated nowhere else here:
+			// DefaultPersisterBundleCountThreshold (10000) staying above
+			// total, and no teardown-triggered early flush. Lower that
+			// threshold, raise total, or add an earlier flush trigger, and
+			// this test keeps PASSING while silently no longer killing the
+			// mutations it exists for - which is rounds 1-4's failure
+			// relocated one layer out yet again.
+			if elapsed < ackDrainStallBudget {
+				t.Fatalf("child finished in %s, under the %s bare stall budget: the %dms debounce "+
+					"did not actually gate this drain, so this probe no longer discriminates the "+
+					"mutation it exists to catch", elapsed, ackDrainStallBudget, longDebounce)
+			}
 		})
 	}
 }
@@ -530,8 +548,8 @@ func TestDrainBudgetsAreCoherent_RefusesADebounceTheClampCannotClear(t *testing.
 		want         bool
 	}{
 		{time.Millisecond, true},
-		{connector.DefaultPersisterDelayThreshold, true}, // 1s, the only value in the tree
-		{6 * time.Second, true},
+		{connector.DefaultPersisterDelayThreshold, true}, // 1s, every scenario child
+		{6 * time.Second, true},                          // the drain probe's debounce, the largest that reaches this drain
 		// The boundary: budget clamps to ackDrainHardCap-1s, so once the
 		// debounce reaches that, the budget no longer clears it.
 		{ackDrainHardCap - 2*time.Second, true},

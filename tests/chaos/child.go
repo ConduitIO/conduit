@@ -467,11 +467,23 @@ func runChild() {
 		// exactly the same reason drainStallBudget exists at all.
 		ackedCountBudget := drainStallBudget(effectivePersistDelay(cfg))
 		if !plugin.waitForAckedCount(cfg.total, ackedCountBudget) {
+			// Print how far it actually got. Without it a reader cannot tell
+			// 0/20 from 19/20 - which is exactly the wedge-vs-slowness
+			// distinction this change exists to preserve, on a required check.
+			//
+			// Be honest about the shape too: unlike the unkeyed path, this is
+			// still a flat wall clock from entry, not a progress bound. It is
+			// strictly weaker than main's (flat 5s -> debounce + 5s), so it is
+			// not a regression, but it does mean the exitDrainStalled below is
+			// a weaker claim here than on the unkeyed path. The counter is a
+			// monotonic watermark and could go through drainTracker; that is a
+			// follow-up, not a silent inconsistency.
 			fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for plugin to ack %d "+
-				"positions. Unlike the unkeyed path this waits on an in-memory counter with no "+
-				"fsync per position, so a timeout here is far more likely to be a wedge than "+
-				"slowness.\n",
-				markerFatal, ackedCountBudget, cfg.total)
+				"positions (reached %d). This waits on an in-memory counter - no fsync per "+
+				"position - but the counter still only advances when an ack reaches the stream "+
+				"via onPersistFlushed, so it is gated on the same persister flush the unkeyed "+
+				"path is.\n",
+				markerFatal, ackedCountBudget, cfg.total, plugin.ackedCount.Load())
 			os.Exit(exitDrainStalled)
 		}
 	} else {
@@ -810,9 +822,10 @@ func drainStallBudget(persistDelay time.Duration) time.Duration {
 // investigated, not re-run") for what is actually a harness
 // misconfiguration.
 //
-// Not reachable today - the largest debounce that reaches this drain
-// anywhere in the tree is the 1s default - so this is a guard on a
-// hypothetical, which is precisely why it should refuse loudly rather than
+// Not reachable today - the largest debounce reaching this drain is the
+// drain probe's 6s (drain_test.go); every scenario child uses the 1s
+// default - so this is a guard on a hypothetical, which is precisely why it
+// should refuse loudly rather than
 // wait to be discovered as a mystery wedge.
 func drainBudgetsAreCoherent(persistDelay time.Duration) bool {
 	return drainStallBudget(persistDelay) > persistDelay
