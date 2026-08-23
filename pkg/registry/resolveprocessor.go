@@ -167,7 +167,7 @@ func resolveProcessorNewestCompatible(proc *index.Processor, opts ResolveOptions
 // field stays present in every entry (see index.ProcessorVersion's doc)
 // and is simply never consulted for a compatibility decision.
 func checkProcessorCompatible(name string, v index.ProcessorVersion, opts ResolveOptions) error {
-	if err := checkMinVersion("minConduitVersion", v.MinConduitVersion, opts.RunningConduitVersion); err != nil {
+	if err := checkMinConduitVersion(v.MinConduitVersion, opts.RunningConduitVersion); err != nil {
 		return newProcessorIncompatibleError(name, v, opts)
 	}
 	return nil

@@ -34,17 +34,31 @@ import (
 // synthetic, mutually-consistent version fixtures that never exercised the
 // real mismatch).
 //
-// The entries below are copied verbatim (fields relevant to resolution only)
-// from https://github.com/ConduitIO/conduit-connector-registry's
+// The entries below reproduce the resolution-relevant fields from
+// https://github.com/ConduitIO/conduit-connector-registry's
 // index/index.json on main, index.version 10, timestamp
 // 2026-08-21T19:26:17Z — the same snapshot
 // TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality
-// (template_gallery_test.go) verified its prose against. If the registry
-// re-publishes ai.chunk/ai.embed/postgres with different min-versions this
-// will drift from "real" and should be re-synced, but it will not go
-// silently stale: a mismatch here would only make these tests pass or fail
-// on stale data, not corrupt anything, and the fixtures are annotated with
-// their source so re-syncing is a copy-paste.
+// (template_gallery_test.go) verified its prose against. Not quite
+// verbatim: the live index stores postgres's version as "v0.14.2" (leading
+// "v", matching its own git tag); the fixture below uses "0.14.2". That
+// difference is harmless — every comparison in this codebase goes through
+// NormalizeVersion (semver.go), which is leading-v tolerant by design — but
+// it means "copied verbatim" would overstate it, so this fixture is
+// reproduced-with-normalization-in-mind, not byte-for-byte.
+//
+// If the registry re-publishes ai.chunk/ai.embed/postgres with different
+// min-versions, this WILL go silently stale: nothing here detects that the
+// live index has drifted from what's hardcoded below, and a stale fixture
+// still runs and still passes. That is deliberately accepted, not an
+// oversight: a hardcoded fixture is definitionally unable to notice its
+// source moved without re-fetching it, and staleness here is low-stakes —
+// the fixtures only feed pure, no-I/O resolution logic, so a drifted
+// fixture makes this file's assertions describe an outdated snapshot, not a
+// production behavior change. The failure mode is "this test suite proves
+// less than its comment implies," not "this test suite lies about
+// something that matters" — and the source/timestamp annotation above
+// means re-syncing is a deliberate, easy copy-paste when someone notices.
 
 // realAIChunkProcessor is ConduitIO/conduit-processor-ai's published
 // ai.chunk@0.1.0 entry: minConduitVersion 0.20.0, minProtocolVersion 0.14.0
@@ -183,9 +197,24 @@ func TestResolve_RealPublishedEntry_ConnectorPathUnaffected(t *testing.T) {
 // TestResolve_MinProtocolVersionStillEnforcedForConnectors is the negative
 // counterpart to the above: a connector version whose minProtocolVersion
 // genuinely exceeds the running protocol must still be refused — proving
-// the connector protocol comparison itself (correct before #2818, and
-// untouched by its fix) still refuses on a real mismatch, not just that it
-// happens to pass against postgres's low bar.
+// the connector protocol comparison itself still refuses on a real
+// mismatch, not just that it happens to pass against postgres's low bar.
+//
+// This is checking more than it looks like: PR #2822's review found that
+// checkMinVersion originally being SHARED between the minConduitVersion and
+// minProtocolVersion call sites silently widened the protocol gate too —
+// the exact-minimum prerelease carve-out (see checkMinConduitVersion's doc,
+// resolve.go) does not belong on a wire-protocol comparison, but nothing
+// here would have caught it leaking there, because tooNew below is a
+// plain-release minimum against a plain-release-adjacent running value.
+// TestResolve_MinProtocolVersionNeverGetsPrereleaseCarveOut (resolve_test.go)
+// is the test that actually exercises the leak scenario (a PRERELEASE
+// running protocol against its exact-minimum release) and would have
+// failed against the pre-#2822-review code. This test's job is narrower:
+// confirm the protocol gate — whichever function backs it — still refuses
+// an ordinary, non-prerelease mismatch, i.e. that checking WHETHER
+// minProtocolVersion is compared for connectors was untouched by either
+// #2818 fix (only processors dropped that comparison).
 func TestResolve_MinProtocolVersionStillEnforcedForConnectors(t *testing.T) {
 	payload := realIndexPayload()
 	tooNew := realPostgresConnector()

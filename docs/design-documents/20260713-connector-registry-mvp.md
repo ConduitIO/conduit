@@ -161,7 +161,11 @@ of the integrity-checked bundle, not a bolt-on unsigned field. `kind` reserves r
 2. Resolve `<name>[@version]` **exact-match only** (no fuzzy/nearest-match — a typo'd name is a hard
    `ERR_NOT_FOUND`, never an auto-installed lookalike); if `@version` omitted, pick the newest
    version whose `minConduitVersion`/`minProtocolVersion` the running Conduit satisfies, so "latest"
-   never means "latest-incompatible". Refuse a yanked/revoked selection with its reason.
+   never means "latest-incompatible". Refuse a yanked/revoked selection with its reason. (This
+   section predates processor support and describes the **connector** install pipeline specifically:
+   both fields are compared for connectors, unchanged since this doc was written. Processors, added
+   later, diverge — `minProtocolVersion` is never compared for them; see
+   `20260727-registry-processor-artifacts.md` §D3 and issue #2818.)
 3. Select the host-OS/arch artifact; **none → refuse**, listing available platforms.
 4. Download (following any Scarf redirect) into a **per-install, `0700`, uniquely-named staging dir
    owned by the invoking user** — never a shared/predictable path.

@@ -408,16 +408,20 @@ type InstallBundleOptions struct {
 	LockTimeout time.Duration
 
 	// RunningConduitVersion/RunningProtocolVersion are this build's own
-	// versions, compared against the bundled version's minConduitVersion/
-	// minProtocolVersion exactly as an online install would (resolve.go) —
-	// an offline install must refuse an incompatible pinned version just as
-	// readily as an online one; being offline is not a compatibility
-	// exemption. This runs through the SAME Resolve/ResolveProcessor
-	// entry points as the online path (resolveBundleArtifact/
-	// resolveProcessorBundleArtifact below), so both the prerelease-tolerant
-	// minConduitVersion comparison and the processor path's
-	// no-minProtocolVersion-comparison (issue #2818, resolveprocessor.go)
-	// apply here identically — no separate algebra to keep in sync.
+	// versions, compared against the bundled version's minConduitVersion
+	// (and, for connectors only, minProtocolVersion) exactly as an online
+	// install would (resolve.go) — an offline install must refuse an
+	// incompatible pinned version just as readily as an online one; being
+	// offline is not a compatibility exemption. This runs through the SAME
+	// Resolve/ResolveProcessor entry points as the online path
+	// (resolveBundleArtifact/resolveProcessorBundleArtifact below), so both
+	// the minConduitVersion prerelease carve-out (checkMinConduitVersion,
+	// resolve.go) and the processor path's no-minProtocolVersion-comparison
+	// (issue #2818, resolveprocessor.go) apply here identically — no
+	// separate algebra to keep in sync. Processors specifically do NOT
+	// compare minProtocolVersion, online or offline (see
+	// checkProcessorCompatible's doc for why); the field stays on this
+	// struct only because it is shared with the connector path.
 	RunningConduitVersion  string
 	RunningProtocolVersion string
 
