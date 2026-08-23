@@ -51,6 +51,22 @@ import (
 // runPipeline's recovery arm, pkg/lifecycle-poc/service.go) - composed on top
 // of, not instead of, that already-proven connector/persister boundary.
 
+// lcPersistDelay is this file's persister debounce - fast, unlike the
+// connector-layer sigkill tests, which use the production-matching
+// connector.DefaultPersisterDelayThreshold to time a kill relative to that
+// specific window (see buildLifecycleChild's own comment on NewPersister for
+// why this scenario's crash windows don't need that). Hoisted to a constant,
+// used at both buildLifecycleChild's connector.NewPersister call and
+// runChildLifecycle's waitForUpstreamCommitted call, so the two cannot drift
+// - they did, once: the drain wait passed
+// connector.DefaultPersisterDelayThreshold (1s) under a comment claiming
+// "this child never overrides the debounce", while NewPersister was in fact
+// passing this file's own 10ms override two calls above. Benign in
+// direction (the derived stall budget was too generous, not too tight), but
+// exactly the kind of quiet divergence between a drain budget and the
+// persister that actually gates it this constant exists to make impossible.
+const lcPersistDelay = 10 * time.Millisecond
+
 // Environment variables for this file's child mode - a separate, small
 // protocol from child.go's envXxx constants (parsed by parseLCChildEnv, not
 // parseChildEnv), reusing only the generic re-exec/spawn/SIGKILL machinery in
@@ -787,7 +803,7 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 	// window sigkill_test.go already covers exhaustively, so fast,
 	// near-immediate flushing keeps this test quick without weakening what
 	// it proves.
-	persister := connector.NewPersister(logger, db, 10*time.Millisecond, 1)
+	persister := connector.NewPersister(logger, db, lcPersistDelay, 1)
 	store := connector.NewStore(db, logger)
 
 	sourceInstance := loadOrCreateInstance(ctx, store)
@@ -955,7 +971,12 @@ func runChildLifecycle() {
 	// markerLCDone and exit while that final commit is still in flight,
 	// producing a false-positive "off by one" gap that has nothing to do with
 	// the recovery loop under test.
-	waitForUpstreamCommitted(built.upstream, cfg.total)
+	// Use the SAME lcPersistDelay this file's buildLifecycleChild actually
+	// configured connector.NewPersister with (see lcPersistDelay's doc for
+	// why this must not be connector.DefaultPersisterDelayThreshold, which
+	// is what a stale comment here used to claim and what this call used to
+	// pass).
+	waitForUpstreamCommitted(built.upstream, cfg.total, lcPersistDelay)
 
 	fmt.Println(markerLCDone)
 	os.Exit(exitOK)

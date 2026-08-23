@@ -219,7 +219,7 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 	}
 
 	second := spawnChild(t, cfg)
-	second.waitExit(t, 30*time.Second)
+	second.waitExit(t, parentWaitExit)
 
 	resumeLine, ok := second.line("RESUME_POSITION")
 	is.True(ok)
