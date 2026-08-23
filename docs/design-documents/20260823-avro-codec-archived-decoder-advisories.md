@@ -358,9 +358,15 @@ surface the "new advisory, no fix" case automatically.
   explicitly in that PR's description so it isn't silently skipped.
 - No new runtime metric is warranted by this change alone — it's a dependency swap behind an
   unchanged `Serde` API, not a new capability with its own failure modes to instrument. The
-  existing `ErrInputTooLarge`/`ErrUnsupportedType`/`ErrSchemaValueMismatch` error paths from #278
-  and the pre-existing `schema/avro` package remain the operator-facing signal for a rejected or
-  malformed Avro payload.
+  existing `ErrInputTooLarge`/`ErrUnsupportedType`/`ErrSchemaValueMismatch` sentinel errors from
+  #278 and the pre-existing `schema/avro` package are the _underlying_ signal for a rejected or
+  malformed Avro payload, but as of this writing the built-in Avro processor
+  (`pkg/plugin/processor/builtin/impl/avro/internal/decoder.go`) wraps whatever `Serde.Unmarshal`
+  returns in a generic `cerrors.Errorf` with no stable `conduiterr.Code` — an operator sees an
+  undifferentiated decode failure, not "rejected: input exceeds the configured size limit."
+  Tracked separately as [`ConduitIO/conduit#2824`](https://github.com/ConduitIO/conduit/issues/2824);
+  out of scope for this doc and for #278 (neither touches the processor), but real, and worth
+  fixing before leaning on these sentinels as an operator-facing signal in practice.
 - Add a note to the migration PR's description recording the `iskorotkov/avro` version pinned and
   the date of the last verified "not archived, has a recent commit" check, so a future reviewer
   auditing dependency health doesn't have to redo this doc's research from scratch.
