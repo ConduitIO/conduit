@@ -42,6 +42,67 @@ happens if it goes stale too, because unlike this decision, that one has no fall
 This doc covers the replace decision. #278 (already open, not merged) covers the mitigation and
 is not gated on this doc landing — the two are independently useful.
 
+## Implementation status (added after DeVaris's sign-off)
+
+**Implemented.** The migration PR against `conduit-commons`
+(`feat/avro-codec-fork-swap`, stacked on `fix/avro-decoder-input-bounds` / #278) does the
+module-path swap and adds `MaxMapAllocSize`, as this doc's "Decision" and "Scope of the migration
+PR" sections called for below — but corrects one thing this doc got wrong before implementation
+started, and it matters enough to put at the top rather than leave buried in "Scope."
+
+**This doc's "Decision" section (below, unedited) said `MaxMapAllocSize` should be gated the same
+way `MaxSliceAllocSize` is — set only when an operator has opted into `WithMaxInputSize`.** That
+was wrong, caught while implementing it: if `MaxSliceAllocSize`/`MaxMapAllocSize` are only set
+behind that opt-in, and `WithMaxInputSize`'s own default is unlimited (correctly, per #278 — see
+that PR's mitigation history), then an operator who never calls `WithMaxInputSize` — the common
+case — decodes with both fields unset, which the fork resolves to its own `maxAllocSize` default
+(`1<<48` on 64-bit). That is functionally the same unbounded exposure as `hamba/avro` today. Gating
+it that way would have made the swap fix nothing beyond the overflow advisory by default — a
+compliance exercise (`govulncheck` goes quiet) with no accompanying reduction in real exposure,
+which is not the point of doing this.
+
+**Implemented instead: `MaxSliceAllocSize` and `MaxMapAllocSize` both get real, non-zero defaults,
+independent of `WithMaxInputSize`.** The asymmetry with `WithMaxInputSize` is deliberate, not an
+inconsistency — `MaxInputSize` bounds _bytes_, an axis this repo has no telemetry to safely default
+(a legitimate `jsonb`/`bytea` column can be multi-MiB, see #278's mitigation history for why a byte
+default broke real records twice). `MaxSliceAllocSize`/`MaxMapAllocSize` bound _element/entry
+counts_, a different axis where a single field with on the order of a million entries is already an
+extreme, non-ordinary shape — a default here can be generous enough to be invisible to every real
+record shape this project has seen while still bounding an attacker's worst case to fixed, tolerable
+memory and CPU. See the migration PR's `limits.go` for the full justification and the exact
+worst-case heap/CPU math behind `defaultMaxAllocSize = 1,000,000`.
+
+**The corrected picture, verified against `github.com/iskorotkov/avro/v2` v2.34.0 and re-verified
+against the implemented package's own regression tests** (naming below matches the migration PR's
+findings, not this doc's original prose, for traceability):
+
+| Finding | Fork alone | Fork + explicit `Config` (as implemented) |
+| --- | --- | --- |
+| **H1** (GO-2026-5047, `ReadBlockHeader` overflow → negative-length slice, `err == nil`) | **fixed** — `length64 <= math.MinInt` is checked and rejected before negating, unconditionally | fixed |
+| **C1** (2 GiB allocated from 5 wire bytes — array element count vs. byte budget) | **NOT fixed** — `MaxSliceAllocSize` unset resolves to the codec's own `1<<48` default | fixed — `MaxSliceAllocSize` now defaults to `1,000,000`, no opt-in required |
+| **C3** (GO-2026-5046/5048, unbounded map cardinality via a `TextUnmarshaler`-keyed map) | **NOT fixed** — unclosable against `hamba/avro` at any configuration; on the fork, `MaxMapAllocSize` unset resolves the same way as C1's `MaxSliceAllocSize` | fixed — `MaxMapAllocSize` now defaults to `1,000,000`, no opt-in required |
+
+This table supersedes the "Forward-compatible with the #278 mitigation" prose under Option 2c below
+wherever the two disagree on whether an ungated default exists — the option-2c prose still correctly
+describes the _pre-implementation_ gated design this doc originally proposed; it was not rewritten
+in place so the record of what was proposed versus what shipped stays intact. Trust this section and
+the migration PR over the prose below for current behavior.
+
+`govulncheck ./...` against the implemented branch reports no `GO-2026-5046`, `GO-2026-5047`, or
+`GO-2026-5048` finding; the pre-swap branch (`fix/avro-decoder-input-bounds`) reports all three
+against `github.com/hamba/avro/v2`, reachable through this package's own code paths, confirming the
+gate this doc's "Observability" section anticipated actually fires.
+
+**Behavioral compatibility, proven rather than assumed:** the full existing `schema`/`schema/avro`
+test suite passes unchanged except the one known divergence (`[]any(nil)` → `[]any{}` for empty
+arrays, already flagged as a bug by this repo's own pre-existing `TODO`). Wire compatibility was
+additionally verified with a standalone cross-codec harness — 14 schema/value shapes spanning
+primitives, arrays, maps, unions, nested records, and both logical types this package uses
+(`bytes.decimal`, `long.time-micros`) — encoding with `hamba/avro` and decoding with the fork, and
+the reverse, in both directions, plus a direct byte-for-byte comparison of the two codecs' encoded
+output for identical input. All 14 cases matched exactly in every direction: the "byte-identical
+wire format" claim in Option 2c below is evidence-backed, not inferred from "same fork lineage."
+
 ## How it was found
 
 Filed as [`ConduitIO/conduit#2817`](https://github.com/ConduitIO/conduit/issues/2817), found while
@@ -246,6 +307,15 @@ end state.
 
 ## Decision
 
+> **Correction (see "Implementation status" above):** the paragraph below, as originally written,
+> proposed gating `MaxMapAllocSize` behind `WithMaxInputSize`, mirroring `MaxSliceAllocSize`'s
+> pre-migration gating. That was wrong and was caught during implementation, not left as shipped:
+> gating it that way would mean the swap closes nothing beyond the overflow advisory for an
+> operator who never opts into `WithMaxInputSize` — the common case. What actually shipped gives
+> `MaxSliceAllocSize` and `MaxMapAllocSize` real, non-zero defaults independent of
+> `WithMaxInputSize`. Left unedited below for the historical record of what was proposed; do not
+> implement this paragraph as written.
+
 **Replace `github.com/hamba/avro/v2` with `github.com/iskorotkov/avro/v2` across
 `conduit-commons/schema/avro`, `conduit`'s built-in Avro processor, and any other direct
 consumers.** Keep #278's opt-in `WithMaxInputSize` / tightened `Config` bounds in place afterward
@@ -264,25 +334,39 @@ the migration PR, and chaos/upgrade tests updated or justified as unaffected (se
 
 ### Scope of the migration PR (separate from this doc)
 
-1. `conduit-commons`: module-path swap in `go.mod` and all `github.com/hamba/avro/v2` imports;
+> **Status: items 1 and 4 implemented** in `feat/avro-codec-fork-swap` (stacked on
+> `fix/avro-decoder-input-bounds` / #278). Item 4's gating direction was corrected during
+> implementation — see "Implementation status" above and the correction note under "Decision."
+> Items 2 and 3 (bumping `conduit`'s dependency, the org-wide `go mod why` sweep) remain open,
+> tracked as this doc's rollout steps 3–4 below.
+
+1. ~~`conduit-commons`: module-path swap in `go.mod` and all `github.com/hamba/avro/v2` imports;
    fix the one known test divergence (`[]any(nil)` → `[]any{}`); audit `union.go`,
    `avro_builder.go`, `extractor.go` for any other nil-vs-empty or similar edge-case divergence
    beyond what the existing test suite already covers — the one found here was caught by an
    existing test, but the audit should not stop at "the tests still pass," given hamba/avro's own
    `TODO` comment shows at least one previously-undetected edge case existed for years.
-   `go.mod`'s `go` directive bump to at least 1.24.13.
+   `go.mod`'s `go` directive bump to at least 1.24.13.~~ **Done.** Audit came back clean: the full
+   existing `schema`/`schema/avro` suite plus a standalone 14-case cross-codec wire-compatibility
+   harness (see "Implementation status") found no divergence beyond the one already known.
 2. `conduit`: bump the `conduit-commons` dependency; verify the built-in Avro processor's
-   acceptance tests and any Avro-specific integration tests pass unchanged.
+   acceptance tests and any Avro-specific integration tests pass unchanged. **Not yet done** —
+   separate follow-up PR against `ConduitIO/conduit` once this PR merges.
 3. Any other direct `hamba/avro/v2` consumer surfaced by a repo-wide `go mod why` sweep across
    `ConduitIO/*` (the issue's own investigation found `conduit-connector-pgvector` reaching it
    transitively through the SDK's schema support — that path updates automatically once
    `conduit-commons` is bumped, no separate connector-side change expected, but should be
-   confirmed with a real build+test run, not assumed).
-4. Add `MaxMapAllocSize` to `limits.go`'s frozen decode API, set only when an operator has opted
+   confirmed with a real build+test run, not assumed). **Not yet done** — depends on item 2 landing
+   first.
+4. ~~Add `MaxMapAllocSize` to `limits.go`'s frozen decode API, set only when an operator has opted
    into `WithMaxInputSize` (mirroring `MaxSliceAllocSize`'s gating as of #278's third revision —
    see #278's `limits.go` for why an ungated default is not defensible here either), with a value
    derived the same way `MaxSliceAllocSize` is (from the configured `maxInputSize`, not a fixed
-   constant or anything derived from a specific call's observed input).
+   constant or anything derived from a specific call's observed input).~~ **Done, but not as
+   written** — see the correction under "Decision": `MaxMapAllocSize` (and `MaxSliceAllocSize`)
+   ship with real, non-zero defaults (`defaultMaxAllocSize = 1,000,000`) independent of
+   `WithMaxInputSize`, not gated behind it. `WithMaxInputSize`, when configured, additionally
+   tightens both when it is the smaller bound.
 
 ### Re-evaluation trigger
 
@@ -373,14 +457,19 @@ surface the "new advisory, no fix" case automatically.
 
 ## Rollout
 
-1. This doc → DeVaris Tier-1 sign-off on the replace decision (fork target: `iskorotkov/avro/v2`).
-2. Migration PR against `conduit-commons` (scope above): module-path swap, fix the known test
-   divergence, audit for others, bump `go.mod`'s `go` directive, add `MaxMapAllocSize` to
-   `limits.go`. Tier 1: human sign-off, failure-mode analysis restated against the actual diff.
-3. Bump `conduit`'s `conduit-commons` dependency; run the built-in Avro processor's acceptance
-   tests and any Avro-touching integration/chaos suites.
-4. Repo-wide `go mod why -m github.com/hamba/avro/v2` sweep across `ConduitIO/*` to confirm no
-   other direct consumer was missed.
+1. **Done.** This doc → DeVaris Tier-1 sign-off on the replace decision (fork target:
+   `iskorotkov/avro/v2`).
+2. **Implemented, pending review.** Migration PR against `conduit-commons`
+   (`feat/avro-codec-fork-swap`, stacked on `fix/avro-decoder-input-bounds` / #278): module-path
+   swap, fix the known test divergence, audit for others (clean — see "Implementation status"),
+   bump `go.mod`'s `go` directive to 1.24.13, add `MaxMapAllocSize` to `limits.go` with real
+   defaults (not gated behind `WithMaxInputSize` as originally scoped — see the correction under
+   "Decision"). Tier 1: human sign-off still required before merge; failure-mode analysis restated
+   against the actual diff in the PR description itself, not just this doc.
+3. **Not started.** Bump `conduit`'s `conduit-commons` dependency; run the built-in Avro processor's
+   acceptance tests and any Avro-touching integration/chaos suites. Blocked on step 2 merging.
+4. **Not started.** Repo-wide `go mod why -m github.com/hamba/avro/v2` sweep across `ConduitIO/*`
+   to confirm no other direct consumer was missed. Blocked on step 3.
 5. No feature flag — this is a dependency substitution behind an unchanged API, not a new
    capability; the existing test suites are the gate.
 
