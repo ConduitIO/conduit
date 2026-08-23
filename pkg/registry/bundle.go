@@ -412,7 +412,12 @@ type InstallBundleOptions struct {
 	// minProtocolVersion exactly as an online install would (resolve.go) —
 	// an offline install must refuse an incompatible pinned version just as
 	// readily as an online one; being offline is not a compatibility
-	// exemption.
+	// exemption. This runs through the SAME Resolve/ResolveProcessor
+	// entry points as the online path (resolveBundleArtifact/
+	// resolveProcessorBundleArtifact below), so both the prerelease-tolerant
+	// minConduitVersion comparison and the processor path's
+	// no-minProtocolVersion-comparison (issue #2818, resolveprocessor.go)
+	// apply here identically — no separate algebra to keep in sync.
 	RunningConduitVersion  string
 	RunningProtocolVersion string
 

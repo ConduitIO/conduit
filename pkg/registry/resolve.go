@@ -43,7 +43,22 @@ type ResolveOptions struct {
 	// own "development" build-info fallback for a locally built binary) is
 	// treated as satisfying every compatibility check — a local dev build
 	// must not hard-refuse every install just because it has no embedded
-	// version.
+	// version. checkMinVersion additionally treats a PRERELEASE of the
+	// exact minimum version as satisfying it (see that function's doc) —
+	// so a nightly build can install something gated to the release it is
+	// building toward.
+	//
+	// RunningProtocolVersion is the conduit-connector-protocol module
+	// version, and is meaningful ONLY for connector resolution
+	// (checkCompatible, below) — connectors genuinely speak that protocol.
+	// Processor resolution (checkProcessorCompatible,
+	// resolveprocessor.go) does NOT compare it: there is no
+	// conduit-processor-protocol module for it to represent, and a
+	// processor entry's minProtocolVersion is a copied connector-SDK
+	// version that corresponds to nothing real (issue #2818). The field
+	// stays on this shared struct because InstallOptions/ResolveOptions is
+	// shared between the two entry points; it is simply never read on the
+	// processor path.
 	RunningConduitVersion  string
 	RunningProtocolVersion string
 }
@@ -182,6 +197,38 @@ func checkCompatible(name string, v index.ConnectorVersion, opts ResolveOptions)
 // checkMinVersion reports whether running satisfies >= minVer. An
 // unparsable running version (e.g. "development") is treated as satisfying
 // every check — see ResolveOptions's doc for why.
+//
+// Deliberate semver deviation: a PRERELEASE of the exact minimum version
+// satisfies it. Plain semver precedence ranks any prerelease below its
+// associated release for the same (major, minor, patch) — e.g.
+// "0.20.0-nightly.20260805" < "0.20.0" — so a strict comparison here would
+// mean no nightly build could ever install a connector/processor gated on
+// the release currently in flight. That makes the nightly train
+// permanently untestable for anything version-gated to the release it is
+// building toward, which is exactly the bug in
+// https://github.com/ConduitIO/conduit/issues/2818: the published
+// postgres-pgvector-rag processors pin minConduitVersion 0.20.0, so
+// v0.20.0-nightly.* builds — the only builds that exist before v0.20.0
+// ships — were refused by every one of them. Nobody caught it earlier
+// because the failure only reproduces against a real build's version
+// string, not the synthetic ones prior unit tests used.
+//
+// Scope is intentionally narrow: this widens compatibility only within the
+// SAME (major, minor, patch) core. "0.20.0-pre" satisfies ">= 0.20.0" but
+// must NOT satisfy ">= 0.20.1" or ">= 0.21.0" — running genuinely lacks
+// that unreleased code, and ordinary numeric precedence (which already
+// ranks a higher-core prerelease above a lower-core release, e.g.
+// "0.21.0-pre" > "0.20.0") is left untouched. A minVer that itself carries
+// a prerelease (an index entry pinned to a prerelease minimum) is also
+// left on ordinary precedence between same-core prereleases, so
+// "0.20.0-rc.0" still fails to satisfy ">= 0.20.0-rc.1".
+//
+// This is shared by both checkCompatible (connectors) and
+// checkProcessorCompatible (processors) — deliberately: the nightly-train
+// testability problem is identical for both artifact kinds (a connector
+// pinned to the in-flight release's minConduitVersion is exactly as
+// unresolvable on a nightly as a processor is), so the fix lives once,
+// here, rather than being special-cased per artifact kind.
 func checkMinVersion(label, minVer, running string) error {
 	minV, err := NormalizeVersion(minVer)
 	if err != nil {
@@ -191,6 +238,12 @@ func checkMinVersion(label, minVer, running string) error {
 	if err != nil {
 		return nil // unparsable running version (dev build): treat as compatible
 	}
+
+	if runV.Prerelease() != "" && minV.Prerelease() == "" &&
+		runV.Major() == minV.Major() && runV.Minor() == minV.Minor() && runV.Patch() == minV.Patch() {
+		return nil // prerelease of the exact minimum version: see doc above
+	}
+
 	if runV.LessThan(minV) {
 		return fmt.Errorf("%s %s not satisfied by running %s", label, minVer, running)
 	}

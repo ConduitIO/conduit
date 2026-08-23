@@ -32,12 +32,15 @@ type ResolvedProcessorVersion struct {
 }
 
 // ResolveProcessor is the processor analogue of Resolve, over
-// payload.Processors. It applies IDENTICAL rules — exact-match name
+// payload.Processors. It applies the SAME rules — exact-match name
 // (anti-typosquat, no fuzzy suggestion), revoked publisher refused, a pinned
 // yanked version refused, newest-non-yanked-compatible when @version is
-// omitted, and incompatible min-versions refused — differing only in the
-// collection it searches and the (processor-worded, processor-coded) errors it
-// returns. Like Resolve it never mutates payload and performs no I/O.
+// omitted, and an incompatible min-version refused — differing in the
+// collection it searches, the (processor-worded, processor-coded) errors it
+// returns, and ONE deliberate divergence: minConduitVersion is checked but
+// minProtocolVersion is NOT (see checkProcessorCompatible's doc — there is no
+// meaningful processor-side protocol version to compare against). Like
+// Resolve it never mutates payload and performs no I/O.
 //
 // It deliberately does NOT refuse a deprecated version: deprecated is a soft,
 // informational flag surfaced by the caller, not a trust or safety state —
@@ -132,21 +135,39 @@ func resolveProcessorNewestCompatible(proc *index.Processor, opts ResolveOptions
 	}
 
 	e := conduiterr.New(CodeIncompatibleVersion, fmt.Sprintf(
-		"no version of %q is compatible with the running Conduit (conduit %s, protocol %s)",
-		proc.Name, opts.RunningConduitVersion, opts.RunningProtocolVersion))
+		"no version of %q is compatible with the running Conduit (conduit %s)",
+		proc.Name, opts.RunningConduitVersion))
 	e.Suggestion = "upgrade Conduit, or pin an older @version explicitly if you know one is compatible"
 	return nil, e
 }
 
 // checkProcessorCompatible refuses a candidate version whose MinConduitVersion
-// or MinProtocolVersion exceeds the running build's own versions. It reuses
-// checkMinVersion (resolve.go) verbatim — the compatibility algebra is
-// identical to connectors; only the error wording/type differs.
+// exceeds the running build's own version.
+//
+// Unlike checkCompatible (connectors, resolve.go), it deliberately does NOT
+// check MinProtocolVersion. A processor entry's minProtocolVersion has no
+// real meaning to compare against: there is no conduit-processor-protocol
+// module (verified against the module proxy — it does not exist), and
+// processors are built against conduit-processor-sdk, not
+// conduit-connector-protocol. The published entries' minProtocolVersion
+// values (e.g. "0.14.0" for ai.chunk/ai.embed) are a copy of an unrelated
+// connector-SDK version and correspond to nothing this binary can honestly
+// report. Comparing them against opts.RunningProtocolVersion — which IS a
+// real version, just the wrong module's (conduit-connector-protocol) — is
+// how issue #2818 happened: `conduit processor-plugins install ai.chunk`
+// refused on every build because 0.9.5 (the connector protocol pin) will
+// never satisfy an unrelated 0.14.0 minimum.
+//
+// This does not require re-signing the published index: index entries keep
+// their minProtocolVersion field (the frozen schema still declares it, and
+// changing published, already-hashed/signed entries would need a
+// role:root-gated re-sign and maintainer approval — see R-1's identity
+// pinning, which treats an already-registered entry's fields the same
+// way). Dropping the comparison here is a client-side, additive fix: the
+// field stays present in every entry (see index.ProcessorVersion's doc)
+// and is simply never consulted for a compatibility decision.
 func checkProcessorCompatible(name string, v index.ProcessorVersion, opts ResolveOptions) error {
 	if err := checkMinVersion("minConduitVersion", v.MinConduitVersion, opts.RunningConduitVersion); err != nil {
-		return newProcessorIncompatibleError(name, v, opts)
-	}
-	if err := checkMinVersion("minProtocolVersion", v.MinProtocolVersion, opts.RunningProtocolVersion); err != nil {
 		return newProcessorIncompatibleError(name, v, opts)
 	}
 	return nil
@@ -154,11 +175,13 @@ func checkProcessorCompatible(name string, v index.ProcessorVersion, opts Resolv
 
 // newProcessorIncompatibleError is newIncompatibleError's processor twin:
 // CodeIncompatibleVersion with the required-vs-running facts and a concrete fix
-// suggestion ("errors are API").
+// suggestion ("errors are API"). It reports only Conduit versions — see
+// checkProcessorCompatible's doc for why protocol is not part of this
+// decision for processors.
 func newProcessorIncompatibleError(name string, v index.ProcessorVersion, opts ResolveOptions) error {
 	e := conduiterr.New(CodeIncompatibleVersion, fmt.Sprintf(
-		"processor %q version %s requires Conduit >= %s and protocol >= %s; running Conduit %s, protocol %s",
-		name, v.Version, v.MinConduitVersion, v.MinProtocolVersion, opts.RunningConduitVersion, opts.RunningProtocolVersion))
+		"processor %q version %s requires Conduit >= %s; running Conduit %s",
+		name, v.Version, v.MinConduitVersion, opts.RunningConduitVersion))
 	e.Suggestion = fmt.Sprintf(
 		"upgrade Conduit to >= %s, or install an older %s version compatible with your running Conduit (omit @version to auto-select one)",
 		v.MinConduitVersion, name)

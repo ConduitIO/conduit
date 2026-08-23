@@ -172,6 +172,52 @@ func TestResolve_DevBuildSkipsCompatibilityCheck(t *testing.T) {
 	assert.Equal(t, "0.15.0", rv.Version.Version)
 }
 
+// TestResolve_PrereleaseOfExactMinimumSatisfies is the nightly-train
+// scenario from issue #2818: a running version that is a PRERELEASE of the
+// exact minimum required version must satisfy it, even though plain semver
+// precedence ranks any prerelease below its associated release.
+func TestResolve_PrereleaseOfExactMinimumSatisfies(t *testing.T) {
+	rv, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.14.1", // MinConduitVersion 0.14.0
+		RunningConduitVersion: "0.14.0-nightly.1", RunningProtocolVersion: "0.14.0-nightly.1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "0.14.1", rv.Version.Version)
+}
+
+// TestResolve_PrereleaseDoesNotSatisfyHigherMinimum bounds the deviation:
+// a prerelease only widens compatibility within the SAME (major, minor,
+// patch) core as the minimum. A prerelease of a version whose core is still
+// BELOW the requirement must not be let through — running truly lacks that
+// unreleased code.
+func TestResolve_PrereleaseDoesNotSatisfyHigherMinimum(t *testing.T) {
+	// 0.15.0 requires MinConduitVersion 99.0.0; a 0.15.0 prerelease's core
+	// (0.15.0) is nowhere near that, so this must still refuse exactly as a
+	// non-prerelease 0.15.0 would.
+	_, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.15.0",
+		RunningConduitVersion: "0.15.0-rc.1", RunningProtocolVersion: "0.15.0-rc.1",
+	})
+	require.Error(t, err)
+	ce, ok := conduiterr.Get(err)
+	require.True(t, ok)
+	assert.Equal(t, registry.CodeIncompatibleVersion, ce.Code)
+}
+
+// TestResolve_HigherCorePrereleaseAlreadySatisfiesOrdinarily is a sanity
+// check that ordinary semver precedence (untouched by the deviation) already
+// does the right thing when the running prerelease's core EXCEEDS the
+// minimum: "0.14.1-rc.1" > "0.14.0" under plain semver (core compared
+// first), with no special-casing required.
+func TestResolve_HigherCorePrereleaseAlreadySatisfiesOrdinarily(t *testing.T) {
+	rv, err := registry.Resolve(testPayload(), registry.ResolveOptions{
+		Name: "postgres", Version: "0.14.1", // MinConduitVersion 0.14.0
+		RunningConduitVersion: "0.14.1-rc.1", RunningProtocolVersion: "0.14.1-rc.1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "0.14.1", rv.Version.Version)
+}
+
 func TestResolve_DeprecatedIsNotRefused(t *testing.T) {
 	// Deprecated is a soft, informational flag (plan-v2 §7) — never a
 	// refusal reason, and no error code exists for it in the canonical
