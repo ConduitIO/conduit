@@ -461,16 +461,21 @@ surface the "new advisory, no fix" case automatically.
 
 1. **Done.** This doc → DeVaris Tier-1 sign-off on the replace decision (fork target:
    `iskorotkov/avro/v2`).
-2. **Implemented, pending review.** Migration PR against `conduit-commons`
+2. **Done — merged 2026-08-24.** Migration PR against `conduit-commons`
    ([`ConduitIO/conduit-commons#279`](https://github.com/ConduitIO/conduit-commons/pull/279),
-   stacked on `fix/avro-decoder-input-bounds` / #278): module-path
-   swap, fix the known test divergence, audit for others (clean — see "Implementation status"),
-   bump `go.mod`'s `go` directive to 1.24.13, add `MaxMapAllocSize` to `limits.go` with real
-   defaults (not gated behind `WithMaxInputSize` as originally scoped — see the correction under
-   "Decision"). Tier 1: human sign-off still required before merge; failure-mode analysis restated
-   against the actual diff in the PR description itself, not just this doc.
+   stacked on `fix/avro-decoder-input-bounds` / [#278](https://github.com/ConduitIO/conduit-commons/pull/278)):
+   module-path swap, fix the known test divergence, audit for others (clean — see "Implementation
+   status"), bump `go.mod`'s `go` directive to 1.24.13, add `MaxMapAllocSize` to `limits.go` with
+   real defaults (not gated behind `WithMaxInputSize` as originally scoped — see the correction
+   under "Decision"). #278 merged first; #279 was rebased onto the resulting squash and re-verified
+   green against the new base before merge.
+
+   Note for anyone reading the history: #278 alone did **not** mitigate the advisories. Its input
+   ceiling is opt-in and `MaxInputSize` defaults to `0` (unlimited), so the default posture was
+   unchanged until #279 landed the codec swap and the 1M allocation defaults. An adversarial review
+   of a separate remediation plan initially recorded #278 as sufficient; it was not.
 3. **Not started.** Bump `conduit`'s `conduit-commons` dependency; run the built-in Avro processor's
-   acceptance tests and any Avro-touching integration/chaos suites. Blocked on step 2 merging.
+   acceptance tests and any Avro-touching integration/chaos suites. **Unblocked** — step 2 is merged.
 4. **Not started.** Repo-wide `go mod why -m github.com/hamba/avro/v2` sweep across `ConduitIO/*`
    to confirm no other direct consumer was missed. Blocked on step 3.
 5. No feature flag — this is a dependency substitution behind an unchanged API, not a new
