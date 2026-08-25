@@ -770,7 +770,7 @@ func TestServiceLifecycle_Recovery_TransientErrorRecovers(t *testing.T) {
 	// Wait until the pipeline has recovered: it must have passed through
 	// Recovering and be Running again. (The initial run also briefly reports
 	// Running, so "Running after a Recovering" is what distinguishes recovery.)
-	waitForRecovered(t, rec)
+	waitForRecovered(t, rec, pl)
 
 	// The recovered run delivers its records end-to-end; wait for the source to
 	// ack them so the graceful stop below has a deterministic last position.
@@ -905,7 +905,12 @@ func TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus(t *test
 	// pre-recovery error resurfacing from a dead tomb, and no orphaned run
 	// left behind (which is what stopAndWaitPersister above would hang on).
 	waitForRecordsAcked(t, source, healthyRecords)
-	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+	// Poll rather than read instantly: close(release) only lets the post-recovery
+	// UpdateStatus(StatusRunning) call PROCEED, it does not wait for it to land on
+	// the instance, and the records this test just waited on were already acked
+	// while the window was frozen — so an instant read here races the status write
+	// with no intervening delay at all. See waitForRecovered for the full ordering.
+	waitForStatus(t, pl, pipeline.StatusRunning)
 
 	is.NoErr(ls.Stop(ctx, pl.ID, false))
 	is.NoErr(ls.WaitPipeline(pl.ID))
@@ -1754,7 +1759,7 @@ func TestServiceLifecycle_NSource_TransientErrorOneSource_Recovers(t *testing.T)
 
 	// Wait until the pipeline has recovered: it must have passed through
 	// Recovering and be Running again.
-	waitForRecovered(t, rec)
+	waitForRecovered(t, rec, pl)
 
 	waitForRecordsAcked(t, sourceA, healthyRecords)
 	is.Equal(pipeline.StatusRunning, pl.GetStatus())
@@ -1925,24 +1930,56 @@ func (r *statusRecorder) snapshot() []pipeline.Status {
 	return out
 }
 
-// waitForRecovered blocks until the recorded status sequence shows a recovery:
-// a Recovering entry followed by a later Running. Fails the test on timeout.
-func waitForRecovered(t *testing.T, rec *statusRecorder) {
+// waitForRecovered blocks until the pipeline has recovered: the recorded status
+// sequence shows a Recovering entry followed by a later Running, AND the live
+// instance actually reports StatusRunning. Fails the test on timeout.
+//
+// Both halves are load-bearing, and the second one is why this takes pl.
+//
+// The recorder is only a LEADING indicator. statusRecorder.UpdateStatus appends
+// the status and runs its hook BEFORE delegating to the wrapped
+// pipeline.Service, which is what actually calls Instance.SetStatus. So the
+// recorded post-recovery Running appears strictly before pl.GetStatus() returns
+// Running, and the gap is a full pipeline.Service.UpdateStatus call (a Get, two
+// metrics updates, and a store write).
+//
+// Record flow is not a substitute watermark either: runPipeline releases every
+// worker goroutine (close(registered)) BEFORE it calls
+// UpdateStatus(StatusRunning), so the recovered run can read, write and ack its
+// entire record set while that status write is still in flight. That is exactly
+// how TestServiceLifecycle_Recovery_TransientErrorRecovers used to flake in CI
+// — waitForRecovered followed by waitForRecordsAcked followed by an INSTANT
+// is.Equal(StatusRunning, pl.GetStatus()) that read Recovering, because neither
+// wait is ordered after the status write. Unlike the initial start (ls.Start
+// returns only after runPipeline's status write completes), a recovery restart
+// runs on the tomb's cleanup goroutine, so nothing in the test goroutine is
+// synchronized with it. Polling the live value here is the ordering the test
+// actually needs; it is a watermark, not a widened timeout.
+func waitForRecovered(t *testing.T, rec *statusRecorder, pl *pipeline.Instance) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
+	recovered := false
 	for {
 		statuses := rec.snapshot()
-		seenRecovering := false
-		for _, s := range statuses {
-			switch {
-			case s == pipeline.StatusRecovering:
-				seenRecovering = true
-			case s == pipeline.StatusRunning && seenRecovering:
-				return // Running after a Recovering == recovered
+		if !recovered {
+			seenRecovering := false
+			for _, s := range statuses {
+				switch {
+				case s == pipeline.StatusRecovering:
+					seenRecovering = true
+				case s == pipeline.StatusRunning && seenRecovering:
+					recovered = true // Running after a Recovering == recovered
+				}
 			}
 		}
+		if recovered && pl.GetStatus() == pipeline.StatusRunning {
+			return
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for pipeline to recover (statuses: %v)", statuses)
+			t.Fatalf(
+				"timed out waiting for pipeline to recover (recorded: %v, live status: %s)",
+				statuses, pl.GetStatus(),
+			)
 		}
 		time.Sleep(time.Millisecond)
 	}
