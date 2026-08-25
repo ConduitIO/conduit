@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.38
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.37
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.3
-	github.com/cohere-ai/cohere-go/v2 v2.14.1
+	github.com/cohere-ai/cohere-go/v2 v2.18.2
 	github.com/conduitio/conduit-commons v0.6.0
 	github.com/conduitio/conduit-connector-file v0.10.8
 	github.com/conduitio/conduit-connector-generator v0.10.4
