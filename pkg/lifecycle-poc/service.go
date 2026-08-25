@@ -84,6 +84,28 @@ type Service struct {
 	// docs/design-documents/20260706-forceful-stop-test-determinism.md.
 	terminalErrors *csync.Map[string, error]
 
+	// testWorkersReleased, if set, is called synchronously from runPipeline
+	// immediately after this run's worker goroutines are released (i.e.
+	// right after close(registered)) — the earliest instant a worker could
+	// possibly do observable work (read/process/ack a record). It exists
+	// solely so a test can hold that instant open deterministically, instead
+	// of racing it, to prove the #2833 regression: that runningPipelines
+	// already points at THIS run before any worker can be released, even on
+	// a recovery restart where a dead run's entry would otherwise still be
+	// in the map. Mirrors the same "wrap/hook a collaborator instead of
+	// sleeping" seam shape as statusRecorder.onUpdate in the test file,
+	// applied here because the window under test closes before the
+	// PipelineService is ever called, so hooking UpdateStatus cannot observe
+	// it.
+	//
+	// Nil in production — NewService never sets it — so the call site below
+	// is a single unlocked nil-check with no synchronization and no
+	// observable effect when unset: zero behavior change outside tests.
+	// Exported to the package's test files only by being unexported (they
+	// share this package) and set directly on a *Service under test; there
+	// is no production code path that can set or read it.
+	testWorkersReleased func(rp *runnablePipeline)
+
 	isGracefulShutdown atomic.Bool
 	metricsDisabled    bool
 }
@@ -1661,25 +1683,22 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return err
 	})
 
-	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
-	// registered on the tomb, so release the workers: none of them can any
-	// longer drive tomb.alive to 0 before the cleanup goroutine exists. This
-	// must happen BEFORE the UpdateStatus call below, which is potentially
-	// slow — the workers only need the registration barrier, not the status
-	// write (the cleanup goroutine is the one that waits for that, via
-	// startupDone).
-	close(registered)
-
 	// Publish this run as THE live run for its pipeline ID, here and not in
-	// Start (#2746).
+	// Start (#2746), and — critically — BEFORE close(registered) below
+	// releases the worker goroutines (#2833).
 	//
-	// Invariant: whenever a caller can observe the pipeline as running,
-	// runningPipelines[id] is the run that is actually running. Every public
-	// entry point resolves a pipeline through this map — Stop, StopAll,
-	// WaitPipeline, StopAndWait (and thus provisioning.ApplyPlanLive) — and
-	// StartWithBackoff's "am I still the live pipeline" guard is a pointer
-	// comparison against it. A stale entry does not fail loudly; it makes all
-	// of them operate on the previous, already-dead run.
+	// Invariant 7: whenever a caller can observe the pipeline as running (and,
+	// as of #2833, whenever any worker can be observed to be doing work at
+	// all), runningPipelines[id] is the run that is actually running. Every
+	// public entry point resolves a pipeline through this map — Stop,
+	// StopAll, WaitPipeline, StopAndWait (and thus
+	// provisioning.ApplyPlanLive) — and StartWithBackoff's "am I still the
+	// live pipeline" guard is a pointer comparison against it. A stale entry
+	// does not fail loudly; it makes all of them operate on the previous,
+	// already-dead run, which is a graceful-shutdown/Stop correctness bug
+	// (invariant 7): a Stop that lands in the stale window stops the DEAD
+	// run and returns success while the actually-running one keeps consuming
+	// and acking records, unsupervised.
 	//
 	// Start used to Set this AFTER runPipeline returned, i.e. after the
 	// UpdateStatus below had already announced StatusRunning. On a recovery
@@ -1688,7 +1707,18 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// the FAILED run: WaitPipeline joined the dead tomb and returned the
 	// pre-recovery error for a pipeline that had just recovered, and Stop
 	// stopped the dead run while the recovered one kept going — leaving a
-	// pipeline nobody could stop and a persister that never quiesced.
+	// pipeline nobody could stop and a persister that never quiesced. #2746/
+	// #2812 fixed that window (Set before UpdateStatus) but left a second,
+	// narrower one: close(registered) below hands worker goroutines their
+	// release signal, and a worker released from <-registered can reach
+	// w.Do — reading, processing and acking records — before this goroutine
+	// gets back around to the Set call, if Set runs after it. On a recovery
+	// restart that is exactly the same stale-map window as #2746, just
+	// shrunk to two adjacent statements instead of spanning the UpdateStatus
+	// call: a Stop landing between close(registered) and Set still resolves
+	// the DEAD run (#2833). Publishing here, before close(registered), closes
+	// it: by the time any worker can possibly be released to do anything
+	// observable, the map already points at THIS run.
 	//
 	// This is the correct publish point, and it needs no rollback on error:
 	//   - every earlier return in this function (sink Open, worker Open)
@@ -1700,6 +1730,24 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	//     can never Delete before this Set, which would strand a live run
 	//     outside the map.
 	s.runningPipelines.Set(rp.pipeline.ID, rp)
+
+	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
+	// registered on the tomb, so release the workers: none of them can any
+	// longer drive tomb.alive to 0 before the cleanup goroutine exists. This
+	// must happen BEFORE the UpdateStatus call below, which is potentially
+	// slow — the workers only need the registration barrier and the Set
+	// above, not the status write (the cleanup goroutine is the one that
+	// waits for that, via startupDone) — and it must happen AFTER the Set
+	// above, per the invariant-7 comment there (#2833): a worker released
+	// any earlier could act while the map still pointed at a dead run.
+	close(registered)
+
+	// testWorkersReleased, if set, lets a test observe/hold this exact
+	// instant — workers released, run published, status not yet announced —
+	// deterministically. See its doc.
+	if s.testWorkersReleased != nil {
+		s.testWorkersReleased(rp)
+	}
 
 	// It's now safe to make the potentially slow UpdateStatus call and then
 	// release the cleanup goroutine to make its own. close(startupDone)
