@@ -84,6 +84,7 @@ const (
 	envLCTotal      = "CONDUIT_CHAOS_LC_TOTAL"
 	envLCPaceMS     = "CONDUIT_CHAOS_LC_PACE_MS"
 	envLCFailAt     = "CONDUIT_CHAOS_LC_FAIL_AT"
+	envLCHoldAt     = "CONDUIT_CHAOS_LC_HOLD_AT"
 	envLCMinDelayMS = "CONDUIT_CHAOS_LC_MIN_DELAY_MS"
 	envLCMaxDelayMS = "CONDUIT_CHAOS_LC_MAX_DELAY_MS"
 	envLCGraceful   = "CONDUIT_CHAOS_LC_GRACEFUL"
@@ -110,6 +111,15 @@ const (
 	// pipeline cleanly and confirmed every record through cfg.total was
 	// acked - the counterpart to child.go's markerDone for this scenario.
 	markerLCDone = "LC_DONE"
+	// markerLCHeld ("LC_HELD <pos>") is printed once by
+	// recoverySourcePlugin.produceLoop when a nonzero holdAt cap has stopped
+	// production - see holdAt's field doc for why this cap exists. Purely a
+	// diagnostic/observability line for the parent (and for
+	// TestRecoveryChild_HoldAt_CapsProductionBelowTotal, which asserts the
+	// cap directly); no scenario gates its SIGKILL on it, because the cap's
+	// whole point is to bound the child's progress REGARDLESS of when the
+	// parent gets scheduled to look.
+	markerLCHeld = "LC_HELD"
 )
 
 // lcChildConfig is the parent-side (harness) counterpart to lcChildEnv,
@@ -123,6 +133,27 @@ type lcChildConfig struct {
 	total  uint64
 	paceMS int
 	failAt uint64 // 0 = this dispense never fails
+
+	// holdAt caps how far this process's source may ever produce, making a
+	// mid-run SIGKILL's landing point bounded BY CONSTRUCTION instead of by
+	// the parent winning a race. Once position holdAt has been sent, the
+	// producer prints markerLCHeld and stops for good (it never reaches
+	// total), so no matter how long the parent is descheduled between
+	// deciding to kill and the signal actually landing, the durable
+	// committed watermark this process can leave behind is <= holdAt.
+	// TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun's
+	// "committedAtKill < total" precondition is exactly that bound; before
+	// this cap existed the child was free-running to total and that
+	// precondition was merely probable, which is what made that test flaky
+	// (#2836).
+	//
+	// 0 (the default, and the value every other scenario in this package
+	// leaves it at) disables the cap entirely - the producer behaves exactly
+	// as it did before this seam existed. It is only ever meaningful for the
+	// crashable variant; graceful children must leave it 0 (enforced in
+	// parseLCChildEnv), since a capped producer could never reach total and
+	// the graceful path waits for exactly that.
+	holdAt uint64
 
 	minDelayMS int
 	maxDelayMS int
@@ -147,6 +178,7 @@ func (c lcChildConfig) env() []string {
 		envLCTotal + "=" + strconv.FormatUint(c.total, 10),
 		envLCPaceMS + "=" + strconv.Itoa(c.paceMS),
 		envLCFailAt + "=" + strconv.FormatUint(c.failAt, 10),
+		envLCHoldAt + "=" + strconv.FormatUint(c.holdAt, 10),
 		envLCMinDelayMS + "=" + strconv.Itoa(c.minDelayMS),
 		envLCMaxDelayMS + "=" + strconv.Itoa(c.maxDelayMS),
 		envLCGraceful + "=" + strconv.FormatBool(c.graceful),
@@ -165,6 +197,7 @@ type lcChildEnv struct {
 	total  uint64
 	paceMS int
 	failAt uint64
+	holdAt uint64
 
 	minDelayMS int
 	maxDelayMS int
@@ -203,6 +236,13 @@ func parseLCChildEnv() lcChildEnv {
 	}
 	cfg.failAt = failAt
 
+	holdAt, err := strconv.ParseUint(os.Getenv(envLCHoldAt), 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envLCHoldAt, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.holdAt = holdAt
+
 	minDelayMS, err := strconv.Atoi(os.Getenv(envLCMinDelayMS))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envLCMinDelayMS, err)
@@ -221,6 +261,18 @@ func parseLCChildEnv() lcChildEnv {
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.mainDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s and %s are required\n", markerFatal, envLCDBDir, envLCUpstream, envLCMainDir, envLCDLQDir)
+		os.Exit(exitBadArgs)
+	}
+	// A capped producer can never reach total, and the graceful variant's
+	// whole exit path (waitForLCTotalAcked) waits for exactly that - so this
+	// combination could only ever manifest as an opaque 30s timeout. Fail
+	// loudly and immediately instead, like every other misconfiguration here.
+	if cfg.graceful && cfg.holdAt > 0 {
+		fmt.Fprintf(os.Stderr, "%s: %s is only valid for the crashable (non-graceful) variant\n", markerFatal, envLCHoldAt)
+		os.Exit(exitBadArgs)
+	}
+	if cfg.holdAt > 0 && cfg.total > 0 && cfg.holdAt >= cfg.total {
+		fmt.Fprintf(os.Stderr, "%s: %s (%d) must be below %s (%d) to bound anything\n", markerFatal, envLCHoldAt, cfg.holdAt, envLCTotal, cfg.total)
 		os.Exit(exitBadArgs)
 	}
 	return cfg
@@ -385,6 +437,7 @@ type recoverySourcePlugin struct {
 	total  uint64 // 0 means unbounded
 	paceMS int
 	failAt uint64 // 0 = never fail; otherwise inject a transient error just before producing this position
+	holdAt uint64 // 0 = no cap; otherwise stop producing for good once this position has been sent (see lcChildConfig.holdAt)
 
 	mu         sync.Mutex
 	nextToRead uint64
@@ -425,7 +478,8 @@ func (p *recoverySourcePlugin) Run(ctx context.Context, stream pconnector.Source
 }
 
 // produceLoop delivers records start+1, start+2, ... up to p.total
-// (inclusive), exactly like chaosPlugin.produceLoop's single-phase mode. If
+// (inclusive), exactly like chaosPlugin.produceLoop's single-phase mode -
+// unless a nonzero p.holdAt cuts production short first (see below). If
 // failAt is nonzero, the instant production would reach that position it
 // instead closes the stream with a synthetic transient error - surfacing as a
 // plain (non-fatal) error from pkg/connector.Source.Read (via
@@ -435,6 +489,13 @@ func (p *recoverySourcePlugin) Run(ctx context.Context, stream pconnector.Source
 // service.go - the same mechanism pkg/lifecycle-poc/service_test.go's
 // sourceRecoversAfterTransientError uses via a mock, just over the real
 // in-memory stream transport instead.
+//
+// If p.holdAt is nonzero, production stops for good once position holdAt has
+// been sent: the loop prints markerLCHeld and returns, exactly as it does on
+// reaching p.total, leaving the stream open and the ack path running but no
+// further records ever produced by this process. That is a hard ceiling on
+// how far this process can get, which is what lets a parent test SIGKILL it
+// mid-run without racing it - see lcChildConfig.holdAt.
 func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRunStream, server pconnector.SourceRunStreamServer, start uint64) {
 	pos := start
 	for {
@@ -452,6 +513,13 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		printProgress("READ", pos)
 
 		if p.total > 0 && pos >= p.total {
+			return
+		}
+		// The production ceiling. Checked after the send (so holdAt is the
+		// last position actually produced, inclusive) and before the pace
+		// sleep, so the marker is printed the instant the ceiling is hit.
+		if p.holdAt > 0 && pos >= p.holdAt {
+			printProgress(markerLCHeld, pos)
 			return
 		}
 		if p.paceMS > 0 {
@@ -613,6 +681,7 @@ type lcSourceDispenser struct {
 	total  uint64
 	paceMS int
 	failAt uint64
+	holdAt uint64
 
 	dispensed atomic.Int64
 }
@@ -628,7 +697,9 @@ func (d *lcSourceDispenser) DispenseSource() (connectorPlugin.SourcePlugin, erro
 	if d.dispensed.Add(1) == 1 {
 		failAt = d.failAt
 	}
-	return &recoverySourcePlugin{store: d.store, total: d.total, paceMS: d.paceMS, failAt: failAt}, nil
+	// holdAt, unlike failAt, applies to EVERY dispense: it is a ceiling on
+	// this process's total production, not a one-shot injected fault.
+	return &recoverySourcePlugin{store: d.store, total: d.total, paceMS: d.paceMS, failAt: failAt, holdAt: d.holdAt}, nil
 }
 
 func (d *lcSourceDispenser) DispenseDestination() (connectorPlugin.DestinationPlugin, error) {
@@ -851,7 +922,7 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 	pl.SetStatus(pipeline.StatusUserStopped) // Init's own required starting status, per pkg/lifecycle-poc.Service.Start
 
 	plugins := staticFetcher{
-		sourceInstance.Plugin: &lcSourceDispenser{store: upstream, total: cfg.total, paceMS: cfg.paceMS, failAt: cfg.failAt},
+		sourceInstance.Plugin: &lcSourceDispenser{store: upstream, total: cfg.total, paceMS: cfg.paceMS, failAt: cfg.failAt, holdAt: cfg.holdAt},
 		destInstance.Plugin:   &lcDestDispenser{log: mainLog},
 		dlqInstance.Plugin:    &lcDestDispenser{log: dlqLog},
 	}
