@@ -15,6 +15,7 @@
 package chaos
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -149,6 +150,68 @@ func assertNoGapThrough(t *testing.T, positions []uint64, upTo uint64, label str
 	}
 }
 
+// waitForUpstreamCommittedAtLeast blocks (polling the child's durable
+// upstream commit marker on disk, not sleeping a fixed duration) until that
+// watermark has reached at least want, then returns it.
+//
+// This reads the very same file assertRecoveryInvariantsAtKill reads back
+// after the kill, while the child is still running. That is safe and
+// race-free by construction: upstreamStore.Commit writes to a temp file,
+// fsyncs, and atomically renames it into place (upstream.go), so a concurrent
+// reader in another process only ever observes a complete previous or
+// complete new value - never a torn one.
+//
+// Why gate a kill on THIS rather than on childProcess.waitForReadCount: read
+// progress is a LAGGING, parent-side observation of a child that keeps
+// running while the parent is descheduled, so "the child had produced n
+// records when I last looked" says nothing about where the child is now. The
+// committed watermark is a durable fact, and - crucially - it is paired with
+// lcChildConfig.holdAt, which caps how far the child can ever get. Lower
+// bound observed, upper bound structural: neither depends on the parent being
+// scheduled promptly.
+func waitForUpstreamCommittedAtLeast(t *testing.T, cp *childProcess, upstreamDir string, want uint64, timeout time.Duration) uint64 {
+	t.Helper()
+	upstream, err := openUpstreamStore(upstreamDir, false)
+	if err != nil {
+		t.Fatalf("open upstream store %s: %v", upstreamDir, err)
+	}
+	deadline := time.Now().Add(timeout)
+	var last uint64
+	for time.Now().Before(deadline) {
+		got, err := upstream.Committed()
+		if err != nil {
+			t.Fatalf("read upstream commit marker: %v\n%s", err, cp.diagnostics())
+		}
+		if got >= want {
+			return got
+		}
+		last = got
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for the upstream commit watermark to reach %d (saw %d)\n%s", want, last, cp.diagnostics())
+	return 0
+}
+
+// maxProgressPosition returns the highest position across every observed
+// progress line with the given tag ("READ", markerLCHeld, ...). Positions,
+// not line counts: a restart within one process re-produces positions it
+// already produced once (see waitForLCRecovered), so counting lines and
+// reading a position off the count are not the same thing - which is
+// precisely the confusion the old read-count kill gate encoded.
+func maxProgressPosition(cp *childProcess, tag string) uint64 {
+	var highest uint64
+	for _, l := range cp.linesWithPrefix(tag + " ") {
+		n, err := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(l, tag+" ")), 10, 64)
+		if err != nil {
+			continue
+		}
+		if n > highest {
+			highest = n
+		}
+	}
+	return highest
+}
+
 // assertRecoveryInvariantsAtKill reads the upstream commit ledger and the
 // main destination's delivery ledger fresh from disk immediately after a
 // SIGKILL, and asserts invariant 1: every position already committed
@@ -257,11 +320,56 @@ func TestSIGKILL_RecoveryLoop_CrashDuringBackoff(t *testing.T) {
 // the pipeline actually completes the restart (Recovering -> Running again)
 // and resumes producing records - and the child is SIGKILLed WHILE that
 // second, recovered run is mid-flight, not while parked in the backoff wait.
-// waitForLCRecovered gates on the observed Recovering->Running transition
-// (not a guess), and waitForReadCount then gates the kill on genuine
-// production progress past the point the first run ever reached (see the
-// comment at its call site) - both are polling waits on the child's own
-// progress, never a blind wall-clock sleep.
+//
+// # Why the kill point is bounded on both sides, and neither bound is a race
+//
+// The two sanity assertions below are the test's own vacuity guards: they
+// refuse to let it pass unless the kill genuinely landed after the recovery
+// and before the run's natural end. Both of those preconditions are
+// established by construction here, not won by out-running the child:
+//
+//   - Lower bound (committedAtKill > failAt-1): the kill is gated on the
+//     child's DURABLE upstream commit watermark reaching killAfterCommitted,
+//     read off disk (waitForUpstreamCommittedAtLeast). Every position at or
+//     past failAt is one the first run provably never produced - produceLoop
+//     closes the stream instead of sending failAt - so a committed watermark
+//     that has passed it is positive proof the recovered run is the one
+//     making progress. It is a durable fact at the instant it is read, not an
+//     inference from a parent-side observation that may already be stale.
+//
+//   - Upper bound (committedAtKill < total): cfg.holdAt caps this child's
+//     producer at position 20, well below cfg.total (60). Nothing past 20 is
+//     ever produced by this process, so nothing past 20 can ever be acked or
+//     committed by it, no matter how long the parent is descheduled between
+//     deciding to kill and SIGKILL actually landing.
+//
+// That second bound is the fix for #2836. This test used to gate its kill on
+// childProcess.waitForReadCount(30) against an uncapped child free-running to
+// total: the child kept producing during the (unbounded) window between the
+// parent observing the 30th READ line and the signal landing, so on a loaded
+// runner it could reach total before it died and the "committedAtKill <
+// total" guard would - correctly - refuse to pass a test that had not
+// actually crashed anything mid-run. A ~400ms stall in that window is enough
+// to reproduce it; see TestRecoveryChild_HoldAt_CapsProductionBelowTotal,
+// which pins the cap against exactly that stall. Enlarging total would only
+// have widened the window that has to be lost, not closed it.
+//
+// Records really are in flight at the kill: the cap is a ceiling, not the
+// trigger. The kill fires the moment the watermark reaches
+// killAfterCommitted (10) while the producer is still on its way to holdAt
+// (20), so records are typically produced-but-not-yet-committed at the
+// instant of the SIGKILL - which is what gives
+// assertRecoveryInvariantsAtKill's invariant-1 check something to bite on,
+// over a committed range (1..10+) deep enough to be worth checking.
+//
+// Note what killAfterCommitted does and does not control. Any value strictly
+// inside (failAt-1, holdAt] gives the identical verdict: the gate cannot
+// return before it, and the child cannot pass holdAt, so both guards hold for
+// every one of them. It tunes how deep the in-flight window is, never whether
+// the test passes - which is exactly the difference between bounding a test
+// and tuning one. (If a badly-starved runner drains all 20 before the parent
+// gets to the kill, the assertions still hold: 40 records were still never
+// produced, so the crash is still mid-run.)
 func TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -272,32 +380,44 @@ func TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun(t *testing.T) {
 		dlqDir:      dir + "/dlq-delivered",
 		total:       60,
 		paceMS:      3,
-		failAt:      5, // fail fast so the recovered run gets most of the budget
+		failAt:      5,  // fail fast so the recovered run gets most of the budget
+		holdAt:      20, // hard ceiling on this process's production; see the doc comment above
 		minDelayMS:  20,
 		maxDelayMS:  20,
 		graceful:    false,
 	}
 
+	// killAfterCommitted brackets the kill point together with cfg.holdAt:
+	// the watermark at the kill is always in [10, 20], strictly inside
+	// (failAt-1, total). See the doc comment above for why every value in
+	// that interval yields the same verdict.
+	const killAfterCommitted = 10
+
 	first := spawnLCChild(t, cfg)
 	waitForLCRecovered(t, first, 10*time.Second)
-	// The first run could only ever have produced positions 1..failAt-1 (4)
-	// before its induced failure - waiting for 30 total READ lines (READ
-	// progress is cumulative across both dispenses within this one process,
-	// see recoverySourcePlugin.produceLoop) proves we are deep into the
-	// SECOND (recovered) run's production, comfortably past both the failure
-	// point and the restart itself, and well short of cfg.total (60) so the
-	// kill still lands mid-run rather than at the natural end.
-	const killAfterReads = 30
-	first.waitForReadCount(t, killAfterReads, 10*time.Second)
+	// Gate the kill on durable, recovered-run progress: once the watermark is
+	// past failAt, the recovered run has provably produced, delivered and
+	// acked records the first run never even sent. See
+	// waitForUpstreamCommittedAtLeast for why this signal, and not a
+	// parent-side read count, is the sound one to kill on. This wait can
+	// never overshoot, because cfg.holdAt caps the child at 20.
+	waitForUpstreamCommittedAtLeast(t, first, cfg.upstreamDir, killAfterCommitted, 10*time.Second)
 	first.sigkill(t)
 
 	committedAtKill := assertRecoveryInvariantsAtKill(t, cfg)
 	// Sanity: the kill landed after the recovery actually happened (more
 	// progress committed than the first run alone could ever have reached)
 	// and before the natural end (otherwise this wouldn't be testing a
-	// mid-recovered-run crash at all).
+	// mid-recovered-run crash at all). Both hold by construction - see the
+	// doc comment above.
 	is.True(committedAtKill > cfg.failAt-1)
 	is.True(committedAtKill < cfg.total)
+	is.True(committedAtKill >= killAfterCommitted) // the gate's own guarantee, restated against the ledger
+	// The stronger, structural form of the guard above: the producer ceiling,
+	// not the margin to total, is what makes it impossible to reach total.
+	// Asserted separately so that if someone removes holdAt, this fails
+	// immediately and deterministically rather than flaking back to life.
+	is.True(committedAtKill <= cfg.holdAt)
 
 	restart := lcChildConfig{
 		dbDir: cfg.dbDir, upstreamDir: cfg.upstreamDir, mainDir: cfg.mainDir, dlqDir: cfg.dlqDir,
@@ -310,4 +430,80 @@ func TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun(t *testing.T) {
 	is.True(done)
 
 	assertRecoveryInvariantsAfterRestart(t, cfg)
+}
+
+// recoveryHoldStall is how long TestRecoveryChild_HoldAt_CapsProductionBelowTotal
+// deliberately does nothing after the producer reports it has hit its ceiling.
+//
+// This is not a "wait long enough and hope" sleep - it is the opposite, and
+// the distinction matters because this package forbids the former. An
+// unsound kill gate is one whose precondition decays as the parent is
+// descheduled for longer; this sleep IS that descheduling, injected on
+// purpose, and the assertions after it must hold no matter how large it
+// gets. Making it larger can only make an unsound cap fail harder. It is
+// sized at 400ms because that is empirically enough for the uncapped
+// producer this test guards against (60 records at paceMS 3, plus a 10ms
+// persister debounce) to run all the way to total - i.e. enough to reproduce
+// #2836's original failure, and the value the flake was diagnosed with.
+const recoveryHoldStall = 400 * time.Millisecond
+
+// TestRecoveryChild_HoldAt_CapsProductionBelowTotal is #2836's regression
+// test: it pins the production ceiling that
+// TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun's "committedAtKill <
+// total" guard now rests on.
+//
+// Before the ceiling existed, that test raced its own child: it observed a
+// read count and then SIGKILLed, and the child kept producing throughout the
+// window in between. This test reproduces that window directly and
+// adversarially - it waits for the producer to report its ceiling, then
+// stalls for recoveryHoldStall (long enough that a ceiling-less child would
+// have finished all 60 records several times over, which is exactly how the
+// original flake was reproduced) - and asserts the child has not moved.
+//
+// Run against a child without the holdAt cap, the maxRead assertion below
+// fails outright: production would be at total (60), not the ceiling (20).
+func TestRecoveryChild_HoldAt_CapsProductionBelowTotal(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	cfg := lcChildConfig{
+		dbDir:       dir + "/db",
+		upstreamDir: dir + "/upstream",
+		mainDir:     dir + "/main-delivered",
+		dlqDir:      dir + "/dlq-delivered",
+		total:       60,
+		paceMS:      3,
+		failAt:      5,
+		holdAt:      20,
+		minDelayMS:  20,
+		maxDelayMS:  20,
+		graceful:    false,
+	}
+	// The ceiling only bounds anything if it is genuinely below total; the
+	// child enforces this too (parseLCChildEnv), but state it here so the
+	// scenario's own numbers can't drift into vacuity unnoticed.
+	is.True(cfg.holdAt > cfg.failAt)
+	is.True(cfg.holdAt < cfg.total)
+
+	child := spawnLCChild(t, cfg)
+	child.waitForMarker(t, markerLCHeld+" ", 10*time.Second)
+	is.Equal(maxProgressPosition(child, markerLCHeld), cfg.holdAt) // the marker reports the ceiling itself
+
+	time.Sleep(recoveryHoldStall) // see recoveryHoldStall: adversarial, not load-bearing
+
+	// Nothing beyond the ceiling was ever produced, however long we looked
+	// away...
+	is.True(maxProgressPosition(child, "READ") <= cfg.holdAt)
+
+	// ...so nothing beyond it can ever have been acked and committed either,
+	// which is the property the SIGKILL scenario's upper-bound guard needs.
+	// Read while the child is still alive, exactly as the kill gate does.
+	upstream, err := openUpstreamStore(cfg.upstreamDir, false)
+	is.NoErr(err)
+	committed, err := upstream.Committed()
+	is.NoErr(err)
+	is.True(committed >= cfg.failAt) // the recovered run really did make durable progress
+	is.True(committed <= cfg.holdAt)
+	is.True(committed < cfg.total)
+
+	child.sigkill(t) // crashable variant: it would otherwise block forever
 }
