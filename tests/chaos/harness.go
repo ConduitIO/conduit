@@ -56,6 +56,26 @@ type childConfig struct {
 	// unchanged and just as strict. See sigkillCases.
 	persistDelayMS int
 
+	// holdAt caps how far a child's producer may ever go, making a mid-run
+	// SIGKILL's landing point bounded BY CONSTRUCTION instead of by the
+	// parent winning a race (the #2835 pattern, applied to this harness's
+	// chaosPlugin - see chaosPlugin.holdAt in upstream.go). Once position
+	// holdAt has been sent, the producer prints "HELD <pos>" (markerHeld)
+	// and stops for good: nothing past it is ever produced, so nothing past
+	// it can ever be acked or committed, however long the parent is
+	// descheduled between deciding to kill and the signal landing. A capped
+	// child also never reaches total, so its read loop blocks forever and it
+	// stays alive until the parent SIGKILLs it - the kill can never miss an
+	// exited process.
+	//
+	// 0 (the default, and the value every scenario that does not need a
+	// bound leaves it at) disables the cap entirely.
+	//
+	// The cap is a property of the FIRST (killed) child only: a RESUMED
+	// child must run to total unencumbered, so scenarios that set this also
+	// spawn their second child with it zeroed.
+	holdAt uint64
+
 	// snapshotK/snapshotPaceMS: DBZ-2 Property 1/2's two-phase producer
 	// knobs (see chaosPlugin's type doc, upstream.go). Zero values preserve
 	// DBZ-1's original single-phase behavior.
@@ -98,6 +118,7 @@ func (c childConfig) env() []string {
 		envDriftAt + "=" + strconv.FormatUint(c.driftAt, 10),
 		envSigtermMode + "=" + strconv.FormatBool(c.sigtermMode),
 		envPersistDelayMS + "=" + strconv.Itoa(c.persistDelayMS),
+		envHoldAt + "=" + strconv.FormatUint(c.holdAt, 10),
 	}
 }
 
