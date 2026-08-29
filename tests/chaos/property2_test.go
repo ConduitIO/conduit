@@ -33,9 +33,11 @@ const (
 	// resumeEmpty: RESUME_POSITION must be the empty/nil position - no
 	// state was ever durably persisted before the kill.
 	resumeEmpty resumeShape = iota
-	// resumeValidNonZero: RESUME_POSITION must be a valid, non-zero, stale
-	// (behind the kill point) position - at least one flush landed before
-	// the kill.
+	// resumeValidNonZero: RESUME_POSITION must be a valid, non-zero
+	// position - at least one flush landed before the kill. Not "stale":
+	// the watermark-gated kill lands exactly on a flush boundary, so the
+	// checkpoint equals the kill point rather than lagging it (see the
+	// mid-position-write case comment).
 	resumeValidNonZero
 )
 
@@ -149,31 +151,49 @@ var property2Cases = []property2Case{
 	{
 		// Mid-position-write: identical timing to DBZ-1's own "mid-stream"
 		// case (sigkill_test.go) - steady-state 15ms/read pacing. The
-		// precondition is a valid, non-zero, STALE (behind the kill point)
-		// checkpoint: at least one automatic flush has landed before the
-		// kill, and the persisted position is from that flush, not caught
-		// up to where the producer is.
+		// precondition is a valid, non-zero checkpoint landed exactly at a
+		// flush boundary: the kill is gated on the child's DURABLE upstream
+		// commit watermark (killAfterCommitted=70,
+		// waitForUpstreamCommittedAtLeast), and the watermark only moves
+		// when a persister flush lands, so the kill can only ever land on a
+		// flushed state. At the kill instant produced == acked == committed
+		// (exactly the ceiling, 100, on an unloaded machine; somewhere in
+		// [70, 100] under load): the checkpoint equals the watermark equals
+		// the kill point, and the in-flight window is empty by construction
+		// - its size no longer depends on how long the parent was
+		// descheduled, only on the ack plumbing at the flush instant. That
+		// is the no-gap equality the shared assertions check: the case pins
+		// the "resume at a flush boundary with a full checkpoint" shape.
 		//
-		// Both sides of that are now STRUCTURAL (the #2835 treatment). The
-		// kill is gated on the child's DURABLE upstream commit watermark
-		// reaching killAfterCommitted=70 (waitForUpstreamCommittedAtLeast) -
-		// a flush has provably landed, so the resume position is provably
-		// non-zero, no matter how slow the machine is. And holdAt caps the
-		// producer at 100: nothing past it is ever produced or committed, so
-		// the resume position can never catch up past the ceiling however
-		// long the parent is descheduled - the old "resumePos <
-		// killAfterReads" guard raced exactly this (a stalled parent let the
-		// child blow through it, #2836). The watermark only moves when a
-		// flush lands, so the kill lands at a flush boundary and the
-		// checkpoint equals the watermark - which is exactly the no-gap
-		// equality the shared assertions check.
+		// Losing the mid-flush in-flight window (records produced but not
+		// yet durable at the kill) is the DELIBERATE cost of bounding the
+		// kill on the watermark - it is what makes the landing point
+		// structural instead of a race with the parent's scheduler. The
+		// crash-with-records-in-flight scenario's intended home is DBZ-1's
+		// own mid-stream SIGKILL case (sigkill_test.go), which still kills
+		// a free-running child.
 		//
-		// 70/100, not 40/120, is deliberate: at 15ms pace a flush covers
-		// ~66 records (producer-paced, so load can only ever make it FEWER),
-		// so the 70 gate deterministically fires at the SECOND flush, whose
-		// uncapped coverage (~132) clears the 100 ceiling - removing the cap
-		// makes the resume position jump to ~132 > 100 and this case fails
-		// immediately instead of flaking back to life.
+		// holdAt=100 is the upper bound: nothing past it is ever produced,
+		// so nothing past it can ever be acked or committed, and the resume
+		// position can never catch up past the ceiling however long the
+		// parent is descheduled - the old "resumePos < killAfterReads"
+		// guard raced exactly this (a stalled parent let the child blow
+		// through it, #2836).
+		//
+		// 70/100 is a bracket, not a tuning: the gate cannot fire before
+		// the watermark reaches 70 (its own guarantee, restated as a
+		// precondition below), and the ceiling means the watermark can
+		// never exceed 100 - so the kill always lands with the watermark in
+		// [70, 100], every value of which yields the identical verdict. On
+		// an unloaded machine the gate fires at the second flush (at 15ms
+		// pace a flush covers ~66 records, so 66 < 70 <= ~132), but under
+		// the very descheduling this PR targets, production slows and the
+		// gate can fire at a later flush with coverage as low as just over
+		// 70 - so the case-level resumePos <= holdAt assertion is only a
+		// SOFT cap-removal detector. The DETERMINISTIC detector is
+		// TestChild_HoldAt_CapsProductionBelowTotal: without the ceiling
+		// the HELD marker never prints, and that test fails outright on any
+		// machine.
 		name:               "mid-position-write",
 		paceMS:             15,
 		killAfterCommitted: 70,
@@ -254,8 +274,9 @@ func TestSIGKILL_Property2_DurableUpstream(t *testing.T) {
 //     long the parent is descheduled.
 //
 // The tunables (killAfterReads, killAfterCommitted, holdAt) therefore affect
-// how deep the in-flight window is, never whether the test passes - which is
-// exactly the difference between bounding a test and tuning one.
+// where inside the bracket the kill lands - how much production happened
+// before it, never whether the test passes - which is exactly the difference
+// between bounding a test and tuning one.
 func assertProperty2Case(t *testing.T, tc property2Case, prune bool) {
 	t.Helper()
 	is := is.New(t)
@@ -391,14 +412,15 @@ func assertProperty2Case(t *testing.T, tc property2Case, prune bool) {
 				tc.name, prune, second.diagnostics(),
 			)
 		}
-		// The structural form of the stale guard. The old check - resumePos
-		// strictly behind killAfterReads - raced a free-running child: a
-		// stalled parent let the child blow through it (#2836). Nothing past
-		// the ceiling is ever produced, so nothing past it can ever be
-		// persisted: resumePos <= holdAt holds by construction, and if
-		// someone removes the cap this fails immediately and deterministically
-		// (the uncapped child's watermark keeps advancing past the ceiling)
-		// instead of flaking back to life.
+		// The structural form of the old stale guard. The old check -
+		// resumePos strictly behind killAfterReads - raced a free-running
+		// child: a stalled parent let the child blow through it (#2836).
+		// Nothing past the ceiling is ever produced, so nothing past it can
+		// ever be persisted: resumePos <= holdAt holds by construction. It
+		// is a SOFT cap-removal detector, though - under load the gate can
+		// fire with uncapped coverage as low as ~70 (see the case comment)
+		// - so the deterministic detector of a missing ceiling is the
+		// regression test's HELD-marker wait, not this assertion.
 		if resumePos > tc.holdAt {
 			t.Fatalf(
 				"Property 2 (%s, prune=%v): expected RESUME_POSITION (%d) to be at or behind the "+
@@ -469,15 +491,13 @@ func TestChild_HoldAt_CapsProductionBelowTotal(t *testing.T) {
 	// away...
 	is.True(maxProgressPosition(child, "READ") <= cfg.holdAt)
 
-	// ...so nothing beyond it can ever have been acked and committed either,
-	// which is the property the SIGKILL scenarios' upper-bound guards need.
-	// Read while the child is still alive, exactly as the kill gate does.
-	upstream, err := openUpstreamStore(cfg.upstreamDir, false)
-	is.NoErr(err)
-	committed, err := upstream.Committed()
-	is.NoErr(err)
-	is.True(committed <= cfg.holdAt)
-	is.True(committed < cfg.total)
+	// No durable-side check here: at ~480ms elapsed the default 1s
+	// persister debounce has not fired, so the committed watermark is 0 by
+	// construction and "committed <= holdAt" would assert nothing. The
+	// committed side of the ceiling is structurally implied (nothing past
+	// it is ever produced, so nothing past it can ever be committed) and is
+	// asserted where a flush has provably landed: the mid-position-write
+	// case's precondition and resume-shape checks.
 
 	child.sigkill(t) // crashable variant: it would otherwise block forever
 }
