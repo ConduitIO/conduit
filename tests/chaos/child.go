@@ -48,6 +48,7 @@ const (
 	envPrune          = "CONDUIT_CHAOS_PRUNE"
 	envPaceMS         = "CONDUIT_CHAOS_PACE_MS"
 	envPersistDelayMS = "CONDUIT_CHAOS_PERSIST_DELAY_MS"
+	envHoldAt         = "CONDUIT_CHAOS_HOLD_AT"
 	envTotal          = "CONDUIT_CHAOS_TOTAL"
 	envSnapshotK      = "CONDUIT_CHAOS_SNAPSHOT_K"
 	envSnapshotPaceMS = "CONDUIT_CHAOS_SNAPSHOT_PACE_MS"
@@ -62,6 +63,7 @@ const (
 	markerFatal       = "FATAL"
 	markerCorruptPo   = "CORRUPT_POSITION"
 	markerHandoff     = "HANDOFF"   // Property 1/2: producer crossed the snapshot->stream boundary, see upstream.go/produceLoop
+	markerHeld        = "HELD"      // production ceiling reached, see chaosPlugin.holdAt (upstream.go)
 	markerAckOrder    = "ACK_ORDER" // Property 3: per-key ack delivery ledger, see upstream.go/ackLoop
 	// markerSigtermDone is the SIGTERM/invariant-7 case's completion marker
 	// (sigterm_test.go, runChildSigterm) - deliberately distinct from
@@ -129,7 +131,21 @@ type childEnv struct {
 	// persistDelayMS overrides the persister debounce; 0 = default. See
 	// childConfig.persistDelayMS in harness.go for why this is configurable.
 	persistDelayMS int
-	total          uint64
+
+	// holdAt caps how far this process's source may ever produce, making a
+	// mid-run SIGKILL's landing point bounded BY CONSTRUCTION instead of by
+	// the parent winning a race. Once position holdAt has been sent, the
+	// producer prints markerHeld and stops for good (it never reaches total),
+	// so no matter how long the parent is descheduled between deciding to
+	// kill and the signal actually landing, the durable committed watermark
+	// this process can leave behind is <= holdAt. See childConfig.holdAt in
+	// harness.go and chaosPlugin.holdAt in upstream.go for the full story.
+	//
+	// 0 (the default, and the value every scenario that does not need a
+	// bound leaves it at) disables the cap entirely - the producer behaves
+	// exactly as it did before this seam existed.
+	holdAt uint64
+	total  uint64
 
 	// snapshotK/snapshotPaceMS: Property 1/2's two-phase producer knobs.
 	// snapshotK == 0 means "no distinct snapshot phase" (DBZ-1's original
@@ -181,6 +197,13 @@ func parseChildEnv() childEnv {
 		cfg.persistDelayMS = d
 	}
 
+	holdAt, err := strconv.ParseUint(os.Getenv(envHoldAt), 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envHoldAt, err)
+		os.Exit(exitBadArgs)
+	}
+	cfg.holdAt = holdAt
+
 	total, err := strconv.ParseUint(os.Getenv(envTotal), 10, 64)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envTotal, err)
@@ -225,6 +248,19 @@ func parseChildEnv() childEnv {
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s and %s are required\n", markerFatal, envDBDir, envUpstreamDir)
+		os.Exit(exitBadArgs)
+	}
+
+	// A cap at or above total bounds nothing - the producer stops at total on
+	// its own, so the cap would never be reached. The only legitimate use of
+	// a cap is strictly below total, where the child is crashable-only by
+	// design: it never reaches total, so the read loop never terminates and
+	// the process must be SIGKILLed (the same contract #2835's recovery
+	// child gives its holdAt seam). Any other combination could only surface
+	// as an opaque timeout or a silently pointless knob - fail loudly and
+	// immediately instead, like every other misconfiguration here.
+	if cfg.holdAt > 0 && cfg.total > 0 && cfg.holdAt >= cfg.total {
+		fmt.Fprintf(os.Stderr, "%s: %s (%d) must be below %s (%d) to bound anything\n", markerFatal, envHoldAt, cfg.holdAt, envTotal, cfg.total)
 		os.Exit(exitBadArgs)
 	}
 	return cfg
@@ -375,6 +411,7 @@ func buildChild(ctx context.Context, cfg childEnv) (*childBuilt, error) {
 		snapshotPaceMS: cfg.snapshotPaceMS,
 		numKeys:        cfg.numKeys,
 		driftAt:        cfg.driftAt,
+		holdAt:         cfg.holdAt,
 	}
 
 	fetcher := staticFetcher{instance.Plugin: staticDispenser{source: plugin}}

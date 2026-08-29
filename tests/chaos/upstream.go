@@ -191,6 +191,26 @@ type chaosPlugin struct {
 	// every existing scenario.
 	driftAt uint64
 
+	// holdAt caps how far this process's producer may ever go, making a
+	// mid-run SIGKILL's landing point bounded BY CONSTRUCTION instead of by
+	// the parent winning a race (the #2835 pattern, applied to this harness).
+	// Once position holdAt has been sent, produceLoop prints markerHeld and
+	// returns, so this process can never produce - and therefore never ack or
+	// commit - anything past holdAt, no matter how long the parent is
+	// descheduled between deciding to kill and the signal actually landing.
+	//
+	// Because the read loop keeps blocking on a stream that stays open, a
+	// capped child also stays alive indefinitely instead of running to total
+	// and exiting on its own - which is what makes "SIGKILL at any time"
+	// reliable (an uncapped child that finishes its run before the parent
+	// kills it would fail the kill, not the test).
+	//
+	// 0 (the default, every scenario that does not need a bound) disables the
+	// cap entirely - the producer behaves exactly as it did before this seam
+	// existed. See childEnv.holdAt (child.go) for the env plumbing and its
+	// validation.
+	holdAt uint64
+
 	// sourceTag is the N-source shared-destination collision scenario's
 	// record-level salt (docs/design-documents/20260801-archv2-multiconnector-
 	// nsource.md's H2 section; nsource_child.go, nsource_sigkill_test.go).
@@ -327,6 +347,13 @@ func (p *chaosPlugin) Run(ctx context.Context, stream pconnector.SourceRunStream
 // that problem: production is paced deterministically, so harness.go's
 // kill-timing waits on READ (and, for mid-handoff, HANDOFF) lines, never ACK
 // lines.
+//
+// If p.holdAt is nonzero, production stops for good once position holdAt has
+// been sent: the loop prints markerHeld and returns, exactly as it does on
+// reaching p.total, leaving the stream open and the ack path running but no
+// further records ever produced by this process. That is a hard ceiling on
+// how far this process can get, which is what lets a parent test SIGKILL it
+// mid-run without racing it — see chaosPlugin.holdAt's field doc.
 func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start uint64) {
 	if p.startGate != nil {
 		// H2 injection scenario only (see the field doc) - block here,
@@ -363,6 +390,14 @@ func (p *chaosPlugin) produceLoop(server pconnector.SourceRunStreamServer, start
 			// (waitForMarker) observes it exactly once this position has
 			// been fully produced - never early.
 			fmt.Printf("%s %d\n", markerHandoff, pos)
+		}
+
+		// The production ceiling. Checked after the send (so holdAt is the
+		// last position actually produced, inclusive) and before the pace
+		// sleep, so the marker is printed the instant the ceiling is hit.
+		if p.holdAt > 0 && pos >= p.holdAt {
+			printProgress(markerHeld, pos)
+			return
 		}
 
 		pace := p.paceMS
