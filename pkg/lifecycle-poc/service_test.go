@@ -919,6 +919,165 @@ func TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus(t *test
 	})
 }
 
+// TestServiceLifecycle_Recovery_ForceStopDuringWorkerReleaseWindow is the
+// #2833 regression test.
+//
+// runPipeline releases this run's worker goroutines (close(registered)) and
+// publishes it as the live entry in runningPipelines (Set) as two adjacent
+// statements with nothing between them. Before this fix, close(registered)
+// ran FIRST: a worker released at that instant is already free to do
+// observable work (read, process, ack), while runningPipelines[id] still
+// points at the PREVIOUS run. On a recovery restart that previous entry is
+// deliberately left in place until the swap (see recoverPipeline), so the
+// window is real and reachable — this is #2746/#2806's failure mode again,
+// just shrunk to two adjacent statements with no I/O between them, which is
+// why #2812 (which fixed the *2746* window, one call further out — ordering
+// Set before UpdateStatus) did not close this one: it never touched the
+// close(registered)-vs-Set order.
+//
+// A Stop landing in that window resolves the DEAD run: Kill lands on an
+// already-dead tomb (a documented no-op — tomb.v2 keeps only the first
+// death reason, see gopkg.in/tomb.v2's kill()), and the actually-running
+// pipeline is left completely unsupervised. Invariant 7 (shutdown is
+// graceful by default), silently.
+//
+// This does not try to catch the window by racing it — a pre-fix repeat
+// sweep of the equivalent window in #2746 passed far more often than it
+// failed, so a green run there proved nothing. It HOLDS runPipeline paused
+// at the exact instant under test via testWorkersReleased (see that
+// field's doc): the same "wrap/hook a collaborator instead of sleeping"
+// seam shape as statusRecorder.onUpdate below, applied one call earlier,
+// because THIS window closes before UpdateStatus — and therefore
+// PipelineService — is ever invoked, so hooking UpdateStatus (as the
+// sibling #2746 test above does) cannot observe it.
+//
+// force=true (not a graceful Stop) is deliberate: stopRunnablePipeline's
+// force branch is a single unconditional rp.t.Kill call with no worker
+// interaction, so the assertion below reduces to a synchronous, racy-drain
+// -free tomb.Alive() check. See TestServiceLifecycle_PipelineForceStop's
+// doc for the same zero-records/force-stop rationale, reused here.
+func TestServiceLifecycle_Recovery_ForceStopDuringWorkerReleaseWindow(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	transientErr := cerrors.New("lost connection to source")
+	// Zero records for the recovered run too: avoids any dependency on ack
+	// timing (see TestServiceLifecycle_PipelineForceStop's doc) — this test
+	// only needs the recovered run's worker to be released and then sit
+	// blocked on its mocked stream, exactly like that test's "Run blocks"
+	// case.
+	noRecords := generateRecords(0)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := sourceRecoversAfterTransientError(ctrl, persister, noRecords, transientErr)
+	destination, destDispenser := destinationRecovers(ctrl, persister, noRecords)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		ps,
+		false,
+	)
+
+	// inWindow closes once the RECOVERY restart's runPipeline has released
+	// its workers; release unblocks it once the assertions below have run.
+	inWindow := make(chan struct{})
+	release := make(chan struct{})
+	var runCount atomic.Int64
+	var liveRp *runnablePipeline
+	ls.testWorkersReleased = func(rp *runnablePipeline) {
+		// The 1st call is the initial run: it has no prior runningPipelines
+		// entry to race against, so #2833's window doesn't apply to it (the
+		// issue is explicit: "the initial-start path does not have this
+		// window"). Only intercept the 2nd call, the recovery restart.
+		if runCount.Add(1) != 2 {
+			return
+		}
+		liveRp = rp
+		close(inWindow)
+		<-release
+	}
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+
+	// deadRp is the pre-recovery run, captured immediately (before the
+	// transient failure) so identity — not just aliveness — distinguishes
+	// "the dead run" from "the live run" below.
+	deadRp, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+
+	<-inWindow
+	is.True(liveRp != nil)
+	is.True(liveRp != deadRp) // sanity: genuinely a different run
+
+	// The regression: a Stop landing right now — runPipeline paused exactly
+	// after releasing the recovered run's workers — must reach the run that
+	// is actually running, not the one that already failed.
+	stopErr := ls.Stop(ctx, pl.ID, true)
+	is.NoErr(stopErr) // force-stop always returns nil, whichever run it resolved
+
+	liveWasKilled := !liveRp.t.Alive()
+
+	// Safety net, unconditional and run regardless of the assertion below:
+	// guarantee the live run's tomb dies so its worker — parked on a mocked
+	// stream Recv with nothing else to wake it (see the zero-records
+	// rationale above) — unblocks via ctx cancellation and cleanup
+	// completes deterministically. Without this, a pre-fix failure here
+	// would otherwise depend on stopAndWaitPersister's 10s timeout to
+	// notice the recovered pipeline never stopped. A no-op if the Stop call
+	// above already reached this tomb (Kill keeps only the first reason).
+	liveRp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
+
+	close(release)
+
+	if !liveWasKilled {
+		t.Fatalf(
+			"Stop(force=true), called the instant runPipeline had released the recovered " +
+				"run's workers, did not kill the live run (tomb still alive) - it landed on " +
+				"the dead pre-recovery run instead, leaving the actually-running pipeline " +
+				"completely unsupervised (#2833)",
+		)
+	}
+
+	err = ls.WaitPipeline(pl.ID)
+	is.True(err != nil)
+	is.True(cerrors.IsFatalError(err))
+	is.True(cerrors.Is(err, pipeline.ErrForceStop))
+	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+
+	// The pre-recovery run's own terminal classification (the transient
+	// error that triggered recovery) must be untouched by our stray Kill
+	// call above - pin that explicitly rather than assuming a no-op.
+	is.True(cerrors.Is(deadRp.t.Err(), transientErr))
+}
+
 // TestServiceLifecycle_Recovery_MaxRetriesExhausted proves the bounded-retry
 // path (design-doc path: running → recovering → degraded). With a finite
 // MaxRetries and a source that fails on every run, the pipeline attempts exactly
