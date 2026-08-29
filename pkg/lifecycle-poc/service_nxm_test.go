@@ -514,7 +514,7 @@ func TestServiceLifecycle_NxM_TransientErrorOneSource_RecoversAllSourcesAndDesti
 	is.NoErr(err)
 
 	// Must have passed through Recovering and be Running again.
-	waitForRecovered(t, rec)
+	waitForRecovered(t, rec, pl)
 
 	// Post-recovery records flow cleanly through the REBUILT shared
 	// destinations - proof the poison flag (which never clears in place) is
