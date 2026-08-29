@@ -49,19 +49,28 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// sigkillCase drives a single SIGKILL scenario. paceMS and killAfterReads
-// together determine where in the ack->commit->persist crash window
-// (source.go's Ack, see doc.go) the kill lands: with the persister's real
-// DefaultPersisterDelayThreshold (1s), waiting for killAfterReads records to
-// be read off the stream at paceMS each guarantees at least
-// killAfterReads*paceMS of genuine elapsed time (childProcess.
-// waitForReadCount's guarantee - see its doc comment), so the numbers below
-// are chosen to land reliably inside or across that 1s boundary without
-// needing a deterministic kill-hook, matching the finding this workstream was
-// built around.
+// sigkillCase drives a single SIGKILL scenario. Every case brackets its kill
+// point with one observed LOWER bound and one STRUCTURAL upper bound (the
+// #2835 pattern), so where exactly inside the bracket the kill lands never
+// affects the verdict - the tunables affect only how much production happened
+// before the kill, never whether the case passes:
 //
-// This keys off READ progress, not ACK progress (see waitForReadCount's doc
-// for why): under the sev-0 fix (Approach A, docs/design-documents/
+//   - mid-snapshot keys off READ progress (killAfterReads): waiting for N
+//     records to be read off the stream at paceMS each guarantees at least
+//     N*paceMS of genuine elapsed time (childProcess.waitForReadCount's
+//     guarantee - see its doc comment), and persistDelayMS makes the
+//     "nothing durably persisted at kill time" precondition structural
+//     rather than inferred from that arithmetic.
+//   - mid-stream keys off the child's DURABLE upstream commit watermark
+//     (killAfterCommitted, via waitForUpstreamCommittedAtLeast): the
+//     watermark only moves when a persister flush lands, so the kill is
+//     gated on flushed progress itself rather than on a parent-side
+//     observation of a child that keeps running while the parent is
+//     descheduled. holdAt is the structural ceiling on how far that child
+//     can ever produce, ack, or commit.
+//
+// Both gate kinds deliberately avoid ACK progress (see waitForReadCount's
+// doc for why): under the sev-0 fix (Approach A, docs/design-documents/
 // 20260723-source-ack-persist-ordering-fix.md), the plugin's ack visibility
 // is deliberately deferred behind connector.Persister's debounce, so "N acks
 // observed" no longer tracks wall-clock-since-start at fine grain for a fast
@@ -77,6 +86,16 @@ type sigkillCase struct {
 	// persistDelayMS overrides the child's persister debounce (0 = default).
 	// See childConfig.persistDelayMS.
 	persistDelayMS int
+	// killAfterCommitted gates the kill on the child's DURABLE upstream
+	// commit watermark reaching at least this value
+	// (waitForUpstreamCommittedAtLeast), instead of on observed READ
+	// progress. 0 = gate on killAfterReads instead. See the struct doc.
+	killAfterCommitted uint64
+	// holdAt caps the FIRST (killed) child's production (see
+	// childConfig.holdAt): the structural upper bound on where the kill can
+	// land, and the guarantee that the child stays alive until SIGKILLed.
+	// 0 = no cap. See the struct doc.
+	holdAt uint64
 }
 
 var sigkillCases = []sigkillCase{
@@ -105,18 +124,42 @@ var sigkillCases = []sigkillCase{
 		persistDelayMS: 600_000,
 	},
 	{
-		// Mid-stream: steady-state pacing slow enough that, by the time we
-		// reach killAfterReads=95 reads (~1.4s in), one automatic flush has
-		// already happened (~1s, around read ~66) AND a second debounce
-		// window has already started (on the next ack after that flush) but
-		// not yet fired (its own 1s timer would land around read ~133). So
-		// Conduit's persisted position is a valid but STALE checkpoint
-		// (unlike the mid-snapshot case's "nothing at all"), which is the
-		// other edge case named in the design doc.
-		name:           "mid-stream",
-		paceMS:         15,
-		killAfterReads: 95,
-		total:          400,
+		// Mid-stream: steady-state pacing slow enough to cross the
+		// persister's ~1s debounce, so the kill lands with a valid, non-zero
+		// checkpoint - the other edge case named in the design doc (a crash
+		// with a checkpoint durably persisted and records in flight past
+		// it), unlike mid-snapshot's "nothing at all".
+		//
+		// The kill point is bounded on both sides, and neither bound is a
+		// race (the #2835/#2840 pattern):
+		//   - LOWER bound (observed): the kill is gated on the child's
+		//     DURABLE upstream commit watermark reaching killAfterCommitted=70
+		//     (waitForUpstreamCommittedAtLeast) - a flush has provably
+		//     landed, so the resume position is provably non-zero. The
+		//     watermark only moves when a flush lands, so the gate can never
+		//     fire before the case's precondition holds, however long the
+		//     parent is stalled.
+		//   - UPPER bound (structural): holdAt=100 caps what the first child
+		//     may ever produce. Nothing past it is ever produced, so nothing
+		//     past it can ever be acked or committed, and the durable
+		//     watermark can never exceed it however long the parent is
+		//     descheduled between deciding to kill and the signal landing. A
+		//     capped child also never reaches total, so its read loop blocks
+		//     forever and the kill can never miss an exited process.
+		//
+		// Every value in [70, 100] yields the identical verdict: the
+		// checkpoint equals the watermark at the kill instant (stale behind
+		// total=400), with the in-flight window [watermark, produced] sized
+		// by the ack plumbing, never by how long the parent was
+		// descheduled. That is exactly the crash shape this case exists to
+		// test - the old timing (killAfterReads=95, "one flush landed, a
+		// second pending") merely estimated it with arithmetic that a
+		// descheduled parent blew through silently (issue #2841).
+		name:               "mid-stream",
+		paceMS:             15,
+		killAfterCommitted: 70,
+		holdAt:             100,
+		total:              400,
 	},
 }
 
@@ -183,16 +226,28 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 		total:       tc.total,
 	}
 
-	// The persister override applies ONLY to the first child. Its job is to
-	// guarantee this case's precondition (no position persisted when the kill
-	// lands); the RESUMED child must run with the real default, or it would
-	// never flush either — which is not the scenario under test, and would
-	// make the resume assertion vacuous.
+	// The structural knobs apply ONLY to the first (killed) child. Their job
+	// is to guarantee this case's precondition: persistDelayMS (mid-snapshot)
+	// makes "no position persisted at kill time" structural, and holdAt
+	// (mid-stream) bounds the kill point from above. The RESUMED child must
+	// run with the real default debounce and no cap, or it would never flush
+	// or run to completion either — which is not the scenario under test,
+	// and would make the resume assertion vacuous.
 	firstCfg := cfg
 	firstCfg.persistDelayMS = tc.persistDelayMS
+	firstCfg.holdAt = tc.holdAt
 
 	first := spawnChild(t, firstCfg)
-	first.waitForReadCount(t, tc.killAfterReads, 30*time.Second)
+	if tc.killAfterCommitted > 0 {
+		// Gate the kill on durable, flushed progress rather than a lagging
+		// parent-side read count (the #2840 pattern). This wait can never
+		// overshoot: firstCfg.holdAt caps what this child can ever produce
+		// or commit, so the watermark is provably in [killAfterCommitted,
+		// holdAt] when the kill lands.
+		waitForUpstreamCommittedAtLeast(t, first, cfg.upstreamDir, tc.killAfterCommitted, 30*time.Second)
+	} else {
+		first.waitForReadCount(t, tc.killAfterReads, 30*time.Second)
+	}
 	first.sigkill(t)
 
 	committedAtKill, err := openUpstreamStore(cfg.upstreamDir, cfg.prune)
@@ -218,6 +273,28 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 			watermarkAtKill, tc.persistDelayMS)
 	}
 
+	// mid-stream's precondition, stated the same way (the #2840 pattern): the
+	// kill must land after at least one durable flush AND with nothing
+	// committed past the production ceiling. The gate and the cap should make
+	// both structural, but assert them rather than trusting them - a run that
+	// lands outside the [killAfterCommitted, holdAt] bracket tests nothing,
+	// and a future violation should identify itself instead of passing
+	// vacuously.
+	if tc.killAfterCommitted > 0 {
+		if watermarkAtKill < tc.killAfterCommitted {
+			t.Fatalf("precondition violated: mid-stream requires the kill to land after at "+
+				"least one durable flush (watermark >= %d), but the watermark at kill time "+
+				"was %d - the kill gate did not do what it claims.\n%s",
+				tc.killAfterCommitted, watermarkAtKill, first.diagnostics())
+		}
+		if watermarkAtKill > tc.holdAt {
+			t.Fatalf("precondition violated: mid-stream: the upstream watermark at kill time "+
+				"(%d) exceeded the production ceiling holdAt (%d) - the child produced past "+
+				"its cap, so the upper bound this case rests on is not in effect.\n%s",
+				watermarkAtKill, tc.holdAt, first.diagnostics())
+		}
+	}
+
 	second := spawnChild(t, cfg)
 	second.waitExit(t, parentWaitExit)
 
@@ -234,6 +311,23 @@ func assertSigkillIsGapFree(t *testing.T, tc sigkillCase, prune bool) {
 	// doc and the two callers for why the same assertion now covers both
 	// upstream classes.
 	is.True(resumePos >= watermarkAtKill)
+
+	// The structural form of the mid-stream case's "stale checkpoint" claim:
+	// nothing past the ceiling was ever produced, so nothing past it was ever
+	// flushed, so the resume position can never be past it either. This is a
+	// SOFT cap-removal detector (under load the gate can fire with the
+	// watermark as low as just over killAfterCommitted) - the DETERMINISTIC
+	// detector is #2840's TestChild_HoldAt_CapsProductionBelowTotal
+	// (property2_test.go, same seam, merged on main), whose HELD-marker wait
+	// an uncapped child fails outright on any machine.
+	if tc.holdAt > 0 && resumePos > tc.holdAt {
+		t.Fatalf(
+			"mid-stream (prune=%v): expected RESUME_POSITION (%d) to be at or behind the "+
+				"production ceiling (holdAt %d) - a checkpoint that caught up past the ceiling "+
+				"means the upper bound this case rests on is not in effect\n%s",
+			prune, resumePos, tc.holdAt, second.diagnostics(),
+		)
+	}
 
 	_, foundGap := second.line(markerOpenGap)
 	if foundGap {
