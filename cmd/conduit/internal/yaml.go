@@ -34,8 +34,39 @@ func NewYAMLTree() *YAMLTree {
 	}
 }
 
-// Insert adds a path with a value to the tree
+// Insert adds a path with a scalar value to the tree.
 func (t *YAMLTree) Insert(path, value, comment string) {
+	t.insertNode(path, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: value,
+	}, comment)
+}
+
+// InsertSeq adds a path holding a YAML sequence of scalars.
+//
+// A sequence must be inserted as a real SequenceNode, never as a scalar: a
+// Go slice formatted through fmt (%v) yields "[]" or "[a b]", which the
+// encoder then emits as the *quoted string* '[]' — a value the config loader
+// rejects. That produced a conduit.yaml `conduit run` refused to start with,
+// so slices go through this method and never through Insert.
+func (t *YAMLTree) InsertSeq(path string, values []string, comment string) {
+	seq := &yaml.Node{Kind: yaml.SequenceNode}
+	if len(values) == 0 {
+		// Flow style so an empty sequence renders as `key: []` rather than a
+		// dangling key with a nil value.
+		seq.Style = yaml.FlowStyle
+	}
+	for _, v := range values {
+		seq.Content = append(seq.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: v,
+		})
+	}
+	t.insertNode(path, seq, comment)
+}
+
+// insertNode walks/creates the mapping path and attaches valueNode at the leaf.
+func (t *YAMLTree) insertNode(path string, valueNode *yaml.Node, comment string) {
 	parts := strings.Split(path, ".")
 	current := t.Root
 
@@ -50,13 +81,13 @@ func (t *YAMLTree) Insert(path, value, comment string) {
 			keyNode.HeadComment = "# " + comment
 		}
 
-		var valueNode *yaml.Node
+		var node *yaml.Node
 		found := false
 
 		// Search for existing key
 		for j := 0; j < len(current.Content); j += 2 {
 			if current.Content[j].Value == part {
-				valueNode = current.Content[j+1]
+				node = current.Content[j+1]
 				found = true
 				break
 			}
@@ -64,18 +95,15 @@ func (t *YAMLTree) Insert(path, value, comment string) {
 
 		if !found {
 			if isLast {
-				valueNode = &yaml.Node{
-					Kind:  yaml.ScalarNode,
-					Value: value,
-				}
+				node = valueNode
 			} else {
-				valueNode = &yaml.Node{
+				node = &yaml.Node{
 					Kind: yaml.MappingNode,
 				}
 			}
-			current.Content = append(current.Content, keyNode, valueNode)
+			current.Content = append(current.Content, keyNode, node)
 		}
 
-		current = valueNode
+		current = node
 	}
 }

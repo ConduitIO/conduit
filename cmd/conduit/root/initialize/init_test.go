@@ -133,3 +133,46 @@ func TestInit_RerunSkipsExistingDirs(t *testing.T) {
 		is.Equal(entry["created"], false)
 	}
 }
+
+// TestInit_GeneratedConfigIsAcceptedByRun closes the loop the tests above
+// leave open: they assert conduit.yaml *exists*, never that it *works*. This
+// feeds the file `conduit init` just wrote back through the exact viper path
+// RunCommand.Config() uses and validates the result, so a config Conduit
+// cannot start with fails here instead of in a user's terminal.
+//
+// Regression test for the defect where every []string field was rendered
+// through fmt ("%v") and written as the quoted scalar '[]'. viper decoded
+// that as []string{"[]"}, Validate rejected api.http.cors.allowed-origins,
+// and `conduit init && conduit pipelines init && conduit run` — the
+// documented getting-started walkthrough — refused to start.
+func TestInit_GeneratedConfigIsAcceptedByRun(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	cfg := conduit.DefaultConfigWithBasePath(dir)
+
+	_, err := runInit(t, &cfg, "--path="+dir)
+	is.NoErr(err)
+
+	generated := filepath.Join(dir, "conduit.yaml")
+	_, statErr := os.Stat(generated)
+	is.NoErr(statErr)
+
+	// Same shape as RunCommand.Config(): viper layers the generated file over
+	// the defaults, exactly as `conduit run` does.
+	var parsed conduit.Config
+	err = ecdysis.ParseConfig(ecdysis.Config{
+		EnvPrefix:     "CONDUIT",
+		Parsed:        &parsed,
+		Path:          generated,
+		DefaultValues: conduit.DefaultConfigWithBasePath(dir),
+	}, &cobra.Command{})
+	is.NoErr(err)
+
+	// Assert the slice shape directly so a regression names its own cause
+	// rather than surfacing as an opaque validation failure.
+	is.Equal(len(parsed.API.HTTP.CORS.AllowedOrigins), 0)
+	is.Equal(len(parsed.Processors.Egress.Allow), 0)
+	is.Equal(len(parsed.Processors.Egress.SecretRefs), 0)
+
+	is.NoErr(parsed.Validate())
+}
