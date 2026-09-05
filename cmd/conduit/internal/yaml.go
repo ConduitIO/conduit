@@ -58,7 +58,13 @@ func (t *YAMLTree) InsertSeq(path string, values []string, comment string) {
 	}
 	for _, v := range values {
 		seq.Content = append(seq.Content, &yaml.Node{
-			Kind:  yaml.ScalarNode,
+			Kind: yaml.ScalarNode,
+			// !!str is load-bearing: an untagged scalar is emitted bare
+			// wherever YAML syntax does not force quoting, so elements like
+			// "null", "~", "true" or "0755" resolve back as null/bool/int on
+			// decode — silently changing, and for "null" dropping outright,
+			// elements of a []string. The tag pins them as strings.
+			Tag:   "!!str",
 			Value: v,
 		})
 	}

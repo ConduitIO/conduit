@@ -61,10 +61,21 @@ func TestInsertSeq_EmptyRendersAsSequenceNotQuotedString(t *testing.T) {
 
 // TestInsertSeq_NonEmptyRoundTrips covers the branch no config default
 // exercises today: a populated list must survive encode/decode in order.
+//
+// The values are chosen to be hostile on purpose. An untagged scalar node is
+// emitted bare wherever YAML syntax does not force quoting, so "null" and "~"
+// resolve to null and vanish from a []string on decode, "true" resolves to a
+// bool, and "0755" resolves to octal 493. A benign allowlist like
+// {"api.openai.com"} cannot detect any of that, which is exactly how the
+// defect survived the first pass at this test.
 func TestInsertSeq_NonEmptyRoundTrips(t *testing.T) {
 	is := is.New(t)
 	tree := internal.NewYAMLTree()
-	tree.InsertSeq("processors.egress.allow", []string{"api.openai.com", "https://api.voyageai.com:443"}, "allowlist")
+	tree.InsertSeq("processors.egress.allow", []string{
+		"api.openai.com",
+		"https://api.voyageai.com:443",
+		"true", "null", "~", "0755", "123", "no",
+	}, "allowlist")
 
 	out := encode(t, tree)
 
@@ -76,7 +87,11 @@ func TestInsertSeq_NonEmptyRoundTrips(t *testing.T) {
 		} `yaml:"processors"`
 	}
 	is.NoErr(yaml.Unmarshal([]byte(out), &decoded))
-	is.Equal(decoded.Processors.Egress.Allow, []string{"api.openai.com", "https://api.voyageai.com:443"})
+	is.Equal(decoded.Processors.Egress.Allow, []string{
+		"api.openai.com",
+		"https://api.voyageai.com:443",
+		"true", "null", "~", "0755", "123", "no",
+	})
 }
 
 // TestInsert_ScalarUnchanged guards the pre-existing scalar path through the
