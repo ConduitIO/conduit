@@ -30,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	"github.com/conduitio/conduit/cmd/conduit/root/initialize"
+	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
@@ -132,4 +133,58 @@ func TestInit_RerunSkipsExistingDirs(t *testing.T) {
 		is.True(ok)
 		is.Equal(entry["created"], false)
 	}
+}
+
+// TestInit_GeneratedConfigIsAcceptedByRun closes the loop the tests above
+// leave open: they assert conduit.yaml *exists*, never that it *works*. This
+// feeds the file `conduit init` just wrote back through the exact viper path
+// RunCommand.Config() uses and validates the result, so a config Conduit
+// cannot start with fails here instead of in a user's terminal.
+//
+// Regression test for the defect where every []string field was rendered
+// through fmt ("%v") and written as the quoted scalar '[]'. viper decoded
+// that as []string{"[]"}, Validate rejected api.http.cors.allowed-origins,
+// and `conduit init && conduit pipelines init && conduit run` — the
+// documented getting-started walkthrough — refused to start.
+func TestInit_GeneratedConfigIsAcceptedByRun(t *testing.T) {
+	is := is.New(t)
+
+	// ecdysis binds viper with AutomaticEnv under the CONDUIT_ prefix, and
+	// CONDUIT_CONFIG_PATH overrides the file path outright. A developer shell
+	// carrying either would make this test validate something other than the
+	// file init just wrote, so clear them for the duration.
+	for _, e := range os.Environ() {
+		if k, _, ok := strings.Cut(e, "="); ok && strings.HasPrefix(k, "CONDUIT_") {
+			t.Setenv(k, "")
+			os.Unsetenv(k)
+		}
+	}
+
+	dir := t.TempDir()
+	cfg := conduit.DefaultConfigWithBasePath(dir)
+
+	_, err := runInit(t, &cfg, "--path="+dir)
+	is.NoErr(err)
+
+	generated := filepath.Join(dir, "conduit.yaml")
+	_, statErr := os.Stat(generated)
+	is.NoErr(statErr)
+
+	// Drive the REAL run command: its own Config() and its own fully-bound
+	// cobra flag set, not a restatement of them. A hand-copied ecdysis.Config
+	// drifts silently the moment RunCommand.Config() changes (EnvPrefix,
+	// ExcludedFlags, a flag's type), leaving this test green while
+	// `conduit run` breaks — the exact failure it exists to catch.
+	runCmd := &run.RunCommand{}
+	cobraRun := ecdysis.New().MustBuildCobraCommand(runCmd)
+	is.NoErr(cobraRun.ParseFlags([]string{"--config.path=" + generated}))
+	is.NoErr(ecdysis.ParseConfig(runCmd.Config(), cobraRun))
+
+	// Assert the slice shape directly so a regression names its own cause
+	// rather than surfacing as an opaque validation failure.
+	is.Equal(len(runCmd.Cfg.API.HTTP.CORS.AllowedOrigins), 0)
+	is.Equal(len(runCmd.Cfg.Processors.Egress.Allow), 0)
+	is.Equal(len(runCmd.Cfg.Processors.Egress.SecretRefs), 0)
+
+	is.NoErr(runCmd.Cfg.Validate())
 }

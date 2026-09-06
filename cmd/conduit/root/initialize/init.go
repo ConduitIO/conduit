@@ -152,13 +152,39 @@ func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.Y
 
 		// Process non-struct fields with a long tag
 		if longName != "" {
-			value := fmt.Sprintf("%v", fieldValue.Interface())
 			usage := field.Tag.Get("usage")
+
+			// Slices must be written as a YAML sequence. Rendering one with
+			// fmt (%v) produces "[]" or "[a b]", which the encoder emits as a
+			// quoted string ('[]') that the config loader then rejects — the
+			// generated conduit.yaml would not start (api.http.cors.allowed-origins).
+			if fieldValue.Kind() == reflect.Slice {
+				cfgYAML.InsertSeq(fullPath, sliceToStrings(fieldValue), usage)
+				continue
+			}
+
+			value := fmt.Sprintf("%v", fieldValue.Interface())
 			if value != "" { // Only insert non-empty values
 				cfgYAML.Insert(fullPath, value, usage)
 			}
 		}
 	}
+}
+
+// sliceToStrings renders each element of a slice as the scalar it will be
+// written as. Config slices are []string today; the fmt fallback keeps any
+// future element type from silently producing a malformed document.
+func sliceToStrings(v reflect.Value) []string {
+	out := make([]string, 0, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		e := v.Index(i)
+		if e.Kind() == reflect.String {
+			out = append(out, e.String())
+			continue
+		}
+		out = append(out, fmt.Sprintf("%v", e.Interface()))
+	}
+	return out
 }
 
 // ResultCommand returns the --json envelope's stable dotted discriminator.
