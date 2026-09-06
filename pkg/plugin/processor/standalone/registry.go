@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/internal/wasmengine"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/stealthrocket/wazergo"
@@ -34,10 +35,16 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// newRuntime is a function that creates a new Wazero runtime. This is used to
-// allow tests to replace the runtime with an interpreter runtime, as it's much
-// faster than the compiler runtime.
-var newRuntime = wazero.NewRuntime
+// newRuntime creates a new wazero runtime for compiling and running standalone
+// WASM processors. It delegates to wasmengine.New so that test binaries — in
+// this package and in pkg/registry, which drives this package's loader through
+// InspectSpecification — can swap in the interpreter runtime, much faster than
+// the compiler runtime for a module that is loaded, inspected and discarded.
+// The knob lives in pkg/internal/wasmengine so it cannot be reached from
+// outside this module. Production always gets wazero's default engine.
+func newRuntime(ctx context.Context) wazero.Runtime {
+	return wasmengine.New(ctx)
+}
 
 // Registry is a directory registry of processor plugins, organized by plugin
 // type, name and version.
