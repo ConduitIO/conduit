@@ -84,11 +84,9 @@ func TestMain(m *testing.M) {
 	// instantiate shared test runtime
 	ctx := context.Background()
 
-	// use interpreter runtime as it's faster for tests
-	newRuntime = func(ctx context.Context) wazero.Runtime {
-		cfg := wazero.NewRuntimeConfigInterpreter()
-		return wazero.NewRuntimeWithConfig(ctx, cfg)
-	}
+	// use interpreter runtime as it's faster for tests (see
+	// UseInterpreterRuntimeInTests for the measured numbers)
+	UseInterpreterRuntimeInTests()
 
 	TestRuntime = newRuntime(ctx)
 
