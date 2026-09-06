@@ -14,9 +14,14 @@ name: link check
 # the diff teaches people to bypass it, and a check people bypass protects
 # nothing. This is flake-hunt.yml's reasoning, applied to links.
 #
-# Because it is not a PR gate, it does NOT get a row in CLAUDE.md's "Process
-# maturity" table - that table tracks gates that block a merge. Do not describe
-# this workflow as a gate anywhere.
+# It does NOT get a row in CLAUDE.md's "Process maturity" table. Not because the
+# table only tracks blocking gates - it does track non-blocking and scheduled
+# states (the property/fuzz row tracks a MISSING scheduled long-fuzz run) - but
+# because that table enumerates the specific engineering-standard gates named in
+# CLAUDE.md's "Testing standards" and "PR review process". A link check is named
+# nowhere in CLAUDE.md, and neither flake-hunt.yml nor markdown-lint.yml has a
+# row either, despite markdownlint being a live blocking PR check. Do not
+# describe this workflow as a gate anywhere.
 #
 # WHY WEEKLY AND NOT NIGHTLY: link rot is measured in months, and every run
 # spends third-party rate-limit budget (github.com most of all). Weekly catches
@@ -52,13 +57,19 @@ jobs:
   link-check:
     name: check links in front-door docs
     runs-on: ubuntu-latest
+    # The retry budget below backs off exponentially, so the theoretical worst
+    # case is ~23 minutes of waiting. Bound it explicitly rather than falling
+    # back to GitHub's 360-minute default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
       # Restore lychee's verdict cache so a manual re-run does not re-request
       # every URL. --max-cache-age below decides when an entry goes stale.
       - name: Restore lychee cache
-        uses: actions/cache@v4
+        # v6, not v4: v4 targets Node.js 20, which the runners now force onto
+        # Node.js 24 with a deprecation warning. v6 targets Node.js 24 natively.
+        uses: actions/cache@v6
         with:
           path: .lycheecache
           key: cache-lychee-${{ github.sha }}
@@ -74,9 +85,16 @@ jobs:
           # postmortems are historical records that cite URLs as they were at
           # the time; rewriting them to chase link rot would falsify them.
           #
-          # 429 is accepted, not failed: a rate-limited response says nothing
-          # about whether the link is alive, and failing on it is exactly the
-          # flakiness this workflow is shaped to avoid.
+          # --accept REPLACES lychee's default accepted set (100..=103,200..=299)
+          # rather than extending it, so the default range is restated here.
+          # Passing a bare "200,206,429" would quietly start failing any link
+          # that answers 201/202/204 - a latent false-failure generator inside a
+          # check whose whole point is not producing false failures.
+          #
+          # 429 is added because a rate-limited response says nothing about
+          # whether the link is alive, and failing on it is exactly the
+          # flakiness this workflow is shaped to avoid. It does not burn the
+          # retry budget: lychee returns early once a status is accepted.
           #
           # The retry/timeout budget is deliberately generous (up to 6 attempts,
           # 15s apart, 60s each). The first run of this workflow timed out on
@@ -91,7 +109,7 @@ jobs:
             --max-retries 6
             --retry-wait-time 15
             --timeout 60
-            --accept 200,206,429
+            --accept 100..=103,200..=299,429
             README.md
             CONTRIBUTING.md
             ROADMAP.md
