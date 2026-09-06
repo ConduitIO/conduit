@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/internal/wasmengine"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -84,9 +85,10 @@ func TestMain(m *testing.M) {
 	// instantiate shared test runtime
 	ctx := context.Background()
 
-	// use interpreter runtime as it's faster for tests (see
-	// UseInterpreterRuntimeInTests for the measured numbers)
-	UseInterpreterRuntimeInTests()
+	// Use the interpreter runtime as it's faster for tests; set
+	// CONDUIT_TEST_WASM_ENGINE=compiler to run this binary against wazero's
+	// optimizing compiler instead. See wasmengine.ConfigureForTests.
+	wasmengine.ConfigureForTests()
 
 	TestRuntime = newRuntime(ctx)
 
