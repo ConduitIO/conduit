@@ -1,0 +1,13 @@
+# URLs the link check (.github/workflows/link-check.yml) must not try to fetch.
+# One regex per line; lines starting with # are comments.
+#
+# Keep this file empty of "make it green" entries. A link that is genuinely
+# gone gets repointed at something that resolves, not silenced here. The only
+# legitimate entries are URLs that cannot be checked by an unauthenticated
+# runner at all - private hosts, endpoints that only exist while Conduit is
+# running locally, or hosts that reject automated requests outright.
+#
+# Nothing is excluded today: every URL in README.md, CONTRIBUTING.md and
+# ROADMAP.md resolves, and the two that do not (http://localhost:8080/openapi
+# and the api.voyageai.com allowlist example) sit inside inline code and fenced
+# code blocks, which lychee skips as verbatim unless --include-verbatim is set.

@@ -1,0 +1,136 @@
+name: link check
+
+# Catches STALE_PUBLIC_REFERENCE rot in the repo's front-door markdown: dead
+# domains and moved files. It exists because the three broken links fixed in
+# the PR that added it had been broken for months with nothing to notice - the
+# README's "API docs" badge pointed at docs.conduit.io, a domain that no longer
+# resolves, and the OpenAPI definition at a pkg/web/... path that had moved to
+# pkg/http/... . A reader hits both of those before they ever run Conduit.
+#
+# SCHEDULED, NOT PER-PR, AND DELIBERATELY NOT BLOCKING. Link checking is the
+# textbook flaky gate: it fails on someone else's rate limit, someone else's
+# TLS renewal, and someone else's outage, none of which the PR author can fix
+# or should be blocked by. A blocking check that goes red for reasons outside
+# the diff teaches people to bypass it, and a check people bypass protects
+# nothing. This is flake-hunt.yml's reasoning, applied to links.
+#
+# Because it is not a PR gate, it does NOT get a row in CLAUDE.md's "Process
+# maturity" table - that table tracks gates that block a merge. Do not describe
+# this workflow as a gate anywhere.
+#
+# WHY WEEKLY AND NOT NIGHTLY: link rot is measured in months, and every run
+# spends third-party rate-limit budget (github.com most of all). Weekly catches
+# rot long before a release cut, at a seventh of the traffic.
+#
+# WHY lychee AND NOT markdown-link-check: lychee has native retries and
+# per-host rate limiting, caches verdicts between runs, and reads GITHUB_TOKEN
+# so the many github.com links here are not 429'd from a shared runner IP. The
+# action is pinned by commit SHA, matching the markdownlint-cli2-action pin in
+# markdown-lint.yml.
+
+on:
+  schedule:
+    # Mondays 06:40 UTC. Minute/hour offset from the other scheduled workflows
+    # (trigger-nightly 03:00, flake-hunt 03:30, govulncheck 05:15) so they do
+    # not contend for runners.
+    - cron: '40 6 * * 1'
+  workflow_dispatch:
+  # Also runs when the check itself is edited, so a change to the workflow or
+  # its ignore list is exercised before it merges. This does not make the job a
+  # gate: it is not in main's required contexts, and being path-filtered it
+  # could not become one without being restructured first.
+  pull_request:
+    paths:
+      - '.github/workflows/link-check.yml'
+      - '.lycheeignore'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  link-check:
+    name: check links in front-door docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Restore lychee's verdict cache so a manual re-run does not re-request
+      # every URL. --max-cache-age below decides when an entry goes stale.
+      - name: Restore lychee cache
+        uses: actions/cache@v4
+        with:
+          path: .lycheecache
+          key: cache-lychee-${{ github.sha }}
+          restore-keys: cache-lychee-
+
+      - name: Check links
+        # v2.9.0, pinned by commit SHA. Keep the trailing comment and the SHA
+        # in sync when bumping.
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Scoped to the front-door docs a new reader actually lands on,
+          # rather than globbing **/*.md. Design documents, ADRs and
+          # postmortems are historical records that cite URLs as they were at
+          # the time; rewriting them to chase link rot would falsify them.
+          #
+          # 429 is accepted, not failed: a rate-limited response says nothing
+          # about whether the link is alive, and failing on it is exactly the
+          # flakiness this workflow is shaped to avoid.
+          args: >-
+            --no-progress
+            --cache
+            --max-cache-age 1w
+            --max-retries 4
+            --retry-wait-time 10
+            --timeout 30
+            --accept 200,206,429
+            README.md
+            CONTRIBUTING.md
+            ROADMAP.md
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A scheduled failure has no PR to annotate, so it files (or comments on)
+      # an issue. Without this the only record is a red run nobody opens.
+      - name: File an issue on failure
+        if: failure() && github.event_name != 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = 'Broken links found in front-door docs';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The weekly link check failed: ${runUrl}`,
+              '',
+              'Open the run and read the lychee summary for the failing URLs.',
+              'Fix the link, or - if the target is legitimately gone - point it at',
+              'something that resolves. Do not add it to `.lycheeignore` just to make',
+              'this green.',
+            ].join('\n');
+            // Dedupe on title rather than a label so this does not depend on a
+            // label existing in the repo.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.find((i) => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['documentation'],
+              });
+            }

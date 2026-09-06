@@ -147,19 +147,40 @@ func (c *InstallCommand) Docs() ecdysis.Docs {
 		Short: "Install a standalone connector from the registry index",
 		Long: `install resolves <name>[@version] against the registry index (exact-match name lookup,
 newest-compatible version selection when @version is omitted), downloads the artifact for this
-host's platform, checks its integrity, and — pending the trust core landing in a future
-release — refuses at the verification step: this build has no code path that installs an
-unverified connector artifact.
+host's platform, verifies it, and unpacks it into --connectors.path so 'conduit run' can use it.
+
+Every install is verified end to end. The signed index is checked against the trust anchors
+compiled into this build and refused if it is unsigned, stale, or rolled back; the downloaded
+artifact must match the index sha256 and carry BOTH a valid signature and a SLSA provenance
+attestation from the connector's pinned identity. A signature without provenance is refused.
+There is no flag, config value, or environment variable that disables index verification.
+
+  --dry-run          resolve and select the platform artifact and report what would be
+                     installed; downloads no artifact and installs nothing (the verified
+                     index's freshness state is still recorded under --connectors.path)
+  --index-file       read the index from a local file instead of --index-url (offline)
+  --bundle           install fully offline from a 'conduit connectors bundle' tarball; makes no
+                     network call and re-verifies everything from the bundle's own contents
+  --allow-unsigned   skip ONLY the artifact signature/provenance check — never the sha256 check
+                     and never index verification. Refused unless it clears the full gate: a
+                     typed interactive confirmation, or CONDUIT_ALLOW_UNSIGNED_INSTALL=I_UNDERSTAND
+                     in a non-interactive context, and never at all when the operator has set
+                     install.allow-unsigned to false.
 
 Exit codes (via the ConduitError's registered category):
   0  success
-  1  Runtime    — internal bug, archive-shape violation, verification not yet available
-  2  Validation — connector/version not found, incompatible version, yanked/revoked, no platform artifact
-  3  Environment — index unreachable, download failed, corrupt download, install lock contended`,
+  1  Runtime    — internal bug, archive-shape violation, corrupt download (sha256 mismatch),
+                  index integrity failure, no usable trust anchors in this build
+  2  Validation — connector/version not found, incompatible version, yanked version,
+                  no platform artifact, stale/rolled-back/too-new index, stale bundle
+  3  Environment — index unreachable, download failed, install lock contended, and every
+                  trust rejection: unsigned or mis-signed artifact, invalid provenance,
+                  revoked identity, or an --allow-unsigned attempt refused by policy`,
 		Example: "conduit connectors install postgres\n" +
 			"conduit connectors install postgres@0.14.1\n" +
 			"conduit connectors install postgres --dry-run\n" +
-			"conduit connectors install postgres --json",
+			"conduit connectors install postgres --json\n" +
+			"conduit connectors install --bundle ./postgres-0.14.2-linux-amd64.bundle.tar.gz",
 	}
 }
 
