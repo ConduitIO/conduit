@@ -19,9 +19,11 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"text/template"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -317,34 +319,120 @@ func (c *InitCommand) renderPipeline(pipeline pipelineTemplate) (string, error) 
 	return buf.String(), nil
 }
 
-// ensureDestinationDir creates the directory c.configFilePath will be
-// written into, if it does not already exist, and records it in
-// c.createdDir when this run is the one that created it (so Render and the
-// --json result can report it, the way `conduit init` reports the
-// directories it creates).
+// isDestinationShapedError reports whether err is the filesystem saying
+// something about the *shape or accessibility of the destination path* —
+// as opposed to something about the state of the storage underneath it.
+//
+// This predicate is what keeps `pipelines init`'s exit code deterministic
+// across platforms. A full filesystem surfaces ENOSPC at different syscalls
+// on different systems: HFS+/APFS allocate eagerly, so it comes back from
+// open(2); ext4's delayed allocation defers it to write(2) or close(2).
+// Classifying every non-EEXIST open failure as an unwritable destination
+// would therefore give "disk full" exit 2 on macOS and exit 1 on Linux for
+// the identical condition, which defeats the point of
+// docs/architecture-decision-records/20260706-deterministic-cli-exit-codes.md
+// (scripts and agents branch on the code). It would also print the wrong
+// remedy: on a full disk the directory is perfectly writable.
+//
+// So only destination-shaped errnos map to CodePipelinesPathUnwritable
+// (exit 2, "fix the path you asked for"); ENOSPC, EDQUOT, EIO and anything
+// else fall through to conduiterr.CodeInternal (exit 1), matching what the
+// post-open write path has always returned.
+//
+// The two portable fs sentinels are checked first so this also classifies
+// correctly on Windows, whose syscall.Errno values are Win32 error codes
+// rather than the POSIX constants below.
+func isDestinationShapedError(err error) bool {
+	if cerrors.Is(err, fs.ErrPermission) || cerrors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+
+	var errno syscall.Errno
+	if !cerrors.As(err, &errno) {
+		return false
+	}
+	//nolint:exhaustive // An allowlist by design: every errno not named here
+	// is deliberately NOT destination-shaped (see this function's doc).
+	switch errno {
+	case syscall.EACCES, // no permission on a path component
+		syscall.EPERM,        // operation not permitted (e.g. immutable flag)
+		syscall.ENOTDIR,      // a path component is not a directory
+		syscall.EISDIR,       // the destination file path is a directory
+		syscall.ENOENT,       // a parent directory does not exist
+		syscall.ELOOP,        // symlink loop in the path
+		syscall.ENAMETOOLONG: // the path is too long for this filesystem
+		return true
+	default:
+		return false
+	}
+}
+
+// destinationError builds the coded error for a failed create-or-open of the
+// pipeline destination, choosing the code from isDestinationShapedError:
+// CodePipelinesPathUnwritable (exit 2) with the caller's remedy when the
+// path itself is the problem, conduiterr.CodeInternal (exit 1) with a
+// storage-oriented remedy otherwise. Both carry the underlying OS error in
+// the message — the defect this replaces was a bare, reason-less
+// "could not open X".
+//
+// The suggestion is deliberately not shared between the two: telling a user
+// whose disk is full to "check that the directory is writable" is the same
+// unhelpful-error defect, relocated.
+func destinationError(msg, configPath, suggestion string, err error) error {
+	if !isDestinationShapedError(err) {
+		ce := conduiterr.Wrap(conduiterr.CodeInternal, msg, err)
+		ce.ConfigPath = configPath
+		ce.Suggestion = "the filesystem rejected the write for a reason unrelated to the destination path " +
+			"(a full or read-only device, a quota, or an I/O error) — check free space and quota on this filesystem"
+		return ce
+	}
+
+	ce := conduiterr.Wrap(CodePipelinesPathUnwritable, msg, err)
+	ce.ConfigPath = configPath
+	ce.Suggestion = suggestion
+	return ce
+}
+
+// ensureDestinationDir creates --pipelines.path, if it does not already
+// exist, and records it in c.createdDir when this run is the one that
+// created it (so Render and the --json result can report it, the way
+// `conduit init` reports the directories it creates).
 //
 // Why this exists: `conduit pipelines init` with no arguments — the first
 // example in its own --help — writes to ./pipelines/demo-pipeline.yaml, and
 // used to fail outright in any directory that was not already a Conduit
 // workspace, because nothing created ./pipelines first. `mkdir pipelines`
 // made the identical command succeed, which is not a decision a user should
-// have to make. `conduit init` already creates pipelines/ as part of setting
-// up a workspace, so creating it on demand here is the consistent behavior,
-// not a new one: the scaffold command owns the file it writes and the
-// directory that holds it. Both surfaces remain idempotent — MkdirAll is a
-// no-op on an existing directory — and the overwrite protection that matters
-// is on the pipeline *file* (writeFile's O_EXCL), which this does not
-// weaken: creating a directory never destroys anything.
+// have to make. `conduit init` already creates pipelines/ as part of
+// setting up a workspace, so creating it on demand here is the consistent
+// behavior, not a new one: the scaffold command owns the file it writes and
+// the directory that holds it. Both surfaces remain idempotent — MkdirAll is
+// a no-op on an existing directory — and the overwrite protection that
+// matters is on the pipeline *file* (writeFile's O_EXCL), which this does
+// not weaken: creating a directory never destroys anything.
+//
+// Invariant: this creates --pipelines.path and nothing below it. It
+// deliberately does NOT create filepath.Dir(c.configFilePath), which the
+// *positional pipeline-name argument* can point anywhere: a name containing
+// a path separator ("sub/nested/name", or "../../escaped/evil") would
+// otherwise have this command silently create directories — including ones
+// outside --pipelines.path — and report success for a file
+// pkg/provisioning/config's YAMLFilesInDir never loads, because it reads
+// direct children of the pipelines directory and does not recurse. Such a
+// name now fails at the open with a coded error instead of succeeding
+// falsely.
 //
 // Only reached when !DryRun (writeFile's only caller path), so --dry-run
 // still touches the filesystem not at all — it neither writes the file nor
 // creates the directory.
 //
 // 0o755 (not conduit init's os.ModePerm) matches pkg/scaffold's parent-dir
-// creation: the umask makes the two equivalent under any normal umask, and
-// an explicit non-world-writable mode is the safer literal.
+// creation. The two are NOT equivalent: os.ModePerm is 0o777, so under a
+// umask looser than 022 (umask 002 -> 775, umask 000 -> 777) `conduit init`
+// produces a group- or world-writable pipelines directory where this
+// produces 755. The explicit, tighter literal is the deliberate choice here.
 func (c *InitCommand) ensureDestinationDir() error {
-	dir := filepath.Dir(c.configFilePath)
+	dir := filepath.Clean(c.flags.PipelinesPath)
 
 	// Stat first only to decide whether to *report* a creation; MkdirAll
 	// below is still the authoritative, race-free create (it succeeds if
@@ -354,16 +442,17 @@ func (c *InitCommand) ensureDestinationDir() error {
 	existedBefore := statErr == nil
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		ce := conduiterr.Wrap(CodePipelinesPathUnwritable,
-			fmt.Sprintf("could not create the pipelines directory %q: %v", dir, err), err)
-		ce.ConfigPath = dir
-		ce.Suggestion = fmt.Sprintf(
-			"check that %q is writable and that nothing other than a directory occupies %q, "+
-				"run `conduit init` to set up a Conduit workspace here, "+
-				"or pass --pipelines.path to write the pipeline somewhere else",
-			filepath.Dir(dir), dir,
+		return destinationError(
+			fmt.Sprintf("could not create the pipelines directory %q: %v", dir, err),
+			dir,
+			fmt.Sprintf(
+				"check that %q is writable and that nothing other than a directory occupies %q, "+
+					"run `conduit init` to set up a Conduit workspace here, "+
+					"or pass --pipelines.path to write the pipeline somewhere else",
+				filepath.Dir(dir), dir,
+			),
+			err,
 		)
-		return ce
 	}
 
 	if !existedBefore {
@@ -408,29 +497,44 @@ func (c *InitCommand) writeFile(renderedConfig string) error {
 			)
 			return ce
 		}
-		// Anything else the open can fail with (the path is a directory,
-		// the directory is read-only, a path component is not a directory)
-		// is an ordinary unwritable-destination problem, not an internal
-		// bug: report the underlying OS error and a remedy rather than the
-		// bare, reason-less "could not open X" under internal.error this
-		// used to return. See CodePipelinesPathUnwritable.
-		ce := conduiterr.Wrap(CodePipelinesPathUnwritable,
-			fmt.Sprintf("could not write the pipeline file %q: %v", c.configFilePath, err), err)
-		ce.ConfigPath = c.configFilePath
-		ce.Suggestion = fmt.Sprintf(
-			"check that %q is a writable directory, or pass --pipelines.path to write the pipeline somewhere else",
-			filepath.Dir(c.configFilePath),
+		// Every other open failure is classified by destinationError: a
+		// problem with the path itself (unwritable directory, a directory
+		// where the file should be, a pipeline name containing a path
+		// separator whose parent does not exist) is the user-fixable
+		// CodePipelinesPathUnwritable, while a full disk or an I/O error is
+		// not — see isDestinationShapedError. Either way the underlying OS
+		// error goes into the message, replacing the bare, reason-less
+		// "could not open X" under internal.error this used to return.
+		return destinationError(
+			fmt.Sprintf("could not write the pipeline file %q: %v", c.configFilePath, err),
+			c.configFilePath,
+			fmt.Sprintf(
+				"check that %q is a writable directory and that the pipeline name contains no path separator, "+
+					"or pass --pipelines.path to write the pipeline somewhere else",
+				filepath.Dir(c.configFilePath),
+			),
+			err,
 		)
-		return ce
 	}
 	defer output.Close()
 
 	if _, err := output.WriteString(renderedConfig); err != nil {
-		// A failure after a successful open is a genuine I/O failure (the
-		// device is full, the filesystem errored mid-write), not a
-		// user-fixable destination problem — it stays in the internal
-		// bucket deliberately.
-		return conduiterr.Wrap(conduiterr.CodeInternal, "failed writing pipeline config", err)
+		// Routed through the same classifier as the open failure above so
+		// the two branches cannot disagree: a full device reaching this
+		// path (Linux's delayed allocation) and the same device reaching
+		// the open path (macOS's eager allocation) must produce the same
+		// code and the same remedy. In practice everything here is a
+		// storage failure, so this is CodeInternal (exit 1) — which is
+		// what this branch has always returned.
+		return destinationError(
+			fmt.Sprintf("could not write the pipeline file %q: %v", c.configFilePath, err),
+			c.configFilePath,
+			fmt.Sprintf(
+				"check that %q is a writable directory, or pass --pipelines.path to write the pipeline somewhere else",
+				filepath.Dir(c.configFilePath),
+			),
+			err,
+		)
 	}
 	return nil
 }

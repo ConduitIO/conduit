@@ -32,10 +32,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
@@ -489,4 +491,162 @@ func mustResult(is *is.I, b []byte) cecdysis.Result {
 	var got cecdysis.Result
 	is.NoErr(json.Unmarshal(b, &got))
 	return got
+}
+
+// TestIsDestinationShapedError is the predicate-level guard for the exit-code
+// determinism the classifier exists to protect (review of #2857): a full
+// device surfaces ENOSPC at open(2) on HFS+/APFS and at write(2) on ext4, so
+// if the open branch classified it as an unwritable *destination* the same
+// "disk full" would exit 2 on macOS and 1 on Linux. Storage-state errnos must
+// therefore be excluded from the destination-shaped set.
+//
+// Injected at the predicate rather than by filling a real filesystem, which
+// is not portably fakeable in a unit test.
+func TestIsDestinationShapedError(t *testing.T) {
+	is := is.New(t)
+
+	destinationShaped := []syscall.Errno{
+		syscall.EACCES, syscall.EPERM, syscall.ENOTDIR,
+		syscall.EISDIR, syscall.ENOENT, syscall.ELOOP, syscall.ENAMETOOLONG,
+	}
+	for _, errno := range destinationShaped {
+		err := &os.PathError{Op: "open", Path: "/x/pipelines/p.yaml", Err: errno}
+		is.True(isDestinationShapedError(err)) // must be exit 2
+	}
+
+	storageState := []syscall.Errno{syscall.ENOSPC, syscall.EDQUOT, syscall.EIO, syscall.EROFS}
+	for _, errno := range storageState {
+		err := &os.PathError{Op: "open", Path: "/x/pipelines/p.yaml", Err: errno}
+		is.True(!isDestinationShapedError(err)) // must fall through to internal
+	}
+
+	// A plain error carrying no errno at all is not destination-shaped.
+	is.True(!isDestinationShapedError(cerrors.New("boom")))
+	is.True(!isDestinationShapedError(nil))
+}
+
+// TestDestinationError_DiskFullIsNotAPathProblem pins the whole outcome, not
+// just the predicate: a synthesized ENOSPC must produce the internal code
+// (exit 1, the same bucket the post-open write branch has always returned),
+// must NOT tell the user to check that the directory is writable — the
+// directory is fine, the device is full — and must still carry the OS error.
+func TestDestinationError_DiskFullIsNotAPathProblem(t *testing.T) {
+	is := is.New(t)
+
+	full := &os.PathError{Op: "open", Path: "/x/pipelines/p.yaml", Err: syscall.ENOSPC}
+	err := destinationError("could not write the pipeline file: no space left on device",
+		"/x/pipelines/p.yaml", "check that the directory is writable", full)
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), conduiterr.CodeInternal.Reason())
+	is.Equal(exitcode.ExitCode(err), exitcode.Runtime)
+	is.True(!strings.Contains(ce.Suggestion, "writable directory"))
+	is.True(strings.Contains(ce.Suggestion, "free space"))
+	is.True(cerrors.Is(err, syscall.ENOSPC)) // cause preserved
+
+	// The permission case, by contrast, keeps the caller's remedy and exit 2.
+	denied := &os.PathError{Op: "open", Path: "/x/pipelines/p.yaml", Err: syscall.EACCES}
+	err2 := destinationError("could not write the pipeline file: permission denied",
+		"/x/pipelines/p.yaml", "check that the directory is writable", denied)
+
+	ce2, ok := conduiterr.Get(err2)
+	is.True(ok)
+	is.Equal(ce2.Code.Reason(), CodePipelinesPathUnwritable.Reason())
+	is.Equal(exitcode.ExitCode(err2), exitcode.Validation)
+	is.Equal(ce2.Suggestion, "check that the directory is writable")
+}
+
+// TestInitCommand_NestedPipelineName_NoFalseSuccess is the regression test
+// for the second review finding: because the positional pipeline name is
+// joined into the destination path, creating filepath.Dir(configFilePath)
+// would have made a name containing a path separator silently succeed —
+// writing a file that pkg/provisioning/config's YAMLFilesInDir never loads
+// (it reads direct children of the pipelines directory and does not
+// recurse), while printing "simply run `conduit run`" and returning
+// ok:true. Only --pipelines.path is created, so this must fail with a coded
+// exit-2 error instead.
+func TestInitCommand_NestedPipelineName_NoFalseSuccess(t *testing.T) {
+	is := is.New(t)
+	pipelinesDir := filepath.Join(t.TempDir(), "pipelines")
+
+	cmd := newInitEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"sub/nested/name", "--pipelines.path=" + pipelinesDir, "--json"})
+
+	err := cmd.Execute()
+	is.True(err != nil)
+	is.Equal(exitcode.ExitCode(err), exitcode.Validation)
+
+	got := mustResult(is, out.Bytes())
+	is.True(!got.OK)
+	is.True(got.Error != nil)
+	is.Equal(got.Error.Code, CodePipelinesPathUnwritable.Reason())
+
+	// --pipelines.path itself is created (that is this PR's fix), but
+	// nothing below it is.
+	_, statErr := os.Stat(pipelinesDir)
+	is.NoErr(statErr)
+	_, statErr = os.Stat(filepath.Join(pipelinesDir, "sub"))
+	is.True(os.IsNotExist(statErr))
+}
+
+// TestInitCommand_EscapingPipelineName_CreatesNothingOutside is the other
+// half of the same finding: a "../../escaped/evil" name must never have this
+// command create directories outside --pipelines.path.
+func TestInitCommand_EscapingPipelineName_CreatesNothingOutside(t *testing.T) {
+	is := is.New(t)
+	root := t.TempDir()
+	// Deep enough that "../.." from the pipelines dir stays inside the
+	// TempDir, so the assertion is about our behavior and not about the
+	// test tree's shape.
+	pipelinesDir := filepath.Join(root, "workspace", "here", "pipelines")
+
+	cmd := newInitEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"../../escaped/evil", "--pipelines.path=" + pipelinesDir, "--json"})
+
+	err := cmd.Execute()
+	is.True(err != nil)
+	is.Equal(exitcode.ExitCode(err), exitcode.Validation)
+
+	got := mustResult(is, out.Bytes())
+	is.True(!got.OK)
+	is.Equal(got.Error.Code, CodePipelinesPathUnwritable.Reason())
+
+	// Nothing was created outside --pipelines.path.
+	_, statErr := os.Stat(filepath.Join(root, "workspace", "escaped"))
+	is.True(os.IsNotExist(statErr))
+	_, statErr = os.Stat(filepath.Join(root, "escaped"))
+	is.True(os.IsNotExist(statErr))
+}
+
+// TestInitCommand_ExistingDir_OmitsCreatedDirKey pins the omitempty
+// guarantee at the wire level. Asserting CreatedDir == "" on a decoded
+// InitResult cannot tell an absent key from an empty one — dropping
+// omitempty would keep that assertion green while every --json consumer
+// gained a key. This asserts on the raw JSON object instead.
+func TestInitCommand_ExistingDir_OmitsCreatedDirKey(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir() // already exists: nothing for init to create
+
+	cmd := newInitEcdysis().MustBuildCobraCommand(&InitCommand{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pipelines.path=" + dir, "--json"})
+	is.NoErr(cmd.Execute())
+
+	var raw struct {
+		Result map[string]any `json:"result"`
+	}
+	is.NoErr(json.Unmarshal(out.Bytes(), &raw))
+	_, ok := raw.Result["createdDir"]
+	is.True(!ok) // key absent, not present-and-empty
+
+	// Human output must not claim a creation either.
+	is.True(!strings.Contains(out.String(), "Created directory"))
 }
