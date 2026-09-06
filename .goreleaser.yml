@@ -16,8 +16,15 @@ builds:
       - ui
     ldflags:
       - "-s -w -X 'github.com/conduitio/conduit/pkg/conduit.version={{ .Tag }}'"
+    hooks:
+      post:
+        # Developer ID-sign and notarize darwin binaries so a browser-downloaded
+        # release is not killed by Gatekeeper. No-op for non-darwin targets, for
+        # nightly tags, and whenever QUILL_SIGN_P12 is unset — see the script.
+        - cmd: ./scripts/sign-darwin.sh "{{ .Path }}" "{{ .Target }}"
+          output: true
 archives:
-  - builds:
+  - ids:
       - conduit
     name_template: >-
       {{ .ProjectName }}_
@@ -28,7 +35,8 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 checksum:
   name_template: 'checksums.txt'
 snapshot:
