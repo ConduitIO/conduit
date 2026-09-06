@@ -77,13 +77,20 @@ jobs:
           # 429 is accepted, not failed: a rate-limited response says nothing
           # about whether the link is alive, and failing on it is exactly the
           # flakiness this workflow is shaped to avoid.
+          #
+          # The retry/timeout budget is deliberately generous (up to 6 attempts,
+          # 15s apart, 60s each). The first run of this workflow timed out on
+          # www.gnu.org at a 30s budget while the same URL answered in 0.5s from
+          # an ordinary connection - a runner-side hiccup, not link rot. On a
+          # weekly job the extra wall-clock costs nothing and buys a report
+          # people can trust.
           args: >-
             --no-progress
             --cache
             --max-cache-age 1w
-            --max-retries 4
-            --retry-wait-time 10
-            --timeout 30
+            --max-retries 6
+            --retry-wait-time 15
+            --timeout 60
             --accept 200,206,429
             README.md
             CONTRIBUTING.md
