@@ -167,15 +167,21 @@ There is no flag, config value, or environment variable that disables index veri
                      in a non-interactive context, and never at all when the operator has set
                      install.allow-unsigned to false.
 
-Exit codes (via the ConduitError's registered category):
+Exit codes (via the ConduitError's registered category). Trust rejections are split across
+buckets on purpose — read the error code, not just the exit code:
   0  success
   1  Runtime    — internal bug, archive-shape violation, corrupt download (sha256 mismatch),
-                  index integrity failure, no usable trust anchors in this build
-  2  Validation — connector/version not found, incompatible version, yanked version,
-                  no platform artifact, stale/rolled-back/too-new index, stale bundle
-  3  Environment — index unreachable, download failed, install lock contended, and every
-                  trust rejection: unsigned or mis-signed artifact, invalid provenance,
-                  revoked identity, or an --allow-unsigned attempt refused by policy`,
+                  index integrity failure (a key this build knows, but verification failed),
+                  or this build's embedded anchors could not be loaded at all
+                  (registry.trust_anchors_unavailable — a broken build; reinstall a release)
+  2  Validation — connector/version not found, incompatible version, yanked version, no
+                  platform artifact, stale/rolled-back/too-new index, index nesting too deep,
+                  stale bundle, and registry.trust_anchor_expired: the index is signed by a
+                  key this build does not know, so upgrade Conduit
+  3  Environment — index unreachable, download failed, install lock contended, an index or
+                  signature bundle over its size cap, and the artifact trust rejections:
+                  unsigned or mis-signed, invalid provenance, a revoked or too-loosely-pinned
+                  publisher identity, or an --allow-unsigned attempt refused by policy`,
 		Example: "conduit connectors install postgres\n" +
 			"conduit connectors install postgres@0.14.1\n" +
 			"conduit connectors install postgres --dry-run\n" +
