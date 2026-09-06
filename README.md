@@ -12,7 +12,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Twitter](https://img.shields.io/static/v1?label=X/Twitter&message=Follow&color=1DA1F2&logo=twitter&logoColor=white)](https://x.com/ConduitIO)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduitdata.io/docs/getting-started)
-[![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
+[![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://conduitdata.io/api)
 
 ## Overview
 
@@ -60,15 +60,53 @@ see <https://conduitdata.io/docs/getting-started>.
 
 ## Installation guide
 
+### Install script (recommended)
+
+The install script detects your platform and installs Conduit through the native
+package manager for it — Homebrew on macOS, `dpkg` or `rpm` on Linux:
+
+```sh
+curl https://conduitdata.io/install.sh | bash
+```
+
+This is the route the [documentation site](https://conduitdata.io/docs/getting-started)
+leads with, and on macOS it is the one to prefer: it goes through Homebrew, so it
+avoids the quarantine problem described under
+[Download binary and run](#download-binary-and-run).
+
+### Homebrew
+
+Make sure you have [homebrew](https://brew.sh/) installed on your machine, then run:
+
+```sh
+brew update
+brew install conduit
+```
+
 ### Download binary and run
 
 Download a pre-built binary from
 the [latest release](https://github.com/conduitio/conduit/releases/latest) and
-simply run it!
+run it:
 
 ```sh
 ./conduit run
 ```
+
+On macOS, the release binaries are ad-hoc signed — they are not Developer ID
+signed and they are not notarized. A binary downloaded through a browser
+therefore carries the `com.apple.quarantine` attribute, and Gatekeeper refuses
+to run it with no error message at all: the process is killed and you get an
+empty terminal. Clear the attribute after downloading and before you run the
+binary for the first time:
+
+```sh
+xattr -d com.apple.quarantine ./conduit
+```
+
+`curl` and `wget` do not set the quarantine attribute, so a binary fetched that
+way runs as-is. Homebrew and the install script are unaffected — on macOS,
+prefer either of those.
 
 Once you see that the service is running, the configured pipeline should start
 processing records automatically. You can also interact with
@@ -80,31 +118,26 @@ Conduit can be configured through command line parameters. To view the full list
 of available options, run `./conduit run --help` or see
 [configuring Conduit](#configuring-conduit).
 
-### Homebrew
-
-Make sure you have [homebrew](https://brew.sh/) installed on your machine, then run:
-
-```sh
-brew update
-brew install conduit
-```
-
 ### Debian
 
 Download the right `.deb` file for your machine architecture from the
-[latest release](https://github.com/conduitio/conduit/releases/latest), then run:
+[latest release](https://github.com/conduitio/conduit/releases/latest), then run
+the command below, substituting the version and architecture of the file you
+downloaded for `<version>` and `<arch>`:
 
 ```sh
-dpkg -i conduit_0.17.0_Linux_x86_64.deb
+dpkg -i conduit_<version>_Linux_<arch>.deb
 ```
 
 ### RPM
 
 Download the right `.rpm` file for your machine architecture from the
-[latest release](https://github.com/conduitio/conduit/releases/latest), then run:
+[latest release](https://github.com/conduitio/conduit/releases/latest), then run
+the command below, substituting the version and architecture of the file you
+downloaded for `<version>` and `<arch>`:
 
 ```sh
-rpm -i conduit_0.17.0_Linux_x86_64.rpm
+rpm -i conduit_<version>_Linux_<arch>.rpm
 ```
 
 ### Build from source
@@ -352,8 +385,8 @@ The HTTP API is by default running on port 8080. You can define a custom address
 using the CLI flag `-api.http.address`. It is generated
 using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus
 providing the same functionality as the gRPC API. To learn more about the HTTP
-API please have a look at the [API documentation](https://www.conduit.io/api),
-[OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json)
+API please have a look at the [API documentation](https://conduitdata.io/api),
+[OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/http/openapi/swagger-ui/api/v1/api.swagger.json)
 or run Conduit and navigate to `http://localhost:8080/openapi` to open
 a [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to
 try it out.
@@ -479,7 +512,7 @@ files drift from source.
 ## Contributing
 
 For a complete guide to contributing to Conduit, see
-the [contribution guide](https://github.com/ConduitIO/conduit/blob/master/CONTRIBUTING.md).
+the [contribution guide](https://github.com/ConduitIO/conduit/blob/main/CONTRIBUTING.md).
 
 We welcome you to join the community and contribute to Conduit to make it
 better! When something does not work as intended please check if there is

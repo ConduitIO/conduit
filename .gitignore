@@ -80,3 +80,7 @@ golangci-report.xml
 # Python bytecode (the CI helper scripts under .github/scripts are run, not imported)
 __pycache__/
 *.pyc
+
+# lychee's link-check result cache (.github/workflows/link-check.yml); written
+# when the check is run locally, restored from the Actions cache in CI.
+.lycheecache

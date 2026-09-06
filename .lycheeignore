@@ -1,0 +1,24 @@
+# URLs the link check (.github/workflows/link-check.yml) must not try to fetch.
+# One regex per line, matched against the URL; lines starting with # are
+# comments.
+#
+# Keep this file empty of "make it green" entries. A link that is genuinely
+# gone gets repointed at something that resolves, not silenced here. The only
+# legitimate entries are URLs that cannot be checked by an unauthenticated CI
+# runner at all - hosts that refuse automated or datacenter-origin requests
+# outright, private hosts, or endpoints that exist only while Conduit is
+# running locally.
+#
+# Everything else in README.md, CONTRIBUTING.md and ROADMAP.md is checked. The
+# two unreachable URLs that are NOT listed here - http://localhost:8080/openapi
+# and the api.voyageai.com egress-allowlist example - need no entry: both sit
+# inside inline code and fenced code blocks, which lychee skips as verbatim
+# unless --include-verbatim is set.
+
+# X/Twitter serves 403 Forbidden to datacenter IP ranges regardless of user
+# agent, so a GitHub-hosted runner can never verify this link, while the same
+# URL returns 200 from an ordinary connection. Checking it would report a
+# permanent false failure about a link that works for every human reader.
+# Verified 2026-09-06: 403 from an ubuntu-latest runner, 200 from a residential
+# IP with both a curl and a browser user agent.
+^https?://(www\.)?(x|twitter)\.com/
