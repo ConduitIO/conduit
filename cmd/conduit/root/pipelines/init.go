@@ -84,6 +84,12 @@ type InitResult struct {
 	// Config is the rendered pipeline YAML — the literal bytes written to
 	// Path, or (under --dry-run) the bytes that would have been written.
 	Config string `json:"config"`
+	// CreatedDir is the directory this run had to create in order to write
+	// Path, or "" when it already existed. Always "" under --dry-run, which
+	// touches the filesystem not at all. Reported so a user (or an agent)
+	// can see that `pipelines init` set up the workspace directory for
+	// them, the same way `conduit init` reports the directories it creates.
+	CreatedDir string `json:"createdDir,omitempty"`
 	// Template is the vendored template name this pipeline was scaffolded
 	// from (see --template), or empty when scaffolded via the generic
 	// --source/--destination path.
@@ -118,6 +124,10 @@ type InitCommand struct {
 	sourceConnector      string
 	destinationConnector string
 	pipelineName         string
+	// createdDir is set by ensureDestinationDir to the destination
+	// directory this run created (empty when it already existed, or when
+	// nothing was written). Read only after writeFile has run.
+	createdDir string
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
@@ -156,9 +166,13 @@ permanently-maintained set of named, runnable pipelines (run 'conduit pipelines 
 to enumerate them). --template is mutually exclusive with --source/--destination: a named template already
 is a specific source+destination+settings triple, so mixing them is rejected as ambiguous.
 
+The destination directory (--pipelines.path, ./pipelines by default) is created if it does not
+exist, so this works in a directory that has not been set up with 'conduit init'.
+
 Refuses to overwrite an existing pipeline file at the destination path unless --force is set.
 --dry-run prints the pipeline configuration that would be written without touching the filesystem
-(and is exempt from the --force check, since it never writes).`,
+(it creates nothing, not even the destination directory, and is exempt from the --force check,
+since it never writes).`,
 		Example: "conduit pipelines init\n" +
 			"conduit pipelines init --source generator --destination s3 \n" +
 			"conduit pipelines init awesome-pipeline-name --source postgres --destination kafka \n" +
@@ -303,7 +317,63 @@ func (c *InitCommand) renderPipeline(pipeline pipelineTemplate) (string, error) 
 	return buf.String(), nil
 }
 
-// writeFile writes the already-rendered pipeline config to c.configFilePath.
+// ensureDestinationDir creates the directory c.configFilePath will be
+// written into, if it does not already exist, and records it in
+// c.createdDir when this run is the one that created it (so Render and the
+// --json result can report it, the way `conduit init` reports the
+// directories it creates).
+//
+// Why this exists: `conduit pipelines init` with no arguments — the first
+// example in its own --help — writes to ./pipelines/demo-pipeline.yaml, and
+// used to fail outright in any directory that was not already a Conduit
+// workspace, because nothing created ./pipelines first. `mkdir pipelines`
+// made the identical command succeed, which is not a decision a user should
+// have to make. `conduit init` already creates pipelines/ as part of setting
+// up a workspace, so creating it on demand here is the consistent behavior,
+// not a new one: the scaffold command owns the file it writes and the
+// directory that holds it. Both surfaces remain idempotent — MkdirAll is a
+// no-op on an existing directory — and the overwrite protection that matters
+// is on the pipeline *file* (writeFile's O_EXCL), which this does not
+// weaken: creating a directory never destroys anything.
+//
+// Only reached when !DryRun (writeFile's only caller path), so --dry-run
+// still touches the filesystem not at all — it neither writes the file nor
+// creates the directory.
+//
+// 0o755 (not conduit init's os.ModePerm) matches pkg/scaffold's parent-dir
+// creation: the umask makes the two equivalent under any normal umask, and
+// an explicit non-world-writable mode is the safer literal.
+func (c *InitCommand) ensureDestinationDir() error {
+	dir := filepath.Dir(c.configFilePath)
+
+	// Stat first only to decide whether to *report* a creation; MkdirAll
+	// below is still the authoritative, race-free create (it succeeds if
+	// another process wins the race), so a stale answer here can only make
+	// the informational "Created directory" line wrong, never the write.
+	_, statErr := os.Stat(dir)
+	existedBefore := statErr == nil
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		ce := conduiterr.Wrap(CodePipelinesPathUnwritable,
+			fmt.Sprintf("could not create the pipelines directory %q: %v", dir, err), err)
+		ce.ConfigPath = dir
+		ce.Suggestion = fmt.Sprintf(
+			"check that %q is writable and that nothing other than a directory occupies %q, "+
+				"run `conduit init` to set up a Conduit workspace here, "+
+				"or pass --pipelines.path to write the pipeline somewhere else",
+			filepath.Dir(dir), dir,
+		)
+		return ce
+	}
+
+	if !existedBefore {
+		c.createdDir = dir
+	}
+	return nil
+}
+
+// writeFile creates the destination directory if needed and writes the
+// already-rendered pipeline config to c.configFilePath.
 //
 // Invariant: never silently overwrite an existing pipeline file — this
 // command's original bug was os.OpenFile with O_CREATE|O_WRONLY|O_TRUNC and
@@ -318,6 +388,10 @@ func (c *InitCommand) renderPipeline(pipeline pipelineTemplate) (string, error) 
 // never reaches here, so it has nothing to protect and never hits this
 // check at all.
 func (c *InitCommand) writeFile(renderedConfig string) error {
+	if err := c.ensureDestinationDir(); err != nil {
+		return err
+	}
+
 	flags := os.O_CREATE | os.O_WRONLY | os.O_EXCL
 	if c.flags.Force {
 		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
@@ -334,11 +408,28 @@ func (c *InitCommand) writeFile(renderedConfig string) error {
 			)
 			return ce
 		}
-		return conduiterr.Wrap(conduiterr.CodeInternal, fmt.Sprintf("could not open %q", c.configFilePath), err)
+		// Anything else the open can fail with (the path is a directory,
+		// the directory is read-only, a path component is not a directory)
+		// is an ordinary unwritable-destination problem, not an internal
+		// bug: report the underlying OS error and a remedy rather than the
+		// bare, reason-less "could not open X" under internal.error this
+		// used to return. See CodePipelinesPathUnwritable.
+		ce := conduiterr.Wrap(CodePipelinesPathUnwritable,
+			fmt.Sprintf("could not write the pipeline file %q: %v", c.configFilePath, err), err)
+		ce.ConfigPath = c.configFilePath
+		ce.Suggestion = fmt.Sprintf(
+			"check that %q is a writable directory, or pass --pipelines.path to write the pipeline somewhere else",
+			filepath.Dir(c.configFilePath),
+		)
+		return ce
 	}
 	defer output.Close()
 
 	if _, err := output.WriteString(renderedConfig); err != nil {
+		// A failure after a successful open is a genuine I/O failure (the
+		// device is full, the filesystem errored mid-write), not a
+		// user-fixable destination problem — it stays in the internal
+		// bucket deliberately.
 		return conduiterr.Wrap(conduiterr.CodeInternal, "failed writing pipeline config", err)
 	}
 	return nil
@@ -470,6 +561,7 @@ func (c *InitCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, 
 			DryRun:       c.flags.DryRun,
 			Forced:       c.flags.Force,
 			Config:       rendered,
+			CreatedDir:   c.createdDir,
 		},
 	}, nil
 }
@@ -548,6 +640,7 @@ func (c *InitCommand) executeTemplateScaffold(ctx context.Context) (cecdysis.Out
 			DryRun:        c.flags.DryRun,
 			Forced:        c.flags.Force,
 			Config:        tmpl.YAML,
+			CreatedDir:    c.createdDir,
 			Template:      tmpl.Name,
 			Prerequisites: tmpl.Prerequisites,
 		},
@@ -556,8 +649,10 @@ func (c *InitCommand) executeTemplateScaffold(ctx context.Context) (cecdysis.Out
 
 // Render returns the human-readable rendering of a successful init run: the
 // original "your pipeline has been initialized" message when a file was
-// written, or the rendered config plus a "nothing was written" notice under
-// --dry-run — followed by a prerequisites section whenever the scaffolded
+// written (preceded by a "Created directory" line when this run had to
+// create the destination directory), or the rendered config plus a "nothing
+// was written" notice under --dry-run — followed by a prerequisites section
+// whenever the scaffolded
 // template names one (renderPrerequisites), so a template whose plugins
 // aren't built into this binary never prints a plain "run `conduit run`"
 // that would fail opaquely.
@@ -574,8 +669,13 @@ func (c *InitCommand) Render(outcome cecdysis.Outcome) string {
 			"(nothing was written):\n\n%s%s", result.Path, result.Config, prereq)
 	}
 
-	return fmt.Sprintf("Your pipeline has been initialized and created at %q.\n"+
-		"To run the pipeline, simply run `conduit run`.\n%s", result.Path, prereq)
+	var created string
+	if result.CreatedDir != "" {
+		created = fmt.Sprintf("Created directory: %s\n", result.CreatedDir)
+	}
+
+	return fmt.Sprintf("%sYour pipeline has been initialized and created at %q.\n"+
+		"To run the pipeline, simply run `conduit run`.\n%s", created, result.Path, prereq)
 }
 
 // renderPrerequisites renders InitResult.Prerequisites as a "before you can
