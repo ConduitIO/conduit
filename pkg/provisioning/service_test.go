@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -482,6 +483,275 @@ func TestService_Delete(t *testing.T) {
 
 	err := service.Delete(context.Background(), oldPipelineInstance.ID)
 	is.NoErr(err)
+}
+
+func TestService_UpsertYaml(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Add cleanup for output files that will be created during the test
+	t.Cleanup(func() {
+		for _, path := range []string{"./output-v1.txt", "./output-v2.txt", "./output-v3.txt", "./input.txt"} {
+			_ = os.Remove(path)
+		}
+	})
+
+	// Set up a real service with non-mock components for actual runtime verification
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
+	logger.Logger = logger.Hook(ctxutil.MessageIDLogCtxHook{})
+
+	// Create a temporary database
+	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
+	is.NoErr(err)
+	t.Cleanup(func() {
+		err := db.Close()
+		is.NoErr(err)
+	})
+
+	// Set up the necessary services
+	tokenService := connutils.NewAuthManager()
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
+	is.NoErr(err)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
+
+	// Set up plugin services
+	connPluginService := conn_plugin.NewPluginService(
+		logger,
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, connSchemaService),
+		standalone.NewRegistry(logger, ""),
+		tokenService,
+	)
+	connPluginService.Init(ctx, "conn-utils-token:12345")
+
+	procPluginService := proc_plugin.NewPluginService(
+		logger,
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
+		nil,
+	)
+
+	// Set up core services
+	plService := pipeline.NewService(logger, db)
+	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
+	procService := processor.NewService(logger, db, procPluginService)
+
+	// Set up lifecycle service
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       0,
+		MaxRetriesWindow: 5 * time.Minute,
+	}
+	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connService, procService, connPluginService, plService)
+
+	// Create the provisioning service
+	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "")
+
+	// Define the base YAML template for single pipeline
+	singlePipelineTemplate := `version: 2.2
+pipelines:
+  - id: test-pipeline
+    status: running
+    name: Test Pipeline
+    description: %s
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s`
+
+	// Define the base YAML template for multiple pipelines
+	// Note: Each pipeline needs its own YAML document with version number
+	multiPipelineTemplate := `---
+version: 2.2
+pipelines:
+  - id: test-pipeline-1
+    status: running
+    name: Test Pipeline 1
+    description: %s
+    connectors:
+      - id: source-1
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s
+---
+version: 2.2
+pipelines:
+  - id: test-pipeline-2
+    status: running
+    name: Test Pipeline 2
+    description: %s
+    connectors:
+      - id: source-2
+        type: source
+        plugin: builtin:file
+        settings:
+          path: ./input.txt
+      - id: destination-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %s`
+
+	// Define test cases
+	type testCase struct {
+		name         string
+		source       string
+		sourceType   string
+		description  string
+		outputPath   string
+		multiple     bool   // Whether to use multiple pipelines
+		description2 string // Description for second pipeline (if multiple)
+		outputPath2  string // Output path for second pipeline (if multiple)
+	}
+
+	testCases := []testCase{
+		{
+			name:        "Initial configuration (single pipeline)",
+			sourceType:  "string",
+			description: "Initial configuration",
+			outputPath:  "./output-v1.txt",
+			multiple:    false,
+		},
+		{
+			name:        "Update via YAML string (single pipeline)",
+			sourceType:  "string",
+			description: "Updated configuration via string",
+			outputPath:  "./output-v2.txt",
+			multiple:    false,
+		},
+		{
+			name:        "Update via YAML file (single pipeline)",
+			sourceType:  "file",
+			description: "Updated configuration via file",
+			outputPath:  "./output-v3.txt",
+			multiple:    false,
+		},
+		{
+			name:         "Multiple pipelines via YAML string",
+			sourceType:   "string",
+			description:  "First pipeline in multi-config",
+			outputPath:   "./output-multi-1.txt",
+			multiple:     true,
+			description2: "Second pipeline in multi-config",
+			outputPath2:  "./output-multi-2.txt",
+		},
+	}
+
+	// Create a temporary file for the file-based test case
+	tmpfile, err := os.CreateTemp("", "test-pipeline-*.yaml")
+	is.NoErr(err)
+	defer os.Remove(tmpfile.Name())
+
+	// Add cleanup for additional output files that will be created during the test
+	t.Cleanup(func() {
+		for _, path := range []string{"./output-multi-1.txt", "./output-multi-2.txt"} {
+			_ = os.Remove(path)
+		}
+	})
+
+	// Run each test case
+	for i, tc := range testCases {
+		// Add a small delay between test cases to ensure the pipeline has time to stabilize
+		if i > 0 {
+			time.Sleep(1 * time.Second)
+		}
+		t.Logf("Running test case %d: %s", i+1, tc.name)
+
+		// Generate the YAML content based on whether we're testing single or multiple pipelines
+		var yamlContent string
+		if tc.multiple {
+			yamlContent = fmt.Sprintf(multiPipelineTemplate, tc.description, tc.outputPath, tc.description2, tc.outputPath2)
+		} else {
+			yamlContent = fmt.Sprintf(singlePipelineTemplate, tc.description, tc.outputPath)
+		}
+
+		// Set up the source based on the source type
+		var source string
+		if tc.sourceType == "file" {
+			// Write the YAML content to the file
+			err = os.WriteFile(tmpfile.Name(), []byte(yamlContent), 0o644)
+			is.NoErr(err)
+			source = tmpfile.Name()
+		} else {
+			source = yamlContent
+		}
+
+		// Reload the pipeline with the current configuration
+		var expectedPipelineIDs []string
+		if tc.multiple {
+			expectedPipelineIDs = []string{"test-pipeline-1", "test-pipeline-2"} // Both pipeline IDs in multi-pipeline case
+		} else {
+			expectedPipelineIDs = []string{"test-pipeline"} // Single pipeline case
+		}
+
+		result, err := service.UpsertYaml(ctx, source)
+		is.NoErr(err)
+		is.Equal(len(result.PipelineIDs), len(expectedPipelineIDs))
+
+		// Check that all expected pipeline IDs are in the result
+		for _, expectedID := range expectedPipelineIDs {
+			found := false
+			for _, actualID := range result.PipelineIDs {
+				if actualID == expectedID {
+					found = true
+					break
+				}
+			}
+			is.True(found)
+		}
+
+		// Give the pipeline time to update
+		time.Sleep(500 * time.Millisecond)
+
+		if tc.multiple {
+			// Verify the first pipeline was created/updated correctly
+			pipeline1, err := plService.Get(ctx, "test-pipeline-1")
+			is.NoErr(err)
+			is.Equal(pipeline1.Config.Name, "Test Pipeline 1")
+			is.Equal(pipeline1.Config.Description, tc.description)
+
+			// Get the destination connector directly and verify its path setting
+			destConn1, err := connService.Get(ctx, "test-pipeline-1:destination-1")
+			is.NoErr(err)
+			is.Equal(destConn1.Config.Settings["path"], tc.outputPath)
+
+			// Verify the second pipeline was created/updated correctly
+			pipeline2, err := plService.Get(ctx, "test-pipeline-2")
+			is.NoErr(err)
+			is.Equal(pipeline2.Config.Name, "Test Pipeline 2")
+			is.Equal(pipeline2.Config.Description, tc.description2)
+
+			// Get the destination connector directly and verify its path setting
+			destConn2, err := connService.Get(ctx, "test-pipeline-2:destination-2")
+			is.NoErr(err)
+			is.Equal(destConn2.Config.Settings["path"], tc.outputPath2)
+		} else {
+			// Verify the configuration was applied correctly for single pipeline
+			pipeline, err := plService.Get(ctx, "test-pipeline")
+			is.NoErr(err)
+			is.Equal(pipeline.Config.Name, "Test Pipeline")
+			is.Equal(pipeline.Config.Description, tc.description)
+
+			// Get the destination connector directly and verify its path setting
+			destConn, err := connService.Get(ctx, "test-pipeline:destination")
+			is.NoErr(err)
+			is.Equal(destConn.Config.Settings["path"], tc.outputPath)
+		}
+	}
 }
 
 func TestService_IntegrationTestServices(t *testing.T) {
