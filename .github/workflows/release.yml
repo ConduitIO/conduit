@@ -31,6 +31,27 @@ jobs:
           prev_tag=$(git tag | grep -v "nightly" | sort -r --version-sort | head -n 2 | tail -n 1)
           echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> $GITHUB_ENV
 
+      # quill signs and notarizes Mach-O binaries from a Linux runner, so the
+      # release job needs no macOS runner. Installed from a pinned release and
+      # checksum-verified rather than through anchore's `curl | sh` installer:
+      # this is the one job that produces the artifacts users execute, so an
+      # unverified download here is a supply-chain hole.
+      - name: Install quill
+        if: ${{ !contains(github.ref, '-nightly') }}
+        env:
+          QUILL_VERSION: 0.7.1
+          QUILL_SHA256: e58c6f86378a22507c1123e24412afd4ee2d3bb32ebd94d6059827dc0c1b3fbf
+        run: |
+          set -euo pipefail
+          tarball="quill_${QUILL_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$tarball" \
+            "https://github.com/anchore/quill/releases/download/v${QUILL_VERSION}/${tarball}"
+          echo "${QUILL_SHA256}  ${tarball}" | sha256sum -c -
+          tar xzf "$tarball" quill
+          install -m 0755 quill /usr/local/bin/quill
+          rm -f "$tarball" quill
+          quill version
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -40,6 +61,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          # macOS signing + notarization. All five are optional: when
+          # QUILL_SIGN_P12 is empty, scripts/sign-darwin.sh leaves the binaries
+          # ad-hoc signed and the release proceeds exactly as it does today.
+          QUILL_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          QUILL_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+          QUILL_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          QUILL_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          QUILL_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
 
   build-push-docker-image:
     name: Build and push Docker image
