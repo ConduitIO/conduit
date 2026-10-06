@@ -17,6 +17,14 @@ updates:
       interval: "daily"
     commit-message:
       prefix: "go.mod:"
+    ignore:
+      # grpc v1.84.0 is affected by GO-2026-6443 / CVE-2026-84445
+      # (https://pkg.go.dev/vuln/GO-2026-6443): server panic on a request with
+      # no :authority or Host header. The fixed releases are v1.82.2 and
+      # v1.83.2; there is no fixed v1.84.x, so main pins v1.83.2. Lift this
+      # entry when a fixed v1.84.x or v1.85.0 is tagged and bump to that.
+      - dependency-name: "google.golang.org/grpc"
+        versions: ["1.84.0"]
 
   # Maintain dependencies for Docker
   - package-ecosystem: "docker"
