@@ -225,23 +225,33 @@ type runnablePipeline struct {
 	// starts with intentionalStop false, so a pipeline that recovers and later
 	// stops for an unrelated reason gets ordinary recovery semantics again, not
 	// a stale "this was user-stopped" marker from a previous run.
+	//
+	// It is a lock-free mirror of the stop request below: written only under
+	// stopMu, together with the rest of the request, and read lock-free by
+	// the cleanup goroutine and StartWithBackoff.
 	intentionalStop atomic.Bool
 
-	// stopFailedFirst records, for the stop request that set intentionalStop,
-	// whether the run's tomb already carried an error at that moment: 0 no
-	// request recorded, 1 the run was healthy, 2 it had already failed on its
-	// own. A fatal error that came before the stop still degrades the run;
-	// anything after the stop ends it stopped, with the error recorded
-	// (#2901). Reset together with intentionalStop.
-	stopFailedFirst atomic.Int32
-
-	// stopKind records who made the first stop request for this run: 0 none,
+	// stopMu guards the stop request: stopGen, stopKind, stopFailedFirst, and
+	// writes to intentionalStop. Making a request and rolling one back are
+	// each one critical section, so the first request's kind and failed-first
+	// snapshot land together, and a rollback cannot erase a request that
+	// arrived after the one it undoes (#2912).
+	stopMu sync.Mutex
+	// stopGen counts stop requests made for this run. A rollback undoes the
+	// request only if no other request was made after it, i.e. stopGen still
+	// equals the value its own markStopRequested returned.
+	stopGen uint64
+	// stopKind records who made the first stop request: 0 none,
 	// stopKindUser for a user Stop, stopKindSystem for StopAll. The first
 	// request wins, so a user-stopped run that a later shutdown also reaches
 	// stays UserStopped and is not auto-started on the next boot (#2912 S2,
-	// matching pkg/lifecycle's stopSignal). Reset together with
-	// intentionalStop.
-	stopKind atomic.Int32
+	// matching pkg/lifecycle's stopSignal).
+	stopKind int32
+	// stopFailedFirst records whether the run's tomb already carried an error
+	// when the first stop request was made. A fatal error that came before
+	// the stop still degrades the run; anything after the stop ends it
+	// stopped, with the error recorded (#2901).
+	stopFailedFirst bool
 }
 
 const (
@@ -249,36 +259,57 @@ const (
 	stopKindSystem int32 = 2
 )
 
-// markStopRequested records a stop request for rp: intentionalStop, who
-// asked (see stopKind), and whether the run had already failed (see
-// stopFailedFirst). Only the first request's kind and snapshot count.
-func (rp *runnablePipeline) markStopRequested(system bool) {
-	snapshot := int32(1)
-	if rp.t != nil && rp.t.Err() != tomb.ErrStillAlive {
-		snapshot = 2
-	}
+// markStopRequested records a stop request for rp. The first request (when
+// none is recorded) also records who asked and whether the run had already
+// failed. It returns a token for rollbackStopRequest and whether this call
+// made the first request.
+func (rp *runnablePipeline) markStopRequested(system bool) (token uint64, first bool) {
+	failed := rp.t != nil && rp.t.Err() != tomb.ErrStillAlive
 	kind := stopKindUser
 	if system {
 		kind = stopKindSystem
 	}
-	rp.stopFailedFirst.CompareAndSwap(0, snapshot)
-	rp.stopKind.CompareAndSwap(0, kind)
-	rp.intentionalStop.Store(true)
+
+	rp.stopMu.Lock()
+	defer rp.stopMu.Unlock()
+	if !rp.intentionalStop.Load() {
+		first = true
+		rp.stopKind = kind
+		rp.stopFailedFirst = failed
+		rp.intentionalStop.Store(true)
+	}
+	rp.stopGen++
+	return rp.stopGen, first
 }
 
-// clearStopRequest undoes markStopRequested, for a stop request that turned
-// out to stop nothing.
-func (rp *runnablePipeline) clearStopRequest() {
+// rollbackStopRequest undoes the request markStopRequested returned token
+// for, for a stop that turned out to stop nothing. It does nothing if another
+// request was made since: that request still stands, even though it was not
+// the first (#2912).
+func (rp *runnablePipeline) rollbackStopRequest(token uint64) {
+	rp.stopMu.Lock()
+	defer rp.stopMu.Unlock()
+	if rp.stopGen != token {
+		return
+	}
 	rp.intentionalStop.Store(false)
-	rp.stopFailedFirst.Store(0)
-	rp.stopKind.Store(0)
+	rp.stopKind = 0
+	rp.stopFailedFirst = false
+}
+
+// stopRequest returns the run's recorded stop request.
+func (rp *runnablePipeline) stopRequest() (requested bool, kind int32, failedFirst bool) {
+	rp.stopMu.Lock()
+	defer rp.stopMu.Unlock()
+	return rp.intentionalStop.Load(), rp.stopKind, rp.stopFailedFirst
 }
 
 // stoppedStatus is the terminal status of a run that was stopped: the kind of
 // the first stop request made for it, or, if none reached it, SystemStopped
 // during a shutdown and UserStopped otherwise.
 func (s *Service) stoppedStatus(rp *runnablePipeline) pipeline.Status {
-	switch rp.stopKind.Load() {
+	_, kind, _ := rp.stopRequest()
+	switch kind {
 	case stopKindUser:
 		return pipeline.StatusUserStopped
 	case stopKindSystem:
@@ -489,8 +520,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// instead of misreading it as a spontaneous failure and
 		// auto-restarting via recoverPipeline. See the intentionalStop field
 		// doc.
-		wasRequested := rp.intentionalStop.Load()
-		rp.markStopRequested(system)
+		stopToken, firstRequest := rp.markStopRequested(system)
 
 		// H1 (adversarial review of #2734): every worker's Stop call is
 		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
@@ -593,8 +623,12 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// the run, it stands. Clearing it in either case let a second
 			// Stop or StopAll erase a user stop, so a later drain error
 			// recovered and restarted the pipeline.
-			if len(unarmedSources) > 0 && !wasRequested {
-				rp.clearStopRequest()
+			//
+			// And only if no other stop request was made in the meantime
+			// (#2912): a concurrent Stop or StopAll that recorded its request
+			// after this one, and is still waiting to arm, must keep it.
+			if len(unarmedSources) > 0 && firstRequest {
+				rp.rollbackStopRequest(stopToken)
 			}
 		case len(unarmedSources) > 0:
 			// H1 (adversarial review): PARTIAL arming. Some source(s) armed
@@ -659,7 +693,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// explicitly stopped. Since #2901 a force stop is recorded as a stop
 		// request too, so the run ends UserStopped (SystemStopped from
 		// StopAll) with ErrForceStop recorded, rather than Degraded.
-		rp.markStopRequested(system)
+		_, _ = rp.markStopRequested(system)
 		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
@@ -1753,8 +1787,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 			// shutdown flag alone must not: a run that failed fatally on its
 			// own and is classified after StopAll set the flag, but before
 			// StopAll reached it, is degraded (#2912 S1, as in pkg/lifecycle).
-			stopRequested := rp.intentionalStop.Load()
-			failedFirst := rp.stopFailedFirst.Load() == 2
+			stopRequested, _, failedFirst := rp.stopRequest()
 			switch {
 			case cerrors.IsFatalError(err) && (!stopRequested || failedFirst):
 				// Invariant 3/7: a fatal error the run hit on its own, before any

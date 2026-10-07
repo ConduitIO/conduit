@@ -501,12 +501,10 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 		if rp.t == nil || !rp.t.Alive() {
 			continue
 		}
+		alreadyStopping := rp.stop.requested()
 		err := s.stopGraceful(ctx, rp, reason, true)
 		if err != nil {
-			s.logger.Warn(ctx).
-				Err(err).
-				Str(log.PipelineIDField, p.ID).
-				Msg("could not stop pipeline")
+			s.logStopError(ctx, alreadyStopping, err, p.ID, "could not stop pipeline")
 		}
 	}
 	// TODO stop pipelines forcefully after timeout if they are still running
@@ -1258,6 +1256,20 @@ func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, syste
 	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, fmt.Sprintf("%+v", err))
 }
 
+// logStopError logs a failed stop of a pipeline during shutdown. If a stop
+// had already been requested for the run (StopAll and the self-stop at
+// publication can both reach the same run, and so can a user Stop followed by
+// StopAll), the error is the source refusing a second stop while the first
+// one drains, which is expected: it is logged at debug, not as a warning.
+func (s *Service) logStopError(ctx context.Context, alreadyStopping bool, err error, pipelineID, msg string) {
+	e := s.logger.Warn(ctx)
+	if alreadyStopping {
+		e = s.logger.Debug(ctx)
+		msg += " (a stop was already in progress)"
+	}
+	e.Err(err).Str(log.PipelineIDField, pipelineID).Msg(msg)
+}
+
 // publishRunningPipeline makes rp the live run for its pipeline ID (see the
 // comment at its call site in runPipeline for why the timing matters). If
 // shutdown has begun by then, it also stops rp, because StopAll may already
@@ -1284,11 +1296,10 @@ func (s *Service) publishRunningPipeline(rp *runnablePipeline) {
 		// Detached context (#2912 N1): ctx is the caller's, e.g. an API
 		// request, and its cancellation must not leave the run alive until
 		// the exit timeout.
+		alreadyStopping := rp.stop.requested()
 		if err := s.stopGraceful(context.Background(), rp, shutdownReason, true); err != nil {
-			s.logger.Warn(context.Background()).
-				Err(err).
-				Str(log.PipelineIDField, rp.pipeline.ID).
-				Msg("could not stop pipeline that started while shutting down")
+			s.logStopError(context.Background(), alreadyStopping, err, rp.pipeline.ID,
+				"could not stop pipeline that started while shutting down")
 		}
 	}
 }
