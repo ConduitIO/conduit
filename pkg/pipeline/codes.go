@@ -38,4 +38,10 @@ var (
 	// CodePipelineNameMissing is raised when a pipeline config is missing
 	// the required name field.
 	CodePipelineNameMissing = conduiterr.Register("pipeline.name_missing", codes.InvalidArgument)
+	// CodeShuttingDown is raised when a pipeline start is refused because
+	// Conduit has begun shutting down: once shutdown starts, no new pipeline
+	// run is started (including automatic recovery restarts), so that every
+	// run is drained before positions are flushed and the database is closed.
+	// Unavailable: retry against the instance after it restarts.
+	CodeShuttingDown = conduiterr.Register("pipeline.shutting_down", codes.Unavailable)
 )

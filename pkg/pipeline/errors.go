@@ -22,6 +22,7 @@ var (
 	ErrPipelineCannotRecover = cerrors.New("pipeline couldn't be recovered")
 	ErrPipelineRunning       = cerrors.New("pipeline is running")
 	ErrPipelineNotRunning    = cerrors.New("pipeline not running")
+	ErrShuttingDown          = cerrors.New("conduit is shutting down")
 	ErrInstanceNotFound      = cerrors.New("pipeline instance not found")
 	ErrNameMissing           = cerrors.New("must provide a pipeline name")
 	ErrIDMissing             = cerrors.New("must provide a pipeline ID")
