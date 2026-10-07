@@ -66,8 +66,17 @@ services:
   # than teaching `docker compose up --wait` about a one-shot job-style
   # service, and it's what the test needs to control anyway to assert
   # against known object keys.
+  #
+  # Image: MinIO stopped publishing images. minio/minio was removed from
+  # Docker Hub (the pull fails with "pull access denied", which broke this
+  # job from ~2026-09-15) and quay.io/minio/minio requires authentication.
+  # pgsty/minio is a maintained community build of the same server, a
+  # drop-in for the old image (same entrypoint, `server /data`, env vars,
+  # health endpoint and bundled curl). Pinned by multi-arch index digest
+  # (tag RELEASE.2026-08-04T00-00-00Z) so a third-party retag cannot change
+  # what CI runs; bump the digest deliberately.
   templates-minio:
-    image: minio/minio:latest
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     ports:
       - "9110:9000"
     environment:
