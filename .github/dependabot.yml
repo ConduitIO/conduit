@@ -31,6 +31,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # The Go toolchain stays on 1.25.x until the coordinated fleet move in
+      # v0.21 (commons, conduit and every built-in connector together). Patch
+      # bumps inside 1.25 are still proposed. Lift this with that move.
+      - dependency-name: "golang"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
       prefix: "docker:"
 
