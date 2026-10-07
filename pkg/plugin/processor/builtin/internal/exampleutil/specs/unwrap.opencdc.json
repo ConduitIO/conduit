@@ -40,8 +40,8 @@
   },
   "examples": [
     {
-      "summary": "Unwrap an [OpenCDC record](https://conduit.io/docs/using/opencdc-record)",
-      "description": "In this example we use the `unwrap.opencdc` processor to unwrap the [OpenCDC record](https://conduit.io/docs/using/opencdc-record) found in the record's `.Payload.After` field.",
+      "summary": "Unwrap an [OpenCDC record](https://conduitdata.io/docs/using/opencdc-record)",
+      "description": "In this example we use the `unwrap.opencdc` processor to unwrap the [OpenCDC record](https://conduitdata.io/docs/using/opencdc-record) found in the record's `.Payload.After` field.",
       "config": {
         "field": ".Payload.After"
       },

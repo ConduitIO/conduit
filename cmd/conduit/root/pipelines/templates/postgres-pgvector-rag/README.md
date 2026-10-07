@@ -56,8 +56,9 @@ fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; t
 one-record-in-one-record-out and fails, at the chunk step, with a
 `pipeline.fanout_requires_arch_v2` error (`FailedPrecondition`) naming this flag. Run this pipeline
 with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true` in the config). Architecture v2
-is currently a **preview** engine — it is more allocation-efficient than the default but does not yet
-have automatic error-recovery parity; review its status before depending on it for production data.
+is a **preview** engine: graduation to the default engine is evaluated in v0.21 against a written
+gate. Pipelines that need record fan-out cannot run on the classic engine at all, so until then this
+template depends on the preview engine; review its status before relying on it for production data.
 
 You'll also need the pgvector target table created ahead of time, matching the `dimension` you
 configure (768 for the template's default `nomic-embed-text` model):

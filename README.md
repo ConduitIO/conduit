@@ -8,7 +8,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Test](https://github.com/ConduitIO/conduit/actions/workflows/test.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
-[![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
+[![GitHub Discussions](https://img.shields.io/github/discussions/ConduitIO/conduit?logo=github&label=discussions)](https://github.com/ConduitIO/conduit/discussions)
 [![Twitter](https://img.shields.io/static/v1?label=X/Twitter&message=Follow&color=1DA1F2&logo=twitter&logoColor=white)](https://x.com/ConduitIO)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://conduitdata.io/docs/getting-started)
@@ -520,8 +520,7 @@ already an [issue](https://github.com/ConduitIO/conduit/issues) that describes
 your problem, otherwise
 please [open an issue](https://github.com/ConduitIO/conduit/issues/new/choose)
 and let us know. When you are not sure how to do something
-please [open a discussion](https://github.com/ConduitIO/conduit/discussions) or
-hit us up on [Discord](https://discord.meroxa.com).
+please [open a discussion](https://github.com/ConduitIO/conduit/discussions).
 
 We also value contributions in the form of pull requests. When opening a PR please
 ensure:

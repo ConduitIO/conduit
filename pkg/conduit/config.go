@@ -262,8 +262,14 @@ type Config struct {
 	} `mapstructure:"schema-registry"`
 
 	Preview struct {
-		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (supports multiple sources, or multiple destinations, per pipeline; N sources AND M destinations together is wired but not yet verified — see slice 3c. A record split before a fan-out point is not supported and fails with a coded error)"`
+		// PipelineArchV2 runs pipelines on the preview engine
+		// (pkg/lifecycle-poc) instead of the classic default (pkg/lifecycle).
+		// It is required for record fan-out: the classic engine is
+		// one-record-in-one-record-out and stops a pipeline whose processor
+		// splits a record with stream.CodeFanOutRequiresArchV2. Keep the usage
+		// string in sync with that code's godoc, which is what reaches
+		// llms-full.txt.
+		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables the preview pipeline engine (architecture v2). Required for pipelines with a processor that splits one record into several (record fan-out, e.g. ai.chunk, split, clone), including the postgres-pgvector-rag template: the classic default engine cannot run them and stops with pipeline.fanout_requires_arch_v2. Known limit: a split record whose pieces are cut across a multi-destination fan-out fails with pipeline.split_run_straddles_fanout. Graduation to the default engine is evaluated in v0.21 against a written gate"`
 		PipelineArchV2DisableMetrics bool `long:"preview.pipeline-arch-v2-disable-metrics" mapstructure:"pipeline-arch-v2-disable-metrics" usage:"disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"`
 	}
 

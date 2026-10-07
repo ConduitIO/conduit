@@ -15,6 +15,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -108,4 +110,35 @@ func isATXHeading(line string) bool {
 		n++
 	}
 	return n >= 1 && n <= 6 && n < len(line) && line[n] == ' '
+}
+
+// TestRewriteRetiredDocsLinks guards #2860: connector specs inlined into
+// llms-full.txt carried links to conduit.io, a domain that no longer resolves.
+func TestRewriteRetiredDocsLinks(t *testing.T) {
+	is := is.New(t)
+
+	cases := map[string]string{
+		"See (https://conduit.io/docs/using/connectors/configuration-parameters/output-format).": "See (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format).",
+		"[this article](https://conduit.io/docs/connectors/output-formats)":                      "[this article](https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format)",
+		"[standalone](https://conduit.io/docs/core-concepts#standalone-connector)":               "[standalone](https://conduitdata.io/docs/core-concepts#standalone-connector)",
+		"http://conduit.io/docs": "https://conduitdata.io/docs",
+		// Unrelated text, including the Go module path, is untouched.
+		"github.com/conduitio/conduit-connector-sdk": "github.com/conduitio/conduit-connector-sdk",
+	}
+	for in, want := range cases {
+		is.Equal(rewriteRetiredDocsLinks(in), want)
+	}
+}
+
+// TestCommittedFilesHaveNoRetiredDocsLinks fails if a generated file links to
+// conduit.io again, whatever source the link came from (#2860).
+func TestCommittedFilesHaveNoRetiredDocsLinks(t *testing.T) {
+	is := is.New(t)
+
+	root := repoRoot(t)
+	for _, name := range []string{"llms.txt", "llms-full.txt"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		is.NoErr(err)
+		is.True(!strings.Contains(string(data), "://conduit.io")) // generated file links to the retired conduit.io domain
+	}
 }

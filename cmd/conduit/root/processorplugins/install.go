@@ -102,13 +102,14 @@ type InstallArgs struct {
 // run through the one pkg/registry code path; there is no processor-specific
 // trust logic.
 //
-// # Tranche A vs Tranche B
+// # Hosted index and offline paths
 //
-// Against the live hosted index (Tranche B), install <name> resolves the
-// processor collection. Until the hosted index carries processors (PR-D), that
-// path returns registry.processor_not_found with a suggestion pointing at the
-// interim offline paths — the Tranche A --index-file / --bundle / gated
-// --allow-unsigned flows, which are fully usable today.
+// Against the hosted index (the default --index-url), install <name> resolves
+// the index's processor collection, which serves published processors (for
+// example ai.chunk and ai.embed). A name the index does not carry returns
+// registry.processor_not_found with a suggestion pointing at the offline
+// paths — --index-file / --bundle, plus the gated --allow-unsigned flow — which
+// run the same verification without reaching the hosted index.
 type InstallCommand struct {
 	flags InstallFlags
 	args  InstallArgs
@@ -130,7 +131,8 @@ the next 'conduit run' discovers it.
 This is an OFFLINE command: unlike 'processor-plugins list'/'describe' (which query a running
 engine), install writes to --processors.path on disk with no engine running.
 
-Interim offline paths (until the hosted index serves processors):
+By default install resolves against the hosted registry index, which serves published
+processors (for example ai.chunk and ai.embed). Offline alternatives, verified the same way:
   --index-file <local.json>   install from a locally-provided, still signature-verified index
   --bundle <path.tgz>         install fully offline from a signed processor bundle
 

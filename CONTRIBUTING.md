@@ -6,8 +6,7 @@ As a contributor, here are the guidelines we would like you to follow.
 ## Asking questions
 
 If you have a question or you are not sure how to do something, please
-[open a discussion](https://github.com/ConduitIO/conduit/discussions) or hit us up
-on [Discord](https://discord.meroxa.com)!
+[open a discussion](https://github.com/ConduitIO/conduit/discussions).
 
 ## Filing a bug or feature
 
