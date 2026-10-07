@@ -1483,7 +1483,7 @@ func TestServiceLifecycle_RunPipeline_UpdateStatusRunningFails_RollsBackPublicat
 //
 // Like the AC1 test above, this holds the window open on rp2's failing write
 // rather than racing it, so the mid-write assertion (rp2 is already
-// published, and alive, even though its own write is about to fail) fails
+// published in place of rp1, even though its own write is about to fail) fails
 // deterministically pre-fix for the same reason AC1's does: pre-fix, Set
 // happens only after runPipeline returns successfully, so at this exact
 // moment the map still points at the dead rp1.
@@ -1522,8 +1522,22 @@ func TestServiceLifecycle_Recovery_NestedStartFailureDoesNotCorruptRunningPipeli
 
 	inWindow := make(chan struct{})
 	release := make(chan struct{})
+	// rp1 is the original run, captured while its StatusRecovering is being
+	// written: recoverPipeline runs on rp1's cleanup goroutine and the map
+	// deliberately still holds rp1 until a recovered run replaces it. That
+	// holds whatever order runPipeline publishes and announces in, so the
+	// capture does not depend on the #2806 fix it is used to check. The
+	// window assertion below compares against it: "the entry is not the
+	// superseded rp1" is the property #2806 is about.
+	var (
+		ls  *Service
+		rp1 *runnablePipeline
+	)
 	rec := newStatusRecorder(ps)
 	rec.onUpdate = func(status pipeline.Status, nth int) error {
+		if status == pipeline.StatusRecovering && nth == 1 {
+			rp1, _ = ls.runningPipelines.Get(pl.ID)
+		}
 		if status == pipeline.StatusRunning && nth == 2 {
 			close(inWindow)
 			<-release
@@ -1533,7 +1547,7 @@ func TestServiceLifecycle_Recovery_NestedStartFailureDoesNotCorruptRunningPipeli
 	}
 
 	done := make(chan struct{})
-	ls := NewService(
+	ls = NewService(
 		logger,
 		testErrRecoveryCfg(),
 		testConnectorService{
@@ -1555,14 +1569,23 @@ func TestServiceLifecycle_Recovery_NestedStartFailureDoesNotCorruptRunningPipeli
 
 	<-inWindow
 	// Mid-write for the RECOVERED run's (rp2's) announcement, moments
-	// before that write fails: the entry must already be rp2, alive, even
-	// though rp2 itself is about to be rolled back.
+	// before that write fails: the entry must already be rp2 — not the
+	// superseded rp1 — even though rp2 itself is about to be rolled back.
+	//
+	// This asserts identity, not liveness. rp2's own source is built to fail
+	// on its own (transientErr above), so its tomb can already be dying by
+	// the time this goroutine reads the map; whether it is depends only on
+	// scheduling. An earlier version asserted rp2.t.Alive() here and flaked
+	// in the nightly flake hunt for exactly that reason: the entry was the
+	// correct run, whose nodes had simply already failed. What #2806 forbids
+	// is the map still pointing at rp1, and that is what is checked.
+	is.True(rp1 != nil) // the StatusRecovering hook must have captured the original run
 	rp2, ok := ls.runningPipelines.Get(pl.ID)
-	is.True(ok) // no live entry at all while rp2's StatusRunning is in flight
-	is.True(rp2.t != nil)
-	if !rp2.t.Alive() {
-		t.Fatalf("runningPipelines[%s] points at a dead tomb while the recovered run's StatusRunning is being announced (#2806)", pl.ID)
+	is.True(ok) // no entry at all while rp2's StatusRunning is in flight
+	if rp2 == rp1 {
+		t.Fatalf("runningPipelines[%s] still points at the superseded run while the recovered run's StatusRunning is being announced (#2806)", pl.ID)
 	}
+	is.True(rp2.t != nil) // rp2 has been run, not just built
 	close(release)
 
 	select {
