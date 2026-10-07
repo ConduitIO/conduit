@@ -250,6 +250,16 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"`pipeline.fanout_requires_arch_v2` error (FailedPrecondition) naming this flag. Architecture " +
 					"v2 is a preview engine; graduation to the default engine is evaluated in v0.21 against a written gate — " +
 					"see its status before relying on it in production.",
+				"Open the engine-level egress ceiling so the embedding processor can reach Ollama: start " +
+					"Conduit with `--processors.egress.enabled --processors.egress.allow http://127.0.0.1:11434` " +
+					"(or set `processors.egress.enabled: true` and `processors.egress.allow: [http://127.0.0.1:11434]` " +
+					"in conduit.yaml). Network egress for WASM processors is off by default; the template's " +
+					"`sdk.egress.allow` opts ai.embed in, but only for destinations the operator also allows. " +
+					"Without the ceiling every embed call fails with \"http egress is not enabled for this " +
+					"processor\". Ollama must be listening on 127.0.0.1:11434 with the model pulled " +
+					"(`ollama pull nomic-embed-text`). Keep the address an IP literal: loopback is only " +
+					"reachable through an exact (IP, port) allowlist entry, and `localhost` is rejected. For a " +
+					"hosted provider, see the comments on the embed processor in the scaffolded pipeline.",
 				"pgvector destination: NOT installable from the registry yet — " +
 					"github.com/conduitio/conduit-connector-pgvector has no tagged release, so there is no " +
 					"version to pass to `conduit connectors install`. Build it yourself: clone the repo and " +

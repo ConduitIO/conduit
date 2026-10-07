@@ -107,7 +107,35 @@ pipelines:
           # 768-dimensional — the pgvector destination's "dimension"
           # setting above MUST match whatever model you actually use.
           model: nomic-embed-text
-          ollama.baseURL: http://localhost:11434
+          # Ollama's default port, written as the loopback IP literal on
+          # purpose: the egress gate refuses loopback addresses unless the
+          # exact (IP, port) pair is allowlisted, and "localhost" cannot be
+          # allowlisted for plain http. Keep this and sdk.egress.allow below
+          # identical.
+          ollama.baseURL: http://127.0.0.1:11434
+          # Network egress is off by default for WASM processors. This
+          # opts ai.embed in for exactly one destination, the local Ollama
+          # server. It only takes effect when the operator also opens the
+          # engine-level ceiling: start Conduit with
+          #   --processors.egress.enabled --processors.egress.allow http://127.0.0.1:11434
+          # (or processors.egress.enabled/allow in conduit.yaml). Without
+          # that, every embed call fails with "http egress is not enabled
+          # for this processor".
+          #
+          # For a hosted provider instead (OpenAI shown), replace the
+          # provider/model/ollama.* lines and this block with:
+          #   provider: openai
+          #   model: text-embedding-3-small   # 1536 dims: update `dimension`
+          #   openai.authSecretRef: openai_key
+          #   sdk.egress.allow: api.openai.com
+          #   sdk.egress.secretRefs: openai_key
+          # start Conduit with
+          #   --processors.egress.enabled --processors.egress.allow api.openai.com
+          #   --processors.egress.secret-refs openai_key
+          # and export CONDUIT_SECRET_OPENAI_KEY="Bearer sk-..." in its
+          # environment. The key is injected host-side and never enters
+          # the processor or this file.
+          sdk.egress.allow: http://127.0.0.1:11434
           requestTimeout: 30s
           maxRetries: "5"
           # inputField/outputField are left at their defaults
