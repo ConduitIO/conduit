@@ -43,12 +43,14 @@ const terminalStatusGuard = 10 * time.Second
 // stream.SourceNode's contract (a user Stop passes nil, StopAll passes
 // pipeline.ErrGracefulShutdown). If ctxErr is set, Run returns it when its
 // context is canceled, standing in for a node that fails while the tomb is
-// being killed.
+// being killed. If waitFor is set, a failing Run first waits for it to close,
+// which lets a test order this node's failure after another node's exit.
 type scriptedNode struct {
-	id     string
-	runErr error
-	ctxErr error
-	stop   chan error
+	id      string
+	runErr  error
+	ctxErr  error
+	stop    chan error
+	waitFor <-chan struct{}
 }
 
 func newScriptedNode(runErr, ctxErr error) *scriptedNode {
@@ -59,6 +61,9 @@ func (n *scriptedNode) ID() string { return n.id }
 
 func (n *scriptedNode) Run(ctx context.Context) error {
 	if n.runErr != nil {
+		if n.waitFor != nil {
+			<-n.waitFor
+		}
 		return n.runErr
 	}
 	select {
@@ -83,19 +88,47 @@ var _ stream.StoppableNode = (*scriptedNode)(nil)
 // nodesWg.Done() and before the goroutine returns its error to the tomb. Holding it
 // holds the #2896 window open: the cleanup goroutine is already past
 // nodesWg.Wait() while the failing node's tomb.run bookkeeping has not run.
+//
+// hits counts the lines it actually held, so a test can assert the gate
+// engaged: if the log line is renamed, the gate would otherwise silently stop
+// holding anything and the test would degrade to racing the window.
+//
+// watchID/watched optionally signal when a given node's "node stopped" line
+// (at any level) is written. That line is written after the node's deferred
+// nodesWg.Done(), so watched closing proves that node's Done() has run.
 type nodeStoppedGate struct {
 	release <-chan struct{}
 	abort   <-chan struct{}
+	hits    atomic.Int64
+
+	watchID   string
+	watched   chan struct{}
+	watchOnce sync.Once
 }
 
-func (w nodeStoppedGate) Write(p []byte) (int, error) {
-	if bytes.Contains(p, []byte(`"message":"node stopped"`)) && bytes.Contains(p, []byte(`"level":"error"`)) {
+func (w *nodeStoppedGate) Write(p []byte) (int, error) {
+	if !bytes.Contains(p, []byte(`"message":"node stopped"`)) {
+		return len(p), nil
+	}
+	if w.watched != nil && bytes.Contains(p, []byte(`"node_id":"`+w.watchID+`"`)) {
+		w.watchOnce.Do(func() { close(w.watched) })
+	}
+	if bytes.Contains(p, []byte(`"level":"error"`)) {
+		w.hits.Add(1)
 		select {
 		case <-w.release:
 		case <-w.abort:
 		}
 	}
 	return len(p), nil
+}
+
+// watch makes the gate close the returned channel once node id's "node
+// stopped" line is written. Call before start.
+func (w *nodeStoppedGate) watch(id string) <-chan struct{} {
+	w.watchID = id
+	w.watched = make(chan struct{})
+	return w.watched
 }
 
 // terminalRun is the harness shared by the tests below: one runnablePipeline
@@ -109,6 +142,8 @@ type terminalRun struct {
 	pl       *pipeline.Instance
 	rec      *statusRecorder
 	failures chan FailureEvent
+	// gate is the log writer when gateLog was requested, nil otherwise.
+	gate *nodeStoppedGate
 
 	// firstTerminal closes on the first status write other than Running,
 	// i.e. the cleanup goroutine's classification of the run.
@@ -128,7 +163,10 @@ func newTerminalRun(t *testing.T, cfg *ErrRecoveryCfg, gateLog bool, nodes ...st
 
 	logger := log.Nop()
 	if gateLog {
-		logger = log.New(zerolog.New(nodeStoppedGate{release: tr.firstTerminal, abort: tr.abort}))
+		tr.gate = &nodeStoppedGate{release: tr.firstTerminal, abort: tr.abort}
+		// Trace level explicitly: the watch hook relies on the trace-level
+		// "node stopped" line of a node that returned nil.
+		logger = log.New(zerolog.New(tr.gate).Level(zerolog.TraceLevel))
 	}
 
 	tr.rec = newStatusRecorder(testPipelineService{tr.pl.ID: tr.pl})
@@ -244,6 +282,9 @@ func TestServiceLifecycle_NodeErrorNotReportedAsUserStopped(t *testing.T) {
 			tr := newTerminalRun(t, tc.cfg, true, newScriptedNode(tc.err, nil))
 			tr.start(t)
 			tr.waitDead(t)
+			// The gate must actually have held the window open; otherwise
+			// this test is only racing it.
+			is.True(tr.gate.hits.Load() >= 1)
 
 			got := tr.statuses()
 			if len(got) >= 2 && got[1] == pipeline.StatusUserStopped {
@@ -268,6 +309,43 @@ func TestServiceLifecycle_NodeErrorNotReportedAsUserStopped(t *testing.T) {
 			is.True(strings.Contains(err.Error(), tc.wantInFailure))
 		})
 	}
+}
+
+// TestServiceLifecycle_NodeErrorAfterHealthyNodeExit pins the claim the #2896
+// fix rests on with more than one node: nodesWg cannot reach zero before
+// every failed node has recorded its error on the tomb, even when a healthy
+// sibling has already returned nil and called Done().
+//
+// Ordering is forced, not raced: the failing node does not return its error
+// until the healthy node's "node stopped" line has been written, which happens
+// after the healthy node's deferred Done(). So the failing node is the last
+// one to reach Done(), the case where the cleanup goroutine wakes right after
+// it. The failing node's own error log line is then held by the gate, as in
+// the single-node test.
+func TestServiceLifecycle_NodeErrorAfterHealthyNodeExit(t *testing.T) {
+	is := is.New(t)
+	healthy := newScriptedNode(nil, nil)
+	failing := newScriptedNode(cerrors.FatalError(cerrors.New("source connector error")), nil)
+	tr := newTerminalRun(t, testErrRecoveryCfg(), true, healthy, failing)
+	failing.waitFor = tr.gate.watch(healthy.ID())
+
+	tr.start(t)
+	// The healthy node returns nil (a source that finished, say) before the
+	// failing node fails.
+	is.NoErr(healthy.Stop(context.Background(), nil))
+	tr.waitDead(t)
+
+	is.True(tr.gate.hits.Load() >= 1)
+	got := tr.statuses()
+	if len(got) >= 2 && got[1] == pipeline.StatusUserStopped {
+		t.Fatalf("failed pipeline reported as %v (statuses %v) after a healthy sibling exited first (#2896)", got[1], got)
+	}
+	is.Equal([]pipeline.Status{pipeline.StatusRunning, pipeline.StatusDegraded}, got)
+
+	events := tr.failureEvents()
+	is.Equal(len(events), 1)
+	is.True(strings.Contains(events[0].Error.Error(), "source connector error"))
+	is.True(strings.Contains(events[0].Error.Error(), failing.ID()))
 }
 
 // TestServiceLifecycle_UserStopStillUserStopped checks the other side of the
