@@ -145,27 +145,40 @@ func errShuttingDown(pipelineID string) error {
 	return err
 }
 
-// stopSignal records that a stop was requested for one pipeline run (#2901).
+// stopSignal records that a stop was requested for one pipeline run (#2901),
+// who requested it, and whether the run had already failed at that moment.
 // It is fired by stopGraceful and stopForceful before they touch any node, and
 // never reset: a run whose stop was requested never enters recovery and never
 // gets restarted by a pending recovery. A restarted run is a new
 // runnablePipeline with a fresh, unfired signal.
 //
+// Only the first request counts. A user Stop followed by StopAll stays a user
+// stop, matching the source node, which also keeps the first stop's reason.
+//
 // The zero value is ready to use. All methods are safe for concurrent use.
 type stopSignal struct {
 	mu    sync.Mutex
 	fired bool
-	ch    chan struct{}
+	// system is true when the request came from StopAll (a shutdown), false
+	// for a user Stop. It picks SystemStopped over UserStopped.
+	system bool
+	// failedFirst is true when the run's tomb already carried an error when
+	// the stop was requested: the run failed on its own, and the stop did not
+	// cause the error. A fatal error that came first still degrades the run.
+	failedFirst bool
+	ch          chan struct{}
 }
 
-// fire records the stop request. Idempotent.
-func (s *stopSignal) fire() {
+// fire records the stop request. Only the first call has an effect.
+func (s *stopSignal) fire(system, failedFirst bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.fired {
 		return
 	}
 	s.fired = true
+	s.system = system
+	s.failedFirst = failedFirst
 	close(s.chLocked())
 }
 
@@ -174,6 +187,13 @@ func (s *stopSignal) requested() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.fired
+}
+
+// state returns what the first fire call recorded.
+func (s *stopSignal) state() (fired, system, failedFirst bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fired, s.system, s.failedFirst
 }
 
 // done returns a channel that is closed once fire has been called.

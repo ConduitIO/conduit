@@ -157,6 +157,13 @@ type runnablePipeline struct {
 	stop stopSignal
 }
 
+// requestStop fires rp's stop signal, recording whether the request is a
+// shutdown (system) and whether the run had already failed on its own.
+func (rp *runnablePipeline) requestStop(system bool) {
+	failedFirst := rp.t != nil && rp.t.Err() != tomb.ErrStillAlive
+	rp.stop.fire(system, failedFirst)
+}
+
 // ConnectorService can fetch and create a connector instance, and report when
 // every position/state write already queued for persistence has been
 // durably committed — see WaitPersisted's doc and StopAndWait, which relies
@@ -396,14 +403,17 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 
 	switch force {
 	case false:
-		return s.stopGraceful(ctx, rp, nil)
+		return s.stopGraceful(ctx, rp, nil, false)
 	case true:
 		return s.stopForceful(ctx, rp)
 	}
 	panic("unreachable code")
 }
 
-func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason error) error {
+// stopGraceful asks rp's source nodes to stop with reason and lets the run
+// drain. system is true for a shutdown (StopAll), false for a user Stop; it
+// decides between SystemStopped and UserStopped when the run ends.
+func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason error, system bool) error {
 	s.logger.Info(ctx).
 		Str(log.PipelineIDField, rp.pipeline.ID).
 		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
@@ -414,7 +424,7 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 	// itself echoed back by the source) the cleanup goroutine treats this run
 	// as stopped and never restarts it. Also abandons a recovery that is
 	// waiting out its backoff for this run.
-	rp.stop.fire()
+	rp.requestStop(system)
 
 	var errs []error
 	for _, n := range rp.n {
@@ -438,10 +448,11 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 		Msg("force stopping pipeline")
 
-	// The fatal error below already keeps the run out of recovery; firing the
-	// stop signal additionally abandons a recovery that is waiting out its
-	// backoff for this run (#2901).
-	rp.stop.fire()
+	// Record the stop request first (#2901): the run then ends UserStopped
+	// with the force-stop error recorded, never recovers, and a recovery
+	// waiting out its backoff for this run is abandoned. The fatal error
+	// below is what cancels the nodes' context.
+	rp.requestStop(false)
 
 	// Creates a FatalError to prevent the pipeline from recovering.
 	rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
@@ -462,7 +473,8 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 // is permanent. From then on Start refuses with pipeline.CodeShuttingDown, no
 // run is restarted by recovery, and a run that ends with an error (including
 // a non-graceful reason that the source returns as its error) is reported
-// Degraded instead of being recovered (#2901).
+// SystemStopped with the error recorded instead of being recovered, unless it
+// had already failed fatally on its own before the stop (#2901).
 func (s *Service) StopAll(ctx context.Context, reason error) {
 	// Invariant 7 (#2901): begin the shutdown before reading the running
 	// pipelines, under publishMu. runPipeline publishes a run under the same
@@ -478,7 +490,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
-		err := s.stopGraceful(ctx, rp, reason)
+		err := s.stopGraceful(ctx, rp, reason, true)
 		if err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
@@ -1085,115 +1097,154 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 	// cleanup function updates the metrics and pipeline status once all nodes
 	// stop running
 	rp.t.Go(func() error {
-		// use fresh context for cleanup function, otherwise the updated status
-		// won't be stored
-		ctx := context.Background()
-
-		nodesWg.Wait()
-		err := rp.t.Err()
-
-		switch err {
-		case tomb.ErrStillAlive:
-			// not an actual error, the pipeline stopped gracefully
-			err = nil
-			var status pipeline.Status
-			if isGracefulShutdown.Load() {
-				// it was triggered by a graceful shutdown of Conduit
-				status = pipeline.StatusSystemStopped
-			} else {
-				// it was manually triggered by a user
-				status = pipeline.StatusUserStopped
-			}
-			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
-				return err
-			}
-		default:
-			switch {
-			case cerrors.IsFatalError(err):
-				// we use %+v to get the stack trace too
-				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
-					return err
-				}
-			case rp.stop.requested():
-				// Invariant 7 (#2901): a stop was requested for this run (user
-				// Stop or StopAll) and it ended with a non-fatal error: a node
-				// failed while draining, or the source returned StopAll's
-				// non-graceful reason. Never recover a run someone asked to
-				// stop. Recovery would restart a pipeline the user stopped,
-				// or restart one during shutdown, after Wait has stopped
-				// looking. Report the error as Degraded instead, so it is not
-				// lost: OnFailure fires (and with it exit-on-degraded).
-				s.logger.Warn(ctx).
-					Err(err).
-					Str(log.PipelineIDField, rp.pipeline.ID).
-					Msg("pipeline stopped with an error after a stop was requested; not recovering")
-				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); updateErr != nil {
-					return updateErr
-				}
-			default:
-				// try to recover the pipeline
-				recoveryErr := s.recoverPipeline(ctx, rp)
-				switch {
-				case recoveryErr == nil:
-					// recovery was triggered didn't error, so no cleanup
-					// this is why we return nil to skip the cleanup below.
-					return nil
-				case cerrors.Is(recoveryErr, errRecoveryAborted):
-					// A stop was requested, or shutdown began, while the
-					// recovery was pending (#2901). The run still ended with
-					// err, so report that error, as in the arm above.
-					s.logger.Warn(ctx).
-						Err(err).
-						Str(log.PipelineIDField, rp.pipeline.ID).
-						Msg("pipeline recovery abandoned: stop requested or shutting down")
-					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); updateErr != nil {
-						return updateErr
-					}
-				default:
-					s.logger.
-						Err(ctx, err).
-						Str(log.PipelineIDField, rp.pipeline.ID).
-						Msg("pipeline recovery failed")
-
-					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
-						return updateErr
-					}
-
-					// we assign it to err so it's returned and notified by the cleanup function
-					err = recoveryErr
-				}
-			}
-		}
-
-		s.logger.
-			Err(ctx, err).
-			Str(log.PipelineIDField, rp.pipeline.ID).
-			Msg("pipeline stopped")
-
-		// Record the terminal error before removing the pipeline from
-		// runningPipelines, so a WaitPipeline caller that races this cleanup still
-		// sees the result instead of a false nil (ordering matters: set before
-		// delete leaves no window where neither is observable).
-		s.terminalErrors.Set(rp.pipeline.ID, err)
-
-		// confirmed that all nodes stopped, we can now remove the pipeline
-		// from the running pipelines — but only if the entry under this ID
-		// is still THIS run (#2806). This goroutine can itself be the one
-		// running synchronously inside an OLDER run's cleanup: recoverPipeline
-		// -> StartWithBackoff -> Start runs a nested runPipeline on the
-		// calling tomb, not a fresh goroutine. If that nested run's own
-		// UpdateStatus above fails, the error propagates back into the
-		// OUTER run's cleanup, which falls through to this same terminal
-		// block. A blind Delete(rp.pipeline.ID) there would delete the
-		// INNER run's freshly-published, still-alive entry — orphaning it,
-		// unreachable via Stop/WaitPipeline, exactly the bug class this
-		// fix closes. See deleteRunningPipelineIfCurrent.
-		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
-
-		s.notify(rp.pipeline.ID, err)
-		return err
+		return s.cleanupRun(rp, &nodesWg, &isGracefulShutdown)
 	})
 	return nil
+}
+
+// cleanupRun is the cleanup goroutine of a run started by runPipeline. It
+// waits for every node to stop, classifies how the run ended, writes the
+// terminal status, records the terminal error, removes the run from
+// runningPipelines (compare-and-delete) and notifies OnFailure handlers for
+// real failures. For a transient failure with no stop requested it runs
+// recovery instead, synchronously, on this run's tomb.
+func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGracefulShutdown *atomic.Bool) error {
+	// use fresh context for cleanup function, otherwise the updated status
+	// won't be stored
+	ctx := context.Background()
+
+	nodesWg.Wait()
+	err := rp.t.Err()
+	// stoppedWithErr is set when the run was stopped (not failed) but
+	// still ended with an error. That error is recorded and returned,
+	// but it is not a failure: OnFailure is not notified.
+	stoppedWithErr := false
+
+	switch err {
+	case tomb.ErrStillAlive:
+		// not an actual error, the pipeline stopped gracefully
+		err = nil
+		var status pipeline.Status
+		if isGracefulShutdown.Load() {
+			// it was triggered by a graceful shutdown of Conduit
+			status = pipeline.StatusSystemStopped
+		} else {
+			// it was manually triggered by a user
+			status = pipeline.StatusUserStopped
+		}
+		if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
+			return err
+		}
+	default:
+		stopRequested, systemStop, failedFirst := rp.stop.state()
+		switch {
+		case cerrors.IsFatalError(err) && (!stopRequested || failedFirst):
+			// The run failed on its own with a fatal error, before any
+			// stop was requested: it is degraded.
+			// we use %+v to get the stack trace too
+			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
+				return err
+			}
+		case stopRequested:
+			// Invariant 7 (#2901, ADR 20261007-stop-requested-never-recovers):
+			// a stop was requested for this run and it ended with an error:
+			// a node failed while draining, the source returned StopAll's
+			// non-graceful reason, or it was force-stopped. Never recover a
+			// run someone asked to stop; that would restart a pipeline the
+			// user stopped, or start one during shutdown after Wait stopped
+			// looking. The run is stopped, with the error recorded.
+			if updateErr := s.finishStopped(ctx, rp, systemStop, err); updateErr != nil {
+				return updateErr
+			}
+			stoppedWithErr = true
+		default:
+			// try to recover the pipeline
+			recoveryErr := s.recoverPipeline(ctx, rp)
+			switch {
+			case recoveryErr == nil:
+				// recovery was triggered didn't error, so no cleanup
+				// this is why we return nil to skip the cleanup below.
+				return nil
+			case cerrors.Is(recoveryErr, errRecoveryAborted):
+				// A stop was requested, or shutdown began, while the
+				// recovery was pending (#2901). Same outcome as the arm
+				// above, with the error the run failed with. A shutdown
+				// that ended the wait before StopAll reached this run
+				// counts as a system stop.
+				fired, system, _ := rp.stop.state()
+				if !fired {
+					system = true
+				}
+				if updateErr := s.finishStopped(ctx, rp, system, err); updateErr != nil {
+					return updateErr
+				}
+				stoppedWithErr = true
+			default:
+				s.logger.
+					Err(ctx, err).
+					Str(log.PipelineIDField, rp.pipeline.ID).
+					Msg("pipeline recovery failed")
+
+				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
+					return updateErr
+				}
+
+				// we assign it to err so it's returned and notified by the cleanup function
+				err = recoveryErr
+			}
+		}
+	}
+
+	s.logger.
+		Err(ctx, err).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Msg("pipeline stopped")
+
+	// Record the terminal error before removing the pipeline from
+	// runningPipelines, so a WaitPipeline caller that races this cleanup still
+	// sees the result instead of a false nil (ordering matters: set before
+	// delete leaves no window where neither is observable).
+	s.terminalErrors.Set(rp.pipeline.ID, err)
+
+	// confirmed that all nodes stopped, we can now remove the pipeline
+	// from the running pipelines — but only if the entry under this ID
+	// is still THIS run (#2806). This goroutine can itself be the one
+	// running synchronously inside an OLDER run's cleanup: recoverPipeline
+	// -> StartWithBackoff -> Start runs a nested runPipeline on the
+	// calling tomb, not a fresh goroutine. If that nested run's own
+	// UpdateStatus above fails, the error propagates back into the
+	// OUTER run's cleanup, which falls through to this same terminal
+	// block. A blind Delete(rp.pipeline.ID) there would delete the
+	// INNER run's freshly-published, still-alive entry — orphaning it,
+	// unreachable via Stop/WaitPipeline, exactly the bug class this
+	// fix closes. See deleteRunningPipelineIfCurrent.
+	s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
+
+	if !stoppedWithErr {
+		s.notify(rp.pipeline.ID, err)
+	}
+	return err
+}
+
+// finishStopped writes the terminal status of a run that was stopped but
+// ended with err: SystemStopped for a shutdown, so the pipeline starts again
+// on the next boot, UserStopped otherwise. The error is kept as the
+// pipeline's error message, logged, and (by the caller) stored as the
+// terminal error that WaitPipeline returns. It is not a failure, so the
+// caller does not notify OnFailure handlers and exit-on-degraded does not
+// trip (#2901).
+func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, system bool, err error) error {
+	status := pipeline.StatusUserStopped
+	if system {
+		status = pipeline.StatusSystemStopped
+	}
+	s.logger.Warn(ctx).
+		Err(err).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Any(log.PipelineStatusField, status).
+		Msg("pipeline stopped with an error after a stop was requested; not recovering")
+	// we use %+v to get the stack trace too
+	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, fmt.Sprintf("%+v", err))
 }
 
 // publishRunningPipeline makes rp the live run for its pipeline ID (see the
@@ -1218,8 +1269,8 @@ func (s *Service) publishRunningPipeline(ctx context.Context, rp *runnablePipeli
 		// see it (e.g. a recovery restart that was building its nodes while
 		// StopAll iterated). Invariant 7: stop it the same way StopAll would
 		// have, so Wait's drain covers it. It goes on to report Running and
-		// then SystemStopped (or Degraded) like any other run StopAll stopped.
-		if err := s.stopGraceful(ctx, rp, shutdownReason); err != nil {
+		// then SystemStopped like any other run StopAll stopped.
+		if err := s.stopGraceful(ctx, rp, shutdownReason, true); err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
 				Str(log.PipelineIDField, rp.pipeline.ID).

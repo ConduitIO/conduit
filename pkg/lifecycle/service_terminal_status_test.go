@@ -392,7 +392,8 @@ func TestServiceLifecycle_StopAllStillSystemStopped(t *testing.T) {
 // because a force Stop killed the tomb. stopForceful records
 // FatalError(ErrForceStop) first; the node's own (transient) error, now also
 // passed to Kill by the node goroutine, must not replace it. The run must end
-// Degraded with the force-stop reason and must not enter recovery.
+// UserStopped with the force-stop reason recorded (a force stop is a stop, not
+// a failure: no OnFailure, #2901) and must not enter recovery.
 func TestServiceLifecycle_ForceStopWinsOverNodeError(t *testing.T) {
 	is := is.New(t)
 	node := newScriptedNode(nil, cerrors.New("lost connection"))
@@ -402,12 +403,11 @@ func TestServiceLifecycle_ForceStopWinsOverNodeError(t *testing.T) {
 	is.NoErr(tr.ls.Stop(context.Background(), tr.pl.ID, true))
 	tr.waitDead(t)
 
-	is.Equal([]pipeline.Status{pipeline.StatusRunning, pipeline.StatusDegraded}, tr.statuses())
+	is.Equal([]pipeline.Status{pipeline.StatusRunning, pipeline.StatusUserStopped}, tr.statuses())
 	is.Equal(tr.rp.recoveryAttempts.Load(), int64(0))
 	is.True(strings.Contains(tr.pl.Error, pipeline.ErrForceStop.Error()))
 	is.True(!strings.Contains(tr.pl.Error, "lost connection"))
 
-	events := tr.failureEvents()
-	is.Equal(len(events), 1)
-	is.True(cerrors.Is(events[0].Error, pipeline.ErrForceStop))
+	is.Equal(len(tr.failureEvents()), 0)
+	is.True(cerrors.Is(tr.ls.WaitPipeline(tr.pl.ID), pipeline.ErrForceStop))
 }

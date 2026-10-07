@@ -152,9 +152,13 @@ func TestStopSignal(t *testing.T) {
 		t.Fatal("done closed before fire")
 	default:
 	}
-	s.fire()
-	s.fire() // idempotent
+	s.fire(true, false)
+	s.fire(false, true) // only the first request counts
 	is.True(s.requested())
+	fired, system, failedFirst := s.state()
+	is.True(fired)
+	is.True(system)
+	is.True(!failedFirst)
 	<-done
 	<-s.done()
 }

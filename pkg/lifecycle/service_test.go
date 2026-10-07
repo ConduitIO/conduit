@@ -453,7 +453,9 @@ func TestServiceLifecycle_Stop(t *testing.T) {
 			},
 			forceStop: true,
 			wantErr:   cerrors.FatalError(pipeline.ErrForceStop),
-			want:      pipeline.StatusDegraded,
+			// A force stop is a stop, not a failure (#2901): UserStopped,
+			// with the force-stop error recorded.
+			want: pipeline.StatusUserStopped,
 		},
 	}
 
@@ -518,6 +520,7 @@ func TestServiceLifecycle_Stop(t *testing.T) {
 			err = ls.WaitPipeline(pl.ID)
 			if tc.wantErr != nil {
 				is.True(err != nil)
+				is.True(pl.Error != "") // the error is recorded, never dropped (#2901)
 			} else {
 				is.NoErr(err)
 				is.Equal("", pl.Error)
@@ -602,7 +605,9 @@ func TestServiceLifecycle_WaitPipeline_AfterCleanup(t *testing.T) {
 	err = ls.WaitPipeline(pl.ID)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, pipeline.ErrForceStop))
-	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	// A force stop ends UserStopped with the error recorded (#2901).
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+	is.True(strings.Contains(pl.Error, pipeline.ErrForceStop.Error()))
 }
 
 func TestServiceLifecycle_StopAll(t *testing.T) {
@@ -626,7 +631,10 @@ func TestServiceLifecycle_StopAll(t *testing.T) {
 			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
 				ls.StopAll(ctx, cerrors.FatalError(cerrors.New("terrible err")))
 			},
-			want:    pipeline.StatusDegraded,
+			// Before #2901 this was Degraded. A pipeline caught in a
+			// shutdown was stopped, not failed: SystemStopped, with the
+			// reason recorded, so it starts again on the next boot.
+			want:    pipeline.StatusSystemStopped,
 			wantErr: cerrors.New("terrible err"),
 		},
 	}
@@ -692,6 +700,7 @@ func TestServiceLifecycle_StopAll(t *testing.T) {
 			err = ls.WaitPipeline(pl.ID)
 			if tc.wantErr != nil {
 				is.True(err != nil)
+				is.True(pl.Error != "") // the error is recorded, never dropped (#2901)
 			} else {
 				is.NoErr(err)
 				is.Equal("", pl.Error)
@@ -712,7 +721,8 @@ func TestServiceLifecycle_StopAll(t *testing.T) {
 // after the runtime's Wait has stopped looking, and the restarted run keeps
 // writing while the persister is flushed and the database closed. It now
 // asserts the intended behaviour: a run whose stop was requested is never
-// recovered; it ends Degraded with the reason as its error, the source is
+// recovered; it ends SystemStopped with the reason recorded as its error (so
+// it starts again on the next boot), the source is
 // dispensed exactly once (Times(1) below fails at controller finish on a
 // restart), Wait returns, and Start is refused because the service is
 // shutting down.
@@ -771,9 +781,10 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	is.True(err != context.DeadlineExceeded) // Wait must return: nothing restarts
 	is.True(cerrors.Is(err, wantErr))
 
-	// The run ended with the reason as its error and was not recovered.
+	// The run was stopped by the shutdown, with the reason recorded, and
+	// was not recovered.
 	is.True(cerrors.Is(ls.WaitPipeline(pl.ID), wantErr))
-	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	is.Equal(pipeline.StatusSystemStopped, pl.GetStatus())
 	is.True(strings.Contains(pl.Error, wantErr.Error()))
 	_, live := ls.runningPipelines.Get(pl.ID)
 	is.True(!live)

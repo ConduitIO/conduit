@@ -22,6 +22,7 @@ package lifecycle
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -176,7 +177,8 @@ func TestServiceLifecycle_Recovery_GracefulShutdownDuringLongBackoff(t *testing.
 	is.NoErr(err)
 
 	ctrl := gomock.NewController(t)
-	source, srcDispenser := failingSourceTimes(ctrl, persister, cerrors.New("lost connection to source"), 1)
+	transientErr := cerrors.New("lost connection to source")
+	source, srcDispenser := failingSourceTimes(ctrl, persister, transientErr, 1)
 	destination, destDispenser := destinationTimes(ctrl, persister, 1)
 	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 1)
 	pl.DLQ.Plugin = dlq.Plugin
@@ -215,6 +217,9 @@ func TestServiceLifecycle_Recovery_GracefulShutdownDuringLongBackoff(t *testing.
 		t.Fatalf("Wait timed out: a 10m recovery backoff held up the shutdown (#2901)")
 	}
 	is.Equal(pipeline.StatusSystemStopped, pl.GetStatus())
+	// The error the run failed with is kept, not dropped (#2901).
+	is.True(strings.Contains(pl.Error, "lost connection to source"))
+	is.True(cerrors.Is(ls.WaitPipeline(pl.ID), transientErr))
 }
 
 func TestServiceLifecycle_StartRefusedAfterStopAll(t *testing.T) {
@@ -312,6 +317,7 @@ func TestServiceLifecycle_Recovery_UserStopDuringBackoff_NoRestart(t *testing.T)
 	if got := pl.GetStatus(); got != pipeline.StatusUserStopped {
 		t.Fatalf("status %s after a user Stop during recovery backoff, want %s: the pipeline was restarted (#2901)", got, pipeline.StatusUserStopped)
 	}
+	is.True(strings.Contains(pl.Error, "lost connection to source")) // kept, not dropped
 	_, live := ls.runningPipelines.Get(pl.ID)
 	is.True(!live)
 }

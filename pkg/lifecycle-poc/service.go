@@ -226,6 +226,26 @@ type runnablePipeline struct {
 	// stops for an unrelated reason gets ordinary recovery semantics again, not
 	// a stale "this was user-stopped" marker from a previous run.
 	intentionalStop atomic.Bool
+
+	// stopFailedFirst records, for the stop request that set intentionalStop,
+	// whether the run's tomb already carried an error at that moment: 0 no
+	// request recorded, 1 the run was healthy, 2 it had already failed on its
+	// own. A fatal error that came before the stop still degrades the run;
+	// anything after the stop ends it stopped, with the error recorded
+	// (#2901). Reset together with intentionalStop.
+	stopFailedFirst atomic.Int32
+}
+
+// markStopRequested records a stop request for rp: intentionalStop, plus
+// whether the run had already failed (see stopFailedFirst). Only the first
+// request's failed-first snapshot counts.
+func (rp *runnablePipeline) markStopRequested() {
+	snapshot := int32(1)
+	if rp.t != nil && rp.t.Err() != tomb.ErrStillAlive {
+		snapshot = 2
+	}
+	rp.stopFailedFirst.CompareAndSwap(0, snapshot)
+	rp.intentionalStop.Store(true)
 }
 
 // ConnectorService can fetch and create a connector instance, and report when
@@ -418,7 +438,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// instead of misreading it as a spontaneous failure and
 		// auto-restarting via recoverPipeline. See the intentionalStop field
 		// doc.
-		rp.intentionalStop.Store(true)
+		rp.markStopRequested()
 
 		// H1 (adversarial review of #2734): every worker's Stop call is
 		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
@@ -514,6 +534,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// single-worker rollback condition ("nothing began stopping"),
 			// generalized to "no worker began stopping".
 			rp.intentionalStop.Store(false)
+			rp.stopFailedFirst.Store(0)
 		case len(unarmedSources) > 0:
 			// H1 (adversarial review): PARTIAL arming. Some source(s) armed
 			// and tore down their connector; other(s) are still reading.
@@ -552,7 +573,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 				rp.pipeline.ID, armedSources, unarmedSources,
 			))
 			ce.Suggestion = "check the destination/DLQ and the unarmed source(s) for a stuck write or read; " +
-				"the pipeline is being force-stopped and will reach a Degraded status - restart it once the " +
+				"the pipeline is being force-stopped and will end stopped with this error recorded - restart it once the " +
 				"underlying issue is resolved"
 			rp.t.Kill(cerrors.FatalError(ce))
 			errs = append(errs, ce)
@@ -574,7 +595,10 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// pkg/lifecycle/service.go) so the cleanup goroutine's IsFatalError check
 		// (see the switch on rp.t.Err() below) classifies it as terminal and error
 		// recovery — once wired in — never auto-restarts a pipeline the user
-		// explicitly stopped.
+		// explicitly stopped. Since #2901 a force stop is recorded as a stop
+		// request too, so the run ends UserStopped (SystemStopped from
+		// StopAll) with ErrForceStop recorded, rather than Degraded.
+		rp.markStopRequested()
 		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
@@ -1631,6 +1655,10 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// *pipeline.Instance. See the comment on startupDone above.
 		<-startupDone
 		err := rp.t.Err()
+		// stoppedWithErr is set when the run was stopped (not failed) but
+		// still ended with an error: the error is recorded and returned, but
+		// OnFailure is not notified (#2901).
+		stoppedWithErr := false
 
 		if err == tomb.ErrStillAlive && sinkCloseErr != nil {
 			// Every worker exited cleanly (no fatal/transient error anywhere),
@@ -1665,40 +1693,41 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				return err
 			}
 		default:
+			stopRequested := s.isGracefulShutdown.Load() || rp.intentionalStop.Load()
+			failedFirst := rp.stopFailedFirst.Load() == 2
 			switch {
-			case cerrors.IsFatalError(err):
-				// Invariant 3/7: a fatal terminal error (including a user
-				// force-stop, which stopRunnablePipeline fatal-tags) is never
-				// auto-recovered — it degrades. we use %+v to get the stack trace too.
+			case cerrors.IsFatalError(err) && (!stopRequested || failedFirst):
+				// Invariant 3/7: a fatal error the run hit on its own, before any
+				// stop was requested, is never auto-recovered — it degrades.
+				// we use %+v to get the stack trace too.
 				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 					return err
 				}
 			case s.isGracefulShutdown.Load():
-				// Transient error that fired while Conduit is already shutting
-				// down: do not start a recovery loop that would race the
-				// shutdown (invariant 7). Finalize as a system stop. This is a
-				// deliberate v2 improvement over v1, which does not gate its
-				// error arm on graceful shutdown — flagged in the PR.
-				err = nil
-				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
+				// The run ended with an error while Conduit is shutting down: do
+				// not start a recovery loop that would race the shutdown
+				// (invariant 7). Finalize as a system stop, so it starts again
+				// on the next boot, and keep the error (#2901, ADR
+				// 20261007-stop-requested-never-recovers): it is recorded on the
+				// pipeline and returned by WaitPipeline, but it is not a failure,
+				// so OnFailure is not notified.
+				if updateErr := s.finishStopped(ctx, rp, pipeline.StatusSystemStopped, err); updateErr != nil {
 					return updateErr
 				}
+				stoppedWithErr = true
 			case rp.intentionalStop.Load():
 				// Invariant 3/7: an operator (or provisioning.ApplyPlanLive via
 				// StopAndWait) deliberately asked THIS pipeline to stop — see
-				// stopRunnablePipeline, which sets intentionalStop before
-				// calling Stop on every worker. A transient (non-fatal) error surfacing
-				// from that deliberate drain must never be misread as a
-				// spontaneous failure needing recovery: auto-restarting here
-				// would restart a pipeline the operator just stopped, exactly
-				// the race the recovery port introduced (O3). Finalize as
-				// StatusUserStopped, mirroring the tomb.ErrStillAlive branch's
-				// clean-stop status, but via this arm because the drain itself
-				// returned an error instead of returning cleanly.
-				err = nil
-				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); updateErr != nil {
+				// stopRunnablePipeline, which records the request before calling
+				// Stop on any worker. An error surfacing from that deliberate
+				// drain (or a force stop) must never be misread as a spontaneous
+				// failure needing recovery: auto-restarting here would restart a
+				// pipeline the operator just stopped (O3). Finalize as
+				// StatusUserStopped and keep the error (#2901), as above.
+				if updateErr := s.finishStopped(ctx, rp, pipeline.StatusUserStopped, err); updateErr != nil {
 					return updateErr
 				}
+				stoppedWithErr = true
 			default:
 				// Transient (non-fatal) error: attempt bounded-backoff recovery.
 				recoveryErr := s.recoverPipeline(ctx, rp)
@@ -1717,20 +1746,21 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 					return nil
 				case cerrors.Is(recoveryErr, errGracefulShutdownDuringRecovery):
 					// A graceful shutdown began while we were parked in the
-					// backoff wait. Finalize as a system stop, not a degraded
-					// failure, and run the cleanup tail so the entry is removed.
-					err = nil
-					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
+					// backoff wait. Finalize as a system stop with the error the
+					// run failed with, and run the cleanup tail so the entry is
+					// removed.
+					if updateErr := s.finishStopped(ctx, rp, pipeline.StatusSystemStopped, err); updateErr != nil {
 						return updateErr
 					}
+					stoppedWithErr = true
 				case cerrors.Is(recoveryErr, errIntentionalStopDuringRecovery):
 					// A user Stop arrived while we were parked in the backoff
 					// wait (#2901). Same outcome as the intentionalStop arm
-					// above: finalize as a user stop, do not restart.
-					err = nil
-					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); updateErr != nil {
+					// above: a user stop with the error kept, no restart.
+					if updateErr := s.finishStopped(ctx, rp, pipeline.StatusUserStopped, err); updateErr != nil {
 						return updateErr
 					}
+					stoppedWithErr = true
 				default:
 					// Recovery is exhausted (MaxRetries) or itself errored.
 					s.logger.
@@ -1774,7 +1804,9 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// the stop and wait paths.
 		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 
-		s.notify(rp.pipeline.ID, err)
+		if !stoppedWithErr {
+			s.notify(rp.pipeline.ID, err)
+		}
 		return err
 	})
 
@@ -1909,6 +1941,20 @@ func (s *Service) deleteRunningPipelineIfCurrent(id string, rp *runnablePipeline
 		}
 		s.runningPipelines.Delete(id)
 	}
+}
+
+// finishStopped writes the terminal status of a run that was stopped but
+// ended with err, keeping err as the pipeline's error message (#2901). The
+// caller stores err as the terminal error WaitPipeline returns and does not
+// notify OnFailure handlers. Mirrors pkg/lifecycle.Service.finishStopped.
+func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, status pipeline.Status, err error) error {
+	s.logger.Warn(ctx).
+		Err(err).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Any(log.PipelineStatusField, status).
+		Msg("pipeline stopped with an error after a stop was requested; not recovering")
+	// we use %+v to get the stack trace too
+	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, fmt.Sprintf("%+v", err))
 }
 
 // recoverPipeline attempts to recover a pipeline that stopped with a transient
