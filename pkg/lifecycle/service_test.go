@@ -702,7 +702,20 @@ func TestServiceLifecycle_StopAll(t *testing.T) {
 	}
 }
 
-// Creates first a pipeline that will stop with a recoverable error, to check later that it restarted and it's running.
+// TestServiceLifecycle_StopAll_Recovering covers StopAll with a recoverable
+// (non-fatal) reason, which is what the runtime passes when it shuts down
+// because its tomb died with an error. The source returns that reason as its
+// error.
+//
+// This test used to assert that the pipeline then went into recovery and was
+// restarted. That was the bug in #2901: the restart happens during shutdown,
+// after the runtime's Wait has stopped looking, and the restarted run keeps
+// writing while the persister is flushed and the database closed. It now
+// asserts the intended behaviour: a run whose stop was requested is never
+// recovered; it ends Degraded with the reason as its error, the source is
+// dispensed exactly once (Times(1) below fails at controller finish on a
+// restart), Wait returns, and Start is refused because the service is
+// shutting down.
 func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
@@ -718,14 +731,13 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
 	is.NoErr(err)
 
-	// create mocked connectors
-	// source will stop and return ErrGracefulShutdown which should signal to the
-	// service that everything went well and the pipeline was gracefully shutdown
+	// Exactly one dispense of each plugin: a recovery restart would be a
+	// second one.
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(0)
-	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 2)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 2)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 2)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -748,51 +760,30 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
 
-	// start the pipeline now that everything is set up
-	err = ls.Start(
-		ctx,
-		pl.ID,
-	)
+	err = ls.Start(ctx, pl.ID)
 	is.NoErr(err)
 
-	// wait for pipeline to finish consuming records from the source
-	time.Sleep(100 * time.Millisecond)
-
-	c := make(cchan.Chan[error])
-	go func() {
-		c <- ls.WaitPipeline(pl.ID)
-	}()
-
-	// force the pipeline to stop with a recoverable error
+	// StopAll waits for the source to be running before it stops it, so no
+	// sleep is needed here.
 	ls.StopAll(ctx, wantErr)
-	err, _, ctxErr := c.RecvTimeout(ctx, 10000*time.Millisecond)
-	is.NoErr(ctxErr)
 
-	// check the first pipeline stopped with the error that caused the restart
+	err = ls.Wait(10 * time.Second)
+	is.True(err != context.DeadlineExceeded) // Wait must return: nothing restarts
 	is.True(cerrors.Is(err, wantErr))
 
-	go func() {
-		c <- ls.WaitPipeline(pl.ID)
-	}()
+	// The run ended with the reason as its error and was not recovered.
+	is.True(cerrors.Is(ls.WaitPipeline(pl.ID), wantErr))
+	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	is.True(strings.Contains(pl.Error, wantErr.Error()))
+	_, live := ls.runningPipelines.Get(pl.ID)
+	is.True(!live)
 
-	_, _, err = c.RecvTimeout(ctx, 1000*time.Millisecond)
-	is.True(cerrors.Is(err, context.DeadlineExceeded))
-
-	// stop the running pipeline
-	err = ls.Stop(ctx, pl.ID, false)
-	is.NoErr(err)
-
-	// Check pipeline ended in a running state
-	is.Equal(pipeline.StatusRunning, pl.GetStatus())
-
-	go func() {
-		c <- ls.WaitPipeline(pl.ID)
-	}()
-	err, _, _ = c.RecvTimeout(ctx, 1000*time.Millisecond)
-	is.NoErr(err)
-
-	// This is to demonstrate the test indeed stopped the pipeline
-	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+	// After StopAll the service starts nothing.
+	err = ls.Start(ctx, pl.ID)
+	is.True(cerrors.Is(err, pipeline.ErrShuttingDown))
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, pipeline.CodeShuttingDown)
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
@@ -1354,9 +1345,9 @@ func TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus(t *test
 	deadRp, ok := ls.runningPipelines.Get(pl.ID)
 	is.True(ok)
 
-	// wait for the pipeline to be consuming, then force a recoverable error.
-	time.Sleep(100 * time.Millisecond)
-	ls.StopAll(ctx, wantErr)
+	// Force a recoverable error. Not via StopAll(wantErr), which this test
+	// used before #2901: a stop request never leads to recovery any more.
+	injectSourceError(ctx, t, ls, pl.ID, wantErr)
 
 	<-inWindow
 
@@ -1735,8 +1726,9 @@ func TestServiceLifecycle_Recovery_StopDuringWindowTargetsLiveRun(t *testing.T) 
 	)
 
 	is.NoErr(ls.Start(ctx, pl.ID))
-	time.Sleep(100 * time.Millisecond)
-	ls.StopAll(ctx, wantErr)
+	// Force a recoverable error. Not via StopAll(wantErr), which this test
+	// used before #2901: a stop request never leads to recovery any more.
+	injectSourceError(ctx, t, ls, pl.ID, wantErr)
 
 	<-inWindow
 	// Stop while the recovered run's own StatusRunning announcement is
