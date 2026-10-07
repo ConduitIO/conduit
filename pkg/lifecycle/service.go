@@ -389,12 +389,16 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return err
 	}
 
-	if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
+	// Read the status once. Reading it separately for each comparison (and
+	// again for the message) let a Recovering -> Running transition between
+	// the reads refuse a stop of a pipeline that was Recovering, then
+	// Running, with "can't stop pipeline with status Running" (#2912 S4).
+	if status := rp.pipeline.GetStatus(); status != pipeline.StatusRunning && status != pipeline.StatusRecovering {
 		// Invariant: errors.Is(err, ErrPipelineNotRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		err := conduiterr.Wrap(
 			pipeline.CodePipelineNotRunning,
-			fmt.Sprintf("can't stop pipeline with status %q: %s", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning),
+			fmt.Sprintf("can't stop pipeline with status %q: %s", status, pipeline.ErrPipelineNotRunning),
 			pipeline.ErrPipelineNotRunning,
 		)
 		err.Suggestion = "start the pipeline before trying to stop it"
@@ -487,7 +491,14 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 
 	for _, rp := range s.runningPipelines.All() {
 		p := rp.pipeline
-		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
+		// Invariant 7 (#2912 B1): stop every run that is still alive, whatever
+		// its status says. A run is published before it announces
+		// StatusRunning, so for a moment its entry carries the previous run's
+		// status (UserStopped after a Stop, SystemStopped at boot, Degraded,
+		// or none for a new pipeline). It read the shutdown flag before it
+		// was set, so it will not stop itself; skipping it here by status
+		// would leave it running past Wait.
+		if rp.t == nil || !rp.t.Alive() {
 			continue
 		}
 		err := s.stopGraceful(ctx, rp, reason, true)
@@ -1076,7 +1087,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 	// published but nothing yet owns cleaning it up if UpdateStatus fails.
 	// So: roll back explicitly on that error path instead of relying on a
 	// cleanup goroutine that does not exist yet.
-	s.publishRunningPipeline(ctx, rp)
+	s.publishRunningPipeline(rp)
 
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
@@ -1251,7 +1262,7 @@ func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, syste
 // comment at its call site in runPipeline for why the timing matters). If
 // shutdown has begun by then, it also stops rp, because StopAll may already
 // have iterated runningPipelines without seeing it (#2901).
-func (s *Service) publishRunningPipeline(ctx context.Context, rp *runnablePipeline) {
+func (s *Service) publishRunningPipeline(rp *runnablePipeline) {
 	if s.testBeforePublish != nil {
 		s.testBeforePublish(rp)
 	}
@@ -1270,8 +1281,11 @@ func (s *Service) publishRunningPipeline(ctx context.Context, rp *runnablePipeli
 		// StopAll iterated). Invariant 7: stop it the same way StopAll would
 		// have, so Wait's drain covers it. It goes on to report Running and
 		// then SystemStopped like any other run StopAll stopped.
-		if err := s.stopGraceful(ctx, rp, shutdownReason, true); err != nil {
-			s.logger.Warn(ctx).
+		// Detached context (#2912 N1): ctx is the caller's, e.g. an API
+		// request, and its cancellation must not leave the run alive until
+		// the exit timeout.
+		if err := s.stopGraceful(context.Background(), rp, shutdownReason, true); err != nil {
+			s.logger.Warn(context.Background()).
 				Err(err).
 				Str(log.PipelineIDField, rp.pipeline.ID).
 				Msg("could not stop pipeline that started while shutting down")

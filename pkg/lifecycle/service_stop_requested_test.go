@@ -22,6 +22,7 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -326,21 +328,29 @@ func (d *closeTrackingDB) NewTransaction(ctx context.Context, update bool) (data
 	return d.DB.NewTransaction(ctx, update)
 }
 
+// recordsPerRun returns, for the nth (1-based) dispense of a plugin, the
+// records that run moves. nil means none.
+type recordsPerRun func(n int32) []opencdc.Record
+
+func noRecords(int32) []opencdc.Record { return nil }
+
 // countingSource is a source connector whose plugin can be dispensed any number
-// of times; dispensed counts how often. Each dispensed plugin produces no
-// records and supports a graceful stop.
-func countingSource(ctrl *gomock.Controller, persister *connector.Persister) (*connector.Instance, *pmock.Dispenser, *atomic.Int32) {
+// of times; dispensed counts how often. The nth dispensed plugin produces
+// records(n) and supports a graceful stop. A test that moves records must wait
+// for them to be acked (waitForSourceAcked) before stopping the run, so the
+// stop position is known.
+func countingSource(ctrl *gomock.Controller, persister *connector.Persister, records recordsPerRun) (*connector.Instance, *pmock.Dispenser, *atomic.Int32) {
 	var dispensed atomic.Int32
 	source := dummySource(persister)
 	dispenser := pmock.NewDispenser(ctrl)
 	dispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
-		dispensed.Add(1)
+		recs := records(dispensed.Add(1))
 		return pmock.NewConfigurableSourcePlugin(ctrl,
 			pmock.SourcePluginWithConfigure(),
 			pmock.SourcePluginWithOpen(),
 			pmock.SourcePluginWithRun(),
-			pmock.SourcePluginWithRecords(nil, nil),
-			pmock.SourcePluginWithAcks(0, true),
+			pmock.SourcePluginWithRecords(recs, nil),
+			pmock.SourcePluginWithAcks(len(recs), true),
 			pmock.SourcePluginWithStop(),
 			pmock.SourcePluginWithTeardown(),
 		), nil
@@ -348,17 +358,24 @@ func countingSource(ctrl *gomock.Controller, persister *connector.Persister) (*c
 	return source, dispenser, &dispensed
 }
 
-// countingDestination is countingSource's destination counterpart.
-func countingDestination(ctrl *gomock.Controller, persister *connector.Persister) (*connector.Instance, *pmock.Dispenser) {
+// countingDestination is countingSource's destination counterpart: the nth
+// dispensed plugin expects records(n), in order, and a stop at the last one.
+func countingDestination(ctrl *gomock.Controller, persister *connector.Persister, records recordsPerRun) (*connector.Instance, *pmock.Dispenser) {
 	dest := dummyDestination(persister)
 	dispenser := pmock.NewDispenser(ctrl)
+	var dispensed atomic.Int32
 	dispenser.EXPECT().DispenseDestination().DoAndReturn(func() (connectorPlugin.DestinationPlugin, error) {
+		recs := records(dispensed.Add(1))
+		var stopAt opencdc.Position
+		if len(recs) > 0 {
+			stopAt = recs[len(recs)-1].Position
+		}
 		return pmock.NewConfigurableDestinationPlugin(ctrl,
 			pmock.DestinationPluginWithConfigure(),
 			pmock.DestinationPluginWithOpen(),
 			pmock.DestinationPluginWithRun(),
-			pmock.DestinationPluginWithRecords(nil),
-			pmock.DestinationPluginWithStop(nil),
+			pmock.DestinationPluginWithRecords(recs),
+			pmock.DestinationPluginWithStop(stopAt),
 			pmock.DestinationPluginWithTeardown(),
 		), nil
 	}).AnyTimes()
@@ -381,16 +398,39 @@ func TestServiceLifecycle_Shutdown_NoRunOutlivesWait(t *testing.T) {
 	ctx := context.Background()
 	logger := log.New(zerolog.Nop())
 	db := &closeTrackingDB{DB: &inmemory.DB{}}
-	persister := connector.NewPersister(logger, db, time.Second, 3)
+	// Bundle count 1: every acked position is flushed to the store at once, so
+	// a position write from a run that outlived Wait lands after the close and
+	// is counted, instead of sitting in the persister's batch.
+	persister := connector.NewPersister(logger, db, time.Second, 1)
 
 	ps := pipeline.NewService(logger, db)
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
 	is.NoErr(err)
 
 	ctrl := gomock.NewController(t)
-	source, srcDispenser, srcDispensed := countingSource(ctrl, persister)
-	destination, destDispenser := countingDestination(ctrl, persister)
-	dlq, dlqDispenser := countingDestination(ctrl, persister)
+	// Records flow in every run, so a run that outlived Wait would also write
+	// source positions (through the persister) after the close, not only
+	// statuses. Each run gets its own positions, so the wait for its acks is
+	// not satisfied by an earlier run's.
+	var runRecordsMu sync.Mutex
+	runRecordsByRun := map[int32][]opencdc.Record{}
+	runRecords := func(n int32) []opencdc.Record {
+		runRecordsMu.Lock()
+		defer runRecordsMu.Unlock()
+		if recs, ok := runRecordsByRun[n]; ok {
+			return recs // the source and the destination must see the same records
+		}
+		recs := generateRecords(5)
+		for i := range recs {
+			recs[i].Position = opencdc.Position(fmt.Sprintf("run%d-%d", n, i))
+		}
+		runRecordsByRun[n] = recs
+		return recs
+	}
+	records := runRecords(1)
+	source, srcDispenser, srcDispensed := countingSource(ctrl, persister, runRecords)
+	destination, destDispenser := countingDestination(ctrl, persister, runRecords)
+	dlq, dlqDispenser := countingDestination(ctrl, persister, noRecords)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -428,6 +468,9 @@ func TestServiceLifecycle_Shutdown_NoRunOutlivesWait(t *testing.T) {
 		}
 	}
 	t.Cleanup(stopLive)
+
+	// Every record acked, so the drain stops at a known position.
+	waitForSourceAcked(t, source, records)
 
 	shutdownErr := cerrors.New("conduit experienced an error: shut down due to 'exit-on-degraded' error")
 	ls.StopAll(ctx, shutdownErr)
@@ -489,11 +532,36 @@ func TestServiceLifecycle_Shutdown_NoRunOutlivesWait(t *testing.T) {
 	is.NoErr(ls2.Init(ctx))
 	is.Equal(pipeline.StatusRunning, pl2.GetStatus())
 	is.Equal(pl2.Error, "") // a new run clears the previous run's error
+	waitForSourceAcked(t, source, runRecords(2))
 	// Stop waits for the source to be running, i.e. for the plugin to have
 	// been dispensed and opened, so the count is final afterwards.
 	is.NoErr(ls2.Stop(ctx, pl.ID, false))
 	is.NoErr(ls2.WaitPipeline(pl.ID))
 	is.Equal(srcDispensed.Load(), int32(2)) // started again on the next boot
+}
+
+// waitForSourceAcked blocks until source has acked through the last of records
+// (the position Source.Ack stores on the connector instance), failing the test
+// on timeout. Mirrors pkg/lifecycle-poc's waitForRecordsAcked.
+func waitForSourceAcked(t *testing.T, source *connector.Instance, records []opencdc.Record) {
+	t.Helper()
+	if len(records) == 0 {
+		return
+	}
+	want := records[len(records)-1].Position
+	deadline := time.Now().Add(terminalStatusGuard)
+	for {
+		source.RLock()
+		state, ok := source.State.(connector.SourceState)
+		source.RUnlock()
+		if ok && bytes.Equal(state.Position, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for the source to ack %d records", len(records))
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // injectSourceError makes the live run's source nodes stop with err, as if the

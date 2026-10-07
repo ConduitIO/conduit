@@ -234,18 +234,60 @@ type runnablePipeline struct {
 	// anything after the stop ends it stopped, with the error recorded
 	// (#2901). Reset together with intentionalStop.
 	stopFailedFirst atomic.Int32
+
+	// stopKind records who made the first stop request for this run: 0 none,
+	// stopKindUser for a user Stop, stopKindSystem for StopAll. The first
+	// request wins, so a user-stopped run that a later shutdown also reaches
+	// stays UserStopped and is not auto-started on the next boot (#2912 S2,
+	// matching pkg/lifecycle's stopSignal). Reset together with
+	// intentionalStop.
+	stopKind atomic.Int32
 }
 
-// markStopRequested records a stop request for rp: intentionalStop, plus
-// whether the run had already failed (see stopFailedFirst). Only the first
-// request's failed-first snapshot counts.
-func (rp *runnablePipeline) markStopRequested() {
+const (
+	stopKindUser   int32 = 1
+	stopKindSystem int32 = 2
+)
+
+// markStopRequested records a stop request for rp: intentionalStop, who
+// asked (see stopKind), and whether the run had already failed (see
+// stopFailedFirst). Only the first request's kind and snapshot count.
+func (rp *runnablePipeline) markStopRequested(system bool) {
 	snapshot := int32(1)
 	if rp.t != nil && rp.t.Err() != tomb.ErrStillAlive {
 		snapshot = 2
 	}
+	kind := stopKindUser
+	if system {
+		kind = stopKindSystem
+	}
 	rp.stopFailedFirst.CompareAndSwap(0, snapshot)
+	rp.stopKind.CompareAndSwap(0, kind)
 	rp.intentionalStop.Store(true)
+}
+
+// clearStopRequest undoes markStopRequested, for a stop request that turned
+// out to stop nothing.
+func (rp *runnablePipeline) clearStopRequest() {
+	rp.intentionalStop.Store(false)
+	rp.stopFailedFirst.Store(0)
+	rp.stopKind.Store(0)
+}
+
+// stoppedStatus is the terminal status of a run that was stopped: the kind of
+// the first stop request made for it, or, if none reached it, SystemStopped
+// during a shutdown and UserStopped otherwise.
+func (s *Service) stoppedStatus(rp *runnablePipeline) pipeline.Status {
+	switch rp.stopKind.Load() {
+	case stopKindUser:
+		return pipeline.StatusUserStopped
+	case stopKindSystem:
+		return pipeline.StatusSystemStopped
+	}
+	if s.isGracefulShutdown.Load() {
+		return pipeline.StatusSystemStopped
+	}
+	return pipeline.StatusUserStopped
 }
 
 // ConnectorService can fetch and create a connector instance, and report when
@@ -376,11 +418,13 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
 	}
 
-	if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning)
+	// Read the status once: separate reads let a Recovering -> Running
+	// transition in between refuse the stop (#2912 S4, as in pkg/lifecycle).
+	if status := rp.pipeline.GetStatus(); status != pipeline.StatusRunning && status != pipeline.StatusRecovering {
+		return cerrors.Errorf("can't stop pipeline with status %q: %w", status, pipeline.ErrPipelineNotRunning)
 	}
 
-	return s.stopRunnablePipeline(ctx, rp, force)
+	return s.stopRunnablePipeline(ctx, rp, force, false)
 }
 
 // StopAll will ask all the running pipelines to stop gracefully
@@ -413,15 +457,22 @@ func (s *Service) StopAll(ctx context.Context, force bool) error {
 
 	var errs []error
 	for _, rp := range s.runningPipelines.All() {
-		if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
+		// Invariant 7 (#2912 B1): stop every run that is still alive, whatever
+		// its status says. A run is published before it announces
+		// StatusRunning, so for a moment its entry carries the previous run's
+		// status; it read the shutdown flag before it was set, so skipping it
+		// here by status would leave it running past Wait.
+		if rp.t == nil || !rp.t.Alive() {
 			continue
 		}
-		errs = append(errs, s.stopRunnablePipeline(ctx, rp, force))
+		errs = append(errs, s.stopRunnablePipeline(ctx, rp, force, true))
 	}
 	return cerrors.Join(errs...)
 }
 
-func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force bool) error {
+// stopRunnablePipeline stops rp gracefully or forcefully. system is true for
+// a shutdown (StopAll), false for a user Stop; see stopKind.
+func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force, system bool) error {
 	switch force {
 	case false:
 		s.logger.Info(ctx).
@@ -438,7 +489,8 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// instead of misreading it as a spontaneous failure and
 		// auto-restarting via recoverPipeline. See the intentionalStop field
 		// doc.
-		rp.markStopRequested()
+		wasRequested := rp.intentionalStop.Load()
+		rp.markStopRequested(system)
 
 		// H1 (adversarial review of #2734): every worker's Stop call is
 		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
@@ -533,8 +585,17 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// already-completed user stop. Mirrors the original
 			// single-worker rollback condition ("nothing began stopping"),
 			// generalized to "no worker began stopping".
-			rp.intentionalStop.Store(false)
-			rp.stopFailedFirst.Store(0)
+			//
+			// Only roll back what this call did (#2912 S3). If every worker
+			// was already stopping (preArmed: an earlier Stop armed them, or
+			// they exhausted on their own), both lists are empty and this
+			// call stopped nothing new; if an earlier request already marked
+			// the run, it stands. Clearing it in either case let a second
+			// Stop or StopAll erase a user stop, so a later drain error
+			// recovered and restarted the pipeline.
+			if len(unarmedSources) > 0 && !wasRequested {
+				rp.clearStopRequest()
+			}
 		case len(unarmedSources) > 0:
 			// H1 (adversarial review): PARTIAL arming. Some source(s) armed
 			// and tore down their connector; other(s) are still reading.
@@ -598,7 +659,7 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// explicitly stopped. Since #2901 a force stop is recorded as a stop
 		// request too, so the run ends UserStopped (SystemStopped from
 		// StopAll) with ErrForceStop recorded, rather than Degraded.
-		rp.markStopRequested()
+		rp.markStopRequested(system)
 		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
@@ -1681,19 +1742,18 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
 			err = nil
-			var status pipeline.Status
-			if s.isGracefulShutdown.Load() {
-				// it was triggered by a graceful shutdown of Conduit
-				status = pipeline.StatusSystemStopped
-			} else {
-				// it was manually triggered by a user
-				status = pipeline.StatusUserStopped
-			}
-			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
+			// SystemStopped for a shutdown, UserStopped for a user stop; the
+			// first stop request decides (#2912 S2).
+			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, s.stoppedStatus(rp), ""); err != nil {
 				return err
 			}
 		default:
-			stopRequested := s.isGracefulShutdown.Load() || rp.intentionalStop.Load()
+			// Only a stop request recorded on this run (with its failed-first
+			// snapshot) can turn a fatal error into a stop. The service-wide
+			// shutdown flag alone must not: a run that failed fatally on its
+			// own and is classified after StopAll set the flag, but before
+			// StopAll reached it, is degraded (#2912 S1, as in pkg/lifecycle).
+			stopRequested := rp.intentionalStop.Load()
 			failedFirst := rp.stopFailedFirst.Load() == 2
 			switch {
 			case cerrors.IsFatalError(err) && (!stopRequested || failedFirst):
@@ -1711,7 +1771,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				// 20261007-stop-requested-never-recovers): it is recorded on the
 				// pipeline and returned by WaitPipeline, but it is not a failure,
 				// so OnFailure is not notified.
-				if updateErr := s.finishStopped(ctx, rp, pipeline.StatusSystemStopped, err); updateErr != nil {
+				if updateErr := s.finishStopped(ctx, rp, s.stoppedStatus(rp), err); updateErr != nil {
 					return updateErr
 				}
 				stoppedWithErr = true
@@ -1724,7 +1784,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				// failure needing recovery: auto-restarting here would restart a
 				// pipeline the operator just stopped (O3). Finalize as
 				// StatusUserStopped and keep the error (#2901), as above.
-				if updateErr := s.finishStopped(ctx, rp, pipeline.StatusUserStopped, err); updateErr != nil {
+				if updateErr := s.finishStopped(ctx, rp, s.stoppedStatus(rp), err); updateErr != nil {
 					return updateErr
 				}
 				stoppedWithErr = true
@@ -1749,7 +1809,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 					// backoff wait. Finalize as a system stop with the error the
 					// run failed with, and run the cleanup tail so the entry is
 					// removed.
-					if updateErr := s.finishStopped(ctx, rp, pipeline.StatusSystemStopped, err); updateErr != nil {
+					if updateErr := s.finishStopped(ctx, rp, s.stoppedStatus(rp), err); updateErr != nil {
 						return updateErr
 					}
 					stoppedWithErr = true
@@ -1757,7 +1817,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 					// A user Stop arrived while we were parked in the backoff
 					// wait (#2901). Same outcome as the intentionalStop arm
 					// above: a user stop with the error kept, no restart.
-					if updateErr := s.finishStopped(ctx, rp, pipeline.StatusUserStopped, err); updateErr != nil {
+					if updateErr := s.finishStopped(ctx, rp, s.stoppedStatus(rp), err); updateErr != nil {
 						return updateErr
 					}
 					stoppedWithErr = true
@@ -1897,7 +1957,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// sets the flag before it reads runningPipelines, so at least one of the
 	// two sees the other. Stop it the way StopAll would have.
 	if s.runs.shuttingDown() {
-		if err := s.stopRunnablePipeline(context.Background(), rp, false); err != nil {
+		if err := s.stopRunnablePipeline(context.Background(), rp, false, true); err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
 				Str(log.PipelineIDField, rp.pipeline.ID).

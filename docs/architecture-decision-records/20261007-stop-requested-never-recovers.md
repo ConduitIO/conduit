@@ -73,9 +73,11 @@ Neither is acceptable on its own. The status should describe what the operator o
    keeps the pipeline whose own failure triggered exit-on-degraded `Degraded`, while the pipelines
    that shutdown then stops are `SystemStopped`.
 5. `StopAll` puts the service into shutdown mode for good. `Start` and recovery restarts are
-   refused with `pipeline.shutting_down`. A run that was already starting when `StopAll` ran stops
-   itself as soon as it is published, and `Wait` waits on a count of live runs, not a snapshot of
-   the running pipelines.
+   refused with `pipeline.shutting_down`. `StopAll` stops every run that is still alive, whatever
+   status its pipeline currently shows: a run is published before it announces `Running`, so for
+   a moment it carries the previous run's status. A run that was already starting when `StopAll`
+   ran stops itself as soon as it is published, and `Wait` waits on a count of live runs, not a
+   snapshot of the running pipelines.
 
 ## Consequences
 
