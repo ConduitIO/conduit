@@ -315,7 +315,7 @@ func (s *Service) stoppedStatus(rp *runnablePipeline) pipeline.Status {
 	case stopKindSystem:
 		return pipeline.StatusSystemStopped
 	}
-	if s.isGracefulShutdown.Load() {
+	if s.isGracefulShutdown.Load() || s.runs.shuttingDown() {
 		return pipeline.StatusSystemStopped
 	}
 	return pipeline.StatusUserStopped
@@ -465,14 +465,17 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 // good: from then on Start refuses with pipeline.CodeShuttingDown, no run is
 // restarted by recovery, and Wait covers every run that is live (#2901).
 func (s *Service) StopAll(ctx context.Context, force bool) error {
+	// Set graceful shutdown flag to true, so pipelines know the system
+	// triggered the stop. It must be set before beginShutdown below: that
+	// wakes recovery backoff waits, and the run they abandon reads this flag
+	// (through stoppedStatus) to report SystemStopped.
+	s.isGracefulShutdown.Store(true)
+
 	// Invariant 7 (#2901): begin the shutdown before reading
 	// runningPipelines below. runPipeline publishes a run and only then reads
 	// this flag, so a run is either in the map StopAll iterates or sees the
 	// flag and stops itself.
 	s.runs.beginShutdown()
-
-	// Set graceful shutdown flag to true, so pipelines know the system triggered the stop.
-	s.isGracefulShutdown.Store(true)
 
 	l := s.runningPipelines.Len()
 	if l == 0 {

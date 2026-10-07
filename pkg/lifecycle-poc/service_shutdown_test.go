@@ -163,7 +163,34 @@ func TestServiceLifecycle_StartDuringShutdown_IsStoppedAndWaitedFor(t *testing.T
 // checked for the shutdown only after sleeping, so the runtime's Wait timed
 // out first (exitTimeout is 30s, MaxDelay defaults to 10m) and the runtime
 // closed the database with the cleanup goroutine still to write a status.
+//
+// The "shutdown wakes the wait first" case holds the window between StopAll
+// waking the backoff wait and setting the service's graceful-shutdown flag:
+// StopAll used to wake the wait first, so the abandoned run could read the
+// flag still unset and report UserStopped, which is not auto-started on the
+// next boot (1 in 50 under -race). Only the wake-up is triggered here.
 func TestServiceLifecycle_Recovery_GracefulShutdownDuringLongBackoff(t *testing.T) {
+	testCases := []struct {
+		name     string
+		shutdown func(ctx context.Context, ls *Service) error
+	}{{
+		name:     "StopAll",
+		shutdown: func(ctx context.Context, ls *Service) error { return ls.StopAll(ctx, false) },
+	}, {
+		name: "shutdown wakes the wait first",
+		shutdown: func(_ context.Context, ls *Service) error {
+			ls.runs.beginShutdown()
+			return nil
+		},
+	}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testGracefulShutdownDuringLongBackoff(t, tc.shutdown)
+		})
+	}
+}
+
+func testGracefulShutdownDuringLongBackoff(t *testing.T, shutdown func(ctx context.Context, ls *Service) error) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -211,7 +238,7 @@ func TestServiceLifecycle_Recovery_GracefulShutdownDuringLongBackoff(t *testing.
 	case <-time.After(shutdownTestGuard):
 		t.Fatal("pipeline did not enter recovery")
 	}
-	is.NoErr(ls.StopAll(ctx, false))
+	is.NoErr(shutdown(ctx, ls))
 
 	if err := ls.Wait(shutdownTestGuard); err == context.DeadlineExceeded {
 		t.Fatalf("Wait timed out: a 10m recovery backoff held up the shutdown (#2901)")
