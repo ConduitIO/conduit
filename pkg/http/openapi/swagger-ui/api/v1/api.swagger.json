@@ -1991,7 +1991,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
         }
       }
     },
@@ -2401,7 +2402,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "title": "settings are the plugin settings"
+          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. Requests must carry real values; sending a\nredacted map back stores \"***\" as the value."
         },
         "windowSize": {
           "type": "string",
@@ -2632,7 +2633,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
         },
         "workers": {
           "type": "integer",

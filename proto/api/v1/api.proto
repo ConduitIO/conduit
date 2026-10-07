@@ -84,7 +84,10 @@ message Pipeline {
     // plugin is the connector plugin used for storing DLQ records
     // default = builtin:log, configured to log with level WARN
     string plugin = 1;
-    // settings are the plugin settings
+    // settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
+    // value is redacted to "***" and only keys are returned, because settings
+    // routinely hold credentials. Requests must carry real values; sending a
+    // redacted map back stores "***" as the value.
     map<string, string> settings = 2;
 
     // window_size defines how many last acks/nacks are monitored in the window
@@ -130,6 +133,9 @@ message Connector {
 
   message Config {
     string name = 1;
+    // settings are the connector plugin settings. In responses every value is
+    // redacted to "***" and only keys are returned, because settings routinely
+    // hold credentials. Requests must carry real values.
     map<string, string> settings = 2;
   }
 
@@ -169,6 +175,9 @@ message Processor {
     string id = 2;
   }
   message Config {
+    // settings are the processor plugin settings. In responses every value is
+    // redacted to "***" and only keys are returned, because settings routinely
+    // hold credentials. Requests must carry real values.
     map<string, string> settings = 1;
     int32 workers = 2;
   }
