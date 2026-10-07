@@ -240,3 +240,78 @@ func TestServiceLifecycle_StartRefusedAfterStopAll(t *testing.T) {
 
 	ls.runs.wait() // nothing was admitted
 }
+
+// TestServiceLifecycle_Recovery_UserStopDuringBackoff_NoRestart: a user Stop
+// on a pipeline whose run failed transiently and is waiting out its recovery
+// backoff. Stop resolves the dead run, marks it intentionalStop and returns
+// success. Before the fix StartWithBackoff never looked at that flag: after
+// the backoff it restarted the pipeline the user had stopped (a second
+// dispense, which the Times(1) expectations reject at controller finish).
+//
+// The Stop is issued from inside the Recovering status write, which happens
+// before StartWithBackoff is entered, so it is ordered before the post-wait
+// check without any sleep.
+func TestServiceLifecycle_Recovery_UserStopDuringBackoff_NoRestart(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := failingSourceTimes(ctrl, persister, cerrors.New("lost connection to source"), 1)
+	destination, destDispenser := destinationTimes(ctrl, persister, 1)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 1)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	cfg := testErrRecoveryCfg()
+	cfg.MinDelay = time.Millisecond
+	cfg.MaxDelay = time.Millisecond
+
+	var ls *Service
+	stopErr := make(chan error, 1)
+	rec := newStatusRecorder(ps)
+	rec.onUpdate = func(status pipeline.Status, nth int) {
+		if status == pipeline.StatusRecovering && nth == 1 {
+			stopErr <- ls.Stop(context.Background(), pl.ID, false)
+		}
+	}
+	ls = NewService(logger, cfg,
+		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		testProcessorService{},
+		testConnectorPluginService{source.Plugin: srcDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
+		rec, false,
+	)
+	first := make(chan *runnablePipeline, 1)
+	ls.testWorkersReleased = func(rp *runnablePipeline) {
+		select {
+		case first <- rp:
+		default:
+		}
+	}
+	is.NoErr(ls.Start(ctx, pl.ID))
+	rp := <-first
+
+	select {
+	case <-rp.t.Dead():
+	case <-time.After(shutdownTestGuard):
+		t.Fatal("the failed run's cleanup did not finish")
+	}
+	is.NoErr(<-stopErr)
+
+	if got := pl.GetStatus(); got != pipeline.StatusUserStopped {
+		t.Fatalf("status %s after a user Stop during recovery backoff, want %s: the pipeline was restarted (#2901)", got, pipeline.StatusUserStopped)
+	}
+	_, live := ls.runningPipelines.Get(pl.ID)
+	is.True(!live)
+}

@@ -47,6 +47,12 @@ import (
 // shutdown must finalize the pipeline, not race the shutdown with a restart.
 var errGracefulShutdownDuringRecovery = cerrors.New("graceful shutdown during recovery backoff")
 
+// errIntentionalStopDuringRecovery is the user-Stop counterpart of
+// errGracefulShutdownDuringRecovery: StartWithBackoff returns it when a user
+// Stop marked the run intentionalStop while it was parked in the backoff wait.
+// The cleanup goroutine maps it to StatusUserStopped (#2901).
+var errIntentionalStopDuringRecovery = cerrors.New("user stop during recovery backoff")
+
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
 	ID    string
@@ -1717,6 +1723,14 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); updateErr != nil {
 						return updateErr
 					}
+				case cerrors.Is(recoveryErr, errIntentionalStopDuringRecovery):
+					// A user Stop arrived while we were parked in the backoff
+					// wait (#2901). Same outcome as the intentionalStop arm
+					// above: finalize as a user stop, do not restart.
+					err = nil
+					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); updateErr != nil {
+						return updateErr
+					}
 				default:
 					// Recovery is exhausted (MaxRetries) or itself errored.
 					s.logger.
@@ -1938,6 +1952,8 @@ func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) err
 //     cleanup and the caller must NOT run its cleanup tail.
 //   - errGracefulShutdownDuringRecovery: a graceful shutdown began during the
 //     backoff wait; the caller finalizes a system stop instead of restarting.
+//   - errIntentionalStopDuringRecovery: a user Stop arrived during the backoff
+//     wait; the caller finalizes a user stop instead of restarting.
 //   - any other error: a fatal recovery failure (MaxRetries exhausted) or a
 //     Start error; the caller degrades the pipeline.
 func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
@@ -1997,6 +2013,13 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 	// concurrent restart still wins.
 	if s.isGracefulShutdown.Load() {
 		return errGracefulShutdownDuringRecovery
+	}
+
+	// A user Stop on a Recovering pipeline resolves this (dead) run and marks
+	// it intentionalStop. Without this check the restart below went ahead
+	// anyway, restarting a pipeline the user had just stopped (#2901).
+	if rp.intentionalStop.Load() {
+		return errIntentionalStopDuringRecovery
 	}
 
 	err := s.Start(ctx, rp.pipeline.ID)
