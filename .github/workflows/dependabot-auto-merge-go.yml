@@ -1,5 +1,28 @@
 # This action automatically merges dependabot PRs that update go dependencies (only patch and minor updates).
-# Based on: https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically/automating-dependabot-with-github-actions#enable-auto-merge-on-a-pull-request 
+# Based on: https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically/automating-dependabot-with-github-actions#enable-auto-merge-on-a-pull-request
+#
+# EXCLUDED DEPS: load-bearing dependencies never auto-merge. Bumps to these
+# need a human review because they sit under the data path, state storage or
+# the plugin wire format. Same approach as ConduitIO/conduit-commons#281.
+#
+# Why this exists: #2877 (grpc 1.83.2 -> 1.84.0) was approved and merged by
+# this workflow while govulncheck was failing on it (GO-2026-6443).
+# govulncheck is not a required check, so auto-merge only waited for the
+# required ones. Undone in #2881.
+#
+# Exact module paths:
+#   google.golang.org/grpc         - plugin and API transport
+#   google.golang.org/protobuf     - the gRPC/protocol wire format
+#   github.com/jackc/pgx/v5        - Postgres driver (connectors, templates)
+#   github.com/dgraph-io/badger/v4 - default state/position store
+#   modernc.org/sqlite             - state/position store backend
+# Prefixes (any module path that starts with these):
+#   github.com/twmb/franz-go       - Kafka client, incl. pkg/sr, pkg/kadm
+#   github.com/conduitio/          - commons, protocol, connector-sdk,
+#                                    processor-sdk, built-in connectors, etc.
+#
+# A grouped PR is excluded if ANY dependency in it matches. Excluded PRs get
+# a comment saying so and wait for a human to review and merge them.
 
 name: Dependabot auto-merge
 on:
@@ -22,17 +45,52 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      - name: Check exclusion list
+        id: excluded
+        env:
+          NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          EXCLUDED_EXACT: "google.golang.org/grpc,google.golang.org/protobuf,github.com/jackc/pgx/v5,github.com/dgraph-io/badger/v4,modernc.org/sqlite"
+          EXCLUDED_PREFIX: "github.com/twmb/franz-go,github.com/conduitio/"
+        run: |
+          set -euo pipefail
+          excluded="false"
+          IFS=',' read -ra names <<< "$NAMES"
+          IFS=',' read -ra exact <<< "$EXCLUDED_EXACT"
+          IFS=',' read -ra prefix <<< "$EXCLUDED_PREFIX"
+          for n in "${names[@]}"; do
+            n="${n// /}"
+            for b in "${exact[@]}"; do
+              [ "$n" = "$b" ] && excluded="true"
+            done
+            for p in "${prefix[@]}"; do
+              [[ "$n" == "$p"* ]] && excluded="true"
+            done
+          done
+          # Fail closed: if fetch-metadata gave us no names we cannot tell
+          # what is being bumped, so do not auto-merge it.
+          [ "${#names[@]}" -eq 0 ] && excluded="true"
+          echo "excluded=$excluded" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on excluded PR
+        if: ${{ steps.excluded.outputs.excluded == 'true' }}
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEP_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        run: |
+          gh pr comment "$PR_URL" --body "Not auto-merging: \`${DEP_NAMES}\` is on the load-bearing exclusion list in dependabot-auto-merge-go.yml (data path, state storage or wire format). Needs a human review, including the govulncheck result."
+
       - name: Approve PR
-        # Approve only patch and minor updates
-        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+        # Approve only patch and minor updates, and never excluded deps
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.excluded.outputs.excluded == 'false' }}
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for Dependabot PRs
-        # Enable auto-merging only for patch and minor updates
-        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+        # Enable auto-merging only for patch and minor updates, and never excluded deps
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.excluded.outputs.excluded == 'false' }}
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
