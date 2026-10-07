@@ -227,7 +227,7 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	// config v1.27 (2024), the DEFAULT RequestChecksumCalculation is
 	// "when_supported": PutObject unconditionally computes a trailing CRC32
 	// checksum and sends the body with aws-chunked transfer encoding, a
-	// framing that this compose file's `minio/minio:latest` image cannot
+	// framing that this compose file's MinIO image cannot
 	// parse — MinIO responds 400 "MalformedXML: The XML you provided was
 	// not well-formed", the destination nacks, and no object ever lands
 	// (reproduced in CI: this test was failing with exactly that PutObject
