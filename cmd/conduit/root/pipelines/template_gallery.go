@@ -234,9 +234,9 @@ func galleryCatalogSpec() []GalleryTemplate {
 			// their registry-availability truthfully — see
 			// TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality
 			// in template_gallery_test.go for the drift guard. The pgvector
-			// entry is revisited when
-			// github.com/conduitio/conduit-connector-pgvector cuts its first
-			// tagged release. The processor entry was revisited when
+			// entry was revisited once conduit-connector-pgvector v0.1.0 was
+			// installable from the hosted index (verified 2026-10-07, after
+			// the index re-sign). The processor entry was revisited when
 			// https://github.com/ConduitIO/conduit/issues/2818 was fixed:
 			// `conduit processor-plugins install` no longer refuses every
 			// processor on every build — it now correctly requires
@@ -260,12 +260,13 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"(`ollama pull nomic-embed-text`). Keep the address an IP literal: loopback is only " +
 					"reachable through an exact (IP, port) allowlist entry, and `localhost` is rejected. For a " +
 					"hosted provider, see the comments on the embed processor in the scaffolded pipeline.",
-				"pgvector destination: NOT installable from the registry yet — " +
-					"github.com/conduitio/conduit-connector-pgvector has no tagged release, so there is no " +
-					"version to pass to `conduit connectors install`. Build it yourself: clone the repo and " +
-					"run `go build -o conduit-connector-pgvector ./cmd/connector`, then place the binary under " +
-					"the directory --connectors.path points at (defaults to `connectors/` next to " +
-					"conduit.yaml). Switch to the registry install once that repo cuts a tagged release.",
+				"pgvector destination: published to the signed registry at v0.1.0. Install it with " +
+					"`conduit connectors install pgvector`, which places it under the directory " +
+					"--connectors.path points at (defaults to `connectors/` next to conduit.yaml). " +
+					"Offline or air-gapped: build it from source instead — clone " +
+					"github.com/conduitio/conduit-connector-pgvector, run " +
+					"`go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under " +
+					"--connectors.path.",
 				"conduit-processor-ai's chunking (ai.chunk) and embedding (ai.embed) processors are " +
 					"published to the signed registry at 0.1.0 and install via `conduit processor-plugins " +
 					"install ai.chunk` / `conduit processor-plugins install ai.embed` — the " +

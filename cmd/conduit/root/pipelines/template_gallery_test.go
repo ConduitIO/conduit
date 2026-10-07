@@ -392,12 +392,12 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // that fails opaquely on first `conduit run` because a plugin isn't
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
-// human-readable Render output, citing the `conduit
-// processor-plugins install ai.chunk`/`ai.embed` commands (installable as of
-// issue #2818's fix, still gated on minConduitVersion 0.20.0 — see
+// human-readable Render output, citing the `conduit connectors install
+// pgvector` and `conduit processor-plugins install ai.chunk`/`ai.embed`
+// commands (the processors are still gated on minConduitVersion 0.20.0 — see
 // TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality) and
-// pointing at a local build as the fallback for pgvector (always) and
-// ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
+// pointing at a local build as the fallback for pgvector (offline or
+// air-gapped) and ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -419,6 +419,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	is.True(len(result.Prerequisites) >= 2)
 
 	joined := strings.Join(result.Prerequisites, "\n")
+	is.True(strings.Contains(joined, "conduit connectors install pgvector"))
 	is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector ./cmd/connector"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.chunk"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.embed"))
@@ -431,6 +432,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	cmd2.SetOut(&out2)
 	cmd2.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--force"})
 	is.NoErr(cmd2.Execute())
+	is.True(strings.Contains(out2.String(), "conduit connectors install pgvector"))
 	is.True(strings.Contains(out2.String(), "go build -o conduit-connector-pgvector ./cmd/connector"))
 }
 
@@ -492,13 +494,14 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 // registry index and confirm what "true" would even mean for an unknown
 // future plugin.
 //
-// REVISIT the pgvector block below the moment
-// github.com/conduitio/conduit-connector-pgvector cuts a tagged release
-// that ConduitIO/conduit-connector-registry's index.json picks up — at that
-// point `conduit connectors install pgvector@<version>` becomes a claim
-// this test should REQUIRE, not forbid, and template_gallery.go's
-// Prerequisites/README.md's table should switch back to the registry
-// install path.
+// UPDATE (pgvector published): conduit-connector-pgvector v0.1.0
+// (2026-08-24) is in the hosted index, and once the index was re-signed on
+// 2026-10-07 (it had gone stale, failing every install with
+// registry.index_stale) `conduit connectors install pgvector` installed
+// v0.1.0 end to end from a clean --connectors.path on a build of main. The
+// pgvector block below therefore flipped from FORBIDDING the registry
+// install to REQUIRING it, and from requiring the build-from-source steps as
+// the only path to requiring them as the offline/air-gapped fallback.
 func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testing.T) {
 	is := is.New(t)
 
@@ -526,18 +529,19 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 		})
 	}
 
-	// (2) pgvector: no tagged release exists anywhere, so a registry install
-	// can never succeed — the prose must never claim otherwise. This substring
-	// check is a heuristic, not a proof: a truthful sentence that happened to
-	// read "do not run `conduit connectors install pgvector`" would also trip
-	// it. That is an accepted, narrow false-positive risk given the prose is
-	// authored entirely in this repo (template_gallery.go) — not a general
-	// claim that substring matching soundly detects "is this a working
-	// instruction or a warning."
-	t.Run("pgvector_not_registry_installable", func(t *testing.T) {
+	// (2) pgvector: v0.1.0 is published to the signed registry, so the
+	// registry install is the instruction and building from source is only
+	// the offline/air-gapped fallback. The negative checks pin out the old
+	// "no tagged release / not installable" claims, which were true until
+	// v0.1.0 shipped and would now send readers to a needless local build.
+	t.Run("pgvector_registry_installable", func(t *testing.T) {
 		is := is.New(t)
-		is.True(!strings.Contains(joined, "connectors install pgvector"))
-		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector"))
+		is.True(strings.Contains(joined, "conduit connectors install pgvector"))
+		is.True(strings.Contains(joined, "v0.1.0"))                                 // the published connector version
+		is.True(strings.Contains(joined, "air-gapped"))                             // the fallback is scoped, not the default
+		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector")) // the fallback itself
+		is.True(!strings.Contains(joined, "no tagged release"))
+		is.True(!strings.Contains(joined, "NOT installable"))
 	})
 
 	// (3) ai.chunk/ai.embed: published to the signed registry (0.1.0 per the
@@ -569,14 +573,17 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 			"0.20.0",                                 // its actual value
 			"registry.incompatible_version",          // the code for a too-old Conduit
 			"2818",                                   // the tracking issue, now fixed
-			"go build -o conduit-connector-pgvector", // the pgvector fallback
+			"conduit connectors install pgvector",    // the pgvector install
+			"go build -o conduit-connector-pgvector", // the pgvector offline fallback
+			"air-gapped",                             // ...scoped as a fallback
 			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback, for pre-0.20.0 builds
 			"pipeline.fanout_requires_arch_v2",       // the real arch-v2 error
 		} {
 			is.True(strings.Contains(text, fact)) // README must state this fact too
 		}
-		// Same never-claim rule as (2), applied to the README.
-		is.True(!strings.Contains(text, "connectors install pgvector`"))
+		// Same retired claims as (2), applied to the README.
+		is.True(!strings.Contains(text, "no tagged release"))
+		is.True(!strings.Contains(text, "Not yet in the registry"))
 	})
 
 	t.Run("ai.chunk_ai.embed_published_and_installable", func(t *testing.T) {
