@@ -428,6 +428,7 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 	// itself echoed back by the source) the cleanup goroutine treats this run
 	// as stopped and never restarts it. Also abandons a recovery that is
 	// waiting out its backoff for this run.
+	alreadyStopping := rp.stop.requested()
 	rp.requestStop(system)
 
 	var errs []error
@@ -437,7 +438,14 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
 			err := node.Stop(ctx, reason)
 			if err != nil {
-				s.logger.Err(ctx, err).Str(log.NodeIDField, n.ID()).Msg("stop failed")
+				// A node refusing a second stop while the first one drains
+				// ("stop already triggered") is expected when a stop was
+				// already in progress for this run: debug, not error.
+				e := s.logger.Err(ctx, err)
+				if alreadyStopping {
+					e = s.logger.Debug(ctx).Err(err)
+				}
+				e.Str(log.NodeIDField, n.ID()).Msg("stop failed")
 				errs = append(errs, err)
 			}
 		}

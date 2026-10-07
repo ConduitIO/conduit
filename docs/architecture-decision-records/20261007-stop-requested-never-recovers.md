@@ -91,6 +91,10 @@ Neither is acceptable on its own. The status should describe what the operator o
   `Degraded`. It no longer fires OnFailure, so it no longer shuts Conduit down under
   exit-on-degraded.
 - A drain error no longer disappears in arch-v2: it is recorded as in the default engine.
+- In arch-v2 a stop that gives up before stopping anything (its context expired) withdraws its
+  request only if it was the only one; once two stops have been requested, the run stays marked
+  stopped even if both gave up, so a later transient error ends it stopped with the error
+  recorded instead of recovering it.
 - Clients that read `Degraded` as "something went wrong" must also look at the error message of a
   stopped pipeline. A non-empty error on a stopped pipeline means the drain did not end cleanly.
 - `conduit pipelines start` or API `Start` racing a shutdown fails with `pipeline.shutting_down`

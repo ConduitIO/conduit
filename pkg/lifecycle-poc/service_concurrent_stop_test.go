@@ -215,3 +215,176 @@ func TestServiceLifecycle_ConcurrentStops_ExpiredStopKeepsOthersRequest(t *testi
 		})
 	}
 }
+
+// inFlightRun is a running single-source pipeline whose one record is held at
+// the destination, and with it the worker's processing lock, until release is
+// closed; the batch then fails with the transient drainErr. Every plugin is
+// dispensed exactly once, so a recovery restart fails the test.
+type inFlightRun struct {
+	ls       *Service
+	pl       *pipeline.Instance
+	rec      *statusRecorder
+	release  chan struct{}
+	drainErr error
+}
+
+func newInFlightRun(t *testing.T, configure func(ls *Service)) *inFlightRun {
+	t.Helper()
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	t.Cleanup(func() { stopAndWaitPersister(t, killAll, persister) })
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	wantRecords := generateRecords(1)
+	ctrl := gomock.NewController(t)
+	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(wantRecords, nil),
+		pmock.SourcePluginWithAcks(0, false),
+		pmock.SourcePluginWithTeardown(),
+	)
+	source := dummySource(persister)
+	sourceDispenser := pmock.NewDispenser(ctrl)
+	sourceDispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil).Times(1)
+
+	r := &inFlightRun{release: make(chan struct{}), drainErr: cerrors.New("transient destination write failure mid-drain")}
+	received := make(chan struct{})
+	destPlugin := pmock.NewConfigurableDestinationPlugin(ctrl,
+		pmock.DestinationPluginWithConfigure(),
+		pmock.DestinationPluginWithOpen(),
+		pmock.DestinationPluginWithRun(),
+		pmock.DestinationPluginWithControlledError(wantRecords, received, r.release, r.drainErr),
+		pmock.DestinationPluginWithTeardown(),
+	)
+	destination := dummyDestination(persister)
+	destDispenser := pmock.NewDispenser(ctrl)
+	destDispenser.EXPECT().DispenseDestination().Return(destPlugin, nil).Times(1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	r.pl = pl
+	r.rec = newStatusRecorder(ps)
+	r.ls = NewService(logger, testErrRecoveryCfg(),
+		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		testProcessorService{},
+		testConnectorPluginService{source.Plugin: sourceDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
+		r.rec, false,
+	)
+	if configure != nil {
+		configure(r.ls)
+	}
+	is.NoErr(r.ls.Start(ctx, pl.ID))
+	r.waitFor(t, received, "the record to be in flight at the destination")
+	return r
+}
+
+func (r *inFlightRun) waitFor(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(shutdownTestGuard):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+// stop starts a user Stop with a probeCtx and waits until it has recorded its
+// request and is waiting for the processing lock.
+func (r *inFlightRun) stop(t *testing.T) (*probeCtx, <-chan error) {
+	t.Helper()
+	ctx := newProbeCtx()
+	errc := make(chan error, 1)
+	go func() { errc <- r.ls.Stop(ctx, r.pl.ID, false) }()
+	r.waitFor(t, ctx.reached, "the stop to wait for the processing lock")
+	return ctx, errc
+}
+
+// finishUserStopped waits for the run's cleanup and asserts the outcome every
+// test here expects: UserStopped with the drain error recorded, never
+// Recovering.
+func (r *inFlightRun) finishUserStopped(t *testing.T) {
+	t.Helper()
+	is := is.New(t)
+	done := make(chan error, 1)
+	go func() { done <- r.ls.WaitPipeline(r.pl.ID) }()
+	var waitErr error
+	select {
+	case waitErr = <-done:
+	case <-time.After(shutdownTestGuard):
+		t.Fatalf("run did not finish; statuses %v", r.rec.snapshot())
+	}
+	for _, s := range r.rec.snapshot() {
+		if s == pipeline.StatusRecovering {
+			t.Fatalf("the run entered recovery although a stop was requested (statuses %v)", r.rec.snapshot())
+		}
+	}
+	is.Equal(pipeline.StatusUserStopped, r.pl.GetStatus())
+	is.True(cerrors.Is(waitErr, r.drainErr))
+	is.True(strings.Contains(r.pl.Error, r.drainErr.Error()))
+}
+
+// TestServiceLifecycle_StopRolledBackAfterSnapshot_UsesSnapshot: the cleanup
+// goroutine reads the run's stop request once and must classify the run on
+// that read alone. A stop is recorded, the batch fails, the cleanup reads the
+// request, and then (testAfterStopSnapshot) the request is rolled back, as a
+// concurrent stop that armed nothing does. The cleanup used to re-read the
+// live flag for the user-stop arm, find it cleared, and send a run it had
+// seen as stopped into recovery (a second dispense, rejected by Times(1)).
+func TestServiceLifecycle_StopRolledBackAfterSnapshot_UsesSnapshot(t *testing.T) {
+	r := newInFlightRun(t, func(ls *Service) {
+		ls.testAfterStopSnapshot = func(rp *runnablePipeline) {
+			rp.stopMu.Lock()
+			latest := rp.stopGen
+			rp.stopMu.Unlock()
+			rp.rollbackStopRequest(latest)
+		}
+	})
+	_, errA := r.stop(t)
+
+	close(r.release) // the batch fails; the stop then gets the lock and arms
+	select {
+	case <-errA:
+	case <-time.After(shutdownTestGuard):
+		t.Fatal("the stop did not return")
+	}
+	r.finishUserStopped(t)
+}
+
+// TestServiceLifecycle_TwoStopsBothExpire_StaysStopped pins a deliberate
+// choice (ADR 20261007-stop-requested-never-recovers): when two stops are
+// recorded and both give up before arming, the run stays marked stopped. The
+// first stop's rollback is a no-op because a later request exists, and the
+// second never rolls back because it was not the first. A transient error
+// that ends the run afterwards is therefore a stopped run's error:
+// UserStopped with the error recorded, no recovery.
+func TestServiceLifecycle_TwoStopsBothExpire_StaysStopped(t *testing.T) {
+	is := is.New(t)
+	r := newInFlightRun(t, nil)
+	ctxA, errA := r.stop(t)
+	ctxC, errC := r.stop(t)
+
+	ctxA.cancel()
+	ctxC.cancel()
+	for _, errc := range []<-chan error{errA, errC} {
+		select {
+		case err := <-errc:
+			is.True(err != nil) // neither stop armed the worker
+		case <-time.After(shutdownTestGuard):
+			t.Fatal("a stop did not return after its context expired")
+		}
+	}
+
+	close(r.release) // the batch fails with a transient error; nobody arms
+	r.finishUserStopped(t)
+}

@@ -131,6 +131,13 @@ type Service struct {
 	// is no production code path that can set or read it.
 	testWorkersReleased func(rp *runnablePipeline)
 
+	// testAfterStopSnapshot, if set, is called by the cleanup goroutine right
+	// after it has read the run's stop request, before it classifies the run.
+	// It lets a test change the request in exactly that window (e.g. a
+	// concurrent stop rolling back) to prove the classification uses only
+	// what it read. Nil in production, same contract as testWorkersReleased.
+	testAfterStopSnapshot func(rp *runnablePipeline)
+
 	// testCompareAndDeleteWindow, if set, is called from
 	// deleteRunningPipelineIfCurrent after the identity check has matched and
 	// before the Delete: the exact window a concurrent publication must not
@@ -612,12 +619,11 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// w.stop (the only such path is acquireProcessingLock losing to
 			// ctx - see funnel.Worker.Stop). No source was torn down; every
 			// worker is still genuinely running, unattended, exactly as
-			// before this call. Clear the marker so a LATER, unrelated
-			// transient error is still eligible for ordinary auto-recovery
-			// instead of being permanently (and incorrectly) treated as an
-			// already-completed user stop. Mirrors the original
-			// single-worker rollback condition ("nothing began stopping"),
-			// generalized to "no worker began stopping".
+			// before this call. Clear the marker, when it is this call's own
+			// request alone (see below), so a LATER, unrelated transient
+			// error is still eligible for ordinary auto-recovery. Mirrors the
+			// original single-worker rollback condition ("nothing began
+			// stopping"), generalized to "no worker began stopping".
 			//
 			// Only roll back what this call did (#2912 S3). If every worker
 			// was already stopping (preArmed: an earlier Stop armed them, or
@@ -630,6 +636,17 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 			// And only if no other stop request was made in the meantime
 			// (#2912): a concurrent Stop or StopAll that recorded its request
 			// after this one, and is still waiting to arm, must keep it.
+			//
+			// Consequence, accepted deliberately (ADR
+			// 20261007-stop-requested-never-recovers): once two stop
+			// requests have been made, the marker is never cleared, even if
+			// both give up before arming. The first's rollback is a no-op
+			// because a later request exists, and the second never rolls
+			// back because it was not the first. The run then stays marked
+			// stopped: a later transient error ends it UserStopped (or
+			// SystemStopped) with the error recorded, and it is not
+			// recovered. Someone asked twice to stop this run; not
+			// restarting it is the safer reading.
 			if len(unarmedSources) > 0 && firstRequest {
 				rp.rollbackStopRequest(stopToken)
 			}
@@ -1791,6 +1808,9 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 			// own and is classified after StopAll set the flag, but before
 			// StopAll reached it, is degraded (#2912 S1, as in pkg/lifecycle).
 			stopRequested, _, failedFirst := rp.stopRequest()
+			if s.testAfterStopSnapshot != nil {
+				s.testAfterStopSnapshot(rp)
+			}
 			switch {
 			case cerrors.IsFatalError(err) && (!stopRequested || failedFirst):
 				// Invariant 3/7: a fatal error the run hit on its own, before any
@@ -1811,7 +1831,12 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 					return updateErr
 				}
 				stoppedWithErr = true
-			case rp.intentionalStop.Load():
+			case stopRequested:
+				// Use the snapshot read above, never a live read: a concurrent
+				// stop that armed nothing can roll the request back between
+				// the two, and a live read would then send a run that was
+				// asked to stop into recovery (#2912).
+				//
 				// Invariant 3/7: an operator (or provisioning.ApplyPlanLive via
 				// StopAndWait) deliberately asked THIS pipeline to stop — see
 				// stopRunnablePipeline, which records the request before calling
