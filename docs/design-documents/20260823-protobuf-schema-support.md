@@ -1,5 +1,30 @@
 # Protobuf schema support: decoding Confluent Schema Registry Protobuf topics
 
+## Sign-off (added 2026-10-06)
+
+**Approved for v0.21.** DeVaris scheduled Protobuf decode into v0.21 and delegated the open
+questions below to the doc's recommendations. Each is decided here so PB-1 can start without
+re-litigating them. The body of the doc is left unedited; where this section and the body
+disagree, this section wins.
+
+| # | Open question | Decision |
+| --- | --- | --- |
+| 1 | `SerdeFactory.Parse` signature (§"Schema references") | **Option (a)**: extend `Parse` to take a `context.Context` and a resolver. Checked 2026-10-06 across the local clones of `conduit`, `conduit-connector-sdk` and `conduit-processor-sdk`: every caller outside `conduit-commons/schema` uses `SerdeForType`, not `Parse`, so the break stays inside commons. PB-6 re-runs that check against every `ConduitIO/*` repo before the commons tag. |
+| 2 | Unknown-field default | **Reject by default.** A payload carrying fields the resolved descriptor doesn't know fails decode with a stable error code, and the record follows the pipeline's DLQ/halt policy (invariant 6). Preserving unknown fields under a reserved key is opt-in. |
+| 3 | Compile timeout default | **5s, always on, configurable.** A compile that hangs on network-supplied schema text would poison the process-global `Serde` cache for every pipeline using the schema. The timeout fails the compile without caching it. |
+| 4 | Enum representation | **Name by default**, matching `protojson`. The name-vs-number option is documented as a processor parameter in PB-5, not left implicit. |
+| 5 | `google.protobuf.Any` | **Raw form** (`type_url` plus undecoded `value` bytes), documented as a limitation. No partial resolution. |
+| 6 | Risk tier | **Tier 2, with one Tier-1 condition.** The `schema.proto` enum addition and the `Parse` change are cross-repo public contracts, so the PB-1 PR carries the backward-compatibility proof from §"Compatibility" (an old-vintage reader round-trips `TYPE_PROTOBUF = 2` unharmed) as a test, not prose. |
+
+**One added requirement, found during sign-off.** Callers index `KnownSerdeFactories[t]` and call
+`.SerdeForType(...)` directly (`conduit-connector-sdk/source_middleware.go:368`,
+`conduit-processor-sdk/middleware.go:673`, `conduit`'s Avro encoder). A decode-only Protobuf entry
+with a nil `SerdeForType` turns any path that reaches it with `TypeProtobuf` into a nil-func panic.
+The connector SDK's `sdk.schema.extract.type` is validated as `inclusion=avro` today, which blocks
+the obvious route, but that is one validation tag away from a crash. PB-1 therefore sets
+`SerdeForType` to a function that returns a coded "Protobuf encoding is not supported" error, with
+a test.
+
 ## Summary
 
 Conduit cannot read Protobuf-encoded Kafka topics today. `pkg/schemaregistry/toschema/sr.go`
