@@ -16,6 +16,9 @@
 #   github.com/jackc/pgx/v5        - Postgres driver (connectors, templates)
 #   github.com/dgraph-io/badger/v4 - default state/position store
 #   modernc.org/sqlite             - state/position store backend
+#   github.com/goccy/go-json       - serializes stored pipeline/processor
+#                                    state (pkg/pipeline/store.go,
+#                                    pkg/processor/store.go)
 # Prefixes (any module path that starts with these):
 #   github.com/twmb/franz-go       - Kafka client, incl. pkg/sr, pkg/kadm
 #   github.com/conduitio/          - commons, protocol, connector-sdk,
@@ -49,7 +52,7 @@ jobs:
         id: excluded
         env:
           NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          EXCLUDED_EXACT: "google.golang.org/grpc,google.golang.org/protobuf,github.com/jackc/pgx/v5,github.com/dgraph-io/badger/v4,modernc.org/sqlite"
+          EXCLUDED_EXACT: "google.golang.org/grpc,google.golang.org/protobuf,github.com/jackc/pgx/v5,github.com/dgraph-io/badger/v4,modernc.org/sqlite,github.com/goccy/go-json"
           EXCLUDED_PREFIX: "github.com/twmb/franz-go,github.com/conduitio/"
         run: |
           set -euo pipefail
