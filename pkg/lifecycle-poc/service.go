@@ -66,6 +66,12 @@ type Service struct {
 	// non-nil: buildRunnablePipeline reads it to seed each pipeline's backoff.
 	errRecoveryCfg *lifecyclev1.ErrRecoveryCfg
 
+	// runs counts live runs and holds the shutdown flag (#2901). StopAll
+	// begins the shutdown; from then on Start and recovery restarts are
+	// refused, and Wait does not return while any run is live. Mirrors
+	// pkg/lifecycle. See runTracker.
+	runs runTracker
+
 	pipelines  PipelineService
 	connectors ConnectorService
 
@@ -275,11 +281,20 @@ func (s *Service) Init(
 }
 
 // Start builds and starts a pipeline with the given ID.
-// If the pipeline is already running, Start returns ErrPipelineRunning.
+// If the pipeline is already running, Start returns ErrPipelineRunning. Once
+// StopAll has been called, Start refuses with an error coded
+// pipeline.CodeShuttingDown (errors.Is(err, pipeline.ErrShuttingDown) holds).
 func (s *Service) Start(
 	ctx context.Context,
 	pipelineID string,
 ) error {
+	// Invariant 7: once shutdown has begun no new run starts (#2901). The
+	// authoritative check is runPipeline's admission; this one just avoids
+	// building a run that would be refused.
+	if s.runs.shuttingDown() {
+		return errShuttingDown(pipelineID)
+	}
+
 	pl, err := s.pipelines.Get(ctx, pipelineID)
 	if err != nil {
 		return err
@@ -344,7 +359,17 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 
 // StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
+//
+// StopAll is the shutdown path and puts the service into shutdown mode for
+// good: from then on Start refuses with pipeline.CodeShuttingDown, no run is
+// restarted by recovery, and Wait covers every run that is live (#2901).
 func (s *Service) StopAll(ctx context.Context, force bool) error {
+	// Invariant 7 (#2901): begin the shutdown before reading
+	// runningPipelines below. runPipeline publishes a run and only then reads
+	// this flag, so a run is either in the map StopAll iterates or sees the
+	// flag and stops itself.
+	s.runs.beginShutdown()
+
 	// Set graceful shutdown flag to true, so pipelines know the system triggered the stop.
 	s.isGracefulShutdown.Store(true)
 
@@ -591,6 +616,14 @@ func (s *Service) waitInternal() error {
 			errs = append(errs, cerrors.Errorf("pipeline %s: %w", rp.pipeline.ID, err))
 		}
 	}
+
+	// Invariant 7 (#2901): the snapshot above can miss a run, e.g. a recovery
+	// restart published after the snapshot, whose predecessor's tomb dies
+	// while the restarted run is still going. The runtime flushes the
+	// persister and closes the database right after Wait, so wait until no
+	// run is live at all.
+	s.runs.wait()
+
 	return cerrors.Join(errs...)
 }
 
@@ -1388,6 +1421,20 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return pipeline.ErrPipelineRunning
 	}
 
+	// Invariant 7 (#2901): count this run as live before it opens anything,
+	// and refuse it once shutdown has begun. Wait blocks until every admitted
+	// run is released: on the early returns below, which happen before any
+	// goroutine is on the tomb, or once the tomb is dead.
+	if !s.runs.admit() {
+		return errShuttingDown(rp.pipeline.ID)
+	}
+	released := false
+	defer func() {
+		if !released {
+			s.runs.release()
+		}
+	}()
+
 	// the tomb is responsible for running goroutines related to the pipeline
 	rp.t = &tomb.Tomb{}
 	ctx := rp.t.Context(nil) //nolint:staticcheck // this is the correct usage of tomb
@@ -1787,6 +1834,31 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		s.testWorkersReleased(rp)
 	}
 
+	// Every goroutine of this run is on the tomb, so from here on the
+	// admission is released when the tomb is dead, not by the deferred
+	// release above.
+	released = true
+	t := rp.t
+	go func() {
+		<-t.Dead()
+		s.runs.release()
+	}()
+
+	// Invariant 7 (#2901): if shutdown began after this run was admitted but
+	// before it was published (e.g. a recovery restart that was opening its
+	// connectors while StopAll iterated runningPipelines), StopAll could not
+	// see it. The publication above happened before this read, and StopAll
+	// sets the flag before it reads runningPipelines, so at least one of the
+	// two sees the other. Stop it the way StopAll would have.
+	if s.runs.shuttingDown() {
+		if err := s.stopRunnablePipeline(context.Background(), rp, false); err != nil {
+			s.logger.Warn(ctx).
+				Err(err).
+				Str(log.PipelineIDField, rp.pipeline.ID).
+				Msg("could not stop pipeline that started while shutting down")
+		}
+	}
+
 	// It's now safe to make the potentially slow UpdateStatus call and then
 	// release the cleanup goroutine to make its own. close(startupDone)
 	// unconditionally, including on error, so the cleanup goroutine (already
@@ -1905,6 +1977,10 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-s.runs.shutdownStarted():
+		// Invariant 7 (#2901): end the wait as soon as shutdown begins, so
+		// Wait is not held up by a backoff of up to MaxDelay.
+		return errGracefulShutdownDuringRecovery
 	case <-time.After(duration):
 	}
 
@@ -1923,7 +1999,13 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		return errGracefulShutdownDuringRecovery
 	}
 
-	return s.Start(ctx, rp.pipeline.ID)
+	err := s.Start(ctx, rp.pipeline.ID)
+	if cerrors.Is(err, pipeline.ErrShuttingDown) {
+		// Shutdown began between the check above and Start's admission
+		// (#2901): same outcome as a shutdown during the wait.
+		return errGracefulShutdownDuringRecovery
+	}
+	return err
 }
 
 // notify notifies all registered FailureHandlers about an error.
