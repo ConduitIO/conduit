@@ -5,13 +5,18 @@ on:
     tags:
       - v*
 
-permissions:
-  contents: write
+# Each job declares exactly what it needs. id-token: write lets a job mint a
+# GitHub OIDC token, which cosign exchanges for a short-lived Sigstore
+# certificate bound to this workflow and ref (keyless signing, no stored keys).
+permissions: {}
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and upload assets
+      id-token: write # keyless cosign signature over checksums.txt
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -23,13 +28,31 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      # GoReleaser's `signs` step shells out to cosign to sign checksums.txt.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: 'v3.1.3'
+
+      # GoReleaser's `sboms` step shells out to syft, one SBOM per archive.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: 'v1.54.0'
+
+      # Fail here, before anything is published, if either tool is missing.
+      - name: Check signing tools
+        run: |
+          cosign version
+          syft version
+
       - name: Set GORELEASER_PREVIOUS_TAG in actual release
         if: ${{ !contains(github.ref, '-nightly') }}
         # find previous tag by filtering out nightly tags and choosing the
         # second to last tag (last one is the current release)
         run: |
           prev_tag=$(git tag | grep -v "nightly" | sort -r --version-sort | head -n 2 | tail -n 1)
-          echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> $GITHUB_ENV
+          echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -46,7 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: write # push the image and its signature
+      id-token: write # keyless cosign signature over the image digest
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
@@ -84,7 +108,13 @@ jobs:
             org.opencontainers.image.description=Conduit is a data streaming tool written in Go. It aims to provide the best user experience for building and running real-time data pipelines. Conduit comes with batteries included, it provides a UI, common connectors, transforms and observability data out of the box.
             org.opencontainers.image.vendor=ConduitIO
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: 'v3.1.3'
+
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6.18.0
         with:
           context: .
@@ -92,3 +122,21 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Sign the multi-arch index by digest, never by tag: a tag can be moved
+      # between push and sign, a digest cannot. One signature covers every tag
+      # metadata-action applied, since they all point at this digest.
+      # Values pass through env, not ${{ }} in the script, so nothing from the
+      # event payload is interpolated into the shell.
+      - name: Sign Docker image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "unexpected image digest: '$DIGEST'" >&2
+            exit 1
+          fi
+          # GHCR image names must be lowercase; github.repository is ConduitIO/conduit.
+          image="${REGISTRY}/${IMAGE_NAME,,}@${DIGEST}"
+          cosign sign --yes "$image"
