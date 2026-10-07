@@ -119,6 +119,14 @@ type Service struct {
 	// is no production code path that can set or read it.
 	testWorkersReleased func(rp *runnablePipeline)
 
+	// testCompareAndDeleteWindow, if set, is called from
+	// deleteRunningPipelineIfCurrent after the identity check has matched and
+	// before the Delete: the exact window a concurrent publication must not
+	// land in. It lets a test hold that window open and prove publishMu
+	// closes it (#2811), instead of racing it. Nil in production, same
+	// contract as testWorkersReleased.
+	testCompareAndDeleteWindow func()
+
 	isGracefulShutdown atomic.Bool
 	metricsDisabled    bool
 }
@@ -1810,6 +1818,9 @@ func (s *Service) deleteRunningPipelineIfCurrent(id string, rp *runnablePipeline
 	defer s.publishMu.Unlock()
 	// Invariant 7: only the run that owns the entry may remove it.
 	if current, ok := s.runningPipelines.Get(id); ok && current == rp {
+		if s.testCompareAndDeleteWindow != nil {
+			s.testCompareAndDeleteWindow()
+		}
 		s.runningPipelines.Delete(id)
 	}
 }

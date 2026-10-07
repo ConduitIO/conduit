@@ -118,11 +118,17 @@ func TestServiceLifecycle_Recovery_SupersededCleanupKeepsLiveEntry(t *testing.T)
 		false,
 	)
 
-	// Capture the recovery restart's run (the 2nd runPipeline) by identity.
+	// Capture both runs by identity from inside runPipeline: the 1st call is
+	// the initial run (rp1), the 2nd the recovery restart (rp2). rp1 must not
+	// be read from runningPipelines after Start returns: its transient
+	// failure and the 1ms backoff restart may already have replaced it.
 	var runCount atomic.Int64
-	var liveRp atomic.Pointer[runnablePipeline]
+	var deadRpPtr, liveRp atomic.Pointer[runnablePipeline]
 	ls.testWorkersReleased = func(rp *runnablePipeline) {
-		if runCount.Add(1) == 2 {
+		switch runCount.Add(1) {
+		case 1:
+			deadRpPtr.Store(rp)
+		case 2:
 			liveRp.Store(rp)
 		}
 	}
@@ -133,8 +139,8 @@ func TestServiceLifecycle_Recovery_SupersededCleanupKeepsLiveEntry(t *testing.T)
 	ls.OnFailure(func(e FailureEvent) { failures <- e })
 
 	is.NoErr(ls.Start(ctx, pl.ID))
-	deadRp, ok := ls.runningPipelines.Get(pl.ID)
-	is.True(ok)
+	deadRp := deadRpPtr.Load()
+	is.True(deadRp != nil)
 
 	var outer FailureEvent
 	select {
@@ -147,10 +153,10 @@ func TestServiceLifecycle_Recovery_SupersededCleanupKeepsLiveEntry(t *testing.T)
 
 	rp2 := liveRp.Load()
 	is.True(rp2 != nil)
-	is.True(rp2 != deadRp)
-	// Safety net, registered before the assertion so a pre-fix failure does
+	// Safety net, registered before any further assertion so a failure does
 	// not leave rp2's worker parked until stopAndWaitPersister times out.
 	defer rp2.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
+	is.True(rp2 != deadRp)
 	is.True(rp2.t.Alive()) // sanity: rp2 is really running
 
 	// The regression: rp1's cleanup must not have erased rp2's entry.
@@ -203,4 +209,68 @@ func TestService_deleteRunningPipelineIfCurrent(t *testing.T) {
 	is.True(!ok)
 
 	s.deleteRunningPipelineIfCurrent("missing", older) // absent key: no-op, no panic
+}
+
+// TestService_deleteRunningPipelineIfCurrent_SerializedAgainstPublish proves
+// publishMu makes the compare-and-delete one step with respect to a
+// publication (#2811). Without it the check is a TOCTOU that needs no
+// recovery chain: an operator Stop finalizes StatusUserStopped, which admits a
+// concurrent Start; if that Start's publish lands between the departing run's
+// identity check and its Delete, the departing run erases the new live run.
+//
+// testCompareAndDeleteWindow holds the delete inside that window while a
+// concurrent publish is attempted. Two checks, so removing the lock from
+// either side fails:
+//   - inside the window publishMu must be held (deterministic: TryLock fails);
+//   - the concurrent publish must survive the delete. With the lock it cannot
+//     land until the delete finishes, so the window waits out a bounded grace
+//     period for it and then proceeds. The grace period never decides the
+//     pass condition; it only gives an unserialized publish time to land in
+//     the window and be erased.
+func TestService_deleteRunningPipelineIfCurrent_SerializedAgainstPublish(t *testing.T) {
+	is := is.New(t)
+	s := &Service{runningPipelines: csync.NewMap[string, *runnablePipeline]()}
+
+	departing := &runnablePipeline{}
+	newer := &runnablePipeline{}
+	s.publishRunningPipeline("p", departing)
+
+	inWindow := make(chan struct{})
+	published := make(chan struct{})
+	// Written and read only on the test goroutine: the hook runs
+	// synchronously inside deleteRunningPipelineIfCurrent below.
+	lockHeldInWindow := false
+	s.testCompareAndDeleteWindow = func() {
+		if s.publishMu.TryLock() {
+			s.publishMu.Unlock()
+		} else {
+			lockHeldInWindow = true
+		}
+		close(inWindow)
+		select {
+		case <-published:
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+
+	go func() {
+		<-inWindow
+		s.publishRunningPipeline("p", newer)
+		close(published)
+	}()
+
+	s.deleteRunningPipelineIfCurrent("p", departing)
+
+	select {
+	case <-published:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent publish never completed")
+	}
+
+	is.True(lockHeldInWindow) // the compare-and-delete must run under publishMu
+	got, ok := s.runningPipelines.Get("p")
+	if !ok || got != newer {
+		t.Fatalf("a publish that raced the departing run's compare-and-delete was erased "+
+			"(present=%v, isNewer=%v): the newer live run is unreachable (#2811)", ok, got == newer)
+	}
 }
