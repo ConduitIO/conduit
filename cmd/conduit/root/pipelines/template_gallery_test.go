@@ -38,6 +38,8 @@ package pipelines
 import (
 	"bytes"
 	"context"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,6 +52,7 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	yamlparser "github.com/conduitio/conduit/pkg/provisioning/config/yaml"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
@@ -600,6 +603,108 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 		// a working alternative).
 		is.True(strings.Contains(joined, "not a workaround"))
 	})
+}
+
+// TestGalleryCatalog_PgvectorRAG_EmbedEgressAdmitsProvider guards the
+// template's embedding-provider egress settings. WASM host egress is closed by
+// default, so a scaffolded postgres-pgvector-rag pipeline only reaches its
+// provider if the embed processor opts in (sdk.egress.allow) for the exact
+// target its ollama.baseURL names, and the provider is loopback, so the entry
+// must be an IP literal (the gate refuses loopback except by an exact
+// (IP, port) carve-out; "localhost" cannot be allowlisted for http). The
+// template shipped without any of this and every embed call failed with
+// "http egress is not enabled for this processor"; the e2e suites did not
+// notice because they patched the settings in themselves.
+//
+// This runs in the required unit-test job (no docker, no sibling repos). It
+// resolves the policy the same way processor.Service.resolveEgressPolicy does,
+// against the ceiling the prerequisite note tells the operator to open, and
+// checks that the note names that ceiling.
+func TestGalleryCatalog_PgvectorRAG_EmbedEgressAdmitsProvider(t *testing.T) {
+	is := is.New(t)
+
+	tmpl, ok := lookupGalleryTemplate(templateNamePostgresPgvectorRAG)
+	is.True(ok)
+
+	pipelines, err := yamlparser.NewParser(log.Nop()).Parse(context.Background(), strings.NewReader(tmpl.YAML))
+	is.NoErr(err)
+	is.Equal(len(pipelines), 1)
+
+	var settings map[string]string
+	for _, p := range pipelines[0].Processors {
+		if p.Plugin == "standalone:ai.embed" {
+			settings = p.Settings
+		}
+	}
+	is.True(settings != nil) // the template must still have an ai.embed processor
+
+	allowRaw, ok := settings[egress.ConfigKeyAllow]
+	if !ok {
+		t.Fatalf("ai.embed has no %s setting: egress is off by default, so every embed call fails", egress.ConfigKeyAllow)
+	}
+
+	baseURL, err := url.Parse(settings["ollama.baseURL"])
+	is.NoErr(err)
+	port := baseURL.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[baseURL.Scheme]
+	}
+
+	requested, err := egress.PolicyFromSettings(settings)
+	is.NoErr(err) // a malformed allowlist (e.g. http://localhost) fails the pipeline build
+	is.True(requested.Enabled)
+
+	// The ceiling the prerequisite note documents (enabled + the same entry),
+	// and the unrestricted single-tenant ceiling (enabled alone). Both must
+	// admit the provider with nothing dropped.
+	documentedCeilingAllow, err := egress.ParseAllowlist(allowRaw)
+	is.NoErr(err)
+	ceilings := map[string]egress.Policy{
+		"documented":   {Enabled: true, Allowlist: documentedCeilingAllow},
+		"unrestricted": {Enabled: true},
+	}
+	for name, ceiling := range ceilings {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			effective, dropped := egress.ResolvePolicy(requested, ceiling)
+			is.Equal(len(dropped), 0)
+			is.True(effective.Enabled)
+
+			// Stage 1: the baseURL's scheme+host:port is allowlisted.
+			is.True(effective.MatchHostPort(baseURL.Scheme, baseURL.Hostname(), port))
+
+			// Stage 2: a loopback/private target is only dialable through an
+			// IP-literal entry for the exact (IP, port). A hostname would pass
+			// stage 1 and still be refused at connect time.
+			ip := net.ParseIP(baseURL.Hostname())
+			if ip == nil {
+				t.Fatalf("ollama.baseURL host %q is not an IP literal; a local provider needs an exact (IP, port) carve-out", baseURL.Hostname())
+			}
+			if refused, _ := egress.Refuse(ip); refused {
+				carveOut := false
+				for _, e := range effective.Allowlist {
+					if e.IsIP() && e.IP.Equal(ip) && e.Port == port {
+						carveOut = true
+					}
+				}
+				is.True(carveOut) // no exact (IP, port) carve-out for the provider
+			}
+		})
+	}
+
+	// The engine ceiling is operator config, not pipeline config, so the
+	// template cannot open it. The prerequisite note and README must tell the
+	// operator exactly how.
+	joined := strings.Join(tmpl.Prerequisites, "\n")
+	readme, err := os.ReadFile(filepath.Join("templates", templateNamePostgresPgvectorRAG, "README.md"))
+	is.NoErr(err)
+	for _, fact := range []string{
+		"--processors.egress.enabled",
+		"--processors.egress.allow " + allowRaw,
+	} {
+		is.True(strings.Contains(joined, fact))         // prerequisite note must state it
+		is.True(strings.Contains(string(readme), fact)) // README must state it
+	}
 }
 
 // TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites is
