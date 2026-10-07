@@ -248,7 +248,8 @@ func galleryCatalogSpec() []GalleryTemplate {
 					"record into many chunk records, and record fan-out is only supported by architecture v2; " +
 					"on the default engine the pipeline fails at the chunk step with a " +
 					"`pipeline.fanout_requires_arch_v2` error (FailedPrecondition) naming this flag. Architecture " +
-					"v2 is a preview engine — see its status before relying on it in production.",
+					"v2 is a preview engine; graduation to the default engine is evaluated in v0.21 against a written gate — " +
+					"see its status before relying on it in production.",
 				"pgvector destination: NOT installable from the registry yet — " +
 					"github.com/conduitio/conduit-connector-pgvector has no tagged release, so there is no " +
 					"version to pass to `conduit connectors install`. Build it yourself: clone the repo and " +

@@ -21,9 +21,11 @@ import (
 
 // CodeFanOutRequiresArchV2 is raised when a processor returns a fan-out result
 // (sdk.MultiRecord — one input record producing N output records, e.g. ai.chunk,
-// split, clone) on the default (classic) pipeline engine, which is
-// one-record-in-one-record-out and cannot express fan-out. Fan-out is supported
-// only by pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled via
-// --preview.pipeline-arch-v2. FailedPrecondition: the pipeline as configured
-// cannot run on this engine.
+// split, clone) on the classic default pipeline engine, which is
+// one-record-in-one-record-out and cannot run it. Record fan-out needs the
+// preview engine, pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled
+// with --preview.pipeline-arch-v2 or preview.pipeline-arch-v2: true; the
+// postgres-pgvector-rag template is one such pipeline. Graduation of v2 to the
+// default engine is evaluated in v0.21 against a written gate. FailedPrecondition:
+// the pipeline as configured cannot run on this engine.
 var CodeFanOutRequiresArchV2 = conduiterr.Register("pipeline.fanout_requires_arch_v2", codes.FailedPrecondition)

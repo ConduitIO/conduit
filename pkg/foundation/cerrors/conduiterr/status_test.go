@@ -33,7 +33,7 @@ func TestRoundTrip_AllFields(t *testing.T) {
 	orig := conduiterr.New(conduiterr.CodeConnectorPluginNotFound, "connector plugin not found")
 	orig.ConfigPath = "/connectors/1/plugin"
 	orig.Suggestion = "run `conduit connectors install <name>`"
-	orig.DocsURL = "https://conduit.io/docs/errors/connector.plugin_not_found"
+	orig.DocsURL = "https://conduitdata.io/docs/errors/connector.plugin_not_found"
 	orig.Fix = &conduiterr.Fix{ConfigPath: "/connectors/1/plugin", Op: "set", Value: "builtin:postgres"}
 
 	got := conduiterr.FromStatus(conduiterr.ToStatus(orig))
