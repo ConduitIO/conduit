@@ -75,6 +75,19 @@ type Service struct {
 	handlers         []FailureHandler
 	runningPipelines *csync.Map[string, *runnablePipeline]
 
+	// publishMu serializes WRITERS to runningPipelines — the publication in
+	// publishRunningPipeline and the compare-and-delete in
+	// deleteRunningPipelineIfCurrent — so the read-compare-delete is atomic
+	// with respect to a concurrent publication (#2811). csync.Map has no
+	// compare-and-swap primitive; without this lock a stale owner's Delete can
+	// still land just after another goroutine's Set and erase the newer run.
+	// Mirrors pkg/lifecycle.Service.publishMu (#2806).
+	//
+	// Readers (Get/All/Copy) deliberately do not take it: csync.Map has its own
+	// RWMutex for memory safety. It is never held across I/O or a worker
+	// operation, so it cannot deadlock against the stop path.
+	publishMu sync.Mutex
+
 	// terminalErrors holds the terminal error of a pipeline after it has stopped
 	// and been removed from runningPipelines, so WaitPipeline can still report it
 	// to a caller that races the pipeline's own cleanup goroutine. Written before
@@ -1676,8 +1689,21 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// delete leaves no window where neither is observable).
 		s.terminalErrors.Set(rp.pipeline.ID, err)
 
-		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
-		s.runningPipelines.Delete(rp.pipeline.ID)
+		// All workers have stopped, so remove this run from runningPipelines —
+		// but only if the entry under this ID is still THIS run (#2811).
+		// This goroutine can be an OLDER run's cleanup that is unwinding
+		// from a nested recovery restart: recoverPipeline -> StartWithBackoff
+		// -> Start -> runPipeline(newer) runs synchronously on this
+		// goroutine, publishes the newer run and releases its workers before
+		// announcing StatusRunning. If that announcement fails, Start returns
+		// an error with the newer run live, this goroutine takes the
+		// recovery-failed arm above and arrives here. A delete by key would
+		// erase the newer run's entry and leave its workers running where no
+		// Stop, StopAll, Wait or WaitPipeline can reach them.
+		//
+		// Invariant 7: a run whose workers are live must stay reachable by
+		// the stop and wait paths.
+		s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 
 		s.notify(rp.pipeline.ID, err)
 		return err
@@ -1728,8 +1754,12 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	//     UpdateStatus below fails;
 	//   - that cleanup goroutine blocks on startupDone (closed below), so it
 	//     can never Delete before this Set, which would strand a live run
-	//     outside the map.
-	s.runningPipelines.Set(rp.pipeline.ID, rp)
+	//     outside the map;
+	//   - that Delete is a compare-and-delete (#2811), so when this run is a
+	//     nested recovery restart and the UpdateStatus below fails, the
+	//     OUTER run's cleanup, which then falls through to its own terminal
+	//     block, cannot erase this run's entry.
+	s.publishRunningPipeline(rp.pipeline.ID, rp)
 
 	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
 	// registered on the tomb, so release the workers: none of them can any
@@ -1756,6 +1786,32 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	close(startupDone)
 	return err
+}
+
+// publishRunningPipeline makes rp the live run for id in runningPipelines,
+// replacing any previous entry. It takes publishMu so it is ordered against
+// deleteRunningPipelineIfCurrent.
+func (s *Service) publishRunningPipeline(id string, rp *runnablePipeline) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+	s.runningPipelines.Set(id, rp)
+}
+
+// deleteRunningPipelineIfCurrent removes id's entry from runningPipelines only
+// if it still holds exactly rp: a compare-and-delete, not a delete by key
+// (#2811). A run's cleanup goroutine calls it as its last map write, and by
+// then a newer run may own the key (a nested recovery restart whose status
+// announcement failed, or an operator Start that landed after a Stop); the
+// newer run's entry must survive. publishMu makes the compare and the delete
+// one atomic step with respect to publishRunningPipeline. Mirrors
+// pkg/lifecycle.Service.deleteRunningPipelineIfCurrent (#2806).
+func (s *Service) deleteRunningPipelineIfCurrent(id string, rp *runnablePipeline) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+	// Invariant 7: only the run that owns the entry may remove it.
+	if current, ok := s.runningPipelines.Get(id); ok && current == rp {
+		s.runningPipelines.Delete(id)
+	}
 }
 
 // recoverPipeline attempts to recover a pipeline that stopped with a transient
