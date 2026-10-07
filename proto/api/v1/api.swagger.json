@@ -1670,7 +1670,7 @@
         },
         "error": {
           "type": "string",
-          "description": "Error message when pipeline status is STATUS_DEGRADED."
+          "description": "Error message recorded with the pipeline's last terminal status.\nAlways set when status is STATUS_DEGRADED. May be set when status is\nSTATUS_STOPPED, if the run ended with an error after a stop was\nrequested (a node failed while draining, or the pipeline was force\nstopped); the pipeline is not degraded in that case and is not\nrecovered. Empty while the pipeline is running or recovering."
         },
         "stoppedReason": {
           "$ref": "#/definitions/StateStoppedReason"
@@ -2539,7 +2539,7 @@
         "STATUS_RECOVERING"
       ],
       "default": "STATUS_UNSPECIFIED",
-      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
+      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline is stopped: by a user (Stop, including a force stop), or by\nConduit itself (an engine shutdown, or a pipeline that was running\nbefore a restart and has not been resumed). State.stopped_reason tells\nthe two apart. A stopped pipeline is not necessarily clean: if the run\nhit an error while draining after the stop was requested, the error is\nrecorded in State.error and the status is still STATUS_STOPPED.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
     },
     "v1PlanPipelineRequest": {
       "type": "object",
