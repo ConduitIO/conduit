@@ -33,6 +33,30 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
+# One SPDX SBOM per archive, written next to it as <archive>.sbom.json and
+# listed in checksums.txt, so the signature below covers the SBOMs too.
+# `--enrich all` (GoReleaser's default) is left off: it makes syft call out to
+# package registries for license data, adding a network dependency to the
+# tag-time release. Module names, versions and hashes come from the binary's
+# Go build info either way.
+sboms:
+  - artifacts: archive
+    args: ["$artifact", "--output", "spdx-json=$document"]
+# Keyless Sigstore signature over checksums.txt. cosign gets a short-lived
+# certificate from the GitHub Actions OIDC token, so there is no key to store
+# or leak; the certificate names this repo, release.yml and the tag. Signing
+# checksums.txt covers every archive, package and SBOM it lists.
+# Verification: docs/releases.md, "Verifying a release".
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - "sign-blob"
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    output: true
 changelog:
   sort: asc
   use: github
@@ -72,6 +96,18 @@ release:
     
     - 📦 [conduit_{{ .Version }}_Windows_arm64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_arm64.zip)
     - 📦 [conduit_{{ .Version }}_Windows_x86_64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_x86_64.zip)
+
+    ## Verifying
+
+    `checksums.txt` is signed with [Sigstore](https://www.sigstore.dev/) keyless signing (`checksums.txt.sigstore.json`), and each archive has an SPDX SBOM. The Docker image is signed by digest. See [Verifying a release](https://github.com/ConduitIO/conduit/blob/main/docs/releases.md#verifying-a-release).
+
+    ```
+    cosign verify-blob \
+      --certificate-identity 'https://github.com/ConduitIO/conduit/.github/workflows/release.yml@refs/tags/{{ .Tag }}' \
+      --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+      --bundle checksums.txt.sigstore.json checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    ```
 
     ## Docker images
 
