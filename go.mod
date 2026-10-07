@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.25.8
+go 1.25.14
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0

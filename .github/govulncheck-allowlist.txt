@@ -22,55 +22,9 @@
 #
 # Format: one GO-XXXX-NNNN per line. `#` comments and blank lines ignored.
 #
-# Baseline captured 2026-08-21 against main.
-
-# ---------------------------------------------------------------------------
-# Go standard library (20 findings)
-#
-# Every one of these is fixed by a Go toolchain patch release; none needs a
-# code change. go.mod currently pins go 1.25.8. Clearing this whole block is a
-# single toolchain bump, and it is the cheapest large win available here.
-# ---------------------------------------------------------------------------
-# JsBraceDepth Context Tracking Bugs (XSS) in html/template
-GO-2026-4865
-# Unbounded allocation for old GNU sparse in archive/tar
-GO-2026-4869
-# Unauthenticated TLS 1.3 KeyUpdate record can cause persistent connection retention and DoS in crypto/tls
-GO-2026-4870
-# Infinite loop in HTTP/2 transport when given bad SETTINGS_MAX_FRAME_SIZE in net/http/internal/http2 in golang.org/x/net
-GO-2026-4918
-# Inefficient policy validation in crypto/x509
-GO-2026-4946
-# Unexpected work during chain building in crypto/x509
-GO-2026-4947
-# Root escape via symlink plus trailing slash in os
-GO-2026-4970
-# Panic in Dial and LookupPort when handling NUL byte on Windows in net
-GO-2026-4971
-# Escaper bypass leads to XSS in html/template
-GO-2026-4980
-# Bypass of meta content URL escaping causes XSS in html/template
-GO-2026-4982
-# Invoking failure to reject ASCII-only Punycode-encoded labels in golang.org/x/net/idna
-GO-2026-5026
-# Inefficient candidate hostname parsing in crypto/x509
-GO-2026-5037
-# Arbitrary inputs are included in errors without any escaping in net/textproto
-GO-2026-5039
-# Invoking Encrypted Client Hello privacy leak in crypto/tls
-GO-2026-5856
-# Enforce maximum recursion depth in encoding/asn1
-GO-2026-5972
-# Add recursion depth guard during decode in encoding/xml
-GO-2026-6088
-# Apply ReadHeaderTimeout when doing unencrypted HTTP/2 check in net/http
-GO-2026-6089
-# Limit handshake messages we are willing to accept post-handshake in crypto/tls
-GO-2026-6090
-# Fix Javascript regexp context tracking in html/template
-GO-2026-6091
-# Avoid quadratic complexity in resolvePath in net/url
-GO-2026-6218
+# Baseline captured 2026-08-21 against main (24 findings). The 20 Go standard
+# library entries were cleared on 2026-10-07 by bumping go.mod to go 1.25.14;
+# every one was fixed in a 1.25.x patch release (1.25.9 through 1.25.13).
 
 # ---------------------------------------------------------------------------
 # github.com/hamba/avro/v2 (3 findings) — UNFIXABLE, tracked in #2817
