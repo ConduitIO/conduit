@@ -29,7 +29,7 @@ is):
 
 | Plugin | Kind | Install |
 | --- | --- | --- |
-| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | **Not yet in the registry** — the repo has no tagged release, so there is no version to pass to `conduit connectors install`. Build it: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. Switch to the registry install once a tagged release ships. |
+| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | Published to the signed registry at **v0.1.0** — install with `conduit connectors install pgvector`. Offline or air-gapped: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. |
 | `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.chunk` (the `registry.incompatible_version` refusal tracked as [#2818](https://github.com/ConduitIO/conduit/issues/2818) is fixed). Requires a running Conduit that satisfies `minConduitVersion` **0.20.0** (a v0.20.0 nightly or later; v0.19.0 stable is correctly refused as too old). On an older Conduit, build it yourself: clone `conduit-processor-ai`, `GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, and place the `.wasm` under `--processors.path`. |
 | `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.embed`, same `minConduitVersion` 0.20.0 requirement as `ai.chunk`. On an older Conduit, build it the same way (`./cmd/embedding`). |
 
@@ -42,12 +42,11 @@ processors' genuine `minConduitVersion: 0.20.0` requirement: a v0.19.0 stable Co
 correctly refused with `registry.incompatible_version` (it really predates the release these
 processors target), while any v0.20.0 nightly or the eventual v0.20.0 stable release installs
 them successfully. `--bundle` applies the identical version algebra offline, so it is not a
-workaround for that version requirement. A registry install for the pgvector destination is
-separately impossible today for an unrelated reason — `conduit-connector-pgvector` has not cut a
-tagged release, so there is no version for `conduit connectors install` to resolve; that plugin
-still needs to be built from source (see the table above). `conduit pipelines init --template
-postgres-pgvector-rag` names all three realities in its prerequisite note every time this template
-is scaffolded.
+workaround for that version requirement. The pgvector destination has no such requirement
+(`minConduitVersion` 0.15.0) and installs with `conduit connectors install pgvector`; build it from
+source only when the host cannot reach the registry (see the table above). `conduit pipelines init
+--template postgres-pgvector-rag` names all three installs in its prerequisite note every time this
+template is scaffolded.
 
 ## Requires pipeline architecture v2
 
