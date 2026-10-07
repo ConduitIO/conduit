@@ -4404,7 +4404,10 @@ type Pipeline_DLQ struct {
 	// plugin is the connector plugin used for storing DLQ records
 	// default = builtin:log, configured to log with level WARN
 	Plugin string `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	// settings are the plugin settings
+	// settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
+	// value is redacted to "***" and only keys are returned, because settings
+	// routinely hold credentials. Requests must carry real values; sending a
+	// redacted map back stores "***" as the value.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// window_size defines how many last acks/nacks are monitored in the window
 	// that controls if the pipeline should stop (0 disables the window)
@@ -4575,7 +4578,10 @@ type Connector_Config struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name     string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// settings are the connector plugin settings. In responses every value is
+	// redacted to "***" and only keys are returned, because settings routinely
+	// hold credentials. Requests must carry real values.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
@@ -4685,6 +4691,9 @@ type Processor_Config struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// settings are the processor plugin settings. In responses every value is
+	// redacted to "***" and only keys are returned, because settings routinely
+	// hold credentials. Requests must carry real values.
 	Settings map[string]string `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Workers  int32             `protobuf:"varint,2,opt,name=workers,proto3" json:"workers,omitempty"`
 }
