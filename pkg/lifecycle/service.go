@@ -871,7 +871,26 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 				return nil
 			}
 			if err != nil {
-				return cerrors.Errorf("node %s stopped with error: %w", node.ID(), err)
+				err = cerrors.Errorf("node %s stopped with error: %w", node.ID(), err)
+				// Record the error on the tomb here, synchronously, before
+				// the deferred nodesWg.Done() above runs (#2896). tomb.v2
+				// only records a t.Go'd function's return value after the
+				// function returns, i.e. after Done() and the "node stopped"
+				// log write. In that window the cleanup goroutine below can
+				// wake from nodesWg.Wait(), read rp.t.Err() as ErrStillAlive
+				// and classify a failed pipeline as user-stopped: no
+				// Degraded status, no OnFailure handlers, and for a
+				// transient error no recovery. Killing first means every
+				// node error is visible to rp.t.Err() by the time nodesWg
+				// reaches zero.
+				//
+				// Kill keeps the first non-nil reason, so this does not
+				// override an earlier reason (e.g. stopForceful's
+				// ErrForceStop or a sibling node's error), and the
+				// t.kill(err) tomb.run does after we return is a no-op.
+				// pkg/lifecycle-poc's worker goroutine does the same.
+				rp.t.Kill(err)
+				return err
 			}
 			return nil
 		})
