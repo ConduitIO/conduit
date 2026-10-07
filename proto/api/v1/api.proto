@@ -44,7 +44,12 @@ message Pipeline {
     STATUS_UNSPECIFIED = 0;
     // Pipeline is running.
     STATUS_RUNNING = 1;
-    // Pipeline gracefully stopped.
+    // Pipeline is stopped: by a user (Stop, including a force stop), or by
+    // Conduit itself (an engine shutdown, or a pipeline that was running
+    // before a restart and has not been resumed). State.stopped_reason tells
+    // the two apart. A stopped pipeline is not necessarily clean: if the run
+    // hit an error while draining after the stop was requested, the error is
+    // recorded in State.error and the status is still STATUS_STOPPED.
     STATUS_STOPPED = 2;
     // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
@@ -57,7 +62,12 @@ message Pipeline {
 
   message State {
     Status status = 1;
-    // Error message when pipeline status is STATUS_DEGRADED.
+    // Error message recorded with the pipeline's last terminal status.
+    // Always set when status is STATUS_DEGRADED. May be set when status is
+    // STATUS_STOPPED, if the run ended with an error after a stop was
+    // requested (a node failed while draining, or the pipeline was force
+    // stopped); the pipeline is not degraded in that case and is not
+    // recovered. Empty while the pipeline is running or recovering.
     string error = 2;
 
     // StoppedReason distinguishes how a STATUS_STOPPED pipeline came to be

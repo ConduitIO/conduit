@@ -32,7 +32,12 @@ const (
 	Pipeline_STATUS_UNSPECIFIED Pipeline_Status = 0
 	// Pipeline is running.
 	Pipeline_STATUS_RUNNING Pipeline_Status = 1
-	// Pipeline gracefully stopped.
+	// Pipeline is stopped: by a user (Stop, including a force stop), or by
+	// Conduit itself (an engine shutdown, or a pipeline that was running
+	// before a restart and has not been resumed). State.stopped_reason tells
+	// the two apart. A stopped pipeline is not necessarily clean: if the run
+	// hit an error while draining after the stop was requested, the error is
+	// recorded in State.error and the status is still STATUS_STOPPED.
 	Pipeline_STATUS_STOPPED Pipeline_Status = 2
 	// Pipeline stopped with an error (see State.error).
 	Pipeline_STATUS_DEGRADED Pipeline_Status = 3
@@ -4283,7 +4288,12 @@ type Pipeline_State struct {
 	unknownFields protoimpl.UnknownFields
 
 	Status Pipeline_Status `protobuf:"varint,1,opt,name=status,proto3,enum=api.v1.Pipeline_Status" json:"status,omitempty"`
-	// Error message when pipeline status is STATUS_DEGRADED.
+	// Error message recorded with the pipeline's last terminal status.
+	// Always set when status is STATUS_DEGRADED. May be set when status is
+	// STATUS_STOPPED, if the run ended with an error after a stop was
+	// requested (a node failed while draining, or the pipeline was force
+	// stopped); the pipeline is not degraded in that case and is not
+	// recovered. Empty while the pipeline is running or recovering.
 	Error         string                       `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	StoppedReason Pipeline_State_StoppedReason `protobuf:"varint,3,opt,name=stopped_reason,json=stoppedReason,proto3,enum=api.v1.Pipeline_State_StoppedReason" json:"stopped_reason,omitempty"`
 }
