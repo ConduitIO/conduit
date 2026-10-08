@@ -103,10 +103,25 @@ came afterwards, with the regression tests below.
   does after `ErrTxnTooBig`, Postgres does not), so it does not commit around a failure. The other
   option, retrying the remainder in a second transaction, is tracked in #2930.
 - `Source.onPersistFlushed` with an error keeps the acks queued and never releases them. A later
-  successful flush stores a later cumulative position that covers them. The error goes to the
-  pipeline through `Errors()` while the plugin runs. Once teardown has started nobody reads that
-  channel, so the error is kept and returned from `Teardown` instead of blocking the persister
-  callback (which would have hung `WaitPendingWrites` for everyone).
+  successful flush stores a later cumulative position that covers them, and also clears the kept
+  error, since nothing is left undurable.
+- Persist errors reach the pipeline without ever blocking a persister callback forever. That is
+  `persistErrReporter`, used by both `Source` and `Destination`. While the connector runs, the
+  error goes out on `Errors()`. The reporter is stopped when `Teardown` starts and when `Open`
+  fails after registering its lifecycle-event persist; the node never calls `Teardown` after a
+  failed `Open`. After that, the error is kept and `Teardown` returns it. A callback blocked on an
+  unread `errs` holds its flush's `callbacksDone` open and hangs every unbounded
+  `WaitPendingWrites` (`lifecycle.Service.StopAndWait`, `Persister.Wait` at shutdown).
+- The fix itself made that hazard reachable for destinations. Before it, a destination's
+  lifecycle-event persist callback almost always got nil, because a commit failure was rare. With
+  whole-batch failure, a destination that shares a batch with a failing connector gets the error.
+  Its old `d.errs <- err` then blocked forever whenever nothing read `Errors()`, which is always
+  the case under arch-v2 and also after a failed `Open`. The fresh-context review of the fix PR
+  caught this, and the destination got the same reporter before merge.
+- `Source.Teardown` flushes with a detached context, as `ConnectorStopped` does. A force-stop
+  cancels the connector context, and on a ctx-aware store a canceled context would fail the
+  transaction and with it every connector in the batch.
+- Batch failures carry the stable error code `connector.state_persist_failed` with a suggestion.
 
 ## New automated checks
 
@@ -118,22 +133,30 @@ came afterwards, with the regression tests below.
     plugin never receives the ack;
   - source teardown: a failed final flush withholds the final ack and `Teardown` returns the error;
   - real badger `ErrTxnTooBig`: the whole oversized batch fails and nothing is committed.
+- `pkg/connector/persist_errors_test.go`:
+  - a destination in a failed batch with nobody reading `Errors()`: nothing hangs and the error
+    is kept;
+  - `Open` failing after its lifecycle-event persist (source and destination): `WaitPendingWrites`
+    still returns;
+  - a failure followed by a covering successful flush: `Teardown` is clean;
+  - a force-stopped `Teardown` does not fail the other connectors in the batch;
+  - the batch error carries `connector.state_persist_failed`.
 - `tests/chaos/storefault_test.go` (`TestSIGKILL_StoreFault_PruningUpstream_NoGap`): a child
   process with a real badger store whose position writes start failing, against a pruning upstream,
   SIGKILLed and restarted. Before the fix the restart reports `OPEN_GAP_ERROR`. It runs in the
   required `tests/chaos (race, x3)` check.
 
-All of these fail on the pre-fix code and pass with the fix. The PR has the output.
+The behavioral checks fail on the pre-fix code and pass with the fix. The PR has the output.
 
 ## Follow-ups
 
 - Arch-v2 (`pkg/lifecycle-poc`) never reads `Source.Errors()` or `Destination.Errors()` (see the
   TODO on `funnel.Source`). With this fix a failed flush under arch-v2 still withholds the ack, so
-  there is no data loss, but the error is never surfaced. A source whose writes keep failing would
-  keep running and never ack upstream. Until teardown, that is: then `Teardown` returns the error.
-  This has to be fixed before the arch-v2 flip in v0.21. Tracked in #2929.
-- `Destination`'s lifecycle-event persist callback still sends on its unbuffered `errs` without a
-  teardown escape. Tracked in #2930.
+  there is no data loss, but the error only surfaces when the pipeline stops, as `Teardown`'s
+  error. A source whose writes keep failing keeps running and never acks upstream. Each failed flush
+  also parks its callback goroutine (and the flush's `callbacksDone` waiter) until `Teardown`, so
+  goroutines grow with every failed flush. This has to be fixed before the arch-v2 flip in v0.21.
+  Tracked in #2929.
 - Consider committing the healthy part of a failed batch in a second transaction, to stop one
   connector's failure from failing connectors in other pipelines. Tracked in #2930.
 - Decide whether to enable `govet`'s `shadow` analyzer, at least for `pkg/connector`,

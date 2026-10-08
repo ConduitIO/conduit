@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
@@ -426,12 +427,15 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 // Invariant 1: a source's PersistCallback releases its deferred upstream ack
 // (see Source.onPersistFlushed), so this must never return nil for a batch
 // that did not durably land — any storeFunc error aborts the commit.
-// Invariant 2: a position write that fails is reported, never dropped while
-// the batch is reported durable.
+// Invariant 2: a position is never reported stored when it was not, so the
+// stored position stays the one a restart can safely resume from.
+// Invariant 3: the failure reaches every callback, never only a log line.
+//
+// Every error it returns carries CodeConnectorStatePersistFailed.
 func (p *Persister) writeBatch(ctx context.Context, batch map[string]persistData) error {
 	tx, txCtx, err := p.db.NewTransaction(ctx, true)
 	if err != nil {
-		return cerrors.Errorf("failed to create transaction for connector batch: %w", err)
+		return statePersistError("failed to create transaction for connector batch", err)
 	}
 	// Discard after a successful Commit is a no-op (database.Transaction
 	// contract); on every error path it is what drops the partial writes.
@@ -444,10 +448,20 @@ func (p *Persister) writeBatch(ctx context.Context, batch map[string]persistData
 		}
 	}
 	if len(errs) > 0 {
-		return cerrors.Errorf("failed to store connector batch, transaction discarded: %w", cerrors.Join(errs...))
+		return statePersistError("failed to store connector batch, transaction discarded", cerrors.Join(errs...))
 	}
 	if err := tx.Commit(); err != nil {
-		return cerrors.Errorf("failed to commit connector batch: %w", err)
+		return statePersistError("failed to commit connector batch", err)
 	}
 	return nil
+}
+
+// statePersistError wraps cause as a CodeConnectorStatePersistFailed error.
+// The message includes the cause's text because ConduitError.Error() returns
+// only its own message, and operators need the store's error (and the
+// failing connector IDs) in the one line they see.
+func statePersistError(msg string, cause error) error {
+	err := conduiterr.Wrap(CodeConnectorStatePersistFailed, msg+": "+cause.Error(), cause)
+	err.Suggestion = statePersistSuggestion
+	return err
 }

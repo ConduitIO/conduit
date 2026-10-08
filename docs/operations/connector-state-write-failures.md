@@ -9,22 +9,28 @@ position has committed. See
 
 ## Symptom
 
-A pipeline goes degraded, or a stopped pipeline reports an error, with a message containing:
+The error carries the code `connector.state_persist_failed` and a message containing one of:
 
 ```text
 failed to store connector batch, transaction discarded: connector "<id>": ...
-```
-
-or
-
-```text
 failed to create transaction for connector batch: ...
 failed to commit connector batch: ...
-failed to persist source connector position during teardown: ...
 ```
 
-The Conduit log has a matching error line:
+A stopping connector wraps it as `failed to persist source connector position during teardown: ...`
+or `failed to persist destination connector state: ...`.
+
+The Conduit log always has the error line
 `failed to persist connector batch; nothing in it was committed and every connector in it is notified`.
+What else you see depends on the pipeline architecture:
+
+- **Default architecture:** the pipeline goes degraded with the error above. A pipeline that was
+  stopping reports it as its stop error.
+- **Arch-v2 (`--preview.pipeline-arch-v2`):** the pipeline keeps reporting **running**. The error
+  reaches it only when the pipeline stops (#2929). While it runs, the signs are the log line above
+  and a source whose upstream retention keeps growing because nothing is acknowledged. For a
+  Postgres source that means a replication slot whose `confirmed_flush_lsn` stops advancing and
+  retained WAL that keeps growing.
 
 ## Diagnosis
 
