@@ -86,6 +86,16 @@ Each session writes to `benchi/archv2-gate/results/<UTC time>-<shape>-<session>/
 - `env.json`: the machine the session ran on (see Environment).
 - `summary.md`: the tables described below.
 
+## Running on a dedicated EC2 instance
+
+`aws/` is a separate Go module that runs every session on one on-demand
+instance and leaves the results in a private S3 bucket
+(`cd benchi/archv2-gate/aws && go run . launch|status|cleanup`). The package doc in
+`aws/main.go` lists what it creates. The instance halts and terminates itself
+at a hard cap, has no ingress, and gets no credentials in user data. A cloud VM
+is virtualized and shares hardware, so its results are an early read, not gate
+evidence, unless the gate's environment rules are met.
+
 ## Reading the summary
 
 - **A/A floor** is the largest per-round |delta| between the two replicates of
