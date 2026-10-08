@@ -1,0 +1,20 @@
+version: "2.2"
+pipelines:
+  - id: base64-decode-pipeline
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:file"
+        settings:
+          path: /data/input-base64.txt
+      - id: destination
+        type: destination
+        plugin: "builtin:file"
+        settings:
+          path: /data/output-decoded.txt
+    processors:
+      - id: decode-base64
+        plugin: "base64.decode"
+        settings:
+          field: .Payload.After

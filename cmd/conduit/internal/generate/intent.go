@@ -15,7 +15,6 @@
 package generate
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -99,39 +98,6 @@ var connectorAliases = map[string]string{
 	connGenerator: connGenerator,
 }
 
-// capabilityPhrases maps prompt wording to a capability.go tag. Only phrases
-// that unambiguously name a transform are listed: "only orders over $100"
-// clearly asks for a filter, while "clean up the data" asks for nothing this
-// table can name, and inventing a requirement from it would fail candidates
-// that were perfectly correct.
-//
-// Every tag must exist in capabilityProcessors — TestCapabilityPhrases_
-// ResolveToRealTags fails otherwise, since an unknown tag is permanently
-// unsatisfiable (capability.go) and would make every candidate fail.
-var capabilityPhrases = map[string]string{
-	"only":         capFilter,
-	capFilter:      capFilter, // the word people use IS the tag
-	"where":        capFilter,
-	"exclude rows": capFilter,
-	"as json":      capJSONEncode,
-	"to json":      capJSONEncode,
-	"json encoded": capJSONEncode,
-	"parse json":   capJSONDecode,
-	"decode json":  capJSONDecode,
-	"as avro":      capAvroEncode,
-	"avro encoded": capAvroEncode,
-	"decode avro":  capAvroDecode,
-	capMask:        capMask,
-	"redact":       capMask,
-	capRename:      capRename,
-	"base64":       capBase64Encode,
-	"debezium":     capUnwrapDebezium,
-	"embedding":    capEmbed,
-	"embeddings":   capEmbed,
-	"summarize":    capTextgen,
-	capWebhook:     capWebhook,
-}
-
 // sourceCues and destinationCues are the directional words that assign a
 // mentioned connector to a role.
 var (
@@ -209,7 +175,7 @@ func ExtractIntent(prompt string, names []string) Intent {
 
 	intent.Source = roles[roleSource]
 	intent.Destination = roles[roleDestination]
-	intent.Capabilities = extractCapabilities(lower)
+	intent.Capabilities = extractCapabilities(prompt)
 	return intent
 }
 
@@ -253,23 +219,6 @@ func matchesCue(word string, cues []string) bool {
 		}
 	}
 	return false
-}
-
-// extractCapabilities returns every capability tag the prompt clearly asks
-// for, sorted and deduplicated so the same prompt always yields the same
-// expectation.
-func extractCapabilities(lowerPrompt string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for phrase, tag := range capabilityPhrases {
-		if seen[tag] || !strings.Contains(lowerPrompt, phrase) {
-			continue
-		}
-		seen[tag] = true
-		out = append(out, tag)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // promptMentionsConnector reports whether prompt names the given catalog

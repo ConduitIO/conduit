@@ -1,0 +1,22 @@
+version: "2.2"
+pipelines:
+  - id: kafka-to-s3-archive
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:kafka"
+        settings:
+          servers: "localhost:9092"
+          topics: "my-topic"
+          groupID: "conduit-s3-archive"
+      - id: destination
+        type: destination
+        plugin: "builtin:s3"
+        settings:
+          aws.accessKeyId: TODO
+          aws.secretAccessKey: TODO
+          aws.bucket: "my-archive-bucket"
+          aws.region: "us-east-1"
+          format: "json"
+          prefix: "kafka-archive"

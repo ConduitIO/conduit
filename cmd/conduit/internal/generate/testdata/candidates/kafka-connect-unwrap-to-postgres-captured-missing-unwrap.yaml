@@ -1,0 +1,19 @@
+version: "2.2"
+pipelines:
+  - id: kafka-to-postgres-upsert
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:kafka"
+        settings:
+          servers: localhost:9092
+          topics: my-topic
+          groupID: conduit-consumer-group
+          readFromBeginning: "true"
+      - id: destination
+        type: destination
+        plugin: "builtin:postgres"
+        settings:
+          url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
+          table: "{{ index .Metadata \"opencdc.collection\" }}"
