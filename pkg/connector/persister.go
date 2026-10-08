@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
@@ -365,29 +366,32 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 }
 
 // flushNow will flush the state to the store.
+//
+// The batch is all-or-nothing: either every connector in it is committed in
+// one transaction and every callback receives nil, or nothing is committed and
+// every callback receives the same non-nil error. There is no third outcome,
+// and every path — including a failure to open the transaction — calls every
+// callback exactly once and closes both of st's channels.
+//
+// Why the whole batch fails when one connector's write fails: whether the
+// transaction is still committable after a failed write depends on the store
+// (badger keeps it usable after ErrTxnTooBig; Postgres aborts it on any
+// statement error), and Persister cannot tell which it has. Committing the
+// rest would need a second transaction; failing the batch is the simple
+// choice that never reports a write as durable when it may not be. The cost
+// is that connectors sharing the batch are failed too, possibly in other
+// pipelines (see #2925 and docs/postmortems/20261007-persister-store-error-ignored.md).
 func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, st *flushState) {
 	defer close(st.writeDone)
 	start := p.clock.Now()
 
-	tx, ctx, err := p.db.NewTransaction(ctx, true)
+	err := p.writeBatch(ctx, batch)
 	if err != nil {
-		// TODO make sure error is propagated back to the runtime and Conduit shuts down
-		p.logger.Err(ctx, err).Msg("error creating new transaction")
-		return
+		p.logger.Err(ctx, err).
+			Int("count", len(batch)).
+			Msg("failed to persist connector batch; nothing in it was committed and every connector in it is notified")
 	}
 
-	defer tx.Discard()
-	for id, data := range batch {
-		err := data.storeFunc(ctx)
-		if err != nil {
-			p.logger.Err(ctx, err).
-				Str(log.ConnectorIDField, id).
-				Msg("error while saving connector")
-		}
-	}
-	if err == nil {
-		err = tx.Commit()
-	}
 	// Track every callback this flush spawns so WaitPendingWrites can observe
 	// not just "the write landed" but "every side effect the write's callback
 	// performs has also finished" — see flushState.callbacksDone. The
@@ -414,4 +418,50 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 		Int("count", len(batch)).
 		Dur(log.DurationField, p.clock.Now().Sub(start)).
 		Msg("persisted connectors")
+}
+
+// writeBatch stores every connector in batch in a single transaction and
+// commits it. It returns nil only if the commit succeeded; on any error
+// nothing has been committed.
+//
+// Invariant 1: a source's PersistCallback releases its deferred upstream ack
+// (see Source.onPersistFlushed), so this must never return nil for a batch
+// that did not durably land — any storeFunc error aborts the commit.
+// Invariant 2: a position is never reported stored when it was not, so the
+// stored position stays the one a restart can safely resume from.
+// Invariant 3: the failure reaches every callback, never only a log line.
+//
+// Every error it returns carries CodeConnectorStatePersistFailed.
+func (p *Persister) writeBatch(ctx context.Context, batch map[string]persistData) error {
+	tx, txCtx, err := p.db.NewTransaction(ctx, true)
+	if err != nil {
+		return statePersistError("failed to create transaction for connector batch", err)
+	}
+	// Discard after a successful Commit is a no-op (database.Transaction
+	// contract); on every error path it is what drops the partial writes.
+	defer tx.Discard()
+
+	var errs []error
+	for id, data := range batch {
+		if err := data.storeFunc(txCtx); err != nil {
+			errs = append(errs, cerrors.Errorf("connector %q: %w", id, err))
+		}
+	}
+	if len(errs) > 0 {
+		return statePersistError("failed to store connector batch, transaction discarded", cerrors.Join(errs...))
+	}
+	if err := tx.Commit(); err != nil {
+		return statePersistError("failed to commit connector batch", err)
+	}
+	return nil
+}
+
+// statePersistError wraps cause as a CodeConnectorStatePersistFailed error.
+// The message includes the cause's text because ConduitError.Error() returns
+// only its own message, and operators need the store's error (and the
+// failing connector IDs) in the one line they see.
+func statePersistError(msg string, cause error) error {
+	err := conduiterr.Wrap(CodeConnectorStatePersistFailed, msg+": "+cause.Error(), cause)
+	err.Suggestion = statePersistSuggestion
+	return err
 }

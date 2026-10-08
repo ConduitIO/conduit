@@ -157,6 +157,19 @@ type Source struct {
 	// (plugin genuinely running), an exhausted retry escalates loudly, which
 	// is safe because the node is reading errs. See deliverOneAck.
 	tearingDown atomic.Bool
+	// persistErrs delivers persister failures to errs without ever blocking
+	// a persister callback forever (see persistErrReporter). It is stopped
+	// when Teardown starts and when Open fails after registering a persist.
+	// Created in Instance.Connector.
+	persistErrs *persistErrReporter
+	// pendingPersistErr holds persist failures that could not be delivered
+	// on errs (persistErrs stopped), so Teardown can return them instead of
+	// reporting a clean stop. pendingPersistErrSeq is the durableAckSeq a
+	// later successful flush must reach to supersede them: that flush stored
+	// a later cumulative state, so the failure no longer leaves anything
+	// undurable and is cleared. Both guarded by ackMu.
+	pendingPersistErr    error
+	pendingPersistErrSeq uint64
 
 	// teardownFlushTimeout overrides DefaultTeardownFlushTimeout for
 	// Teardown's bounded flush wait. Zero (the production default — this
@@ -210,6 +223,10 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	defer func() {
 		// ensure the plugin gets torn down if something bad happens
 		if err != nil {
+			// The node does not call Teardown after a failed Open, so nothing
+			// will read errs: a lifecycle-event persist registered below
+			// must not block its persister callback on it (#2925).
+			s.persistErrs.stop()
 			_, tdErr := s.plugin.Teardown(ctx, pconnector.SourceTeardownRequest{})
 			if tdErr != nil {
 				s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
@@ -232,9 +249,15 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		// when a lifecycle event is successfully triggered we consider the config active
 		s.Instance.LastActiveConfig = s.Instance.Config
 		// persist connector in the next batch to store last active config
+		// Any flush registered after this one stores the whole instance
+		// (including LastActiveConfig), so the first Ack flush supersedes a
+		// failure of this one.
+		s.ackMu.Lock()
+		supersededAt := s.nextAckSeq + 1
+		s.ackMu.Unlock()
 		err := s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 			if err != nil {
-				s.errs <- err
+				s.reportPersistError(supersededAt, err)
 			}
 		})
 		if err != nil {
@@ -344,6 +367,12 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 // outcome: at worst a benign duplicate on the next run (the position may
 // not have reached disk yet, so a restart simply re-delivers it), never a
 // gap.
+//
+// Teardown returns an error if a position write reported to this source
+// failed after teardown began (see reportPersistError), even when the plugin
+// itself tore down cleanly: the final positions are then not durable and
+// their acks were withheld, so the stop was not clean (#2925). A failure
+// reported after the bounded flush wait gave up is logged only.
 func (s *Source) Teardown(ctx context.Context) error {
 	// Signal the deferred-ack delivery goroutine that we are tearing down,
 	// before any wait below. From here on it will still retry a transient send
@@ -352,6 +381,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// teardown, so an escalation there would deadlock the goroutine. See the
 	// tearingDown field doc and deliverOneAck.
 	s.tearingDown.Store(true)
+	s.persistErrs.stop()
 
 	s.Instance.Lock()
 	if s.plugin == nil {
@@ -377,7 +407,11 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// before we cancel the stream and tear the plugin down. deadline anchors
 	// that single budget.
 	deadline := time.Now().Add(timeout)
-	s.Instance.persister.Flush(ctx)
+	// Flush with a detached context, as ConnectorStopped does: ctx is the
+	// connector context, which a force-stop cancels, and a canceled context
+	// would fail NewTransaction on a ctx-aware store and with it every
+	// connector sharing the batch. The wait below still honors ctx.
+	s.Instance.persister.Flush(context.Background())
 	if err := s.Instance.persister.WaitPendingWritesContext(ctx, timeout); err != nil {
 		// Bounded-wait fallback (see doc comment above): proceed with
 		// teardown rather than hang. The deferred ack for whatever is still
@@ -455,8 +489,21 @@ func (s *Source) Teardown(ctx context.Context) error {
 	s.Instance.connector = nil
 	s.Instance.persister.ConnectorStopped()
 
+	// A final position write that failed during teardown (reportPersistError)
+	// means the stop was not clean: the last positions are not durable and
+	// their acks were withheld. Report it rather than a successful teardown.
+	s.ackMu.Lock()
+	persistErr := s.pendingPersistErr
+	s.ackMu.Unlock()
+	if persistErr != nil {
+		persistErr = cerrors.Errorf("failed to persist source connector position during teardown: %w", persistErr)
+	}
+
 	if err != nil {
-		return cerrors.Errorf("could not tear down source connector plugin: %w", err)
+		return cerrors.Join(cerrors.Errorf("could not tear down source connector plugin: %w", err), persistErr)
+	}
+	if persistErr != nil {
+		return persistErr
 	}
 
 	s.Instance.logger.Info(ctx).Msg("source connector plugin successfully torn down")
@@ -576,12 +623,13 @@ func (s *Source) Ack(ctx context.Context, p []opencdc.Position) error {
 // double-send and never a gap.
 func (s *Source) onPersistFlushed(seq uint64, err error) {
 	if err != nil {
-		// Durability failed: propagate so the runtime can fail the
-		// connector/pipeline, exactly as before this fix. Invariant 1: never
-		// ack the plugin for a write that did not durably land — the queued
-		// positions stay queued; there is nothing safe to send, and this
-		// connector is on its way down regardless.
-		s.errs <- err
+		// Invariant 1: never ack the plugin for a write that did not durably
+		// land. The queued positions stay queued and are not handed to the
+		// delivery goroutine. A later successful flush of this connector
+		// writes its cumulative (later) position, which covers these seqs, so
+		// releasing them then is safe; until then nothing is sent.
+		// Invariant 3: the failure is surfaced, not dropped (#2925).
+		s.reportPersistError(seq, err)
 		return
 	}
 
@@ -589,6 +637,11 @@ func (s *Source) onPersistFlushed(seq uint64, err error) {
 	s.ackMu.Lock()
 	if seq > s.durableAckSeq {
 		s.durableAckSeq = seq
+	}
+	if s.pendingPersistErr != nil && s.durableAckSeq >= s.pendingPersistErrSeq {
+		// A later cumulative state landed; the earlier failure no longer
+		// leaves anything undurable (see reportPersistError).
+		s.pendingPersistErr = nil
 	}
 	i := 0
 	for ; i < len(s.pendingAcks) && s.pendingAcks[i].seq <= s.durableAckSeq; i++ {
@@ -613,6 +666,36 @@ func (s *Source) onPersistFlushed(seq uint64, err error) {
 	if appended {
 		s.signalDelivery()
 	}
+}
+
+// reportPersistError surfaces a failed position/state write for this source.
+// While the plugin is running it sends err on errs, which the source node
+// reads and turns into a pipeline failure. Once persistErrs is stopped
+// (teardown started, or Open failed) nothing reads errs, so the error is
+// kept for Teardown to return, unless a flush that reached supersededAt has
+// already landed since. It never blocks forever: it runs inside a persister
+// callback (see persistErrReporter).
+//
+// Invariant 3: a failed position write is surfaced, never dropped silently,
+// while it still leaves positions undurable.
+func (s *Source) reportPersistError(supersededAt uint64, err error) {
+	if s.persistErrs.send(err) {
+		return
+	}
+	s.ackMu.Lock()
+	superseded := s.durableAckSeq >= supersededAt
+	if !superseded {
+		s.pendingPersistErr = cerrors.Join(s.pendingPersistErr, err)
+		s.pendingPersistErrSeq = max(s.pendingPersistErrSeq, supersededAt)
+	}
+	s.ackMu.Unlock()
+	if superseded {
+		s.Instance.logger.Warn(context.Background()).Err(err).
+			Msg("source connector position write failed, but a later write has already landed; nothing is left undurable")
+		return
+	}
+	s.Instance.logger.Err(context.Background(), err).
+		Msg("failed to persist source connector position while stopping; its pending acks were not sent to the plugin")
 }
 
 // signalDelivery wakes the deferred-ack delivery goroutine without blocking.

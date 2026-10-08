@@ -170,4 +170,11 @@
 // last commit, which for a real Debezium-Postgres connector is not
 // guaranteed. See the PR description's failure-mode analysis for the full
 // walk of the ack->commit->persist sequence and what each crash point does.
+//
+// Store fault injection (storefault_test.go, store_fault.go, #2925): the
+// child can wrap its badger DB so connector-state writes start failing after
+// a set number (childConfig.storeFailAfter). That covers the one failure the
+// crash scenarios above cannot: a position write that fails while the
+// process stays up. The acks for that write must be withheld, so a SIGKILL
+// and restart afterwards still finds no gap against a pruning upstream.
 package chaos

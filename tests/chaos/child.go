@@ -49,6 +49,7 @@ const (
 	envPaceMS         = "CONDUIT_CHAOS_PACE_MS"
 	envPersistDelayMS = "CONDUIT_CHAOS_PERSIST_DELAY_MS"
 	envHoldAt         = "CONDUIT_CHAOS_HOLD_AT"
+	envStoreFailAfter = "CONDUIT_CHAOS_STORE_FAIL_AFTER"
 	envTotal          = "CONDUIT_CHAOS_TOTAL"
 	envSnapshotK      = "CONDUIT_CHAOS_SNAPSHOT_K"
 	envSnapshotPaceMS = "CONDUIT_CHAOS_SNAPSHOT_PACE_MS"
@@ -169,6 +170,12 @@ type childEnv struct {
 	// (source.go:249-326) explicitly, rather than tearing down at the
 	// natural end of a total-bounded run. See sigterm_test.go.
 	sigtermMode bool
+
+	// storeFailAfter: store fault injection (storefault_test.go, #2925). 0
+	// (the default) disables it. N > 0 lets the first N connector-state
+	// writes reach badger and fails every later one, the way badger fails a
+	// write with ErrTxnTooBig while leaving the transaction committable.
+	storeFailAfter int
 }
 
 // parseChildEnv reads and validates the child's environment. Any failure
@@ -203,6 +210,15 @@ func parseChildEnv() childEnv {
 		os.Exit(exitBadArgs)
 	}
 	cfg.holdAt = holdAt
+
+	if v := os.Getenv(envStoreFailAfter); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %q\n", markerFatal, envStoreFailAfter, v)
+			os.Exit(exitBadArgs)
+		}
+		cfg.storeFailAfter = n
+	}
 
 	total, err := strconv.ParseUint(os.Getenv(envTotal), 10, 64)
 	if err != nil {
@@ -387,9 +403,13 @@ type childBuilt struct {
 func buildChild(ctx context.Context, cfg childEnv) (*childBuilt, error) {
 	logger := log.New(zerolog.Nop()) // keep stdout clean; it is our progress-line channel
 
-	db, err := badger.New(zerolog.Nop(), cfg.dbDir)
+	bdb, err := badger.New(zerolog.Nop(), cfg.dbDir)
 	if err != nil {
 		return nil, fmt.Errorf("open badger db: %w", err)
+	}
+	var db database.DB = bdb
+	if cfg.storeFailAfter > 0 {
+		db = &storeFaultDB{DB: bdb, allowed: int64(cfg.storeFailAfter)}
 	}
 
 	persistDelay := effectivePersistDelay(cfg)
