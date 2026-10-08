@@ -1,0 +1,38 @@
+schemaVersion: 1
+requestID: s3-to-file-backup
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:40:49.886252Z
+corpusPromptSHA256: 7edab0b029f06e95f695b6056e047af5476ea847573809286393200cc7f816a3
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: 7edab0b029f06e95f695b6056e047af5476ea847573809286393200cc7f816a3
+      tokensUsed: 5698
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: s3-to-file-backup
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:s3"
+                settings:
+                  aws.bucket: TODO
+                  aws.region: TODO
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  prefix: ""
+                  pollingPeriod: 1s
+              - id: destination
+                type: destination
+                plugin: "builtin:file"
+                settings:
+                  path: /data/backup/s3-objects
+        ```
+outcome:
+    validatePass: true
+    semanticMatch: true

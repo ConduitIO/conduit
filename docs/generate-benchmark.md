@@ -1,14 +1,10 @@
 # `conduit generate` benchmark corpus and eval harness
 
-**Status: design-only path deliverable for v0.19.** `conduit generate` itself is not implemented
-in v0.19 — the command build is deferred to v0.20+ (the v0.19 build slot went to the Python
-connector SDK; see `docs/design-documents/20260722-conduit-generate.md`'s Status section). What
-ships now is this document, the committed benchmark corpus, and a scoring harness proven correct
-against fixture data — so that when `generate` is built, the acceptance bar it must clear is
-already frozen and reviewable, not invented mid-implementation.
-
-No LLM provider client ships with this harness. It scores whatever candidate pipeline YAML it's
-given; it never calls a model itself.
+This document describes the corpus `conduit generate` is measured against, the two metrics it is
+scored on, how both eval jobs run in CI, and the latest measured numbers. The acceptance bar was
+frozen in v0.19, before the command existed, so it could not be tuned to whatever the first
+implementation happened to produce. The scorer itself never calls a model; the eval jobs below
+produce the candidates it scores.
 
 ## Where things live
 
@@ -18,9 +14,14 @@ given; it never calls a model itself.
 | Scoring harness (Go) | `cmd/conduit/internal/generate/*.go` |
 | Fixture tests proving the harness is correct | `cmd/conduit/internal/generate/score_test.go` |
 | Fixture candidate pipelines (good and bad, by hand) | `cmd/conduit/internal/generate/testdata/candidates/` |
+| Committed provider transcripts (replay corpus) | `cmd/conduit/internal/generate/testdata/transcripts/<provider>/<model>/` |
+| Replay golden | `cmd/conduit/internal/generate/testdata/replay_expected.json` |
+| PR replay job | `.github/workflows/generate-eval.yml` (`TestReplayEval`) |
+| Scheduled live job | `.github/workflows/generate-eval-live.yml` (`TestLiveEval`) |
+| Transcript capture | `.github/workflows/generate-capture.yml` (`TestCaptureTranscripts`) |
 
 This file is a rendering of the corpus for human review. If the two ever disagree, the YAML file
-is correct — it's what `generate.LoadRequests` and the future CI/scheduled eval job actually read.
+is correct — it's what `generate.LoadRequests` and both eval jobs actually read.
 
 ## The two metrics — always reported separately
 
@@ -44,13 +45,62 @@ Both numbers are **medians over >= 3 repeated runs**, never best-of — the same
 CLAUDE.md requires of `benchi` throughput claims, applied here to model-output scoring
 (`ScoreMedian` in `score.go`).
 
-**This PR reports no live scores.** There is no provider integration yet, so there is nothing to
-run the harness against in production. What's proven here is that the harness itself is correct:
-given a known-good candidate it scores both metrics true, and given each specific way a candidate
-can go wrong (bad schema, wrong connector, dropped filter, swapped direction, a fabricated/unknown
-plugin) it scores false on exactly the axis that's wrong — see `score_test.go`. When v0.20 wires up
-a provider, running it against this same corpus and reporting the resulting medians into this file
-is the first real eval run.
+The harness itself is proven against fixtures: given a known-good candidate it scores both metrics
+true, and given each specific way a candidate can go wrong (bad schema, wrong connector, dropped
+filter, swapped direction, a fabricated/unknown plugin) it scores false on exactly the axis that's
+wrong — see `score_test.go`.
+
+A third number is reported beside the two, never in place of either: **Generate OK**, whether
+`Generate` itself returned a candidate. That is the command's own verdict — validate plus its
+prompt-derived intent judge — and it can disagree with the corpus verdict, which is scored against
+committed ground truth. Where they disagree, the judge accepted a pipeline the corpus rejects (or
+the reverse), and that is a finding about the judge.
+
+## How it runs in CI
+
+**Replay, every PR** (`generate-eval (replay)`). The committed transcripts are replayed through the
+real `Generate` loop — extraction, `validate.RunBytes` with the shipped options, the intent judge,
+retry feedback — and the scored result is byte-compared against `replay_expected.json`. The job
+runs three times in random request order and the three outputs must be identical. It never calls a
+provider: the only provider the test can construct is a replay, the job carries no provider
+configuration (and the test fails if it finds any), and the test binary runs as a user whose
+outbound traffic is rejected at the OS level, with a positive control proving the block before
+the run. The job is not path-filtered. It is advisory today, not a required check.
+
+Replay measures Conduit's code against frozen model output. A golden diff means a code change
+moved a request's verdict; regenerate the golden in the same PR if the change is intended
+(`CONDUIT_GENERATE_REPLAY_UPDATE=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/`).
+Transcripts captured against an older system prompt or connector catalog still replay and are
+flagged as stale warnings, never failures.
+
+**Live, weekly** (`generate-eval (live)`, Mondays 06:00 UTC, also manually dispatchable). The
+corpus runs against the live Anthropic model, three passes, and the job publishes medians,
+per-category and per-request tables as the run summary and a `result.json` artifact. It has no PR
+trigger, read-only permissions, and a fork guard. A median under either floor turns the run red. A
+transport failure (no response after two retries) discards the whole pass; a majority of discarded
+passes is `INCONCLUSIVE` and reports no numbers. Cost is about $1 per pass at list price.
+
+## Latest numbers
+
+Measured 2026-10-08 against `anthropic/claude-sonnet-5`, 28 requests, three passes each, two
+independent runs (the transcript capture and a `TestLiveEval` run):
+
+| Run | Validate pass (median) | Semantic match (median) | Generate OK (median) | Per-pass semantic |
+| --- | ---: | ---: | ---: | --- |
+| Capture | 100.0% (28/28) | 67.9% (19/28) | — | 19, 19, 18 of 28 |
+| Live eval | 100.0% (28/28) | 64.3% (18/28) | 82.1% (23/28) | 17, 18, 18 of 28 |
+
+**Validate pass clears its 90% floor. Semantic match misses its 70% floor in both runs,** by one to
+two requests. In the live run every semantic miss is the same failure: the model writes a valid
+source and destination and leaves out the processor the request asked for. Pooled over the three
+passes, requests that need no processor score 45/45 and requests that need at least one score
+8/39. The `convert`, `mask`, `set`, `split` and `unwrap-kafkaconnect` processors never appeared.
+
+Generate OK sits well above semantic match because the intent judge accepts most of those
+pipelines: for `mask`, `set`, `split`, `convert` and `unwrap-kafkaconnect` it passed 3/3 while the
+corpus failed 3/3. The judge also refuses `file-to-file-base64-decode` (0/3) by demanding a
+`base64-encode` processor for a request to decode. Both are judge findings, separate from model
+quality.
 
 ## How a request is scored
 

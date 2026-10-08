@@ -1,0 +1,88 @@
+schemaVersion: 1
+requestID: postgres-cdc-to-kafka-filtered
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:39:32.987572Z
+corpusPromptSHA256: da623d78e10b1772d0ab2e34004dfce760e6f4ff8aaba4c2423296a56f9420f4
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: da623d78e10b1772d0ab2e34004dfce760e6f4ff8aaba4c2423296a56f9420f4
+      tokensUsed: 5866
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: postgres-orders-to-kafka
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "postgresql://user:TODO@localhost:5432/mydb"
+                  tables: "orders"
+                  cdcMode: auto
+              - id: destination
+                type: destination
+                plugin: "builtin:kafka"
+                settings:
+                  servers: "localhost:9092"
+                  topic: "orders"
+    - "n": 2
+      userPromptSHA256: c87c4cc7c9f9f45af5125675ddaebbdf57bb3d822569ba0df154dbc2ebbe2b61
+      tokensUsed: 7659
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: postgres-to-kafka-orders
+            status: running
+            connectors:
+              - id: orders-source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: TODO
+                  tables: orders
+                  cdcMode: auto
+                  logrepl.publicationName: conduitpub
+                  logrepl.slotName: conduitslot
+              - id: filter-high-value-orders
+                type: processor
+                plugin: "builtin:filter"
+                settings:
+                  condition: ".Payload.After.amount > 100"
+              - id: orders-destination
+                type: destination
+                plugin: "builtin:kafka"
+                settings:
+                  servers: localhost:9092
+                  topic: orders-over-100
+                  acks: all
+    - "n": 3
+      userPromptSHA256: d71b7e88ef5b06570affd191a7d3accfbf7d84f1ace96607cc2965b22b270f91
+      tokensUsed: 6334
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: orders-over-100-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "postgres://user:TODO@localhost:5432/mydb"
+                  tables: "orders"
+                  cdcMode: auto
+              - id: destination
+                type: destination
+                plugin: "builtin:kafka"
+                settings:
+                  servers: "localhost:9092"
+                  topic: "orders-over-100"
+outcome:
+    validatePass: true
+    semanticMatch: false
+    semanticIssues:
+        - missing required capability "filter" (no matching processor present)

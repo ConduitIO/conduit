@@ -1,0 +1,97 @@
+schemaVersion: 1
+requestID: s3-to-log-audit
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:43:50.696514Z
+corpusPromptSHA256: 5ece7008cfc641fe706f593d386e8e1c7c84fda790527b818608208537f66c3f
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: 5ece7008cfc641fe706f593d386e8e1c7c84fda790527b818608208537f66c3f
+      tokensUsed: 5741
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: s3-audit-log-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  aws.region: us-east-1
+                  aws.bucket: TODO
+                  pollingPeriod: 1s
+              - id: destination
+                type: destination
+                plugin: "builtin:log"
+                settings:
+                  level: info
+                  message: "audit: new object read from S3 bucket"
+        ```
+    - "n": 2
+      userPromptSHA256: 9e0a58af6d338b04c29a875d886a23ca062d32337b6ec73e1e8c0ae7e25f9edf
+      tokensUsed: 7978
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: s3-audit-log-pipeline
+            status: running
+            connectors:
+              - id: s3-source
+                type: source
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  aws.region: TODO
+                  aws.bucket: TODO
+                  pollingPeriod: 1s
+                processors:
+                  - id: filter-new-objects
+                    plugin: "builtin:filter"
+                    settings:
+                      condition: '{{ eq .Metadata["opencdc.operation"] "create" }}'
+              - id: audit-log
+                type: destination
+                plugin: "builtin:log"
+                settings:
+                  level: info
+                  message: "audit: new S3 object ingested"
+    - "n": 3
+      userPromptSHA256: 9e0a58af6d338b04c29a875d886a23ca062d32337b6ec73e1e8c0ae7e25f9edf
+      tokensUsed: 6969
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: s3-audit-log
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  aws.region: us-east-1
+                  aws.bucket: my-bucket
+              - id: destination
+                type: destination
+                plugin: "builtin:log"
+                settings:
+                  level: info
+                  message: "audit: new object detected"
+            processors:
+              - id: filter-new-objects
+                plugin: "builtin:filter"
+                settings:
+                  condition: '.Metadata["opencdc.operation"] == "create"'
+outcome:
+    validatePass: true
+    semanticMatch: false
+    semanticIssues:
+        - missing required capability "filter" (no matching processor present)

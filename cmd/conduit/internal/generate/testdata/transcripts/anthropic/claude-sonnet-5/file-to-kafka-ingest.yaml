@@ -1,0 +1,35 @@
+schemaVersion: 1
+requestID: file-to-kafka-ingest
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:40:14.15344Z
+corpusPromptSHA256: 04d6a6c7fd1e70455a63252c5fdefd003cee7d2a3f2e4b4bd678a967741ddb33
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: 04d6a6c7fd1e70455a63252c5fdefd003cee7d2a3f2e4b4bd678a967741ddb33
+      tokensUsed: 5649
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: file-to-kafka-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:file"
+                settings:
+                  path: /data/input.txt
+              - id: destination
+                type: destination
+                plugin: "builtin:kafka"
+                settings:
+                  servers: localhost:9092
+                  topics: my-topic
+                  acks: all
+        ```
+outcome:
+    validatePass: true
+    semanticMatch: true
