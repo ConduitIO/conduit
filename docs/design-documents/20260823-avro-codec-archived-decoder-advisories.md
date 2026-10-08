@@ -352,8 +352,8 @@ the migration PR, and chaos/upgrade tests updated or justified as unaffected (se
    existing `schema`/`schema/avro` suite plus a standalone 14-case cross-codec wire-compatibility
    harness (see "Implementation status") found no divergence beyond the one already known.
 2. `conduit`: bump the `conduit-commons` dependency; verify the built-in Avro processor's
-   acceptance tests and any Avro-specific integration tests pass unchanged. **Not yet done** —
-   separate follow-up PR against `ConduitIO/conduit` once this PR merges.
+   acceptance tests and any Avro-specific integration tests pass unchanged. **In review** — see
+   rollout step 3.
 3. Any other direct `hamba/avro/v2` consumer surfaced by a repo-wide `go mod why` sweep across
    `ConduitIO/*` (the issue's own investigation found `conduit-connector-pgvector` reaching it
    transitively through the SDK's schema support — that path updates automatically once
@@ -474,8 +474,18 @@ surface the "new advisory, no fix" case automatically.
    ceiling is opt-in and `MaxInputSize` defaults to `0` (unlimited), so the default posture was
    unchanged until #279 landed the codec swap and the 1M allocation defaults. An adversarial review
    of a separate remediation plan initially recorded #278 as sufficient; it was not.
-3. **Not started.** Bump `conduit`'s `conduit-commons` dependency; run the built-in Avro processor's
-   acceptance tests and any Avro-touching integration/chaos suites. **Unblocked** — step 2 is merged.
+3. **In review (targets v0.20.1).** `conduit-commons` v0.7.0 tagged 2026-10-08 at main `ea740f01`;
+   conduit bumped to it in the `build/commons-v0.7.0` PR, with a regression test that a
+   >1,000,000-element array or map fails `avro.decode` with an error (and a declared-but-absent count
+   is rejected without allocating). A cross-codec check re-run for that PR (19 cases, v0.6.0 vs
+   v0.7.0) found byte-identical encodings and identical decoded values in both directions, except
+   the known `[]any(nil)` → `[]any{}`. The three advisories stay reachable in conduit through the
+   built-in `conduit-connector-postgres` v0.14.2, which imports `hamba/avro/v2` directly; they clear
+   with step 4.
+   Two corrections found while doing this step: v0.7.0 is not purely additive (`Builder.AddField`
+   and `Builder.Build` now use the fork's types, and `Parse`/`SerdeForType` gained `...Option`,
+   which breaks function-typed variables); and the fork's `go.mod` lists its lint tools, which
+   broke `go mod tidy` in conduit until `evolviconf` v0.1.1 (no `tools.go`) was required.
 4. **Not started.** Repo-wide `go mod why -m github.com/hamba/avro/v2` sweep across `ConduitIO/*`
    to confirm no other direct consumer was missed. Blocked on step 3.
 5. No feature flag — this is a dependency substitution behind an unchanged API, not a new

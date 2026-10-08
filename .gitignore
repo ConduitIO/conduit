@@ -84,3 +84,7 @@ __pycache__/
 # lychee's link-check result cache (.github/workflows/link-check.yml); written
 # when the check is run locally, restored from the Actions cache in CI.
 .lycheecache
+
+# Golden databases for the storage-engine upgrade gate (tests/upgrade/storecompat).
+!tests/upgrade/storecompat/testdata/*/conduit.db
+!tests/upgrade/storecompat/testdata/*/conduit.db/**

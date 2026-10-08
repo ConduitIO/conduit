@@ -87,6 +87,10 @@ and decodes the payload. The schema is cached locally after it's first downloade
 
 If the processor encounters structured data or the data can't be decoded it returns an error.
 
+Arrays and maps are limited to 1,000,000 elements each. A payload that declares more fails to decode
+with an error naming ` + "`MaxSliceAllocSize`" + ` or ` + "`MaxMapAllocSize`" + `; it is never truncated. The failed record
+goes to the pipeline's dead-letter queue or stops the pipeline, depending on the DLQ configuration.
+
 This processor is the counterpart to [` + "`avro.encode`" + `](/docs/using/processors/builtin/avro.encode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
