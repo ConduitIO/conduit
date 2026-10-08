@@ -85,6 +85,53 @@ func TestRestoreRedactedSettings(t *testing.T) {
 	}
 }
 
+func TestRestoreRedactedSettingsForPlugin(t *testing.T) {
+	stored := map[string]string{"password": "s3cret", "host": "db"}
+
+	t.Run("same plugin restores", func(t *testing.T) {
+		is := is.New(t)
+		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored,
+			map[string]string{"password": log.Redacted, "host": "evil"}, "/config/settings")
+		is.NoErr(err)
+		is.Equal(got, map[string]string{"password": "s3cret", "host": "evil"})
+	})
+
+	for _, newPlugin := range []string{"builtin:http", "builtin:pg@v0.2.0", ""} {
+		t.Run("plugin change refuses *** ("+newPlugin+")", func(t *testing.T) {
+			is := is.New(t)
+			got, err := restoreRedactedSettingsForPlugin("builtin:pg", newPlugin, stored,
+				map[string]string{"password": log.Redacted, "host": log.Redacted, "port": "1"}, "/dlq/settings")
+			is.True(got == nil)
+			ce, ok := conduiterr.Get(err)
+			is.True(ok)
+			is.Equal(ce.Code, CodeRedactedSettingPluginChanged)
+			is.True(strings.Contains(ce.Message, `"host", "password"`))
+			is.True(strings.Contains(ce.Message, `"builtin:pg"`))
+			is.Equal(ce.ConfigPath, "/dlq/settings/host")
+		})
+	}
+
+	t.Run("plugin change with real values is fine", func(t *testing.T) {
+		is := is.New(t)
+		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:http", stored,
+			map[string]string{"url": "http://x"}, "/config/settings")
+		is.NoErr(err)
+		is.Equal(got, map[string]string{"url": "http://x"})
+	})
+}
+
+func TestRefuseRedactedSettings(t *testing.T) {
+	is := is.New(t)
+	is.NoErr(RefuseRedactedSettings(nil, "/config/settings"))
+	is.NoErr(RefuseRedactedSettings(map[string]string{"a": "a***"}, "/config/settings"))
+
+	err := RefuseRedactedSettings(map[string]string{"a": "x", "b": log.Redacted}, "/connectors/2/settings")
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeRedactedSettingWithoutStoredValue)
+	is.Equal(ce.ConfigPath, "/connectors/2/settings/b")
+}
+
 func TestRestoreRedactedSettings_NoStoredValue(t *testing.T) {
 	is := is.New(t)
 	stored := map[string]string{"host": "db"}
