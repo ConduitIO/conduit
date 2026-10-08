@@ -133,9 +133,10 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 	switch i.Type {
 	case TypeSource:
 		return &Source{
-			Instance:  i,
-			dispenser: pluginDispenser,
-			errs:      make(chan error),
+			Instance:        i,
+			dispenser:       pluginDispenser,
+			errs:            make(chan error),
+			teardownStarted: make(chan struct{}),
 		}, nil
 	case TypeDestination:
 		return &Destination{
