@@ -8,12 +8,13 @@ conduit pipelines init --template postgres-s3
 conduit run
 ```
 
-> **S3-compatible stores (MinIO, Ceph, …):** the current `s3` connector hits a
-> `MalformedXML` 400 against non-AWS S3 because of aws-sdk-go-v2's default request
-> checksum. Until [issue #963](https://github.com/ConduitIO/conduit-connector-s3/issues/963)
-> is fixed, set `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` (and
-> `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required`) in the Conduit environment.
-> Real AWS S3 is unaffected.
+> **S3-compatible stores (MinIO, Ceph, …):** uncomment `aws.endpoint` and
+> `aws.pathStyle` in the scaffolded file and set `aws.endpoint` to your store's
+> URL. Most S3-compatible stores do not support virtual-hosted addressing by
+> default; without `aws.pathStyle: true` writes fail with `NoSuchBucket` or
+> `MalformedXML`
+> ([conduit-connector-s3#963](https://github.com/ConduitIO/conduit-connector-s3/issues/963),
+> fixed in s3 connector v0.9.4). Leave both commented for AWS S3.
 
 Requires a reachable Postgres database and an S3 (or S3-compatible) bucket
 with write access — this template has real infrastructure dependencies,
@@ -37,6 +38,8 @@ table in object storage for downstream querying (Athena, Spark, etc.).
 | `builtin:s3` (destination) | `aws.accessKeyId` / `aws.secretAccessKey` | AWS (or S3-compatible) credentials. **Placeholders — must be replaced.** |
 | | `aws.region` | Bucket region. **Placeholder — must be replaced.** |
 | | `aws.bucket` | Destination bucket name. **Placeholder — must be replaced.** |
+| | `aws.endpoint` | Commented out. S3-compatible store URL, e.g. `http://localhost:9000` for MinIO. Empty means the default AWS endpoints. |
+| | `aws.pathStyle` | Commented out. `true` for path-style addressing (`http://endpoint/bucket/key`), which MinIO and most other S3-compatible stores need. |
 | | `format` | `json` — one JSON object per record. (`parquet` is also supported by the connector but not used by this template.) |
 
 ## Runnable example
