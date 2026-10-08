@@ -190,7 +190,7 @@ func joinInts(xs []int64) string {
 func renderSummary(cfg config, results []runResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# archv2-gate: shape %s, session %s\n\n", cfg.Shape, cfg.Session)
-	fmt.Fprintf(&b, "%d rounds, %s warmup discarded, %s window, records counted at the sink. "+
+	fmt.Fprintf(&b, "%d rounds, %s warmup discarded, %s window, records counted at the sink.\n"+
 		"Environment in env.json, every run in runs.csv.\n\n", cfg.Rounds, cfg.Warmup, cfg.Window)
 
 	byArm := map[string][]float64{}
@@ -230,7 +230,8 @@ func renderSummary(cfg config, results []runResult) string {
 		fmt.Fprintf(&b, "- A/A floor from this session, quoted beside it: ±%.1f%%\n\n", maxAbs(aa))
 	}
 
-	b.WriteString("Read this against the A/A floor, not on its own. A difference inside the floor is not " +
+	// Two lines, each under markdownlint's 120-character limit.
+	b.WriteString("Read this against the A/A floor, not on its own. A difference inside the floor is not\n" +
 		"a difference this session can resolve. Rates from different sessions are not comparable.\n")
 	return b.String()
 }
