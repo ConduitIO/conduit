@@ -131,6 +131,10 @@ type Service struct {
 	// is no production code path that can set or read it.
 	testWorkersReleased func(rp *runnablePipeline)
 
+	// statusWriteTimeout overrides the package's statusWriteTimeout when
+	// positive. Zero in production; only this package's tests set it.
+	statusWriteTimeout time.Duration
+
 	// testAfterStopSnapshot, if set, is called by the cleanup goroutine right
 	// after it has read the run's stop request, before it classifies the run.
 	// It lets a test change the request in exactly that window (e.g. a
@@ -2045,13 +2049,57 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// notified OnFailure. The context ignores the tomb's cancellation: a run
 	// that fails right away must not also fail its Running write and log a
 	// spurious persistence failure; its cleanup writes the terminal status
-	// after startupDone either way.
-	err := s.pipelines.UpdateStatus(context.WithoutCancel(ctx), rp.pipeline.ID, pipeline.StatusRunning, "")
-	close(startupDone)
-	if err != nil {
-		s.runningStatusNotPersisted(ctx, rp, err)
-	}
+	// after startupDone either way. See announceRunning for the bound.
+	s.announceRunning(ctx, rp, startupDone)
 	return nil
+}
+
+// statusWriteTimeout bounds how long Start waits for a run's StatusRunning
+// write. The run is live before the write, so the bound only decides when
+// Start returns; it never stops the run. Same value as pkg/lifecycle.
+const statusWriteTimeout = 30 * time.Second
+
+// runningWriteTimeout returns the bound announceRunning applies.
+func (s *Service) runningWriteTimeout() time.Duration {
+	if s.statusWriteTimeout > 0 {
+		return s.statusWriteTimeout
+	}
+	return statusWriteTimeout
+}
+
+// announceRunning writes StatusRunning for rp, whose workers are running, and
+// closes startupDone when the write returns. It returns when the write has
+// returned or after statusWriteTimeout, whichever comes first, so a hung
+// pipeline store cannot hold Start (or a recovery restart) forever. The write
+// carries the same timeout, so backends that honour the context give up too;
+// for one that ignores it (badger) the write goroutine finishes on its own,
+// and the cleanup goroutine, which waits for startupDone, keeps the tomb and
+// Wait from finishing before it does. Mirrors
+// pkg/lifecycle.Service.announceRunning.
+func (s *Service) announceRunning(ctx context.Context, rp *runnablePipeline, startupDone chan struct{}) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.runningWriteTimeout())
+		err := s.pipelines.UpdateStatus(wctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+		cancel()
+		close(startupDone)
+		if err != nil {
+			s.runningStatusNotPersisted(ctx, rp, err)
+		}
+	}()
+
+	timer := time.NewTimer(s.runningWriteTimeout())
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		s.logger.Warn(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Dur(log.DurationField, s.runningWriteTimeout()).
+			Str("code", pipeline.CodeStatusPersistFailed.Reason()).
+			Msg("pipeline status write did not return in time; the run is live and Start returns without waiting for it")
+	}
 }
 
 // runningStatusNotPersisted handles a failed StatusRunning write for a run
