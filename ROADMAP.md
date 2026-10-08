@@ -76,8 +76,9 @@ In priority order:
 Six languages are officially supported, in two tiers. Official SDKs are maintained by the
 project and must pass the same conformance suite in CI.
 
-- **Full tier — Go, Python, TypeScript, Rust:** connectors, processors (WASM in-process and/or gRPC
-  out-of-process), the processor state API, and an embedded client.
+- **Full tier — Go, Python, TypeScript, Rust:** connectors over gRPC (standalone plugins),
+  processors (WASM in-process and/or gRPC out-of-process), the processor state API, and an
+  embedded client.
 - **Enterprise tier — Java, C#:** connectors over gRPC (standalone plugins), processors on the gRPC
   out-of-process runtime including the state API, and an embedded client (generated gRPC bindings
   with a thin hand-written layer). WASM for Java and C# comes only once their component-model
@@ -93,11 +94,18 @@ authors.
 suited to Go, Rust, TypeScript and untrusted logic) or out-of-process over gRPC (needed for Python
 with native libraries such as tokenizers, numpy or model clients, which cannot run in WASM). Both
 runtimes implement the same language-neutral contract — protobuf for gRPC, WIT for the WASM
-component model — including the processor state API.
+component model — including the processor state API. WASM processors today use the existing
+processor ABI; WIT/component-model processors depend on the WASM connector/component host ADR
+planned for v0.23, which supersedes
+[ADR 20260722](docs/architecture-decision-records/20260722-wasm-component-model-deferred.md) in
+part. Connectors in every official language ship over gRPC.
 
 **Parity.** The connector and processor protocols are specified first, bindings are generated per
 language, and a language-neutral conformance suite plus a published parity matrix show what each
-SDK supports. Design doc to follow.
+SDK supports. After a protocol change, full-tier SDKs reach parity within one minor release and
+enterprise-tier SDKs within two; until then the feature is labelled Go-only preview. Protocol spec
+minor versions come at most every other release, and plugin spec v1 includes stable error codes.
+Design: `docs/design-documents/20261008-sdk-parity-and-open-plugin-protocol.md` (#2948).
 
 **Embedding, plainly stated.** True in-process embedding is Go-only. Python, TypeScript, Java, C#
 and other clients manage a local or remote engine over the gRPC control API
@@ -197,6 +205,8 @@ to the next release rather than holding the train.
       ([design](docs/design-documents/20260823-protobuf-schema-support.md))
 - [ ] Python connector SDK GA, with `conduit connector new --lang python`
 - [ ] Python embedded client GA
+- [ ] Before the Python GAs: one merged Python distribution with `conduit.connector` and
+      `conduit.client` namespaces
 - [ ] Go toolchain update across Conduit and the built-in connectors, together with replacing the
       archived Avro library ([design](docs/design-documents/20260823-avro-codec-archived-decoder-advisories.md))
 - [ ] arch-v2 graduation go/no-go against a gate fixed in advance
@@ -234,7 +244,10 @@ to the next release rather than holding the train.
 - [ ] Kafka Connect connector JAR host (preview): an opt-in JVM sidecar over the plugin protocol,
       never inside the engine
 - [ ] MySQL CDC GA
-- [ ] Rust SDK for WASM connectors and processors (preview), with `conduit connector new --lang rust`
+- [ ] Rust SDK (preview): gRPC connectors and WASM processors on the existing processor ABI, with
+      `conduit connector new --lang rust`
+- [ ] ADR: WASM connector/component host choice (supersedes ADR 20260722 in part).
+      WIT/component-model processors depend on it
 - [ ] TypeScript embedded client
 - [ ] Kafka Queues (share groups) source mode
 - [ ] OpenLineage events
@@ -283,7 +296,7 @@ to the next release rather than holding the train.
 - [ ] Schema harmonization across sources
 - [ ] Curated Iceberg output with OpenLineage
 - [ ] Templates such as "unify customers from Postgres, Salesforce and events"
-- [ ] TypeScript connectors (WASM via componentize-js), with `conduit connector new --lang ts`
+- [ ] TypeScript connectors over gRPC, with `conduit connector new --lang ts`
 - [ ] Pipelines-as-code builders in Python and TypeScript
 - [ ] One-call local mode for non-Go embedded clients
 - [ ] Java SDK complete (connectors, processors, state API), with `conduit connector new --lang java`
@@ -341,7 +354,7 @@ Kept on the list, not scheduled in a release yet:
 - docker-compose quickstart
 - `deploy/` examples: docker-compose, systemd, ECS task definition, Nomad job spec (examples, not
   supported products)
-- WASI Preview 2 / component-model adoption for connectors beyond the Rust and TypeScript SDKs
+- WASM connectors and WIT/component-model adoption beyond what the v0.23 host-choice ADR decides
   (deferred by [ADR 20260722](docs/architecture-decision-records/20260722-wasm-component-model-deferred.md))
 - WASM support for Java and C# processors and connectors, once their component-model toolchains
   are production-grade (re-evaluated yearly)
@@ -405,6 +418,10 @@ at fleet scale:** multi-cluster/multi-region federation · SSO/SAML/SCIM, RBAC, 
 lineage, PII policy packs, org-level schema-contract enforcement, compliance reporting ·
 cross-fleet upgrade orchestration, SLA alerting, cost/throughput analytics · support and SLAs ·
 air-gapped and FIPS-hardened distributions
+
+Where the two meet: open source Conduit emits lineage events (OpenLineage) and performs per-pipeline
+PII redaction; the commercial offering is the org-level lineage graph and centrally governed policy
+packs.
 
 **The one-way ratchet:** nothing shipped as open source will ever be moved behind a paywall.
 Commercial features may become open source over time; the reverse never happens.
