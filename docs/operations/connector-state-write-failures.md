@@ -12,7 +12,7 @@ position has committed. See
 The error carries the code `connector.state_persist_failed` and a message containing one of:
 
 ```text
-failed to store connector batch, transaction discarded: connector "<id>": ...
+failed to store connector "<id>", its state was not committed: ...
 failed to create transaction for connector batch: ...
 failed to commit connector batch: ...
 ```
@@ -20,8 +20,13 @@ failed to commit connector batch: ...
 A stopping connector wraps it as `failed to persist source connector position during teardown: ...`
 or `failed to persist destination connector state: ...`.
 
-The Conduit log always has the error line
-`failed to persist connector batch; nothing in it was committed and every connector in it is notified`.
+The Conduit log has one of these error lines:
+
+- `failed to persist connector state; retrying the rest of the batch without it in a new transaction`,
+  with the connector ID, when one connector's write failed;
+- `failed to persist connector batch; nothing in this attempt was committed and every connector in it is notified`,
+  when the transaction could not be opened or committed.
+
 What else you see depends on the pipeline architecture:
 
 - **Default architecture:** the pipeline goes degraded with the error above. A pipeline that was
@@ -34,10 +39,14 @@ What else you see depends on the pipeline architecture:
 
 ## Diagnosis
 
-The batch is all-or-nothing. When one connector's write fails, nothing in that batch is committed
-and every connector in it gets the error, so pipelines other than the one with the bad connector
-can fail at the same moment. The connector ID in the message is the one whose write failed. The
-others were failed because they shared its batch.
+When one connector's write fails, only that connector gets the error. The persister discards the
+transaction and writes the rest of the batch again in a new one, so other connectors, including
+those of other pipelines, are not affected (#2930). The connector ID in the message is the one
+whose write failed.
+
+When the transaction itself could not be opened or committed, the failure is not one connector's,
+and every connector in that attempt gets the error, so several pipelines can fail at the same
+moment.
 
 No data is lost. The failed positions were never acknowledged upstream. After a restart the source
 resumes from its last stored position and re-reads from there, so expect duplicates downstream.
@@ -62,7 +71,8 @@ Common causes:
 - For badger size errors, find the connector named in the message and reduce its state: check its
   settings for large inline values (certificates, schemas) and its position size. If many large
   connectors flush together, a single oversized batch can also be avoided by running them in
-  separate Conduit instances until #2930 lands.
+  separate Conduit instances. When a batch is too big, the connectors whose writes cross the limit
+  fail (the last ones by connector ID) and the rest are committed; the failed ones are retried with
+  their next state change.
 - If the same connector fails on every restart, its state cannot be written at all. Stop that
-  pipeline so it stops failing the batches it shares with others, and report it with the error
-  message.
+  pipeline and report it with the error message.

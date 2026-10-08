@@ -197,8 +197,7 @@ func TestStore_MigratePre041(t *testing.T) {
 	}
 
 	for k, v := range pre041connectors {
-		err := db.Set(ctx, "connector:connector:"+k, []byte(v))
-		is.NoErr(err)
+		is.NoErr(db.Set(ctx, "connector:connector:"+k, []byte(v)))
 	}
 
 	store := NewStore(db, logger)
