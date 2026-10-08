@@ -134,6 +134,7 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
 	plsMock.EXPECT().
 		Update(gomock.AssignableToTypeOf(ctxType), plBefore.ID, newConfig).
 		Return(want, nil)
@@ -153,7 +154,9 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 		ID:     uuid.NewString(),
 		Config: pipeline.Config{Name: "old pipeline"},
 	}
-	plBefore.SetStatus(pipeline.StatusRunning)
+	// The status lags the run: it says stopped while a run is starting or
+	// recovering. Admission is by run liveness (#2899 item 2).
+	plBefore.SetStatus(pipeline.StatusUserStopped)
 
 	newConfig := pipeline.Config{Name: "new pipeline"}
 
@@ -161,6 +164,7 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
 	is.Equal(got, nil)
@@ -212,6 +216,7 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
 	plsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(nil)
@@ -229,12 +234,15 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	plBefore := &pipeline.Instance{
 		ID: uuid.NewString(),
 	}
-	plBefore.SetStatus(pipeline.StatusRunning)
+	// The status lags the run: it says stopped while a run is starting or
+	// recovering. Admission is by run liveness (#2899 item 2).
+	plBefore.SetStatus(pipeline.StatusUserStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
@@ -282,6 +290,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, ErrPipelineHasProcessorsAttached)) // sentinel still in the chain
@@ -308,6 +317,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, ErrPipelineHasConnectorsAttached)) // sentinel still in the chain
@@ -460,4 +470,30 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)
 	is.True(cerrors.Is(err, wantErr))
 	is.Equal(got, nil)
+}
+
+// TestPipelineOrchestrator_Delete_StatusRunningNoRun pins that Delete does
+// not read the status (#2899 item 2): a pipeline whose status says Running
+// but which has no run is not refused.
+func TestPipelineOrchestrator_Delete_StatusRunningNoRun(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+
+	plBefore := &pipeline.Instance{
+		ID: uuid.NewString(),
+	}
+	plBefore.SetStatus(pipeline.StatusRunning)
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	plsMock.EXPECT().
+		Delete(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(nil)
+
+	is.NoErr(orc.Pipelines.Delete(ctx, plBefore.ID))
 }

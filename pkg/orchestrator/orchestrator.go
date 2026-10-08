@@ -135,4 +135,7 @@ type LifecycleService interface {
 	// It is allowed to execute a force stop even after a graceful stop was
 	// requested.
 	Stop(ctx context.Context, pipelineID string, force bool) error
+	// IsActive reports whether the pipeline has a run that is starting,
+	// live, or waiting out a recovery backoff, regardless of its status.
+	IsActive(pipelineID string) bool
 }

@@ -44,6 +44,12 @@ var (
 	// run is drained before positions are flushed and the database is closed.
 	// Unavailable: retry against the instance after it restarts.
 	CodeShuttingDown = conduiterr.Register("pipeline.shutting_down", codes.Unavailable)
+	// CodePipelineStopping is raised when a pipeline start is refused because
+	// the pipeline's previous run has stopped but is still writing its
+	// terminal status. Starting a new run in that window would let the old
+	// run's status overwrite the new run's. Unavailable: retry the start
+	// shortly; the window lasts until one status write completes.
+	CodePipelineStopping = conduiterr.Register("pipeline.stopping", codes.Unavailable)
 	// CodeStatusPersistFailed is raised when a pipeline's status could not be
 	// written to the pipeline store. The in-memory status, which the API, the
 	// CLI and the lifecycle read, has already moved; the store still holds
