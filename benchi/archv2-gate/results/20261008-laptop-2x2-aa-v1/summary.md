@@ -1,6 +1,7 @@
 # archv2-gate: shape 2x2, session aa-v1
 
-5 rounds, 20s warmup discarded, 1m0s window, records counted at the sink. Environment in env.json, every run in runs.csv.
+5 rounds, 20s warmup discarded, 1m0s window, records counted at the sink.
+Environment in env.json, every run in runs.csv.
 
 | arm | n | median rec/s | sd % | min | max |
 | --- | --- | --- | --- | --- | --- |
@@ -13,4 +14,5 @@
 - median-to-median delta: -1.1%
 - **A/A floor (largest per-round |delta|): ±7.4%**
 
-Read this against the A/A floor, not on its own. A difference inside the floor is not a difference this session can resolve. Rates from different sessions are not comparable.
+Read this against the A/A floor, not on its own. A difference inside the floor is not
+a difference this session can resolve. Rates from different sessions are not comparable.
