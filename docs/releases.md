@@ -14,7 +14,8 @@ latest Docker image which is not a nightly is tagged with `latest`.
 
 ## Nightly builds
 
-We provide nightly builds (binaries and Docker images) and keep them for 7 days. The latest nightly Docker image is tagged
+We provide nightly builds (binaries and Docker images). The last 5 nightly releases are kept, and nightly Docker images
+for 7 days (see "Nightly image cleanup" below). The latest nightly Docker image is tagged
 with `latest-nightly`.
 
 ## Implementation
@@ -31,6 +32,32 @@ Docker images.
 The "Trigger nightly build" GH action requires a personal access token, and _not_ a GitHub token provided by Actions. The
 reason is that a workflow which produces an event using a GitHub token cannot trigger another workflow through that event.
 For more information, please check [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
+
+### Nightly image cleanup
+
+The `cleanup-nightly-images` job in `trigger-nightly.yml` deletes nightly images whose `vX.Y.Z-nightly.YYYYMMDD` tag
+is more than 7 days old, together with everything attached to them: the per-platform manifests, buildx attestation
+manifests, and the cosign signature and attestation artifacts. GHCR has no OCI referrers API, so cosign stores those
+under a `sha256-<signed digest>` tag that points at an index of Sigstore bundles. That tag does not say "nightly", so
+the planner (`.github/scripts/ghcr_nightly_cleanup.py`) follows digests instead of matching tag names:
+
+- an image is deleted only if **every** tag on it is an expired nightly tag. `latest-nightly`, `latest` or a stable
+  `vX.Y.Z` tag on the same digest keeps it;
+- nothing reachable from a kept image is deleted, so a stable release's signature and attestations are never touched;
+- a `sha256-<digest>` tag whose subject no longer exists in the registry is deleted as an orphan;
+- right before each delete it re-reads the version's live tags and skips it if a tag was added since the plan.
+
+The job is a dry run until the repository variable `GHCR_CLEANUP_APPLY` is `true`; a manual run can also apply with
+the `cleanup-apply` input. Each run writes its plan to the job summary. To see the plan locally (anonymous registry
+access, no token needed):
+
+```sh
+python3 .github/scripts/ghcr_nightly_cleanup.py --image ghcr.io/conduitio/conduit --keep-days 7
+```
+
+Deleting needs a token that can delete versions of the `conduit` package. The job uses `GITHUB_TOKEN` with
+`packages: write`, which requires the repository to have the **Admin** role on the package (package settings, "Manage
+Actions access"). If deletes fail, the job fails and lists the HTTP status of each failed delete.
 
 ## Signatures and SBOMs
 
