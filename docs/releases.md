@@ -32,19 +32,6 @@ The "Trigger nightly build" GH action requires a personal access token, and _not
 reason is that a workflow which produces an event using a GitHub token cannot trigger another workflow through that event.
 For more information, please check [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
-### Pinned release tooling
-
-`release.yml` pins everything that runs with release permissions to an exact version, so a tag builds with the same
-tools the nightlies before it used:
-
-- every action by full commit SHA, with the version in a trailing comment (`uses: owner/action@<sha> # vX.Y.Z`).
-  Dependabot's `github-actions` updates move the SHA and the comment together.
-- GoReleaser by exact version (`version:` input of `goreleaser/goreleaser-action`), and cosign and syft by exact version
-  in their installer steps. Dependabot does not see these; bump them by hand.
-
-Bump a tool in its own PR, never in the run-up to a release tag, and let at least one nightly go green on it before
-tagging. The nightly is the only end-to-end test of the release pipeline.
-
 ## Signatures and SBOMs
 
 Starting with v0.20.0, every release and nightly is signed with [Sigstore](https://www.sigstore.dev/) keyless
@@ -98,6 +85,19 @@ To accept any release or nightly from this repository instead of one exact tag, 
 
 Releases up to and including v0.19.0 and nightlies built before signing landed are not signed; for those only
 `checksums.txt` is available.
+
+## Pinned release tooling
+
+`release.yml` pins everything that runs with release permissions to an exact version, so a tag builds with the same
+tools the nightlies before it used:
+
+- every action by full commit SHA, with the version in a trailing comment (`uses: owner/action@<sha> # vX.Y.Z`).
+  Dependabot's `github-actions` updates move the SHA and the comment together.
+- GoReleaser by exact version (`version:` input of `goreleaser/goreleaser-action`), and cosign and syft by exact version
+  in their installer steps. Dependabot does not see these; bump them by hand.
+
+Bump a tool in its own PR, never in the run-up to a release tag, and let at least one nightly go green on it before
+tagging. The nightly is the only end-to-end test of the release pipeline.
 
 ## How to release
 
