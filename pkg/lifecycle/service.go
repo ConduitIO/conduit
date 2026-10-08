@@ -146,7 +146,7 @@ type Service struct {
 	// statusLocksMu guards the map. A status lock is taken before publishMu,
 	// never after it.
 	statusLocksMu sync.Mutex
-	statusLocks   map[string]*sync.Mutex
+	statusLocks   map[string]*statusLock
 
 	// testBeforeStatusWrite, if set, is called by writeRunStatus before it
 	// takes the status lock. Nil in production.
@@ -198,10 +198,15 @@ type runnablePipeline struct {
 	phase        runPhase
 	superseded   bool
 	supersededCh chan struct{}
-	// abandoned and takeoverErr settle who records a failed takeover
+	// ended and takeoverErr settle who records a failed takeover
 	// (fencing.go). Guarded by publishMu.
-	abandoned   bool
+	ended       *takeoverOutcome
 	takeoverErr error
+	// lastStatus and lastMsg are the last status the cleanup goroutine
+	// wrote (or tried to), kept for a failed takeover (fencing.go). Written
+	// only by the cleanup goroutine.
+	lastStatus pipeline.Status
+	lastMsg    string
 }
 
 // supersede marks rp as taken over by a new Start. publishMu must be held.
@@ -331,8 +336,10 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 		released := s.releaseReservation(pl.ID, res)
 		// R4: a Start that took over a run in recovery and failed leaves the
 		// pipeline with no run; make sure that is recorded (fencing.go).
-		if released && err != nil && res.took != nil && s.takeoverFailed(res.took, err) {
-			s.finishFailedTakeover(ctx, pl.ID, res.took, err)
+		if released && err != nil && res.took != nil {
+			if out := s.takeoverFailed(res.took, err); out != nil {
+				s.recordTakeoverOutcome(ctx, pl.ID, res.took, out, err)
+			}
 		}
 	}()
 
@@ -457,6 +464,17 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 // terminal status instead of a restart.
 var errRecoveryAborted = cerrors.New("recovery aborted: stop requested or shutting down")
 
+// isShuttingDown reports whether StopAll has been called.
+func (s *Service) isShuttingDown() bool {
+	shuttingDown, _ := s.runs.shuttingDown()
+	return shuttingDown
+}
+
+// runStopRequested reports whether a stop was requested for rp.
+func runStopRequested(rp *runnablePipeline) bool {
+	return rp.stop.requested()
+}
+
 // predecessorStopErr is reserve's check for a recovery restart: the run it
 // restarts must not have been asked to stop. publishMu must be held, which
 // is also where Stop records the request.
@@ -499,6 +517,11 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 			// A recovery restart is building. If its build fails, the run
 			// it restarts must end stopped, not degraded.
 			res.predecessor.requestStop(false)
+		}
+		if res.took != nil {
+			// Likewise for a Start that took over a run in recovery: if it
+			// fails, the pipeline ends stopped (fencing.go).
+			res.took.requestStop(false)
 		}
 		s.publishMu.Unlock()
 		return nil
@@ -1353,6 +1376,7 @@ func (s *Service) runningStatusNotPersisted(ctx context.Context, rp *runnablePip
 // The write is bounded by statusWriteTimeout, so on a backend that honours
 // the context a hung store cannot hold the cleanup, and with it Wait, forever.
 func (s *Service) writeStatus(ctx context.Context, rp *runnablePipeline, status pipeline.Status, errMsg string) {
+	rp.lastStatus, rp.lastMsg = status, errMsg
 	wctx, cancel := context.WithTimeout(ctx, s.runningWriteTimeout())
 	defer cancel()
 	// R4: dropped if a newer run owns the pipeline (fencing.go).
@@ -1456,8 +1480,9 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 				// notifications; this run only removes its own entry (a
 				// no-op once the new run is published). If that Start has
 				// already failed, this run records the outcome (fencing.go).
-				if takeoverErr := s.handOver(rp); takeoverErr != nil {
-					s.finishFailedTakeover(ctx, rp.pipeline.ID, rp, takeoverErr)
+				out := takeoverOutcome{abandoned: true, runErr: err}
+				if startErr := s.endSuperseded(rp, out); startErr != nil {
+					s.recordTakeoverOutcome(ctx, rp.pipeline.ID, rp, &out, startErr)
 				}
 				s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 				return err
@@ -1519,6 +1544,14 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 	// class this fix closes. See deleteRunningPipelineIfCurrent.
 	s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
 
+	if !owned {
+		// A Start took the pipeline over while this run was in its backoff.
+		// Keep this run's decision in case that Start fails (fencing.go).
+		out := takeoverOutcome{runErr: err, status: rp.lastStatus, msg: rp.lastMsg, termErr: err, notify: !stoppedWithErr}
+		if startErr := s.endSuperseded(rp, out); startErr != nil {
+			s.recordTakeoverOutcome(ctx, rp.pipeline.ID, rp, &out, startErr)
+		}
+	}
 	if owned && !stoppedWithErr {
 		s.notify(rp.pipeline.ID, err)
 	}
