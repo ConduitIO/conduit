@@ -343,9 +343,16 @@ func validateRunsWholeBeforeFanOut(b *Batch) error {
 		return nil
 	}
 
-	present := make(map[*splitRun]int, len(b.runs))
+	// present is allocated only once a run is found: NewBatch gives every
+	// batch an all-nil runs slice, so an eager map here was an allocation on
+	// every fan-out pass for the common no-split case (#2910). Ranging over a
+	// nil map below is a no-op.
+	var present map[*splitRun]int
 	for _, r := range b.runs {
 		if r != nil {
+			if present == nil {
+				present = make(map[*splitRun]int)
+			}
 			present[r]++
 		}
 	}
