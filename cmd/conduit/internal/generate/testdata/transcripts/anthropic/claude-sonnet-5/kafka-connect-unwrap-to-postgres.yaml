@@ -2,14 +2,64 @@ schemaVersion: 1
 requestID: kafka-connect-unwrap-to-postgres
 provider: anthropic
 model: claude-sonnet-5
-capturedAt: 2026-10-08T02:41:20.445503Z
+capturedAt: 2026-10-08T20:33:14.863746Z
 corpusPromptSHA256: 427a0a164892a01f1be3c0f9caffbed299f34c87aceee871305243ee2d0b6b2b
 systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
 catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
 turns:
     - "n": 1
       userPromptSHA256: 427a0a164892a01f1be3c0f9caffbed299f34c87aceee871305243ee2d0b6b2b
-      tokensUsed: 6019
+      tokensUsed: 6587
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: kafka-connect-to-postgres
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:kafka"
+                settings:
+                  servers: localhost:9092
+                  topics: my-kafka-connect-topic
+                  groupID: conduit-postgres-upsert
+                  readFromBeginning: "true"
+              - id: destination
+                type: destination
+                plugin: "builtin:postgres"
+                settings:
+                  url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
+                  table: "{{ index .Metadata \"opencdc.collection\" }}"
+                  sdk.record.format: opencdc/json
+    - "n": 2
+      userPromptSHA256: dba45f854168d3b92c2dd30a0484ecf322f7b7ad0f17ca3e05a0afb34689442b
+      tokensUsed: 6103
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: kafka-to-postgres-unwrap
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:kafka"
+                settings:
+                  servers: localhost:9092
+                  topics: my_topic
+                  groupID: conduit-consumer-group
+              - id: destination
+                type: destination
+                plugin: "builtin:postgres"
+                settings:
+                  url: postgres://user:TODO@localhost:5432/mydb
+                  table: my_table
+            processors:
+              - id: unwrap-kafka-connect
+                plugin: "kafkaconnect.unwrap"
+                settings: {}
+    - "n": 3
+      userPromptSHA256: dba45f854168d3b92c2dd30a0484ecf322f7b7ad0f17ca3e05a0afb34689442b
+      tokensUsed: 6134
       completionText: |-
         version: "2.2"
         pipelines:
@@ -23,13 +73,16 @@ turns:
                   servers: localhost:9092
                   topics: my-topic
                   groupID: conduit-consumer-group
-                  readFromBeginning: "true"
               - id: destination
                 type: destination
                 plugin: "builtin:postgres"
                 settings:
-                  url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
-                  table: "{{ index .Metadata \"opencdc.collection\" }}"
+                  url: TODO
+                  table: my_table
+            processors:
+              - id: unwrap-kafkaconnect
+                plugin: "builtin:unwrap.kafkaconnect"
+                settings: {}
 outcome:
     validatePass: true
     semanticMatch: true
