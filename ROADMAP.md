@@ -35,9 +35,10 @@ In priority order:
    governance with a public contributor ladder.
 2. **Real languages, no bespoke DSL.** Transformations are code you can test, version, and reuse
    — written in Go, Python, TypeScript, Rust, Java or C# — not a config-language dialect you have
-   to learn.
-   Processors run in-process as WASM, or out-of-process over gRPC when they need native libraries.
-   Prebuilt processors cover the common 90% with zero code.
+   to learn. Processors run in-process as WASM, or out-of-process over gRPC when they need native
+   libraries. Prebuilt processors cover the common 90% with zero code. Established standard query
+   languages (jq, JMESPath, SQL) are allowed as processor parameters; they are never a pipeline
+   configuration language.
 3. **Broker-neutral.** Conduit is Switzerland. Every streaming provider is a peer; none is
    privileged. No broker required at all for point-to-point pipelines.
 4. **Boring to operate.** Single static binary, no JVM, no ZooKeeper, no worker cluster.
@@ -111,6 +112,22 @@ Design: `docs/design-documents/20261008-sdk-parity-and-open-plugin-protocol.md` 
 and other clients manage a local or remote engine over the gRPC control API
 ([ADR 20260724](docs/architecture-decision-records/20260724-embed-bindings-via-grpc.md)); the
 record data path never crosses into the host language.
+
+---
+
+## Catalog track
+
+Reuse and certify first; build only real gaps. A connector inventory
+(`docs/catalog-inventory.md`, #2951) found far more existing connectors — many in
+`conduitio-labs` — than the registry lists. The catalog work below starts from that inventory.
+
+Every connector carries a quality tier in the registry and on a public parity scorecard:
+**Certified**, **Verified**, **Adapter** or **Community**. Certified means the acceptance suite,
+kill tests and benchi runs pass in CI on a golden path; Adapter means it runs through a host such
+as the Kafka Connect JAR host; Community means listed with license metadata. The exact criteria for
+each tier are published with the scorecard in v0.21.
+
+Catalog items are placed in the release train below, prefixed **Catalog**.
 
 ---
 
@@ -214,6 +231,12 @@ to the next release rather than holding the train.
       no-go is an allowed outcome
 - [ ] Coverage floor and benchmark-regression gates in CI
 - [ ] `conduit generate`: processor-aware generation
+- [ ] **Catalog:** list every labs connector that passes the acceptance suite in the registry as
+      Community tier with license metadata (from 6 listed connectors to roughly 30)
+- [ ] **Catalog:** add missing `LICENSE` files; labs connector CI runs on the default branch
+- [ ] **Catalog:** quality tiers (Certified / Verified / Adapter / Community) and a public parity
+      scorecard seeded from the inventory
+- [ ] **Catalog:** archive the empty labs `conduit-processor-textgen` stub
 - [ ] Looking for three teams migrating off Kafka Connect to work with us as early adopters — open
       a [discussion](https://github.com/ConduitIO/conduit/discussions)
 
@@ -225,11 +248,17 @@ to the next release rather than holding the train.
       subject strategy, tombstones, decimal and time encodings — with a harness that diffs
       Conduit's output against real Debezium on the same database
 - [ ] SMT compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs,
-      mapped automatically by `migrate`
-- [ ] MySQL CDC beta
-- [ ] NATS JetStream source and destination
-- [ ] Apache Iceberg destination beta: upserts, compaction-friendly writes, REST/Glue/Nessie
-      catalogs — operational database to lakehouse in real time, no Kafka required
+      mapped automatically by `migrate` — including the five missing today (Flatten,
+      ExtractChangedRecordState, EventRouter, PartitionRouting, TimezoneConverter) and typed values
+      for `field.set`
+- [ ] MySQL CDC beta (certified from the labs `mysql` connector)
+- [ ] NATS JetStream source and destination (certified from labs `nats-jetstream`)
+- [ ] **Catalog:** certify the JDBC sink family from the labs SQL connectors (Postgres and MySQL
+      destinations first)
+- [ ] **Catalog:** certify Elasticsearch from labs, and check OpenSearch against it
+- [ ] Apache Iceberg destination beta — a new Go-native build (the labs Java connector is a behavior
+      reference only): upserts, compaction-friendly writes, REST/Glue/Nessie catalogs — operational
+      database to lakehouse in real time, no Kafka required
 - [ ] Helm chart: Deployment/StatefulSet, pipeline configs via ConfigMap or git-sync,
       ServiceMonitor — static pipeline-to-instance assignment before the operator exists
 - [ ] Secrets: Vault, AWS and GCP KMS, Kubernetes secrets
@@ -242,7 +271,10 @@ to the next release rather than holding the train.
       keep working
 - [ ] **Active/passive HA on Kubernetes**: lease, failover, resume from checkpoint, chaos-tested
 - [ ] Kafka Connect connector JAR host (preview): an opt-in JVM sidecar over the plugin protocol,
-      never inside the engine
+      never inside the engine, built on the existing Kafka Connect wrapper. Meanwhile it is the path
+      to Debezium-grade CDC for SQL Server, Oracle, Db2 and HANA, whose current connectors are
+      trigger-based
+- [ ] **Catalog:** certify Snowflake, ClickHouse and Redis from labs
 - [ ] MySQL CDC GA
 - [ ] Rust SDK (preview): gRPC connectors and WASM processors on the existing processor ABI, with
       `conduit connector new --lang rust`
@@ -259,7 +291,12 @@ to the next release rather than holding the train.
 
 - [ ] Kubernetes operator (Apache-2.0): `Pipeline` CRD, import of Strimzi resources, bin-packing of
       pipelines across pods, health-based rescheduling, lag-based autoscaling
-- [ ] SQL Server and MongoDB CDC
+- [ ] MongoDB CDC (certified from labs `mongo`) and SQL Server CDC (the trigger-based labs
+      connector certified as an interim; log-based capture later)
+- [ ] **Catalog:** certify Kinesis, SQS and Google Pub/Sub from labs
+- [ ] **Catalog:** certify Salesforce, Stripe and HubSpot from labs (three of five native SaaS
+      targets)
+- [ ] Apache Iceberg destination GA
 - [ ] Exactly-once Kafka destination (transactional), and documented delivery semantics for every
       source/destination pair
 - [ ] Community publishing to the registry (GitHub Action + signing) and private registries
@@ -267,10 +304,12 @@ to the next release rather than holding the train.
 - [ ] **Replay and backfill as first-class verbs**: `conduit pipeline replay --from <position>`,
       snapshot re-runs, offset inspection and reset in CLI and UI
 - [ ] `conduit connector generate --from-openapi <spec>` — connector scaffolding from API specs
-- [ ] gRPC out-of-process processor runtime and the Python processor SDK
+- [ ] gRPC out-of-process processor runtime and the Python processor SDK; the WASM-based
+      `conduit-processor-sdk-python` is archived
 - [ ] Processor protocol spec (protobuf + WIT) published beside the connector protocol spec
 - [ ] SDK conformance suite and public parity matrix
-- [ ] Not before this release: Node.js client, Qdrant destination
+- [ ] Not before this release: Node.js client, Qdrant destination (a new build; the repository
+      is empty)
 
 ### v0.25 — State foundations
 
@@ -285,8 +324,8 @@ to the next release rather than holding the train.
 - [ ] Clear documentation of what the state layer is and isn't
 - [ ] Arrow columnar record spike, gated on the cross-engine benchmark harness
 - [ ] Java and C# embedded clients (generated gRPC bindings)
-- [ ] Java SDK begins: gRPC connectors and gRPC processors, including the state API (completes in
-      v0.26)
+- [ ] Java SDK begins, informed by the labs Java SDK proof of concept: gRPC connectors and gRPC
+      processors, including the state API (completes in v0.26)
 
 ### v0.26 — Curate
 
@@ -303,7 +342,8 @@ to the next release rather than holding the train.
 
 ### v0.27 — Windows and aggregations
 
-- [ ] Tumbling, sliding and session windows
+- [ ] Tumbling, sliding and session windows, built crash-safe on the state API (the existing
+      `aggregate` prototype is a reference only)
 - [ ] Processing time first; event time with **bounded lateness only** — late records go to the
       DLQ or a late-data output per policy, never silently dropped
 - [ ] Aggregates: count, sum, min, max, avg, distinct (HLL), top-K, last
@@ -315,6 +355,7 @@ to the next release rather than holding the train.
 
 - [ ] `ai.extract`, `ai.classify`, `ai.summarize` with schema-bound structured output, batching,
       rate limits and model routing
+- [ ] One provider-pluggable text-generation processor in place of today's per-provider ones
 - [ ] Cost controls: token budgets, sampling
 - [ ] LLM results cached by input hash, so replay is deterministic and cheap
 - [ ] Windowed summarization
@@ -360,11 +401,19 @@ Kept on the list, not scheduled in a release yet:
   are production-grade (re-evaluated yearly)
 - Official SDKs beyond the six official languages — community tier via the conformance kit; promoted
   only on demand
-- Oracle CDC
+- Log-based CDC for SQL Server, Oracle, Db2 and HANA (the current connectors are trigger-based;
+  Debezium through the JAR host covers them from v0.23)
+- Catalog builds not yet placed: BigQuery destination, OpenSearch (if the Elasticsearch connector
+  doesn't cover it), Shopify, GitHub, MQTT, and a new Bento/Redpanda Connect adapter (the 2022
+  prototype acknowledges before the write is durable, so it is a reference only)
+- Catalog consolidations not yet placed: built-in OpenAI and Cohere embedding processors fold into
+  `ai.embed` (deprecated over two minor releases); the labs `redpanda` connector is retired in
+  favour of the `kafka` connector with a Redpanda profile tested in CI; `enhanced-generator` and the
+  labs `textgen` test-data intent fold into the built-in `generator` connector
 - Vector destinations: Pinecone, Turbopuffer
-- Native connectors: Snowflake; S3/GCS/Azure Blob with Parquet; ClickHouse; BigQuery;
-  Databricks/Delta Lake; Elasticsearch/OpenSearch; Redpanda (tuned); Kinesis/SQS/SNS; Google
-  Pub/Sub; Redis; HTTP/webhooks (source and destination); DuckDB/MotherDuck
+- Other native connectors: GCS and Azure Blob with Parquet; Databricks/Delta Lake; SNS;
+  HTTP/webhooks (source rebuilt so the response waits for the ack, plus destination);
+  DuckDB/MotherDuck
 - JSON Schema support in the Schema Registry integration
 - Schema contracts and drift policy: halt, DLQ or auto-evolve on drift, surfaced in the UI
 - Checkpoint-aware rolling upgrades in the operator (drain → checkpoint → reschedule)
