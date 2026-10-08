@@ -96,8 +96,11 @@ func (c *Command) Usage() string { return "generate <request>" }
 
 func (c *Command) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Generate a pipeline configuration from a natural-language description",
-		Long: `Turns a description of a pipeline into a pipeline configuration file.
+		Short: "Preview. Generate a pipeline configuration from a natural-language description",
+		Long: `Preview. Turns a description of a pipeline into a pipeline configuration file.
+
+It reliably picks the right connectors but often leaves out requested processor steps,
+so review the generated file before deploying it.
 
 Every generated configuration is checked with the same offline validate engine
 'conduit pipelines validate' uses, including that every connector it references actually
