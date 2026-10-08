@@ -15,7 +15,7 @@ The persister collects changed connectors for up to one second (or 10,000 change
 in one transaction (`flushNow` → `writeBatch`). A source's persist callback releases its deferred
 upstream ack (invariant 1), so a callback may only get nil if that connector's state is committed.
 
-#2925 found that a per-connector write error was ignored and the batch committed anyway. #2932
+Issue #2925 found that a per-connector write error was ignored and the batch committed anyway. #2932
 fixed it by failing the whole batch, because whether a transaction is still usable after a failed
 write depends on the store:
 
@@ -54,7 +54,7 @@ Retrying a connector's write is safe because `Store.PrepareSet` captures a copy 
 
 **Keep whole-batch failure (status quo after #2932).** Simple and correct, but one unwritable
 connector fails unrelated pipelines on every flush. Rejected: the blast radius is the problem
-#2930 asks to fix.
+issue #2930 asks to fix.
 
 **Continue past a failed write and commit the rest in the same transaction.** One transaction, no
 retry. Correct on badger and in-memory only. On Postgres the commit fails anyway, and on SQLite it
