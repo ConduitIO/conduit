@@ -1125,7 +1125,8 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 // Start returns; it never stops the run.
 const statusWriteTimeout = 30 * time.Second
 
-// runningWriteTimeout returns the bound announceRunning applies.
+// runningWriteTimeout returns the bound on a status write: announceRunning's
+// wait and the timeout writeStatus applies.
 func (s *Service) runningWriteTimeout() time.Duration {
 	if s.statusWriteTimeout > 0 {
 		return s.statusWriteTimeout
@@ -1194,6 +1195,24 @@ func (s *Service) runningStatusNotPersisted(ctx context.Context, rp *runnablePip
 	s.logStatusNotPersisted(ctx, rp.pipeline.ID, pipeline.StatusRunning, err)
 }
 
+// writeStatus writes status for rp from its cleanup goroutine. A failed write
+// is logged and otherwise ignored: the caller goes on to record the terminal
+// error, remove the run from runningPipelines and notify OnFailure whatever
+// the write returned (#2899 item 4; design doc
+// 20261007-lifecycle-status-write-failure, rule R2). Returning early used to
+// leave a dead run registered and, for a fatal error whose Degraded write
+// failed, skip OnFailure, so exit-on-degraded did not trip.
+//
+// The write is bounded by statusWriteTimeout, so on a backend that honours
+// the context a hung store cannot hold the cleanup, and with it Wait, forever.
+func (s *Service) writeStatus(ctx context.Context, rp *runnablePipeline, status pipeline.Status, errMsg string) {
+	wctx, cancel := context.WithTimeout(ctx, s.runningWriteTimeout())
+	defer cancel()
+	if err := s.pipelines.UpdateStatus(wctx, rp.pipeline.ID, status, errMsg); err != nil {
+		s.logStatusNotPersisted(ctx, rp.pipeline.ID, status, err)
+	}
+}
+
 // logStatusNotPersisted logs a status write that did not reach the pipeline
 // store. The run is unaffected; the stored status, which decides what the
 // next boot starts, lags the in-memory one until a later write lands.
@@ -1212,6 +1231,10 @@ func (s *Service) logStatusNotPersisted(ctx context.Context, pipelineID string, 
 // runningPipelines (compare-and-delete) and notifies OnFailure handlers for
 // real failures. For a transient failure with no stop requested it runs
 // recovery instead, synchronously, on this run's tomb.
+//
+// Invariant 7: the terminal tail (terminal error, map removal, notify) runs
+// whatever the status writes return, and the returned error is the run's
+// terminal error, never a status write's (#2899 item 4). See writeStatus.
 //
 // startupDone is closed by runPipeline once its StatusRunning write has
 // returned; the terminal status is written only after that.
@@ -1244,9 +1267,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 			// it was manually triggered by a user
 			status = pipeline.StatusUserStopped
 		}
-		if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
-			return err
-		}
+		s.writeStatus(ctx, rp, status, "")
 	default:
 		stopRequested, systemStop, failedFirst := rp.stop.state()
 		switch {
@@ -1254,9 +1275,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 			// The run failed on its own with a fatal error, before any
 			// stop was requested: it is degraded.
 			// we use %+v to get the stack trace too
-			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
-				return err
-			}
+			s.writeStatus(ctx, rp, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
 		case stopRequested:
 			// Invariant 7 (#2901, ADR 20261007-stop-requested-never-recovers):
 			// a stop was requested for this run and it ended with an error:
@@ -1265,9 +1284,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 			// run someone asked to stop; that would restart a pipeline the
 			// user stopped, or start one during shutdown after Wait stopped
 			// looking. The run is stopped, with the error recorded.
-			if updateErr := s.finishStopped(ctx, rp, systemStop, err); updateErr != nil {
-				return updateErr
-			}
+			s.finishStopped(ctx, rp, systemStop, err)
 			stoppedWithErr = true
 		default:
 			// try to recover the pipeline
@@ -1287,9 +1304,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 				if !fired {
 					system = true
 				}
-				if updateErr := s.finishStopped(ctx, rp, system, err); updateErr != nil {
-					return updateErr
-				}
+				s.finishStopped(ctx, rp, system, err)
 				stoppedWithErr = true
 			default:
 				s.logger.
@@ -1297,9 +1312,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 					Str(log.PipelineIDField, rp.pipeline.ID).
 					Msg("pipeline recovery failed")
 
-				if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
-					return updateErr
-				}
+				s.writeStatus(ctx, rp, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr))
 
 				// we assign it to err so it's returned and notified by the cleanup function
 				err = recoveryErr
@@ -1346,7 +1359,7 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 // terminal error that WaitPipeline returns. It is not a failure, so the
 // caller does not notify OnFailure handlers and exit-on-degraded does not
 // trip (#2901).
-func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, system bool, err error) error {
+func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, system bool, err error) {
 	status := pipeline.StatusUserStopped
 	if system {
 		status = pipeline.StatusSystemStopped
@@ -1357,7 +1370,7 @@ func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, syste
 		Any(log.PipelineStatusField, status).
 		Msg("pipeline stopped with an error after a stop was requested; not recovering")
 	// we use %+v to get the stack trace too
-	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, fmt.Sprintf("%+v", err))
+	s.writeStatus(ctx, rp, status, fmt.Sprintf("%+v", err))
 }
 
 // logStopError logs a failed stop of a pipeline during shutdown. If a stop
@@ -1438,10 +1451,11 @@ func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) err
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
 	measure.PipelineRecoveringCount.WithValues(rp.pipeline.Config.Name).Inc()
 
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
-	if err != nil {
-		return err
-	}
+	// A failed Recovering write does not stop the recovery: the status is a
+	// report (#2899). Before, the store error was returned as the recovery's
+	// error, so a status-store blip degraded a pipeline that would have
+	// recovered.
+	s.writeStatus(ctx, rp, pipeline.StatusRecovering, "")
 
 	// Exit the goroutine and attempt to restart the pipeline
 	return s.StartWithBackoff(ctx, rp)
