@@ -1,0 +1,21 @@
+version: "2.2"
+pipelines:
+  - id: postgres-to-s3-customers
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          url: "TODO"
+          tables: "customers"
+          cdcMode: auto
+      - id: destination
+        type: destination
+        plugin: "builtin:s3"
+        settings:
+          aws.accessKeyId: "TODO"
+          aws.secretAccessKey: "TODO"
+          aws.region: "TODO"
+          aws.bucket: "TODO"
+          format: json

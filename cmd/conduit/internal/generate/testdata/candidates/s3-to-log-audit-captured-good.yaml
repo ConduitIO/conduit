@@ -1,0 +1,22 @@
+```yaml
+version: "2.2"
+pipelines:
+  - id: s3-audit-log-pipeline
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:s3"
+        settings:
+          aws.accessKeyId: TODO
+          aws.secretAccessKey: TODO
+          aws.region: us-east-1
+          aws.bucket: TODO
+          pollingPeriod: 1s
+      - id: destination
+        type: destination
+        plugin: "builtin:log"
+        settings:
+          level: info
+          message: "audit: new object read from S3 bucket"
+```

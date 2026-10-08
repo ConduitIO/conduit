@@ -19,6 +19,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/matryer/is"
 )
 
@@ -336,6 +337,29 @@ func TestScoreSemantic_MalformedYAML_NeverPanicsNeverMatches(t *testing.T) {
 func TestHasCapability_UnknownTag_NeverMatches(t *testing.T) {
 	is := is.New(t)
 	is.True(!hasCapability(nil, "this-tag-does-not-exist"))
+}
+
+// The grounding prompt tells the model to write "builtin:<name>", and the
+// engine resolves "field.set", "builtin:field.set" and a versioned reference
+// to the same processor. Only the bare form used to count, so a correct
+// "builtin:field.set" pipeline failed a set request.
+func TestHasCapability_MatchesEveryBuiltinReferenceForm(t *testing.T) {
+	for _, tc := range []struct {
+		ref  string
+		want bool
+	}{
+		{"field.set", true},
+		{"builtin:field.set", true},
+		{"builtin:field.set@v0.1.0", true},
+		{"any:field.set", true},
+		{"standalone:field.set", false},
+		{"builtin:field.rename", false},
+	} {
+		got := hasCapability([]config.Processor{{Plugin: tc.ref}}, capSet)
+		if got != tc.want {
+			t.Errorf("hasCapability(%q, set) = %v, want %v", tc.ref, got, tc.want)
+		}
+	}
 }
 
 // --- ScoreRun / ScoreMedian ---

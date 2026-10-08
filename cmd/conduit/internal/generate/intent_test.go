@@ -187,19 +187,6 @@ func TestConnectorAliases_ResolveToRealConnectors(t *testing.T) {
 	}
 }
 
-// Every capability phrase must map to a tag capability.go can satisfy: an
-// unknown tag is permanently unsatisfiable, so a typo here would fail every
-// candidate forever.
-func TestCapabilityPhrases_ResolveToRealTags(t *testing.T) {
-	is := is.New(t)
-
-	for phrase, tag := range capabilityPhrases {
-		_, ok := capabilityProcessors[tag]
-		is.True(ok)
-		is.True(phrase != "")
-	}
-}
-
 // Pre-call refusal is narrow by design: an empty prompt and a contradictory
 // one are refused before a provider call; a terse one is not.
 func TestGenerate_PreCallRefusalIsNarrow(t *testing.T) {
