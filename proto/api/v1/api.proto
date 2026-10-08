@@ -96,8 +96,12 @@ message Pipeline {
     string plugin = 1;
     // settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
     // value is redacted to "***" and only keys are returned, because settings
-    // routinely hold credentials. Requests must carry real values; sending a
-    // redacted map back stores "***" as the value.
+    // routinely hold credentials. In UpdateDLQ, a value that is exactly "***"
+    // keeps the stored value for that key, so a GetDLQ response can be sent
+    // back unchanged; "***" for a key with no stored value is rejected with
+    // orchestrator.redacted_setting_without_stored_value. Any other value
+    // replaces the stored one, and a key left out is removed. A real value of
+    // exactly "***" cannot be set.
     map<string, string> settings = 2;
 
     // window_size defines how many last acks/nacks are monitored in the window
@@ -145,7 +149,12 @@ message Connector {
     string name = 1;
     // settings are the connector plugin settings. In responses every value is
     // redacted to "***" and only keys are returned, because settings routinely
-    // hold credentials. Requests must carry real values.
+    // hold credentials. In UpdateConnector, a value that is exactly "***" keeps
+    // the stored value for that key, so a GetConnector response can be sent
+    // back unchanged; "***" for a key with no stored value is rejected with
+    // orchestrator.redacted_setting_without_stored_value. Any other value
+    // replaces the stored one, and a key left out is removed. CreateConnector
+    // stores values as sent, so it needs real values.
     map<string, string> settings = 2;
   }
 
@@ -187,7 +196,12 @@ message Processor {
   message Config {
     // settings are the processor plugin settings. In responses every value is
     // redacted to "***" and only keys are returned, because settings routinely
-    // hold credentials. Requests must carry real values.
+    // hold credentials. In UpdateProcessor, a value that is exactly "***" keeps
+    // the stored value for that key, so a GetProcessor response can be sent
+    // back unchanged; "***" for a key with no stored value is rejected with
+    // orchestrator.redacted_setting_without_stored_value. Any other value
+    // replaces the stored one, and a key left out is removed. CreateProcessor
+    // stores values as sent, so it needs real values.
     map<string, string> settings = 1;
     int32 workers = 2;
   }

@@ -40,6 +40,12 @@ var (
 	// or processor provisioned by a config file is mutated through the API
 	// instead of the config file.
 	CodeImmutableProvisionedByConfig = conduiterr.Register("orchestrator.immutable_provisioned_by_config", codes.FailedPrecondition)
+	// CodeRedactedSettingWithoutStoredValue is raised when an update sends
+	// the redacted placeholder "***" for a setting that has no stored value.
+	// "***" in an update means "keep the stored value"; with nothing stored
+	// there is nothing to keep, and storing "***" itself would silently
+	// break the setting.
+	CodeRedactedSettingWithoutStoredValue = conduiterr.Register("orchestrator.redacted_setting_without_stored_value", codes.InvalidArgument)
 )
 
 // pipelineRunningErr wraps pipeline.ErrPipelineRunning with the

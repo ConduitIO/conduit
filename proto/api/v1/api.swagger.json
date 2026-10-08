@@ -1992,7 +1992,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
+          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateConnector, a value that is exactly \"***\" keeps\nthe stored value for that key, so a GetConnector response can be sent\nback unchanged; \"***\" for a key with no stored value is rejected with\norchestrator.redacted_setting_without_stored_value. Any other value\nreplaces the stored one, and a key left out is removed. CreateConnector\nstores values as sent, so it needs real values."
         }
       }
     },
@@ -2402,7 +2402,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. Requests must carry real values; sending a\nredacted map back stores \"***\" as the value."
+          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. In UpdateDLQ, a value that is exactly \"***\"\nkeeps the stored value for that key, so a GetDLQ response can be sent\nback unchanged; \"***\" for a key with no stored value is rejected with\norchestrator.redacted_setting_without_stored_value. Any other value\nreplaces the stored one, and a key left out is removed. A real value of\nexactly \"***\" cannot be set."
         },
         "windowSize": {
           "type": "string",
@@ -2634,7 +2634,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
+          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateProcessor, a value that is exactly \"***\" keeps\nthe stored value for that key, so a GetProcessor response can be sent\nback unchanged; \"***\" for a key with no stored value is rejected with\norchestrator.redacted_setting_without_stored_value. Any other value\nreplaces the stored one, and a key left out is removed. CreateProcessor\nstores values as sent, so it needs real values."
         },
         "workers": {
           "type": "integer",
