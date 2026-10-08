@@ -301,13 +301,13 @@
           "sourceCategory": "postgres",
           "destinationCategory": "log",
           "attempts": 1,
-          "tokensUsed": 5736,
+          "tokensUsed": 5650,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 1,
           "promptsMatchCapture": true,
-          "matchesCapture": false
+          "matchesCapture": true
         },
         {
           "id": "kafka-to-kafka-retopic",
@@ -356,12 +356,12 @@
             "unwrap-debezium"
           ],
           "attempts": 2,
-          "tokensUsed": 12644,
+          "tokensUsed": 12457,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
-          "promptsMatchCapture": false,
+          "turnsRecorded": 2,
+          "promptsMatchCapture": true,
           "matchesCapture": true
         },
         {
@@ -486,13 +486,13 @@
             "json-encode"
           ],
           "attempts": 2,
-          "tokensUsed": 12545,
+          "tokensUsed": 12995,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
-          "matchesCapture": false
+          "matchesCapture": true
         },
         {
           "id": "file-to-file-base64-decode",
@@ -502,13 +502,13 @@
             "base64-decode"
           ],
           "attempts": 2,
-          "tokensUsed": 12238,
+          "tokensUsed": 11915,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
-          "promptsMatchCapture": false,
-          "matchesCapture": false
+          "turnsRecorded": 2,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
         },
         {
           "id": "kafka-to-s3-split-batches",
@@ -576,13 +576,13 @@
           "sourceCategory": "s3",
           "destinationCategory": "log",
           "attempts": 1,
-          "tokensUsed": 5741,
+          "tokensUsed": 5713,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 1,
           "promptsMatchCapture": true,
-          "matchesCapture": false
+          "matchesCapture": true
         },
         {
           "id": "postgres-to-kafka-set-derived-field",
