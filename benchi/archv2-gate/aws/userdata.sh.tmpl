@@ -1,0 +1,185 @@
+#!/bin/bash
+# archv2-gate early read: instance bootstrap. Rendered by the launcher in this
+# directory (main.go). It holds no credentials: S3 uploads use the instance
+# role, whose only S3 permission is PutObject under the run's prefix.
+#
+# The hard runtime cap is scheduled first, before anything that can fail, and
+# the instance is launched with InstanceInitiatedShutdownBehavior=terminate, so
+# a halt at the cap or at the end of the run terminates it.
+shutdown -h +{{.MaxMinutes}}
+
+cat > /etc/archv2-bench.env <<'ENV'
+BUCKET={{.Bucket}}
+PREFIX={{.Prefix}}
+REGION={{.Region}}
+MAIN_SHA={{.MainSHA}}
+FANOUT_SHA={{.FanoutSHA}}
+FANOUT_PR={{.FanoutPR}}
+HARNESS_SHA={{.HarnessSHA}}
+HARNESS_PR={{.HarnessPR}}
+GO_VERSION={{.GoVersion}}
+GO_SHA256={{.GoSHA256}}
+ROUNDS={{.Rounds}}
+ENV
+
+cat > /opt/archv2-bench.sh <<'SCRIPT'
+#!/bin/bash
+set -uo pipefail
+source /etc/archv2-bench.env
+export HOME=/root AWS_DEFAULT_REGION="$REGION"
+LOG=/var/log/archv2-bench.log
+exec >>"$LOG" 2>&1
+S3="s3://$BUCKET/$PREFIX"
+W=/opt/bench
+OUT=$W/out
+mkdir -p "$OUT/results"
+
+upload() {
+  aws s3 cp --quiet --recursive "$OUT" "$S3/" || true
+  aws s3 cp --quiet "$LOG" "$S3/bootstrap.log" || true
+}
+status() {
+  echo "$(date -u +%FT%TZ) $*" | tee -a "$OUT/status.txt"
+  aws s3 cp --quiet "$OUT/status.txt" "$S3/status.txt" || true
+  aws s3 cp --quiet "$LOG" "$S3/bootstrap.log" || true
+}
+finish() {
+  kill ${SAMPLER_LOAD:-} ${SAMPLER_VMSTAT:-} 2>/dev/null || true
+  upload
+  status "DONE, halting (instance terminates on halt)"
+  shutdown -h now
+  exit 0
+}
+fail() { status "FAILED: $*"; finish; }
+
+status "bootstrap start"
+
+dnf install -y docker git >/dev/null || fail "dnf install docker git"
+systemctl enable --now docker || fail "start docker"
+
+curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" || fail "download go"
+echo "${GO_SHA256}  /tmp/go.tgz" | sha256sum -c - || fail "go tarball checksum mismatch"
+tar -C /usr/local -xzf /tmp/go.tgz || fail "untar go"
+export PATH=/usr/local/go/bin:$PATH GOPATH=/root/go GOCACHE=/root/.cache/go-build
+status "docker $(docker version --format '{{"{{"}}.Server.Version{{"}}"}}') and $(go version) installed"
+
+git clone -q https://github.com/ConduitIO/conduit.git "$W/conduit" || fail "git clone"
+cd "$W/conduit" || fail "cd clone"
+git fetch -q origin "+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" \
+  "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}" || fail "fetch PR refs"
+for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA"; do
+  git cat-file -e "${sha}^{commit}" || fail "commit $sha not found"
+done
+git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
+git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
+git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
+
+status "building images"
+docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
+  -t conduit-bench:main "$W/src-main" || fail "docker build main"
+docker build -q --label "org.opencontainers.image.revision=$FANOUT_SHA" \
+  -t conduit-bench:pr${FANOUT_PR} "$W/src-fanout" || fail "docker build pr${FANOUT_PR}"
+
+# Fan-out before/after session. The harness compares two engines on ONE image
+# (arms "v1-a", "v2", "v1-b"; v2 adds --preview.pipeline-arch-v2). This image
+# routes its v1 arms to main's binary with arch-v2 forced on, and its v2 arm
+# to the PR's binary, so an "ab" session measures v2-main, v2-PR, v2-main per
+# round with main's two runs as the A/A control. Both binaries come from the
+# images built above, unchanged.
+mkdir -p "$W/fanout-wrap"
+cat > "$W/fanout-wrap/conduit" <<'WRAP'
+#!/bin/sh
+for a in "$@"; do
+  [ "$a" = "--preview.pipeline-arch-v2" ] && exec /app/conduit-pr "$@"
+done
+exec /app/conduit-main "$@" --preview.pipeline-arch-v2
+WRAP
+cat > "$W/fanout-wrap/Dockerfile" <<WRAPDF
+FROM conduit-bench:main
+COPY --from=conduit-bench:pr${FANOUT_PR} /app/conduit /app/conduit-pr
+RUN mv /app/conduit /app/conduit-main
+COPY conduit /app/conduit
+RUN chmod 0755 /app/conduit
+WRAPDF
+docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
+  -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
+
+cd "$W/src-harness" || fail "cd harness"
+go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
+status "images and harness built"
+
+{
+  echo "## instance"
+  TOK=$(curl -fsS -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 300' http://169.254.169.254/latest/api/token)
+  for k in instance-id instance-type ami-id placement/availability-zone; do
+    echo "$k: $(curl -fsS -H "X-aws-ec2-metadata-token: $TOK" "http://169.254.169.254/latest/meta-data/$k")"
+  done
+  echo "## commits"
+  echo "main: $MAIN_SHA"; echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"; echo "harness pr${HARNESS_PR}: $HARNESS_SHA"
+  echo "## binaries (sha256)"
+  for img in main pr${FANOUT_PR}; do
+    echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
+  done
+  docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
+  echo "## images"; docker images --no-trunc
+  echo "## uname"; uname -a
+  echo "## os"; cat /etc/os-release
+  echo "## lscpu"; lscpu
+  echo "## meminfo"; head -5 /proc/meminfo
+  echo "## clocksource"; cat /sys/devices/system/clocksource/clocksource0/current_clocksource
+  echo "## cpufreq governor"; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>&1
+  echo "## disk"; df -h /; lsblk
+  echo "## docker info"; docker info
+  echo "## go"; go version
+} > "$OUT/environment.txt" 2>&1
+upload
+
+# Background samplers for the whole session: 1/5/15-minute load and vmstat
+# (which carries CPU steal, the virtualization signal) every 5s.
+cat > "$W/sampler.sh" <<'SAMPLER'
+#!/bin/bash
+while :; do echo "$(date -u +%FT%TZ) $(cat /proc/loadavg)"; sleep 5; done
+SAMPLER
+nohup bash "$W/sampler.sh" > "$OUT/loadavg.log" 2>&1 &
+SAMPLER_LOAD=$!
+nohup vmstat -t -w 5 > "$OUT/vmstat.log" 2>&1 &
+SAMPLER_VMSTAT=$!
+
+docker builder prune -af >/dev/null 2>&1
+sync; echo 3 > /proc/sys/vm/drop_caches
+status "quiet 60s before sessions"
+sleep 60
+
+session() { # name image shape session
+  local name=$1 image=$2 shape=$3 sess=$4
+  status "session $name start (image $image, shape $shape, session $sess, rounds $ROUNDS)"
+  "$W/archv2-gate" -image "$image" -shape "$shape" -session "$sess" -rounds "$ROUNDS" \
+    -out "$OUT/results/$name" > "$OUT/results/$name.stdout" 2> "$OUT/results/$name.stderr"
+  local rc=$?
+  status "session $name exit $rc"
+  upload
+  sync; echo 3 > /proc/sys/vm/drop_caches
+}
+
+session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1
+session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2
+session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
+session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2
+session 05-1x1-ab-main conduit-bench:main 1x1 ab
+session 06-2x2-ab-main conduit-bench:main 2x2 ab
+cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
+Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
+session the arm labels mean:
+  v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
+  v2         = arch-v2 on pr${FANOUT_PR} ${FANOUT_SHA}
+No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
+the PR's fan-out change against main, both on arch-v2.
+NOTE
+session 07-2x2-fanout conduit-bench:fanout 2x2 ab
+
+finish
+SCRIPT
+chmod 0755 /opt/archv2-bench.sh
+
+# Run detached from cloud-init so its timeouts never apply to a multi-hour run.
+systemd-run --unit=archv2-bench --description="archv2-gate early read" /opt/archv2-bench.sh
