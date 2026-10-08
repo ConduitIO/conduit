@@ -1915,11 +1915,13 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// from a nested recovery restart: recoverPipeline -> StartWithBackoff
 		// -> Start -> runPipeline(newer) runs synchronously on this
 		// goroutine, publishes the newer run and releases its workers before
-		// announcing StatusRunning. If that announcement fails, Start returns
-		// an error with the newer run live, this goroutine takes the
-		// recovery-failed arm above and arrives here. A delete by key would
-		// erase the newer run's entry and leave its workers running where no
-		// Stop, StopAll, Wait or WaitPipeline can reach them.
+		// announcing StatusRunning. That announcement no longer fails Start
+		// (#2899), but before it did, Start returned an error with the newer
+		// run live, this goroutine took the recovery-failed arm above and
+		// arrived here. A delete by key would erase the newer run's entry and
+		// leave its workers running where no Stop, StopAll, Wait or
+		// WaitPipeline can reach them; the compare-and-delete keeps this block
+		// safe for any failure that unwinds here with a newer run published.
 		//
 		// Invariant 7: a run whose workers are live must stay reachable by
 		// the stop and wait paths.
@@ -1978,9 +1980,10 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	//     can never Delete before this Set, which would strand a live run
 	//     outside the map;
 	//   - that Delete is a compare-and-delete (#2811), so when this run is a
-	//     nested recovery restart and the UpdateStatus below fails, the
-	//     OUTER run's cleanup, which then falls through to its own terminal
-	//     block, cannot erase this run's entry.
+	//     nested recovery restart, the OUTER run's cleanup can never erase
+	//     this run's entry on its way through its own terminal block;
+	//   - a failed UpdateStatus below is logged, not returned (#2899), so it
+	//     cannot make the caller treat this live run as a failed start.
 	s.publishRunningPipeline(rp.pipeline.ID, rp)
 
 	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
@@ -2030,9 +2033,59 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// release the cleanup goroutine to make its own. close(startupDone)
 	// unconditionally, including on error, so the cleanup goroutine (already
 	// blocked on it) is never left hanging.
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+	//
+	// Invariant 7: once a run has goroutines it is registered and owns its
+	// cleanup; a status write cannot unpublish it (#2898, #2899). The write
+	// is a report, not a gate (design doc
+	// 20261007-lifecycle-status-write-failure, rule R1): the workers are
+	// running, so Start reports success whatever the write returns. Returning
+	// the error used to tell the caller the start failed while the run moved
+	// data, and on a recovery restart it sent the failed run's cleanup into
+	// the recovery-failed arm, which wrote Degraded over the live restart and
+	// notified OnFailure. The context ignores the tomb's cancellation: a run
+	// that fails right away must not also fail its Running write and log a
+	// spurious persistence failure; its cleanup writes the terminal status
+	// after startupDone either way.
+	err := s.pipelines.UpdateStatus(context.WithoutCancel(ctx), rp.pipeline.ID, pipeline.StatusRunning, "")
 	close(startupDone)
-	return err
+	if err != nil {
+		s.runningStatusNotPersisted(ctx, rp, err)
+	}
+	return nil
+}
+
+// runningStatusNotPersisted handles a failed StatusRunning write for a run
+// whose workers are already running. It logs the failure and leaves the run
+// alone (pipeline.Service has already counted it), with one exception: if the
+// pipeline no longer exists, it was deleted under the starting run, and the
+// run is stopped as a user stop instead of moving data for a pipeline that is
+// gone. Mirrors pkg/lifecycle.Service.runningStatusNotPersisted.
+func (s *Service) runningStatusNotPersisted(ctx context.Context, rp *runnablePipeline, err error) {
+	if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+		s.logger.Err(ctx, err).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Msg("pipeline was deleted while its run was starting; stopping the run")
+		if stopErr := s.stopRunnablePipeline(context.Background(), rp, false, false); stopErr != nil {
+			s.logger.Warn(ctx).
+				Err(stopErr).
+				Str(log.PipelineIDField, rp.pipeline.ID).
+				Msg("could not stop the run of a deleted pipeline")
+		}
+		return
+	}
+	s.logStatusNotPersisted(ctx, rp.pipeline.ID, pipeline.StatusRunning, err)
+}
+
+// logStatusNotPersisted logs a status write that did not reach the pipeline
+// store. The run is unaffected; the stored status, which decides what the
+// next boot starts, lags the in-memory one until a later write lands.
+func (s *Service) logStatusNotPersisted(ctx context.Context, pipelineID string, status pipeline.Status, err error) {
+	s.logger.Warn(ctx).
+		Err(err).
+		Str(log.PipelineIDField, pipelineID).
+		Any(log.PipelineStatusField, status).
+		Str("code", pipeline.CodeStatusPersistFailed.Reason()).
+		Msg("pipeline status not persisted; the run is unaffected")
 }
 
 // publishRunningPipeline makes rp the live run for id in runningPipelines,
