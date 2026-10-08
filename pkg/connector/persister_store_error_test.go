@@ -15,9 +15,7 @@
 package connector
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,14 +23,12 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
-	"github.com/conduitio/conduit-commons/database/badger"
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
-	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
 
@@ -90,47 +86,6 @@ func collectCallback(t *testing.T) (PersistCallback, func() error) {
 			return nil
 		}
 	}
-}
-
-// TestPersister_StoreErrorAbortsWholeBatch: one connector's storeFunc fails
-// in a batch of two. Nothing from the batch may be committed and BOTH
-// callbacks must receive the error — before the fix the failure was logged,
-// the other connector's write committed, and both callbacks got nil.
-func TestPersister_StoreErrorAbortsWholeBatch(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	logger := log.Nop()
-
-	wantErr := cerrors.New("injected store failure")
-	inner := &inmemory.DB{}
-	db := &faultyStoreDB{DB: inner, failID: "bad-conn", setErr: wantErr}
-	db.setArmed.Store(true)
-
-	// Thresholds high enough that only the explicit Flush below flushes.
-	persister := NewPersister(logger, db, time.Hour, 100)
-
-	good := &Instance{ID: "good-conn", Type: TypeSource, State: SourceState{Position: opencdc.Position("p1")}}
-	bad := &Instance{ID: "bad-conn", Type: TypeSource, State: SourceState{Position: opencdc.Position("p2")}}
-
-	goodCb, goodErr := collectCallback(t)
-	badCb, badErr := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, good, goodCb))
-	is.NoErr(persister.Persist(ctx, bad, badCb))
-
-	persister.Flush(ctx)
-	is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
-
-	// (b) every callback in the batch gets a non-nil error carrying the cause.
-	gotGood, gotBad := goodErr(), badErr()
-	is.True(gotGood != nil) // innocent connector must not be told its write landed
-	is.True(gotBad != nil)  // failing connector must not be told its write landed
-	is.True(cerrors.Is(gotGood, wantErr))
-	is.True(cerrors.Is(gotBad, wantErr))
-
-	// (a) the transaction was not committed: no state from the batch landed.
-	got, err := NewStore(inner, logger).GetAll(ctx)
-	is.NoErr(err)
-	is.Equal(len(got), 0)
 }
 
 // TestPersister_NewTransactionErrorReachesEveryCallback: before the fix,
@@ -192,14 +147,14 @@ func TestPersister_StoreErrorThenRecovery(t *testing.T) {
 	is.Equal(got.State, SourceState{Position: opencdc.Position("p2")})
 }
 
-// TestSource_Ack_BatchStoreErrorDoesNotReleasePluginAck is the end-to-end
-// form of #2925 for a source: the source's own position write would succeed,
-// but ANOTHER connector in the same persister batch fails, so the batch
-// commits nothing. The deferred plugin ack (#2680) must NOT be released, and
-// the failure must reach the pipeline via Errors(). Before the fix the
-// source's callback got nil, the plugin received the ack, and nothing was
-// surfaced.
-func TestSource_Ack_BatchStoreErrorDoesNotReleasePluginAck(t *testing.T) {
+// TestSource_Ack_OwnStoreErrorDoesNotReleasePluginAck is the end-to-end form
+// of #2925 for a source: the source's own position write fails in a batch it
+// shares with a healthy connector. The deferred plugin ack (#2680) must NOT
+// be released, and the failure must reach the pipeline via Errors(). Before
+// #2932 the source's callback got nil, the plugin received the ack, and
+// nothing was surfaced. Since #2930 the healthy connector is committed in a
+// retry; that must not leak a nil to the source.
+func TestSource_Ack_OwnStoreErrorDoesNotReleasePluginAck(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -207,10 +162,9 @@ func TestSource_Ack_BatchStoreErrorDoesNotReleasePluginAck(t *testing.T) {
 
 	wantErr := cerrors.New("injected store failure")
 	inner := &inmemory.DB{}
-	db := &faultyStoreDB{DB: inner, failID: "other-conn", setErr: wantErr}
-	db.setArmed.Store(true)
+	db := &faultyStoreDB{DB: inner, failID: "test-connector-id", setErr: wantErr}
 	// Explicit Flush only (fake clock never advanced), so the source's ack and
-	// the failing connector are guaranteed to share one batch.
+	// the healthy connector are guaranteed to share one batch.
 	persister := NewPersister(logger, db, DefaultPersisterDelayThreshold, 100)
 	persister.clock = newFakeClock()
 
@@ -222,12 +176,13 @@ func TestSource_Ack_BatchStoreErrorDoesNotReleasePluginAck(t *testing.T) {
 		Return(pconnector.SourceTeardownResponse{}, nil)
 
 	is.NoErr(src.Open(ctx))
-	// Settle Open's own lifecycle-event persist (it does not involve the
-	// failing key, so it commits normally).
+	// Settle Open's own lifecycle-event persist before arming the failure.
 	persister.Flush(ctx)
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
+	db.setArmed.Store(true)
 
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, func(error) {}))
+	otherCb, otherErr := collectCallback(t)
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, otherCb))
 	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("never-durable")}))
 
 	recv := make(chan pconnector.SourceRunRequest, 1)
@@ -260,6 +215,8 @@ func TestSource_Ack_BatchStoreErrorDoesNotReleasePluginAck(t *testing.T) {
 	stored, err := NewStore(inner, logger).Get(ctx, src.Instance.ID)
 	is.NoErr(err)
 	is.Equal(stored.State, nil)
+	// The healthy connector sharing the batch was committed.
+	is.NoErr(otherErr())
 
 	src.teardownFlushTimeout = 500 * time.Millisecond
 	is.NoErr(src.Teardown(ctx))
@@ -330,51 +287,4 @@ func TestSource_Teardown_FinalFlushStoreErrorIsReturned(t *testing.T) {
 
 	// The persister must not be wedged either: WaitPendingWrites returns.
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 2*time.Second))
-}
-
-// TestPersister_Badger_TxnTooBigFailsWholeBatch reproduces #2925 against the
-// real default store, not a fake. Badger caps one transaction at ~15% of its
-// 64 MiB memtable (~9.6 MB), counting the full size of every value under its
-// 1 MiB value-log threshold. Sixteen connectors with ~800 KB of encoded state
-// each, flushed in one batch, cross that cap: the Sets past it return
-// ErrTxnTooBig while the transaction stays committable. Before the fix the
-// rest of the batch committed, the overflow connectors were silently dropped,
-// and every callback got nil — including those of the dropped connectors,
-// which for a source releases the upstream ack for a position that was never
-// stored.
-func TestPersister_Badger_TxnTooBigFailsWholeBatch(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	logger := log.Nop()
-
-	db, err := badger.New(zerolog.Nop(), t.TempDir())
-	is.NoErr(err)
-	t.Cleanup(func() { _ = db.Close() })
-
-	persister := NewPersister(logger, db, time.Hour, 100)
-
-	const conns = 16
-	// 600 KB raw becomes ~800 KB once JSON base64-encodes the position: under
-	// badger's 1 MiB value threshold, so each value counts in full.
-	pos := opencdc.Position(bytes.Repeat([]byte{'x'}, 600_000))
-	waits := make([]func() error, conns)
-	for i := range conns {
-		cb, wait := collectCallback(t)
-		waits[i] = wait
-		inst := &Instance{ID: fmt.Sprintf("big-%02d", i), Type: TypeSource, State: SourceState{Position: pos}}
-		is.NoErr(persister.Persist(ctx, inst, cb))
-	}
-	persister.Flush(ctx)
-	is.NoErr(persister.WaitPendingWritesContext(ctx, 30*time.Second))
-
-	for i, wait := range waits {
-		err := wait()
-		if err == nil {
-			t.Fatalf("connector big-%02d was told its write landed; the batch exceeded badger's transaction limit", i)
-		}
-		is.True(strings.Contains(err.Error(), "Txn is too big"))
-	}
-	got, err := NewStore(db, logger).GetAll(ctx)
-	is.NoErr(err)
-	is.Equal(len(got), 0) // all-or-nothing: nothing from the oversized batch committed
 }

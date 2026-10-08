@@ -255,7 +255,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		s.ackMu.Lock()
 		supersededAt := s.nextAckSeq + 1
 		s.ackMu.Unlock()
-		err := s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+		err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 			if err != nil {
 				s.reportPersistError(supersededAt, err)
 			}
