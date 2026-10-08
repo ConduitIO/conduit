@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 )
@@ -45,34 +46,54 @@ import (
 //     decision 5).
 //   - A Start that takes over a run in recovery and then fails to start
 //     leaves the pipeline with no run. Whichever of the two finishes last,
-//     the failed Start or the superseded run's cleanup, records it: status
-//     Degraded with the start error, and that error as the terminal error.
-//     Without that, the status kept saying Recovering with nothing running.
-//     A superseded run that ends through a terminal arm instead (a stop or
-//     a shutdown that reached it during the backoff) writes its own status
-//     as usual; if the Start that superseded it has already failed, it also
-//     records its terminal error and notifies, as if it had never been
-//     superseded. (A Start is refused while a run is finishing, so only a
-//     run in recovery backoff is ever superseded.)
+//     the failed Start or the superseded run's cleanup, records the outcome,
+//     and the outcome does not depend on which: the superseded run's own
+//     terminal decision if it made one (as if it had never been superseded),
+//     otherwise SystemStopped on shutdown, UserStopped if a stop was
+//     requested, Degraded with the start error otherwise. Without that, the
+//     status kept saying Recovering with nothing running. (A Start is
+//     refused while a run is finishing, so only a run in recovery backoff is
+//     ever superseded.)
 //
 // The design doc places the token on pipeline.Instance and fences in
 // pipeline.Service. The lifecycle is the only writer of run statuses, so the
 // same guarantee is enforced here, at the writer, with the run's registry entry
 // as the token; nothing in pipeline.Service or the persisted instance changes.
 
-// statusLock returns the lock that orders status writes for pipelineID.
-func (s *Service) statusLock(pipelineID string) *sync.Mutex {
+// lockStatus takes the lock that orders status writes for pipelineID and
+// returns its unlock. The lock is reference-counted: its map entry is removed
+// when the last holder or waiter releases it, so deleted pipelines leave
+// nothing behind.
+func (s *Service) lockStatus(pipelineID string) (unlock func()) {
 	s.statusLocksMu.Lock()
-	defer s.statusLocksMu.Unlock()
 	if s.statusLocks == nil {
-		s.statusLocks = make(map[string]*sync.Mutex)
+		s.statusLocks = make(map[string]*statusLock)
 	}
 	l, ok := s.statusLocks[pipelineID]
 	if !ok {
-		l = &sync.Mutex{}
+		l = &statusLock{}
 		s.statusLocks[pipelineID] = l
 	}
-	return l
+	l.refs++
+	s.statusLocksMu.Unlock()
+
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		s.statusLocksMu.Lock()
+		l.refs--
+		if l.refs == 0 {
+			delete(s.statusLocks, pipelineID)
+		}
+		s.statusLocksMu.Unlock()
+	}
+}
+
+// statusLock is one pipeline's status lock with its reference count, which
+// statusLocksMu guards.
+type statusLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 // isRegistered reports whether rp is its pipeline's registered run.
@@ -99,9 +120,8 @@ func (s *Service) writeRunStatus(ctx context.Context, rp *runnablePipeline, stat
 	if s.testBeforeStatusWrite != nil {
 		s.testBeforeStatusWrite(rp, status)
 	}
-	l := s.statusLock(rp.pipeline.ID)
-	l.Lock()
-	defer l.Unlock()
+	unlock := s.lockStatus(rp.pipeline.ID)
+	defer unlock()
 	// Invariant 7 / R4: a run writes its pipeline's status only while it is
 	// the registered run; a newer run's writes are never overwritten.
 	if !s.isRegistered(rp) {
@@ -114,55 +134,111 @@ func (s *Service) writeRunStatus(ctx context.Context, rp *runnablePipeline, stat
 	return true, s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, errMsg)
 }
 
-// handOver is called by a superseded run's cleanup when it abandons its
-// recovery and leaves the pipeline to the Start that took it over. It returns
-// the takeover's error if that Start already failed, in which case this run
-// records the outcome (finishFailedTakeover); otherwise the Start will, if it
-// fails later. A superseded run that ends through a terminal arm instead
-// writes its own terminal status and does not hand over.
-func (s *Service) handOver(rp *runnablePipeline) error {
+// takeoverOutcome is how a superseded run ended. It is kept on the run so
+// that, if the Start that superseded it fails, the pipeline's outcome is
+// recorded the same way whichever of the two finished first.
+type takeoverOutcome struct {
+	// abandoned: the run left its recovery to the Start and decided
+	// nothing. The outcome then depends on why the Start failed.
+	abandoned bool
+	// runErr is the error the run failed with.
+	runErr error
+	// status, msg, termErr and notify are the terminal decision the run made
+	// (when not abandoned): what it wrote, what WaitPipeline should return,
+	// and whether it is a failure for OnFailure.
+	status  pipeline.Status
+	msg     string
+	termErr error
+	notify  bool
+}
+
+// endSuperseded is called when a run that a Start superseded finishes its
+// cleanup without owning the pipeline. It keeps how the run ended and
+// returns the Start's error if that Start has already failed, in which case
+// the caller records the outcome (recordTakeoverOutcome); otherwise the
+// Start does, if it fails later.
+func (s *Service) endSuperseded(rp *runnablePipeline, out takeoverOutcome) error {
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
-	rp.abandoned = true
+	rp.ended = &out
 	return rp.takeoverErr
 }
 
 // takeoverFailed is called by a Start that superseded took and then failed
-// to publish a run. It reports whether took's cleanup already abandoned its
-// recovery to this Start, in which case the caller records the outcome;
-// otherwise took's cleanup does (handOver, or its own terminal arm).
-func (s *Service) takeoverFailed(took *runnablePipeline, err error) bool {
+// to publish a run. It returns how took ended if its cleanup has already
+// finished, in which case the caller records the outcome; otherwise took's
+// cleanup does, now that it owns the pipeline again (ownsPipeline).
+func (s *Service) takeoverFailed(took *runnablePipeline, err error) *takeoverOutcome {
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	took.takeoverErr = err
-	return took.abandoned
+	return took.ended
 }
 
-// finishFailedTakeover records a pipeline left without a run by a failed
-// takeover: status Degraded with startErr, and startErr as the terminal error.
-// It does nothing if another Start or run has the pipeline by now. It does not
-// notify OnFailure: the failure is the Start's, and the Start returned it.
-func (s *Service) finishFailedTakeover(ctx context.Context, pipelineID string, took *runnablePipeline, startErr error) {
-	l := s.statusLock(pipelineID)
-	l.Lock()
-	defer l.Unlock()
+// recordTakeoverOutcome records the outcome of a pipeline left without a run
+// by a failed takeover. If the superseded run had made a terminal decision,
+// that decision stands, as if the run had never been superseded. If it had
+// abandoned its recovery to the Start:
+//
+//   - shutdown (the Start was refused, or Conduit is stopping): SystemStopped
+//     with the run's error, so the pipeline starts again on the next boot;
+//   - a stop was requested: UserStopped with the run's error;
+//   - otherwise: Degraded with the Start's error.
+//
+// Neither of the abandoned outcomes notifies OnFailure: the failure is the
+// Start's, and the Start returned it. It does nothing if another Start or run
+// has the pipeline by now.
+func (s *Service) recordTakeoverOutcome(ctx context.Context, pipelineID string, took *runnablePipeline, out *takeoverOutcome, startErr error) {
+	unlock := s.lockStatus(pipelineID)
+	defer unlock()
 
+	free := func() bool {
+		_, starting := s.starting[pipelineID]
+		cur, ok := s.runningPipelines.Get(pipelineID)
+		return !starting && (!ok || cur == took)
+	}
 	s.publishMu.Lock()
-	_, starting := s.starting[pipelineID]
-	cur, ok := s.runningPipelines.Get(pipelineID)
+	ok := free()
 	s.publishMu.Unlock()
-	if starting || (ok && cur != took) {
+	if !ok {
 		return
+	}
+
+	o := *out
+	if o.abandoned {
+		switch {
+		case cerrors.Is(startErr, pipeline.ErrShuttingDown) || s.isShuttingDown():
+			o.status, o.msg, o.termErr = pipeline.StatusSystemStopped, fmt.Sprintf("%+v", o.runErr), o.runErr
+		case runStopRequested(took):
+			o.status, o.msg, o.termErr = pipeline.StatusUserStopped, fmt.Sprintf("%+v", o.runErr), o.runErr
+		default:
+			o.status = pipeline.StatusDegraded
+			o.msg = fmt.Sprintf("could not start the pipeline while it was recovering: %+v", startErr)
+			o.termErr = startErr
+		}
+		o.notify = false
 	}
 
 	s.logger.Err(ctx, startErr).
 		Str(log.PipelineIDField, pipelineID).
+		Any(log.PipelineStatusField, o.status).
 		Msg("pipeline could not be started while it was recovering; it is not running")
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.runningWriteTimeout())
 	defer cancel()
-	msg := fmt.Sprintf("could not start the pipeline while it was recovering: %+v", startErr)
-	if err := s.pipelines.UpdateStatus(wctx, pipelineID, pipeline.StatusDegraded, msg); err != nil {
-		s.logStatusNotPersisted(ctx, pipelineID, pipeline.StatusDegraded, err)
+	if err := s.pipelines.UpdateStatus(wctx, pipelineID, o.status, o.msg); err != nil {
+		s.logStatusNotPersisted(ctx, pipelineID, o.status, err)
 	}
-	s.terminalErrors.Set(pipelineID, startErr)
+
+	// Fenced like the other per-run writes: a Start that reserves from here
+	// on clears the terminal error after it reserves, so it cannot be left
+	// with this one.
+	s.publishMu.Lock()
+	ok = free()
+	if ok {
+		s.terminalErrors.Set(pipelineID, o.termErr)
+	}
+	s.publishMu.Unlock()
+	if ok && o.notify {
+		s.notify(pipelineID, o.termErr)
+	}
 }

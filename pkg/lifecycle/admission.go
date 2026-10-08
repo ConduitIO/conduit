@@ -97,7 +97,9 @@ func errPipelineStopping(pipelineID string) error {
 		fmt.Sprintf("can't start pipeline %s: %s", pipelineID, pipeline.ErrPipelineStopping),
 		pipeline.ErrPipelineStopping,
 	)
-	err.Suggestion = "the pipeline's previous run is still finishing; retry the start in a moment"
+	err.Suggestion = "the pipeline's previous run is still writing its final status; retry the start shortly. " +
+		"The wait is bounded (30s) only on databases that honour request contexts (SQLite, Postgres); " +
+		"on badger a hung write can hold it longer"
 	return err
 }
 
