@@ -1,0 +1,18 @@
+version: "2.2"
+pipelines:
+  - id: postgres-orders-to-kafka
+    status: running
+    connectors:
+      - id: pg-source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          url: "postgres://user:TODO@localhost:5432/orders_db?sslmode=require"
+          tables: "orders"
+          cdcMode: auto
+      - id: kafka-dest
+        type: destination
+        plugin: "builtin:kafka"
+        settings:
+          servers: "localhost:9092"
+          topics: "orders"

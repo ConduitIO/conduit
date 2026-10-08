@@ -14,7 +14,10 @@
 
 package generate
 
-import "github.com/conduitio/conduit/pkg/provisioning/config"
+import (
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
+)
 
 // capabilityProcessors maps a required-capability tag (as used in a
 // Request's Expect.RequiredCapabilities) to the set of builtin processor
@@ -22,10 +25,8 @@ import "github.com/conduitio/conduit/pkg/provisioning/config"
 // pkg/plugin/processor/builtin.DefaultBuiltinProcessors's keys at the time
 // this package was written — never a second, independently-maintained
 // processor list; if a builtin processor is renamed or removed, this map
-// needs a matching update (there is no structural link enforcing it, since
-// importing the builtin processor registry here would pull plugin runtime
-// dependencies into a package that only ever handles YAML text — a cost not
-// worth paying for a compile-time guarantee testdata already exercises).
+// needs a matching update. TestCapabilityRules_ResolveToRealTags fails when
+// a plugin named here is not in BuiltinProcessorRefs.
 //
 // A capability tag NOT present in this map is intentionally
 // unsatisfiable (hasCapability returns false for it) rather than matching
@@ -42,6 +43,10 @@ import "github.com/conduitio/conduit/pkg/provisioning/config"
 // for. They are separate constants so a rename of either cannot silently
 // rewrite the other.
 const procFilter = "filter"
+
+// procSplit is the builtin processor plugin named "split", kept apart from
+// capSplit for the same reason as procFilter.
+const procSplit = "split"
 
 const (
 	capFilter             = "filter"
@@ -80,7 +85,7 @@ var capabilityProcessors = map[string]map[string]bool{
 	capUnwrapDebezium:     {"unwrap.debezium": true},
 	capUnwrapKafkaconnect: {"unwrap.kafkaconnect": true},
 	capUnwrapOpencdc:      {"unwrap.opencdc": true},
-	capSplit:              {"split": true},
+	capSplit:              {procSplit: true},
 	capClone:              {"clone": true},
 	capWebhook:            {"webhook.http": true},
 	capEmbed:              {"openai.embed": true, "cohere.embed": true},
@@ -91,15 +96,34 @@ var capabilityProcessors = map[string]map[string]bool{
 // attached to a connector — allProcessors flattens both) is one of the
 // builtin plugins capabilityProcessors registers for tag. An unknown tag
 // (see the map's doc comment) always returns false.
+//
+// A processor reference is compared by its plugin name, so "field.set",
+// "builtin:field.set" and "builtin:field.set@v0.1.0" all count: the engine
+// resolves each of them to the same builtin processor, and the grounding
+// prompt tells the model to write the "builtin:" form. A "standalone:"
+// reference never counts, since it is not the builtin this map names.
 func hasCapability(procs []config.Processor, tag string) bool {
 	plugins, ok := capabilityProcessors[tag]
 	if !ok {
 		return false
 	}
 	for _, p := range procs {
-		if plugins[p.Plugin] {
+		if plugins[builtinProcessorName(p.Plugin)] {
 			return true
 		}
 	}
 	return false
+}
+
+// builtinProcessorName returns the bare plugin name of a processor reference
+// that can resolve to a builtin ("builtin:" or no type prefix), or "" for
+// any other type.
+func builtinProcessorName(ref string) string {
+	fn := plugin.FullName(ref)
+	switch fn.PluginType() {
+	case plugin.PluginTypeBuiltin, plugin.PluginTypeAny:
+		return fn.PluginName()
+	default:
+		return ""
+	}
 }

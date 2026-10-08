@@ -1,0 +1,16 @@
+version: "2.2"
+pipelines:
+  - id: base64-decode-pipeline
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:file"
+        settings:
+          path: /data/input/base64-records.txt
+      - id: destination
+        type: destination
+        plugin: "builtin:file"
+        settings:
+          path: /data/output/decoded-records.txt
+          sdk.record.format: raw
