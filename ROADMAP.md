@@ -122,10 +122,15 @@ Reuse and certify first; build only real gaps. A connector inventory
 `conduitio-labs` — than the registry lists. The catalog work below starts from that inventory.
 
 Every connector carries a quality tier in the registry and on a public parity scorecard:
-**Certified**, **Verified**, **Adapter** or **Community**. Certified means the acceptance suite,
-kill tests and benchi runs pass in CI on a golden path; Adapter means it runs through a host such
-as the Kafka Connect JAR host; Community means listed with license metadata. The exact criteria for
-each tier are published with the scorecard in v0.21.
+
+- **Certified** — everything in Verified, plus: built on a native family core, chaos-tested
+  (kill and resume), a benchmark baseline, documented delivery semantics, and maintained by the
+  Conduit project.
+- **Verified** — passes the plugin conformance suite, and the publisher's identity is verified
+  (signed registry publish).
+- **Adapter** — runs through the Kafka Connect JAR host or the Bento/Redpanda Connect adapter;
+  delivery semantics are inherited from the hosted component and documented.
+- **Community** — passes the conformance suite; maintained by the community.
 
 Catalog items are placed in the release train below, prefixed **Catalog**.
 
@@ -237,6 +242,10 @@ to the next release rather than holding the train.
 - [ ] **Catalog:** quality tiers (Certified / Verified / Adapter / Community) and a public parity
       scorecard seeded from the inventory
 - [ ] **Catalog:** archive the empty labs `conduit-processor-textgen` stub
+- [ ] **Catalog:** retire the labs `redpanda` connector in favour of the `kafka` connector with a
+      Redpanda profile tested in CI
+- [ ] **Catalog:** deprecate the built-in OpenAI and Cohere embedding processors in favour of
+      `ai.embed` (removed in v0.23)
 - [ ] Looking for three teams migrating off Kafka Connect to work with us as early adopters — open
       a [discussion](https://github.com/ConduitIO/conduit/discussions)
 
@@ -255,7 +264,13 @@ to the next release rather than holding the train.
 - [ ] NATS JetStream source and destination (certified from labs `nats-jetstream`)
 - [ ] **Catalog:** certify the JDBC sink family from the labs SQL connectors (Postgres and MySQL
       destinations first)
-- [ ] **Catalog:** certify Elasticsearch from labs, and check OpenSearch against it
+- [ ] **Catalog:** certify Elasticsearch from labs, with OpenSearch alongside (a separate
+      OpenSearch connector only if the Elasticsearch one doesn't cover it)
+- [ ] **Catalog:** Bento/Redpanda Connect adapter (preview) — a new build with ack propagation and
+      resumable positions; the 2022 prototype acknowledges before the write is durable and is a
+      reference only. Hosts inputs and outputs, not Bloblang
+- [ ] **Catalog:** `enhanced-generator` and the labs `textgen` test-data intent fold into the
+      built-in `generator` connector
 - [ ] Apache Iceberg destination beta — a new Go-native build (the labs Java connector is a behavior
       reference only): upserts, compaction-friendly writes, REST/Glue/Nessie catalogs — operational
       database to lakehouse in real time, no Kafka required
@@ -275,6 +290,9 @@ to the next release rather than holding the train.
       to Debezium-grade CDC for SQL Server, Oracle, Db2 and HANA, whose current connectors are
       trigger-based
 - [ ] **Catalog:** certify Snowflake, ClickHouse and Redis from labs
+- [ ] **Catalog:** BigQuery destination (new build) with the warehouse family
+- [ ] **Catalog:** Bento/Redpanda Connect adapter GA
+- [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed; use `ai.embed`
 - [ ] MySQL CDC GA
 - [ ] Rust SDK (preview): gRPC connectors and WASM processors on the existing processor ABI, with
       `conduit connector new --lang rust`
@@ -293,7 +311,8 @@ to the next release rather than holding the train.
       pipelines across pods, health-based rescheduling, lag-based autoscaling
 - [ ] MongoDB CDC (certified from labs `mongo`) and SQL Server CDC (the trigger-based labs
       connector certified as an interim; log-based capture later)
-- [ ] **Catalog:** certify Kinesis, SQS and Google Pub/Sub from labs
+- [ ] **Catalog:** certify Kinesis, SQS and Google Pub/Sub from labs; MQTT (new build) with the
+      messaging family
 - [ ] **Catalog:** certify Salesforce, Stripe and HubSpot from labs (three of five native SaaS
       targets)
 - [ ] Apache Iceberg destination GA
@@ -324,6 +343,8 @@ to the next release rather than holding the train.
 - [ ] Clear documentation of what the state layer is and isn't
 - [ ] Arrow columnar record spike, gated on the cross-engine benchmark harness
 - [ ] Java and C# embedded clients (generated gRPC bindings)
+- [ ] **Catalog:** Shopify and GitHub connectors (new builds) on the HTTP/SaaS family core
+- [ ] **Catalog:** log-based SQL Server CDC begins (v0.25 or later)
 - [ ] Java SDK begins, informed by the labs Java SDK proof of concept: gRPC connectors and gRPC
       processors, including the state API (completes in v0.26)
 
@@ -401,15 +422,8 @@ Kept on the list, not scheduled in a release yet:
   are production-grade (re-evaluated yearly)
 - Official SDKs beyond the six official languages — community tier via the conformance kit; promoted
   only on demand
-- Log-based CDC for SQL Server, Oracle, Db2 and HANA (the current connectors are trigger-based;
-  Debezium through the JAR host covers them from v0.23)
-- Catalog builds not yet placed: BigQuery destination, OpenSearch (if the Elasticsearch connector
-  doesn't cover it), Shopify, GitHub, MQTT, and a new Bento/Redpanda Connect adapter (the 2022
-  prototype acknowledges before the write is durable, so it is a reference only)
-- Catalog consolidations not yet placed: built-in OpenAI and Cohere embedding processors fold into
-  `ai.embed` (deprecated over two minor releases); the labs `redpanda` connector is retired in
-  favour of the `kafka` connector with a Redpanda profile tested in CI; `enhanced-generator` and the
-  labs `textgen` test-data intent fold into the built-in `generator` connector
+- Log-based CDC for Oracle, Db2 and HANA — they stay on the Debezium engine through the JAR host
+  until there is demand
 - Vector destinations: Pinecone, Turbopuffer
 - Other native connectors: GCS and Azure Blob with Parquet; Databricks/Delta Lake; SNS;
   HTTP/webhooks (source rebuilt so the response waits for the ack, plus destination);
