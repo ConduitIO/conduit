@@ -193,6 +193,14 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
+	// "***" (the API's redaction placeholder) keeps the stored value, so a
+	// redacted GET -> UPDATE round trip does not overwrite credentials (#2913).
+	// Before Validate, so the plugin validates the real values.
+	config.Settings, err = restoreRedactedSettings(conn.Config.Settings, config.Settings, "/config/settings")
+	if err != nil {
+		return nil, err
+	}
+
 	err = c.Validate(ctx, conn.Type, conn.Plugin, config)
 	if err != nil {
 		return nil, err

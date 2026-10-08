@@ -180,6 +180,13 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
+	// "***" (the API's redaction placeholder) keeps the stored value, so a
+	// redacted GET -> UPDATE round trip does not overwrite credentials (#2913).
+	cfg.Settings, err = restoreRedactedSettings(oldConfig.Settings, cfg.Settings, "/config/settings")
+	if err != nil {
+		return nil, err
+	}
+
 	proc, err = p.processors.Update(ctx, id, plugin, cfg)
 	if err != nil {
 		return nil, err

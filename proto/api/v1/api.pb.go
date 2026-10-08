@@ -4416,8 +4416,12 @@ type Pipeline_DLQ struct {
 	Plugin string `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
 	// settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
 	// value is redacted to "***" and only keys are returned, because settings
-	// routinely hold credentials. Requests must carry real values; sending a
-	// redacted map back stores "***" as the value.
+	// routinely hold credentials. In UpdateDLQ, a value that is exactly "***"
+	// keeps the stored value for that key, so a GetDLQ response can be sent
+	// back unchanged; "***" for a key with no stored value is rejected with
+	// orchestrator.redacted_setting_without_stored_value. Any other value
+	// replaces the stored one, and a key left out is removed. A real value of
+	// exactly "***" cannot be set.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// window_size defines how many last acks/nacks are monitored in the window
 	// that controls if the pipeline should stop (0 disables the window)
@@ -4591,7 +4595,12 @@ type Connector_Config struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// settings are the connector plugin settings. In responses every value is
 	// redacted to "***" and only keys are returned, because settings routinely
-	// hold credentials. Requests must carry real values.
+	// hold credentials. In UpdateConnector, a value that is exactly "***" keeps
+	// the stored value for that key, so a GetConnector response can be sent
+	// back unchanged; "***" for a key with no stored value is rejected with
+	// orchestrator.redacted_setting_without_stored_value. Any other value
+	// replaces the stored one, and a key left out is removed. CreateConnector
+	// stores values as sent, so it needs real values.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
@@ -4703,7 +4712,12 @@ type Processor_Config struct {
 
 	// settings are the processor plugin settings. In responses every value is
 	// redacted to "***" and only keys are returned, because settings routinely
-	// hold credentials. Requests must carry real values.
+	// hold credentials. In UpdateProcessor, a value that is exactly "***" keeps
+	// the stored value for that key, so a GetProcessor response can be sent
+	// back unchanged; "***" for a key with no stored value is rejected with
+	// orchestrator.redacted_setting_without_stored_value. Any other value
+	// replaces the stored one, and a key left out is removed. CreateProcessor
+	// stores values as sent, so it needs real values.
 	Settings map[string]string `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Workers  int32             `protobuf:"varint,2,opt,name=workers,proto3" json:"workers,omitempty"`
 }

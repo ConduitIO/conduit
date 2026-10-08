@@ -119,6 +119,14 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
+	// "***" (the API's redaction placeholder) keeps the stored value, so a
+	// redacted GetDLQ -> UpdateDLQ round trip does not overwrite credentials
+	// (#2913). Before Validate, so the plugin validates the real values.
+	dlq.Settings, err = restoreRedactedSettings(pl.DLQ.Settings, dlq.Settings, "/dlq/settings")
+	if err != nil {
+		return nil, err
+	}
+
 	// cast orchestrator to a ConnectorOrchestrator to get access to the plugin
 	// config validate function
 	err = (*ConnectorOrchestrator)(po).Validate(
