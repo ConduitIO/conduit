@@ -43,6 +43,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	gen "github.com/conduitio/conduit/cmd/conduit/internal/generate"
 	"github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
@@ -53,7 +54,12 @@ var (
 	_ ecdysis.CommandWithDocs    = (*Command)(nil)
 	_ ecdysis.CommandWithFlags   = (*Command)(nil)
 	_ ecdysis.CommandWithArgs    = (*Command)(nil)
+	_ ecdysis.CommandWithConfig  = (*Command)(nil)
 )
+
+// envPrefix is the prefix of the environment variables the conduit.yaml
+// loader honours, shared with every other command (CONDUIT_CONFIG_PATH, ...).
+const envPrefix = "CONDUIT"
 
 // Args holds the natural-language request.
 type Args struct {
@@ -69,15 +75,21 @@ type Flags struct {
 	Provider   string `long:"provider" usage:"generation provider to use (anthropic, openai, ollama); auto-detected when exactly one is configured"`
 	Model      string `long:"model" usage:"provider-specific model identifier; the provider's default when unset"`
 	Out        string `long:"out" usage:"path to write the generated pipeline to; defaults to a filename derived from the pipeline id, in the working directory"`
-	MaxRetries int    `long:"max-retries" usage:"how many provider calls a single generate may make, including the first" default:"3"`
+	MaxRetries int    `long:"max-retries" usage:"how many provider calls a single generate may make, including the first"`
 	Force      bool   `long:"force" usage:"overwrite the output file if it already exists"`
 	NoColor    bool   `long:"no-color" usage:"disable colored/glyph output even on a color-capable terminal"`
+	// ConfigPath is the conduit.yaml generate reads generate.provider from.
+	// Same flag name and default as every other command that reads it.
+	ConfigPath string `long:"config.path" usage:"global conduit configuration file; generate reads generate.provider from it"`
 }
 
 // Command implements `conduit generate`.
 type Command struct {
 	args  Args
 	flags Flags
+	// cfg is conduit.yaml (plus CONDUIT_* overrides), parsed by ecdysis
+	// before ExecuteWithResult runs. Only cfg.Generate is used.
+	cfg conduit.Config
 
 	// env and newProvider are seams so a test can exercise the whole command
 	// — resolve, generate, write, render — without touching process
@@ -109,15 +121,42 @@ This command never deploys anything. It writes a file; deploying it is the same 
 'conduit pipelines deploy' step a hand-written pipeline needs.
 
 A generation provider must be configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run a
-local Ollama server. When more than one is available, choose with --provider rather than
-letting the command pick for you.`,
+local Ollama server. When more than one is available, the command refuses to pick one for you;
+choose one, in order of precedence, with:
+  --provider <name>                     this invocation only
+  CONDUIT_GENERATE_PROVIDER=<name>      environment, e.g. in CI
+  generate.provider: <name>             in conduit.yaml (see --config.path)
+Valid names: anthropic, openai, ollama.`,
 		Example: `conduit generate "read from postgres and write new rows to s3 as json"
 conduit generate "stream orders from postgres into kafka, only orders over 100" --out orders.yaml
 conduit generate "sync kafka into postgres" --provider anthropic --json`,
 	}
 }
 
-func (c *Command) Flags() []ecdysis.Flag { return ecdysis.BuildFlags(&c.flags) }
+// defaultConfigPath is conduit.yaml in the working directory, the same file
+// every other command reads by default.
+const defaultConfigPath = "conduit.yaml"
+
+func (c *Command) Flags() []ecdysis.Flag {
+	flags := ecdysis.BuildFlags(&c.flags)
+	flags.SetDefault("config.path", defaultConfigPath)
+	// ecdysis ignores `default:` struct tags; without this the flag is 0 and
+	// the output says "attempt 1 of 0" (#2933).
+	flags.SetDefault("max-retries", gen.DefaultMaxAttempts)
+	return flags
+}
+
+// Config loads conduit.yaml so generate.provider is honoured. A missing file
+// is not an error (ecdysis treats the file as optional); a malformed one is,
+// the same as for every other command that reads it.
+func (c *Command) Config() ecdysis.Config {
+	return ecdysis.Config{
+		EnvPrefix:     envPrefix,
+		Parsed:        &c.cfg,
+		Path:          c.flags.ConfigPath,
+		DefaultValues: conduit.Config{},
+	}
+}
 
 func (c *Command) Args(args []string) error {
 	if len(args) == 0 {
@@ -176,6 +215,7 @@ func (c *Command) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, erro
 
 	name, err := provider.Resolve(provider.ResolveInput{
 		Flag:        c.flags.Provider,
+		Config:      c.cfg.Generate.Provider,
 		Env:         env,
 		ProbeOllama: probe,
 	})
