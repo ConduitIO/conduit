@@ -104,7 +104,8 @@ and for their agents._
 - [x] Official Conduit MCP server: agents can scaffold, validate, deploy, inspect, and repair
       pipelines
 - [x] `llms.txt` + single-page condensed documentation dump for LLM context
-- [ ] `conduit generate "<natural language>"` — AI-assisted pipeline generation from plain English
+- [ ] `conduit generate "<natural language>"` (preview) — AI-assisted pipeline generation from
+      plain English
 
 ### Plugin scaffolding
 
