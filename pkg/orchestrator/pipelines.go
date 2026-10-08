@@ -63,6 +63,8 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 	// live or waiting out a recovery backoff, whatever its status says
 	// (#2899 item 2). The status lags the run; a pending restart would run
 	// against the changed config.
+	// TODO lock pipeline: the check and the update are two steps, so a Start
+	// can still admit a run between them (#2961).
 	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
@@ -86,6 +88,8 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	// live or waiting out a recovery backoff, whatever its status says
 	// (#2899 item 2). Deleting under a starting or recovering run left that
 	// run moving data for a pipeline that no longer exists.
+	// TODO lock pipeline: the check and the delete are two steps, so a Start
+	// can still admit a run between them (#2961).
 	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
@@ -120,7 +124,9 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
 	// TODO lock pipeline
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())

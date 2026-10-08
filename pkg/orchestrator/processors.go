@@ -56,7 +56,9 @@ func (p *ProcessorOrchestrator) Create(
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("cannot add a processor to the pipeline %q", pl.ID))
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if p.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
@@ -174,7 +176,9 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, err
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if p.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
@@ -226,7 +230,9 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if p.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
