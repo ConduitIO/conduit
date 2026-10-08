@@ -26,6 +26,11 @@ import (
 // is no flag to pass.
 const EnvProvider = "CONDUIT_GENERATE_PROVIDER"
 
+// ConfigPath is the JSON pointer of generate.provider in conduit.yaml. It is
+// set as the ConfigPath of the error for an unknown provider name read from
+// the config file.
+const ConfigPath = "/generate/provider"
+
 // Env vars whose presence makes a hosted provider a candidate.
 const (
 	EnvAnthropicKey = "ANTHROPIC_API_KEY"
@@ -55,7 +60,9 @@ type Probe func(host string) bool
 type ResolveInput struct {
 	// Flag is --provider. Highest precedence.
 	Flag string
-	// Config is generate.provider from conduit.yaml.
+	// Config is generate.provider from conduit.yaml. It is below
+	// CONDUIT_GENERATE_PROVIDER, the same way every conduit.yaml key is
+	// below its CONDUIT_* environment variable.
 	Config string
 	// Env looks up environment variables. Required.
 	Env Env
@@ -69,12 +76,19 @@ type ResolveInput struct {
 
 // Resolve returns the provider name this invocation should use.
 //
-// Precedence, per design doc §1:
+// Precedence:
 //
 //  1. --provider flag
-//  2. generate.provider in conduit.yaml
-//  3. CONDUIT_GENERATE_PROVIDER
+//  2. CONDUIT_GENERATE_PROVIDER
+//  3. generate.provider in conduit.yaml
 //  4. auto-detect, and only when EXACTLY ONE candidate is resolvable
+//
+// Design doc §1 put generate.provider above the environment variable. That
+// order was changed when the config key was wired up (#2908):
+// CONDUIT_GENERATE_PROVIDER is the variable Conduit's config loader derives
+// for generate.provider, and every other conduit.yaml key is overridden by
+// its CONDUIT_* variable, so a file beating its own variable would be the
+// only exception. It also lets CI override a checked-in conduit.yaml.
 //
 // An explicit selection (1-3) is honoured without probing anything: if a user
 // names a provider, the job is to use it and let the call fail with the
@@ -89,10 +103,10 @@ func Resolve(in ResolveInput) (string, error) {
 		return "", conduiterr.New(conduiterr.CodeInternal, "provider resolution requires an Env lookup")
 	}
 
-	for _, explicit := range []struct{ source, value string }{
-		{"--provider", in.Flag},
-		{"generate.provider", in.Config},
-		{EnvProvider, in.Env(EnvProvider)},
+	for _, explicit := range []struct{ source, value, configPath string }{
+		{"--provider", in.Flag, ""},
+		{EnvProvider, in.Env(EnvProvider), ""},
+		{"generate.provider in conduit.yaml", in.Config, ConfigPath},
 	} {
 		v := strings.TrimSpace(explicit.value)
 		if v == "" {
@@ -102,6 +116,7 @@ func Resolve(in ResolveInput) (string, error) {
 			e := conduiterr.New(codeUnknownProvider,
 				fmt.Sprintf("unknown generation provider %q (set via %s)", v, explicit.source))
 			e.Suggestion = "valid providers: " + strings.Join(Names, ", ")
+			e.ConfigPath = explicit.configPath
 			return "", e
 		}
 		return v, nil
@@ -123,7 +138,7 @@ func Resolve(in ResolveInput) (string, error) {
 		e := conduiterr.New(CodeAmbiguousProvider,
 			fmt.Sprintf("more than one generation provider is configured: %s", strings.Join(candidates, ", ")))
 		e.Suggestion = fmt.Sprintf(
-			"choose one with --provider, generate.provider in conduit.yaml, or %s", EnvProvider,
+			"choose one with --provider, %s, or generate.provider in conduit.yaml", EnvProvider,
 		)
 		return "", e
 	}

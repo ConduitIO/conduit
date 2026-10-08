@@ -57,11 +57,11 @@ func Test_Resolve_Precedence(t *testing.T) {
 		is.Equal(got, NameOpenAI)
 	})
 
-	t.Run("config beats env", func(t *testing.T) {
+	t.Run("env beats config", func(t *testing.T) {
 		is := is.New(t)
 		got, err := Resolve(ResolveInput{Config: NameAnthropic, Env: env(full), ProbeOllama: reachable(true)})
 		is.NoErr(err)
-		is.Equal(got, NameAnthropic)
+		is.Equal(got, NameOllama)
 	})
 
 	t.Run("env beats auto-detect", func(t *testing.T) {
@@ -69,6 +69,14 @@ func Test_Resolve_Precedence(t *testing.T) {
 		got, err := Resolve(ResolveInput{Env: env(full), ProbeOllama: reachable(true)})
 		is.NoErr(err)
 		is.Equal(got, NameOllama)
+	})
+
+	t.Run("config beats auto-detect", func(t *testing.T) {
+		is := is.New(t)
+		noEnvProvider := map[string]string{EnvAnthropicKey: "sk-ant", EnvOpenAIKey: "sk-oai"}
+		got, err := Resolve(ResolveInput{Config: NameOpenAI, Env: env(noEnvProvider), ProbeOllama: reachable(true)})
+		is.NoErr(err)
+		is.Equal(got, NameOpenAI)
 	})
 }
 
@@ -189,6 +197,22 @@ func Test_Resolve_UnknownProviderName(t *testing.T) {
 
 	ce, _ := conduiterr.Get(err)
 	is.True(contains(ce.Suggestion, NameAnthropic)) // lists the valid ones
+	is.Equal(ce.ConfigPath, "")                     // a flag has no config path
+}
+
+// An unknown name in conduit.yaml names the config key and carries its JSON
+// pointer, so the error says which file setting to fix.
+func Test_Resolve_UnknownProviderNameFromConfig(t *testing.T) {
+	t.Parallel()
+	is := is.New(t)
+
+	_, err := Resolve(ResolveInput{Config: "antropic", Env: env(nil)})
+	is.True(err != nil)
+	is.Equal(codeOf(t, err), conduiterr.CodeInvalidArgument)
+
+	ce, _ := conduiterr.Get(err)
+	is.True(contains(ce.Message, "generate.provider in conduit.yaml"))
+	is.Equal(ce.ConfigPath, ConfigPath)
 }
 
 // Test_Candidates_DeterministicOrder pins that reporting order is stable.

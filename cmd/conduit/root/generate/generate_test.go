@@ -100,7 +100,7 @@ func TestFlags_NoApplyPathExists(t *testing.T) {
 		is.True(!slices.Contains(names, forbidden))
 	}
 	slices.Sort(names)
-	is.Equal(names, []string{"force", "max-retries", "model", "no-color", "out", "provider"})
+	is.Equal(names, []string{"config.path", "force", "max-retries", "model", "no-color", "out", "provider"})
 }
 
 func TestArgs(t *testing.T) {
