@@ -299,6 +299,11 @@ to the next release rather than holding the train.
 - [ ] **Catalog:** certify Snowflake, ClickHouse and Redis from labs; the `mysql-snowflake` and
       `kafka-clickhouse` templates ship with their certified paths
 - [ ] **Catalog:** BigQuery destination (new build) with the warehouse family
+- [ ] **Catalog:** DuckDB / MotherDuck destination with the warehouse family: upsert and delete by
+      source key, schema evolution. Ships as a standalone gRPC connector so the DuckDB CGO driver
+      never enters the engine binary. A Postgres CDC → DuckDB/MotherDuck template is part of its
+      definition of done. (The v0.22 Parquet object-storage and Iceberg outputs are already
+      directly queryable by DuckDB.)
 - [ ] **Catalog:** Bento/Redpanda Connect adapter GA
 - [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed; use `ai.embed`
 - [ ] MySQL CDC GA
@@ -445,7 +450,7 @@ Kept on the list, not scheduled in a release yet:
   only on demand
 - Log-based CDC for Oracle, Db2 and HANA — they stay on the Debezium engine through the JAR host
   until there is demand
-- DuckDB/MotherDuck
+- Evaluate a DuckDB source and DuckLake support, on demand
 - Production reference architectures beyond the streaming SQL partners
 
 ## Documentation (parallel track)
