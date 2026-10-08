@@ -340,3 +340,39 @@ func TestServiceLifecycle_Recovery_RunningWriteFails_RestartStaysLive(t *testing
 	is.Equal(storedStatus(t, db, pl.ID), pipeline.StatusUserStopped)
 	is.Equal(len(failures), 0)
 }
+
+// notFoundOnRunning wraps a PipelineService and answers the StatusRunning
+// write with pipeline.ErrInstanceNotFound, as if the pipeline had been
+// deleted while its run was starting. Other writes pass through.
+type notFoundOnRunning struct {
+	PipelineService
+}
+
+func (n notFoundOnRunning) UpdateStatus(ctx context.Context, id string, status pipeline.Status, errMsg string) error {
+	if status == pipeline.StatusRunning {
+		return cerrors.Errorf("pipeline %s: %w", id, pipeline.ErrInstanceNotFound)
+	}
+	return n.PipelineService.UpdateStatus(ctx, id, status, errMsg)
+}
+
+// TestServiceLifecycle_RunningWriteNotFound_StopsRun covers R1's one
+// fail-closed exception: a StatusRunning write that fails because the
+// pipeline no longer exists means it was deleted under the starting run. The
+// run must not keep moving data for a pipeline that is gone: it is stopped
+// as a user stop, and Start still reports success because the run was live.
+func TestServiceLifecycle_RunningWriteNotFound_StopsRun(t *testing.T) {
+	is := is.New(t)
+	never := func(pipeline.Status, int) bool { return false }
+	r := newStatusFaultRun(t, &statusFaultDB{DB: &inmemory.DB{}}, never, newScriptedNode(nil, nil))
+	r.ls.pipelines = notFoundOnRunning{PipelineService: r.ps}
+
+	is.NoErr(r.ls.runPipeline(context.Background(), r.rp))
+	// Nobody calls Stop: the run stops itself.
+	waitClosed(t, r.rp.t.Dead(), "the run of the deleted pipeline to stop")
+
+	is.True(r.rp.stop.requested())
+	is.Equal(r.pl.GetStatus(), pipeline.StatusUserStopped)
+	_, ok := r.ls.runningPipelines.Get(r.pl.ID)
+	is.True(!ok)
+	is.Equal(len(r.failureEvents()), 0)
+}

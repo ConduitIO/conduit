@@ -179,3 +179,78 @@ func TestServiceLifecycle_RunningWriteFails_StartSucceeds(t *testing.T) {
 	is.Equal(storedStatus(t, db, pl.ID), pipeline.StatusUserStopped)
 	is.Equal(len(failures), 0)
 }
+
+// notFoundOnRunning wraps a PipelineService and answers the StatusRunning
+// write with pipeline.ErrInstanceNotFound, as if the pipeline had been
+// deleted while its run was starting. Other writes pass through.
+type notFoundOnRunning struct {
+	PipelineService
+}
+
+func (n notFoundOnRunning) UpdateStatus(ctx context.Context, id string, status pipeline.Status, errMsg string) error {
+	if status == pipeline.StatusRunning {
+		return cerrors.Errorf("pipeline %s: %w", id, pipeline.ErrInstanceNotFound)
+	}
+	return n.PipelineService.UpdateStatus(ctx, id, status, errMsg)
+}
+
+// TestServiceLifecycle_RunningWriteNotFound_StopsRun covers R1's one
+// fail-closed exception in arch-v2: a pipeline deleted under its starting
+// run gets that run stopped as a user stop instead of left moving data.
+func TestServiceLifecycle_RunningWriteNotFound_StopsRun(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	inner := pipeline.NewService(logger, db)
+	pl, err := inner.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	ctrl := gomock.NewController(t)
+	source, sourceDispenser := generatorSource(ctrl, persister, nil, nil, false)
+	destination, destDispenser := asserterDestination(ctrl, persister, nil, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl, err = inner.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = inner.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		testProcessorService{},
+		testConnectorPluginService{source.Plugin: sourceDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
+		notFoundOnRunning{PipelineService: inner},
+		false,
+	)
+	failures := make(chan FailureEvent, 4)
+	ls.OnFailure(func(e FailureEvent) { failures <- e })
+	var rp *runnablePipeline
+	ls.testWorkersReleased = func(r *runnablePipeline) { rp = r }
+	defer func() {
+		if rp != nil && rp.t.Alive() {
+			rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
+			<-rp.t.Dead()
+		}
+	}()
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+	is.True(rp != nil)
+	// Nobody calls Stop: the run stops itself.
+	select {
+	case <-rp.t.Dead():
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run of the deleted pipeline was not stopped")
+	}
+	is.NoErr(ls.WaitPipeline(pl.ID))
+	is.Equal(pl.GetStatus(), pipeline.StatusUserStopped)
+	_, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(!ok)
+	is.Equal(len(failures), 0)
+}
