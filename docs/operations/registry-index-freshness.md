@@ -22,7 +22,9 @@ message: index timestamp 2026-09-05T21:08:35Z is older than the max staleness wi
 
 Maintainers see an open issue labeled `index-staleness` in `ConduitIO/conduit-connector-registry`,
 filed by `index-staleness-alarm.yml`. The alarm fires once the served index is older than 72h,
-which leaves 3 to 4 days before users hit the error above.
+which leaves 3 to 4 days before users hit the error above. The issue is assigned to the
+maintainer, its title carries the absolute UTC time the index goes stale, and the alarm posts an
+`@`-mention when it opens, again at 120h (48h left), and again at 168h (installs are failing).
 
 ## Diagnosis
 
@@ -59,7 +61,9 @@ which leaves 3 to 4 days before users hit the error above.
    index is fresh. Don't close it by hand before that. The alarm's green run is the confirmation.
 
 Re-sign every 5 days or so, without waiting for the alarm. The index has gone stale twice while the
-alarm was firing.
+alarm was firing. This weekly cadence stays until v0.22.0 ships. After that, clients from v0.21 on
+stay fresh through the liveness document, and a root re-sign is due about every 30 days (see the
+design doc).
 
 ### Temporary user workaround
 

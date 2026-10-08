@@ -315,7 +315,7 @@ operator override for old clients.
 
 **The transition cost, stated plainly:** liveness removes the human only for v0.21+ clients. While
 v0.18 to v0.20 clients matter, the root still has to be re-signed every ≤ 7 days, and the 72h alarm
-stays as it is. When to stop doing that is a maintainer decision (below).
+stays as it is. Decided: this continues until v0.22.0 ships (see the decision section).
 
 ## Failure modes
 
@@ -356,8 +356,8 @@ stays as it is. When to stop doing that is a maintainer decision (below).
   - **Anomaly (actionable):** the served liveness statement's T is older than 48h, or its digest
     doesn't match the served index.
   - **Reminder (periodic, roughly monthly):** root age is past `max-root-age − 7d`.
-  - **Old-client cliff:** keep the current 72h root-age alarm until the maintainer retires the weekly
-    root cadence (see decisions).
+  - **Old-client cliff:** keep the current 72h root-age alarm until v0.22.0 ships, when the weekly
+    root cadence ends (see the decision section).
 - **Optional follow-up:** a Rekor search on the pinned identity that flags any entry outside the
   scheduled window.
 - **Runbook:** `docs/operations/registry-index-freshness.md` (added in this PR) covers today's
@@ -372,7 +372,8 @@ None of this needs the root key unattended.
    `index-sign.yml` (role `root`), approve at `registry-signing`, then confirm the served
    `index.json` shows version 14 and a new timestamp. The alarm will open its issue on the
    2026-10-10 12:30 UTC run (about 79h old). Don't wait for it.
-2. **Make the alarm reach a person, not a timeline.** Issue #33 collected daily alarm comments for
+2. **Make the alarm reach a person, not a timeline** (decided 2026-10-08, implemented in the
+   registry repo). Issue #33 collected daily alarm comments for
    about 25 days while installs were broken. A comment on an issue the maintainer is subscribed to evidently doesn't get
    read. A small, secret-free registry-repo change:
    - put the absolute expiry time (`stale at 2026-10-14T05:30:44Z`) in the issue title;
@@ -404,7 +405,23 @@ None of this needs the root key unattended.
    - A CI test that the workflow path matches the identity pinned in Conduit.
 3. **Later:** decide on retiring the in-band freshness role (D5).
 
-## Decisions needed from DeVaris
+## Decision (DeVaris, 2026-10-08)
+
+- **Approved:** the keyless `liveness.json` design as recommended (D1–D5), including the ungated,
+  secret-free scheduled liveness workflow. The client change targets **v0.21**.
+- **`install.max-root-age` default: 30 days.**
+- **No future-dated root timestamps**, not even as a break-glass.
+- **Weekly human root re-sign continues until v0.22.0 ships**, for v0.18 to v0.20 clients. The
+  v0.21 release notes announce that. After v0.22.0 the root cadence relaxes to the 30-day ceiling.
+  From then on, v0.18 to v0.20 clients get `registry.index_stale` between day 7 and the next root
+  re-sign, and the fix is to upgrade to v0.21 or later.
+- **Alarm fix now**, in `ConduitIO/conduit-connector-registry`. The staleness alarm assigns and
+  `@`-mentions the maintainer, puts the absolute expiry time in the issue title, and escalates at
+  120h and 168h since the last root signature.
+
+The open questions below are kept for the record. They are resolved as stated above.
+
+## Decisions that were needed from DeVaris
 
 1. **Approve an ungated, scheduled workflow that can extend liveness.** This is the custody decision
    `index-sign.yml`'s header defers. With keyless signing it holds no secret, and its worst case is
@@ -413,7 +430,7 @@ None of this needs the root key unattended.
    more root re-signs. 30 days matches the site build's existing staleness limit. 90 days would mean
    four re-signs a year.
 3. **How long to keep the weekly root cadence for v0.18 to v0.20 clients after v0.21 ships.**
-   Recommendation: until v0.23.0 (two minors, matching the deprecation policy). After that, old
+   Recommendation was v0.23.0 (two minors). **Decided: until v0.22.0.** After that, old
    clients get `registry.index_stale` between day 7 and the next monthly re-sign, and the fix is to
    upgrade.
 4. **Allow future-dated root timestamps as a break-glass?** For example, before a planned absence:
