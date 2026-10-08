@@ -117,9 +117,18 @@ We're building infrastructure people bet their data on. Design like it.
   human would want to read. See `docs/releases.md`.
 - **Performance:** claims require benchi runs, committed configs, reproducible results. Never
   assert numbers without a benchmark in the repo.
-- **State layer discipline:** local embedded KV state, checkpointed with the pipeline. No
-  distributed snapshots, no pluggable state backends, no event-time watermark machinery. If a
-  design doc starts growing Flink features, stop and flag it.
+- **State layer discipline:** scope is set by ADR
+  `20261008-state-layer-scope-windows-and-bounded-lateness.md`. Allowed: dedup with TTL,
+  lookup/enrichment tables and stream-table joins, keyed upsert/merge, tumbling/sliding/session
+  windows, standard aggregates, and event time with **bounded lateness only** (per partition, a
+  window closes when max observed event time minus a fixed configured allowance passes its end;
+  later records go to the DLQ/late-data output per policy, never silently dropped — invariant 6).
+  State is partition-scoped (moves with partition claims), lives in the local embedded KV, and every
+  state write commits atomically with the pipeline checkpoint (invariant 5). Read-only key lookups
+  over the API/MCP are in scope; queries, scans and SQL are not. Excluded: global/distributed
+  watermarks, a triggers framework, stream-stream joins, distributed snapshots, pluggable state
+  backends, any expression/config DSL. If a design doc starts growing any excluded item, stop and
+  flag it.
 - **Docs move with code:** a feature PR without docs is incomplete. Update `conduit.io` docs
   source AND `llms.txt` when behavior changes — maintained together, always.
 
@@ -325,8 +334,16 @@ admin-merge path is for maintainer-authored work that has cleared the bar above.
 
 ### State layer
 
-- Scope check first: dedup, lookup tables, simple windows — nothing else without explicit
-  maintainer sign-off. Checkpoint/recovery tests are mandatory (kill mid-window, verify state).
+- Scope check first against ADR `20261008-state-layer-scope-windows-and-bounded-lateness.md`:
+  dedup with TTL, lookup tables and stream-table joins, keyed upsert/merge, tumbling/sliding/session
+  windows, standard aggregates, bounded-lateness event time, read-only key lookups over API/MCP.
+  Anything on its excluded list needs a superseding ADR, not a design-doc footnote.
+- Prerequisites before state work beyond design: arch-v2 is the default engine, the
+  partition-claims protocol has shipped, replay/backfill verbs exist.
+- State is partition-scoped and committed atomically with the checkpoint (invariant 5); late
+  records follow the configured policy, never silently dropped (invariant 6).
+- Checkpoint/recovery tests are mandatory for every state feature (kill mid-write and mid-window,
+  verify state and positions).
 
 ### Benchmarks
 
@@ -337,13 +354,18 @@ admin-merge path is for maintainer-authored work that has cleared the bar above.
 
 - Never introduce a privileged integration for one broker vendor.
 - Never add license restrictions or enterprise-gated features to open-source repos.
-- Never claim Conduit replaces Flink; use the state-layer + streaming-SQL-partner framing.
+- Never claim Conduit replaces Flink; position it as operational stream processing for
+  integration and AI, with streaming SQL partner engines for heavy SQL and stream-stream joins.
+- Never add global/distributed watermarks, a triggers framework, stream-stream joins, distributed
+  snapshots, or pluggable state backends to the state layer without a superseding ADR.
 - Never introduce a bespoke transformation DSL — transformations are real-language code compiled
-  to WASM.
+  to WASM or run as out-of-process gRPC processors.
 - Never change `conduit-connector-protocol` without an explicit versioning discussion.
 - Never publish performance claims without reproducible benchi results.
 - Never mark a connector "supported" without acceptance tests passing in CI.
-- Never start a speculative C#/Ruby/Java-native SDK without documented demand.
+- Never start a speculative SDK for a community-tier language (Ruby, etc.) without documented
+  demand. Official languages are Go, Python, TypeScript, Rust (full tier) and Java, C# (enterprise
+  tier) — see `ROADMAP.md`.
 - Never merge a Tier 1 (data-path) change on automated review alone — human sign-off is
   mandatory.
 - Never trade an ack-correctness, ordering, or crash-safety guarantee for throughput without a
