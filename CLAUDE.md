@@ -359,7 +359,8 @@ admin-merge path is for maintainer-authored work that has cleared the bar above.
 - Never add global/distributed watermarks, a triggers framework, stream-stream joins, distributed
   snapshots, or pluggable state backends to the state layer without a superseding ADR.
 - Never introduce a bespoke transformation DSL — transformations are real-language code compiled
-  to WASM or run as out-of-process gRPC processors.
+  to WASM or run as out-of-process gRPC processors. Established standard query languages (jq,
+  JMESPath, SQL) are allowed as processor parameters, never as a pipeline configuration language.
 - Never change `conduit-connector-protocol` without an explicit versioning discussion.
 - Never publish performance claims without reproducible benchi results.
 - Never mark a connector "supported" without acceptance tests passing in CI.
