@@ -466,30 +466,42 @@ PR 1. #2899 closes when PRs 2 to 4 have merged.
 
 ## Implementation notes (PR 3, PR 4)
 
-These are the places where the implementation differs from the rules above. All were found in review of the implementation PRs (#2955, #2962) and accepted there.
+These are the places where the implementation differs from the rules above. All were found in review of the
+implementation PRs (#2955, #2962) and accepted there.
 
-- **`Start` is refused while a run is finishing.** R3 grants a `Start` when the registered run is `finishing`. In the implementation the run's terminal status write could then land over the new run's `Running`: a live run reported `UserStopped`, and two `UpdateStatus` calls raced on one `pipeline.Instance`.
-  - So `Start` is refused while the previous run is finishing, with a new retryable code, `pipeline.stopping` (gRPC `Unavailable`).
+- **`Start` is refused while a run is finishing.** R3 grants a `Start` when the registered run is `finishing`. In the
+  implementation the run's terminal status write could then land over the new run's `Running`: a live run reported
+  `UserStopped`, and two `UpdateStatus` calls raced on one `pipeline.Instance`.
+  - So `Start` is refused while the previous run is finishing, with a new retryable code, `pipeline.stopping` (gRPC
+`Unavailable`).
   - Only a run in recovery `backoff` is ever superseded.
   - PR 4's fencing would make the `finishing` grant safe, but the refusal stays. Relaxing it is a separate change.
-- **`IsActive` counts a finishing run.** `Delete`, `Update` and the other orchestrator mutations wait for the finishing window as well, because a finishing run can still move to `backoff`.
+- **`IsActive` counts a finishing run.** `Delete`, `Update` and the other orchestrator mutations wait for the finishing
+  window as well, because a finishing run can still move to `backoff`.
 - **`Stop` records the stop request under `publishMu`**, in every admitted phase: starting, live, backoff, finishing.
   - A recovery restart's reservation refuses a run whose stop was requested.
-  - A `Stop` that lands on a recovery restart's reservation, or on a takeover `Start`'s reservation, is also recorded on the run that reservation would replace. So if the start fails, the pipeline ends stopped.
-- **The R4 fence lives in the lifecycle, not in `pipeline.Service`.** R4 puts a `run` token on `pipeline.Instance` and adds `UpdateRunStatus`. The implementation keeps the same guarantee at the only writer of run statuses, using the run's registry entry as the token:
-  - a run writes the pipeline's status only while it is the registered run, under a per-pipeline status lock (reference-counted) that the new run's `Running` write also takes;
+  - A `Stop` that lands on a recovery restart's reservation, or on a takeover `Start`'s reservation, is also recorded on
+the run that reservation would replace. So if the start fails, the pipeline ends stopped.
+- **The R4 fence lives in the lifecycle, not in `pipeline.Service`.** R4 puts a `run` token on `pipeline.Instance` and
+  adds `UpdateRunStatus`. The implementation keeps the same guarantee at the only writer of run statuses, using the
+  run's registry entry as the token:
+  - a run writes the pipeline's status only while it is the registered run, under a per-pipeline status lock (reference-
+counted) that the new run's `Running` write also takes;
   - a run records its terminal error and notifies only while it owns the pipeline.
 
   `pipeline.Service`, the `PipelineService` interface and the persisted instance are unchanged.
-- **A failed takeover is recorded the same way whichever side finishes last.** The two sides are the `Start` that superseded a backoff run and then failed, and that run's cleanup. The outcome is:
+- **A failed takeover is recorded the same way whichever side finishes last.** The two sides are the `Start` that
+  superseded a backoff run and then failed, and that run's cleanup. The outcome is:
   - the superseded run's own terminal decision, if it made one;
   - otherwise `SystemStopped` on shutdown;
   - `UserStopped` if a stop was requested;
   - `Degraded` with the start error in all other cases.
 
   This case is not in the rules above.
-- **Status writes are bounded** at 30s (`statusWriteTimeout`). On badger, which ignores the context, the bound covers `Start`'s wait but not the write itself (#2964).
-- **Follow-ups found in review:** a per-pipeline lock across the orchestrator's check and mutation (#2961), and provisioning still deciding "running" from status (#2965).
+- **Status writes are bounded** at 30s (`statusWriteTimeout`). On badger, which ignores the context, the bound covers
+  `Start`'s wait but not the write itself (#2964).
+- **Follow-ups found in review:** a per-pipeline lock across the orchestrator's check and mutation (#2961), and
+  provisioning still deciding "running" from status (#2965).
 
 ## Scope
 
