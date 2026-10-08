@@ -137,6 +137,10 @@ type Service struct {
 	// production.
 	testAtReservation    func(pipelineID string, predecessor *runnablePipeline)
 	testAfterBackoffWait func(rp *runnablePipeline)
+	// testAfterFinishing, if set, is called by the cleanup goroutine right
+	// after it moves the run to phaseFinishing, before it classifies how
+	// the run ended. Nil in production.
+	testAfterFinishing func(rp *runnablePipeline)
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -417,6 +421,12 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		// Shutdown began between the check above and Start's admission.
 		return errRecoveryAborted
 	}
+	if err != nil && rp.stop.requested() {
+		// A Stop arrived while the restart was building (it is recorded on
+		// rp as well as on the restart's reservation) and the restart then
+		// failed: the run ends stopped, not degraded, and does not notify.
+		return errRecoveryAborted
+	}
 	return err
 }
 
@@ -425,6 +435,16 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 // shutting down (#2901). The cleanup goroutine in runPipeline turns it into a
 // terminal status instead of a restart.
 var errRecoveryAborted = cerrors.New("recovery aborted: stop requested or shutting down")
+
+// predecessorStopErr is reserve's check for a recovery restart: the run it
+// restarts must not have been asked to stop. publishMu must be held, which
+// is also where Stop records the request.
+func predecessorStopErr(rp *runnablePipeline) error {
+	if rp.stop.requested() {
+		return errRecoveryAborted
+	}
+	return nil
+}
 
 // recoveryAborted reports whether a pending recovery restart of rp must be
 // abandoned: a stop was requested for rp, or the service is shutting down.
@@ -443,31 +463,40 @@ func (s *Service) recoveryAborted(rp *runnablePipeline) bool {
 // its status shows. A Stop that arrives while a Start is still building the
 // run is recorded and applied as soon as the run is published.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
+	// Invariant 7 (#2901): the stop request is recorded under publishMu, the
+	// lock a recovery restart reserves under, so a restart either sees the
+	// request and is abandoned, or is already published and is stopped
+	// itself. Recording it after the lookup let a restart reserve in between
+	// and run on after Stop returned.
 	s.publishMu.Lock()
 	if res, ok := s.starting[pipelineID]; ok {
 		if res.stop == nil {
 			res.stop = &pendingStop{}
 		}
 		res.stop.force = res.stop.force || force
+		if res.predecessor != nil {
+			// A recovery restart is building. If its build fails, the run
+			// it restarts must end stopped, not degraded.
+			res.predecessor.requestStop(false)
+		}
 		s.publishMu.Unlock()
 		return nil
 	}
 	rp, ok := s.runningPipelines.Get(pipelineID)
-	phase := phaseLive
+	var phase runPhase
+	alreadyStopping := false
 	if ok {
 		phase = rp.phase
+		alreadyStopping = rp.stop.requested()
+		rp.requestStop(false)
 	}
 	s.publishMu.Unlock()
-	if ok && phase == phaseBackoff {
+	if ok && phase != phaseLive {
 		// The nodes are already dead: recording the stop is the whole job.
-		// It ends the backoff wait and the run finishes stopped, with the
-		// error it failed with (#2901). Telling dead nodes to stop would
-		// only fail.
-		rp.requestStop(false)
+		// A run in backoff ends its wait and finishes stopped, with the
+		// error it failed with (#2901); a finishing run that would go on to
+		// recover does not. Telling dead nodes to stop would only fail.
 		return nil
-	}
-	if ok && phase == phaseFinishing {
-		ok = false
 	}
 
 	if !ok {
@@ -484,7 +513,7 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 
 	switch force {
 	case false:
-		return s.stopGraceful(ctx, rp, nil, false)
+		return s.stopNodes(ctx, rp, nil, alreadyStopping)
 	case true:
 		return s.stopForceful(ctx, rp)
 	}
@@ -507,7 +536,14 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 	// waiting out its backoff for this run.
 	alreadyStopping := rp.stop.requested()
 	rp.requestStop(system)
+	return s.stopNodes(ctx, rp, reason, alreadyStopping)
+}
 
+// stopNodes asks rp's source nodes to stop with reason. The stop request
+// must already be recorded on rp; alreadyStopping says whether one had been
+// recorded before this one, which makes a node refusing a second stop
+// expected.
+func (s *Service) stopNodes(ctx context.Context, rp *runnablePipeline, reason error, alreadyStopping bool) error {
 	var errs []error
 	for _, n := range rp.n {
 		if node, ok := n.(stream.StoppableNode); ok {
@@ -1336,6 +1372,9 @@ func (s *Service) cleanupRun(rp *runnablePipeline, nodesWg *sync.WaitGroup, isGr
 	// (admission.go). Recovery moves the run to backoff if it is not taken
 	// over first.
 	s.setPhase(rp, phaseFinishing)
+	if s.testAfterFinishing != nil {
+		s.testAfterFinishing(rp)
+	}
 	err := rp.t.Err()
 	// stoppedWithErr is set when the run was stopped (not failed) but
 	// still ended with an error. That error is recorded and returned,
@@ -1505,9 +1544,13 @@ func (s *Service) publishRunningPipeline(rp *runnablePipeline) {
 	if pending != nil {
 		// A user Stop arrived while this run was being built. Apply it now,
 		// as Stop would have. Detached context, as below.
+		var err error
 		if pending.force {
-			_ = s.stopForceful(context.Background(), rp)
-		} else if err := s.stopGraceful(context.Background(), rp, nil, false); err != nil {
+			err = s.stopForceful(context.Background(), rp)
+		} else {
+			err = s.stopGraceful(context.Background(), rp, nil, false)
+		}
+		if err != nil {
 			s.logStopError(context.Background(), false, err, rp.pipeline.ID,
 				"could not stop pipeline that was stopped while starting")
 		}

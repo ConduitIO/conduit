@@ -42,6 +42,8 @@ type admissionRun struct {
 	ls       *Service
 	pl       *pipeline.Instance
 	failures chan FailureEvent
+	// conns can make a Start fail to build (fencing_test.go).
+	conns *gatedConnectors
 
 	mu        sync.Mutex
 	published []*runnablePipeline
@@ -78,8 +80,12 @@ func newAdmissionRun(t *testing.T) *admissionRun {
 	cfg.MinDelay = time.Millisecond
 	cfg.MaxDelay = time.Millisecond
 	r := &admissionRun{pl: pl, failures: make(chan FailureEvent, 8)}
+	r.conns = &gatedConnectors{
+		testConnectorService: testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		entered:              make(chan struct{}),
+	}
 	r.ls = NewService(logger, cfg,
-		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		r.conns,
 		testProcessorService{},
 		testConnectorPluginService{source.Plugin: srcDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
 		ps,

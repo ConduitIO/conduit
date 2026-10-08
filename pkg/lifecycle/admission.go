@@ -34,8 +34,9 @@ import (
 //
 // A pipeline ID is in one of these states:
 //
-//   - free: no reservation and no registered run (or a registered run that is
-//     finishing: its nodes are dead and its terminal tail is in progress);
+//   - free: no reservation and no registered run;
+//   - finishing: the registered run's nodes are dead and its cleanup is
+//     classifying it or writing its terminal tail;
 //   - starting: a Start holds a reservation while it builds and starts the run;
 //   - live: the run is published in runningPipelines;
 //   - backoff: the published run's nodes are dead and its cleanup is waiting out
@@ -43,7 +44,9 @@ import (
 //
 // Invariant 2: at most one run per pipeline ID holds a reservation or a live
 // entry. Start is granted only on free or backoff; on backoff it supersedes
-// the pending restart, which is then abandoned. The recovery restart reserves
+// the pending restart, which is then abandoned. On finishing it is refused
+// with pipeline.stopping (retryable): the finishing run's terminal status
+// write would otherwise race the new run's Running. The recovery restart reserves
 // the same way but is granted only if its run is still the registered one and
 // has not been superseded, so exactly one of an external Start and the
 // pending restart wins.
@@ -72,6 +75,8 @@ type reservation struct {
 	// done is closed when the reservation is consumed by the publication or
 	// released, so WaitPipeline can wait for a starting run.
 	done chan struct{}
+	// predecessor is the run a recovery restart restarts, nil for a Start.
+	predecessor *runnablePipeline
 }
 
 type pendingStop struct {
@@ -83,6 +88,16 @@ type pendingStop struct {
 // leaves the pipeline to the new run: no status, no terminal error, no
 // notification.
 var errRecoverySuperseded = cerrors.New("recovery superseded: the pipeline was started again")
+
+func errPipelineStopping(pipelineID string) error {
+	err := conduiterr.Wrap(
+		pipeline.CodePipelineStopping,
+		fmt.Sprintf("can't start pipeline %s: %s", pipelineID, pipeline.ErrPipelineStopping),
+		pipeline.ErrPipelineStopping,
+	)
+	err.Suggestion = "the pipeline's previous run is still finishing; retry the start in a moment"
+	return err
+}
 
 func errPipelineRunning(pipelineID string) error {
 	// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
@@ -122,15 +137,25 @@ func (s *Service) reserve(pipelineID string, predecessor *runnablePipeline) (*re
 		if !ok || cur != predecessor || predecessor.superseded {
 			return nil, errRecoverySuperseded
 		}
+		// Invariant 7: a run someone asked to stop is never restarted. Stop
+		// records the request under this lock.
+		if err := predecessorStopErr(predecessor); err != nil {
+			return nil, err
+		}
 	case ok && cur.phase == phaseLive:
 		return nil, errPipelineRunning(pipelineID)
+	case ok && cur.phase == phaseFinishing:
+		// The run's nodes are dead and its terminal tail has not finished
+		// writing. A new run now could have its Running overwritten by that
+		// tail, so refuse until it is done (retryable).
+		return nil, errPipelineStopping(pipelineID)
 	case ok:
-		// backoff or finishing: this Start takes over. A pending restart is
-		// abandoned (it checks superseded under this lock).
+		// backoff: this Start takes over. The pending restart is abandoned
+		// (it checks superseded under this lock).
 		cur.supersede()
 	}
 
-	res := &reservation{done: make(chan struct{})}
+	res := &reservation{done: make(chan struct{}), predecessor: predecessor}
 	if s.starting == nil {
 		s.starting = make(map[string]*reservation)
 	}
@@ -184,6 +209,7 @@ func (s *Service) IsActive(pipelineID string) bool {
 	if _, ok := s.starting[pipelineID]; ok {
 		return true
 	}
-	cur, ok := s.runningPipelines.Get(pipelineID)
-	return ok && cur.phase != phaseFinishing
+	_, ok := s.runningPipelines.Get(pipelineID)
+	// A finishing run counts: it may still move to a recovery backoff.
+	return ok
 }
