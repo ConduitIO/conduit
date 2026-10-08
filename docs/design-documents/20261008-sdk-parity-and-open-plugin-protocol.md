@@ -24,8 +24,8 @@ people remember to do. This document proposes how:
    `conduit plugins conformance <artifact>`.
 4. **Feature manifests and a release gate.** Each SDK ships a machine-readable manifest. A generated parity matrix is
    published in docs and in registry metadata. An official SDK cannot publish a release that claims a spec version
-   it did not pass. Official SDKs reach parity within one minor release of a spec change, or the feature is labelled
-   "Go-only preview".
+   it did not pass. Official SDKs reach parity within one minor release of a spec change (full tier) or two (enterprise
+   tier), or the feature is labelled "Go-only preview".
 5. **Change propagation is automated.** A spec release opens tracking issues in every official SDK repo and can start
    an agent that drafts the port from the Go reference. Conformance and human review gate the result.
 6. **One repo per language** for non-Go SDKs (connector, processor, state and client packages together). Go keeps its
@@ -36,8 +36,9 @@ people remember to do. This document proposes how:
 
 The one load-bearing conflict this doc surfaces: [ADR 20260722](../architecture-decision-records/20260722-wasm-component-model-deferred.md)
 made WASM _connectors_ NO-GO because no pure-Go runtime can host WASI Preview 2 components, and that is still true on
-2026-10-08. The roadmap places Rust WASM connectors at v0.23 and TypeScript WASM connectors at v0.26. Both need a
-decision (see [Decisions needed](#decisions-needed)). Nothing else in this plan depends on that decision.
+2026-10-08. WIT-based processors share the same blocker. Resolved: Rust and TypeScript connectors ship over gRPC, the
+custom wasip1 processor ABI continues, and the host choice is recorded in an ADR at v0.23 (see
+[Decisions](#decisions-devaris-2026-10-08)).
 
 ## Context: what exists today (verified 2026-10-08)
 
@@ -199,13 +200,21 @@ paths do not change.
 
 The **control API stays in this repo** (`proto/api/v1`). It changes in the same PRs as engine features, and splitting
 it out would make every API field a two-repo change. The spec repo pins a control API version per spec release and
-documents it. The embedded-client conformance scenarios drive that pinned version. (This is a judgement call; see
-[Decisions needed](#decisions-needed).)
+documents it. The embedded-client conformance scenarios drive that pinned version. (Decided; see
+[Decisions](#decisions-devaris-2026-10-08).)
 
 #### Versioning
 
 - One spec semver, `MAJOR.MINOR.PATCH`, independent of Conduit's version. The spec starts at **1.0.0**, which is the
-  connector protocol as of v0.9.5 plus processor v1 as of processor-sdk v0.6.0, with nothing else added.
+  connector protocol as of v0.9.5 plus processor v1 as of processor-sdk v0.6.0, plus two additive pieces: stable
+  error codes (below) and the `spec_version`/`capabilities` fields in `Specify`.
+- **Stable error codes are part of spec 1.0.0.** Today the plugin protocol has none (`pconnector/errors.go` defines
+  only `ErrUnimplemented`). Spec 1.0.0 adds `plugin/v1` with a reason registry in the engine's existing format: a
+  `google.rpc.Status` carrying a `google.rpc.ErrorInfo` detail, domain `conduit`, dotted reasons (`plugin.config.missing`,
+  `plugin.config.invalid`, `plugin.capability_unsupported`, `plugin.record.too_large`, …) and the failing config path in
+  `metadata`. Generated constants per language replace ad hoc codes such as pydantic's `"missing"`. Additive on the
+  wire: an older engine still reads the status message. Reasons follow the same announce → warn → remove policy as
+  fields.
 - The registry's `minProtocolVersion` keeps its field name and its semver pattern. Values below `1.0.0` mean the legacy
   per-repo versions, and every legacy version sorts below 1.0.0, so ordering stays correct with no schema change.
 - **MINOR** adds features (new RPCs, fields, WIT functions behind a version gate). **MAJOR** means a new proto package
@@ -256,11 +265,13 @@ So the migration runs in phases, and each phase is useful without the next:
 2. **New WASM SDKs build on ABI v1 until a host exists.** Rust processors (v0.23) target `wasm32-wasip1` core modules
    with the `conduit` imports. That needs prost and a dozen lines of hand-written import glue, and it is the same thing
    TinyGo does today. Rust is not blocked.
-3. **Host decision (by v0.23).** Pick one of: (a) wait for gravity or wacogo to reach a tagged, full-type-coverage
-   release; (b) build an **out-of-process component host**, a separate `conduit-wasm-host` binary on wasmtime that
-   loads a component and speaks the existing gRPC plugin protocol to the engine, which keeps the engine CGO-free and
-   keeps the single sandboxed artifact but gives up in-process speed; (c) CGO wasmtime in the engine, which ADR 20260722
-   rejects.
+3. **Host decision (ADR at v0.23, decided 2026-10-08).** The ADR chooses between (a) waiting for gravity or wacogo to
+   reach a tagged, full-type-coverage release and (b) an **out-of-process component host**, a separate
+   `conduit-wasm-host` binary on wasmtime that loads a component and speaks the existing gRPC plugin protocol to the
+   engine. Option (b) keeps the engine CGO-free and keeps the single sandboxed artifact, but gives up in-process speed.
+   (c) CGO wasmtime in the engine stays rejected per ADR 20260722. The v0.23 ADR supersedes ADR 20260722 in part. The
+   same choice unblocks WIT-based processors and WASM connectors, and until it ships the custom wasip1 ABI v1 is the
+   only WASM processor ABI.
 4. **Dual-ABI period.** Once a component host ships, both ABIs are supported. ABI v1 is announced deprecated no earlier
    than the release where the component host is GA, warned for at least two minors, and removed only in a spec MAJOR.
    `conduit processor-plugins describe --json` reports `abi: wasip1-v1 | component` so operators can see what they run.
@@ -402,8 +413,10 @@ features:
   or NuGet is a later job that depends on it. **A claimed surface version with any failing scenario fails the release.**
   A surface the tier requires (from `tiers.yaml`) but the manifest leaves `null` also fails, unless every feature in it
   is labelled `preview` under the parity policy.
-- **Parity policy.** When a spec minor adds a feature, official SDKs in the tiers whose surfaces include it have one
-  Conduit minor to reach `ga` for it. Until they do, the feature appears in docs and in the matrix as
+- **Parity policy.** When a spec minor adds a feature, official SDKs in the tiers whose surfaces include it must reach
+  `ga` for it within **one Conduit minor (full tier) or two Conduit minors (enterprise tier)**. The window is recorded
+  per tier in `tiers.yaml`, and the release gate reads it from there. Until they do, the feature appears in docs and in
+  the matrix as
   "Go-only preview" (or "Go, Python preview"). The engine does not gate it; the label is for users.
 - **Parity matrix.** A scheduled job in the spec repo collects every SDK's manifest and its latest conformance report,
   then renders a matrix (feature × language, with the status and the report link) into the docs site and `llms.txt`.
@@ -451,7 +464,7 @@ and released together with independent package versions. Go keeps `conduit-conne
 `conduit-processor-sdk` as they are, because their module paths are a public contract.
 
 ```text
-conduit-sdk-python/     packages: conduit-connector-sdk, conduit-processor-sdk, conduit-client (one namespace)
+conduit-sdk-python/     one distribution: conduit.connector, conduit.processor, conduit.client
 conduit-sdk-typescript/ packages: @conduitio/connector, @conduitio/processor, @conduitio/client
 conduit-sdk-rust/       crates:   conduit-connector, conduit-processor, conduit-client
 conduit-sdk-java/       artifacts: io.conduit:connector-sdk, processor-sdk, client
@@ -459,9 +472,10 @@ conduit-sdk-dotnet/     packages: Conduit.Connector, Conduit.Processor, Conduit.
 ```
 
 The existing `conduit-connector-sdk-python` and `conduit-client-python` merge into `conduit-sdk-python` before v0.21 GA.
-The merge is also where the `conduit` namespace collision gets fixed: both distributions become PEP 420 namespace
-packages under `conduit.connector` and `conduit.client`, with no top-level `conduit/__init__.py`. That changes import
-paths, which is acceptable at 0.1.0.dev and not after GA.
+They ship as **one distribution**, which removes the `conduit` package collision: the code moves under
+`conduit.connector` and `conduit.client` (and `conduit.processor` at v0.24). That changes import paths for 0.1.0.dev
+users, which is acceptable before GA and not after. The other languages ship one package per surface because their
+ecosystems have no single-namespace collision problem and users install only what they need.
 
 Shared CI lives in the spec repo as reusable workflows: `conformance.yml` (build kitchen-sink, run the runner, upload the
 report), `release-gate.yml`, `regen-check.yml` (`buf generate` and WIT bindgen, then fail on diff), and `propagate.yml`.
@@ -507,7 +521,9 @@ Published from `conduit-plugin-spec/docs/` to the docs site under "Plugin protoc
   embedded client. Generated stubs plus a thin layer. Exactly the same scenarios as the full tier for those surfaces.
 - **Placement:** Java and C# embedded clients at v0.25 (mostly generated). Java connector and processor SDK across
   v0.25–v0.26, after the Kafka Connect JAR host (v0.23) and the gRPC processor runtime (v0.24). Java is also the
-  forward path for Kafka Connect connector authors. C# SDK at v0.27, scoped with at least one committed adopter.
+  forward path for Kafka Connect connector authors. C# SDK at v0.27, with scope set together with early adopters. There
+  is no maintainer precondition.
+- **Parity window:** two Conduit minors, against one for the full tier.
 - **WASM re-evaluation criteria, checked yearly (first check 2027-10):** a Java or C# guest toolchain becomes eligible
   when all of these hold: (1) a tagged non-preview release that produces WASI P2 or P3 components from ordinary library
   code; (2) no experimental package feeds required; (3) the kitchen-sink processor compiles and passes `--mode sdk` on
@@ -549,9 +565,9 @@ What must be automated for this to be sustainable:
 | New language idioms, docs prose, examples | partly (generated reference docs) | yes |
 
 Two rules keep the tax bounded: **spec minors ship at most every other Conduit release** unless a fix is urgent, and a
-spec change that touches a Tier 1 surface must be worth six ports. If neither the automation nor the cadence rule holds
-in practice by v0.26, the enterprise tier's parity window should widen to two minors rather than letting the gate turn
-red and get ignored.
+spec change that touches a Tier 1 surface must be worth six ports. The enterprise tier's two-minor parity window
+spreads Java and C# ports across two releases. If the gate still goes red and stays red, the response is to narrow
+scope, not to let the gate be ignored.
 
 ## Alternatives considered
 
@@ -649,23 +665,23 @@ Brief placements, with the parity work this doc adds. Estimates are focused main
 
 | Release | Brief placement | Parity and protocol work | Estimate |
 | --- | --- | --- | --- |
-| v0.21 | Python connector SDK GA; Python embedded client GA | spec repo at 1.0.0 (move protos, `buf breaking` required, `features.yaml`, `tiers.yaml`); `ErrorInfo` and capabilities added to `Specify`; runner v0 for the connector surface; Go and Python kitchen-sinks; Python repo merge and namespace fix; manifests for Go and Python | 5–6 |
+| v0.21 | Python connector SDK GA; Python embedded client GA | spec repo at 1.0.0 (move protos, `buf breaking` required, `features.yaml`, `tiers.yaml`); stable error codes (`plugin/v1` reason registry) and capabilities in `Specify`; runner v0 for the connector surface; Go and Python kitchen-sinks; Python repos merged into one distribution (`conduit.connector`, `conduit.client`); manifests for Go and Python | 5–6 |
 | v0.22 | — | vectors and property scenarios; mutants; release gate on Go and Python; fan-out workflow; protocol reference for connectors plus the Ruby walkthrough; registry `conformance` field | 4–5 |
-| v0.23 | Rust SDK; TypeScript embedded client | Rust SDK: gRPC connectors, ABI v1 processors (WASM connectors depend on the host decision); TS client on generated stubs; component-host decision recorded as an ADR | 5–6 |
+| v0.23 | Rust SDK; TypeScript embedded client | Rust SDK: gRPC connectors, ABI v1 processors; TS client on generated stubs; component-host ADR (pure-Go runtime vs out-of-process wasmtime host), superseding ADR 20260722 in part | 5–6 |
 | v0.24 | gRPC processor runtime; Python processor SDK; processor spec (protobuf + WIT) published; conformance suite and parity matrix live | `processor/v2` gRPC service; runner processor surface; public matrix; benchi runtime comparison | 6–8 (runtime is Tier 1) |
 | v0.25 | state API in Go, Python, TypeScript and Rust at once; Java and C# embedded clients | `state/v1` proto and WIT; state scenarios with crash recovery; Java and C# clients; Java SDK starts | 6–8 (state is Tier 1, separate design doc first) |
-| v0.26 | TypeScript connectors; pipelines-as-code builders in Python and TypeScript; one-call local mode for non-Go clients | TS connectors over gRPC on Node now, or as WASM components if v0.23's host decision allows; Java SDK GA | 5–6 |
-| v0.27 | C# SDK | C# connector, processor and state on gRPC; enterprise-tier gate for C# | 4–5 |
+| v0.26 | TypeScript connectors; pipelines-as-code builders in Python and TypeScript; one-call local mode for non-Go clients | TS connectors over gRPC on Node (WASM connectors follow the v0.23 host ADR, not this release); Java SDK GA | 5–6 |
+| v0.27 | C# SDK | C# connector, processor and state on gRPC, scoped with early adopters; enterprise-tier gate for C# | 4–5 |
 
 ## Risks
 
 - **Maintenance tax.** Six SDKs is about 45,000 hand-written lines before tests and a recurring port load per spec
-  minor. Mitigated by the automation table and the cadence rule. If the gate goes red and stays red, the honest response
-  is to narrow scope (widen the enterprise parity window, or delay C#), not to waive the gate.
+  minor. Mitigated by the automation table, the cadence rule and the enterprise tier's two-minor window. If the gate
+  goes red and stays red, the honest response is to narrow scope, not to waive the gate.
 - **Component-model maturity.** Host side: no pure-Go component host, so in-process WASM components are blocked.
   Guest side: Rust is mature, Go and TypeScript work but are young or labelled experimental, Python is pure-Python
-  only, C# is preview and Java has nothing. The phasing does not depend on any of these except the WASM-connector
-  placements.
+  only, C# is preview and Java has nothing. The phasing does not depend on any of these: connectors ship over gRPC,
+  and WASM processors stay on ABI v1 until the v0.23 host ADR is implemented.
 - **gRPC processor latency.** Out-of-process adds a serialization round trip per batch and per state call. Measured in
   v0.24 before docs recommend anything.
 - **Conformance as a bottleneck.** If the runner is wrong, every SDK is wrong in the same way. Mitigated by the mutants,
@@ -673,21 +689,30 @@ Brief placements, with the parity work this doc adds. Estimates are focused main
 - **Go reference bias.** Features land in Go first, so other SDKs always lag by up to one minor. That is acceptable and
   visible ("Go-only preview"), not hidden.
 
-## Decisions needed
+## Decisions (DeVaris, 2026-10-08)
 
-1. **WASM connector placements vs ADR 20260722.** v0.23 Rust WASM connectors and v0.26 TypeScript WASM connectors need
-   a component host. Options: wait for gravity or wacogo (both untagged today), build an out-of-process wasmtime
-   component host that speaks gRPC to the engine (no CGO in the engine), or move those placements to gRPC connectors
-   and keep WASM for processors only. Recommendation: Rust and TypeScript connectors ship over gRPC; the host decision
-   is recorded as an ADR at v0.23 with the out-of-process host as the leading candidate.
-2. **Control API location.** Recommendation: keep `proto/api/v1` in this repo, pinned per spec release. Alternative:
-   move it into the spec repo so every contract is in one place, at the cost of two-repo PRs for API fields.
-3. **Python namespace fix before v0.21 GA.** Merge the two Python repos and move to `conduit.connector` and
-   `conduit.client`. This breaks import paths for 0.1.0.dev users.
-4. **C# gating.** Recommendation: C# starts only with a committed adopter willing to co-maintain. Otherwise it
-   becomes the first SDK whose gate stays red.
-5. **Parity window per tier.** One minor for both tiers (the brief's policy) or two for the enterprise tier.
-6. **Spec cadence.** Spec minors at most every other Conduit release.
+Recorded on PR #2948. The options considered are kept beside each decision.
+
+1. **Rust and TypeScript connectors ship over gRPC now.** The WASM connector host choice is recorded in an ADR at
+   v0.23: wait for a pure-Go component runtime, or run a separate wasmtime host process that speaks gRPC to the engine.
+   That ADR supersedes ADR 20260722 in part. WIT-based processors have the same blocker, so the custom wasip1 processor
+   ABI (ABI v1) continues until that host exists. _Considered:_ keeping the v0.23 and v0.26 WASM connector placements
+   and waiting on gravity or wacogo, both untagged on 2026-10-08. That would have made two releases depend on upstream
+   projects we don't control.
+2. **`proto/api/v1` stays in this repo, pinned per spec release.** _Considered:_ moving it into the spec repo so every
+   contract lives in one place. Rejected because every API field would then need PRs in two repos.
+3. **The two Python repos merge into one distribution, with `conduit.connector` and `conduit.client`, before v0.21
+   GA.** Users of the pre-GA 0.1.0.dev releases take the import break. _Considered:_ two distributions sharing a
+   PEP 420 namespace. Rejected because it keeps two release trains for one language and makes users install two
+   packages.
+4. **C# stays at v0.27, scoped with early adopters. There is no co-maintainer precondition.** _Considered:_ gating the
+   C# start on a co-maintainer. Rejected: no maintainer gates.
+5. **Parity window: one Conduit minor for the full tier, two for the enterprise tier (Java, C#).** It is recorded in
+   `tiers.yaml` and enforced by the release gate. _Considered:_ one minor for every tier, the brief's original policy.
+6. **Spec minors ship at most every other Conduit release**, unless an urgent fix requires otherwise.
+7. **Stable error codes are added in spec 1.0.0**, through the `plugin/v1` reason registry (`ErrorInfo`, domain
+   `conduit`, config path in metadata), because the protocol has none today. _Considered:_ deferring codes to a later
+   minor. Rejected because every SDK would ship ad hoc codes first and then have to break them.
 
 ## Risk tier and related
 
