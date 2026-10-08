@@ -509,7 +509,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
 
-### s3 (v0.9.3)
+### s3 (v0.9.4)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -581,6 +581,8 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
+| `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
+| `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
 | `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
 | `pollingPeriod` | duration | 1s | no | polling period for the CDC mode, formatted as a time.Duration string. |  |
@@ -601,6 +603,8 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
+| `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
+| `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
 | `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
 | `format` | string |  | yes | the destination format, either "json" or "parquet". | required, inclusion(parquet,json) |

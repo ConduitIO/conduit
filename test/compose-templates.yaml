@@ -75,6 +75,15 @@ services:
   # health endpoint and bundled curl). Pinned by multi-arch index digest
   # (tag RELEASE.2026-08-04T00-00-00Z) so a third-party retag cannot change
   # what CI runs; bump the digest deliberately.
+  #
+  # MINIO_KMS_SECRET_KEY enables SSE-S3: the s3 destination always sends
+  # ServerSideEncryption=AES256 (conduit-connector-s3 destination/writer/s3.go)
+  # and MinIO answers 501 "Server side encryption specified but KMS is not
+  # configured" without a key. Same dev key as conduit-connector-s3's own
+  # test/docker-compose.yml.
+  #
+  # No MINIO_DOMAIN: MinIO accepts only path-style requests, so the test
+  # also proves the template's aws.pathStyle setting reaches the connector.
   templates-minio:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     ports:
@@ -82,6 +91,7 @@ services:
     environment:
       MINIO_ROOT_USER: conduitminio
       MINIO_ROOT_PASSWORD: conduitminiosecret
+      MINIO_KMS_SECRET_KEY: my-minio-key:OSMM+vkKUTCvQs9YL/CVMIMt43HFhkTiqZC7QkYYkYI=
     command: server /data
     networks:
       - templates-e2e

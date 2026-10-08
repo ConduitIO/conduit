@@ -31,4 +31,8 @@ pipelines:
           aws.secretAccessKey: your-secret-access-key
           aws.region: us-east-1
           aws.bucket: your-bucket-name
+          # S3-compatible stores (MinIO, Ceph, ...): uncomment both lines and
+          # point aws.endpoint at the store. Leave them commented for AWS S3.
+          # aws.endpoint: http://localhost:9000
+          # aws.pathStyle: true
           format: json
