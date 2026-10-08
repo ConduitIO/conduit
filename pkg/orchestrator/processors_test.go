@@ -36,6 +36,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -108,11 +109,12 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
 	}
-	pl.SetStatus(pipeline.StatusRunning)
+	pl.SetStatus(pipeline.StatusRecovering) // in recovery backoff: the old status check let this through
 
 	parent := processor.Parent{
 		ID:   pl.ID,
@@ -168,6 +170,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -208,6 +211,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -263,6 +267,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -342,6 +347,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -435,11 +441,12 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
 	}
-	pl.SetStatus(pipeline.StatusRunning)
+	pl.SetStatus(pipeline.StatusRecovering) // in recovery backoff: the old status check let this through
 
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
@@ -521,6 +528,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -609,6 +617,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -686,11 +695,12 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
 	}
-	pl.SetStatus(pipeline.StatusRunning)
+	pl.SetStatus(pipeline.StatusRecovering) // in recovery backoff: the old status check let this through
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -727,6 +737,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -768,6 +779,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -824,6 +836,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),

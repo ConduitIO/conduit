@@ -349,6 +349,7 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -396,11 +397,12 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID: uuid.NewString(),
 	}
-	plBefore.SetStatus(pipeline.StatusRunning)
+	plBefore.SetStatus(pipeline.StatusRecovering) // in recovery backoff: the old status check let this through
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	plsMock.EXPECT().
@@ -444,6 +446,7 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
