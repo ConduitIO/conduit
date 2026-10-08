@@ -1,0 +1,82 @@
+schemaVersion: 1
+requestID: file-to-file-base64-decode
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:42:37.477645Z
+corpusPromptSHA256: b59e3e65a4e43e0111a4509056014f96aac6218afc4fb6a7b9a6bb86882c72b6
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: b59e3e65a4e43e0111a4509056014f96aac6218afc4fb6a7b9a6bb86882c72b6
+      tokensUsed: 5860
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: base64-decode-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:file"
+                settings:
+                  path: /data/input/base64-records.txt
+              - id: destination
+                type: destination
+                plugin: "builtin:file"
+                settings:
+                  path: /data/output/decoded-records.txt
+                  sdk.record.format: raw
+    - "n": 2
+      userPromptSHA256: a5d1eccf6eac2af27bf53b182e088f82263431af20af10d456e4d6a14daf9222
+      tokensUsed: 6378
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: base64-decode-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:file"
+                settings:
+                  path: /data/input-base64.txt
+              - id: destination
+                type: destination
+                plugin: "builtin:file"
+                settings:
+                  path: /data/output-decoded.txt
+            processors:
+              - id: decode-base64
+                plugin: "base64.decode"
+                settings:
+                  field: .Payload.After
+    - "n": 3
+      userPromptSHA256: a5d1eccf6eac2af27bf53b182e088f82263431af20af10d456e4d6a14daf9222
+      tokensUsed: 6167
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: base64-decode-file-pipeline
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:file"
+                settings:
+                  path: /data/input-base64.txt
+              - id: destination
+                type: destination
+                plugin: "builtin:file"
+                settings:
+                  path: /data/output-decoded.txt
+            processors:
+              - id: base64-decode
+                plugin: "builtin:base64.decode"
+                settings:
+                  field: .Payload.After
+outcome:
+    validatePass: true
+    semanticMatch: false
+    semanticIssues:
+        - missing required capability "base64-encode" (no matching processor present)
