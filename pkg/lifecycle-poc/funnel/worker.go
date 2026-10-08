@@ -283,6 +283,9 @@ func (w *Worker) Close(ctx context.Context) error {
 
 // Do processes records from the source until the worker is stopped. It returns
 // no error if the worker is stopped gracefully.
+//
+// Do does not read the connectors' Errors() channels; the caller runs
+// WatchConnectorErrors alongside it (#2929).
 func (w *Worker) Do(ctx context.Context) error {
 	for !w.stop.Load() {
 		w.logger.Trace(ctx).Msg("starting next batch")
