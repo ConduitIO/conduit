@@ -224,3 +224,31 @@ func TestProviderConfig_UnknownNameIsRejected(t *testing.T) {
 	is.Equal(ce.ConfigPath, "/generate/provider")
 	is.True(strings.Contains(ce.Message, `"antropic"`))
 }
+
+// TestMaxRetriesDefault is the #2933 regression test: ecdysis ignores
+// `default:` struct tags, so --max-retries defaulted to 0 and the output said
+// "attempt 1 of 0".
+func TestMaxRetriesDefault(t *testing.T) {
+	is := is.New(t)
+	isolateEnv(t)
+	t.Chdir(t.TempDir())
+	t.Setenv(provider.EnvAnthropicKey, "sk-ant")
+
+	c := &Command{
+		newProvider: func(string, string, func(string) string) (provider.Provider, error) {
+			return &fakeProvider{reply: validPipeline}, nil
+		},
+		probe: func(string) bool { return false },
+	}
+	e := ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithResultDecorator{}))
+	cmd := e.MustBuildCobraCommand(c)
+	is.Equal(cmd.Flags().Lookup("max-retries").DefValue, "3")
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"generator to log", "--out", filepath.Join(t.TempDir(), "out.yaml")})
+	_, err := cmd.ExecuteC()
+	is.NoErr(err)
+	is.True(strings.Contains(out.String(), "attempt 1 of 3")) // not "of 0"
+}

@@ -75,7 +75,7 @@ type Flags struct {
 	Provider   string `long:"provider" usage:"generation provider to use (anthropic, openai, ollama); auto-detected when exactly one is configured"`
 	Model      string `long:"model" usage:"provider-specific model identifier; the provider's default when unset"`
 	Out        string `long:"out" usage:"path to write the generated pipeline to; defaults to a filename derived from the pipeline id, in the working directory"`
-	MaxRetries int    `long:"max-retries" usage:"how many provider calls a single generate may make, including the first" default:"3"`
+	MaxRetries int    `long:"max-retries" usage:"how many provider calls a single generate may make, including the first"`
 	Force      bool   `long:"force" usage:"overwrite the output file if it already exists"`
 	NoColor    bool   `long:"no-color" usage:"disable colored/glyph output even on a color-capable terminal"`
 	// ConfigPath is the conduit.yaml generate reads generate.provider from.
@@ -140,6 +140,9 @@ const defaultConfigPath = "conduit.yaml"
 func (c *Command) Flags() []ecdysis.Flag {
 	flags := ecdysis.BuildFlags(&c.flags)
 	flags.SetDefault("config.path", defaultConfigPath)
+	// ecdysis ignores `default:` struct tags; without this the flag is 0 and
+	// the output says "attempt 1 of 0" (#2933).
+	flags.SetDefault("max-retries", gen.DefaultMaxAttempts)
 	return flags
 }
 
