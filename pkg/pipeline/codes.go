@@ -44,4 +44,13 @@ var (
 	// run is drained before positions are flushed and the database is closed.
 	// Unavailable: retry against the instance after it restarts.
 	CodeShuttingDown = conduiterr.Register("pipeline.shutting_down", codes.Unavailable)
+	// CodeStatusPersistFailed is raised when a pipeline's status could not be
+	// written to the pipeline store. The in-memory status, which the API, the
+	// CLI and the lifecycle read, has already moved; the store still holds
+	// the previous status, which is what the next boot will act on. The
+	// lifecycle treats the write as a report: a run whose status was not
+	// persisted keeps running, and Start and Stop do not return this error.
+	// Check the database (/healthz, free disk) and whether position writes
+	// are failing too. Unavailable: the store may accept the write later.
+	CodeStatusPersistFailed = conduiterr.Register("pipeline.status_persist_failed", codes.Unavailable)
 )

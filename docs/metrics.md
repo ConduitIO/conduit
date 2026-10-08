@@ -22,6 +22,7 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | Pipeline name                                  | Type      | Description                                                                                                    |
     |------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------|
     | `conduit_pipelines`                            | Gauge     | Number of pipelines by status.                                                                                 |
+    | `conduit_pipeline_status_persist_failures_total` | Counter | Number of pipeline status writes that failed to reach the pipeline store, by pipeline name. A run keeps going when its status write fails; the stored status, which decides what the next boot starts, lags until a later write lands. Should stay at 0; investigate the database when it rises. |
     | `conduit_connectors`                           | Gauge     | Number of connectors by type (source, destination).                                                            |
     | `conduit_processors`                           | Gauge     | Number of processors by name and type.                                                                         |
     | `conduit_connector_bytes`                      | Histogram | Number of bytes* a connector processed by pipeline name, plugin, type (source, destination) and component ID.  |
