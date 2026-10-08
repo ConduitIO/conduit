@@ -1,0 +1,25 @@
+name: ghcr-cleanup-planner
+
+# Unit tests for the planner that decides which GHCR manifests the nightly
+# cleanup deletes (.github/scripts/ghcr_nightly_cleanup.py). The nightly job
+# runs the same tests before it deletes anything; this catches a break at
+# review time instead of at 00:30 UTC.
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/ghcr_nightly_cleanup.py'
+      - '.github/scripts/test_ghcr_nightly_cleanup.py'
+      - '.github/scripts/testdata/ghcr-*'
+      - '.github/workflows/ghcr-cleanup-planner.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test the deletion planner
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_ghcr_nightly_cleanup

@@ -6,15 +6,24 @@ on:
     # we want the nightly builds only on work days
     - cron:  '0 0 * * 2-6'
   workflow_dispatch:
+    inputs:
+      cleanup-apply:
+        description: 'Delete expired nightly images (otherwise the image cleanup is a dry run)'
+        type: boolean
+        default: false
+
+permissions: {}
 
 jobs:
   trigger-nightly:
     name: Push tag for nightly build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # the push and release cleanup use NIGHTLY_BUILD_GH_TOKEN
     steps:
       -
         name: 'Checkout'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
           fetch-depth: 0
@@ -27,15 +36,15 @@ jobs:
           # A previous release was created using a lightweight tag
           # git describe by default includes only annotated tags
           # git describe --tags includes lightweight tags as well
-          DESCRIBE=`git tag -l --sort=-v:refname | grep -v nightly | head -n 1`
-          MAJOR_VERSION=`echo $DESCRIBE | awk '{split($0,a,"."); print a[1]}'`
-          MINOR_VERSION=`echo $DESCRIBE | awk '{split($0,a,"."); print a[2]}'`
-          MINOR_VERSION="$((${MINOR_VERSION} + 1))"
+          DESCRIBE=$(git tag -l --sort=-v:refname | grep -v nightly | head -n 1)
+          MAJOR_VERSION=$(echo "$DESCRIBE" | awk '{split($0,a,"."); print a[1]}')
+          MINOR_VERSION=$(echo "$DESCRIBE" | awk '{split($0,a,"."); print a[2]}')
+          MINOR_VERSION="$((MINOR_VERSION + 1))"
           TAG="${MAJOR_VERSION}.${MINOR_VERSION}.0-nightly.$(date +'%Y%m%d')"
-          git tag -a $TAG -m "$TAG: nightly build"
-          git push origin $TAG
+          git tag -a "$TAG" -m "$TAG: nightly build"
+          git push origin "$TAG"
       - name: 'Clean up nightly releases'
-        uses: dev-drprasad/delete-older-releases@v0.3.4
+        uses: dev-drprasad/delete-older-releases@dfbe6be2a006e9475dfcbe5b8d201f1824c2a9fe # v0.3.4
         with:
           keep_latest: 5
           delete_tags: true
@@ -43,11 +52,52 @@ jobs:
           delete_prerelease_only: true
         env:
           GITHUB_TOKEN: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
-      - name: 'Delete nightly containers older than a week'
-        uses: snok/container-retention-policy@v3.1.0
-        with:
-          account: ConduitIO
-          image-names: conduit
-          image-tags: '*-nightly*'
-          cut-off: 1w
-          token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
+
+  # Expired nightly images are deleted together with their cosign signatures
+  # and attestations. Those live under `sha256-<digest>` tags (the OCI
+  # referrers tag schema; GHCR has no referrers API), which a `*-nightly*`
+  # pattern never matches, so they need the reachability-based planner in
+  # .github/scripts/ghcr_nightly_cleanup.py. Nothing reachable from a stable
+  # tag, `latest`, `latest-nightly` or an unexpired nightly is deleted.
+  #
+  # Dry run unless the repository variable GHCR_CLEANUP_APPLY is 'true' (for
+  # the schedule) or the `cleanup-apply` input is set (manual run). Read the
+  # dry-run plan in the job summary before turning it on.
+  cleanup-nightly-images:
+    name: Delete expired nightly images and their signatures
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # list and delete ghcr.io/conduitio/conduit versions
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The planner decides what gets deleted from a public registry. Its
+      # tests run against a real tag list; if they fail, nothing is deleted.
+      - name: Test the deletion planner
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_ghcr_nightly_cleanup
+
+      - name: Clean up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLY: ${{ inputs.cleanup-apply || vars.GHCR_CLEANUP_APPLY == 'true' }}
+        run: |
+          set -euo pipefail
+          args=(--image ghcr.io/conduitio/conduit --keep-days 7)
+          if [[ "$APPLY" == "true" ]]; then
+            args+=(--apply)
+          fi
+          status=0
+          python3 .github/scripts/ghcr_nightly_cleanup.py "${args[@]}" 2>&1 | tee cleanup.log || status=$?
+          {
+            echo '## Nightly image cleanup'
+            echo
+            echo "Mode: $([[ "$APPLY" == "true" ]] && echo apply || echo 'dry run')"
+            echo
+            echo '```'
+            grep -v '^  expire ' cleanup.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
