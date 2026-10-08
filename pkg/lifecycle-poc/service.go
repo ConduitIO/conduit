@@ -147,6 +147,10 @@ type Service struct {
 	// production.
 	testAtReservation    func(pipelineID string, predecessor *runnablePipeline)
 	testAfterBackoffWait func(rp *runnablePipeline)
+	// testAfterFinishing, if set, is called by the cleanup goroutine right
+	// after it moves the run to phaseFinishing, before it classifies how
+	// the run ended. Nil in production.
+	testAfterFinishing func(rp *runnablePipeline)
 
 	// testAfterStopSnapshot, if set, is called by the cleanup goroutine right
 	// after it has read the run's stop request, before it classifies the run.
@@ -517,38 +521,55 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 // its status shows. A Stop that arrives while a Start is still building the
 // run is recorded and applied as soon as the run is published.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
+	// Invariant 7 (#2901): the stop request is recorded under publishMu, the
+	// lock a recovery restart reserves under, so a restart either sees the
+	// request and is abandoned, or is already published and is stopped
+	// itself. Recording it after the lookup let a restart reserve in between
+	// and run on after Stop returned.
 	s.publishMu.Lock()
 	if res, ok := s.starting[pipelineID]; ok {
 		if res.stop == nil {
 			res.stop = &pendingStop{}
 		}
 		res.stop.force = res.stop.force || force
+		if res.predecessor != nil {
+			// A recovery restart is building. If its build fails, the run
+			// it restarts must end stopped, not degraded.
+			_, _ = res.predecessor.markStopRequested(false)
+		}
 		s.publishMu.Unlock()
 		return nil
 	}
 	rp, ok := s.runningPipelines.Get(pipelineID)
-	phase := phaseLive
+	var phase runPhase
+	var mark *stopMark
 	if ok {
 		phase = rp.phase
+		token, first := rp.markStopRequested(false)
+		mark = &stopMark{token: token, first: first}
 	}
 	s.publishMu.Unlock()
-	if ok && phase == phaseBackoff {
-		// The workers are already dead: recording the stop is the whole
-		// job. The pending restart sees it and the run finishes stopped,
-		// with the error it failed with (#2901). Telling dead workers to
-		// stop would only fail.
-		_, _ = rp.markStopRequested(false)
-		return nil
-	}
-	if ok && phase == phaseFinishing {
-		ok = false
-	}
 
 	if !ok {
 		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
 	}
+	if phase != phaseLive {
+		// The workers are already dead: recording the stop is the whole
+		// job. A run in backoff finishes stopped, with the error it failed
+		// with, when its wait ends (#2901); a finishing run that would go on
+		// to recover does not. Telling dead workers to stop would only fail.
+		return nil
+	}
 
-	return s.stopRunnablePipeline(ctx, rp, force, false)
+	return s.stopRunnablePipelineMarked(ctx, rp, force, false, mark)
+}
+
+// stopMark is a stop request already recorded on a run (markStopRequested's
+// result), handed to stopRunnablePipelineMarked so it does not record a
+// second one and can still roll this one back.
+type stopMark struct {
+	token uint64
+	first bool
 }
 
 // StopAll will ask all the running pipelines to stop gracefully
@@ -600,6 +621,12 @@ func (s *Service) StopAll(ctx context.Context, force bool) error {
 // stopRunnablePipeline stops rp gracefully or forcefully. system is true for
 // a shutdown (StopAll), false for a user Stop; see stopKind.
 func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force, system bool) error {
+	return s.stopRunnablePipelineMarked(ctx, rp, force, system, nil)
+}
+
+// stopRunnablePipelineMarked is stopRunnablePipeline for a caller that has
+// already recorded the stop request (mark), or nil to record it here.
+func (s *Service) stopRunnablePipelineMarked(ctx context.Context, rp *runnablePipeline, force, system bool, mark *stopMark) error {
 	switch force {
 	case false:
 		s.logger.Info(ctx).
@@ -616,7 +643,13 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// instead of misreading it as a spontaneous failure and
 		// auto-restarting via recoverPipeline. See the intentionalStop field
 		// doc.
-		stopToken, firstRequest := rp.markStopRequested(system)
+		var stopToken uint64
+		var firstRequest bool
+		if mark != nil {
+			stopToken, firstRequest = mark.token, mark.first
+		} else {
+			stopToken, firstRequest = rp.markStopRequested(system)
+		}
 
 		// H1 (adversarial review of #2734): every worker's Stop call is
 		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
@@ -799,7 +832,9 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// explicitly stopped. Since #2901 a force stop is recorded as a stop
 		// request too, so the run ends UserStopped (SystemStopped from
 		// StopAll) with ErrForceStop recorded, rather than Degraded.
-		_, _ = rp.markStopRequested(system)
+		if mark == nil {
+			_, _ = rp.markStopRequested(system)
+		}
 		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
@@ -1869,6 +1904,9 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// over (admission.go). Recovery moves the run to backoff if it is
 		// not taken over first.
 		s.setPhase(rp, phaseFinishing)
+		if s.testAfterFinishing != nil {
+			s.testAfterFinishing(rp)
+		}
 
 		// Invariant 7: from here the terminal tail (terminal error, map
 		// removal, notify) runs whatever the status writes return, and this
@@ -1951,16 +1989,13 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				recoveryErr := s.recoverPipeline(ctx, rp)
 				switch {
 				case recoveryErr == nil:
-					// Recovery restarted the pipeline (or an external Start
-					// already replaced the running entry). The live run now owns
+					// Recovery restarted the pipeline. The live run now owns
 					// terminal cleanup, so return early WITHOUT running the
 					// cleanup tail below — deleting the runningPipelines entry
 					// here would delete the new run's entry. Mirrors v1's
-					// return nil (pkg/lifecycle/service.go). This early return is
-					// also what lets StartWithBackoff's "am I still the live
-					// pipeline" guard observe a concurrent restart during the
-					// backoff wait: the old entry must stay in runningPipelines
-					// until Start swaps in the new one.
+					// return nil (pkg/lifecycle/service.go). A Start that took
+					// the pipeline over during the backoff is the
+					// errRecoverySuperseded case below, not this one.
 					return nil
 				case cerrors.Is(recoveryErr, errRecoverySuperseded):
 					// A Start took the pipeline over while this run was
@@ -2442,7 +2477,23 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		// (#2901): same outcome as a shutdown during the wait.
 		return errGracefulShutdownDuringRecovery
 	}
+	if err != nil && rp.intentionalStop.Load() {
+		// A Stop arrived while the restart was building (it is recorded on
+		// rp as well as on the restart's reservation) and the restart then
+		// failed: the run ends stopped, not degraded, and does not notify.
+		return errIntentionalStopDuringRecovery
+	}
 	return err
+}
+
+// predecessorStopErr is reserve's check for a recovery restart: the run it
+// restarts must not have been asked to stop. publishMu must be held, which
+// is also where Stop records the request.
+func predecessorStopErr(rp *runnablePipeline) error {
+	if rp.intentionalStop.Load() {
+		return errIntentionalStopDuringRecovery
+	}
+	return nil
 }
 
 // notify notifies all registered FailureHandlers about an error.

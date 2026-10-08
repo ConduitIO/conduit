@@ -46,6 +46,8 @@ type admissionRun struct {
 	pl        *pipeline.Instance
 	dispensed atomic.Int32
 	failures  chan FailureEvent
+	// conns can make a Start fail to build (fencing_test.go).
+	conns *gatedConnectors
 	// held is the destination whose Open blocks, for the holdDest-th
 	// dispense.
 	held *blockingOpenDestination
@@ -120,8 +122,12 @@ func newAdmissionRun(t *testing.T, failFirst bool, holdDest int32) *admissionRun
 	}
 	r.pl = pl
 
+	r.conns = &gatedConnectors{
+		testConnectorService: testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		entered:              make(chan struct{}),
+	}
 	r.ls = NewService(logger, testErrRecoveryCfg(),
-		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		r.conns,
 		testProcessorService{},
 		testConnectorPluginService{source.Plugin: srcDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
 		ps, false,
