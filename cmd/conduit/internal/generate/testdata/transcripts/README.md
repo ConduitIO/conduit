@@ -1,8 +1,10 @@
 # Committed provider transcripts
 
-Empty today. This directory is where the eval harness's replay corpus lives once A5a-3 (the
-capture slice — WS1 A5a/A5b plan §4) runs against a live provider and commits its output; this
-slice (A5a-2) defines the format and the loader, not the capture tool, and ships no transcripts.
+The eval harness's replay corpus: one transcript per corpus request, captured against a live
+provider by `TestCaptureTranscripts` (`generate-capture.yml`), and replayed on every PR by
+`TestReplayEval` (`generate-eval.yml`), which byte-compares its result against
+`../replay_expected.json`. Re-capturing changes what replay sees, so regenerate the golden in the
+same PR (`CONDUIT_GENERATE_REPLAY_UPDATE=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/`).
 
 ## Layout
 

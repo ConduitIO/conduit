@@ -1,0 +1,633 @@
+{
+  "schemaVersion": 1,
+  "corpora": [
+    {
+      "corpus": "anthropic/claude-sonnet-5",
+      "summary": {
+        "total": 28,
+        "validatePass": 27,
+        "semanticMatch": 18,
+        "generateOK": 21,
+        "tombstoned": 0,
+        "byCategory": [
+          {
+            "dimension": "source",
+            "value": "file",
+            "total": 4,
+            "validatePass": 4,
+            "semanticMatch": 3,
+            "generateOK": 3
+          },
+          {
+            "dimension": "source",
+            "value": "generator",
+            "total": 3,
+            "validatePass": 3,
+            "semanticMatch": 3,
+            "generateOK": 3
+          },
+          {
+            "dimension": "source",
+            "value": "kafka",
+            "total": 8,
+            "validatePass": 8,
+            "semanticMatch": 4,
+            "generateOK": 7
+          },
+          {
+            "dimension": "source",
+            "value": "postgres",
+            "total": 9,
+            "validatePass": 8,
+            "semanticMatch": 4,
+            "generateOK": 5
+          },
+          {
+            "dimension": "source",
+            "value": "s3",
+            "total": 4,
+            "validatePass": 4,
+            "semanticMatch": 4,
+            "generateOK": 3
+          },
+          {
+            "dimension": "destination",
+            "value": "file",
+            "total": 3,
+            "validatePass": 3,
+            "semanticMatch": 2,
+            "generateOK": 2
+          },
+          {
+            "dimension": "destination",
+            "value": "kafka",
+            "total": 9,
+            "validatePass": 9,
+            "semanticMatch": 6,
+            "generateOK": 7
+          },
+          {
+            "dimension": "destination",
+            "value": "log",
+            "total": 4,
+            "validatePass": 4,
+            "semanticMatch": 4,
+            "generateOK": 2
+          },
+          {
+            "dimension": "destination",
+            "value": "postgres",
+            "total": 5,
+            "validatePass": 5,
+            "semanticMatch": 3,
+            "generateOK": 5
+          },
+          {
+            "dimension": "destination",
+            "value": "s3",
+            "total": 7,
+            "validatePass": 6,
+            "semanticMatch": 3,
+            "generateOK": 5
+          },
+          {
+            "dimension": "capability",
+            "value": "base64-decode",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 0,
+            "generateOK": 0
+          },
+          {
+            "dimension": "capability",
+            "value": "convert",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 1,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "filter",
+            "total": 3,
+            "validatePass": 3,
+            "semanticMatch": 0,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "json-encode",
+            "total": 3,
+            "validatePass": 2,
+            "semanticMatch": 0,
+            "generateOK": 0
+          },
+          {
+            "dimension": "capability",
+            "value": "mask",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 0,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "none",
+            "total": 15,
+            "validatePass": 15,
+            "semanticMatch": 15,
+            "generateOK": 13
+          },
+          {
+            "dimension": "capability",
+            "value": "rename",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 1,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "set",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 0,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "split",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 0,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "unwrap-debezium",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 1,
+            "generateOK": 1
+          },
+          {
+            "dimension": "capability",
+            "value": "unwrap-kafkaconnect",
+            "total": 1,
+            "validatePass": 1,
+            "semanticMatch": 0,
+            "generateOK": 1
+          }
+        ]
+      },
+      "records": [
+        {
+          "id": "postgres-cdc-to-kafka-filtered",
+          "sourceCategory": "postgres",
+          "destinationCategory": "kafka",
+          "capabilities": [
+            "filter"
+          ],
+          "attempts": 3,
+          "tokensUsed": 19859,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"filter\" (no matching processor present)"
+          ],
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-s3-json-export",
+          "sourceCategory": "postgres",
+          "destinationCategory": "s3",
+          "capabilities": [
+            "json-encode"
+          ],
+          "attempts": 3,
+          "tokensUsed": 18695,
+          "generateOK": false,
+          "generateCode": "generate.validate_failed",
+          "validatePass": false,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "expected destination category \"s3\", found \"(none)\"",
+            "missing required capability \"json-encode\" (no matching processor present)"
+          ],
+          "validateFindings": [
+            "processor.plugin_not_found @ /pipelines/processors/1/plugin"
+          ],
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-postgres-sync",
+          "sourceCategory": "kafka",
+          "destinationCategory": "postgres",
+          "attempts": 1,
+          "tokensUsed": 5672,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-s3-archive",
+          "sourceCategory": "kafka",
+          "destinationCategory": "s3",
+          "capabilities": [
+            "json-encode"
+          ],
+          "attempts": 3,
+          "tokensUsed": 18039,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"json-encode\" (no matching processor present)"
+          ],
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "file-to-kafka-ingest",
+          "sourceCategory": "file",
+          "destinationCategory": "kafka",
+          "attempts": 1,
+          "tokensUsed": 5649,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "s3-to-postgres-load",
+          "sourceCategory": "s3",
+          "destinationCategory": "postgres",
+          "attempts": 1,
+          "tokensUsed": 5733,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "generator-to-log-smoketest",
+          "sourceCategory": "generator",
+          "destinationCategory": "log",
+          "attempts": 1,
+          "tokensUsed": 5665,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-log-debug-tap",
+          "sourceCategory": "postgres",
+          "destinationCategory": "log",
+          "attempts": 3,
+          "tokensUsed": 19023,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-kafka-retopic",
+          "sourceCategory": "kafka",
+          "destinationCategory": "kafka",
+          "attempts": 1,
+          "tokensUsed": 5697,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "file-to-s3-upload",
+          "sourceCategory": "file",
+          "destinationCategory": "s3",
+          "attempts": 1,
+          "tokensUsed": 5758,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "s3-to-file-backup",
+          "sourceCategory": "s3",
+          "destinationCategory": "file",
+          "attempts": 1,
+          "tokensUsed": 5698,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-cdc-debezium-unwrap-to-kafka",
+          "sourceCategory": "postgres",
+          "destinationCategory": "kafka",
+          "capabilities": [
+            "unwrap-debezium"
+          ],
+          "attempts": 3,
+          "tokensUsed": 19189,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-connect-unwrap-to-postgres",
+          "sourceCategory": "kafka",
+          "destinationCategory": "postgres",
+          "capabilities": [
+            "unwrap-kafkaconnect"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6019,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"unwrap-kafkaconnect\" (no matching processor present)"
+          ],
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-s3-mask-pii",
+          "sourceCategory": "postgres",
+          "destinationCategory": "s3",
+          "capabilities": [
+            "mask"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6645,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"mask\" (no matching processor present)"
+          ],
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-s3-rename-field",
+          "sourceCategory": "kafka",
+          "destinationCategory": "s3",
+          "capabilities": [
+            "rename"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6147,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "file-to-log-tail",
+          "sourceCategory": "file",
+          "destinationCategory": "log",
+          "attempts": 1,
+          "tokensUsed": 5629,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "generator-to-kafka-loadtest",
+          "sourceCategory": "generator",
+          "destinationCategory": "kafka",
+          "attempts": 1,
+          "tokensUsed": 5695,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-postgres-replicate",
+          "sourceCategory": "postgres",
+          "destinationCategory": "postgres",
+          "attempts": 1,
+          "tokensUsed": 5712,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-file-export",
+          "sourceCategory": "kafka",
+          "destinationCategory": "file",
+          "attempts": 1,
+          "tokensUsed": 5712,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "s3-to-kafka-load",
+          "sourceCategory": "s3",
+          "destinationCategory": "kafka",
+          "attempts": 1,
+          "tokensUsed": 5731,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-kafka-filter-and-encode",
+          "sourceCategory": "postgres",
+          "destinationCategory": "kafka",
+          "capabilities": [
+            "filter",
+            "json-encode"
+          ],
+          "attempts": 3,
+          "tokensUsed": 19420,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"filter\" (no matching processor present)",
+            "missing required capability \"json-encode\" (no matching processor present)"
+          ],
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "file-to-file-base64-decode",
+          "sourceCategory": "file",
+          "destinationCategory": "file",
+          "capabilities": [
+            "base64-decode"
+          ],
+          "attempts": 3,
+          "tokensUsed": 18405,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"base64-decode\" (no matching processor present)"
+          ],
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-s3-split-batches",
+          "sourceCategory": "kafka",
+          "destinationCategory": "s3",
+          "capabilities": [
+            "split"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6040,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"split\" (no matching processor present)"
+          ],
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-kafka-convert-types",
+          "sourceCategory": "postgres",
+          "destinationCategory": "kafka",
+          "capabilities": [
+            "convert"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6186,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "generator-to-s3-loadtest",
+          "sourceCategory": "generator",
+          "destinationCategory": "s3",
+          "attempts": 1,
+          "tokensUsed": 5797,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "kafka-to-postgres-filter-before-upsert",
+          "sourceCategory": "kafka",
+          "destinationCategory": "postgres",
+          "capabilities": [
+            "filter"
+          ],
+          "attempts": 1,
+          "tokensUsed": 6677,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"filter\" (no matching processor present)"
+          ],
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "s3-to-log-audit",
+          "sourceCategory": "s3",
+          "destinationCategory": "log",
+          "attempts": 3,
+          "tokensUsed": 20688,
+          "generateOK": false,
+          "generateCode": "generate.semantic_mismatch",
+          "validatePass": true,
+          "semanticMatch": true,
+          "turnsRecorded": 3,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        },
+        {
+          "id": "postgres-to-kafka-set-derived-field",
+          "sourceCategory": "postgres",
+          "destinationCategory": "kafka",
+          "capabilities": [
+            "set"
+          ],
+          "attempts": 1,
+          "tokensUsed": 7218,
+          "generateOK": true,
+          "validatePass": true,
+          "semanticMatch": false,
+          "semanticIssues": [
+            "missing required capability \"set\" (no matching processor present)"
+          ],
+          "turnsRecorded": 1,
+          "promptsMatchCapture": true,
+          "matchesCapture": true
+        }
+      ]
+    }
+  ]
+}
