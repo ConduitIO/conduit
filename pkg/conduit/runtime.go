@@ -343,6 +343,10 @@ type lifecycleService interface {
 	// provisioning.LifecycleService (see StopAndWait above) — it is used by the
 	// live in-place apply path. See lifecycle.Service.ReconfigureProcessor.
 	ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error
+	// IsActive keeps this interface a superset of
+	// orchestrator.LifecycleService: Delete and Update are admitted by run
+	// liveness, not by status (#2899 item 2).
+	IsActive(pipelineID string) bool
 	Init(ctx context.Context) error
 }
 

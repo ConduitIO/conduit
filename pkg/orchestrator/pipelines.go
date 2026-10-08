@@ -59,8 +59,11 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 		// sentinel wrapped, ConduitError adds the code.
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
-	// TODO lock pipeline
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: refused while the pipeline has a run that is starting,
+	// live or waiting out a recovery backoff, whatever its status says
+	// (#2899 item 2). The status lags the run; a pending restart would run
+	// against the changed config.
+	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
@@ -79,7 +82,11 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 		// sentinel wrapped, ConduitError adds the code.
 		return immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be deleted", pl.ID))
 	}
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: refused while the pipeline has a run that is starting,
+	// live or waiting out a recovery backoff, whatever its status says
+	// (#2899 item 2). Deleting under a starting or recovering run left that
+	// run moving data for a pipeline that no longer exists.
+	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
