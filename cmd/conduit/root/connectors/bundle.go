@@ -22,9 +22,12 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/registry"
+	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/registry/trust"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -70,6 +73,20 @@ type BundleCommand struct {
 
 func (c *BundleCommand) Usage() string { return "bundle <name>[@version]" }
 
+// bundleExitCodes is the "Exit codes" block of bundle's --help, with each
+// exit code computed from the real mapping (#2907).
+var bundleExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: registry.CodeCorruptDownload, When: "download does not match the index sha256"},
+	exitcodedoc.Entry{Code: registry.CodeConnectorNotFound, When: "no connector with that name in the index"},
+	exitcodedoc.Entry{Code: registry.CodeVersionNotFound, When: "no such version"},
+	exitcodedoc.Entry{Code: registry.CodeIncompatibleVersion, When: "no version compatible with this Conduit"},
+	exitcodedoc.Entry{Code: index.CodeVersionYanked, When: "the requested version was yanked"},
+	exitcodedoc.Entry{Code: registry.CodeNoPlatformArtifact, When: "no artifact for the requested OS/architecture"},
+	exitcodedoc.Entry{Code: index.CodeIndexUnreachable, When: "index could not be fetched"},
+	exitcodedoc.Entry{Code: registry.CodeDownloadFailed, When: "artifact download failed"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityRevoked, When: "publisher identity revoked"},
+)
+
 func (c *BundleCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Prepare an offline install bundle for a connector",
@@ -84,10 +101,7 @@ The bundle is a carrier for an already-verified installation, replayed later on 
 no network access at all: "conduit connectors install --bundle <path>" re-verifies everything
 from the bundle's own contents — it never trusts the bundle just because it exists.
 
-Exit codes (via the ConduitError's registered category):
-  0  success
-  2  connector/version not found, incompatible version, yanked/revoked, no platform artifact
-  3  index unreachable, download failed, corrupt download`,
+` + bundleExitCodes,
 		Example: "conduit connectors bundle postgres@0.14.1 --os linux --arch amd64 --output postgres.bundle.tar.gz\n" +
 			"conduit connectors bundle postgres --json",
 	}

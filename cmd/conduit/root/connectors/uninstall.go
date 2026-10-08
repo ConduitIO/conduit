@@ -24,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -82,6 +83,14 @@ type UninstallCommand struct {
 
 func (c *UninstallCommand) Usage() string { return "uninstall <name>[@version]" }
 
+// uninstallExitCodes is the "Exit codes" block of uninstall's --help, with
+// each exit code computed from the real mapping (#2907).
+var uninstallExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: registry.CodeConnectorNotInstalled, When: "no such connector installed"},
+	exitcodedoc.Entry{Code: registry.CodeAmbiguousUninstall, When: "several versions installed and no @version given"},
+	exitcodedoc.Entry{Code: registry.CodeConnectorInUse, When: "a pipeline uses the connector and --force was not given"},
+)
+
 func (c *UninstallCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Remove an installed standalone connector",
@@ -94,11 +103,7 @@ provisioned on disk) references the exact name@version being removed. By default
 refuses with a list of the affected pipelines; --force proceeds anyway and the result
 carries a warning naming them.
 
-Exit codes (via the ConduitError's registered category):
-  0  success
-  1  Runtime    — internal bug
-  2  Validation — not installed, ambiguous uninstall (multiple versions, no @version given)
-  3  Environment — connector is in use by a pipeline and --force was not given`,
+` + uninstallExitCodes,
 		Example: "conduit connectors uninstall postgres\n" +
 			"conduit connectors uninstall postgres@0.14.1\n" +
 			"conduit connectors uninstall postgres --force\n" +
