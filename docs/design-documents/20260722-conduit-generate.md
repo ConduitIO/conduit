@@ -218,11 +218,6 @@ favoritism the roadmap forbids for brokers. Resolution is deterministic, in this
 1. **Explicit.** `--provider` flag or `generate.provider` in `conduit.yaml`.
 2. **Explicit via env**, for CI/agent use: `CONDUIT_GENERATE_PROVIDER`.
 
-> **Amended 2026-10-07 (#2908):** as implemented, the order is `--provider` >
-> `CONDUIT_GENERATE_PROVIDER` > `generate.provider` > auto-detect.
-> `CONDUIT_GENERATE_PROVIDER` is the variable Conduit's config loader derives for
-> `generate.provider`, and every other `conduit.yaml` key is overridden by its `CONDUIT_*`
-> variable; the file beating its own variable would have been the only exception.
 3. **Auto-detect exactly one resolvable candidate**, checked in this fixed order for
    reporting purposes only (order does not imply preference — see below):
    - `ANTHROPIC_API_KEY` set → `anthropic` is a candidate.
@@ -237,6 +232,12 @@ favoritism the roadmap forbids for brokers. Resolution is deterministic, in this
      name the candidates found, rather than silently picking one. A silent pick here is exactly
      the kind of hidden-favoritism decision this design avoids — it would also make a real support
      question ("why did it use provider X") return a wrong answer every time behavior changed.
+
+> **Amended 2026-10-07 (#2908):** as implemented, the order is `--provider` >
+> `CONDUIT_GENERATE_PROVIDER` > `generate.provider` > auto-detect.
+> `CONDUIT_GENERATE_PROVIDER` is the variable Conduit's config loader derives for
+> `generate.provider`, and every other `conduit.yaml` key is overridden by its `CONDUIT_*`
+> variable; the file beating its own variable would have been the only exception.
 
 **Model selection.** Each provider adapter has a documented recommended default model, overridable
 by `--model`/`generate.model`. Exact model IDs are a code-level constant, not pinned in this doc —
