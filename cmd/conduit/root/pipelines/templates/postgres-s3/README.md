@@ -13,7 +13,7 @@ conduit run
 > URL. Most S3-compatible stores do not support virtual-hosted addressing by
 > default; without `aws.pathStyle: true` writes fail with `NoSuchBucket` or
 > `MalformedXML`
-> ([conduit-connector-s3#963](https://github.com/ConduitIO/conduit-connector-s3/issues/963),
+> ([s3 connector issue #963](https://github.com/ConduitIO/conduit-connector-s3/issues/963),
 > fixed in s3 connector v0.9.4). Leave both commented for AWS S3.
 
 Requires a reachable Postgres database and an S3 (or S3-compatible) bucket
