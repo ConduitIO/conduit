@@ -60,6 +60,10 @@ to compose them correctly:
 
 1. **Destination fan-out** (this slice): one batch, cloned once per destination branch
    (`Batch.clone()`), each branch processing its own copy concurrently.
+   _Update 2026-10-08 (#2910): a branch made only of destination tasks no longer deep-copies the
+   records; it shares them read-only with its siblings and still gets its own statuses and run
+   ledger. Branches with a processor still get `Batch.clone()`. See
+   [20261008-archv2-fanout-shared-records](20261008-archv2-fanout-shared-records.md)._
 2. **Record splitting** (pre-existing, `Batch.SplitRecord`): a processor can split one record into
    several (e.g. a decompression/expansion processor), tracked via `Batch.splitRecords` (a
    position-string-keyed map back to the pre-split original) and collapsed back via
