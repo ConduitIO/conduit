@@ -176,3 +176,63 @@ func TestFrozenSchema_RejectsProcessorArtifactsList(t *testing.T) {
 
 	is.True(validateAgainstFrozenSchema(t, sch, mutated) != nil)
 }
+
+// setLicenseAndTier loads the sample index, sets license and tier on its first
+// connector and first processor, and returns the re-marshaled envelope.
+func setLicenseAndTier(t *testing.T, license, tier any) []byte {
+	t.Helper()
+	is := is.New(t)
+	raw, err := os.ReadFile("testdata/sample-index.json")
+	is.NoErr(err)
+
+	var env map[string]any
+	is.NoErr(json.Unmarshal(raw, &env))
+	payload := env["payload"].(map[string]any)
+	for _, coll := range []string{"connectors", "processors"} {
+		entry := payload[coll].([]any)[0].(map[string]any)
+		entry["license"] = license
+		entry["tier"] = tier
+	}
+	out, err := json.Marshal(env)
+	is.NoErr(err)
+	return out
+}
+
+// TestFrozenSchema_AcceptsLicenseAndTier proves the additive fields validate
+// on both connector and processor entries, for every tier and for SPDX
+// identifiers and simple expressions.
+func TestFrozenSchema_AcceptsLicenseAndTier(t *testing.T) {
+	sch := compileFrozenSchema(t)
+	for _, tier := range []string{"certified", "verified", "adapter", "community"} {
+		for _, license := range []string{"Apache-2.0", "MIT", "Apache-2.0 OR MIT", "GPL-2.0-only WITH Classpath-exception-2.0"} {
+			t.Run(tier+"/"+license, func(t *testing.T) {
+				is.New(t).NoErr(validateAgainstFrozenSchema(t, sch, setLicenseAndTier(t, license, tier)))
+			})
+		}
+	}
+}
+
+// TestFrozenSchema_RejectsBadLicenseAndTier proves the schema still constrains
+// the new fields: tier is a closed enum and license must look like an SPDX
+// identifier or expression.
+func TestFrozenSchema_RejectsBadLicenseAndTier(t *testing.T) {
+	sch := compileFrozenSchema(t)
+	testCases := []struct {
+		name    string
+		license any
+		tier    any
+	}{
+		{"unknown tier", "Apache-2.0", "gold"},
+		{"uppercase tier", "Apache-2.0", "Community"},
+		{"empty tier", "Apache-2.0", ""},
+		{"non-string tier", "Apache-2.0", 1},
+		{"empty license", "", "community"},
+		{"free-text license", "Apache License 2.0", "community"},
+		{"non-string license", 2, "community"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is.New(t).True(validateAgainstFrozenSchema(t, sch, setLicenseAndTier(t, tc.license, tc.tier)) != nil)
+		})
+	}
+}

@@ -442,3 +442,84 @@ func TestVerify_ForwardCompat_OlderClientIgnoresProcessors(t *testing.T) {
 	_, err = index.Verify(raw, b.anchors(t), "")
 	is.NoErr(err)
 }
+
+// legacyConnectorV1 is index.Connector as it existed BEFORE license and tier
+// were added: a stand-in for an older Conduit build's typed struct.
+type legacyConnectorV1 struct {
+	Name       string                   `json:"name"`
+	Repository string                   `json:"repository,omitempty"`
+	Publisher  index.Publisher          `json:"publisher"`
+	Versions   []index.ConnectorVersion `json:"versions"`
+}
+
+// legacyProcessorV1 is index.Processor before license and tier were added.
+type legacyProcessorV1 struct {
+	Name      string                   `json:"name"`
+	Publisher index.Publisher          `json:"publisher"`
+	Versions  []index.ProcessorVersion `json:"versions"`
+}
+
+// TestVerify_ForwardCompat_OlderClientIgnoresLicenseAndTier is the upgrade
+// test for design doc 20261008-registry-license-and-tier: an index whose
+// connector and processor entries carry license and tier
+//
+//   - verifies and exposes both fields on a current build,
+//   - unmarshals without error into the pre-change typed structs (an older
+//     client ignores the two unknown keys and reads everything else), and
+//   - signature-verifies over the same raw bytes, so adding the fields does
+//     not invalidate the signature for anyone.
+func TestVerify_ForwardCompat_OlderClientIgnoresLicenseAndTier(t *testing.T) {
+	is := is.New(t)
+	b := newTestIndexBuilder(t)
+
+	payload := withProcessor(defaultTestPayload())
+	payload.Connectors[0].License = "Apache-2.0"
+	payload.Connectors[0].Tier = index.TierCommunity
+	payload.Processors[0].License = "MIT"
+	payload.Processors[0].Tier = index.TierVerified
+	raw := b.sign(t, payload, "root")
+
+	// (a) Current build verifies and sees both fields.
+	vi, err := index.Verify(raw, b.anchors(t), "")
+	is.NoErr(err)
+	is.True(vi.Verified)
+	is.Equal(vi.Payload.SchemaVersion, 1) // still schemaVersion 1
+	is.Equal(vi.Payload.Connectors[0].License, "Apache-2.0")
+	is.Equal(vi.Payload.Connectors[0].Tier, index.TierCommunity)
+	is.Equal(vi.Payload.Processors[0].License, "MIT")
+	is.Equal(vi.Payload.Processors[0].Tier, index.TierVerified)
+
+	// (b) Older client: the same payload bytes parse into the pre-change shapes.
+	var env struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	is.NoErr(json.Unmarshal(raw, &env))
+	var legacy struct {
+		SchemaVersion int                 `json:"schemaVersion"`
+		Connectors    []legacyConnectorV1 `json:"connectors"`
+		Processors    []legacyProcessorV1 `json:"processors"`
+	}
+	is.NoErr(json.Unmarshal(env.Payload, &legacy))
+	is.Equal(legacy.SchemaVersion, 1)
+	is.Equal(legacy.Connectors[0].Name, "example")
+	is.Equal(len(legacy.Connectors[0].Versions), 1)
+	is.Equal(legacy.Processors[0].Name, "example-processor")
+	is.Equal(legacy.Processors[0].Versions[0].Artifact.Kind, "wasm-processor")
+}
+
+// TestTier_UnknownValueParses proves the Go side does not reject a tier it
+// does not know: a later schema may add a tier, and an older client must keep
+// parsing the index. The enum is enforced by the JSON Schema (index-CI), not
+// by the client.
+func TestTier_UnknownValueParses(t *testing.T) {
+	is := is.New(t)
+	b := newTestIndexBuilder(t)
+
+	payload := defaultTestPayload()
+	payload.Connectors[0].Tier = index.Tier("some-future-tier")
+	raw := b.sign(t, payload, "root")
+
+	vi, err := index.Verify(raw, b.anchors(t), "")
+	is.NoErr(err)
+	is.Equal(vi.Payload.Connectors[0].Tier, index.Tier("some-future-tier"))
+}

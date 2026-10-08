@@ -111,6 +111,14 @@
           "format": "uri",
           "description": "Source repository URL, for the web UI and human review context. Not itself a trust input -- the trust input is `publisher.expectedIdentityPattern`, which independently encodes (and pins) the repo + workflow path."
         },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$",
+          "description": "SPDX license identifier or simple expression for the source, e.g. \"Apache-2.0\". Optional (added additively under schemaVersion 1, see docs/design-documents/20261008-registry-license-and-tier.md). Not used in any trust decision."
+        },
+        "tier": { "$ref": "#/$defs/tier" },
         "publisher": { "$ref": "#/$defs/publisher" },
         "versions": {
           "type": "array",
@@ -145,6 +153,14 @@
           "format": "uri",
           "description": "Source repository URL, for the web UI and human review context. Not itself a trust input -- the trust input is `publisher.expectedIdentityPattern`."
         },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$",
+          "description": "SPDX license identifier or simple expression for the source, e.g. \"Apache-2.0\". Optional (added additively under schemaVersion 1, see docs/design-documents/20261008-registry-license-and-tier.md). Not used in any trust decision."
+        },
+        "tier": { "$ref": "#/$defs/tier" },
         "publisher": { "$ref": "#/$defs/publisher" },
         "versions": {
           "type": "array",
@@ -152,6 +168,12 @@
           "items": { "$ref": "#/$defs/processorVersion" }
         }
       }
+    },
+
+    "tier": {
+      "type": "string",
+      "enum": ["certified", "verified", "adapter", "community"],
+      "description": "Registry support classification for a connector or processor name, set by registry maintainers (never by a publisher's release workflow). Optional (added additively under schemaVersion 1). Display and filtering metadata only; not used in any trust, resolution or install decision. certified: maintained by the Conduit project and meets the certification bar. verified: acceptance suite in CI plus signed artifacts and provenance. adapter: bridge to another plugin ecosystem. community: published as-is with no support commitment."
     },
 
     "publisher": {
