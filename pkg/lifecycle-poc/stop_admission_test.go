@@ -86,7 +86,7 @@ func closeIfOpen(ch chan struct{}) {
 func TestServiceLifecycle_StopBeforeRestartReserves_NotLost(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, true, 0)
+	r := newAdmissionRun(t, errTransient, 0)
 
 	var once sync.Once
 	stopErr := make(chan error, 1)
@@ -115,7 +115,7 @@ func TestServiceLifecycle_StopBeforeRestartReserves_NotLost(t *testing.T) {
 func TestServiceLifecycle_StopWhileFinishing_NoRestart(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, true, 0)
+	r := newAdmissionRun(t, errTransient, 0)
 
 	var once sync.Once
 	stopErr := make(chan error, 1)
@@ -140,7 +140,7 @@ func TestServiceLifecycle_StopWhileFinishing_NoRestart(t *testing.T) {
 func TestServiceLifecycle_StopDuringRestartBuild_FailedBuild_EndsStopped(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, true, 0)
+	r := newAdmissionRun(t, errTransient, 0)
 
 	// Once the first run has failed, building fails, after a hold.
 	r.conns.gate = make(chan struct{})
@@ -170,7 +170,7 @@ func TestServiceLifecycle_StopDuringRestartBuild_FailedBuild_EndsStopped(t *test
 func TestServiceLifecycle_StopThenStart_RefusedWhileFinishing(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, false, 0)
+	r := newAdmissionRun(t, nil, 0)
 	h := &holdStatus{PipelineService: r.ls.pipelines, status: pipeline.StatusUserStopped, entered: make(chan struct{}), release: make(chan struct{})}
 	r.ls.pipelines = h
 	t.Cleanup(func() { closeIfOpen(h.release) })

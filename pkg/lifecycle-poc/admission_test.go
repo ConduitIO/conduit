@@ -41,6 +41,8 @@ import (
 
 const admissionGuard = 10 * time.Second
 
+var errTransient = cerrors.New("lost connection to source")
+
 type admissionRun struct {
 	ls        *Service
 	pl        *pipeline.Instance
@@ -57,11 +59,11 @@ type admissionRun struct {
 }
 
 // newAdmissionRun builds a pipeline whose source and destination plugins can
-// be dispensed any number of times. With failFirst, the first source fails
-// with a transient error (no stop); every other source idles until stopped.
+// be dispensed any number of times. The first source fails with firstErr if
+// it is set (no stop); every other source idles until stopped.
 // The holdDest-th destination (0 for none) blocks in Open until
 // r.held.release is closed.
-func newAdmissionRun(t *testing.T, failFirst bool, holdDest int32) *admissionRun {
+func newAdmissionRun(t *testing.T, firstErr error, holdDest int32) *admissionRun {
 	t.Helper()
 	ctx, killAll := context.WithCancel(context.Background())
 	logger := log.New(zerolog.Nop())
@@ -80,8 +82,8 @@ func newAdmissionRun(t *testing.T, failFirst bool, holdDest int32) *admissionRun
 	srcDispenser := pmock.NewDispenser(ctrl)
 	srcDispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
 		var srcErr error
-		if r.dispensed.Add(1) == 1 && failFirst {
-			srcErr = cerrors.New("lost connection to source")
+		if r.dispensed.Add(1) == 1 {
+			srcErr = firstErr
 		}
 		return pmock.NewConfigurableSourcePlugin(ctrl,
 			pmock.SourcePluginWithConfigure(),
@@ -210,7 +212,7 @@ func TestServiceLifecycle_Recovery_ExternalStartRacesPendingRestart(t *testing.T
 	ctx := context.Background()
 	// Dispense 1: the run that fails. Dispense 2: the operator's run, held
 	// in its destination's Open (admitted, not published).
-	r := newAdmissionRun(t, true, 2)
+	r := newAdmissionRun(t, errTransient, 2)
 
 	restartWaiting := make(chan struct{})
 	releaseRestart := make(chan struct{})
@@ -267,7 +269,7 @@ func TestServiceLifecycle_Recovery_ExternalStartRacesPendingRestart(t *testing.T
 func TestServiceLifecycle_ConcurrentStarts_OneWins(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, false, 1)
+	r := newAdmissionRun(t, nil, 1)
 
 	first := make(chan error, 1)
 	go func() { first <- r.ls.Start(ctx, r.pl.ID) }()
@@ -292,7 +294,7 @@ func TestServiceLifecycle_ConcurrentStarts_OneWins(t *testing.T) {
 func TestServiceLifecycle_StopWhileStarting_StopsRun(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	r := newAdmissionRun(t, false, 1)
+	r := newAdmissionRun(t, nil, 1)
 
 	started := make(chan error, 1)
 	go func() { started <- r.ls.Start(ctx, r.pl.ID) }()

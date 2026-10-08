@@ -120,7 +120,9 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
 	// TODO lock pipeline
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if po.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
