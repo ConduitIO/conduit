@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -179,7 +180,7 @@ type fixture struct {
 }
 
 var (
-	storedConnectorSettings = map[string]string{"level": "info", "message": "connector-secret"}
+	storedConnectorSettings = map[string]string{"level": "debug", "message": "connector-secret"}
 	storedProcessorSettings = map[string]string{"field": ".Metadata.key", "value": "processor-secret"}
 	storedDLQSettings       = map[string]string{"level": "warn", "message": "dlq-secret"}
 )
@@ -287,11 +288,13 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 	h := startAPI(t)
 
 	type target struct {
-		name   string
-		path   func(f fixture) string
-		body   func(settings map[string]string) any
-		stored func(conn, proc, dlq map[string]string) map[string]string
-		orig   map[string]string
+		name string
+		path func(f fixture) string
+		body func(plugin string, settings map[string]string) any
+		// plugin is the stored plugin; otherPlugin is a different one.
+		plugin, otherPlugin string
+		stored              func(conn, proc, dlq map[string]string) map[string]string
+		orig                map[string]string
 		// changeKey is a key whose value the "new value" case replaces.
 		changeKey string
 	}
@@ -299,32 +302,38 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 		{
 			name: "connector",
 			path: func(f fixture) string { return "/v1/connectors/" + f.connectorID },
-			body: func(s map[string]string) any {
-				return map[string]any{"plugin": "builtin:log", "config": map[string]any{"name": "dest", "settings": s}}
+			body: func(pl string, s map[string]string) any {
+				return map[string]any{"plugin": pl, "config": map[string]any{"name": "dest", "settings": s}}
 			},
-			stored:    func(c, _, _ map[string]string) map[string]string { return c },
-			orig:      storedConnectorSettings,
-			changeKey: "message",
+			plugin:      "builtin:log",
+			otherPlugin: "builtin:file",
+			stored:      func(c, _, _ map[string]string) map[string]string { return c },
+			orig:        storedConnectorSettings,
+			changeKey:   "message",
 		},
 		{
 			name: "processor",
 			path: func(f fixture) string { return "/v1/processors/" + f.processorID },
-			body: func(s map[string]string) any {
-				return map[string]any{"plugin": "field.set", "config": map[string]any{"settings": s, "workers": 1}}
+			body: func(pl string, s map[string]string) any {
+				return map[string]any{"plugin": pl, "config": map[string]any{"settings": s, "workers": 1}}
 			},
-			stored:    func(_, p, _ map[string]string) map[string]string { return p },
-			orig:      storedProcessorSettings,
-			changeKey: "value",
+			plugin:      "field.set",
+			otherPlugin: "field.exclude",
+			stored:      func(_, p, _ map[string]string) map[string]string { return p },
+			orig:        storedProcessorSettings,
+			changeKey:   "value",
 		},
 		{
 			name: "dlq",
 			path: func(f fixture) string { return "/v1/pipelines/" + f.pipelineID + "/dead-letter-queue" },
-			body: func(s map[string]string) any {
-				return map[string]any{"plugin": "builtin:log", "settings": s, "windowSize": 1}
+			body: func(pl string, s map[string]string) any {
+				return map[string]any{"plugin": pl, "settings": s, "windowSize": 1}
 			},
-			stored:    func(_, _, d map[string]string) map[string]string { return d },
-			orig:      storedDLQSettings,
-			changeKey: "message",
+			plugin:      "builtin:log",
+			otherPlugin: "builtin:file",
+			stored:      func(_, _, d map[string]string) map[string]string { return d },
+			orig:        storedDLQSettings,
+			changeKey:   "message",
 		},
 	}
 
@@ -334,7 +343,7 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 				is := is.New(t)
 				f := h.newFixture(t)
 
-				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(redactedCopy(tg.orig)))
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, redactedCopy(tg.orig)))
 				is.Equal(code, http.StatusOK)
 				is.True(!strings.Contains(body, "secret")) // the response is redacted too
 				is.Equal(tg.stored(h.stored(t, f)), tg.orig)
@@ -346,7 +355,7 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 
 				update := redactedCopy(tg.orig)
 				update[tg.changeKey] = "new-value"
-				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(update))
+				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusOK)
 
 				want := map[string]string{}
@@ -363,7 +372,7 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 
 				update := redactedCopy(tg.orig)
 				update[tg.changeKey] = "a***b"
-				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(update))
+				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusOK)
 				is.Equal(tg.stored(h.stored(t, f))[tg.changeKey], "a***b")
 			})
@@ -374,7 +383,7 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 
 				update := redactedCopy(tg.orig)
 				delete(update, tg.changeKey)
-				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(update))
+				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusOK)
 
 				want := map[string]string{}
@@ -392,14 +401,129 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 
 				update := redactedCopy(tg.orig)
 				update["not.stored"] = log.Redacted
-				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(update))
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusBadRequest)
 				is.True(strings.Contains(body, orchestrator.CodeRedactedSettingWithoutStoredValue.Reason()))
 				is.True(strings.Contains(body, "not.stored"))
 				is.Equal(tg.stored(h.stored(t, f)), tg.orig) // nothing changed
 			})
+
+			t.Run("*** is refused when the plugin changes", func(t *testing.T) {
+				is := is.New(t)
+				f := h.newFixture(t)
+
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.otherPlugin, redactedCopy(tg.orig)))
+				is.Equal(code, http.StatusBadRequest)
+				is.True(strings.Contains(body, orchestrator.CodeRedactedSettingPluginChanged.Reason()))
+				is.Equal(tg.stored(h.stored(t, f)), tg.orig) // nothing changed
+			})
 		})
 	}
+}
+
+// Create and apply paths have no stored value for "***" to keep, so it is
+// refused there instead of being stored literally.
+func TestRedactedSettings_RefusedOnCreateAndApply(t *testing.T) {
+	h := startAPI(t)
+	ctx := context.Background()
+
+	assertRefused := func(t *testing.T, err error, wantPath string) {
+		t.Helper()
+		is := is.New(t)
+		st, ok := grpcstatus.FromError(err)
+		is.True(ok)
+		is.Equal(st.Code(), codes.InvalidArgument)
+		ce := conduiterr.FromStatus(st)
+		is.True(ce != nil)
+		is.Equal(ce.Code, orchestrator.CodeRedactedSettingWithoutStoredValue)
+		is.Equal(ce.ConfigPath, wantPath)
+	}
+
+	t.Run("CreateConnector", func(t *testing.T) {
+		is := is.New(t)
+		f := h.newFixture(t)
+		before, err := h.connectors.ListConnectors(ctx, &apiv1.ListConnectorsRequest{PipelineId: f.pipelineID})
+		is.NoErr(err)
+
+		_, err = h.connectors.CreateConnector(ctx, &apiv1.CreateConnectorRequest{
+			Type:       apiv1.Connector_TYPE_DESTINATION,
+			Plugin:     "builtin:log",
+			PipelineId: f.pipelineID,
+			Config:     &apiv1.Connector_Config{Name: "dest2", Settings: map[string]string{"level": "debug", "message": log.Redacted}},
+		})
+		assertRefused(t, err, "/config/settings/message")
+
+		after, err := h.connectors.ListConnectors(ctx, &apiv1.ListConnectorsRequest{PipelineId: f.pipelineID})
+		is.NoErr(err)
+		is.Equal(len(after.Connectors), len(before.Connectors)) // nothing created
+	})
+
+	t.Run("CreateConnector over the HTTP gateway", func(t *testing.T) {
+		is := is.New(t)
+		f := h.newFixture(t)
+		code, body := h.httpJSON(t, http.MethodPost, "/v1/connectors", map[string]any{
+			"type": "TYPE_DESTINATION", "plugin": "builtin:log", "pipelineId": f.pipelineID,
+			"config": map[string]any{"name": "dest2", "settings": map[string]string{"message": log.Redacted}},
+		})
+		is.Equal(code, http.StatusBadRequest)
+		is.True(strings.Contains(body, orchestrator.CodeRedactedSettingWithoutStoredValue.Reason()))
+	})
+
+	t.Run("CreateProcessor", func(t *testing.T) {
+		f := h.newFixture(t)
+		_, err := h.processors.CreateProcessor(ctx, &apiv1.CreateProcessorRequest{
+			Plugin: "field.set",
+			Parent: &apiv1.Processor_Parent{Type: apiv1.Processor_Parent_TYPE_PIPELINE, Id: f.pipelineID},
+			Config: &apiv1.Processor_Config{Settings: map[string]string{"field": ".Metadata.k", "value": log.Redacted}},
+		})
+		assertRefused(t, err, "/config/settings/value")
+	})
+
+	doc := func(mutate func(d *apiv1.PipelineDocument)) *apiv1.PipelineDocument {
+		d := &apiv1.PipelineDocument{
+			Id:     "redacted-apply",
+			Status: "stopped",
+			Name:   "redacted-apply",
+			Connectors: []*apiv1.PipelineDocument_Connector{
+				{Id: "src", Type: "source", Plugin: "builtin:generator", Settings: map[string]string{"format.type": "raw"}},
+				{Id: "dst", Type: "destination", Plugin: "builtin:log", Settings: map[string]string{"level": "debug"}},
+			},
+		}
+		mutate(d)
+		return d
+	}
+	applyCases := []struct {
+		name     string
+		mutate   func(d *apiv1.PipelineDocument)
+		wantPath string
+	}{
+		{"connector", func(d *apiv1.PipelineDocument) { d.Connectors[1].Settings["level"] = log.Redacted }, "/connectors/1/settings/level"},
+		{"connector processor", func(d *apiv1.PipelineDocument) {
+			d.Connectors[0].Processors = []*apiv1.PipelineDocument_Processor{{Id: "p", Plugin: "field.set", Settings: map[string]string{"value": log.Redacted}}}
+		}, "/connectors/0/processors/0/settings/value"},
+		{"pipeline processor", func(d *apiv1.PipelineDocument) {
+			d.Processors = []*apiv1.PipelineDocument_Processor{{Id: "p", Plugin: "field.set", Settings: map[string]string{"value": log.Redacted}}}
+		}, "/processors/0/settings/value"},
+		{"dlq", func(d *apiv1.PipelineDocument) {
+			d.Dlq = &apiv1.PipelineDocument_DLQ{Plugin: "builtin:log", Settings: map[string]string{"message": log.Redacted}}
+		}, "/dlq/settings/message"},
+	}
+	for _, tc := range applyCases {
+		t.Run("ApplyPipeline "+tc.name, func(t *testing.T) {
+			_, err := h.pipelines.ApplyPipeline(ctx, &apiv1.ApplyPipelineRequest{Config: doc(tc.mutate)})
+			assertRefused(t, err, tc.wantPath)
+		})
+		t.Run("PlanPipeline "+tc.name, func(t *testing.T) {
+			_, err := h.pipelines.PlanPipeline(ctx, &apiv1.PlanPipelineRequest{Config: doc(tc.mutate)})
+			assertRefused(t, err, tc.wantPath)
+		})
+	}
+
+	t.Run("ApplyPipeline without *** is not refused by this check", func(t *testing.T) {
+		is := is.New(t)
+		_, err := h.pipelines.PlanPipeline(ctx, &apiv1.PlanPipelineRequest{Config: doc(func(*apiv1.PipelineDocument) {})})
+		is.NoErr(err)
+	})
 }
 
 // The refusal reaches a gRPC client as InvalidArgument with the stable reason.

@@ -71,6 +71,12 @@ func (c *ConnectorOrchestrator) Create(
 		return nil, pipelineRunningErr("cannot create connector: " + pipeline.ErrPipelineRunning.Error())
 	}
 
+	// Nothing is stored yet, so "***" (the API's redaction placeholder) has
+	// no value to keep; storing it literally would break the setting (#2913).
+	if err := RefuseRedactedSettings(config.Settings, "/config/settings"); err != nil {
+		return nil, err
+	}
+
 	err = c.Validate(ctx, t, plugin, config)
 	if err != nil {
 		return nil, err
@@ -196,7 +202,7 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 	// "***" (the API's redaction placeholder) keeps the stored value, so a
 	// redacted GET -> UPDATE round trip does not overwrite credentials (#2913).
 	// Before Validate, so the plugin validates the real values.
-	config.Settings, err = restoreRedactedSettings(conn.Config.Settings, config.Settings, "/config/settings")
+	config.Settings, err = restoreRedactedSettingsForPlugin(conn.Plugin, plugin, conn.Config.Settings, config.Settings, "/config/settings")
 	if err != nil {
 		return nil, err
 	}

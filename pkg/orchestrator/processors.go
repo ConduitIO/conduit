@@ -62,6 +62,12 @@ func (p *ProcessorOrchestrator) Create(
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
 	}
 
+	// Nothing is stored yet, so "***" (the API's redaction placeholder) has
+	// no value to keep; storing it literally would break the setting (#2913).
+	if err := RefuseRedactedSettings(cfg.Settings, "/config/settings"); err != nil {
+		return nil, err
+	}
+
 	// create processor and add to pipeline or connector
 	proc, err := p.processors.Create(
 		ctx,
@@ -182,7 +188,7 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 
 	// "***" (the API's redaction placeholder) keeps the stored value, so a
 	// redacted GET -> UPDATE round trip does not overwrite credentials (#2913).
-	cfg.Settings, err = restoreRedactedSettings(oldConfig.Settings, cfg.Settings, "/config/settings")
+	cfg.Settings, err = restoreRedactedSettingsForPlugin(oldPlugin, plugin, oldConfig.Settings, cfg.Settings, "/config/settings")
 	if err != nil {
 		return nil, err
 	}

@@ -46,6 +46,11 @@ var (
 	// there is nothing to keep, and storing "***" itself would silently
 	// break the setting.
 	CodeRedactedSettingWithoutStoredValue = conduiterr.Register("orchestrator.redacted_setting_without_stored_value", codes.InvalidArgument)
+	// CodeRedactedSettingPluginChanged is raised when an update sends "***"
+	// for a setting while changing the plugin (including only its version).
+	// A stored value, typically a credential, is never carried to a
+	// different plugin; the update must send real values.
+	CodeRedactedSettingPluginChanged = conduiterr.Register("orchestrator.redacted_setting_plugin_changed", codes.InvalidArgument)
 )
 
 // pipelineRunningErr wraps pipeline.ErrPipelineRunning with the
