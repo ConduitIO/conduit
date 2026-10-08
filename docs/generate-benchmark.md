@@ -102,6 +102,15 @@ corpus failed 3/3. The judge also refuses `file-to-file-base64-decode` (0/3) by 
 `base64-encode` processor for a request to decode. Both are judge findings, separate from model
 quality.
 
+Both judge findings are fixed (#2935, #2936). The fix also found that a processor written as
+`builtin:<name>` didn't count toward a required capability, in either the judge or the corpus
+scorer. The live numbers above predate the fix. On the committed replay corpus, after the fix and
+a re-capture of the three transcripts it affects (`kafka-connect-unwrap-to-postgres`,
+`postgres-to-s3-mask-pii`, `kafka-to-s3-split-batches`), the judge agrees with the corpus verdict
+on 28/28 requests (21/28 before). Corpus semantic match on replay is 25/28 (18/28 before). In all
+three re-captured requests the model left the processor out on the first attempt and added it after
+the judge's feedback.
+
 ## How a request is scored
 
 Each corpus entry pairs a natural-language `prompt` with an `expect` block — the ground truth this
