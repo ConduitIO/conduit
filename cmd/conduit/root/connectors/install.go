@@ -28,9 +28,13 @@ import (
 	"golang.org/x/term"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/registry"
+	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/registry/trust"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -142,6 +146,40 @@ type InstallCommand struct {
 
 func (c *InstallCommand) Usage() string { return "install <name>[@version]" }
 
+// installExitCodes is the "Exit codes" block of install's --help. The exit
+// code printed for each error code is computed from the real mapping, so it
+// cannot drift (#2907).
+var installExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: registry.CodeArchiveInvalid, When: "archive-shape violation"},
+	exitcodedoc.Entry{Code: registry.CodeCorruptDownload, When: "download does not match the index sha256"},
+	exitcodedoc.Entry{Code: index.CodeIndexIntegrity, When: "index verification failed under a key this build knows"},
+	exitcodedoc.Entry{Code: registry.CodeTrustAnchorsUnavailable, When: "this build's trust anchors could not be loaded (reinstall a release)"},
+	exitcodedoc.Entry{Code: conduiterr.CodeInvalidArgument, When: "bad argument or flag combination"},
+	exitcodedoc.Entry{Code: registry.CodeConnectorNotFound, When: "no connector with that name in the index"},
+	exitcodedoc.Entry{Code: registry.CodeVersionNotFound, When: "no such version"},
+	exitcodedoc.Entry{Code: registry.CodeIncompatibleVersion, When: "no version compatible with this Conduit"},
+	exitcodedoc.Entry{Code: index.CodeVersionYanked, When: "the requested version was yanked"},
+	exitcodedoc.Entry{Code: registry.CodeNoPlatformArtifact, When: "no artifact for this OS/architecture"},
+	exitcodedoc.Entry{Code: index.CodeIndexStale, When: "index is older than the maximum staleness"},
+	exitcodedoc.Entry{Code: index.CodeIndexRollback, When: "index is older than one already seen"},
+	exitcodedoc.Entry{Code: index.CodeSchemaTooNew, When: "index schema is newer than this build understands"},
+	exitcodedoc.Entry{Code: index.CodeIndexNestingTooDeep, When: "index JSON nested too deeply"},
+	exitcodedoc.Entry{Code: index.CodeTrustAnchorExpired, When: "index signed by a key this build does not know (upgrade Conduit)"},
+	exitcodedoc.Entry{Code: registry.CodeBundleStale, When: "--bundle snapshot too old and not approved"},
+	exitcodedoc.Entry{Code: index.CodeIndexUnreachable, When: "index could not be fetched"},
+	exitcodedoc.Entry{Code: registry.CodeDownloadFailed, When: "artifact download failed"},
+	exitcodedoc.Entry{Code: registry.CodeInstallLocked, When: "another install holds the lock"},
+	exitcodedoc.Entry{Code: index.CodeIndexTooLarge, When: "index over its size cap"},
+	exitcodedoc.Entry{Code: trust.CodeBundleTooLarge, When: "signature bundle over its size cap"},
+	exitcodedoc.Entry{Code: trust.CodeUnsigned, When: "artifact is unsigned"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityMismatch, When: "signed by an identity other than the pinned publisher"},
+	exitcodedoc.Entry{Code: trust.CodeProvenanceInvalid, When: "SLSA provenance missing or invalid"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityRevoked, When: "publisher identity revoked"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityPatternTooLoose, When: "publisher identity pinned too loosely"},
+	exitcodedoc.Entry{Code: exitcodedoc.Registered("registry.unsigned_install_non_interactive"), When: "--allow-unsigned without confirmation in a non-interactive context"},
+	exitcodedoc.Entry{Code: exitcodedoc.Registered("registry.unsigned_install_disabled_by_policy"), When: "--allow-unsigned refused by operator policy"},
+)
+
 func (c *InstallCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Install a standalone connector from the registry index",
@@ -167,21 +205,10 @@ There is no flag, config value, or environment variable that disables index veri
                      in a non-interactive context, and never at all when the operator has set
                      install.allow-unsigned to false.
 
-Exit codes (via the ConduitError's registered category). Trust rejections are split across
-buckets on purpose — read the error code, not just the exit code:
-  0  success
-  1  Runtime    — internal bug, archive-shape violation, corrupt download (sha256 mismatch),
-                  index integrity failure (a key this build knows, but verification failed),
-                  or this build's embedded anchors could not be loaded at all
-                  (registry.trust_anchors_unavailable — a broken build; reinstall a release)
-  2  Validation — connector/version not found, incompatible version, yanked version, no
-                  platform artifact, stale/rolled-back/too-new index, index nesting too deep,
-                  stale bundle, and registry.trust_anchor_expired: the index is signed by a
-                  key this build does not know, so upgrade Conduit
-  3  Environment — index unreachable, download failed, install lock contended, an index or
-                  signature bundle over its size cap, and the artifact trust rejections:
-                  unsigned or mis-signed, invalid provenance, a revoked or too-loosely-pinned
-                  publisher identity, or an --allow-unsigned attempt refused by policy`,
+Trust rejections are split across exit codes on purpose: read the error code, not just the
+exit code.
+
+` + installExitCodes,
 		Example: "conduit connectors install postgres\n" +
 			"conduit connectors install postgres@0.14.1\n" +
 			"conduit connectors install postgres --dry-run\n" +
