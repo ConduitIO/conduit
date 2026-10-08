@@ -246,6 +246,9 @@ to the next release rather than holding the train.
       Redpanda profile tested in CI
 - [ ] **Catalog:** deprecate the built-in OpenAI and Cohere embedding processors in favour of
       `ai.embed` (removed in v0.23)
+- [ ] Registry web UI with search, verified badges and download stats (built; deployment pending)
+- [ ] docker-compose quickstart, and `deploy/` examples: docker-compose, systemd, ECS task
+      definition, Nomad job spec (examples, not supported products)
 - [ ] Looking for three teams migrating off Kafka Connect to work with us as early adopters — open
       a [discussion](https://github.com/ConduitIO/conduit/discussions)
 
@@ -278,6 +281,10 @@ to the next release rather than holding the train.
       ServiceMonitor — static pipeline-to-instance assignment before the operator exists
 - [ ] Secrets: Vault, AWS and GCP KMS, Kubernetes secrets
 - [ ] Source-side dead-letter queue
+- [ ] OpenTelemetry metrics and prebuilt Grafana dashboards, with metrics covering what Kafka
+      Connect operators alert on: lag, task and pipeline status, error rate
+- [ ] JSON Schema support in the Schema Registry integration
+- [ ] **Catalog:** GCS and Azure Blob with Parquet, as object-storage family members alongside S3
 
 ### v0.23 — Drop-in
 
@@ -289,7 +296,8 @@ to the next release rather than holding the train.
       never inside the engine, built on the existing Kafka Connect wrapper. Meanwhile it is the path
       to Debezium-grade CDC for SQL Server, Oracle, Db2 and HANA, whose current connectors are
       trigger-based
-- [ ] **Catalog:** certify Snowflake, ClickHouse and Redis from labs
+- [ ] **Catalog:** certify Snowflake, ClickHouse and Redis from labs; the `mysql-snowflake` and
+      `kafka-clickhouse` templates ship with their certified paths
 - [ ] **Catalog:** BigQuery destination (new build) with the warehouse family
 - [ ] **Catalog:** Bento/Redpanda Connect adapter GA
 - [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed; use `ai.embed`
@@ -302,6 +310,9 @@ to the next release rather than holding the train.
 - [ ] Kafka Queues (share groups) source mode
 - [ ] OpenLineage events
 - [ ] Published, reproducible [benchi](https://github.com/ConduitIO/benchi) results vs Kafka Connect
+- [ ] Pipeline-wide batching and allocation reduction, with profiling as a CI gate
+- [ ] **Catalog:** HTTP/webhooks on the HTTP family core — a rebuilt source whose response waits for
+      the ack, plus a destination
 - [ ] Open connector-protocol spec and acceptance suite as a certification ("Conduit Certified")
 - arch-v2 graduation must have passed by this release
 
@@ -315,7 +326,12 @@ to the next release rather than holding the train.
       messaging family
 - [ ] **Catalog:** certify Salesforce, Stripe and HubSpot from labs (three of five native SaaS
       targets)
-- [ ] Apache Iceberg destination GA
+- [ ] Apache Iceberg destination GA, with the `postgres-iceberg` template
+- [ ] Checkpoint-aware rolling upgrades in the operator (drain → checkpoint → reschedule)
+- [ ] Engine-wide schema contracts and drift policy — halt, DLQ or evolve on drift, generalizing
+      the Postgres connector's policy, surfaced in the UI
+- [ ] **Catalog:** SNS with the messaging family
+- [ ] OpenTelemetry traces
 - [ ] Exactly-once Kafka destination (transactional), and documented delivery semantics for every
       source/destination pair
 - [ ] Community publishing to the registry (GitHub Action + signing) and private registries
@@ -343,6 +359,11 @@ to the next release rather than holding the train.
 - [ ] Clear documentation of what the state layer is and isn't
 - [ ] Arrow columnar record spike, gated on the cross-engine benchmark harness
 - [ ] Java and C# embedded clients (generated gRPC bindings)
+- [ ] Kafka consumer-group parallelism right after partition claims ship (full scheduler-driven
+      parallelism is v0.30+)
+- [ ] Terraform provider for the Conduit API (pipelines, connectors, processors as resources);
+      until then, Connect REST API compatibility (v0.23) keeps existing Kafka Connect Terraform
+      providers working
 - [ ] **Catalog:** Shopify and GitHub connectors (new builds) on the HTTP/SaaS family core
 - [ ] **Catalog:** log-based SQL Server CDC begins (v0.25 or later)
 - [ ] Java SDK begins, informed by the labs Java SDK proof of concept: gRPC connectors and gRPC
@@ -355,6 +376,7 @@ to the next release rather than holding the train.
 - [ ] PII redaction GA
 - [ ] Schema harmonization across sources
 - [ ] Curated Iceberg output with OpenLineage
+- [ ] **Catalog:** Databricks/Delta Lake
 - [ ] Templates such as "unify customers from Postgres, Salesforce and events"
 - [ ] TypeScript connectors over gRPC, with `conduit connector new --lang ts`
 - [ ] Pipelines-as-code builders in Python and TypeScript
@@ -377,6 +399,7 @@ to the next release rather than holding the train.
 - [ ] `ai.extract`, `ai.classify`, `ai.summarize` with schema-bound structured output, batching,
       rate limits and model routing
 - [ ] One provider-pluggable text-generation processor in place of today's per-provider ones
+- [ ] **Catalog:** certify Pinecone from labs; build a Turbopuffer destination
 - [ ] Cost controls: token budgets, sampling
 - [ ] LLM results cached by input hash, so replay is deterministic and cheap
 - [ ] Windowed summarization
@@ -395,6 +418,8 @@ to the next release rather than holding the train.
 ### v0.30+ — Scale and partners
 
 - [ ] Keyed state across instances via partition claims
+- [ ] Hot-pipeline parallelism: the scheduler assigns partition claims so one pipeline runs across
+      several instances
 - [ ] Reference architectures with RisingWave, Materialize and ClickHouse for stream-stream joins,
       large-state joins and complex event time — first-class ingest and egress for each
 - [ ] Fleet console (open source core): registers many Conduit instances; fleet-wide visibility,
@@ -410,12 +435,8 @@ Kept on the list, not scheduled in a release yet:
 - Public GitHub Project board
 - CNCF Sandbox application
 - Monthly community call on a public calendar
-- Registry web UI with search, verified badges and download stats (built; deployment pending)
-- More gallery templates: `postgres-iceberg`, `mysql-snowflake`, `shopify-warehouse`,
-  `kafka-clickhouse`; community-contributed templates with the same publishing flow as connectors
-- docker-compose quickstart
-- `deploy/` examples: docker-compose, systemd, ECS task definition, Nomad job spec (examples, not
-  supported products)
+- `shopify-warehouse` template; community-contributed templates with the same publishing flow as
+  connectors
 - WASM connectors and WIT/component-model adoption beyond what the v0.23 host-choice ADR decides
   (deferred by [ADR 20260722](docs/architecture-decision-records/20260722-wasm-component-model-deferred.md))
 - WASM support for Java and C# processors and connectors, once their component-model toolchains
@@ -424,19 +445,8 @@ Kept on the list, not scheduled in a release yet:
   only on demand
 - Log-based CDC for Oracle, Db2 and HANA — they stay on the Debezium engine through the JAR host
   until there is demand
-- Vector destinations: Pinecone, Turbopuffer
-- Other native connectors: GCS and Azure Blob with Parquet; Databricks/Delta Lake; SNS;
-  HTTP/webhooks (source rebuilt so the response waits for the ack, plus destination);
-  DuckDB/MotherDuck
-- JSON Schema support in the Schema Registry integration
-- Schema contracts and drift policy: halt, DLQ or auto-evolve on drift, surfaced in the UI
-- Checkpoint-aware rolling upgrades in the operator (drain → checkpoint → reschedule)
-- Hot-pipeline parallelism: the scheduler assigns partition claims so one pipeline runs across
-  several instances
-- Pipeline-wide batching, allocation reduction, profiling as a CI gate
-- Terraform provider for the Conduit API (pipelines, connectors, processors as resources)
+- DuckDB/MotherDuck
 - Production reference architectures beyond the streaming SQL partners
-- OpenTelemetry traces and metrics, prebuilt Grafana dashboards
 
 ## Documentation (parallel track)
 
@@ -461,9 +471,9 @@ Kept on the list, not scheduled in a release yet:
 Conduit's historical UI was Ember-based and later de-emphasized. The built-in UI was rebuilt from
 scratch and ships embedded in the engine (v0.18): it observes and operates pipelines on the same API
 the CLI and MCP server use, and config-as-code stays the source of truth. We keep the built-in UI
-minimal. Later UI surfaces: replay and offset management alongside the v0.24 replay verbs, the
-registry web UI, and the fleet console (v0.30+). Deeper org-scale console features are the
-commercial product.
+minimal. Later UI surfaces: replay and offset management alongside the v0.24 replay verbs,
+schema-drift visibility (v0.24), the registry web UI (v0.21), and the fleet console (v0.30+).
+Deeper org-scale console features are the commercial product.
 
 ---
 
