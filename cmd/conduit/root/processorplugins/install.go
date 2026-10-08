@@ -23,10 +23,14 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/registry"
+	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/registry/trust"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -118,6 +122,40 @@ type InstallCommand struct {
 
 func (c *InstallCommand) Usage() string { return "install <name>[@version]" }
 
+// installExitCodes is the "Exit codes" block of install's --help. The exit
+// code printed for each error code is computed from the real mapping, so it
+// cannot drift (#2907).
+var installExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: registry.CodeArchiveInvalid, When: "archive-shape violation"},
+	exitcodedoc.Entry{Code: registry.CodeCorruptDownload, When: "download does not match the index sha256"},
+	exitcodedoc.Entry{Code: index.CodeIndexIntegrity, When: "index verification failed under a key this build knows"},
+	exitcodedoc.Entry{Code: registry.CodeTrustAnchorsUnavailable, When: "this build's trust anchors could not be loaded (reinstall a release)"},
+	exitcodedoc.Entry{Code: conduiterr.CodeInvalidArgument, When: "bad argument or flag combination"},
+	exitcodedoc.Entry{Code: registry.CodeProcessorNotFound, When: "no processor with that name in the index"},
+	exitcodedoc.Entry{Code: registry.CodeVersionNotFound, When: "no such version"},
+	exitcodedoc.Entry{Code: registry.CodeIncompatibleVersion, When: "no version compatible with this Conduit"},
+	exitcodedoc.Entry{Code: index.CodeVersionYanked, When: "the requested version was yanked"},
+	exitcodedoc.Entry{Code: registry.CodeInvalidProcessorArtifact, When: "artifact is not a loadable standalone processor, or its name/version disagrees with the index"},
+	exitcodedoc.Entry{Code: index.CodeIndexStale, When: "index is older than the maximum staleness"},
+	exitcodedoc.Entry{Code: index.CodeIndexRollback, When: "index is older than one already seen"},
+	exitcodedoc.Entry{Code: index.CodeSchemaTooNew, When: "index schema is newer than this build understands"},
+	exitcodedoc.Entry{Code: index.CodeIndexNestingTooDeep, When: "index JSON nested too deeply"},
+	exitcodedoc.Entry{Code: index.CodeTrustAnchorExpired, When: "index signed by a key this build does not know (upgrade Conduit)"},
+	exitcodedoc.Entry{Code: registry.CodeBundleStale, When: "--bundle snapshot too old and not approved"},
+	exitcodedoc.Entry{Code: index.CodeIndexUnreachable, When: "index could not be fetched"},
+	exitcodedoc.Entry{Code: registry.CodeDownloadFailed, When: "artifact download failed"},
+	exitcodedoc.Entry{Code: registry.CodeInstallLocked, When: "another install holds the lock"},
+	exitcodedoc.Entry{Code: index.CodeIndexTooLarge, When: "index over its size cap"},
+	exitcodedoc.Entry{Code: trust.CodeBundleTooLarge, When: "signature bundle over its size cap"},
+	exitcodedoc.Entry{Code: trust.CodeUnsigned, When: "artifact is unsigned"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityMismatch, When: "signed by an identity other than the pinned publisher"},
+	exitcodedoc.Entry{Code: trust.CodeProvenanceInvalid, When: "SLSA provenance missing or invalid"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityRevoked, When: "publisher identity revoked"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityPatternTooLoose, When: "publisher identity pinned too loosely"},
+	exitcodedoc.Entry{Code: exitcodedoc.Registered("registry.unsigned_install_non_interactive"), When: "--allow-unsigned without confirmation in a non-interactive context"},
+	exitcodedoc.Entry{Code: exitcodedoc.Registered("registry.unsigned_install_disabled_by_policy"), When: "--allow-unsigned refused by operator policy"},
+)
+
 func (c *InstallCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Install a standalone WASM processor from the registry index",
@@ -136,11 +174,7 @@ processors (for example ai.chunk and ai.embed). Offline alternatives, verified t
   --index-file <local.json>   install from a locally-provided, still signature-verified index
   --bundle <path.tgz>         install fully offline from a signed processor bundle
 
-Exit codes (via the ConduitError's registered category):
-  0  success
-  1  Runtime    — internal bug, archive-shape violation, invalid processor artifact
-  2  Validation — processor/version not found, incompatible version, yanked/revoked
-  3  Environment — index unreachable, download failed, corrupt download, install lock contended`,
+` + installExitCodes,
 		Example: "conduit processor-plugins install ai.embed\n" +
 			"conduit processor-plugins install ai.embed@0.1.0\n" +
 			"conduit processor-plugins install ai.embed --dry-run\n" +
