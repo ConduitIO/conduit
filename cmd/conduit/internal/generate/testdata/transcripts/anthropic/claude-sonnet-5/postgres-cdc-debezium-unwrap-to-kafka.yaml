@@ -2,42 +2,41 @@ schemaVersion: 1
 requestID: postgres-cdc-debezium-unwrap-to-kafka
 provider: anthropic
 model: claude-sonnet-5
-capturedAt: 2026-10-08T02:41:15.266964Z
+capturedAt: 2026-10-08T20:46:42.57258Z
 corpusPromptSHA256: a4c04c78c622a8bd82052b1a9a195c3315064355de915493de2760803ccf260b
 systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
 catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
 turns:
     - "n": 1
       userPromptSHA256: a4c04c78c622a8bd82052b1a9a195c3315064355de915493de2760803ccf260b
-      tokensUsed: 6008
+      tokensUsed: 5937
       completionText: |-
         version: "2.2"
         pipelines:
-          - id: postgres-to-kafka-cdc
+          - id: postgres-cdc-to-kafka
             status: running
             connectors:
               - id: source
                 type: source
                 plugin: "builtin:postgres"
                 settings:
-                  url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
+                  url: "TODO"
                   tables: "*"
                   cdcMode: logrepl
-                  logrepl.publicationName: conduitpub
                   logrepl.slotName: conduitslot
+                  logrepl.publicationName: conduitpub
                   logrepl.autoCleanup: "true"
-                  logrepl.withAvroSchema: "true"
+                  logrepl.withAvroSchema: "false"
               - id: destination
                 type: destination
                 plugin: "builtin:kafka"
                 settings:
-                  servers: "localhost:9092"
-                  topic: "postgres-cdc"
+                  servers: "TODO"
+                  topics: "postgres-cdc"
                   acks: all
-                  compression: snappy
     - "n": 2
-      userPromptSHA256: bff7af949e1d9dfba93c298703dce240d9b863626d542bd46aa891a5bc9ceb93
-      tokensUsed: 6636
+      userPromptSHA256: a796d41fbab2e26ea53b07b54879cb0c48c3d1f42b0f44254861474580c88ca6
+      tokensUsed: 6520
       completionText: |-
         version: "2.2"
         pipelines:
@@ -51,54 +50,21 @@ turns:
                   url: TODO
                   tables: "*"
                   cdcMode: auto
+                  logrepl.publicationName: conduitpub
+                  logrepl.slotName: conduitslot
+                  logrepl.autoCleanup: "true"
+                  logrepl.withAvroSchema: "true"
+                processors:
+                  - id: unwrap-debezium
+                    plugin: "builtin:unwrap.debezium"
+                    settings: {}
               - id: destination
                 type: destination
                 plugin: "builtin:kafka"
                 settings:
                   servers: localhost:9092
-                  topics: postgres.cdc
-            processors:
-              - id: filter-deletes-tombstones
-                plugin: "builtin:filter"
-                settings:
-                  condition: '{{ ne .Operation "snapshot" }}'
-              - id: unwrap-debezium
-                plugin: "builtin:unwrap.debezium"
-                settings: {}
-    - "n": 3
-      userPromptSHA256: bff7af949e1d9dfba93c298703dce240d9b863626d542bd46aa891a5bc9ceb93
-      tokensUsed: 6545
-      completionText: |-
-        version: "2.2"
-        pipelines:
-          - id: postgres-cdc-to-kafka
-            status: running
-            connectors:
-              - id: pg-source
-                type: source
-                plugin: "builtin:postgres"
-                settings:
-                  url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
-                  tables: "*"
-                  cdcMode: auto
-                  logrepl.publicationName: conduitpub
-                  logrepl.slotName: conduitslot
-                  logrepl.withAvroSchema: "true"
-              - id: kafka-destination
-                type: destination
-                plugin: "builtin:kafka"
-                settings:
-                  servers: "localhost:9092"
-                  topic: "postgres-cdc"
+                  topic: postgres-changes
                   acks: all
-            processors:
-              - id: unwrap-debezium
-                plugin: "unwrap.debezium"
-                settings: {}
-              - id: filter-records
-                plugin: "filter"
-                settings:
-                  condition: 'true'
 outcome:
     validatePass: true
     semanticMatch: true
