@@ -96,8 +96,16 @@ message Pipeline {
     string plugin = 1;
     // settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
     // value is redacted to "***" and only keys are returned, because settings
-    // routinely hold credentials. Requests must carry real values; sending a
-    // redacted map back stores "***" as the value.
+    // routinely hold credentials. In UpdateDLQ, a value that is exactly "***"
+    // keeps the stored value for that key, so a GetDLQ response can be sent
+    // back unchanged. "***" is rejected for a key with no stored value
+    // (orchestrator.redacted_setting_without_stored_value) and when the
+    // update changes the plugin, including only its version
+    // (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+    // the stored one, and a key left out is removed. A real value of exactly
+    // "***" cannot be set. Note that "***" re-binds the stored value to the
+    // new settings: changing a host while sending "***" for a password sends
+    // the stored password to the new host.
     map<string, string> settings = 2;
 
     // window_size defines how many last acks/nacks are monitored in the window
@@ -145,7 +153,17 @@ message Connector {
     string name = 1;
     // settings are the connector plugin settings. In responses every value is
     // redacted to "***" and only keys are returned, because settings routinely
-    // hold credentials. Requests must carry real values.
+    // hold credentials. In UpdateConnector, a value that is exactly "***" keeps
+    // the stored value for that key, so a GetConnector response can be sent
+    // back unchanged. "***" is rejected for a key with no stored value,
+    // including every key in CreateConnector
+    // (orchestrator.redacted_setting_without_stored_value), and when the
+    // update changes the plugin, including only its version
+    // (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+    // the stored one, and a key left out is removed. A real value of exactly
+    // "***" cannot be set. Note that "***" re-binds the stored value to the
+    // new settings: changing a host while sending "***" for a password sends
+    // the stored password to the new host.
     map<string, string> settings = 2;
   }
 
@@ -187,7 +205,17 @@ message Processor {
   message Config {
     // settings are the processor plugin settings. In responses every value is
     // redacted to "***" and only keys are returned, because settings routinely
-    // hold credentials. Requests must carry real values.
+    // hold credentials. In UpdateProcessor, a value that is exactly "***" keeps
+    // the stored value for that key, so a GetProcessor response can be sent
+    // back unchanged. "***" is rejected for a key with no stored value,
+    // including every key in CreateProcessor
+    // (orchestrator.redacted_setting_without_stored_value), and when the
+    // update changes the plugin, including only its version
+    // (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+    // the stored one, and a key left out is removed. A real value of exactly
+    // "***" cannot be set. Note that "***" re-binds the stored value to the
+    // new settings: changing a host while sending "***" for a password sends
+    // the stored password to the new host.
     map<string, string> settings = 1;
     int32 workers = 2;
   }
@@ -708,6 +736,9 @@ message PipelineDocument {
     string type = 2;
     string plugin = 3;
     string name = 4;
+    // settings must carry real values: a value that is exactly "***" (the
+    // placeholder API responses use for redacted values) is rejected with
+    // orchestrator.redacted_setting_without_stored_value.
     map<string, string> settings = 5;
     repeated PipelineDocument.Processor processors = 6;
   }
@@ -715,6 +746,9 @@ message PipelineDocument {
   message Processor {
     string id = 1;
     string plugin = 2;
+    // settings must carry real values: a value that is exactly "***" (the
+    // placeholder API responses use for redacted values) is rejected with
+    // orchestrator.redacted_setting_without_stored_value.
     map<string, string> settings = 3;
     int32 workers = 4;
     string condition = 5;
@@ -722,6 +756,9 @@ message PipelineDocument {
 
   message DLQ {
     string plugin = 1;
+    // settings must carry real values: a value that is exactly "***" (the
+    // placeholder API responses use for redacted values) is rejected with
+    // orchestrator.redacted_setting_without_stored_value.
     map<string, string> settings = 2;
     uint64 window_size = 3;
     uint64 window_nack_threshold = 4;

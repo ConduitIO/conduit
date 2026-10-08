@@ -1992,7 +1992,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
+          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateConnector, a value that is exactly \"***\" keeps\nthe stored value for that key, so a GetConnector response can be sent\nback unchanged. \"***\" is rejected for a key with no stored value,\nincluding every key in CreateConnector\n(orchestrator.redacted_setting_without_stored_value), and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. Note that \"***\" re-binds the stored value to the\nnew settings: changing a host while sending \"***\" for a password sends\nthe stored password to the new host."
         }
       }
     },
@@ -2402,7 +2402,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. Requests must carry real values; sending a\nredacted map back stores \"***\" as the value."
+          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. In UpdateDLQ, a value that is exactly \"***\"\nkeeps the stored value for that key, so a GetDLQ response can be sent\nback unchanged. \"***\" is rejected for a key with no stored value\n(orchestrator.redacted_setting_without_stored_value) and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. Note that \"***\" re-binds the stored value to the\nnew settings: changing a host while sending \"***\" for a password sends\nthe stored password to the new host."
         },
         "windowSize": {
           "type": "string",
@@ -2472,7 +2472,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "processors": {
           "type": "array",
@@ -2493,7 +2494,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "windowSize": {
           "type": "string",
@@ -2518,7 +2520,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "workers": {
           "type": "integer",
@@ -2634,7 +2637,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. Requests must carry real values."
+          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateProcessor, a value that is exactly \"***\" keeps\nthe stored value for that key, so a GetProcessor response can be sent\nback unchanged. \"***\" is rejected for a key with no stored value,\nincluding every key in CreateProcessor\n(orchestrator.redacted_setting_without_stored_value), and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. Note that \"***\" re-binds the stored value to the\nnew settings: changing a host while sending \"***\" for a password sends\nthe stored password to the new host."
         },
         "workers": {
           "type": "integer",
