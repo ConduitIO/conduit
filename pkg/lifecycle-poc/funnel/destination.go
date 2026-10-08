@@ -41,10 +41,9 @@ type Destination interface {
 	Write(context.Context, []opencdc.Record) error
 	Ack(context.Context) ([]connector.DestinationAck, error)
 	Teardown(context.Context) error
-	// TODO figure out if we want to handle these errors. This returns errors
-	//  coming from the persister, which persists the connector asynchronously.
-	//  Are we even interested in these errors in the pipeline? Sounds like
-	//  something we could surface and handle globally in the runtime instead.
+	// Errors carries failures the connector reports asynchronously, chiefly
+	// a state write the persister could not commit. Worker.WatchConnectorErrors
+	// reads it and the run fails on the first error (#2929).
 	Errors() <-chan error
 }
 
@@ -76,6 +75,10 @@ func (t *DestinationTask) Open(ctx context.Context) error {
 	}
 	t.logger.Debug(ctx).Msg("destination open")
 	return nil
+}
+
+func (t *DestinationTask) connectorErrors() <-chan error {
+	return t.destination.Errors()
 }
 
 func (t *DestinationTask) Close(ctx context.Context) error {

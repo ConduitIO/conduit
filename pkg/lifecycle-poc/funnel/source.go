@@ -39,10 +39,9 @@ type Source interface {
 	Read(context.Context) ([]opencdc.Record, error)
 	Ack(context.Context, []opencdc.Position) error
 	Teardown(context.Context) error
-	// TODO figure out if we want to handle these errors. This returns errors
-	//  coming from the persister, which persists the connector asynchronously.
-	//  Are we even interested in these errors in the pipeline? Sounds like
-	//  something we could surface and handle globally in the runtime instead.
+	// Errors carries failures the connector reports asynchronously, chiefly
+	// a position write the persister could not commit. Worker.WatchConnectorErrors
+	// reads it and the run fails on the first error (#2929).
 	Errors() <-chan error
 }
 
@@ -99,4 +98,8 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 
 func (t *SourceTask) GetSource() Source {
 	return t.source
+}
+
+func (t *SourceTask) connectorErrors() <-chan error {
+	return t.source.Errors()
 }

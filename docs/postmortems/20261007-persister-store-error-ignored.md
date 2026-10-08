@@ -156,7 +156,8 @@ The behavioral checks fail on the pre-fix code and pass with the fix. The PR has
   error. A source whose writes keep failing keeps running and never acks upstream. Each failed flush
   also parks its callback goroutine (and the flush's `callbacksDone` waiter) until `Teardown`, so
   goroutines grow with every failed flush. This has to be fixed before the arch-v2 flip in v0.21.
-  Tracked in #2929.
+  Tracked in #2929. Fixed for v0.21: arch-v2 now reads both channels and fails the run on the
+  first error, as the default architecture does.
 - Consider committing the healthy part of a failed batch in a second transaction, to stop one
   connector's failure from failing connectors in other pipelines. Tracked in #2930.
 - Decide whether to enable `govet`'s `shadow` analyzer, at least for `pkg/connector`,

@@ -1665,7 +1665,21 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 			// worker and the cleanup goroutine are registered on the tomb.
 			<-registered
 
+			// Invariant 3 (#2929): a connector error reported asynchronously,
+			// chiefly a state write that did not commit, fails the run while
+			// it runs, as in v1. The acks for that write stay withheld
+			// (invariant 1, connector.Source.onPersistFlushed); killing the
+			// tomb is what stops the source reading on, unacknowledged, while
+			// upstream retention grows. Kill cancels ctx, which the plugin
+			// streams derive from, so a blocked Read returns too. The error is
+			// not fatal, so the run goes through recovery like any other
+			// transient failure, and the stop rules (ADR
+			// 20261007-stop-requested-never-recovers) apply unchanged.
+			stopWatch := w.WatchConnectorErrors(ctx, func(err error) {
+				rp.t.Kill(cerrors.Errorf("worker for source %s stopped with error: %w", sourceID, err))
+			})
 			doErr := w.Do(ctx)
+			stopWatch()
 			s.logger.Err(ctx, doErr).
 				Str(log.PipelineIDField, rp.pipeline.ID).
 				Str(log.ConnectorIDField, sourceID).
