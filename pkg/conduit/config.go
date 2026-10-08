@@ -273,6 +273,26 @@ type Config struct {
 		PipelineArchV2DisableMetrics bool `long:"preview.pipeline-arch-v2-disable-metrics" mapstructure:"pipeline-arch-v2-disable-metrics" usage:"disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"`
 	}
 
+	// Generate configures `conduit generate`. It is read only by that
+	// command; the engine (`conduit run`) ignores it.
+	//
+	// The fields deliberately have no `long` tag: `conduit generate` has its
+	// own --provider flag, and a long tag would add a --generate.provider
+	// flag to every command that embeds Config (run, doctor, connectors, ...)
+	// where it would do nothing. They are set in conduit.yaml or through
+	// their environment variables.
+	Generate struct {
+		// Provider selects the generation provider (anthropic, openai,
+		// ollama) when the --provider flag is not given. Precedence:
+		// --provider, then CONDUIT_GENERATE_PROVIDER, then this, then
+		// auto-detection. Empty means "not set". The value is validated
+		// when `conduit generate` resolves its provider, not at engine
+		// startup: an unknown name fails generate with
+		// common.invalid_argument and config path /generate/provider, and
+		// never stops `conduit run`.
+		Provider string `mapstructure:"provider"`
+	} `mapstructure:"generate"`
+
 	Dev struct {
 		CPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
 		MemProfile   string `long:"dev.memprofile" usage:"write memory profile to file"`
