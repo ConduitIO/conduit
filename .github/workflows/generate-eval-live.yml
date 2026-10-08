@@ -1,0 +1,124 @@
+name: generate-eval-live
+
+# WS1 A5b, scheduled half: runs the eval corpus
+# (cmd/conduit/internal/generate/testdata/eval_requests.yaml) through
+# `conduit generate`'s loop against a LIVE Anthropic model, three passes, and
+# reports median validate-pass and semantic-match rates against the committed
+# floors (90% / 70%), plus per-category and per-request breakdowns, as the
+# run's job summary and a result.json artifact. TestLiveEval
+# (live_eval_test.go) is the whole implementation; this file only schedules
+# it and publishes what it wrote.
+#
+# # No PR-reachable trigger, ever
+#
+# This workflow holds ANTHROPIC_API_KEY. A `pull_request` or
+# `pull_request_target` trigger with a secret in scope is an exfiltration
+# path by construction: a one-line diff to anything the test compiles can
+# post the key somewhere and still exit green. `schedule` and
+# `workflow_dispatch` run the workflow as it exists on a merged ref, which is
+# the containment. It therefore cannot fail a PR: it never runs on one.
+# Same reasoning as generate-capture.yml.
+#
+# # Read-only
+#
+# `permissions: contents: read` - the job holding the key cannot push, open a
+# PR, or file an issue. Publishing numbers into docs/generate-benchmark.md
+# and filing a regression issue are follow-ups that belong in a separate,
+# key-less job.
+#
+# # Outcomes
+#
+# PASS - both medians at or above their floors.
+# BELOW_FLOOR - a median is under its floor; the run goes red.
+# INCONCLUSIVE - a majority of passes were discarded for transport failures
+#   (no response after two retries); no numbers are reported and the run goes
+#   red, because "never produces a number" has to be visible too.
+# The summary and artifact are published in every case.
+#
+# Cost: roughly $1 per pass at list price over the 28-request corpus, so
+# ~$3 a run and ~$12-15 a month weekly. Bounded by captureProvider's call and
+# token ceilings, the test's own 35-minute deadline, and timeout-minutes.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC, offset from trigger-nightly (00:00), flake-hunt
+    # (03:30) and chaos (04:45).
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      passes:
+        description: 'Passes over the corpus (median is reported; default 3)'
+        required: false
+        default: '3'
+
+permissions: {}
+
+concurrency:
+  group: generate-eval-live
+  cancel-in-progress: false
+
+jobs:
+  live-eval:
+    # Forks inherit `schedule`; this keeps them from spending this repo's
+    # budget or running with its secret.
+    if: github.repository == 'ConduitIO/conduit'
+    name: generate-eval (live)
+    runs-on: ubuntu-latest
+    environment: generate-eval
+    permissions:
+      contents: read
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Validate inputs
+        env:
+          PASSES: ${{ inputs.passes }}
+        run: |
+          set -euo pipefail
+          # Empty on a scheduled run; the test then uses its default.
+          if [ -n "$PASSES" ] && ! [[ "$PASSES" =~ ^[1-9][0-9]?$ ]]; then
+            echo "::error::passes must be an integer between 1 and 99, got '$PASSES'"
+            exit 1
+          fi
+
+      # ONE narrowly scoped invocation: this test, this package. Never `./...`
+      # with the key in the environment.
+      - name: Run the live eval
+        env:
+          CONDUIT_GENERATE_EVAL_LIVE: '1'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CONDUIT_GENERATE_EVAL_PASSES: ${{ inputs.passes }}
+          CONDUIT_GENERATE_EVAL_OUT: ${{ runner.temp }}/generate-eval-live
+        run: |
+          set -euo pipefail
+          go test -tags=generate_capture -count=1 -timeout 40m -v \
+            -run '^TestLiveEval$' ./cmd/conduit/internal/generate/
+
+      - name: Publish summary
+        if: ${{ !cancelled() }}
+        env:
+          OUT: ${{ runner.temp }}/generate-eval-live
+        run: |
+          set -euo pipefail
+          if [ -f "$OUT/summary.md" ]; then
+            cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## generate-eval (live): no report written" >> "$GITHUB_STEP_SUMMARY"
+            echo "The test failed before producing a report; see the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: generate-eval-live
+          path: ${{ runner.temp }}/generate-eval-live/
+          if-no-files-found: warn
+          retention-days: 90

@@ -1,0 +1,162 @@
+name: generate-eval
+
+# WS1 A5b, PR half: replays the committed provider transcripts
+# (cmd/conduit/internal/generate/testdata/transcripts/) through the real
+# `conduit generate` loop - extraction, validate.RunBytes with the shipped
+# Options, the intent judge, retry feedback - and byte-compares the scored
+# result against testdata/replay_expected.json. It measures Conduit's code
+# against frozen model output. It never measures the model; that is
+# generate-eval-live.yml.
+#
+# # This job never calls a provider - three independent layers
+#
+#  1. Structural: TestReplayEval hands Generate an offlineProvider whose
+#     only field is a *provider.Replay. No live adapter is reachable from it.
+#  2. Environment: every provider variable is set empty here, and with
+#     CONDUIT_GENERATE_EVAL_OFFLINE=1 the test fails if any is non-empty or
+#     if provider.Resolve can find a provider at all.
+#  3. Network: the test binary runs as a dedicated user whose outbound
+#     traffic is rejected by iptables/ip6tables (loopback excepted), with
+#     HTTP(S)_PROXY also pointed at a dead port. A positive control proves
+#     the block holds before the test runs. The binary is compiled BEFORE
+#     the block, as the normal runner user, so module downloads are not
+#     affected.
+#
+# The workflow holds no secret and asks for no write permission.
+#
+# # Always-report, not path-filtered
+#
+# No `paths:` filter and no change detector: the job runs in full on every
+# PR. A path-filtered check cannot be made required (it never reports on an
+# unrelated PR and blocks the merge forever), and the replay depends on most
+# of the tree - the builtin connector and processor specs, validate, the
+# pipeline config parser, go.mod - so a path list would be wide and easy to
+# get wrong in the fail-open direction. Running unconditionally has nothing
+# to fail open. The cost is one package's test binary build plus three
+# replays.
+#
+# # Determinism
+#
+# Three separate invocations, each replaying requests in a fresh random
+# order, must produce byte-identical result.json, and each must equal the
+# committed golden (the test enforces the golden itself; the cmp below is the
+# cross-run check).
+#
+# # Staleness is a warning, never a failure
+#
+# A transcript captured against an older system prompt or connector catalog
+# still replays; the job annotates it so the scheduled job / a re-capture
+# can act. Turning PRs red on every connector bump would make this a gate
+# people route around.
+#
+# Not yet a required check: it is advisory until it has a clean soak on
+# main, then the branch-protection toggle is a maintainer action.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    name: generate-eval (replay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Layer 2: no provider configuration anywhere in this job.
+      ANTHROPIC_API_KEY: ''
+      OPENAI_API_KEY: ''
+      OLLAMA_HOST: ''
+      CONDUIT_GENERATE_PROVIDER: ''
+      EVAL_DIR: /tmp/generate-eval
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build the replay test binary
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVAL_DIR/out"
+          go test -c -o "$EVAL_DIR/generate.test" ./cmd/conduit/internal/generate/
+          # The test reads testdata/ relative to its working directory.
+          cp -R cmd/conduit/internal/generate/testdata "$EVAL_DIR/testdata"
+
+      - name: Block outbound network for the eval user
+        run: |
+          set -euo pipefail
+          sudo useradd --system --no-create-home --shell /usr/sbin/nologin generate-eval
+          uid=$(id -u generate-eval)
+          for ipt in iptables ip6tables; do
+            sudo "$ipt" -I OUTPUT 1 -o lo -m owner --uid-owner "$uid" -j ACCEPT
+            sudo "$ipt" -I OUTPUT 2 -m owner --uid-owner "$uid" -j REJECT
+          done
+          sudo chown -R generate-eval "$EVAL_DIR"
+
+      - name: Positive control - the eval user cannot reach a provider
+        run: |
+          set -uo pipefail
+          for url in https://api.anthropic.com https://api.openai.com https://example.com; do
+            if sudo -u generate-eval env -i PATH="$PATH" curl -sS --max-time 10 -o /dev/null "$url"; then
+              echo "::error::egress block failed: generate-eval reached $url"
+              exit 1
+            fi
+          done
+          echo "egress blocked for generate-eval"
+
+      - name: Replay three times (no network, shuffled order)
+        working-directory: /tmp/generate-eval
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            sudo -u generate-eval env -i \
+              PATH="$PATH" HOME=/tmp TMPDIR=/tmp \
+              HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 \
+              http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 \
+              CONDUIT_GENERATE_EVAL_OFFLINE=1 \
+              CONDUIT_GENERATE_REPLAY_OUT="$EVAL_DIR/out/run$i" \
+              ./generate.test -test.run '^TestReplayEval$' -test.count=1 -test.v
+          done
+
+      - name: Cross-run byte comparison
+        working-directory: /tmp/generate-eval
+        run: |
+          set -euo pipefail
+          # The test writes its outputs 0600 as generate-eval.
+          sudo chown -R "$(id -un)" out
+          cmp out/run1/result.json out/run2/result.json
+          cmp out/run1/result.json out/run3/result.json
+          cmp out/run1/result.json testdata/replay_expected.json
+          sha256sum out/run*/result.json testdata/replay_expected.json
+
+      - name: Publish summary and staleness warnings
+        if: ${{ !cancelled() }}
+        working-directory: /tmp/generate-eval
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -un)" out
+          if [ -f out/run1/summary.md ]; then
+            cat out/run1/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -s out/run1/stale.txt ]; then
+            while IFS= read -r line; do
+              echo "::warning title=generate-eval STALE transcript::$line"
+            done < out/run1/stale.txt
+          fi
+
+      - name: Upload replay results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: generate-eval-replay
+          path: /tmp/generate-eval/out/
+          if-no-files-found: warn
+          retention-days: 14

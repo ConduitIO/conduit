@@ -91,9 +91,12 @@ jobs:
         # tests (TestPreserveMediansIfNothingPromoted_ShapeMismatch_...,
         # TestRequestIsCaptured_RejectsContentMismatch) do not match ANY of
         # the 11 prefixes the prior allowlist named - they would have
-        # silently never run in this gate. `-skip` naming just the one live
-        # test to exclude is fail-SAFE instead: every other test in the
+        # silently never run in this gate. `-skip` naming just the live
+        # tests to exclude is fail-SAFE instead: every other test in the
         # file, present or future, runs unless explicitly excluded.
+        # TestLiveEval (live_eval_test.go) is the second live test; it also
+        # skips itself without CONDUIT_GENERATE_EVAL_LIVE=1, so naming it
+        # here is belt-and-braces.
         #
         # LOW-4 (round-5 review of #2814): `-race` added - green locally in
         # under 4s, and this package's own regression tests
@@ -105,7 +108,7 @@ jobs:
         run: |
           go vet -tags=generate_capture ./cmd/conduit/internal/generate/...
           go test -tags=generate_capture -count=1 -race -v \
-            -skip '^TestCaptureTranscripts$' \
+            -skip '^(TestCaptureTranscripts|TestLiveEval)$' \
             ./cmd/conduit/internal/generate/...
 
   build-cross:
