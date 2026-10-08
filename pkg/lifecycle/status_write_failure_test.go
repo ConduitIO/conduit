@@ -26,6 +26,7 @@ package lifecycle
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,18 +54,37 @@ var errStatusStoreDown = cerrors.New("injected: pipeline store write failed")
 
 type injectStatusFaultKey struct{}
 
+type injectStatusHangKey struct{}
+
 // statusFaultDB fails a pipeline-instance write whose context carries
 // injectStatusFaultKey. With honourCtx it also fails a pipeline-instance write
 // on a cancelled context, as the SQLite and Postgres backends do.
+//
+// A write whose context carries injectStatusHangKey blocks until release is
+// closed (then lands), standing in for a hung store. With honourCtx it gives
+// up when its context ends instead, as SQLite and Postgres would; without it,
+// it ignores the context, as badger does.
 type statusFaultDB struct {
 	database.DB
 	honourCtx bool
+	release   chan struct{}
 }
 
 func (d *statusFaultDB) Set(ctx context.Context, key string, value []byte) error {
 	if strings.HasPrefix(key, pipelineKeyPrefix) {
 		if ctx.Value(injectStatusFaultKey{}) != nil {
 			return errStatusStoreDown
+		}
+		if ctx.Value(injectStatusHangKey{}) != nil {
+			if d.honourCtx {
+				select {
+				case <-d.release:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			} else {
+				<-d.release
+			}
 		}
 		if d.honourCtx && ctx.Err() != nil {
 			return ctx.Err()
@@ -82,6 +102,8 @@ type failStatusWrites struct {
 	fail func(status pipeline.Status, nth int) bool
 	// beforeFail, if set, runs before a selected write is attempted.
 	beforeFail func(status pipeline.Status, nth int)
+	// hang makes a selected write hang in the store instead of failing.
+	hang bool
 
 	mu     sync.Mutex
 	counts map[pipeline.Status]int
@@ -106,7 +128,11 @@ func (f *failStatusWrites) UpdateStatus(ctx context.Context, id string, status p
 		if f.beforeFail != nil {
 			f.beforeFail(status, nth)
 		}
-		ctx = context.WithValue(ctx, injectStatusFaultKey{}, true)
+		if f.hang {
+			ctx = context.WithValue(ctx, injectStatusHangKey{}, true)
+		} else {
+			ctx = context.WithValue(ctx, injectStatusFaultKey{}, true)
+		}
 	}
 	return f.PipelineService.UpdateStatus(ctx, id, status, errMsg)
 }
@@ -375,4 +401,53 @@ func TestServiceLifecycle_RunningWriteNotFound_StopsRun(t *testing.T) {
 	_, ok := r.ls.runningPipelines.Get(r.pl.ID)
 	is.True(!ok)
 	is.Equal(len(r.failureEvents()), 0)
+}
+
+// TestServiceLifecycle_RunningWriteHangs_StartReturnsWithinBound: a pipeline
+// store that hangs on the StatusRunning write must not hold Start forever.
+// runPipeline returns after the bound with the run registered and stoppable,
+// whether the store gives up when the context ends (SQLite, Postgres) or
+// ignores it (badger). In the second case the run cannot finish, and so Wait
+// cannot return, before the hung write does: nothing writes the terminal
+// status underneath it.
+func TestServiceLifecycle_RunningWriteHangs_StartReturnsWithinBound(t *testing.T) {
+	const bound = 50 * time.Millisecond
+	for _, honourCtx := range []bool{true, false} {
+		t.Run(fmt.Sprintf("honourCtx=%v", honourCtx), func(t *testing.T) {
+			is := is.New(t)
+			db := &statusFaultDB{DB: &inmemory.DB{}, honourCtx: honourCtx, release: make(chan struct{})}
+			var releaseOnce sync.Once
+			release := func() { releaseOnce.Do(func() { close(db.release) }) }
+			r := newStatusFaultRun(t, db, failNth(pipeline.StatusRunning, 1), newScriptedNode(nil, nil))
+			t.Cleanup(release)
+			r.ps.hang = true
+			r.ls.statusWriteTimeout = bound
+
+			started := make(chan error, 1)
+			go func() { started <- r.ls.runPipeline(context.Background(), r.rp) }()
+			select {
+			case err := <-started:
+				is.NoErr(err)
+			case <-time.After(terminalStatusGuard):
+				t.Fatalf("runPipeline did not return within %s while the status store hung (bound %s)", terminalStatusGuard, bound)
+			}
+
+			got, ok := r.ls.runningPipelines.Get(r.pl.ID)
+			is.True(ok)
+			is.True(got == r.rp)
+			is.Equal(r.pl.GetStatus(), pipeline.StatusRunning)
+
+			is.NoErr(r.ls.Stop(context.Background(), r.pl.ID, false))
+			if !honourCtx {
+				// The Running write is still in flight: the cleanup goroutine
+				// waits for it, so the run is still live.
+				is.True(r.rp.t.Alive())
+				release()
+			}
+			is.NoErr(r.ls.Wait(terminalStatusGuard))
+			is.Equal(r.pl.GetStatus(), pipeline.StatusUserStopped)
+			is.Equal(storedStatus(t, r.db, r.pl.ID), pipeline.StatusUserStopped)
+			is.Equal(len(r.failureEvents()), 0)
+		})
+	}
 }

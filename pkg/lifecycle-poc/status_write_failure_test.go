@@ -24,6 +24,7 @@ package lifecycle
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -49,15 +50,35 @@ var errStatusStoreDown = cerrors.New("injected: pipeline store write failed")
 
 type injectStatusFaultKey struct{}
 
+type injectStatusHangKey struct{}
+
 // statusFaultDB fails a pipeline-instance write whose context carries
-// injectStatusFaultKey.
+// injectStatusFaultKey. One whose context carries injectStatusHangKey blocks
+// until release is closed (then lands); with honourCtx it gives up when its
+// context ends instead, as SQLite and Postgres would, and without it ignores
+// the context, as badger does.
 type statusFaultDB struct {
 	database.DB
+	honourCtx bool
+	release   chan struct{}
 }
 
 func (d *statusFaultDB) Set(ctx context.Context, key string, value []byte) error {
-	if strings.HasPrefix(key, pipelineKeyPrefix) && ctx.Value(injectStatusFaultKey{}) != nil {
-		return errStatusStoreDown
+	if strings.HasPrefix(key, pipelineKeyPrefix) {
+		if ctx.Value(injectStatusFaultKey{}) != nil {
+			return errStatusStoreDown
+		}
+		if ctx.Value(injectStatusHangKey{}) != nil {
+			if d.honourCtx {
+				select {
+				case <-d.release:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			} else {
+				<-d.release
+			}
+		}
 	}
 	return d.DB.Set(ctx, key, value)
 }
@@ -69,6 +90,8 @@ type failStatusWrites struct {
 	PipelineService
 	// fail selects the calls to fail by status and its 1-based occurrence.
 	fail func(status pipeline.Status, nth int) bool
+	// hang makes a selected write hang in the store instead of failing.
+	hang bool
 
 	mu     sync.Mutex
 	counts map[pipeline.Status]int
@@ -89,7 +112,11 @@ func (f *failStatusWrites) UpdateStatus(ctx context.Context, id string, status p
 	f.mu.Unlock()
 
 	if inject {
-		ctx = context.WithValue(ctx, injectStatusFaultKey{}, true)
+		if f.hang {
+			ctx = context.WithValue(ctx, injectStatusHangKey{}, true)
+		} else {
+			ctx = context.WithValue(ctx, injectStatusFaultKey{}, true)
+		}
 	}
 	return f.PipelineService.UpdateStatus(ctx, id, status, errMsg)
 }
@@ -253,4 +280,81 @@ func TestServiceLifecycle_RunningWriteNotFound_StopsRun(t *testing.T) {
 	_, ok := ls.runningPipelines.Get(pl.ID)
 	is.True(!ok)
 	is.Equal(len(failures), 0)
+}
+
+// TestServiceLifecycle_RunningWriteHangs_StartReturnsWithinBound is the
+// arch-v2 half of pkg/lifecycle's test of the same name: a pipeline store
+// that hangs on the StatusRunning write must not hold Start forever, and the
+// run must stay registered and stoppable.
+func TestServiceLifecycle_RunningWriteHangs_StartReturnsWithinBound(t *testing.T) {
+	const bound = 50 * time.Millisecond
+	for _, honourCtx := range []bool{true, false} {
+		t.Run(fmt.Sprintf("honourCtx=%v", honourCtx), func(t *testing.T) {
+			is := is.New(t)
+			ctx, killAll := context.WithCancel(context.Background())
+			defer killAll()
+			logger := log.New(zerolog.Nop())
+			db := &statusFaultDB{DB: &inmemory.DB{}, honourCtx: honourCtx, release: make(chan struct{})}
+			var releaseOnce sync.Once
+			release := func() { releaseOnce.Do(func() { close(db.release) }) }
+			persister := connector.NewPersister(logger, db, time.Second, 3)
+			defer stopAndWaitPersister(t, killAll, persister)
+			defer release()
+
+			inner := pipeline.NewService(logger, db)
+			pl, err := inner.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+			is.NoErr(err)
+
+			ctrl := gomock.NewController(t)
+			source, sourceDispenser := generatorSource(ctrl, persister, nil, nil, false)
+			destination, destDispenser := asserterDestination(ctrl, persister, nil, false)
+			dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+			pl.DLQ.Plugin = dlq.Plugin
+			pl, err = inner.AddConnector(ctx, pl.ID, source.ID)
+			is.NoErr(err)
+			pl, err = inner.AddConnector(ctx, pl.ID, destination.ID)
+			is.NoErr(err)
+
+			ps := newFailStatusWrites(inner, failNth(pipeline.StatusRunning, 1))
+			ps.hang = true
+			ls := NewService(
+				logger,
+				testErrRecoveryCfg(),
+				testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+				testProcessorService{},
+				testConnectorPluginService{source.Plugin: sourceDispenser, destination.Plugin: destDispenser, dlq.Plugin: dlqDispenser},
+				ps,
+				false,
+			)
+			ls.statusWriteTimeout = bound
+			rpCh := make(chan *runnablePipeline, 1)
+			ls.testWorkersReleased = func(r *runnablePipeline) { rpCh <- r }
+
+			started := make(chan error, 1)
+			go func() { started <- ls.Start(ctx, pl.ID) }()
+			select {
+			case err := <-started:
+				is.NoErr(err)
+			case <-time.After(10 * time.Second):
+				release() // let the run finish so the test can end
+				t.Fatalf("Start did not return within 10s while the status store hung (bound %s)", bound)
+			}
+			rp := <-rpCh
+
+			got, ok := ls.runningPipelines.Get(pl.ID)
+			is.True(ok)
+			is.True(got == rp)
+			is.Equal(pl.GetStatus(), pipeline.StatusRunning)
+
+			is.NoErr(ls.Stop(ctx, pl.ID, false))
+			if !honourCtx {
+				// The cleanup goroutine waits for the in-flight Running write.
+				is.True(rp.t.Alive())
+				release()
+			}
+			is.NoErr(ls.WaitPipeline(pl.ID))
+			is.Equal(pl.GetStatus(), pipeline.StatusUserStopped)
+			is.Equal(storedStatus(t, db, pl.ID), pipeline.StatusUserStopped)
+		})
+	}
 }
