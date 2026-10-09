@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit/tools
 
-go 1.25.14
+go 1.26.9
 
 tool (
 	github.com/bufbuild/buf/cmd/buf
