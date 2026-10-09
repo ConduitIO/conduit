@@ -255,8 +255,8 @@
       "properties": {
         "version": {
           "type": "string",
-          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
-          "description": "Semver version string of this connector release, e.g. \"0.14.0\". Immutable once published (append-only; see `connectors[].versions` description)."
+          "pattern": "^v?\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+          "description": "Semver version string of this connector release, e.g. \"v0.14.0\" (the leading \"v\" is optional; every published entry uses it, and clients compare versions ignoring it). Immutable once published (append-only; see `connectors[].versions` description)."
         },
         "releasedAt": {
           "type": "string",
@@ -303,8 +303,8 @@
       "properties": {
         "version": {
           "type": "string",
-          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
-          "description": "Semver version string of this processor release, e.g. \"0.1.0\". Immutable once published (append-only; see `processors[].versions` description)."
+          "pattern": "^v?\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+          "description": "Semver version string of this processor release, e.g. \"v0.1.0\" (the leading \"v\" is optional; clients compare versions ignoring it). Immutable once published (append-only; see `processors[].versions` description)."
         },
         "releasedAt": {
           "type": "string",

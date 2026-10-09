@@ -48,6 +48,15 @@ information in free-text `description`, which neither the CLI nor the web UI can
 - Tier is set by registry maintainers in the per-entry index files. A publisher's release workflow never writes it.
 - `MaxSupportedSchemaVersion` stays 1.
 
+### Version pattern (fix in the same change)
+
+The schema's `version` pattern for connector and processor versions required bare semver (`0.14.0`), but every entry
+in the served index uses a leading `v` (`v0.14.0`), and the client has always compared versions ignoring it
+(`registry.NormalizeVersion`). The served index therefore did not validate against its own schema. The pattern now
+allows one optional leading `v`. `minConduitVersion` and `minProtocolVersion` keep their bare-semver patterns, which
+the served index already follows. `TestFrozenSchema_ValidatesLiveRegistryIndex` validates an unmodified copy of the
+served index so the two cannot drift apart again.
+
 ## Alternatives considered
 
 1. **Put the classification in `description` or a free-form `labels` map.** Rejected: not filterable without parsing,

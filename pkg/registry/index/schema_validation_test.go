@@ -236,3 +236,55 @@ func TestFrozenSchema_RejectsBadLicenseAndTier(t *testing.T) {
 		})
 	}
 }
+
+// TestFrozenSchema_ValidatesLiveRegistryIndex validates a copy of the index
+// actually served by ConduitIO/conduit-connector-registry (index/index.json on
+// main as of 2026-10-09, unmodified) against the frozen schema. Every published
+// version string there carries a leading "v" ("v0.9.4"), which the client has
+// always accepted (registry.NormalizeVersion) but the schema's version pattern
+// rejected, so the served index did not validate against its own schema. This
+// test keeps the two in agreement.
+func TestFrozenSchema_ValidatesLiveRegistryIndex(t *testing.T) {
+	is := is.New(t)
+	sch := compileFrozenSchema(t)
+
+	raw, err := os.ReadFile("testdata/live-registry-index-20261009.json")
+	is.NoErr(err)
+
+	is.NoErr(validateAgainstFrozenSchema(t, sch, raw))
+}
+
+// TestFrozenSchema_VersionPattern pins what the version pattern accepts after
+// allowing an optional leading "v": exactly one lowercase "v", then semver.
+func TestFrozenSchema_VersionPattern(t *testing.T) {
+	sch := compileFrozenSchema(t)
+	raw, err := os.ReadFile("testdata/sample-index.json")
+	is.New(t).NoErr(err)
+
+	testCases := []struct {
+		version string
+		valid   bool
+	}{
+		{"0.14.0", true},
+		{"v0.14.0", true},
+		{"v1.2.3-rc.1+build.5", true},
+		{"vv0.14.0", false},
+		{"V0.14.0", false},
+		{"v0.14", false},
+		{"version0.14.0", false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.version, func(t *testing.T) {
+			is := is.New(t)
+			var env map[string]any
+			is.NoErr(json.Unmarshal(raw, &env))
+			payload := env["payload"].(map[string]any)
+			payload["connectors"].([]any)[0].(map[string]any)["versions"].([]any)[0].(map[string]any)["version"] = tc.version
+			payload["processors"].([]any)[0].(map[string]any)["versions"].([]any)[0].(map[string]any)["version"] = tc.version
+			mutated, err := json.Marshal(env)
+			is.NoErr(err)
+			err = validateAgainstFrozenSchema(t, sch, mutated)
+			is.Equal(err == nil, tc.valid)
+		})
+	}
+}
