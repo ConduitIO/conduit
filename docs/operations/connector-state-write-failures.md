@@ -18,7 +18,9 @@ failed to commit connector batch: ...
 ```
 
 A stopping connector wraps it as `failed to persist source connector position during teardown: ...`
-or `failed to persist destination connector state: ...`.
+or `failed to persist destination connector state: ...`. A source reports its teardown persist error
+only if the write fails within the teardown flush timeout (10 seconds); a failure after that is
+only logged.
 
 The Conduit log always has the error line
 `failed to persist connector batch; nothing in it was committed and every connector in it is notified`.
@@ -33,7 +35,14 @@ the same way:
   `pipelines.error-recovery.max-retries` (-1, unlimited) the pipeline keeps cycling between
   recovering and running; with a limit it goes **degraded** once the limit is spent, with an error
   saying it could not recover.
-- A pipeline that was stopping reports the error as its stop error and is not restarted.
+- A pipeline that was stopping is not restarted. It ends **user stopped** and nothing is lost,
+  because the positions that could not be stored were never acknowledged. What the pipeline
+  reports as the reason depends on the architecture. The default architecture reports the persist
+  error as the stop error. Under arch-v2 the persist error is returned to whoever called stop, but
+  the run's own error is usually the later, less useful
+  `failed to tear down source: plugin is not running`, because the worker tears the source down a
+  second time on close and records that failure instead (#2966). If you see that message on a
+  stopped arch-v2 pipeline, look for the persist error in the log line above.
 
 Under arch-v2 the error the run failed with reads
 `worker for source <id> stopped with error: connector <id> reported an error: ...`, followed by
