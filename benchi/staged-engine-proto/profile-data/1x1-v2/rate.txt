@@ -1,0 +1,1 @@
+46682 rec/s/sink  (945385 recs over 20.3s, 1 sinks)  cores_used=1.28 vmload=1.16 0.79 0.55 host_after=6.93 8.13 10.81

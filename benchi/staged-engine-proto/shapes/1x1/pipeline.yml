@@ -1,0 +1,29 @@
+# archv2-gate shape 1x1: one generator source, one file sink, default config.
+#
+# Default config is the point: sdk.batch.size and sdk.batch.delay are unset, so
+# the connector SDK reads batches of one record. That is what an out-of-the-box
+# pipeline does, and it is the configuration the gate is decided on.
+#
+# The sink is builtin:file writing one JSON record plus '\n' per record to the
+# harness's sink volume. The harness counts those newlines; nothing here reads
+# engine metrics. Both engines run this file unchanged; the only difference
+# between arms is the --preview.pipeline-arch-v2 flag.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
