@@ -451,11 +451,32 @@ func (b *Batch) findSplitRecord(i int) (int, int) {
 // array via append, leaving every sibling's slice header (and the original
 // batch) untouched. See TestBatch_Clone_PositionsAliasing.
 func (b *Batch) clone() *Batch {
+	c := b.cloneSharingRecords()
 	records := make([]opencdc.Record, len(b.records))
 	for i, r := range b.records {
 		records[i] = r.Clone()
 	}
+	c.records = records
+	return c
+}
 
+// cloneSharingRecords is clone() without the deep copy of the records: the
+// returned batch has its own recordStatuses, run ledger and splitRecords map,
+// but its records slice points at the same opencdc.Record values (and so the
+// same Metadata maps and payloads) as b.
+//
+// It exists for the fan-out case where deep-copying every record per branch
+// was the dominant cost (#2910): a branch made only of destination tasks
+// never modifies a record, it only reads it, so M such branches can read one
+// copy concurrently. That is only safe while EVERY holder of these records
+// treats them as read-only for as long as any branch is still running. The
+// caller decides that - see branchMutatesRecords and Worker.doNextTask - and
+// must use clone() for any branch that may modify a record in place.
+//
+// The records slice is clipped (len == cap), for the same reason positions is
+// in clone(): if a holder ever did append to it, the append must reallocate
+// rather than write into a backing array a sibling is reading.
+func (b *Batch) cloneSharingRecords() *Batch {
 	var splitRecords map[string]opencdc.Record
 	if len(b.splitRecords) > 0 {
 		// Copy the map (not just the reference): SplitRecord writes new
@@ -472,7 +493,7 @@ func (b *Batch) clone() *Batch {
 	}
 
 	return &Batch{
-		records:        records,
+		records:        slices.Clip(b.records),
 		recordStatuses: slices.Clone(b.recordStatuses),
 		positions:      slices.Clip(b.positions),
 		runs:           cloneRuns(b.runs),
@@ -500,10 +521,17 @@ func cloneRuns(runs []*splitRun) []*splitRun {
 		return nil
 	}
 	out := make([]*splitRun, len(runs))
-	seen := make(map[*splitRun]*splitRun, len(runs))
+	// seen is allocated on the first run actually found. Most batches carry
+	// no split runs at all (runs is all nil), and this is called once per
+	// fan-out branch per pass, so an eager map was a per-branch allocation
+	// sized to the batch for nothing (#2910).
+	var seen map[*splitRun]*splitRun
 	for i, r := range runs {
 		if r == nil {
 			continue
+		}
+		if seen == nil {
+			seen = make(map[*splitRun]*splitRun)
 		}
 		cloned, ok := seen[r]
 		if !ok {

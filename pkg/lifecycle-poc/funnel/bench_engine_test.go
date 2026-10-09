@@ -126,7 +126,7 @@ func (d *benchDestination) Ack(context.Context) ([]connector.DestinationAck, err
 // benchWorker builds a worker over batchSize-record reads and destCount
 // destinations, optionally marking the destinations as a shared boundary (the
 // N-source serialization point).
-func benchWorker(b *testing.B, batchSize, destCount int, shared bool) *Worker {
+func benchWorker(b testing.TB, batchSize, destCount int, shared bool) *Worker {
 	b.Helper()
 	logger := log.Nop()
 

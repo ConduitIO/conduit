@@ -121,6 +121,12 @@ func (s *inMemoryStreamClient[REQ, RES]) Send(req REQ) error {
 		return io.EOF
 	// We clone the data before sending it into the stream to avoid
 	// sharing the same data between the server and the client.
+	//
+	// Load-bearing for arch-v2 destination fan-out (#2910): sibling
+	// destination branches share one copy of each record and rely on no
+	// destination writing to it. This clone is what keeps a builtin
+	// destination's edits off the shared records. See
+	// docs/design-documents/20261008-archv2-fanout-shared-records.md.
 	case s.reqChan <- req.Clone():
 		return nil
 	}
