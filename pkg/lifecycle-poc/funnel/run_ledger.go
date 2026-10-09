@@ -17,6 +17,7 @@ package funnel
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -176,6 +177,13 @@ func (r *splitRun) nackBatch() *Batch {
 // does not cover, and why that gap is pre-existing and unaffected by this fix.
 type runAckNacker struct {
 	parent ackNacker
+
+	// mu serializes vote. The staged engine can vote for sub-batches of one
+	// pass from two goroutines at once (a destination's AckReader for the
+	// pieces that were written, the runner for pieces a processor nacked), and
+	// they share the *splitRun counters. Lock order: this mutex, then
+	// multiAckNacker.mu, then the ledger's.
+	mu sync.Mutex
 }
 
 // newRunAckNacker wraps parent. NOTE: the returned value is STATELESS - the
@@ -227,6 +235,9 @@ func (r *runAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) er
 // runAckNacker composable with itself and with multiAckNacker without special
 // cases at the boundary.
 func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	i := 0
 	for i < len(batch.records) {
 		var run *splitRun

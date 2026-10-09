@@ -70,7 +70,7 @@ func TestDoTask_Retry_NonConverging_FailsWithCodedError(t *testing.T) {
 	task := &alwaysRetryTask{id: "stuck-task"}
 	node := &TaskNode{Task: task}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := randomBatch(4)
 	err := w.doTask(ctx, node, batch, newRunAckNacker(parent))
@@ -134,7 +134,7 @@ func TestDoTask_Retry_Converging_CompletesNormally(t *testing.T) {
 	task := &shrinkByCapTask{id: "cap-task", cap: 2}
 	node := &TaskNode{Task: task}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := randomBatch(5)
 	wantPositions := append([]opencdc.Position(nil), batch.positions...)
@@ -197,7 +197,7 @@ func TestDoTask_Retry_TemporaryStall_RecoversAndCompletesNormally(t *testing.T) 
 	task := &recoveringRateLimiterTask{id: "rate-limiter-task", stallRounds: 2}
 	node := &TaskNode{Task: task}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := randomBatch(3)
 	wantPositions := append([]opencdc.Position(nil), batch.positions...)
@@ -267,7 +267,7 @@ func TestDoTask_Retry_SplitRun_NonConverging_NoEarlyReleaseOrWithhold(t *testing
 	task := &splitThenStuckTask{id: "split-stuck-task"}
 	node := &TaskNode{Task: task}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := randomBatch(1)
 	err := w.doTask(ctx, node, batch, newRunAckNacker(parent))
@@ -337,7 +337,7 @@ func TestDoTask_Retry_IterationCap_Reached(t *testing.T) {
 	task := &shrinkByOneForeverTask{id: "slow-shrink-task"}
 	node := &TaskNode{Task: task}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := randomBatch(10)
 	wantAckedPrefix := append([]opencdc.Position(nil), batch.positions[:4]...)
@@ -417,7 +417,7 @@ func TestDoTask_Retry_ProcessorTask_UnsetProcessedRecord_FailsFatally(t *testing
 
 	node := &TaskNode{Task: NewProcessorTask("stuck-proc", proc, logger, NoOpProcessorMetrics{})}
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: logger, processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: logger}
 
 	err := w.doTask(ctx, node, NewBatch(slices.Clone(records)), newRunAckNacker(parent))
 

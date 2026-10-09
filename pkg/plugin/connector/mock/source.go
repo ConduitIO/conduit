@@ -174,14 +174,18 @@ func SourcePluginWithAcks(wantCount int, assertAckCount bool) ConfigurableSource
 			defer wg.Done()
 			serverStream := p.Stream.Server()
 			for {
-				_, err := serverStream.Recv()
+				req, err := serverStream.Recv()
 				if err != nil {
 					if cerrors.Is(err, context.Canceled) || cerrors.Is(err, io.EOF) {
 						return nil // This is expected when the plugin is stopped.
 					}
 					return cerrors.Errorf("source mock recv stream error: %w", err)
 				}
-				gotCount.Add(1)
+				// Count acked POSITIONS, not ack messages. How many positions
+				// one message carries is an engine detail: v1 sends one per
+				// message, the staged engine acks a contiguous prefix per
+				// message. What must hold is that every record was acked.
+				gotCount.Add(int64(len(req.AckPositions)))
 			}
 		})
 	})
