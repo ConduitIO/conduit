@@ -608,7 +608,6 @@ Specification of the pool:
 
 ## Failure modes
 
-
 Tests are planned names unless stated; none exist yet.
 
 | Failure | Detection | Behaviour | Invariants | Test |
