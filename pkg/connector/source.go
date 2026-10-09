@@ -152,7 +152,9 @@ type Source struct {
 	deliveryDone chan struct{}
 	// tearingDown is set true at the very start of Teardown, before any wait.
 	// Once set, deliverDeferredAcks still RETRIES a transient send failure (to
-	// deliver the final durable ack, invariant 7) but never ESCALATES an
+	// deliver the final durable ack, invariant 7), except io.EOF, which means
+	// the plugin ended the stream and is never retried (see deliverOneAck and
+	// onAckStreamClosed), but never ESCALATES an
 	// exhausted retry via errs — nothing reads errs during teardown, so an
 	// escalation there would block the goroutine forever. While it is false
 	// (plugin genuinely running), an exhausted retry escalates loudly, which
@@ -191,6 +193,10 @@ type Source struct {
 	// Default* constant"; see deliverOneAck.
 	deferredAckMaxRetries int
 	deferredAckBackoffCap time.Duration
+	// testEscalating, if set (tests only), is called when the delivery
+	// goroutine enters escalateDeferredAckFailure, so a test can wait for
+	// that point instead of sleeping.
+	testEscalating func()
 }
 
 // pendingAck is one Source.Ack call's positions, queued until the resulting
@@ -904,6 +910,9 @@ func (s *Source) streamTornDown() bool {
 // which waits for this goroutine, so an escalation that waited for stopStream
 // held up the drain for the whole teardown budget (#2900).
 func (s *Source) escalateDeferredAckFailure(err error) {
+	if s.testEscalating != nil {
+		s.testEscalating()
+	}
 	var streamDone <-chan struct{}
 	if s.streamCtx != nil {
 		streamDone = s.streamCtx.Done()

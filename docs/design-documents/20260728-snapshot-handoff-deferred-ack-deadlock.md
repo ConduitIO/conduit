@@ -145,6 +145,10 @@ as a smaller interim if A2's goroutine lifecycle is judged too much surface for 
    → escalate via `errs` while the node still reads it → connector/pipeline fails **loudly** with a
    clear error. **[today: silent deadlock].** Loud failure of an already-broken connector is correct;
    invariant 3 is not breached silently.
+   Since #2900, a `Send` that fails with `io.EOF` (the plugin ended the stream) is neither retried
+   nor escalated, so a running source relies on `Read` surfacing the stream end, with no ~3s
+   escalation backstop. Any future path that parks `Read` while the plugin runs (pause,
+   backpressure) must restore a signal for this case (#2954).
 3. **Teardown race (position durable, stream cancelling).** Unchanged from #2680: drop is benign,
    bounded by `DefaultTeardownFlushTimeout`; restart re-delivers → benign duplicate, never a gap.
    A2's delivery goroutine aborts on the teardown signal exactly as `sendDeferredAck` does today.
