@@ -1,0 +1,81 @@
+diff --git a/benchi/archv2-gate/aws/userdata.sh.tmpl b/benchi/archv2-gate/aws/userdata.sh.tmpl
+index 639525e5..4d1e4c13 100644
+--- a/benchi/archv2-gate/aws/userdata.sh.tmpl
++++ b/benchi/archv2-gate/aws/userdata.sh.tmpl
+@@ -74,6 +74,17 @@ git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
+ git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
+ git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
+ 
++# Staged-engine prototype extension (see benchi/staged-engine-proto/README.md in
++# the prototype PR, which is the "fanout" PR here): add its shapes (4x4,
++# source-batched 1x1) to the harness checkout, and apply its bench-only
++# destination-latency hook to BOTH engine trees so every arm sees the same hook.
++SP="$W/src-fanout/benchi/staged-engine-proto"
++[ -d "$SP/shapes" ] || fail "prototype PR has no benchi/staged-engine-proto"
++cp -r "$SP/shapes/." "$W/src-harness/benchi/archv2-gate/shapes/" || fail "copy shapes"
++for t in src-main src-fanout; do
++  (cd "$W/$t" && git apply "$SP/patches/latency-injection.patch") || fail "apply latency hook to $t"
++done
++
+ status "building images"
+ docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
+   -t conduit-bench:main "$W/src-main" || fail "docker build main"
+@@ -104,6 +115,15 @@ WRAPDF
+ docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
+   -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
+ 
++# Same images with the destination ack latency baked in as an environment
++# variable (the harness passes no env of its own).
++for lat in 1ms 10ms; do
++  for base in main fanout; do
++    printf 'FROM conduit-bench:%s\nENV CONDUIT_BENCH_DEST_ACK_LATENCY=%s\n' "$base" "$lat" \
++      | docker build -q -t "conduit-bench:${base}-lat${lat}" - || fail "docker build ${base}-lat${lat}"
++  done
++done
++
+ cd "$W/src-harness" || fail "cd harness"
+ go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
+ status "images and harness built"
+@@ -161,21 +181,29 @@ session() { # name image shape session
+   sync; echo 3 > /proc/sys/vm/drop_caches
+ }
+ 
+-session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1
+-session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2
+-session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
+-session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2
+-session 05-1x1-ab-main conduit-bench:main 1x1 ab
+-session 06-2x2-ab-main conduit-bench:main 2x2 ab
+-cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
+-Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
+-session the arm labels mean:
++# Sessions for the staged-engine prototype. The A/A pairs for each engine come
++# from the "ab" sessions themselves (v1-a/v1-b, or v2-main twice on the fanout
++# image). Arm labels on the "fanout" image: v1-a and v1-b are arch-v2 on main,
++# v2 is arch-v2 on the prototype; no v1 engine runs there.
++cat > "$OUT/results/README-fanout-sessions.txt" <<NOTE
++Sessions whose image is conduit-bench:fanout or conduit-bench:fanout-lat*:
+   v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
+-  v2         = arch-v2 on pr${FANOUT_PR} ${FANOUT_SHA}
+-No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
+-the PR's fan-out change against main, both on arch-v2.
++  v2         = arch-v2 on the prototype ${FANOUT_SHA} (PR ${FANOUT_PR})
++No v1 engine runs in these. Sessions on conduit-bench:main[-lat*] compare v1
++and arch-v2 on main as usual. Rates from different sessions are not comparable.
+ NOTE
+-session 07-2x2-fanout conduit-bench:fanout 2x2 ab
++session 05-1x1-ab-main conduit-bench:main 1x1 ab
++session 09-1x1-proto conduit-bench:fanout 1x1 ab
++session 06-2x2-ab-main conduit-bench:main 2x2 ab
++session 10-2x2-proto conduit-bench:fanout 2x2 ab
++session 08-4x4-ab-main conduit-bench:main 4x4 ab
++session 11-4x4-proto conduit-bench:fanout 4x4 ab
++session 12-1x1-srcbatch100-ab-main conduit-bench:main 1x1-srcbatch100 ab
++session 13-1x1-srcbatch100-proto conduit-bench:fanout 1x1-srcbatch100 ab
++session 14-1x1-lat1ms-ab-main conduit-bench:main-lat1ms 1x1 ab
++session 15-1x1-lat1ms-proto conduit-bench:fanout-lat1ms 1x1 ab
++session 16-1x1-lat10ms-ab-main conduit-bench:main-lat10ms 1x1 ab
++session 17-1x1-lat10ms-proto conduit-bench:fanout-lat10ms 1x1 ab
+ 
+ finish
+ SCRIPT

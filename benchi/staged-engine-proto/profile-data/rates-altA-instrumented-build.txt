@@ -1,0 +1,20 @@
+== altA-src10 v1
+65781 rec/s/sink  (1000329 recs over 15.2s, 1 sinks)  cores_used=1.65 vmload=0.89 1.14 0.83 host_after=43.11 41.60 25.30
+== altA-src10 v2
+86652 rec/s/sink  (1317520 recs over 15.2s, 1 sinks)  cores_used=1.57 vmload=1.20 1.19 0.85 host_after=34.93 39.86 25.15
+== altA-src100 v1
+74401 rec/s/sink  (1131936 recs over 15.2s, 1 sinks)  cores_used=1.79 vmload=1.48 1.26 0.89 host_after=26.43 37.49 24.72
+== altA-src100 v2
+100011 rec/s/sink  (1524126 recs over 15.2s, 1 sinks)  cores_used=1.64 vmload=1.59 1.30 0.91 host_after=31.65 38.17 25.36
+== altA-src1000 v1
+75695 rec/s/sink  (1152531 recs over 15.2s, 1 sinks)  cores_used=1.84 vmload=1.59 1.32 0.93 host_after=25.57 36.23 25.03
+== altA-src1000 v2
+103784 rec/s/sink  (1576752 recs over 15.2s, 1 sinks)  cores_used=1.62 vmload=1.69 1.37 0.95 host_after=20.96 34.24 24.64
+== altA-both100 v1
+91261 rec/s/sink  (1387903 recs over 15.2s, 1 sinks)  cores_used=2.26 vmload=1.82 1.42 0.98 host_after=19.53 32.86 24.41
+== altA-both100 v2
+99973 rec/s/sink  (1519900 recs over 15.2s, 1 sinks)  cores_used=1.64 vmload=1.89 1.47 1.01 host_after=15.55 30.83 23.92
+== altA-src100-dst100d0 v1
+99473 rec/s/sink  (1514100 recs over 15.2s, 1 sinks)  cores_used=2.34 vmload=1.79 1.48 1.03 host_after=10.12 25.58 22.54
+== altA-src100-dst100d0 v2
+hung: v2-main with dest sdk.batch.size=100 delay=0 (no output within 20+ min; killed)

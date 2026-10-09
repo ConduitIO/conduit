@@ -19,12 +19,15 @@ package funnel
 import (
 	"bytes"
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 type DestinationTask struct {
@@ -33,6 +36,11 @@ type DestinationTask struct {
 	logger      log.CtxLogger
 
 	metrics ConnectorMetrics
+
+	// async is the staged-engine state, created on first Submit. The DLQ's
+	// task never submits and keeps the synchronous Do.
+	asyncOnce sync.Once
+	async     atomic.Pointer[asyncState]
 }
 
 type Destination interface {
@@ -79,7 +87,10 @@ func (t *DestinationTask) Open(ctx context.Context) error {
 }
 
 func (t *DestinationTask) Close(ctx context.Context) error {
-	return t.destination.Teardown(ctx)
+	t.closeAsync()
+	err := t.destination.Teardown(ctx)
+	t.joinAsync()
+	return err
 }
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
@@ -163,4 +174,328 @@ func (t *DestinationTask) markBatchRecords(b *Batch, from int, acks []connector.
 			b.Nack(from+i, acks[i].Error)
 		}
 	}
+}
+
+// asyncTask is a task that can accept a batch without waiting for it to
+// complete. Worker.doTaskAttempt calls Submit instead of Do when the worker
+// runs the staged engine; done runs exactly once per accepted batch, on the
+// task's own goroutine, once the batch's acks were received (nil) or the task
+// failed (non-nil). A Submit that returns an error never calls done.
+type asyncTask interface {
+	Task
+	Submit(ctx context.Context, b *Batch, done func(error)) error
+}
+
+// maxUnackedRecords bounds, per destination, how many records may be written
+// but not yet acked. It is the destination-side half of backpressure: the
+// writer blocks when the window is full. It is a var only for tests.
+var maxUnackedRecords = 4000
+
+// inboxSize is how many submitted batches may wait for the writer. A var only
+// for tests.
+var inboxSize = 1024
+
+// inflightWrite is one batch submitted to a destination: queued in the inbox,
+// then written, then waiting for its acks.
+type inflightWrite struct {
+	batch     *Batch
+	records   []opencdc.Record
+	positions []opencdc.Position
+	start     time.Time
+	acked     int
+	done      func(error)
+}
+
+// asyncState is the staged-engine half of a DestinationTask.
+//
+//	Submit ──inbox──▶ writer ──Write──▶ plugin
+//	                     │ pending FIFO (appended BEFORE Write)
+//	plugin ──acks──▶ AckReader ──done()──▶ worker continuation ──▶ ledger vote
+//
+// The inbox merges all sources writing to this destination in arrival order and
+// keeps each source's order (one runner goroutine per source submits in
+// sequence). The writer is the only caller of Destination.Write and the
+// AckReader the only caller of Destination.Ack. qMu guards the pending FIFO and
+// window counters and is never held across Write: Write can block until the
+// plugin reads, and the plugin can be blocked sending an ack the AckReader
+// needs qMu to take.
+type asyncState struct {
+	inbox chan *inflightWrite
+	dead  chan struct{} // closed on failure or close; wakes blocked submitters
+
+	qMu     sync.Mutex
+	pending []*inflightWrite
+	unacked int
+	err     error
+	closing bool
+	changed chan struct{} // closed and replaced when the window or err changes
+
+	ackCtx    context.Context //nolint:containedctx // owned by the AckReader goroutine
+	ackCancel context.CancelFunc
+	wg        sync.WaitGroup
+}
+
+func (t *DestinationTask) asyncState() *asyncState {
+	t.asyncOnce.Do(func() {
+		a := &asyncState{
+			inbox:   make(chan *inflightWrite, inboxSize),
+			dead:    make(chan struct{}),
+			changed: make(chan struct{}),
+		}
+		a.ackCtx, a.ackCancel = context.WithCancel(context.Background())
+		a.wg.Add(2)
+		go t.writer(a)
+		go t.ackReader(a)
+		t.async.Store(a)
+	})
+	return t.async.Load()
+}
+
+func (a *asyncState) broadcastLocked() {
+	close(a.changed)
+	a.changed = make(chan struct{})
+}
+
+// Submit implements asyncTask. It blocks only while the inbox is full.
+//
+// Invariant 1: Submit never produces a vote. A vote only comes from the
+// AckReader, from an explicit ack matched to a write of these records.
+func (t *DestinationTask) Submit(ctx context.Context, batch *Batch, done func(error)) error {
+	records := batch.ActiveRecords()
+	if len(records) == 0 {
+		done(nil)
+		return nil
+	}
+	a := t.asyncState()
+
+	positions := make([]opencdc.Position, len(records))
+	for i, rec := range records {
+		positions[i] = rec.Position
+	}
+	w := &inflightWrite{batch: batch, records: records, positions: positions, start: time.Now(), done: done}
+
+	// A sticky failure is reported by the next Submit even if the inbox has room.
+	a.qMu.Lock()
+	err, closing := a.err, a.closing
+	a.qMu.Unlock()
+	if err != nil {
+		return err
+	}
+	if closing {
+		return plugin.ErrPluginNotRunning
+	}
+
+	select {
+	case a.inbox <- w:
+		return nil
+	case <-a.dead:
+		a.qMu.Lock()
+		err = a.err
+		a.qMu.Unlock()
+		if err == nil {
+			err = plugin.ErrPluginNotRunning
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// writer is the only caller of Destination.Write on this task.
+func (t *DestinationTask) writer(a *asyncState) {
+	defer a.wg.Done()
+	for {
+		var w *inflightWrite
+		select {
+		case w = <-a.inbox:
+		case <-a.dead:
+			return
+		}
+
+		a.qMu.Lock()
+		for a.err == nil && !a.closing && a.unacked > 0 && a.unacked+len(w.records) > maxUnackedRecords {
+			ch := a.changed
+			a.qMu.Unlock()
+			select {
+			case <-ch:
+			case <-a.dead:
+			}
+			a.qMu.Lock()
+		}
+		if a.err != nil || a.closing {
+			a.qMu.Unlock()
+			return
+		}
+		// Appended BEFORE Write so the AckReader can never see an ack it has
+		// no entry for, and so the FIFO order equals the stream order.
+		a.pending = append(a.pending, w)
+		a.unacked += len(w.records)
+		a.broadcastLocked()
+		a.qMu.Unlock()
+
+		if err := t.destination.Write(a.ackCtx, w.records); err != nil {
+			t.failAsync(a, cerrors.Errorf("failed to write %d records to destination: %w", len(w.records), err))
+			return
+		}
+	}
+}
+
+// failAsync makes the destination's failure sticky and reports it to every
+// write still in flight. No vote is cast for any of them (Invariant 1): their
+// positions stay unreleased and replay.
+func (t *DestinationTask) failAsync(a *asyncState, err error) {
+	a.qMu.Lock()
+	if a.err != nil || a.closing {
+		a.qMu.Unlock()
+		return
+	}
+	a.err = err
+	pending := a.pending
+	a.pending = nil
+	a.broadcastLocked()
+	close(a.dead)
+	a.qMu.Unlock()
+
+	for _, w := range pending {
+		w.done(err)
+	}
+	// Writes still in the inbox were never sent. Report them too so the
+	// failure reaches every worker that has something in flight here.
+	for {
+		select {
+		case w := <-a.inbox:
+			w.done(err)
+		default:
+			return
+		}
+	}
+}
+
+// ackReader is the only caller of Destination.Ack on this task. It matches
+// acks to the FIFO of writes by order, checking position bytes, and completes
+// a write once all of its records were acked.
+//
+// An ack may cover more than one write (an SDK destination that batches
+// combines several writes into one response), or only part of one, so the
+// matching walks the FIFO rather than assuming one response per write.
+func (t *DestinationTask) ackReader(a *asyncState) {
+	defer a.wg.Done()
+	for {
+		a.qMu.Lock()
+		for len(a.pending) == 0 && a.err == nil && !a.closing {
+			ch := a.changed
+			a.qMu.Unlock()
+			select {
+			case <-ch:
+			case <-a.ackCtx.Done():
+				return
+			}
+			a.qMu.Lock()
+		}
+		stop := a.err != nil || a.closing
+		a.qMu.Unlock()
+		if stop {
+			return
+		}
+
+		acks, err := t.destination.Ack(a.ackCtx)
+		if err != nil {
+			a.qMu.Lock()
+			closing := a.closing
+			a.qMu.Unlock()
+			if closing {
+				return
+			}
+			t.failAsync(a, cerrors.Errorf("failed to receive acks from destination: %w", err))
+			return
+		}
+		if err := t.matchAcks(a, acks); err != nil {
+			t.failAsync(a, cerrors.Errorf("failed to validate acks: %w", err))
+			return
+		}
+	}
+}
+
+func (t *DestinationTask) matchAcks(a *asyncState, acks []connector.DestinationAck) error {
+	var completed []*inflightWrite
+
+	a.qMu.Lock()
+
+	// Validate the whole response against the FIFO before applying any of it.
+	// A destination that sends a wrong or surplus ack cannot be trusted for the
+	// rest of that response either, so a violation casts no vote at all
+	// (Invariant 1); every write in flight fails instead.
+	{
+		rest := acks
+		for i := 0; len(rest) > 0; i++ {
+			if i >= len(a.pending) {
+				a.qMu.Unlock()
+				return cerrors.Errorf("received %d acks, but no write is outstanding", len(rest))
+			}
+			w := a.pending[i]
+			from := 0
+			if i == 0 {
+				from = w.acked
+			}
+			n := min(len(rest), len(w.positions)-from)
+			if err := t.validateAcks(rest[:n], w.positions[from:]); err != nil {
+				a.qMu.Unlock()
+				return err
+			}
+			rest = rest[n:]
+		}
+	}
+
+	consumed := 0
+	for len(acks) > 0 {
+		head := a.pending[0]
+		n := min(len(acks), len(head.positions)-head.acked)
+		t.metrics.Observe(head.records[head.acked:head.acked+n], head.start)
+		t.markBatchRecords(head.batch, head.acked, acks[:n])
+		head.acked += n
+		consumed += n
+		acks = acks[n:]
+		if head.acked == len(head.positions) {
+			a.pending[0] = nil
+			a.pending = a.pending[1:]
+			completed = append(completed, head)
+		}
+	}
+	a.unacked -= consumed
+	a.broadcastLocked()
+	a.qMu.Unlock()
+
+	for _, w := range completed {
+		w.done(nil)
+	}
+	return nil
+}
+
+// closeAsync stops the AckReader. Called by Close before Teardown so a Recv
+// error caused by the teardown is not reported as a failure.
+func (t *DestinationTask) closeAsync() {
+	a := t.async.Load()
+	if a == nil {
+		return
+	}
+	a.qMu.Lock()
+	if !a.closing {
+		a.closing = true
+		select {
+		case <-a.dead:
+		default:
+			close(a.dead)
+		}
+	}
+	a.broadcastLocked()
+	a.qMu.Unlock()
+}
+
+func (t *DestinationTask) joinAsync() {
+	a := t.async.Load()
+	if a == nil {
+		return
+	}
+	a.ackCancel()
+	a.wg.Wait()
 }

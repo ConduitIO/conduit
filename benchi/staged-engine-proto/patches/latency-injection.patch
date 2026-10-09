@@ -1,0 +1,158 @@
+diff --git a/pkg/connector/bench_latency.go b/pkg/connector/bench_latency.go
+new file mode 100644
+index 00000000..ad3d54a7
+--- /dev/null
++++ b/pkg/connector/bench_latency.go
+@@ -0,0 +1,122 @@
++// BENCH-ONLY: NOT part of any Conduit change. Applied by the staged-engine
++// prototype's measurement scripts to every arm (v1, arch-v2 main, prototype)
++// so they all see the same injected destination latency.
++package connector
++
++import (
++	"os"
++	"sync"
++	"time"
++
++	"github.com/conduitio/conduit-connector-protocol/pconnector"
++)
++
++// Two independent knobs, both Go durations read once from the environment,
++// both off when unset:
++//
++//	CONDUIT_BENCH_DEST_ACK_LATENCY    an ack is delivered to the engine L after
++//	                                  its write was sent.
++//	CONDUIT_BENCH_DEST_WRITE_LATENCY  Destination.Write takes L (it sleeps
++//	                                  after the send).
++//
++// ACK latency models a destination whose commit takes L (network round trip
++// plus remote commit) while the plugin's serial Write loop stays fast: writes
++// can be sent back to back, acks arrive L after their write. The ack stream is
++// drained by a pump goroutine so that holding an ack back never blocks the
++// plugin (a sleep inside Ack would stall the plugin's serial loop and cap every
++// engine at 1/L). An engine that waits for each write's acks before the next
++// write pays L per write; an engine with writes in flight pays L once per
++// window.
++//
++// WRITE latency is a slow Write call: the plugin loop is serial, so it caps any
++// engine at 1/L per destination. It is here to show exactly that.
++var (
++	benchAckLatency   = envDuration("CONDUIT_BENCH_DEST_ACK_LATENCY")
++	benchWriteLatency = envDuration("CONDUIT_BENCH_DEST_WRITE_LATENCY")
++)
++
++// benchSleepFloor is the shortest delay worth sleeping for.
++const benchSleepFloor = 100 * time.Microsecond
++
++func envDuration(name string) time.Duration {
++	d, _ := time.ParseDuration(os.Getenv(name))
++	return d
++}
++
++type benchWrite struct {
++	n  int
++	at time.Time
++}
++
++type benchResp struct {
++	resp  pconnector.DestinationRunResponse
++	err   error
++	ready time.Time
++}
++
++type benchLatency struct {
++	mu   sync.Mutex
++	q    []benchWrite
++	once sync.Once
++	ch   chan benchResp
++}
++
++func (b *benchLatency) wrote(n int) {
++	if benchWriteLatency > 0 {
++		time.Sleep(benchWriteLatency)
++	}
++	if benchAckLatency == 0 {
++		return
++	}
++	b.mu.Lock()
++	b.q = append(b.q, benchWrite{n: n, at: time.Now()})
++	b.mu.Unlock()
++}
++
++// consume pops n acked records off the write queue and returns the send time
++// of the last write they belonged to.
++func (b *benchLatency) consume(n int) time.Time {
++	var at time.Time
++	b.mu.Lock()
++	for n > 0 && len(b.q) > 0 {
++		w := &b.q[0]
++		take := min(n, w.n)
++		w.n -= take
++		n -= take
++		at = w.at
++		if w.n == 0 {
++			b.q = b.q[1:]
++		}
++	}
++	b.mu.Unlock()
++	return at
++}
++
++func (b *benchLatency) recv(recv func() (pconnector.DestinationRunResponse, error)) (pconnector.DestinationRunResponse, error) {
++	if benchAckLatency == 0 {
++		return recv()
++	}
++	b.once.Do(func() {
++		b.ch = make(chan benchResp, 1<<16)
++		go func() {
++			for {
++				resp, err := recv()
++				at := b.consume(len(resp.Acks))
++				b.ch <- benchResp{resp: resp, err: err, ready: at.Add(benchAckLatency)}
++				if err != nil {
++					return
++				}
++			}
++		}()
++	})
++	x := <-b.ch
++	// Sleeps shorter than benchSleepFloor are skipped: with one ack per record
++	// the engine would otherwise make tens of thousands of tiny sleeps a
++	// second, and the timer and wake-up churn of those (not the latency) would
++	// dominate the measurement. The injected latency is therefore accurate to
++	// within benchSleepFloor.
++	if d := time.Until(x.ready); d > benchSleepFloor {
++		time.Sleep(d)
++	}
++	return x.resp, x.err
++}
+diff --git a/pkg/connector/destination.go b/pkg/connector/destination.go
+index 41b17975..8d4fdcf5 100644
+--- a/pkg/connector/destination.go
++++ b/pkg/connector/destination.go
+@@ -54,6 +54,8 @@ type Destination struct {
+ 
+ 	// wg tracks the number of in flight calls to the connectorPlugin.
+ 	wg sync.WaitGroup
++
++	bench benchLatency // BENCH-ONLY
+ }
+ 
+ type DestinationState struct {
+@@ -250,6 +252,7 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) error {
+ 	if err != nil {
+ 		return cerrors.Errorf("error writing record: %w", err)
+ 	}
++	d.bench.wrote(len(recs)) // BENCH-ONLY
+ 
+ 	return nil
+ }
+@@ -261,7 +264,7 @@ func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
+ 		return nil, err
+ 	}
+ 
+-	resp, err := d.stream.Recv()
++	resp, err := d.bench.recv(d.stream.Recv) // BENCH-ONLY (plain Recv unless a latency is set)
+ 	if err != nil {
+ 		return nil, cerrors.Errorf("error receiving ack: %w", err)
+ 	}

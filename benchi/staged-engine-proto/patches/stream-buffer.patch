@@ -1,0 +1,46 @@
+diff --git a/pkg/plugin/connector/builtin/stream.go b/pkg/plugin/connector/builtin/stream.go
+index af46cfd2..ca497cb4 100644
+--- a/pkg/plugin/connector/builtin/stream.go
++++ b/pkg/plugin/connector/builtin/stream.go
+@@ -17,6 +17,8 @@ package builtin
+ import (
+ 	"context"
+ 	"io"
++	"os"
++	"strconv"
+ 	"sync"
+ 
+ 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+@@ -29,8 +31,8 @@ type InMemoryDestinationRunStream struct {
+ func (s *InMemoryDestinationRunStream) Init(ctx context.Context) {
+ 	s.stream = &inMemoryStream[pconnector.DestinationRunRequest, pconnector.DestinationRunResponse]{
+ 		ctx:      ctx,
+-		reqChan:  make(chan pconnector.DestinationRunRequest),
+-		respChan: make(chan pconnector.DestinationRunResponse),
++		reqChan:  make(chan pconnector.DestinationRunRequest, benchStreamBuffer),
++		respChan: make(chan pconnector.DestinationRunResponse, benchStreamBuffer),
+ 		stopChan: make(chan struct{}),
+ 	}
+ }
+@@ -60,8 +62,8 @@ type InMemorySourceRunStream struct {
+ func (s *InMemorySourceRunStream) Init(ctx context.Context) {
+ 	s.stream = &inMemoryStream[pconnector.SourceRunRequest, pconnector.SourceRunResponse]{
+ 		ctx:      ctx,
+-		reqChan:  make(chan pconnector.SourceRunRequest),
+-		respChan: make(chan pconnector.SourceRunResponse),
++		reqChan:  make(chan pconnector.SourceRunRequest, benchStreamBuffer),
++		respChan: make(chan pconnector.SourceRunResponse, benchStreamBuffer),
+ 		stopChan: make(chan struct{}),
+ 	}
+ }
+@@ -179,3 +181,10 @@ func (s *inMemoryStreamServer[REQ, RES]) emptyReq() REQ {
+ type cloner[T any] interface {
+ 	Clone() T
+ }
++
++// BENCH-ONLY: capacity of the in-memory stream channels, from
++// CONDUIT_BENCH_STREAM_BUFFER (default 0 = unbuffered, the production value).
++var benchStreamBuffer = func() int {
++	n, _ := strconv.Atoi(os.Getenv("CONDUIT_BENCH_STREAM_BUFFER"))
++	return n
++}()

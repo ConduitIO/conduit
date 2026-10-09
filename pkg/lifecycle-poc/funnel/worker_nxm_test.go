@@ -94,6 +94,53 @@ import (
 // below; see DLQ.Nack's windowNackThreshold==0-disables-the-DLQ behavior).
 func buildNxMWorkers(t *testing.T, withProcessor bool, dests []Destination, sources ...Source) ([]*Worker, *Sink, []*fakeDestination) {
 	t.Helper()
+	var proc Task
+	if withProcessor {
+		proc = passthroughTask{id: "shared-proc"}
+	}
+	return buildNxMWorkersProc(t, proc, dests, sources...)
+}
+
+// gateProcessor is a shared "processor" the test can hold a pass inside of: it
+// blocks the pass carrying blockPos until released and signals when a pass
+// carrying signalPos reaches it.
+type gateProcessor struct {
+	id         string
+	blockPos   opencdc.Position
+	blocked    chan struct{}
+	unblock    chan struct{}
+	signalPos  opencdc.Position
+	signalled  chan struct{}
+	signalOnce sync.Once
+	blockOnce  sync.Once
+}
+
+func newGateProcessor(blockPos, signalPos opencdc.Position) *gateProcessor {
+	return &gateProcessor{
+		id: "shared-proc", blockPos: blockPos, signalPos: signalPos,
+		blocked: make(chan struct{}), unblock: make(chan struct{}), signalled: make(chan struct{}),
+	}
+}
+
+func (g *gateProcessor) ID() string                  { return g.id }
+func (g *gateProcessor) Open(context.Context) error  { return nil }
+func (g *gateProcessor) Close(context.Context) error { return nil }
+func (g *gateProcessor) Do(_ context.Context, b *Batch) error {
+	for _, r := range b.records {
+		if string(r.Position) == string(g.signalPos) {
+			g.signalOnce.Do(func() { close(g.signalled) })
+		}
+		if string(r.Position) == string(g.blockPos) {
+			g.blockOnce.Do(func() { close(g.blocked) })
+			<-g.unblock
+		}
+	}
+	return nil
+}
+
+func buildNxMWorkersProc(t *testing.T, proc Task, dests []Destination, sources ...Source) ([]*Worker, *Sink, []*fakeDestination) {
+	t.Helper()
+	withProcessor := proc != nil
 	is := is.New(t)
 	logger := log.Test(t)
 
@@ -105,7 +152,7 @@ func buildNxMWorkers(t *testing.T, withProcessor bool, dests []Destination, sour
 
 	var sharedRoots []*TaskNode
 	if withProcessor {
-		procRoot := &TaskNode{Task: passthroughTask{id: "shared-proc"}}
+		procRoot := &TaskNode{Task: proc}
 		is.NoErr(procRoot.AppendToEnd(destBranches...))
 		sharedRoots = []*TaskNode{procRoot}
 	} else {
@@ -422,68 +469,113 @@ func TestNxM_PositiveComplement_WithProcessor_NoOverlapInSharedSubtree(t *testin
 	destA := newFakeDestination("destA")
 	destB := newFakeDestination("destB")
 
-	workers, sink, _ := buildNxMWorkers(t, true, []Destination{destA, destB}, srcA, srcB)
+	// Staged engine: what the single shared-root mutex serializes is the
+	// SHARED PROCESSOR (a single instance, possibly stateful, not safe for
+	// concurrent calls), not the destination writes: those leave the lock to
+	// each destination's own writer. So the assertion moved from "A blocked
+	// inside destA" to "A blocked inside the shared processor": B must not
+	// enter the processor (and therefore not reach destB) until A's pass
+	// through it ends. The write-side decoupling is asserted by
+	// TestNxM_StagedEngine_StuckDestinationDoesNotBlockOtherSource below.
+	proc := newGateProcessor(recA[0].Position, recB[0].Position)
+	workers, sink, _ := buildNxMWorkersProc(t, proc, []Destination{destA, destB}, srcA, srcB)
 	wA, wB := workers[0], workers[1]
 
 	is.NoErr(sink.Open(ctx))
 	is.NoErr(wA.Open(ctx))
 	is.NoErr(wB.Open(ctx))
 
-	// A gets stuck writing to destA. With withProcessor=true this holds the
-	// ONE shared-root mutex for A's ENTIRE pass (destA AND destB), not just
-	// destA's own branch - see buildSharedTail's doc.
-	blockedA, unblockA := destA.blockWrites(recA[0].Position)
-
 	doErrA := make(chan error, 1)
 	go func() { doErrA <- wA.Do(ctx) }()
 
 	select {
-	case <-blockedA:
+	case <-proc.blocked:
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for worker A to block on destA")
+		t.Fatal("timed out waiting for worker A to block inside the shared processor")
 	}
-
-	// B tries to enter destB - nothing else is touching it, and in the
-	// M-independent-root shape (see the negative-space test above) it would
-	// be free to write to immediately. Gated on the exact record B will
-	// write, so "entered" only fires once B actually reaches this Write
-	// call.
-	enteredB, unblockB := destB.blockWrites(recB[0].Position)
 
 	doErrB := make(chan error, 1)
 	go func() { doErrB <- wB.Do(ctx) }()
 
 	select {
-	case <-enteredB:
-		t.Fatal("worker B entered destB while worker A still held the single shared-root mutex (A was still " +
-			"blocked inside destA) - buildSharedTail's with-processor shape must serialize EVERY branch " +
-			"behind ONE lock, not just the branch A happened to be using")
+	case <-proc.signalled:
+		t.Fatal("worker B entered the shared processor while worker A was still inside it - " +
+			"buildSharedTail's with-processor shape must serialize every pass behind ONE lock")
 	case <-time.After(300 * time.Millisecond):
-		// Expected: B is still blocked trying to acquire the single shared
-		// mutex. 300ms is generous relative to how fast an uncontended
-		// acquire+entry would be if the lock were ever missing.
+		// Expected: B is blocked trying to acquire the single shared mutex.
 	}
 
-	// Release A - B must now be able to make progress, promptly: it only
-	// needed the SAME single shared-root mutex A just released, and that
-	// release happens the instant A's own synchronous pass through the
-	// shared subtree returns.
-	unblockA()
+	close(proc.unblock)
 
 	select {
-	case <-enteredB:
+	case <-proc.signalled:
 	case <-time.After(5 * time.Second):
-		t.Fatal("worker B never entered destB even after worker A released the shared lock")
+		t.Fatal("worker B never entered the shared processor even after worker A left it")
 	}
-	unblockB()
 
-	// Every source writes to every destination (the shared tail is attached
-	// identically to each source - see buildRunnablePipeline), so each of
-	// destA/destB ends up with ONE record from A and ONE from B: 2 each.
+	// Every source writes to every destination, so each of destA/destB ends
+	// up with ONE record from A and ONE from B: 2 each.
 	waitForCondition(t, 5*time.Second, func() bool {
 		return len(destA.receivedPositions()) == 2 && len(destB.receivedPositions()) == 2
 	})
 
+	is.NoErr(wA.Stop(ctx))
+	is.NoErr(<-doErrA)
+	is.NoErr(wB.Stop(ctx))
+	is.NoErr(<-doErrB)
+	is.NoErr(wA.Close(ctx))
+	is.NoErr(wB.Close(ctx))
+	is.NoErr(sink.Close(ctx))
+}
+
+// TestNxM_StagedEngine_StuckDestinationDoesNotBlockOtherSource: even behind a
+// shared processor, a write stuck inside destination A does not hold the
+// shared lock. Source B's pass runs the processor and its record reaches
+// destination B while A's write to destA is still blocked. With the
+// stop-and-wait engine this deadlocked until A's write returned.
+func TestNxM_StagedEngine_StuckDestinationDoesNotBlockOtherSource(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	recA := randomRecords(1)
+	recB := randomRecords(1)
+	recB[0].Position = opencdc.Position("b-0")
+
+	srcA := newFakeSource("srcA", recA)
+	srcB := newFakeSource("srcB", recB)
+	destA := newFakeDestination("destA")
+	destB := newFakeDestination("destB")
+
+	workers, sink, _ := buildNxMWorkers(t, true, []Destination{destA, destB}, srcA, srcB)
+	wA, wB := workers[0], workers[1]
+	is.NoErr(sink.Open(ctx))
+	is.NoErr(wA.Open(ctx))
+	is.NoErr(wB.Open(ctx))
+
+	blockedA, unblockA := destA.blockWrites(recA[0].Position)
+	enteredB, unblockB := destB.blockWrites(recB[0].Position)
+	unblockB()
+
+	doErrA := make(chan error, 1)
+	doErrB := make(chan error, 1)
+	go func() { doErrA <- wA.Do(ctx) }()
+	select {
+	case <-blockedA:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for worker A to block on destA")
+	}
+	go func() { doErrB <- wB.Do(ctx) }()
+
+	select {
+	case <-enteredB:
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker B could not reach destB while A's write to destA was stuck: a stuck destination must not hold the shared lock")
+	}
+	unblockA()
+
+	waitForCondition(t, 5*time.Second, func() bool {
+		return len(destA.receivedPositions()) == 2 && len(destB.receivedPositions()) == 2
+	})
 	is.NoErr(wA.Stop(ctx))
 	is.NoErr(<-doErrA)
 	is.NoErr(wB.Stop(ctx))
@@ -517,7 +609,7 @@ func TestNxM_SharedBoundary_RetryDoesNotSelfDeadlock_MultipleDestinations(t *tes
 	node.MarkSharedBoundary() // exactly what funnel.Sink does for a shared root
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	done := make(chan error, 1)
 	go func() { done <- w.doTask(ctx, node, NewBatch(slices.Clone(records)), parent) }()

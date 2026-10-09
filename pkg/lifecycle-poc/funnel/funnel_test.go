@@ -104,7 +104,12 @@ func Example_simpleStream() {
 		panic(err)
 	}
 
-	// Output:
+	// The staged engine reads ahead of the destination's acks, so "got record
+	// N+1" may print before "received ack N". Every line must still appear
+	// exactly once; the order in which the records were delivered is asserted
+	// separately in TestWorker_PipelinedDeliveryOrder.
+
+	// Unordered output:
 	// DBG opening source component=task:source connector_id=generator
 	// DBG source open component=task:source connector_id=generator
 	// DBG opening destination component=task:destination connector_id=printer
@@ -234,9 +239,13 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		return nil
 	})
 	source.EXPECT().Ack(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, p []opencdc.Position) error {
-		logger.Debug(ctx).Str("node_id", nodeID).Msg("received ack")
+		// One line per acked POSITION: the staged engine acks a contiguous
+		// prefix per Source.Ack call, so the number of calls is not fixed.
+		for range p {
+			logger.Debug(ctx).Str("node_id", nodeID).Msg("received ack")
+		}
 		return nil
-	}).Times(batchCount * batchSize)
+	}).MinTimes(1).MaxTimes(batchCount * batchSize)
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 		if position == batchCount*batchSize {
 			// block until Teardown is called
