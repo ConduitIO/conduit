@@ -475,13 +475,16 @@ surface the "new advisory, no fix" case automatically.
    unchanged until #279 landed the codec swap and the 1M allocation defaults. An adversarial review
    of a separate remediation plan initially recorded #278 as sufficient; it was not.
 3. **In review (targets v0.20.1).** `conduit-commons` v0.7.0 tagged 2026-10-08 at main `ea740f01`;
-   Conduit bumped to it in the `build/commons-v0.7.0` PR, with a regression test that a
-   >1,000,000-element array or map fails `avro.decode` with an error (and a declared-but-absent count
-   is rejected without allocating). A cross-codec check re-run for that PR (19 cases, v0.6.0 vs
-   v0.7.0) found byte-identical encodings and identical decoded values in both directions, except
-   the known `[]any(nil)` → `[]any{}`. The three advisories stay reachable in Conduit through the
-   built-in `conduit-connector-postgres` v0.14.2, which imports `hamba/avro/v2` directly; they clear
-   with step 4.
+   Conduit bumped to it in the `build/commons-v0.7.0` PR. That PR also adds the engine setting
+   `schema.avro.max-elements` (default 1,000,000; 0 = no limit), applied process-wide at startup
+   through commons' `SetDefaultMaxSliceAllocSize`/`SetDefaultMaxMapAllocSize`, so it governs every
+   in-process Avro decode: `avro.decode` and the SDK schema middleware of built-in connectors and
+   processors. Standalone plugins decode with their own SDK and are not governed by it. A payload
+   over the limit fails with the stable code `schema.avro.limit_exceeded`; it is never truncated.
+   A cross-codec check re-run for that PR found byte-identical encodings and identical decoded
+   values in both directions. The three advisories stay reachable in Conduit through the built-in
+   `conduit-connector-postgres` v0.14.2, which imports `hamba/avro/v2` directly; they clear with
+   step 4.
    Two corrections found while doing this step: v0.7.0 is not purely additive (`Builder.AddField`
    and `Builder.Build` now use the fork's types, and `Parse`/`SerdeForType` gained `...Option`,
    which breaks function-typed variables); and the fork's `go.mod` lists its lint tools, which

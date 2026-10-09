@@ -55,6 +55,7 @@ func TestRunCommandFlags(t *testing.T) {
 		{longName: "pipelines.error-recovery.max-retries-window", usage: "amount of time running without any errors after which a pipeline is considered healthy"},
 		{longName: "schema-registry.type", usage: "schema registry type; accepts builtin,confluent"},
 		{longName: "schema-registry.confluent.connection-string", usage: "confluent schema registry connection string"},
+		{longName: "schema.avro.max-elements", usage: "maximum elements in one Avro array or map decoded in-process (built-in processors and connectors); larger payloads fail with schema.avro.limit_exceeded; 0 = no limit"},
 		{longName: "preview.pipeline-arch-v2", usage: "enables the preview pipeline engine (architecture v2). Required for pipelines with a processor that splits one record into several (record fan-out, e.g. ai.chunk, split, clone), including the postgres-pgvector-rag template: the classic default engine cannot run them and stops with pipeline.fanout_requires_arch_v2. Known limit: a split record whose pieces are cut across a multi-destination fan-out fails with pipeline.split_run_straddles_fanout. Graduation to the default engine is evaluated in v0.21 against a written gate"},
 		{longName: "preview.pipeline-arch-v2-disable-metrics", usage: "disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"},
 		{longName: "dev.cpuprofile", usage: "write CPU profile to file"},

@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
@@ -109,21 +110,48 @@ func processOne(t *testing.T, p *DecodeProcessor, rec opencdc.Record) sdk.Proces
 	return got[0]
 }
 
-// requireCapError asserts got is an error record naming the allocation cap.
-func requireCapError(t *testing.T, got sdk.ProcessedRecord, setting string) {
+// requireCapError asserts got is an error record coded
+// schema.avro.limit_exceeded. The code is the contract, not the message.
+func requireCapError(t *testing.T, got sdk.ProcessedRecord) {
 	t.Helper()
 	errRec, ok := got.(sdk.ErrorRecord)
 	if !ok {
 		t.Fatalf("expected sdk.ErrorRecord, got %T (an over-cap payload must not decode)", got)
 	}
-	if !strings.Contains(errRec.Error.Error(), setting) {
-		t.Fatalf("error does not name %s: %v", setting, errRec.Error)
+	ce, ok := conduiterr.Get(errRec.Error)
+	if !ok || ce.Code != schemaregistry.CodeAvroLimitExceeded {
+		t.Fatalf("expected code %s, got %v", schemaregistry.CodeAvroLimitExceeded, errRec.Error)
+	}
+	if ce.ConfigPath != schemaregistry.AvroMaxElementsConfigPath {
+		t.Fatalf("expected config path %s, got %q", schemaregistry.AvroMaxElementsConfigPath, ce.ConfigPath)
 	}
 	t.Logf("error: %v", errRec.Error)
 }
 
+// arraySchema returns an array-of-int record schema. name makes the schema
+// fingerprint unique: conduit-commons caches parsed schemas, and a cached
+// Serde keeps the element limit it was parsed with.
+func arraySchema(name string) string {
+	return `{"type":"record","name":"` + name + `","fields":[{"name":"items","type":{"type":"array","items":"int"}}]}`
+}
+
+// setMaxElements applies schema.avro.max-elements for the rest of the test
+// and restores the default afterwards. Tests using it must not be parallel:
+// the limit is process-wide.
+func setMaxElements(t *testing.T, n int) {
+	t.Helper()
+	if err := schemaregistry.ApplyAvroMaxElements(n); err != nil {
+		t.Fatalf("apply max elements: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := schemaregistry.ApplyAvroMaxElements(schemaregistry.DefaultAvroMaxElements); err != nil {
+			t.Errorf("restore max elements: %v", err)
+		}
+	})
+}
+
 func TestDecodeProcessor_ArrayAllocationCap(t *testing.T) {
-	const schema = `{"type":"record","name":"r","fields":[{"name":"items","type":{"type":"array","items":"int"}}]}`
+	schema := arraySchema("defaultcap")
 
 	t.Run("at cap decodes", func(t *testing.T) {
 		is := is.New(t)
@@ -140,7 +168,7 @@ func TestDecodeProcessor_ArrayAllocationCap(t *testing.T) {
 	t.Run("one over cap is an error, not a truncated array", func(t *testing.T) {
 		p, id := newDecodeProcessorWithSchema(t, schema)
 		got := processOne(t, p, confluentRecord(t, id, intArrayPayload(avroAllocCap+1)))
-		requireCapError(t, got, "MaxSliceAllocSize")
+		requireCapError(t, got)
 	})
 
 	t.Run("declared count is rejected before allocating", func(t *testing.T) {
@@ -156,7 +184,7 @@ func TestDecodeProcessor_ArrayAllocationCap(t *testing.T) {
 		got := processOne(t, p, confluentRecord(t, id, payload))
 		runtime.ReadMemStats(&after)
 
-		requireCapError(t, got, "MaxSliceAllocSize")
+		requireCapError(t, got)
 		allocated := after.TotalAlloc - before.TotalAlloc
 		t.Logf("allocated during decode: %d bytes", allocated)
 		is.True(allocated < 64<<20) // a few registry round-trip buffers, not 2^40 elements
@@ -168,5 +196,46 @@ func TestDecodeProcessor_MapAllocationCap(t *testing.T) {
 
 	p, id := newDecodeProcessorWithSchema(t, schema)
 	got := processOne(t, p, confluentRecord(t, id, mapPayload(avroAllocCap+1)))
-	requireCapError(t, got, "MaxMapAllocSize")
+	requireCapError(t, got)
+}
+
+// TestDecodeProcessor_MaxElementsSetting covers schema.avro.max-elements
+// (applied by the runtime through schemaregistry.ApplyAvroMaxElements).
+func TestDecodeProcessor_MaxElementsSetting(t *testing.T) {
+	over := intArrayPayload(avroAllocCap + 1)
+
+	t.Run("raised to 2,000,000 accepts 1,000,001", func(t *testing.T) {
+		is := is.New(t)
+		setMaxElements(t, 2_000_000)
+		p, id := newDecodeProcessorWithSchema(t, arraySchema("raised"))
+		got := processOne(t, p, confluentRecord(t, id, over))
+		rec, ok := got.(sdk.SingleRecord)
+		if !ok {
+			t.Fatalf("expected sdk.SingleRecord, got %T: %v", got, got)
+		}
+		is.Equal(len(rec.Payload.After.(opencdc.StructuredData)["items"].([]any)), avroAllocCap+1)
+	})
+
+	t.Run("raised limit still rejects above it", func(t *testing.T) {
+		setMaxElements(t, 2_000_000)
+		p, id := newDecodeProcessorWithSchema(t, arraySchema("raisedover"))
+		requireCapError(t, processOne(t, p, confluentRecord(t, id, intArrayPayload(2_000_001))))
+	})
+
+	t.Run("0 removes the limit", func(t *testing.T) {
+		is := is.New(t)
+		setMaxElements(t, 0)
+		p, id := newDecodeProcessorWithSchema(t, arraySchema("unlimited"))
+		got := processOne(t, p, confluentRecord(t, id, over))
+		rec, ok := got.(sdk.SingleRecord)
+		if !ok {
+			t.Fatalf("expected sdk.SingleRecord, got %T: %v", got, got)
+		}
+		is.Equal(len(rec.Payload.After.(opencdc.StructuredData)["items"].([]any)), avroAllocCap+1)
+	})
+
+	t.Run("default rejects 1,000,001", func(t *testing.T) {
+		p, id := newDecodeProcessorWithSchema(t, arraySchema("restored"))
+		requireCapError(t, processOne(t, p, confluentRecord(t, id, over)))
+	})
 }

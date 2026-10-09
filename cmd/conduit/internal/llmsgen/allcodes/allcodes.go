@@ -72,6 +72,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/registry/policy"
 	_ "github.com/conduitio/conduit/pkg/registry/trust"
 	_ "github.com/conduitio/conduit/pkg/scaffold"
+	_ "github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 // Codes returns every conduiterr.Code visible once every package this
