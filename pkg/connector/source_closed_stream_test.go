@@ -211,19 +211,21 @@ func TestSource_Teardown_AbortsBlockedEscalation(t *testing.T) {
 	src.stream = faulty
 	src.deferredAckMaxRetries = 2
 	src.deferredAckBackoffCap = time.Millisecond
+	// Set before the Ack that starts delivery: the Ack → enqueue → signal
+	// chain orders this write before the goroutine reads it.
+	escalating := make(chan struct{})
+	src.testEscalating = func() { close(escalating) }
 
 	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("pos-1")}))
 
-	// Wait until the retries are exhausted; the goroutine then goes straight
-	// to the escalation, which nobody reads.
-	deadline := time.Now().Add(5 * time.Second)
-	for faulty.failures() < 2 {
-		if time.Now().After(deadline) {
-			t.Fatal("deferred ack was never attempted")
-		}
-		time.Sleep(time.Millisecond)
+	// Wait until the goroutine has exhausted its retries and entered the
+	// escalation, which nobody reads. Teardown must then not wait for it.
+	select {
+	case <-escalating:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the delivery goroutine never reached the escalation")
 	}
-	time.Sleep(50 * time.Millisecond)
+	is.Equal(faulty.failures(), 2)
 
 	start := time.Now()
 	is.NoErr(src.Teardown(ctx))
