@@ -64,13 +64,53 @@ type IndexMeta struct {
 
 // Connector is one registered connector name's entry.
 type Connector struct {
-	Name        string             `json:"name"`
-	DisplayName string             `json:"displayName,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Repository  string             `json:"repository,omitempty"`
-	Publisher   Publisher          `json:"publisher"`
-	Versions    []ConnectorVersion `json:"versions"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Description string `json:"description,omitempty"`
+	Repository  string `json:"repository,omitempty"`
+	// License is the SPDX license identifier or expression of the connector's
+	// source (e.g. "Apache-2.0"). Optional and informational: it is not used
+	// in any trust or install decision. See [Tier] for the compatibility notes.
+	License string `json:"license,omitempty"`
+	// Tier is the registry's support classification for this name. Optional
+	// and informational, like License. Empty means unclassified.
+	Tier      Tier               `json:"tier,omitempty"`
+	Publisher Publisher          `json:"publisher"`
+	Versions  []ConnectorVersion `json:"versions"`
 }
+
+// Tier is the registry's support classification for a connector or
+// processor name, set by registry maintainers in the index (never by the
+// publisher's release workflow). It is display and filtering metadata only:
+// no verification, resolution or install path reads it, so a wrong or
+// unknown value cannot change what gets installed or whether it verifies.
+//
+// License and Tier were added additively under schemaVersion 1 (design doc
+// 20261008-registry-license-and-tier). Both carry `omitempty` so an entry
+// without them marshals byte-identically to the earlier schema, and a client
+// built before they existed verifies the signature over the whole payload and
+// then ignores the two unknown keys when unmarshalling.
+//
+// The JSON Schema restricts tier to the constants below. The Go type is a
+// plain string and does not reject other values, so a future tier added to
+// the schema does not make an older client fail to parse the index.
+type Tier string
+
+const (
+	// TierCertified is maintained by the Conduit project and meets the
+	// certification bar: acceptance and integration tests against the real
+	// system in CI, a kill -9 chaos test, a committed benchi run, and docs.
+	TierCertified Tier = "certified"
+	// TierVerified passes the SDK acceptance suite in CI and is released with
+	// signed artifacts and provenance, without the full certification bar.
+	TierVerified Tier = "verified"
+	// TierAdapter is a bridge to another plugin ecosystem (for example the
+	// Kafka Connect wrapper) rather than a native connector.
+	TierAdapter Tier = "adapter"
+	// TierCommunity is published as-is by its maintainers with no support
+	// commitment from the Conduit project.
+	TierCommunity Tier = "community"
+)
 
 // Publisher is the per-name identity pinning — the actual root-of-trust
 // decision for this connector name (R-1 §c). Changing ExpectedOIDCIssuer or
@@ -126,12 +166,16 @@ type ConnectorVersion struct {
 // stays untouched and a WASM processor structurally cannot acquire a
 // per-platform artifact list (design doc D1, "why a separate collection").
 type Processor struct {
-	Name        string             `json:"name"`
-	DisplayName string             `json:"displayName,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Repository  string             `json:"repository,omitempty"`
-	Publisher   Publisher          `json:"publisher"`
-	Versions    []ProcessorVersion `json:"versions"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Description string `json:"description,omitempty"`
+	Repository  string `json:"repository,omitempty"`
+	// License and Tier have the same meaning and compatibility rules as on
+	// Connector; see [Tier].
+	License   string             `json:"license,omitempty"`
+	Tier      Tier               `json:"tier,omitempty"`
+	Publisher Publisher          `json:"publisher"`
+	Versions  []ProcessorVersion `json:"versions"`
 }
 
 // ProcessorVersion is one published processor release. Unlike ConnectorVersion

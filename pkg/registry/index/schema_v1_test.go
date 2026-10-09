@@ -157,6 +157,9 @@ func TestConnectorOnlyIndex_OmitemptyKeepsBytesIdentical(t *testing.T) {
 
 	// The re-marshaled connector-only payload must contain no processors key.
 	is.True(!bytes.Contains(reMarshaled, []byte(`"processors"`)))
+	// Nor do the optional license/tier keys appear for entries without them.
+	is.True(!bytes.Contains(reMarshaled, []byte(`"license"`)))
+	is.True(!bytes.Contains(reMarshaled, []byte(`"tier"`)))
 
 	// (2) A Payload value with Processors nil marshals identically to the
 	// pre-processor shape — no "processors" key emitted.
