@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -151,12 +152,20 @@ type Source struct {
 	deliveryDone chan struct{}
 	// tearingDown is set true at the very start of Teardown, before any wait.
 	// Once set, deliverDeferredAcks still RETRIES a transient send failure (to
-	// deliver the final durable ack, invariant 7) but never ESCALATES an
+	// deliver the final durable ack, invariant 7), except io.EOF, which means
+	// the plugin ended the stream and is never retried (see deliverOneAck and
+	// onAckStreamClosed), but never ESCALATES an
 	// exhausted retry via errs — nothing reads errs during teardown, so an
 	// escalation there would block the goroutine forever. While it is false
 	// (plugin genuinely running), an exhausted retry escalates loudly, which
 	// is safe because the node is reading errs. See deliverOneAck.
 	tearingDown atomic.Bool
+	// ackStreamClosed is set by the delivery goroutine the first time a
+	// deferred-ack Send fails with io.EOF, i.e. the plugin ended the run
+	// stream. It only makes that failure logged as a warning once; every
+	// later ack is still attempted and fails the same way. See
+	// onAckStreamClosed.
+	ackStreamClosed atomic.Bool
 	// persistErrs delivers persister failures to errs without ever blocking
 	// a persister callback forever (see persistErrReporter). It is stopped
 	// when Teardown starts and when Open fails after registering a persist.
@@ -184,6 +193,10 @@ type Source struct {
 	// Default* constant"; see deliverOneAck.
 	deferredAckMaxRetries int
 	deferredAckBackoffCap time.Duration
+	// testEscalating, if set (tests only), is called when the delivery
+	// goroutine enters escalateDeferredAckFailure, so a test can wait for
+	// that point instead of sleeping.
+	testEscalating func()
 }
 
 // pendingAck is one Source.Ack call's positions, queued until the resulting
@@ -777,6 +790,12 @@ func (s *Source) deliverDeferredAcks() {
 // unbuffered errs channel that nothing is reading, a self-inflicted deadlock.
 // The stream must stay open during Teardown's bounded drain (Teardown cancels
 // streamCtx only after that drain) precisely so these final sends can succeed.
+//
+// A Send that fails with io.EOF is never retried, running or tearing down: the
+// plugin has ended the stream, so the ack cannot be delivered by any retry.
+// It stays undelivered (see onAckStreamClosed), which is the same benign
+// duplicate-on-restart outcome as a teardown drop, reached without spending
+// the teardown budget on backoff (#2900).
 func (s *Source) deliverOneAck(positions []opencdc.Position) {
 	attempt := 0
 	for {
@@ -803,6 +822,17 @@ func (s *Source) deliverOneAck(positions []opencdc.Position) {
 			return
 		}
 
+		// io.EOF means the plugin side ended the stream (its Run returned).
+		// That is terminal on both transports: gRPC's SendMsg returns io.EOF
+		// once the server has finished the RPC and on every Send after it,
+		// and the in-memory builtin stream does the same once closed. No
+		// retry can deliver this ack, so retrying only burned Teardown's
+		// whole budget (#2900).
+		if cerrors.Is(sendErr, io.EOF) {
+			s.onAckStreamClosed(positions, sendErr)
+			return
+		}
+
 		attempt++
 		if attempt >= s.maxDeferredAckRetries() {
 			// Retries exhausted. Escalate only if the plugin is genuinely
@@ -826,6 +856,36 @@ func (s *Source) deliverOneAck(positions []opencdc.Position) {
 	}
 }
 
+// onAckStreamClosed handles a deferred ack whose Send failed because the
+// plugin ended the run stream. The ack is not delivered and is not retried.
+//
+// Invariant 1 still holds: nothing was sent, so the plugin was never told it
+// may commit past these positions upstream. Invariant 3 holds because the
+// positions are already durable in Conduit: on restart the plugin is opened
+// from them, and anything its upstream had not committed is read again (a
+// duplicate, never a gap).
+//
+// It is deliberately not escalated on errs. The stream ending is already
+// surfaced by Read: the node is always reading, and Recv on an ended stream
+// returns the plugin's own error (or io.EOF for a clean return). An escalated
+// io.EOF here would race that real cause to the node and could win, so a
+// fatal plugin error would be reported as a retryable EOF and the pipeline
+// would recover instead of degrading (#1659 is about exactly that cause).
+//
+// The first such failure is logged as a warning; later acks on the same
+// ended stream are logged at debug level only.
+func (s *Source) onAckStreamClosed(positions []opencdc.Position, sendErr error) {
+	if !s.ackStreamClosed.CompareAndSwap(false, true) {
+		s.Instance.logger.Debug(context.Background()).
+			Int("positions", len(positions)).
+			Msg("source connector plugin closed its stream; deferred ack not delivered")
+		return
+	}
+	s.Instance.logger.Warn(context.Background()).Err(sendErr).
+		Int("positions", len(positions)).
+		Msg("source connector plugin closed its stream before acks could be delivered; the plugin will replay from the last durable position on restart")
+}
+
 // streamTornDown reports whether the plugin stream's context has been canceled
 // (by stopStream in Teardown or run's error path). Once it has, a stream.Send
 // resolves to ctx.Canceled rather than an actual delivery, so the delivery
@@ -843,18 +903,26 @@ func (s *Source) streamTornDown() bool {
 }
 
 // escalateDeferredAckFailure surfaces a deferred-ack delivery failure to the
-// node via errs. It selects on streamCtx.Done() so that if teardown begins
-// while it is trying to escalate (the node having stopped reading errs), it
-// abandons the escalation instead of blocking forever — keeping the delivery
-// goroutine leak-free.
+// node via errs. It gives up as soon as Teardown starts (persistErrs stopped:
+// the node has stopped reading errs) or the stream is canceled, so the
+// delivery goroutine never blocks forever. Giving up at Teardown's start, not
+// only at stopStream, matters: stopStream runs after Teardown's drain wait,
+// which waits for this goroutine, so an escalation that waited for stopStream
+// held up the drain for the whole teardown budget (#2900).
 func (s *Source) escalateDeferredAckFailure(err error) {
-	if s.streamCtx == nil {
-		s.errs <- err
-		return
+	if s.testEscalating != nil {
+		s.testEscalating()
+	}
+	var streamDone <-chan struct{}
+	if s.streamCtx != nil {
+		streamDone = s.streamCtx.Done()
 	}
 	select {
 	case s.errs <- err:
-	case <-s.streamCtx.Done():
+	case <-s.persistErrs.stopped:
+		s.Instance.logger.Warn(context.Background()).Err(err).
+			Msg("source connector is tearing down; deferred ack delivery failure not escalated")
+	case <-streamDone:
 	}
 }
 
