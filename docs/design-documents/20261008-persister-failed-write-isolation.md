@@ -76,9 +76,14 @@ normally succeeds.
 ## Consequences
 
 - A connector whose write fails gets its own error; the rest of the batch commits and gets nil.
-- A flush makes at most one transaction per connector in the batch. The worst case, every write
-  failing fast (e.g. a store rejecting all writes), is N short failed transactions instead of one.
-  A store that hangs hangs the flush either way, as before.
+- A flush makes at most one transaction per connector in the batch. If every write fails fast
+  (e.g. a store rejecting all writes), that is N short failed transactions instead of one. If every
+  write fails slowly, for example each one runs into a statement timeout, one flush takes up to N
+  times that timeout instead of once. `triggerFlush` holds `p.m` while it waits for the running
+  flush, so for that whole time every `Persist`, and with it every source `Ack`, in the process
+  stalls. When the store is down entirely, opening the transaction fails right away, which is not
+  attributable and ends the flush, so the cost stays at about two attempts. A store that hangs
+  hangs the flush either way, as before.
 - For badger `ErrTxnTooBig`, the connectors whose writes cross the size limit fail, sorted last by
   ID. If the batch is oversized on every flush, those same connectors keep failing while the rest
   make progress. Before, every connector failed.
