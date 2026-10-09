@@ -33,10 +33,12 @@ var (
 	// CodeConnectorInvalidType is raised when a connector type is neither
 	// "source" nor "destination".
 	CodeConnectorInvalidType = conduiterr.Register("connector.invalid_type", codes.InvalidArgument)
-	// CodeConnectorStatePersistFailed is raised when a batch of connector
-	// state writes (source positions, last active config) could not be
-	// committed to the store. Nothing in the batch was committed and every
-	// connector in it receives this error; no source acked the affected
+	// CodeConnectorStatePersistFailed is raised when a connector's state write
+	// (source position, last active config) could not be committed to the
+	// store. When one connector's write fails, only that connector receives
+	// this error and the rest of the batch is committed. When opening or
+	// committing the transaction fails, every connector still in that attempt
+	// receives it. A source that receives it has not acked the affected
 	// positions upstream, so a restart re-reads from the last stored position.
 	CodeConnectorStatePersistFailed = conduiterr.Register("connector.state_persist_failed", codes.Unavailable)
 )

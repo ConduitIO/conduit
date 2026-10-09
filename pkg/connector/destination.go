@@ -109,7 +109,8 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 
 	// TODO add proper support for lifecycle events to DLQs (see https://github.com/ConduitIO/conduit/issues/1016#issuecomment-1535119773)
 	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
-		lifecycleEventTriggered, err := d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
+		var lifecycleEventTriggered bool
+		lifecycleEventTriggered, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
 		if err != nil {
 			return err
 		}
@@ -118,7 +119,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 			// when a lifecycle event is successfully triggered we consider the config active
 			d.Instance.LastActiveConfig = d.Instance.Config
 			// persist connector in the next batch to store last active config
-			err := d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
+			err = d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
 				if err != nil {
 					d.reportPersistError(err)
 				}

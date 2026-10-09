@@ -16,6 +16,8 @@ package connector
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -367,29 +369,27 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 
 // flushNow will flush the state to the store.
 //
-// The batch is all-or-nothing: either every connector in it is committed in
-// one transaction and every callback receives nil, or nothing is committed and
-// every callback receives the same non-nil error. There is no third outcome,
-// and every path — including a failure to open the transaction — calls every
-// callback exactly once and closes both of st's channels.
-//
-// Why the whole batch fails when one connector's write fails: whether the
-// transaction is still committable after a failed write depends on the store
-// (badger keeps it usable after ErrTxnTooBig; Postgres aborts it on any
-// statement error), and Persister cannot tell which it has. Committing the
-// rest would need a second transaction; failing the batch is the simple
-// choice that never reports a write as durable when it may not be. The cost
-// is that connectors sharing the batch are failed too, possibly in other
-// pipelines (see #2925 and docs/postmortems/20261007-persister-store-error-ignored.md).
+// Every connector's callback receives the outcome of its own write: nil if
+// its state was committed, an error if it was not. Every path, including a
+// failure to open a transaction, calls every callback exactly once and closes
+// both of st's channels. See writeBatch for how one connector's failed write
+// is kept from failing the rest of the batch (#2930).
 func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, st *flushState) {
 	defer close(st.writeDone)
 	start := p.clock.Now()
 
-	err := p.writeBatch(ctx, batch)
-	if err != nil {
-		p.logger.Err(ctx, err).
-			Int("count", len(batch)).
-			Msg("failed to persist connector batch; nothing in it was committed and every connector in it is notified")
+	results := p.writeBatch(ctx, batch)
+	failed := 0
+	for id := range batch {
+		// Invariant 1: a callback gets nil only for a recorded commit. A
+		// missing result (writeBatch always records one; this guards a
+		// future change to it) fails closed.
+		if _, ok := results[id]; !ok {
+			results[id] = statePersistError("internal error", cerrors.Errorf("no write outcome recorded for connector %q", id))
+		}
+		if results[id] != nil {
+			failed++
+		}
 	}
 
 	// Track every callback this flush spawns so WaitPendingWrites can observe
@@ -401,12 +401,12 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 	// actually observe.
 	var cbWg sync.WaitGroup
 	cbWg.Add(len(batch))
-	for _, data := range batch {
+	for id, data := range batch {
 		// execute callbacks in go routines to make sure they can't block this function
-		go func(cb PersistCallback) {
+		go func(cb PersistCallback, err error) {
 			defer cbWg.Done()
 			cb(err)
-		}(data.callback)
+		}(data.callback, results[id])
 	}
 	go func() {
 		cbWg.Wait()
@@ -414,46 +414,118 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 	}()
 
 	p.logger.Debug(ctx).
-		Err(err).
 		Int("count", len(batch)).
+		Int("failed", failed).
 		Dur(log.DurationField, p.clock.Now().Sub(start)).
 		Msg("persisted connectors")
 }
 
-// writeBatch stores every connector in batch in a single transaction and
-// commits it. It returns nil only if the commit succeeded; on any error
-// nothing has been committed.
+// writeBatch stores the connectors in batch and returns, for every connector
+// ID in batch, the outcome of that connector's write: nil if its state was
+// committed, otherwise an error carrying CodeConnectorStatePersistFailed.
+//
+// It writes the batch in one transaction. When one connector's write fails,
+// it discards that transaction, records the error for that connector only,
+// and writes the remaining connectors again in a fresh transaction. It stops
+// writing at the first failure instead of trying the rest of the batch in the
+// same transaction, because on Postgres (and SQLite for most errors) a failed
+// statement aborts the transaction and every later write in it fails too,
+// which would blame connectors whose writes were fine. A failed transaction
+// is never reused: whether it is still usable depends on the store (badger:
+// yes, after ErrTxnTooBig; Postgres: no), so only a fresh transaction gives
+// the same guarantee on every store. Every store's Discard drops the
+// uncommitted writes (badger discards the txn, Postgres and SQLite roll back),
+// so a retried write is never committed twice or half.
+//
+// A failure that is not one connector's write (opening a transaction, or
+// Commit) is not attributable, so every connector still in that attempt gets
+// it and nothing is retried.
+//
+// Each attempt either commits or removes one connector, so a flush makes at
+// most one transaction per connector in the batch. That worst case (every
+// write failing) costs one fast-failing transaction per connector, instead of
+// one transaction that fails everyone.
 //
 // Invariant 1: a source's PersistCallback releases its deferred upstream ack
-// (see Source.onPersistFlushed), so this must never return nil for a batch
-// that did not durably land — any storeFunc error aborts the commit.
-// Invariant 2: a position is never reported stored when it was not, so the
-// stored position stays the one a restart can safely resume from.
-// Invariant 3: the failure reaches every callback, never only a log line.
-//
-// Every error it returns carries CodeConnectorStatePersistFailed.
-func (p *Persister) writeBatch(ctx context.Context, batch map[string]persistData) error {
+// (see Source.onPersistFlushed), so a connector gets nil only when the
+// transaction holding its write committed.
+// Invariant 2: a position is never reported stored when it was not. A
+// connector left out keeps its previously stored position; its next Persist
+// writes its later cumulative state. Retries happen inside this flush, which
+// triggerFlush serializes against the next one, so an older state can never
+// be written over a newer one.
+// Invariant 3: every failure reaches the callback of the connector it belongs
+// to, never only a log line.
+func (p *Persister) writeBatch(ctx context.Context, batch map[string]persistData) map[string]error {
+	results := make(map[string]error, len(batch))
+
+	// Write in a stable order, so a failure is reproducible and logs from
+	// consecutive attempts are comparable.
+	remaining := make([]string, 0, len(batch))
+	for id := range batch {
+		remaining = append(remaining, id)
+	}
+	slices.Sort(remaining)
+
+	for attempt := 1; len(remaining) > 0; attempt++ {
+		failedID, err := p.writeAttempt(ctx, batch, remaining)
+		switch {
+		case err == nil:
+			for _, id := range remaining {
+				results[id] = nil
+			}
+			return results
+		case failedID == "":
+			// Not attributable to one connector: everyone still in this
+			// attempt failed with it.
+			p.logger.Err(ctx, err).
+				Int("count", len(remaining)).
+				Int("attempt", attempt).
+				Msg("failed to persist connector batch; nothing in this attempt was committed and every connector in it is notified")
+			for _, id := range remaining {
+				results[id] = err
+			}
+			return results
+		default:
+			p.logger.Err(ctx, err).
+				Str(log.ConnectorIDField, failedID).
+				Int("remaining", len(remaining)-1).
+				Int("attempt", attempt).
+				Msg("failed to persist connector state; retrying the rest of the batch without it in a new transaction")
+			results[failedID] = err
+			remaining = slices.DeleteFunc(remaining, func(id string) bool { return id == failedID })
+		}
+	}
+	return results
+}
+
+// writeAttempt writes the connectors in ids, in order, in one new transaction
+// and commits it. It returns a nil error only if the commit succeeded. If a
+// connector's write fails it stops there, discards the transaction and
+// returns that connector's ID with the error. If opening or committing the
+// transaction fails it returns an empty ID. On any error nothing from this
+// attempt has been committed.
+func (p *Persister) writeAttempt(ctx context.Context, batch map[string]persistData, ids []string) (failedID string, err error) {
 	tx, txCtx, err := p.db.NewTransaction(ctx, true)
 	if err != nil {
-		return statePersistError("failed to create transaction for connector batch", err)
+		return "", statePersistError("failed to create transaction for connector batch", err)
 	}
 	// Discard after a successful Commit is a no-op (database.Transaction
 	// contract); on every error path it is what drops the partial writes.
 	defer tx.Discard()
 
-	var errs []error
-	for id, data := range batch {
-		if err := data.storeFunc(txCtx); err != nil {
-			errs = append(errs, cerrors.Errorf("connector %q: %w", id, err))
+	for _, id := range ids {
+		if storeErr := batch[id].storeFunc(txCtx); storeErr != nil {
+			return id, statePersistError(
+				fmt.Sprintf("failed to store connector %q, its state was not committed", id),
+				storeErr,
+			)
 		}
 	}
-	if len(errs) > 0 {
-		return statePersistError("failed to store connector batch, transaction discarded", cerrors.Join(errs...))
+	if commitErr := tx.Commit(); commitErr != nil {
+		return "", statePersistError("failed to commit connector batch", commitErr)
 	}
-	if err := tx.Commit(); err != nil {
-		return statePersistError("failed to commit connector batch", err)
-	}
-	return nil
+	return "", nil
 }
 
 // statePersistError wraps cause as a CodeConnectorStatePersistFailed error.
