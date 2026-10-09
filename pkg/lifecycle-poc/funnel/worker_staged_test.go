@@ -1129,10 +1129,11 @@ func TestStaged_ProcessorNackWithDisabledDLQ_HaltsBeforeLaterBatches(t *testing.
 	src := newBatchSource("src", recs("p0"), recs("p1"), recs("p2"), recs("p3"))
 	dest := newGatedDestination("dest")
 	dest.autoAck = true
+	errDrift := cerrors.New("record p1 drifted")
 	reject := &funcTask{id: "drift-detect", do: func(b *Batch) error {
 		for i, r := range b.records {
 			if string(r.Position) == "p1" {
-				b.Nack(i, cerrors.New("record p1 drifted"))
+				b.Nack(i, errDrift)
 			}
 		}
 		return nil
@@ -1145,14 +1146,42 @@ func TestStaged_ProcessorNackWithDisabledDLQ_HaltsBeforeLaterBatches(t *testing.
 	select {
 	case err := <-h.doErr:
 		is.True(err != nil)
-		is.True(cerrors.IsFatalError(err))
+		is.True(cerrors.Is(err, errDrift))
 	case <-time.After(5 * time.Second):
 		t.Fatal("pipeline did not halt on the nack")
 	}
 	time.Sleep(50 * time.Millisecond)
 	is.Equal(dest.writtenPositions(), []string{"p0"}) // nothing after the nack was delivered
-	waitForCondition(t, 5*time.Second, func() bool { return len(src.acked()) <= 1 })
-	for _, p := range src.acked() {
-		is.Equal(p, "p0") // the nacked record and its successors are never acked
+	// The record before the nack was handled and is acked before the pipeline
+	// fails; the nacked record and its successors never are.
+	is.Equal(src.acked(), []string{"p0"})
+}
+
+// The same halt, voted by the DESTINATION (an ack with an error) while later
+// batches are already written: records after the poison one were delivered
+// (read-ahead cannot prevent that, v1 neither), but they are never acked, the
+// batches before it ARE released, and the pipeline fails with the DLQ's fatal
+// error.
+func TestStaged_DestinationNackWithDisabledDLQ_ReleasesPrefixThenHalts(t *testing.T) {
+	is := is.New(t)
+	src := newBatchSource("src", recs("p0"), recs("p1"), recs("p2"))
+	dest := newGatedDestination("dest")
+	errRejected := cerrors.New("destination rejected p1")
+	dest.nackErr = map[string]error{"p1": errRejected}
+	h := newStagedHarness(t, src, dest)
+	defer h.finish()
+	h.w.DLQ = NewDLQ("dlq", &dlqRecorder{id: "dlq"}, log.Test(t), NoOpConnectorMetrics{}, 1, 0)
+	h.start()
+
+	waitForCondition(t, 5*time.Second, func() bool { return len(dest.writtenPositions()) == 3 })
+	dest.releaseAll()
+
+	select {
+	case err := <-h.doErr:
+		is.True(err != nil)
+		is.True(cerrors.Is(err, errRejected))
+	case <-time.After(5 * time.Second):
+		t.Fatal("pipeline did not halt on the destination's nack")
 	}
+	is.Equal(src.acked(), []string{"p0"}) // the prefix before the nack, nothing at or after it
 }

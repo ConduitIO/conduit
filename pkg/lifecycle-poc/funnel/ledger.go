@@ -98,13 +98,36 @@ type ledger struct {
 	// nackGate, if set, may veto a nack at vote time with a fatal error. See
 	// DLQ.failFast.
 	nackGate func(origErr error) error
+	// halted is set (and haltCh closed) when a nack that can never be accepted
+	// was voted. The runner stops dispatching; the nack stays in the ledger, the
+	// coordinator releases everything before it and then fails the pipeline on
+	// it (DLQ.Nack returns the same fatal error).
+	halted bool
+	haltCh chan struct{}
 }
+
+// haltError is returned by a vote that halts the pipeline (see
+// ledger.nackGate). The vote itself was recorded.
+type haltError struct{ err error }
+
+func (e *haltError) Error() string { return e.err.Error() }
+func (e *haltError) Unwrap() error { return e.err }
 
 func newLedger() *ledger {
 	return &ledger{
 		changed: make(chan struct{}),
 		signal:  make(chan struct{}, 1),
 		failCh:  make(chan struct{}),
+		haltCh:  make(chan struct{}),
+	}
+}
+
+func (l *ledger) halt() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.halted {
+		l.halted = true
+		close(l.haltCh)
 	}
 }
 
@@ -300,10 +323,17 @@ func (e *ledgerEntry) Ack(_ context.Context, batch *Batch) error {
 func (e *ledgerEntry) Nack(_ context.Context, batch *Batch, taskID string) error {
 	ob := batch.originalBatch()
 	l := e.l
+	// A nack the DLQ can never accept halts the pipeline AT the nack, but the
+	// nack is still recorded: the positions before it must be released first
+	// (Invariant 3: they were handled), and the coordinator fails the pipeline
+	// when it reaches this one. The error returned here only stops the caller
+	// from dispatching the rest of its batch.
+	var haltErr error
 	if l.nackGate != nil {
 		for i := range ob.positions {
 			if err := l.nackGate(ob.recordStatuses[i].Error); err != nil {
-				return err
+				haltErr = &haltError{err: err}
+				break
 			}
 		}
 	}
@@ -322,6 +352,10 @@ func (e *ledgerEntry) Nack(_ context.Context, batch *Batch, taskID string) error
 	}
 	l.mu.Unlock()
 	l.wake()
+	if haltErr != nil {
+		l.halt()
+		return haltErr
+	}
 	return nil
 }
 

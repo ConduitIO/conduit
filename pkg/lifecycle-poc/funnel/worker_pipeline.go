@@ -160,15 +160,38 @@ func (w *Worker) doPipelined(ctx context.Context) error {
 			// the worker, so nothing reaches Source.Ack except through the
 			// coordinator's in-order prefix release.
 			if err := w.afterTask(ctx, w.FirstTask, rb.b, newRunAckNacker(rb.e), nil); err != nil {
+				var he *haltError
+				if cerrors.As(err, &he) {
+					return w.awaitHalt(ctx, he)
+				}
 				return err
 			}
 			p.ledger.markDispatched()
+		case <-p.ledger.haltCh:
+			return w.awaitHalt(ctx, nil)
 		case <-p.ledger.failCh:
 			return p.ledger.failure()
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+// awaitHalt runs when a nack the DLQ can never accept was voted (here or by a
+// destination ack). Nothing more is dispatched. The nack is in the ledger, so
+// the coordinator releases the positions before it and then fails the pipeline
+// on it with the DLQ's fatal error; waiting for that, instead of returning at
+// once, is what keeps the already-handled prefix acked (Invariant 3) while
+// read-ahead is not allowed to deliver the records that come after the nack
+// (Invariant 6).
+func (w *Worker) awaitHalt(ctx context.Context, he *haltError) error {
+	l := w.pl.ledger
+	l.markRunnerExited() // Stop must not wait for dispatch that will never happen
+	err := l.waitFor(ctx, func() bool { return false })
+	if err == nil && he != nil {
+		err = he.err
+	}
+	return err
 }
 
 // finishReading runs once the reader exited and every queued batch was

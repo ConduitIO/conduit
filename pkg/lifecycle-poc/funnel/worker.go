@@ -543,6 +543,10 @@ func (w *Worker) doTaskAttempt(
 				return
 			}
 			if err := w.afterTask(ctx, taskNode, b, acker, retry); err != nil {
+				var he *haltError
+				if cerrors.As(err, &he) {
+					return // the halting nack is in the ledger; the coordinator fails on it in order
+				}
 				w.pl.ledger.fail(err)
 			}
 		})

@@ -121,10 +121,11 @@ func (d *DLQ) Nack(ctx context.Context, batch *Batch, taskID string) (int, error
 	return nacked, nil
 }
 
-// failFast returns the fatal error DLQ.Nack would return for a nack of a record
-// that failed with origErr, if that nack can never be accepted: a DLQ whose
-// window is enabled with a zero threshold tolerates no nack at all, whatever
-// the window holds. It returns nil otherwise.
+// failFast reports whether a nack of a record that failed with origErr can never
+// be accepted, and if so returns the error DLQ.Nack will return for it: a DLQ
+// whose window is enabled with a zero threshold tolerates no nack at all,
+// whatever the window holds, and hands back the record's own error ("DLQ is
+// disabled" branch of Nack). It returns nil otherwise.
 //
 // The staged engine uses it to halt AT the nack instead of when the nack
 // reaches the head of the ledger. A halting nack found by a processor must
@@ -136,10 +137,7 @@ func (d *DLQ) failFast(origErr error) error {
 	if d == nil || d.windowSize == 0 || d.windowNackThreshold != 0 {
 		return nil
 	}
-	return cerrors.FatalError(
-		cerrors.Errorf("DLQ nack threshold exceeded (%d/%d), original error: %w",
-			d.windowNackThreshold, d.windowSize, origErr),
-	)
+	return origErr
 }
 
 func (d *DLQ) sendToDLQ(ctx context.Context, batch *Batch, taskID string) (int, error) {
