@@ -16,9 +16,11 @@ package stream
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
@@ -522,4 +524,125 @@ func TestSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	got, err := trigger()
 	is.True(err != nil)
 	is.True(got == nil)
+}
+
+// TestPubNodeBase_InjectControlMessage_AfterTriggerFailed guards #2969: once
+// the trigger has returned its final error nobody reads the internal message
+// channel, so injecting must give up instead of blocking, and it must not
+// keep cleanup from taking the lock.
+func TestPubNodeBase_InjectControlMessage_AfterTriggerFailed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background() // no deadline
+	logger := log.Nop()
+
+	n := &pubNodeBase{}
+	n.Pub()
+
+	errChan := make(chan error, 1)
+	trigger, cleanup, err := n.Trigger(ctx, logger, errChan, nil)
+	is.NoErr(err)
+
+	wantErr := cerrors.New("source failed")
+	errChan <- wantErr
+	_, err = trigger()
+	is.Equal(wantErr, err)
+
+	injectErr := make(chan error, 1)
+	go func() {
+		injectErr <- n.InjectControlMessage(ctx, ControlMessageStopSourceNode, opencdc.Record{})
+	}()
+	select {
+	case err := <-injectErr:
+		is.True(err != nil)
+	case <-time.After(3 * time.Second):
+		t.Fatal("InjectControlMessage blocked after the trigger failed")
+	}
+
+	cleaned := make(chan struct{})
+	go func() { cleanup(); close(cleaned) }()
+	select {
+	case <-cleaned:
+	case <-time.After(3 * time.Second):
+		t.Fatal("cleanup blocked")
+	}
+
+	// after cleanup the node is not running anymore
+	is.True(n.InjectControlMessage(ctx, ControlMessageStopSourceNode, opencdc.Record{}) != nil)
+}
+
+// TestPubNodeBase_InjectControlMessage_BlockedWhenCleanupStarts covers the
+// exact interleaving of #2969 at the base level: an inject is blocked on the
+// send when cleanup runs. Cleanup must complete and the inject must return.
+func TestPubNodeBase_InjectControlMessage_BlockedWhenCleanupStarts(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+
+	n := &pubNodeBase{}
+	n.Pub()
+	_, cleanup, err := n.Trigger(ctx, logger, nil, nil)
+	is.NoErr(err)
+
+	injectErr := make(chan error, 1)
+	go func() {
+		injectErr <- n.InjectControlMessage(ctx, ControlMessageStopSourceNode, opencdc.Record{})
+	}()
+	time.Sleep(50 * time.Millisecond) // let the inject block on the send
+
+	cleaned := make(chan struct{})
+	go func() { cleanup(); close(cleaned) }()
+	select {
+	case <-cleaned:
+	case <-time.After(3 * time.Second):
+		t.Fatal("cleanup blocked behind InjectControlMessage")
+	}
+	select {
+	case err := <-injectErr:
+		is.True(err != nil)
+	case <-time.After(3 * time.Second):
+		t.Fatal("InjectControlMessage still blocked after cleanup")
+	}
+}
+
+// TestPubNodeBase_NoGoroutineLeakAfterError checks the goroutines spawned by
+// Trigger (message fetcher, external error forwarder) exit once the trigger
+// failed and cleanup ran, even if they were blocked handing something over.
+func TestPubNodeBase_NoGoroutineLeakAfterError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background() // never canceled: only done can release them
+	logger := log.Nop()
+
+	before := runtime.NumGoroutine()
+
+	n := &pubNodeBase{}
+	n.Pub()
+
+	errChan := make(chan error, 2)
+	trigger, cleanup, err := n.Trigger(ctx, logger, errChan, func(context.Context) ([]*Message, error) {
+		// more than one message so the fetcher blocks on the second send
+		return []*Message{{}, {}}, nil
+	})
+	is.NoErr(err)
+
+	// the fetcher delivers a message, then blocks sending the next one
+	_, err = trigger()
+	is.NoErr(err)
+
+	// two errors: the trigger consumes one, the forwarder blocks on the other
+	wantErr := cerrors.New("source failed")
+	errChan <- wantErr
+	errChan <- wantErr
+	for {
+		_, err = trigger()
+		if err != nil {
+			break
+		}
+	}
+	cleanup()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	is.True(runtime.NumGoroutine() <= before) // goroutines leaked
 }
