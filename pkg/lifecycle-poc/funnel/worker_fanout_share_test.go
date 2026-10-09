@@ -267,3 +267,65 @@ func TestDoNextTask_FanOut_DestinationBranchesDoNotCopyRecords(t *testing.T) {
 			perExtraDestination, batchSize)
 	}
 }
+
+// TestBatch_CloneSharingRecords pins what cloneSharingRecords shares and what
+// it does not (#2910): the records themselves are shared, everything a branch
+// writes to while it runs is its own.
+func TestBatch_CloneSharingRecords(t *testing.T) {
+	is := is.New(t)
+
+	// Split record 1 first so the batch has a run ledger, a splitRecords
+	// entry and spare capacity in its slices.
+	base := NewBatch(randomRecords(4))
+	base.SplitRecord(1, randomRecords(3))
+	is.True(base.runs != nil)
+	is.Equal(len(base.splitRecords), 1)
+
+	a := base.cloneSharingRecords()
+	b := base.cloneSharingRecords()
+
+	// Records are shared: same backing array, same Metadata maps.
+	is.True(&a.records[0] == &base.records[0])
+	is.True(&a.records[0] == &b.records[0])
+
+	// Clipped capacity, so an append on any holder reallocates.
+	is.Equal(cap(a.records), len(a.records))
+	is.Equal(cap(a.positions), len(a.positions))
+
+	// Statuses are independent.
+	a.Nack(0, cerrors.New("boom")) // RecordFlagAck is the zero value, so mark the odd one out
+	is.Equal(a.recordStatuses[0].Flag, RecordFlagNack)
+	is.Equal(b.recordStatuses[0].Flag, RecordFlagAck)
+	is.Equal(base.recordStatuses[0].Flag, RecordFlagAck)
+
+	// The run ledger is independent: same shape, distinct *splitRun values,
+	// and a tally change on one branch does not show on a sibling.
+	var runA, runB, runBase *splitRun
+	for i := range base.runs {
+		if base.runs[i] != nil {
+			runA, runB, runBase = a.runs[i], b.runs[i], base.runs[i]
+			break
+		}
+	}
+	if runA == nil || runB == nil {
+		t.Fatal("expected a split run on every clone")
+	}
+	is.True(runA != runB)
+	is.True(runA != runBase)
+	runA.terminalCount++
+	is.Equal(runB.terminalCount, 0)
+	is.Equal(runBase.terminalCount, 0)
+
+	// splitRecords is a copy, not the same map.
+	a.SplitRecord(0, randomRecords(2))
+	is.Equal(len(a.splitRecords), 2)
+	is.Equal(len(b.splitRecords), 1)
+	is.Equal(len(base.splitRecords), 1)
+
+	// The split above grew a's records, but siblings still see the original
+	// length and the same shared elements.
+	is.True(len(a.records) > len(base.records))
+	is.Equal(len(b.records), len(base.records))
+	is.Equal(len(b.positions), len(base.positions))
+	is.True(&b.records[0] == &base.records[0])
+}
