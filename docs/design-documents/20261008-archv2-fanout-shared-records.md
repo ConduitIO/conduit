@@ -31,6 +31,13 @@ Only processors edit records. A destination branch reads them:
   a standalone plugin gets a protobuf-serialized copy. The inspector clones before fanning out to
   sessions.
 - Connector metrics compute record sizes without writing.
+- "Clone" is not "deep copy". `opencdc.Record.Clone` (via `StructuredData.Clone`) is shallow below
+  the top-level `map[string]any`: nested `[]any`, `[]byte` and nested `StructuredData` values stay
+  shared with the original. That is enough for the builtin stream (a plugin that replaces a field or
+  writes a top-level key does not reach the sender), but a builtin plugin that mutates a nested value
+  in place would. On the DLQ path, `DLQ.dlqRecord` (`funnel/dlq.go`) puts the source's raw
+  key, payload and position bytes into `Payload.After` as `[]byte` that sibling branches still read,
+  so a builtin DLQ plugin must not mutate them in place. None does today.
 - After a vote, the parent path reads only: `Worker.Ack` reads positions and metadata,
   `DLQ.dlqRecord` builds a new record from `r.Map()` and never writes to `r`.
 
@@ -67,9 +74,12 @@ from noise. Rejected; it adds a panic-propagation path for no measured gain.
 - **A future change makes the destination path write to a record** (for example, stamping
   destination metadata in `DestinationTask.Do`, or removing the clone in the builtin in-memory
   stream). Siblings would then race on the same maps: a data race and cross-destination corruption.
-  Detection: `go test -race` on the fan-out tests (the existing fan-out suite now runs on the shared
-  path), `TestDoNextTask_FanOut_SharedRecords_MutatingBranchGetsOwnCopy`, and a comment at the
-  builtin stream's clone pointing here. Mitigation: such a change has to either keep the write off
+  Detection: `TestInMemoryDestinationRunStream_ClientSendClonesRequest` in the builtin package
+  (a server-side write to a received record's `Key`, `Payload` or `Metadata` must not reach the
+  sender; it fails if the clone is removed), `TestDoNextTask_FanOut_SharedRecords_MutatingBranchGetsOwnCopy`,
+  and a comment at the builtin stream's clone pointing here. `go test -race` on the fan-out tests
+  does NOT catch removal of the stream clone: those tests use mock destinations, so nothing writes to
+  the records. Mitigation: such a change has to either keep the write off
   the shared record or take `*DestinationTask` off the allow-list.
 - **A nacked record leaves the fan-out while a sibling still reads it.** `multiAckNacker` releases a
   nack as soon as it heads the queue. The DLQ only reads the record and builds a new one, so this is
