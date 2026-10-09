@@ -18,19 +18,36 @@ failed to commit connector batch: ...
 ```
 
 A stopping connector wraps it as `failed to persist source connector position during teardown: ...`
-or `failed to persist destination connector state: ...`.
+or `failed to persist destination connector state: ...`. A source reports its teardown persist error
+only if the write fails within the teardown flush timeout (10 seconds); a failure after that is
+only logged.
 
 The Conduit log always has the error line
 `failed to persist connector batch; nothing in it was committed and every connector in it is notified`.
-What else you see depends on the pipeline architecture:
+Both pipeline architectures (the default one and arch-v2, `--preview.pipeline-arch-v2`) treat it
+the same way:
 
-- **Default architecture:** the pipeline goes degraded with the error above. A pipeline that was
-  stopping reports it as its stop error.
-- **Arch-v2 (`--preview.pipeline-arch-v2`):** the pipeline keeps reporting **running**. The error
-  reaches it only when the pipeline stops (#2929). While it runs, the signs are the log line above
-  and a source whose upstream retention keeps growing because nothing is acknowledged. For a
-  Postgres source that means a replication slot whose `confirmed_flush_lsn` stops advancing and
-  retained WAL that keeps growing.
+- A running pipeline fails on the first failed write of one of its connectors. The error is not
+  fatal, so the pipeline goes through error recovery: status **recovering**, then a restart from
+  the last stored position after the backoff. If the store is back by then, the pipeline runs
+  again and nothing else is needed.
+- If the store keeps failing, every restart fails the same way. With the default
+  `pipelines.error-recovery.max-retries` (-1, unlimited) the pipeline keeps cycling between
+  recovering and running; with a limit it goes **degraded** once the limit is spent, with an error
+  saying it could not recover.
+- A pipeline that was stopping is not restarted. It ends **user stopped** and nothing is lost,
+  because the positions that could not be stored were never acknowledged. What the pipeline
+  reports as the reason depends on the architecture. The default architecture reports the persist
+  error as the stop error. Under arch-v2 the persist error is returned to whoever called stop, but
+  the run's own error is usually the later, less useful
+  `failed to tear down source: plugin is not running`, because the worker tears the source down a
+  second time on close and records that failure instead (#2966). If you see that message on a
+  stopped arch-v2 pipeline, look for the persist error in the log line above.
+
+Under arch-v2 the error the run failed with reads
+`worker for source <id> stopped with error: connector <id> reported an error: ...`, followed by
+the message above. Before v0.21 arch-v2 did not read these errors: the pipeline kept reporting
+running, and the only signs were the log line and upstream retention that kept growing (#2929).
 
 ## Diagnosis
 
