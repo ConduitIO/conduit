@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 type processorWithID struct {
@@ -45,9 +46,20 @@ func (p *processorWithID) Open(ctx context.Context) error {
 	return p.Processor.Open(ctx)
 }
 
+// Process runs the wrapped processor and tags Avro element-limit failures
+// with schemaregistry.CodeAvroLimitExceeded. Built-in processors get the
+// processor-sdk schema decode middleware (see Registry.NewProcessor), whose
+// errors carry no code of their own.
 func (p *processorWithID) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	ctx = ctxutil.ContextWithProcessorID(ctx, p.id)
-	return p.Processor.Process(ctx, records)
+	out := p.Processor.Process(ctx, records)
+	for i, rec := range out {
+		if er, ok := rec.(sdk.ErrorRecord); ok {
+			er.Error = schemaregistry.ClassifyDecodeError(er.Error)
+			out[i] = er
+		}
+	}
+	return out
 }
 
 func (p *processorWithID) Teardown(ctx context.Context) error {

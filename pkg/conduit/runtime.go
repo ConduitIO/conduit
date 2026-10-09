@@ -355,6 +355,15 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
+	// Process-wide, and before any service exists: conduit-commons caches
+	// parsed schemas, and a schema parsed before this call would keep the
+	// previous limit. Governs every in-process Avro decode (avro.decode and
+	// the SDK schema middleware of built-in connectors and processors).
+	// Invariant 6: a payload over the limit fails decode; never truncated.
+	if err := schemaregistry.ApplyAvroMaxElements(cfg.Schema.Avro.MaxElements); err != nil {
+		return nil, cerrors.Errorf("invalid config: %w", err)
+	}
+
 	var ro runtimeOptions
 	for _, opt := range opts {
 		opt(&ro)

@@ -87,6 +87,12 @@ and decodes the payload. The schema is cached locally after it's first downloade
 
 If the processor encounters structured data or the data can't be decoded it returns an error.
 
+Arrays and maps are limited to 1,000,000 elements each by default (engine setting
+` + "`schema.avro.max-elements`" + `; 0 removes the limit). A payload that declares more fails to decode with
+error code ` + "`schema.avro.limit_exceeded`" + `; it is never truncated. The failed record is handled like any
+other processing error: it goes to the pipeline's dead-letter queue, or fails the pipeline, depending on
+the DLQ configuration.
+
 This processor is the counterpart to [` + "`avro.encode`" + `](/docs/using/processors/builtin/avro.encode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
@@ -138,7 +144,9 @@ func (p *DecodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 
 	rd, err := p.decoder.Decode(ctx, data)
 	if err != nil {
-		return nil, cerrors.Errorf("failed decoding data: %w", err)
+		// Invariant 6: an over-limit payload is an error, never a truncated
+		// value. Tag it so operators get schema.avro.limit_exceeded.
+		return nil, schemaregistry.ClassifyDecodeError(cerrors.Errorf("failed decoding data: %w", err))
 	}
 
 	err = field.Set(rd)

@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,12 +27,14 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
 )
@@ -261,6 +264,22 @@ type Config struct {
 		}
 	} `mapstructure:"schema-registry"`
 
+	Schema struct {
+		Avro struct {
+			// MaxElements bounds how many elements one Avro array or map may
+			// declare when Conduit decodes Avro in-process: the built-in
+			// avro.decode processor and the schema middleware of built-in
+			// connectors and processors. A payload over the limit fails to
+			// decode with schema.avro.limit_exceeded; it is never truncated.
+			// 0 removes the limit (the pre-v0.20.1 behavior, which leaves
+			// the decoder open to allocating whatever a payload declares).
+			// Standalone plugins decode in their own process with their own
+			// SDK and are not governed by this setting. Applied once at
+			// startup, process-wide (see schemaregistry.ApplyAvroMaxElements).
+			MaxElements int `long:"schema.avro.max-elements" mapstructure:"max-elements" usage:"maximum elements in one Avro array or map decoded in-process (built-in processors and connectors); larger payloads fail with schema.avro.limit_exceeded; 0 = no limit"`
+		} `mapstructure:"avro"`
+	} `mapstructure:"schema"`
+
 	Preview struct {
 		// PipelineArchV2 runs pipelines on the preview engine
 		// (pkg/lifecycle-poc) instead of the classic default (pkg/lifecycle).
@@ -345,6 +364,8 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 	cfg.SchemaRegistry.Confluent.Authentication.Type = SchemaRegistryAuthTypeNone
+
+	cfg.Schema.Avro.MaxElements = schemaregistry.DefaultAvroMaxElements
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
@@ -445,6 +466,20 @@ func (c Config) validateSchemaRegistryConfig() error {
 		// all good
 	default:
 		return invalidConfigFieldErr("schema-registry.type")
+	}
+	return nil
+}
+
+// validateSchemaConfig checks schema.* engine settings. The error is coded
+// (common.invalid_argument) and carries the setting's config path, so the
+// CLI, API and MCP surfaces can point at the field to fix.
+func (c Config) validateSchemaConfig() error {
+	if n := c.Schema.Avro.MaxElements; n < 0 {
+		ce := conduiterr.New(conduiterr.CodeInvalidArgument,
+			fmt.Sprintf("%q config value mustn't be negative (got: %d)", schemaregistry.AvroMaxElementsConfigPath, n))
+		ce.ConfigPath = schemaregistry.AvroMaxElementsConfigPath
+		ce.Suggestion = "set " + schemaregistry.AvroMaxElementsConfigPath + " to a positive element limit, or 0 for no limit"
+		return ce
 	}
 	return nil
 }
@@ -554,6 +589,10 @@ func (c Config) Validate() error {
 	}
 
 	if err := c.validateAPIConfig(); err != nil {
+		return err
+	}
+
+	if err := c.validateSchemaConfig(); err != nil {
 		return err
 	}
 

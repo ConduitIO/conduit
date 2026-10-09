@@ -614,7 +614,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (105)
+## 3. Error codes (106)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -723,6 +723,7 @@ Author: Meroxa, Inc.
 | `scaffold.toolchain_unavailable` | Unavailable | CodeToolchainUnavailable is raised when the preflight (Go on PATH at the minimum version, git on PATH, GOPATH/bin writable) fails. Maps to gRPC Unavailable -> exitcode.Environment (3): the fix is "install or upgrade a toolchain component", not "change your command line". |
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
+| `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error, so it goes to the pipeline's dead-letter queue or stops the pipeline according to the DLQ configuration. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. ResourceExhausted: the payload exceeds a configured limit. |
 
 ## 4. MCP tool catalog (13)
 
