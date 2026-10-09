@@ -72,7 +72,8 @@ Common causes:
   settings for large inline values (certificates, schemas) and its position size. If many large
   connectors flush together, a single oversized batch can also be avoided by running them in
   separate Conduit instances. When a batch is too big, the connectors whose writes cross the limit
-  fail (the last ones by connector ID) and the rest are committed; the failed ones are retried with
-  their next state change.
+  fail (the last ones by connector ID) and the rest are committed. The persister does not retry
+  the failed ones. For a source the error degrades its pipeline, so its next write usually comes
+  only after the pipeline is restarted.
 - If the same connector fails on every restart, its state cannot be written at all. Stop that
   pipeline and report it with the error message.

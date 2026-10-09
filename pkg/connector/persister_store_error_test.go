@@ -73,19 +73,39 @@ func (f *faultyStoreDB) NewTransaction(ctx context.Context, update bool) (databa
 
 // collectCallback returns a PersistCallback that records the error it was
 // called with, and a func that waits (bounded) for that call.
+//
+// The callback must be called exactly once. The count is checked when the
+// wait returns (tests wait only after the flush's callbacks have finished)
+// and again at cleanup, so a second call fails the test instead of sitting
+// unseen in the channel buffer.
 func collectCallback(t *testing.T) (PersistCallback, func() error) {
 	t.Helper()
+	var calls atomic.Int32
 	ch := make(chan error, 1)
-	return func(err error) { ch <- err }, func() error {
-		t.Helper()
-		select {
-		case err := <-ch:
-			return err
-		case <-time.After(5 * time.Second):
-			t.Fatal("PersistCallback was never called")
-			return nil
+	t.Cleanup(func() {
+		if n := calls.Load(); n > 1 {
+			t.Errorf("PersistCallback was called %d times, want once", n)
 		}
-	}
+	})
+	return func(err error) {
+			calls.Add(1)
+			select {
+			case ch <- err:
+			default: // a second call; reported by the count checks
+			}
+		}, func() error {
+			t.Helper()
+			select {
+			case err := <-ch:
+				if n := calls.Load(); n != 1 {
+					t.Fatalf("PersistCallback was called %d times, want once", n)
+				}
+				return err
+			case <-time.After(5 * time.Second):
+				t.Fatal("PersistCallback was never called")
+				return nil
+			}
+		}
 }
 
 // TestPersister_NewTransactionErrorReachesEveryCallback: before the fix,
