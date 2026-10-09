@@ -684,8 +684,9 @@ the bottleneck is below the engine, and it composes with B.
 
 ### C. Keep two engines with a user choice
 
-No design effort, but every Tier 1 change is reasoned about, tested and fixed twice (H1, H2 and the bugs behind #2722, #2723,
-#2728 and #2729 are engine-specific). Behaviour already differs by engine (persister failure, one-to-many processors, processor
+No design effort, but every Tier 1 change is reasoned about, tested and fixed twice (H1, H2 and the bugs behind
+issues #2722, #2723, #2728 and #2729 are engine-specific). Behaviour already differs by engine (persister failure,
+one-to-many processors, processor
 `workers`). Users cannot choose well: a valid cross-engine number took weeks (#2748). Docs, support and the test matrix
 double. Lost on DX and cost.
 
