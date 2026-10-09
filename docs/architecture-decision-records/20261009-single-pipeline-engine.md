@@ -86,15 +86,18 @@ cannot make an informed choice.
    the source produced them, through filters, splits and DLQ removals. Pieces of a split record are adjacent. There is
    no
    ordering across sources. Redelivery after a crash repeats records but does not reorder them within the replay.
-6. **Processor placement follows the documented flow.** Source processors run in their source's path. Pipeline-level
-   processors run, by default, as **one instance per source in that source's path**, in parallel across sources, which
-   keeps per-source order and the absence of cross-source ordering. A processor that declares itself stateful (an
-   opt-out)
-   runs once, on a serial stage after fan-in, together with every processor after it in the chain. Destination
-   processors
-   run once per destination, before the write. This replaces processor `workers > 1`. The stateful declaration is a
-   public
-   processor-spec contract change and is versioned with the processor SDK.
+6. **Processor placement follows the documented flow, and parallelism is opt-in.** Source processors run in their
+   source's
+   path. A processor runs in parallel only if it is declared `stateless` (built-ins only after an audit and test prove
+   it;
+   standalone processors only if their author declares it in the versioned processor spec). A declared-stateless
+   pipeline-level processor runs as one instance per source in that source's path, and may use a worker pool within the
+   source sized by its `workers` setting, with outputs merged in sequence order, so per-source order and the absence of
+   cross-source ordering are kept. Any processor not declared stateless is treated as stateful and runs once, on a
+   serial
+   stage after fan-in, together with every processor after it in the chain. Destination processors run once per
+   destination, before the write. This replaces processor `workers > 1` as v1 implements it. The `stateless` declaration
+   is a public processor-spec contract change, versioned with the processor SDK.
 7. **One-to-many processors are supported natively**, including across destination fan-out.
 8. **No new tuning knobs** by default, **no connector-protocol change**, and **no persisted position or state format
    change**.
@@ -160,10 +163,9 @@ cannot make an informed choice.
 - Cost accepted: a rewrite of the Tier 1 core of the engine, reviewed by one human. Mitigations are the differential
   test
   against v1, extended chaos and upgrade tests against released binaries, the invariant arguments, and the bar.
-- Open questions that gate implementation slices are in the design document. The ones that can still change this
-  decision:
-  whether the Alternative A run closes the gap without a rewrite, and how processor `workers > 1` on a single-source
-  pipeline is covered before the default flip.
+- Open questions that gate implementation slices are in the design document. The one that can still change this
+  decision is
+  whether the Alternative A run closes the gap without a rewrite.
 
 ## Related
 

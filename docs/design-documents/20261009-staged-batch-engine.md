@@ -157,7 +157,8 @@ lower memory. Performance statements are the early read above until the "Prototy
   the
   v0.20.0 tag. Nearby lanes: LC (`service.go` status writes), TC (`connector/source.go`, `persister.go`), EV
   (`lifecycle-poc`
-  reading `Errors()`, #2929), AV2 (#2910, #2909), GJ. The durability hook below touches TC's files.
+  reading `Errors()`, #2929), AV2 (#2910, #2909), GJ. The durability hook touches TC's files and is sequenced after
+  them (see Credits).
 
 ## Architecture
 
@@ -172,8 +173,8 @@ processors as "stateless components that operate on a single record". Each secti
 | Source connector | Reader (the only caller of `Source.Read`) | 1 per source |
 | Source processors | Run in that source's path, inline after the read | 1 per processor per source |
 | Fan-in | No node. Each source path dispatches into destination inboxes; the inbox is FIFO by arrival, so per-source order is kept and cross-source order is unspecified, as documented | none |
-| Pipeline processors, default | Run in each source's path after the source processors, **one instance per source**, in parallel across sources | N per processor |
-| Pipeline processors that declare themselves stateful | Run on a serial **merge stage** after fan-in. The chain is split at the first stateful processor: it and everything after it run on the merge stage; everything before runs per source | 1 per processor |
+| Pipeline processors declared `stateless` | Run in each source's path after the source processors, **one instance per source**, in parallel across sources; optionally on a worker pool within the source (below) | N per processor, times `workers` |
+| Pipeline processors not declared stateless (the default for anything undeclared) | Run on a serial **merge stage** after fan-in, one instance. The chain is split at the first such processor: it and everything after it run on the merge stage; everything before runs per source | 1 per processor |
 | Fan-out | Dispatch of one shared read-only batch to M inboxes. Bounded by the credit window instead of unbuffered channels | none |
 | Destination processors | Run in the destination's writer, before `Write` | 1 per processor per destination |
 | Destination connector | Writer (only caller of `Write`) and AckReader (only caller of `Ack`) | 1 each per destination |
@@ -183,12 +184,16 @@ destination has durably handled it; the speed of the slowest destination dictate
 One documented sentence changes: the fan-out node "does not buffer messages". The staged engine buffers up to the credit
 window; the site page must say so.
 
-**Processor model.** By default a pipeline-level processor gets one instance per source and runs in that source's path.
-Per-source order is unchanged, and the cross-source guarantee (none) is unchanged. A processor that declares itself
-stateful (an opt-out) runs on the serial merge stage with a single instance. Examples: the labs aggregate processor,
-future
-state-layer processors. This replaces `workers > 1`, which only v1 honours today. The declaration is a processor-spec
-contract change (see "Breaking changes"). It also gives the engine what the earlier `stateless` open question asked for.
+**Processor model.** Parallelism is opt-in and proven, never assumed. A processor runs in parallel only if it is
+**declared `stateless`**: in a built-in, only after the statelessness audit and its test prove it; in a standalone
+processor, only if its author declares the `stateless` field in the versioned processor spec
+(`conduit-processor-sdk`). Anything undeclared is treated as **stateful** and runs once, on the serial merge stage, as
+after v1's fan-in. A declared-stateless pipeline-level processor gets one instance per source, in that source's path,
+and
+may additionally run on a worker pool within the source (next section). Per-source order is unchanged and the
+cross-source guarantee (none) is unchanged. This replaces v1's `workers > 1`, which arch-v2 ignores. Examples of
+stateful:
+the labs aggregate processor, future state-layer processors.
 Destination processors stay in the writer, one instance, and a branch copies the batch only if it has a non-destination
 task.
 
@@ -222,7 +227,8 @@ flowchart LR
     LB -.->|"credits returned when durable"| RB
 ```
 
-When stateful pipeline processors exist, sources dispatch to the merge stage instead of directly to the inboxes.
+When pipeline processors not declared stateless exist, sources dispatch to the merge stage instead of directly to the
+inboxes.
 
 Life of one **position** in the ledger (release is per position, not per batch):
 
@@ -261,8 +267,9 @@ including every `Retry` re-run and every split), stamps a per-source sequence nu
 ledger, and dispatches. `io.EOF` means the source is exhausted and arms a graceful stop for that source only, as today
 (`worker.go:543-590`).
 
-**Merge stage** (one goroutine per pipeline, only if stateful pipeline processors exist). Takes batches from all sources
-in arrival order and runs the stateful processors and everything after them in the chain.
+**Merge stage** (one goroutine per pipeline, only if pipeline processors not declared stateless exist). Takes batches
+  from all sources
+in arrival order and runs the first not-declared-stateless processor and everything after it in the chain.
 
 **Dispatch.** The batch is shared read-only with every destination inbox, reference counted, in sequence order per
   source.
@@ -335,7 +342,8 @@ read response. A single batch larger than the whole window is admitted when noth
 learned from `connector.Source`: it needs a small additive hook, a callback per `Ack` (or a durable watermark) fired
 from
 `onPersistFlushed`. The callback must not block: it posts to the ledger and signals the reader. That hook touches
-`pkg/connector/source.go`, the TC lane's file (#2900, #2930), and must be coordinated with it.
+`pkg/connector/source.go`, the TC lane's file. **Sequencing:** it lands in v0.21, after #2947 and #2950 (v0.20.1)
+merge, so there is no ownership conflict.
 
 Persister lag is now inside the credit loop (up to the one-second debounce). So when the reader is blocked waiting for
 credits while released-but-not-durable positions exist, the engine asks the persister to flush
@@ -367,7 +375,8 @@ engine's serial time (read, process, source ack, persist wait). Pipelining remov
 
 ### Lifecycle
 
-**Start.** Open the shared sink (destinations, stateful pipeline processors) before any worker. Start the stages.
+**Start.** Open the shared sink (destinations, pipeline processors not declared stateless) before any worker. Start the
+  stages.
 
 **Graceful stop** (user `Stop`, `StopAll`, SIGTERM). The stop request is recorded before anything is told to stop, per
 [20261007-stop-requested-never-recovers](../architecture-decision-records/20261007-stop-requested-never-recovers.md).
@@ -407,9 +416,10 @@ errors cast no votes. Nothing past the released prefix is acked. The tail replay
 ### Concurrency model and goroutine budget
 
 Engine-owned goroutines per pipeline: 2 per source (reader, coordinator), 2 per destination (writer, AckReader), 1 merge
-stage if stateful pipeline processors exist, plus the supervisor that exists today: `2N + 2M + 1 (+1)`. Optional
+stage if pipeline processors not declared stateless exist, plus the supervisor that exists today: `2N + 2M + 1 (+1)`.
+Optional
 additions
-from the table above (runner, aggregation) would add up to one per source.
+from the table above (runner, aggregation) would add up to one per source, and each worker pool adds `workers` plus one.
 
 Goroutines owned by the connectors are the same under any engine and are listed separately so comparisons are like for
 like: one deferred-ack delivery goroutine per source (`connector/source.go:291`), the persister's callback goroutines
@@ -505,8 +515,8 @@ only disposable in-memory state; resume is from the persisted position and repla
 5. **DLQ.** Each source's DLQ receives its nacked records in source order.
 
 Mechanism: one goroutine dispatches each source's batches in order to every inbox; FIFO inboxes; one writer per
-destination taking FIFO; an ordered stream; FIFO ack matching; release in position order. Any future worker pool for
-stateless processors must reassemble in order before dispatch.
+destination taking FIFO; an ordered stream; FIFO ack matching; release in position order. A worker pool for a stateless
+processor reassembles in sequence order before anything is dispatched.
 
 ## One-to-many processors and split runs
 
@@ -548,7 +558,56 @@ several records for one input, so the single engine runs them natively.
   written as it stood at the nack.
 - The `rag-e2e` required check is the end-to-end gate.
 
+## Stateless processors: instances and the worker pool
+
+Two ways of running several instances of a declared-stateless processor, one mechanism: N instances whose outputs are
+merged in order.
+
+- **Per source.** One instance per source path. Outputs are merged by arrival at the inbox: no cross-source order.
+- **Within a source (the worker pool).** `workers` instances serve one source path, and outputs are merged **by sequence
+  number**, so per-source order is exactly preserved. This fully replaces v1's `ParallelNode`
+  (`pkg/lifecycle/stream/parallel.go`) and its coordinator that collects results in dispatch order.
+
+Specification of the pool:
+
+- **Size** is the processor's existing `workers` setting, default 1. No new knob. With `workers = 1` there is no pool
+  and
+  the processor runs inline in the reader, as in the baseline. With `workers > 1` the pool is a stage: the reader hands
+  stamped batches to it and does not wait (this is the case in which the reader/runner split of the baseline table
+  becomes
+  required, for that processor only). Each worker owns its own processor instance, so the single-caller rule holds. A
+  pipeline-level processor with `workers = w` in an N-source pipeline therefore has `N x w` instances.
+- **Unit of work** is a whole batch, never a fragment of a split run. A worker runs the processor step for its batch to
+  completion, including every `Retry` re-run and every split, on its own instance. Split runs and `Retry` therefore
+  never
+  cross workers, the run table stays per batch, and a batch leaves the pool with every run whole, as the one-to-many
+  section requires.
+- **Ordered reassembly.** One emitter per pool releases batch results strictly in sequence order. A result that finishes
+  early waits in a reorder buffer. The pool accepts new batches only while the sequence is within `2 x workers` of the
+  next
+  one to emit, so the buffer is bounded by the pool, and credits bound it again.
+- **Credits.** A batch holds its credits from the read until its positions are durable, including while it sits in the
+  pool
+  or the reorder buffer. Amplification growth is charged at ordered emit, oldest first. That keeps the "oldest in flight
+  always proceeds" rule intact: a later completed batch never holds credits the oldest batch needs to emit.
+- **Failure.** A processor error that fails the batch (an error returned or a panic in a worker, as opposed to a
+  per-record nack, which flows through in order like any nack) **cancels the pipeline context without acking that
+  batch**.
+  Batches already emitted before it keep their normal fate and the released prefix may include them; the failing batch,
+  every later batch in the pool and everything in the reorder buffer are discarded unacked and replay. No result is
+  emitted
+  out of order on the way out. Recovery follows the existing classification.
+- **Stop.** Graceful stop drains the pool before the destination flush, like any in-flight batch.
+- **Goroutines.** A pool with `workers > 1` adds `workers` plus one emitter.
+- **Tests (new).** Property: for random per-batch processing delays, output order equals input order and nothing is
+  lost;
+  a worker error at any point acks nothing from that batch and replays the rest; `Retry` and split runs processed on
+  different workers still yield whole runs in order; a differential test of the pool against v1's `ParallelNode` on the
+  same
+  input. The v0.22 flip is gated on the pool (graduation bar).
+
 ## Failure modes
+
 
 Tests are planned names unless stated; none exist yet.
 
@@ -708,8 +767,9 @@ fixed set of goroutines per connector with bounded handoff and keep per-position
 - **Per-position tally, not a per-batch counter** (a per-batch counter cannot represent divergence between
   destinations).
 - **Credits return on durable persistence**, which makes the replay bound exact.
-- **One pipeline-processor instance per source**, per the documented "stateless, single record" model, with a stateful
-  opt-out on a merge stage. The alternative, one shared instance behind a lock, brings back the lock being removed.
+- **One pipeline-processor instance per source, and a worker pool within a source, for declared-stateless processors
+  only**, per the documented "stateless, single record" model, with undeclared processors on a serial merge stage. The
+  alternative, one shared instance behind a lock, brings back the lock being removed.
 
 ## Breaking changes and migration
 
@@ -738,19 +798,19 @@ shapes; otherwise it needs a successor decision (open question).
 **Start-time warnings in v0.21** (log at warn on every start, and a `conduit doctor` check), for both engines where
 relevant:
 
-- a processor with `workers > 1` on the staged engine: "processor workers is not honoured; the default engine will not
-  switch until its replacement ships";
+- a processor with `workers > 1` that is not declared stateless (it runs serially and `workers` is ignored): the message
+  names the processor and tells its author to declare `stateless` once the SDK field ships;
+- any standalone processor that does not declare `stateless`, addressed to its author: it runs on the serial merge
+  stage;
 - a destination whose `sdk.batch.size` raises the derived unacked window;
-- a pipeline that relies on live `ReconfigureProcessor` (it falls back to restart);
-- a standalone processor older than the stateful-declaration SDK version (it will be treated as stateless and
-  instantiated per source once the declaration exists).
+- a pipeline that relies on live `ReconfigureProcessor` (it falls back to restart).
 
 ### User-visible behaviour changes
 
 | Area | Change | Who notices |
 | --- | --- | --- |
-| Processor `workers > 1` | v1 honours it with `ParallelNode`; arch-v2 ignores it today; the staged engine replaces it with one instance per source for pipeline-level processors. **The v0.22 flip waits for this model.** A single-source pipeline with a slow processor and `workers > 1` gets no parallelism from per-source instances (open question 1) | Users of `workers` |
-| Pipeline processor instances | A pipeline-level processor is instantiated once per source (N times). Memory, connections, API-key concurrency and per-instance rate limits are multiplied by N | Operators of N-source pipelines |
+| Processor `workers > 1` | v1 honours it (`ParallelNode`); arch-v2 ignores it. The staged engine honours it for declared-stateless processors with the ordered worker pool. A processor that is not declared stateless runs serially and `workers` is ignored. **The v0.22 flip is gated on the pool.** Built-ins are declared only after the audit, so an unaudited built-in loses the parallelism it had in v1 until it is audited | Users of `workers` |
+| Pipeline processor instances | A declared-stateless pipeline-level processor is instantiated once per source, times `workers` (N x w). Memory, connections, API-key concurrency and per-instance rate limits are multiplied. Undeclared processors are never multiplied: they stay single-instance | Operators of N-source pipelines |
 | Throughput and latency | Expected not below v1. Any added latency from aggregation exists only if that addition ships | Everyone |
 | Memory | Bounded by credits. v1 has an unbounded queue in `DestinationAckerNode` | v1 users with slow destinations |
 | Duplicate window after a crash | Up to one credit window per source (8,000 records at the starting value). Comparable to v1, larger than the funnel's single batch. Still at-least-once | Non-idempotent destinations |
@@ -765,27 +825,28 @@ relevant:
 | Error codes | Added `pipeline.ack_protocol_violation`. Retired, never emitted, registered through the deprecation window: `pipeline.shared_destination_poisoned`, `pipeline.split_run_straddles_fanout`. `pipeline.fanout_requires_arch_v2` is emitted only by the v0.22 fallback. `llms.txt` and `llms-full.txt` updated in the same PRs | Anything matching codes |
 | Inspect / API | No public change in v0.21 (see Observability) | None |
 
-### Processor-spec change: the stateful declaration
+### Processor-spec change: the `stateless` declaration
 
-A processor declares itself stateful (opt-out; stateless is the default). This is a public contract change in the
-processor
-spec (`conduit-processor-sdk`) and must be versioned, with its rollout planned with the SDK:
+A processor declares itself `stateless`. Absence means stateful. This is a public contract change in the processor spec
+(`conduit-processor-sdk`), so it is a versioned field, with its rollout planned with the SDK:
 
-1. Add the declaration to the processor spec in a new SDK minor; standalone (WASM) processors expose it through their
-   specification call; built-ins set it in code.
-2. Compatibility hazard: a stateful processor built before the declaration exists defaults to stateless and would be
-   instantiated N times. Release notes call it out, the v0.21 warning above names it, and the registry should surface
-   the
-   SDK version so operators can tell. Whether pre-declaration standalone processors should instead default to stateful
-   is
-   open question 2.
-3. **Required audit, with a test.** Every built-in processor is audited to confirm it is stateless: its output for a
+1. Add an optional `stateless` field to the processor specification in a new SDK minor. Standalone (WASM) processors
+   expose
+   it through their specification call; built-ins set it in code.
+2. **Conservative default: no silent multiplication.** A standalone processor that does not declare `stateless`,
+   including
+   every processor built before the field exists, is treated as stateful and runs on the serial merge stage with a
+   single
+   instance. Authors opt into parallelism by declaring the field. The v0.21 warning (above) tells authors of undeclared
+   processors. The cost is that undeclared third-party processors do not get per-source instances or `workers`
+   parallelism; they behave as they did after v1's fan-in, with `workers` ignored.
+3. **Required audit, with a test.** A built-in is declared stateless only after an audit proves it: its output for a
    record
    depends only on that record and its configuration, with no cross-record cache or state. Resource-only state (HTTP
-   clients, token buckets) is not semantic state but is multiplied by N and recorded in the audit. A test per built-in
-   proves independence (the same record processed after arbitrary other records yields the same output), and a test
-   fails
-   if a built-in is added without a classification. The labs aggregate processor is classified stateful.
+   clients, token buckets) is not semantic state but is multiplied by instances and is recorded in the audit. A test per
+   built-in proves independence (the same record processed after arbitrary other records gives the same output). Until a
+   built-in is audited it is not declared, so it runs serially. A test fails if a built-in is added without a
+   classification. The labs aggregate processor is classified stateful.
 
 ### Connector expectations
 
@@ -886,7 +947,7 @@ manual AWS-harness runs, and the v0.22 flip must not precede the standing gate.
 
 | Release | Content |
 | --- | --- |
-| v0.21 | Profile, prototype and the Alternative A run; this design; the staged engine implemented in slices behind the existing flag, replacing the funnel; v0.21 warnings; nightly differential test; chaos and upgrade extensions; 4x4 and latency shapes in the harness; the processor-spec declaration proposed with the processor SDK; durability hook with the TC lane |
+| v0.21 | Profile, prototype and the Alternative A run; this design; the staged engine implemented in slices behind the existing flag, replacing the funnel; v0.21 warnings; nightly differential test; chaos and upgrade extensions; 4x4 and latency shapes in the harness; the `stateless` field in `conduit-processor-sdk`, the built-in audit and the ordered worker pool; the durability hook in `connector.Source`, landing after #2947 and #2950 (v0.20.1) |
 | v0.22 | Staged engine is the default **if the bar is met and the processor model has shipped**. Hidden v1 fallback with a tracking issue and runbook. Flag warns |
 | v0.23 | v1, the fallback and the funnel's old loop deleted on the release date |
 | v0.24 or later | Ignored flag removed |
@@ -913,8 +974,9 @@ funnel's stop-and-wait engine is replaced behind the flag in v0.21 and is not ke
 5. Acceptance pipelined-write test passes on built-ins and the certified set; processor conformance and the
    statelessness
    audit pass.
-6. The processor model (stateful declaration, per-source instances) has shipped, and `workers > 1` is accounted for
-   (open question 1).
+6. The processor model has shipped: the `stateless` declaration in the processor SDK, the audited built-ins, per-source
+   instances, and the ordered worker pool replacing `workers > 1`, with the pool tests and the differential test against
+   `ParallelNode` green.
 7. One 24 h soak with no leak.
 8. Recovery parity with v1 per
    [20240812-recover-from-pipeline-errors](20240812-recover-from-pipeline-errors.md), including persister failure (EV
@@ -948,31 +1010,25 @@ floor,
 
 ## Open questions
 
-1. **`workers > 1` on a single-source pipeline.** The approved processor model replaces `workers` with one instance per
-   source, which gives parallelism only across sources. A one-source pipeline with a slow processor loses what v1's
-   `ParallelNode` gave it. Since the default is stateless, the same N-instances idea could serve a worker pool with
-   ordered
-   reassembly inside a source path. Not decided; the v0.22 flip is gated on an answer.
-2. **Default for processors that predate the stateful declaration.** Stateless (as approved) risks silently
-   instantiating a
-   stateful third-party processor N times. A safer rule treats pre-declaration standalone processors as stateful until
-   they
-   declare otherwise. Needs a decision before the SDK release.
-3. **Durability hook shape** in `connector.Source`: a callback per `Ack` or a durable watermark, and ownership with the
-   TC
-   lane.
-4. **Window defaults** (`U` and `W` above) and the process-wide memory story for many pipelines.
-5. **Is starvation flush enough**, or does the persister's one-second debounce still limit throughput at the default
+1. **Window defaults** (`U` and `W` above) and the process-wide memory story for many pipelines.
+2. **Is starvation flush enough**, or does the persister's one-second debounce still limit throughput at the default
    window?
-6. **Graceful stop validation**: `Source.Stop` with read-until-last-position on built-in and standalone sources, and
+3. **Graceful stop validation**: `Source.Stop` with read-until-last-position on built-in and standalone sources, and
    `Destination.Stop(lastWrittenPosition)` with several sources and destination processors that filter the last records.
-7. **Destination-stall watchdog.** Recommendation: none in v0.22; the log and gauge only.
-8. **Fate of `--preview.pipeline-arch-v2-disable-metrics`.**
-9. **DLQ throughput.** Synchronous, in order, in the coordinator; fine for rare nacks.
-10. **Hidden fallback flag name.** Provisional; deleted on the v0.23 release date.
-11. **Persister-failure semantics** (degrade, as v1) need confirming with EV #2929.
-12. **Acceptable default duplicate window** for non-idempotent destinations.
-13. **Pipelined writes for non-Go SDKs.**
+4. **Destination-stall watchdog.** Recommendation: none in v0.22; the log and gauge only.
+5. **Fate of `--preview.pipeline-arch-v2-disable-metrics`.**
+6. **DLQ throughput.** Synchronous, in order, in the coordinator; fine for rare nacks.
+7. **Hidden fallback flag name.** Provisional; deleted on the v0.23 release date.
+8. **Persister-failure semantics** (degrade, as v1) need confirming with EV #2929.
+9. **Acceptable default duplicate window** for non-idempotent destinations.
+10. **Pipelined writes for non-Go SDKs.**
+
+**Resolved (DeVaris, 2026-10-09):** `workers > 1` is covered by the ordered worker pool for declared-stateless
+  processors;
+undeclared standalone processors are stateful and serial; the durability hook lands in v0.21 after #2947 and #2950
+(v0.20.1) merge, so there is no ownership conflict with the TC lane; stall reason is a log line plus the queue-depth
+gauge
+only; the persister flush on credit starvation stays in the baseline, validated by the prototype.
 
 ## Future work
 
@@ -983,7 +1039,7 @@ Recorded so they are not lost, each waiting for evidence that the baseline is in
   unacked, ack lag, structured stall with `blocked_on`), and an `engine` field. Needs an additive API field or RPC.
 - Metrics beyond queue depth: ack-lag histogram, stage batch-size histogram, stall-seconds counter.
 - The conditional additions in the baseline table.
-- A parallel worker pool for stateless processors with ordered reassembly (see open question 1).
+
 - A `mutates` declaration to refine branch copying.
 - The state-layer checkpoint hook on the coordinator's release.
 
