@@ -79,6 +79,13 @@ type Source struct {
 	// source plugin.
 	stream pconnector.SourceRunStreamClient
 
+	// pendingRecv holds the result channel of a stream.Recv call started by
+	// a Read whose context was canceled before the call returned. The next
+	// Read consumes it instead of starting a new receive. Like the stream
+	// itself, it is only accessed by Read, which must not be called
+	// concurrently.
+	pendingRecv <-chan recvResult
+
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
@@ -521,7 +528,21 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 		return nil, cerrors.Errorf("source stream not open: %w", connectorPlugin.ErrStreamNotOpen)
 	}
 
-	resp, err := s.stream.Recv()
+	// stream.Recv does not observe ctx, so it runs in its own goroutine and
+	// Read selects on its result and ctx.Done(). A receive whose Read was
+	// canceled stays pending and is picked up by the next Read, so records
+	// the plugin sends in the meantime are not dropped.
+	if s.pendingRecv == nil {
+		s.pendingRecv = s.recv()
+	}
+	var res recvResult
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res = <-s.pendingRecv:
+		s.pendingRecv = nil
+	}
+	resp, err := res.resp, res.err
 	if err != nil {
 		return nil, err
 	}
@@ -533,6 +554,29 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 
 	s.Instance.inspector.Send(ctx, resp.Records)
 	return resp.Records, nil
+}
+
+// recvResult is the outcome of a single stream.Recv call.
+type recvResult struct {
+	resp pconnector.SourceRunResponse
+	err  error
+}
+
+// recv starts a stream.Recv call in a separate goroutine and returns a channel
+// that receives its result. The call is tracked in wg, so Teardown waits for
+// it (it returns once stopStream closes the stream) before tearing down the
+// plugin. It must only be called while a plugin call is in flight (see
+// preparePluginCall).
+func (s *Source) recv() <-chan recvResult {
+	ch := make(chan recvResult, 1)
+	stream := s.stream
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		resp, err := stream.Recv()
+		ch <- recvResult{resp: resp, err: err}
+	}()
+	return ch
 }
 
 // Ack acknowledges that the records at the given positions were fully
@@ -1016,6 +1060,7 @@ func (s *Source) run(ctx context.Context) error {
 		return cerrors.Errorf("could not run source connector plugin: %w", err)
 	}
 	s.stream = stream.Client()
+	s.pendingRecv = nil
 	s.stopStream = stopStream
 	s.streamCtx = ctx
 	return nil
