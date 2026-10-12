@@ -217,7 +217,6 @@ favoritism the roadmap forbids for brokers. Resolution is deterministic, in this
 
 1. **Explicit.** `--provider` flag or `generate.provider` in `conduit.yaml`.
 2. **Explicit via env**, for CI/agent use: `CONDUIT_GENERATE_PROVIDER`.
-
 3. **Auto-detect exactly one resolvable candidate**, checked in this fixed order for
    reporting purposes only (order does not imply preference — see below):
    - `ANTHROPIC_API_KEY` set → `anthropic` is a candidate.

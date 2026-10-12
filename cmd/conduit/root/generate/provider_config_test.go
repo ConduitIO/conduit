@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 
@@ -60,6 +61,13 @@ func writeConduitYAML(t *testing.T, dir, body string) string {
 // returns the provider name the command resolved.
 func runGenerate(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	resolved, _, err := runGenerateOut(t, args...)
+	return resolved, err
+}
+
+// runGenerateOut is runGenerate that also returns what the command printed.
+func runGenerateOut(t *testing.T, args ...string) (string, string, error) {
+	t.Helper()
 	var resolved string
 	c := &Command{
 		newProvider: func(name, _ string, _ func(string) string) (provider.Provider, error) {
@@ -78,7 +86,7 @@ func runGenerate(t *testing.T, args ...string) (string, error) {
 		"--out", filepath.Join(t.TempDir(), "out.yaml"),
 	}, args...))
 	_, err := cmd.ExecuteC()
-	return resolved, err
+	return resolved, out.String(), err
 }
 
 // TestProviderPrecedence pins --provider > CONDUIT_GENERATE_PROVIDER >
@@ -91,6 +99,29 @@ func TestProviderPrecedence(t *testing.T) {
 		dir := t.TempDir()
 		t.Chdir(dir)
 		writeConduitYAML(t, dir, "generate:\n  provider: anthropic\n")
+		t.Setenv(provider.EnvProvider, provider.NameOllama)
+
+		got, err := runGenerate(t, "--provider", provider.NameOpenAI)
+		is.NoErr(err)
+		is.Equal(got, provider.NameOpenAI)
+	})
+
+	t.Run("flag beats config only", func(t *testing.T) {
+		is := is.New(t)
+		isolateEnv(t)
+		dir := t.TempDir()
+		t.Chdir(dir)
+		writeConduitYAML(t, dir, "generate:\n  provider: anthropic\n")
+
+		got, err := runGenerate(t, "--provider", provider.NameOpenAI)
+		is.NoErr(err)
+		is.Equal(got, provider.NameOpenAI)
+	})
+
+	t.Run("flag beats env only", func(t *testing.T) {
+		is := is.New(t)
+		isolateEnv(t)
+		t.Chdir(t.TempDir()) // no conduit.yaml
 		t.Setenv(provider.EnvProvider, provider.NameOllama)
 
 		got, err := runGenerate(t, "--provider", provider.NameOpenAI)
@@ -225,6 +256,28 @@ func TestProviderConfig_UnknownNameIsRejected(t *testing.T) {
 	is.True(strings.Contains(ce.Message, `"antropic"`))
 }
 
+// A malformed conduit.yaml fails generate instead of being ignored, the same
+// as every other command that reads it, and no provider is built.
+func TestProviderConfig_MalformedFileFailsGenerate(t *testing.T) {
+	is := is.New(t)
+	isolateEnv(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeConduitYAML(t, dir, "generate:\n  provider: [unclosed\n")
+	t.Setenv(provider.EnvAnthropicKey, "sk-ant") // would auto-detect if the file were skipped
+
+	got, err := runGenerate(t)
+	is.Equal(got, "") // no provider was built
+	is.True(err != nil)
+	// The error is ecdysis's config-parse error, as for every other command
+	// that reads conduit.yaml. It carries no conduiterr code or ConfigPath
+	// (ecdysis does not produce them), so the message is what is pinned.
+	is.True(strings.Contains(err.Error(), "error parsing config"))
+	is.True(strings.Contains(err.Error(), "yaml: line 1"))
+	_, coded := conduiterr.Get(err)
+	is.True(!coded)
+}
+
 // TestMaxRetriesDefault is the #2933 regression test: ecdysis ignores
 // `default:` struct tags, so --max-retries defaulted to 0 and the output said
 // "attempt 1 of 0".
@@ -251,4 +304,16 @@ func TestMaxRetriesDefault(t *testing.T) {
 	_, err := cmd.ExecuteC()
 	is.NoErr(err)
 	is.True(strings.Contains(out.String(), "attempt 1 of 3")) // not "of 0"
+
+	// --json reports the same default, not 0.
+	_, outJSON, err := runGenerateOut(t, "--json")
+	is.NoErr(err)
+	var env struct {
+		Summary struct {
+			MaxRetries *int `json:"maxRetries"`
+		} `json:"summary"`
+	}
+	is.NoErr(json.Unmarshal([]byte(outJSON), &env))
+	is.True(env.Summary.MaxRetries != nil)
+	is.Equal(*env.Summary.MaxRetries, 3)
 }
