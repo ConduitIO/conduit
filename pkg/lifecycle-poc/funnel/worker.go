@@ -873,7 +873,28 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 
 		p := pool.New().WithErrors()
 		for _, nextTask := range taskNode.Next {
-			branchBatch := b.clone()
+			// #2910: deep-copying every record for every branch made fan-out
+			// superlinear (2 destinations cost 5.2x one). A branch that can
+			// modify a record in place (anything with a processor in it) still
+			// gets its own deep copy. A branch made only of destination tasks
+			// reads the records and never writes them, so it shares them.
+			//
+			// Invariant 1/3 (enforcement site): this changes which memory a
+			// branch reads, never which votes it casts. Each branch still gets
+			// its own recordStatuses and run ledger, and multiAckNacker still
+			// needs every branch's vote for every position, exactly as before.
+			// What the sharing relies on is that nothing writes a shared record
+			// while any branch is still running: the destination path only
+			// reads, the connector layer copies before handing records to a
+			// plugin, and the DLQ builds a new record rather than editing the
+			// nacked one. See branchMutatesRecords for the rule and
+			// TestDoNextTask_FanOut_SharedRecords_* for the checks.
+			var branchBatch *Batch
+			if branchMutatesRecords(nextTask) {
+				branchBatch = b.clone()
+			} else {
+				branchBatch = b.cloneSharingRecords()
+			}
 			// Invariant 1/3 (enforcement site, #2723): wrap multiAcker in a
 			// FRESH runAckNacker per branch. Each branch's clone can diverge
 			// independently from here on (split further, retry, filter), so
@@ -897,6 +918,32 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 
 		return nil
 	}
+}
+
+// branchMutatesRecords reports whether any task in the fan-out branch rooted
+// at n may modify a record in place, and so needs its own deep copy of the
+// batch's records (Batch.clone) rather than sharing them with its siblings
+// (Batch.cloneSharingRecords). See Worker.doNextTask and #2910.
+//
+// The rule is an allow-list, not a deny-list: only *DestinationTask is known
+// to treat records as read-only. DestinationTask.Do reads positions, hands the
+// slice to Destination.Write and marks per-record statuses on its own Batch.
+// connector.Destination.Write never lets a plugin touch the caller's records:
+// a builtin plugin's in-memory stream clones the request before sending it,
+// and a standalone plugin receives a serialized copy over gRPC. Any other
+// task type - a ProcessorTask, or a type added later - is assumed to mutate,
+// so the safe answer is the default and a new task type has to be proven
+// read-only before it can join the list.
+func branchMutatesRecords(n *TaskNode) bool {
+	if _, ok := n.Task.(*DestinationTask); !ok {
+		return true
+	}
+	for _, next := range n.Next {
+		if branchMutatesRecords(next) {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
