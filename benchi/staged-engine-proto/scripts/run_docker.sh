@@ -34,8 +34,11 @@ sleep $WIN
 n=0; for s in $SINKS; do S1[$n]=$(docker exec $NAME stat -c%s $s); n=$((n+1)); done
 CPU1=$(docker exec $NAME sh -c "grep usage_usec /sys/fs/cgroup/cpu.stat" | cut -d" " -f2)
 T1=$(python3 -c 'import time;print(time.time())'); LA2=$(docker exec $NAME cat /proc/loadavg | cut -d' ' -f1-3)
-docker kill -s INT $NAME >/dev/null; docker wait $NAME >/dev/null; 
-HOSTLA=$(uptime | sed 's/.*load averages: //')
+# Time-bound the stop: an engine that hangs on SIGINT is killed after 30 s so a
+# hung arm costs seconds, not the session.
+docker kill -s INT $NAME >/dev/null
+timeout 30 docker wait $NAME >/dev/null; [ $? = 124 ] && { echo "STOP_TIMEOUT: engine ignored SIGINT for 30s, killing" >&2; docker kill $NAME >/dev/null 2>&1; docker wait $NAME >/dev/null; }
+if [ -r /proc/loadavg ]; then HOSTLA=$(cut -d' ' -f1-3 /proc/loadavg); else HOSTLA=$(uptime | sed 's/.*load averages: //'); fi
 tot=0; n=0
 for s in $SINKS; do
   a=${S0[$n]}; b=${S1[$n]}

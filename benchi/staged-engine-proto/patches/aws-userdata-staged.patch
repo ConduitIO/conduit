@@ -1,45 +1,132 @@
 diff --git a/benchi/archv2-gate/aws/userdata.sh.tmpl b/benchi/archv2-gate/aws/userdata.sh.tmpl
-index 639525e5..4d1e4c13 100644
+index 639525e5..8bee2a45 100644
 --- a/benchi/archv2-gate/aws/userdata.sh.tmpl
 +++ b/benchi/archv2-gate/aws/userdata.sh.tmpl
-@@ -74,6 +74,17 @@ git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
- git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
- git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-# archv2-gate early read: instance bootstrap. Rendered by the launcher in this
++# staged-engine AWS read (extends the archv2-gate early-read launcher): instance bootstrap. Rendered by the launcher in this
+ # directory (main.go). It holds no credentials: S3 uploads use the instance
+ # role, whose only S3 permission is PutObject under the run's prefix.
+ #
+@@ -33,6 +33,7 @@ S3="s3://$BUCKET/$PREFIX"
+ W=/opt/bench
+ OUT=$W/out
+ mkdir -p "$OUT/results"
++START_TS=$(date +%s)
  
-+# Staged-engine prototype extension (see benchi/staged-engine-proto/README.md in
-+# the prototype PR, which is the "fanout" PR here): add its shapes (4x4,
-+# source-batched 1x1) to the harness checkout, and apply its bench-only
-+# destination-latency hook to BOTH engine trees so every arm sees the same hook.
-+SP="$W/src-fanout/benchi/staged-engine-proto"
-+[ -d "$SP/shapes" ] || fail "prototype PR has no benchi/staged-engine-proto"
-+cp -r "$SP/shapes/." "$W/src-harness/benchi/archv2-gate/shapes/" || fail "copy shapes"
-+for t in src-main src-fanout; do
-+  (cd "$W/$t" && git apply "$SP/patches/latency-injection.patch") || fail "apply latency hook to $t"
-+done
+ upload() {
+   aws s3 cp --quiet --recursive "$OUT" "$S3/" || true
+@@ -54,7 +55,7 @@ fail() { status "FAILED: $*"; finish; }
+ 
+ status "bootstrap start"
+ 
+-dnf install -y docker git >/dev/null || fail "dnf install docker git"
++dnf install -y docker git python3 procps-ng >/dev/null || fail "dnf install docker git python3"
+ systemctl enable --now docker || fail "start docker"
+ 
+ curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" || fail "download go"
+@@ -65,48 +66,33 @@ status "docker $(docker version --format '{{"{{"}}.Server.Version{{"}}"}}') and
+ 
+ git clone -q https://github.com/ConduitIO/conduit.git "$W/conduit" || fail "git clone"
+ cd "$W/conduit" || fail "cd clone"
++# HARNESS_PR/HARNESS_SHA carry the commit holding the staged-engine kit (the
++# session driver and shapes), here the prototype PR's own later commit. The
++# prototype ENGINE is built from FANOUT_SHA; the kit adds benchi/ files only.
+ git fetch -q origin "+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" \
+   "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}" || fail "fetch PR refs"
+ for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA"; do
+   git cat-file -e "${sha}^{commit}" || fail "commit $sha not found"
+ done
+ git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
+-git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
+-git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
+-
+-status "building images"
+-docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
+-  -t conduit-bench:main "$W/src-main" || fail "docker build main"
+-docker build -q --label "org.opencontainers.image.revision=$FANOUT_SHA" \
+-  -t conduit-bench:pr${FANOUT_PR} "$W/src-fanout" || fail "docker build pr${FANOUT_PR}"
+-
+-# Fan-out before/after session. The harness compares two engines on ONE image
+-# (arms "v1-a", "v2", "v1-b"; v2 adds --preview.pipeline-arch-v2). This image
+-# routes its v1 arms to main's binary with arch-v2 forced on, and its v2 arm
+-# to the PR's binary, so an "ab" session measures v2-main, v2-PR, v2-main per
+-# round with main's two runs as the A/A control. Both binaries come from the
+-# images built above, unchanged.
+-mkdir -p "$W/fanout-wrap"
+-cat > "$W/fanout-wrap/conduit" <<'WRAP'
+-#!/bin/sh
+-for a in "$@"; do
+-  [ "$a" = "--preview.pipeline-arch-v2" ] && exec /app/conduit-pr "$@"
++git worktree add -q --detach "$W/src-proto" "$FANOUT_SHA" || fail "worktree proto"
++git worktree add -q --detach "$W/kit-src" "$HARNESS_SHA" || fail "worktree kit"
++export KIT=$W/kit-src/benchi/staged-engine-proto
 +
- status "building images"
- docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
-   -t conduit-bench:main "$W/src-main" || fail "docker build main"
-@@ -104,6 +115,15 @@ WRAPDF
- docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
-   -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
- 
-+# Same images with the destination ack latency baked in as an environment
-+# variable (the harness passes no env of its own).
-+for lat in 1ms 10ms; do
-+  for base in main fanout; do
-+    printf 'FROM conduit-bench:%s\nENV CONDUIT_BENCH_DEST_ACK_LATENCY=%s\n' "$base" "$lat" \
-+      | docker build -q -t "conduit-bench:${base}-lat${lat}" - || fail "docker build ${base}-lat${lat}"
++# Bench-only hooks (destination ack latency, stream channel capacity), applied
++# to BOTH engine trees so every arm carries the same code; both are off unless
++# an environment variable is set.
++for t in src-main src-proto; do
++  for p in latency-injection stream-buffer; do
++    (cd "$W/$t" && git apply "$KIT/patches/$p.patch") || fail "apply $p to $t"
 +  done
-+done
-+
- cd "$W/src-harness" || fail "cd harness"
- go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
- status "images and harness built"
-@@ -161,21 +181,29 @@ session() { # name image shape session
-   sync; echo 3 > /proc/sys/vm/drop_caches
- }
+ done
+-exec /app/conduit-main "$@" --preview.pipeline-arch-v2
+-WRAP
+-cat > "$W/fanout-wrap/Dockerfile" <<WRAPDF
+-FROM conduit-bench:main
+-COPY --from=conduit-bench:pr${FANOUT_PR} /app/conduit /app/conduit-pr
+-RUN mv /app/conduit /app/conduit-main
+-COPY conduit /app/conduit
+-RUN chmod 0755 /app/conduit
+-WRAPDF
+-docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
+-  -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
+-
+-cd "$W/src-harness" || fail "cd harness"
+-go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
+-status "images and harness built"
++status "building binaries"
++export BIN_MAIN=$W/conduit-main BIN_PROTO=$W/conduit-proto
++(cd "$W/src-main" && CGO_ENABLED=0 go build -o "$BIN_MAIN" ./cmd/conduit) || fail "build main"
++(cd "$W/src-proto" && CGO_ENABLED=0 go build -o "$BIN_PROTO" ./cmd/conduit) || fail "build proto"
++docker pull -q alpine:3.20 >/dev/null || fail "pull alpine"
++status "binaries built"
  
+ {
+   echo "## instance"
+@@ -115,13 +101,9 @@ status "images and harness built"
+     echo "$k: $(curl -fsS -H "X-aws-ec2-metadata-token: $TOK" "http://169.254.169.254/latest/meta-data/$k")"
+   done
+   echo "## commits"
+-  echo "main: $MAIN_SHA"; echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"; echo "harness pr${HARNESS_PR}: $HARNESS_SHA"
+-  echo "## binaries (sha256)"
+-  for img in main pr${FANOUT_PR}; do
+-    echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
+-  done
+-  docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
+-  echo "## images"; docker images --no-trunc
++  echo "main: $MAIN_SHA"; echo "prototype pr${FANOUT_PR}: $FANOUT_SHA"; echo "kit pr${HARNESS_PR}: $HARNESS_SHA"
++  echo "## binaries (sha256); v1, v2-main and v2-altA are conduit-main, v2-proto is conduit-proto"
++  sha256sum "$BIN_MAIN" "$BIN_PROTO"
+   echo "## uname"; uname -a
+   echo "## os"; cat /etc/os-release
+   echo "## lscpu"; lscpu
+@@ -150,36 +132,12 @@ sync; echo 3 > /proc/sys/vm/drop_caches
+ status "quiet 60s before sessions"
+ sleep 60
+ 
+-session() { # name image shape session
+-  local name=$1 image=$2 shape=$3 sess=$4
+-  status "session $name start (image $image, shape $shape, session $sess, rounds $ROUNDS)"
+-  "$W/archv2-gate" -image "$image" -shape "$shape" -session "$sess" -rounds "$ROUNDS" \
+-    -out "$OUT/results/$name" > "$OUT/results/$name.stdout" 2> "$OUT/results/$name.stderr"
+-  local rc=$?
+-  status "session $name exit $rc"
+-  upload
+-  sync; echo 3 > /proc/sys/vm/drop_caches
+-}
+-
 -session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1
 -session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2
 -session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
@@ -49,33 +136,19 @@ index 639525e5..4d1e4c13 100644
 -cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
 -Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
 -session the arm labels mean:
-+# Sessions for the staged-engine prototype. The A/A pairs for each engine come
-+# from the "ab" sessions themselves (v1-a/v1-b, or v2-main twice on the fanout
-+# image). Arm labels on the "fanout" image: v1-a and v1-b are arch-v2 on main,
-+# v2 is arch-v2 on the prototype; no v1 engine runs there.
-+cat > "$OUT/results/README-fanout-sessions.txt" <<NOTE
-+Sessions whose image is conduit-bench:fanout or conduit-bench:fanout-lat*:
-   v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
+-  v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
 -  v2         = arch-v2 on pr${FANOUT_PR} ${FANOUT_SHA}
 -No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
 -the PR's fan-out change against main, both on arch-v2.
-+  v2         = arch-v2 on the prototype ${FANOUT_SHA} (PR ${FANOUT_PR})
-+No v1 engine runs in these. Sessions on conduit-bench:main[-lat*] compare v1
-+and arch-v2 on main as usual. Rates from different sessions are not comparable.
- NOTE
+-NOTE
 -session 07-2x2-fanout conduit-bench:fanout 2x2 ab
-+session 05-1x1-ab-main conduit-bench:main 1x1 ab
-+session 09-1x1-proto conduit-bench:fanout 1x1 ab
-+session 06-2x2-ab-main conduit-bench:main 2x2 ab
-+session 10-2x2-proto conduit-bench:fanout 2x2 ab
-+session 08-4x4-ab-main conduit-bench:main 4x4 ab
-+session 11-4x4-proto conduit-bench:fanout 4x4 ab
-+session 12-1x1-srcbatch100-ab-main conduit-bench:main 1x1-srcbatch100 ab
-+session 13-1x1-srcbatch100-proto conduit-bench:fanout 1x1-srcbatch100 ab
-+session 14-1x1-lat1ms-ab-main conduit-bench:main-lat1ms 1x1 ab
-+session 15-1x1-lat1ms-proto conduit-bench:fanout-lat1ms 1x1 ab
-+session 16-1x1-lat10ms-ab-main conduit-bench:main-lat10ms 1x1 ab
-+session 17-1x1-lat10ms-proto conduit-bench:fanout-lat10ms 1x1 ab
++# Defines session() and runs the session list (budget-guarded, priority order).
++source "$KIT/scripts/aws_sessions.sh"
  
  finish
  SCRIPT
+ chmod 0755 /opt/archv2-bench.sh
+ 
+ # Run detached from cloud-init so its timeouts never apply to a multi-hour run.
+-systemd-run --unit=archv2-bench --description="archv2-gate early read" /opt/archv2-bench.sh
++systemd-run --unit=archv2-bench --description="staged-engine AWS read" /opt/archv2-bench.sh

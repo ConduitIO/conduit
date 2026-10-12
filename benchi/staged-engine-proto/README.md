@@ -68,22 +68,27 @@ python3 scripts/staged_session.py --shape 1x1 --main ... --proto ... --out out/l
 
 (`run_docker.sh` finds `shapes/` in this directory. Use `GOARCH=amd64` on an Intel host.)
 
-## AWS sessions (prepared, not run)
+## AWS sessions
 
-With `aws-userdata-staged.patch` applied, the launcher runs, on one c7i.4xlarge, after the same bootstrap as the
-earlier early read (these use the harness's own `ab` session, 5 rounds, 20 s warmup, 60 s window):
+**Early, non-gating read on a virtualized instance; not published.** Results of the run, when it exists, are in
+`results-aws/`.
 
-| session | image | shape | arms in the session |
-| --- | --- | --- | --- |
-| 05 | `conduit-bench:main` | 1x1 | v1, arch-v2 main, v1 |
-| 09 | `conduit-bench:fanout` | 1x1 | arch-v2 main, **prototype**, arch-v2 main |
-| 06 / 10 | main / fanout | 2x2 | same pairing |
-| 08 / 11 | main / fanout | 4x4 | same pairing |
-| 12 / 13 | main / fanout | 1x1-srcbatch100 | same pairing |
-| 14 / 15 | `main-lat1ms` / `fanout-lat1ms` | 1x1, ack latency 1 ms | same pairing |
-| 16 / 17 | `main-lat10ms` / `fanout-lat10ms` | 1x1, ack latency 10 ms | same pairing |
+`patches/aws-userdata-staged.patch` changes the #2956 launcher's `userdata.sh.tmpl` (apply it to `c6fb3d3e`). The
+instance, role, security group and bucket handling are the launcher's, unchanged. What changes is the session part:
 
-On the `fanout` images the harness's arm labels `v1-a`, `v1-b` mean arch-v2 on main (the A/A pair) and `v2` means the
-prototype; no v1 engine runs there. That is the mechanism the launcher already uses for the fan-out PR (#2946).
+- no Docker image builds and no `archv2-gate` harness run. The instance builds two static binaries (main, and the
+  prototype) with the two bench-only hooks applied to both trees (`patches/latency-injection.patch`,
+  `patches/stream-buffer.patch`; both are off unless an environment variable is set), records their SHA-256, and
+  runs `scripts/staged_session.py` (the local method, so AWS and local numbers are comparable in kind) through
+  `scripts/aws_sessions.sh`;
+- one session carries every arm, so every comparison has a same-session A/A pair: `v1` (main, classic engine),
+  `v2-main` (main, `--preview.pipeline-arch-v2`), `v2-proto` (prototype, same flag) and, where marked, `v2-altA`
+  (arch-v2 on main with the source `sdk.batch.size=100`, `delay=10ms`: Alternative A), each twice per round in a
+  palindrome with the leading arm rotated;
+- the launcher's `-harness-pr/-harness-sha` are reused to name the commit that holds this directory's scripts (the
+  prototype engine is built from `-fanout-sha`; the two differ by `benchi/` files only);
+- sessions run in priority order and a session that cannot finish inside the budget (`BUDGET_MIN`, default 345 of the
+  360 minute cap) is skipped, not cut off. A hung arm is bounded: `run_docker.sh` SIGKILLs an engine that ignores
+  SIGINT after 30 s and the run is recorded with a zero rate, and `staged_session.py` flags it as HANG in the summary.
 
-The exact command is in the PR description.
+The exact command is in the PR description. The shapes and env for each session are in `scripts/aws_sessions.sh`.
