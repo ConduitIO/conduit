@@ -41,23 +41,20 @@
 // tests. A dedicated compose file (its own Postgres, on its own port) keeps
 // this workstream's infra changes fully isolated.
 //
-// # The MinIO virtual-hosted-addressing assumption
+// # How the s3 destination reaches MinIO
 //
-// conduit-connector-s3's destination builds its client via plain
-// s3.NewFromConfig(awsConfig) (destination/writer/s3.go) — no
-// UsePathStyle override hook exists, so once AWS_ENDPOINT_URL points it at
-// MinIO, it addresses the bucket via virtual-hosted style
-// (https://<bucket>.<endpoint-host>), not path style. This test's bucket
-// name is DNS-safe and the endpoint host is "localhost:9110", so the
-// request host becomes "<bucket>.localhost:9110" — resolving that requires
-// "*.localhost" to resolve to 127.0.0.1, which is RFC 6761 behavior most
-// modern resolvers (glibc/systemd-resolved on Linux, including GitHub
-// Actions' ubuntu-latest runners) implement, and which is the same trick
-// localstack's own docs recommend for testing virtual-hosted S3 addressing
-// without a wildcard DNS server. This test's own setup/verification calls
-// use an explicitly path-style client instead (full control, no such
-// dependency) — only the CONNECTOR's traffic (inside the real engine this
-// test drives) relies on the assumption.
+// The postgres-s3 template ships two commented-out settings for
+// S3-compatible stores, aws.endpoint and aws.pathStyle (conduit-connector-s3
+// v0.9.4+, the fix for ConduitIO/conduit-connector-s3#963). The test
+// uncomments them exactly as the template's README tells a user to, pointing
+// aws.endpoint at this compose file's MinIO. The connector's traffic is
+// therefore configured only through the pipeline file: AWS_ENDPOINT_URL is
+// cleared for the test, because the AWS SDK reads it on its own and would
+// point the client at MinIO even if the aws.endpoint plumbing were broken.
+// MinIO runs without MINIO_DOMAIN, so it does not accept virtual-hosted
+// requests: without aws.pathStyle the destination's writes fail, which is
+// the #963 failure this test now guards against. This test's own
+// setup/verification calls use a separate path-style client.
 package pipelines_test
 
 import (
@@ -131,6 +128,72 @@ func patchPostgresSourceURL(t *testing.T, edited, dsn string) string {
 	return edited
 }
 
+// resetPostgresReplicationState drops the replication slots and
+// publications an earlier test left in the shared templates-postgres
+// database. Both tests here run the postgres source with logical
+// replication and the connector's default slot and publication names, and
+// both recreate my_table. A publication left over from the previous test
+// still exists but no longer covers the new my_table (DROP TABLE removed it),
+// so the connector reuses it and never sees a change. That is what made
+// postgres-cdc-kafka fail after postgres-s3 when both run in one `go test`
+// invocation (`make test-integration-templates`); CI runs each template in its
+// own job on fresh infra and never hit it.
+//
+// The previous test's engine may still be releasing its replication
+// connection, so this waits for the slots to go inactive before dropping
+// them.
+func resetPostgresReplicationState(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		var active int
+		if err := conn.QueryRow(ctx,
+			"SELECT count(*) FROM pg_replication_slots WHERE active AND database = current_database()",
+		).Scan(&active); err != nil {
+			t.Fatalf("count active replication slots: %v", err)
+		}
+		if active == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d replication slot(s) still active in templates-postgres; is another Conduit using it?", active)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if _, err := conn.Exec(ctx,
+		"SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE database = current_database()",
+	); err != nil {
+		t.Fatalf("drop leftover replication slots: %v", err)
+	}
+	rows, err := conn.Query(ctx, "SELECT pubname FROM pg_publication")
+	if err != nil {
+		t.Fatalf("list publications: %v", err)
+	}
+	pubs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("read publications: %v", err)
+	}
+	for _, pub := range pubs {
+		if _, err := conn.Exec(ctx, "DROP PUBLICATION IF EXISTS "+pgx.Identifier{pub}.Sanitize()); err != nil {
+			t.Fatalf("drop leftover publication %q: %v", pub, err)
+		}
+	}
+}
+
+// uncommentTemplateSetting replaces the commented-out template line
+// commented with setting, failing the test unless commented occurs exactly
+// once. The count check catches the template's optional settings being
+// renamed or removed, which would otherwise leave the test silently running
+// without them.
+func uncommentTemplateSetting(t *testing.T, edited, commented, setting string) string {
+	t.Helper()
+	if n := strings.Count(edited, commented); n != 1 {
+		t.Fatalf("expected exactly one %q line in the scaffolded template, found %d — "+
+			"template YAML shape changed, update this test's patching logic", commented, n)
+	}
+	return strings.Replace(edited, commented, setting, 1)
+}
+
 // pathStyleS3Client returns an S3 client this TEST fully controls (path
 // style, talking directly to MinIO) for setup (bucket creation) and
 // verification — deliberately separate from whatever client the pipeline's
@@ -165,12 +228,6 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping infra-backed template end-to-end test in -short mode")
 	}
-	// Blocked by conduit-connector-s3#963: aws-sdk-go-v2's default request
-	// checksum (aws-chunked/CRC32 trailer) is rejected by MinIO with a
-	// MalformedXML 400, and the env-var workaround does not reach the spawned
-	// connector subprocess. The postgres-s3 template itself is valid and works
-	// against real AWS S3 (see README). Re-enable when #963 is fixed.
-	t.Skip("postgres-s3 E2E blocked by conduit-connector-s3#963 (aws-sdk-go-v2 checksum incompatible with MinIO); template works against real AWS S3")
 	is := is.New(t)
 	ctx := context.Background()
 
@@ -181,6 +238,7 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 
+	resetPostgresReplicationState(t, ctx, conn)
 	_, err = conn.Exec(ctx, "DROP TABLE IF EXISTS my_table")
 	is.NoErr(err)
 	_, err = conn.Exec(ctx, "CREATE TABLE my_table (id INT PRIMARY KEY, name TEXT NOT NULL)")
@@ -191,7 +249,10 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	}
 
 	// --- create the destination bucket (path-style, this test's own client) ---
-	bucket := "conduit-templates-e2e-postgres-s3"
+	// A fresh bucket per run: MinIO keeps its data while the compose stack
+	// is up, so a fixed name would let objects from an earlier passing run
+	// satisfy the assertions below even if this run's writes all failed.
+	bucket := "conduit-templates-e2e-postgres-s3-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	s3Client := pathStyleS3Client(t)
 	_, err = s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
 	if err != nil && !strings.Contains(err.Error(), "BucketAlreadyOwnedByYou") && !strings.Contains(err.Error(), "BucketAlreadyExists") {
@@ -211,38 +272,15 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	edited = strings.Replace(edited, "your-access-key-id", templatesE2EMinioKey, 1)
 	edited = strings.Replace(edited, "your-secret-access-key", templatesE2EMinioSecret, 1)
 	edited = strings.Replace(edited, "your-bucket-name", bucket, 1)
+	edited = uncommentTemplateSetting(t, edited, "# aws.endpoint: http://localhost:9000", "aws.endpoint: "+templatesE2EMinioURL)
+	edited = uncommentTemplateSetting(t, edited, "# aws.pathStyle: true", "aws.pathStyle: true")
 	is.True(edited != string(original))
 	is.NoErr(os.WriteFile(pipelinePath, []byte(edited), 0o600))
 
-	// --- point the s3 destination's AWS client at MinIO ---
-	// See this file's doc comment for the virtual-hosted-addressing
-	// assumption this relies on.
-	is.NoErr(os.Setenv("AWS_ENDPOINT_URL", templatesE2EMinioURL))
-	defer os.Unsetenv("AWS_ENDPOINT_URL")
-
-	// --- disable aws-sdk-go-v2's default flexible-checksum trailer ---
-	// conduit-connector-s3's writer builds its client via plain
-	// config.LoadDefaultConfig + s3.NewFromConfig (destination/writer/s3.go)
-	// with no override for checksum behavior. Since aws-sdk-go-v2 v1.30 /
-	// config v1.27 (2024), the DEFAULT RequestChecksumCalculation is
-	// "when_supported": PutObject unconditionally computes a trailing CRC32
-	// checksum and sends the body with aws-chunked transfer encoding, a
-	// framing that this compose file's MinIO image cannot
-	// parse — MinIO responds 400 "MalformedXML: The XML you provided was
-	// not well-formed", the destination nacks, and no object ever lands
-	// (reproduced in CI: this test was failing with exactly that PutObject
-	// error before this change, even though the postgres source side —
-	// same connect/patch logic as postgres-cdc-kafka's already-green test —
-	// worked correctly). config.LoadDefaultConfig resolves
-	// RequestChecksumCalculation from the AWS_REQUEST_CHECKSUM_CALCULATION
-	// env var (env_config.go's setRequestChecksumCalculationFromEnvVal), so
-	// setting it (and its response-side counterpart) to "when_required"
-	// here reaches the connector's client the same way AWS_ENDPOINT_URL
-	// does above, without needing a code change in conduit-connector-s3.
-	is.NoErr(os.Setenv("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"))
-	defer os.Unsetenv("AWS_REQUEST_CHECKSUM_CALCULATION")
-	is.NoErr(os.Setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))
-	defer os.Unsetenv("AWS_RESPONSE_CHECKSUM_VALIDATION")
+	// --- make sure only the pipeline config can point the connector at MinIO ---
+	// The AWS SDK honors AWS_ENDPOINT_URL by itself; if it were set, the
+	// destination would reach MinIO even with aws.endpoint ignored.
+	t.Setenv("AWS_ENDPOINT_URL", "")
 
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = filepath.Join(tmp, "conduit.db")
@@ -324,6 +362,7 @@ func TestTemplateGalleryE2E_Integration_PostgresCDCKafka(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 
+	resetPostgresReplicationState(t, ctx, conn)
 	_, err = conn.Exec(ctx, "DROP TABLE IF EXISTS my_table")
 	is.NoErr(err)
 	_, err = conn.Exec(ctx, "CREATE TABLE my_table (id INT PRIMARY KEY, name TEXT NOT NULL)")
