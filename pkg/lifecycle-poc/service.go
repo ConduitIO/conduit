@@ -503,6 +503,12 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 		}
 	}()
 
+	// #2979: refuse before anything is built or opened, so a refused start reads
+	// nothing from the source and acks nothing (invariants 1 and 3).
+	if err := s.checkDestinationBatching(ctx, pl); err != nil {
+		return err
+	}
+
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building tasks")
 

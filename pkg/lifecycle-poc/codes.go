@@ -57,3 +57,28 @@ var (
 	// simply replays on the pipeline's next start (invariant 3).
 	CodePartialGracefulStopEscalated = conduiterr.Register("lifecycle_v2.partial_graceful_stop_escalated", codes.Aborted)
 )
+
+// CodeArchV2DestinationBatchingUnsupported is returned by Start when a
+// pipeline would run on the preview pipeline architecture v2
+// (--preview.pipeline-arch-v2) and a destination connector, or the
+// dead-letter-queue connector, sets sdk.batch.size above 1 (#2979).
+//
+// The v2 destination task writes a batch and then waits for every ack of it
+// before the next read. With sdk.batch.size > 1 the SDK destination only
+// enqueues on Write and acks when the batch flushes: when it fills, or
+// sdk.batch.delay after its first record. With the default sdk.batch.delay of 0
+// it never flushes by time, so a partial batch is never acked and the pipeline
+// stops delivering while still reporting Running. With a delay it delivers, but
+// one flush per write (measured: 83 rec/s against 56.7k rec/s on the default
+// engine). The classic engine reads acks on their own goroutine and is not
+// affected.
+//
+// Refusing at Start turns a silent liveness failure into an actionable error.
+// It fires before any connector is opened, so nothing is read and nothing is
+// acked (invariants 1 and 3). The defaults (sdk.batch.size 0) and 1 are
+// accepted, as are values that do not parse as an integer, which are left to
+// the plugin's own config validation. Remove sdk.batch.size (and
+// sdk.batch.delay) from the destination, or run without
+// --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See
+// docs/operations/archv2-destination-batching.md.
+var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)
