@@ -36,6 +36,11 @@ class ProvenanceTest(unittest.TestCase):
     def test_new_response_silences_warning(self):
         self.assertEqual(c.analyze({T, c.GOLDEN}, {T: None}, {T: doc()}), ([], False))
 
+    def test_non_yaml_files_are_ignored(self):
+        # README.md under transcripts/ is not a transcript and must not be parsed.
+        readme = c.TRANSCRIPTS + "README.md"
+        self.assertEqual(c.analyze({readme}, {}, {}), ([], False))
+
 
 if __name__ == "__main__":
     unittest.main()

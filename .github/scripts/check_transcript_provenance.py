@@ -62,8 +62,9 @@ def main(base):
     changed = set(subprocess.check_output(
         ["git", "diff", "--name-only", f"{base}...HEAD", "--", "cmd/conduit/internal/generate/testdata"],
         text=True).split())
-    base_docs = {p: show(base, p) for p in changed if p.startswith(TRANSCRIPTS)}
-    head_docs = {p: show("HEAD", p) for p in changed if p.startswith(TRANSCRIPTS)}
+    parsed = [p for p in changed if p.startswith(TRANSCRIPTS) and p.endswith(".yaml")]
+    base_docs = {p: show(base, p) for p in parsed}
+    head_docs = {p: show("HEAD", p) for p in parsed}
     failures, warn = analyze(changed, base_docs, head_docs)
     for f in failures:
         print(f"::error title=generate-eval transcript hash-only edit::{f}")
