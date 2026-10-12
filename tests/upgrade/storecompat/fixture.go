@@ -102,7 +102,7 @@ func ReadManifest(dir string) (Manifest, error) {
 // IDs and plugin names shared by several fixture instances.
 const (
 	pipelineID    = "compat-pipeline"
-	sourceID      = pipelineID + ":source"
+	SourceID      = pipelineID + ":source"
 	destinationID = pipelineID + ":destination"
 	processorID   = pipelineID + ":proc"
 	filePlugin    = "builtin:file"
@@ -115,8 +115,8 @@ var fixtureTime = time.Date(2026, 10, 8, 9, 30, 0, 0, time.UTC)
 // and non-UTF-8 bytes so that a storage layer that treats values as text
 // would corrupt them visibly.
 var (
-	sourcePosition      = opencdc.Position("lsn:0/16B3748\x00\xff\xfe-offset-41")
-	resumedPosition     = opencdc.Position("lsn:0/16B3790\x00\xff\xfe-offset-42")
+	SourcePosition      = opencdc.Position("lsn:0/16B3748\x00\xff\xfe-offset-41")
+	ResumedPosition     = opencdc.Position("lsn:0/16B3790\x00\xff\xfe-offset-42")
 	destinationPosition = opencdc.Position("lsn:0/16B3700\x00\xff-offset-40")
 )
 
@@ -136,7 +136,7 @@ func expectedPipelines() map[string]*pipeline.Instance {
 			WindowSize:          4,
 			WindowNackThreshold: 2,
 		},
-		ConnectorIDs: []string{sourceID, destinationID},
+		ConnectorIDs: []string{SourceID, destinationID},
 		ProcessorIDs: []string{processorID},
 	}
 	running.SetStatus(pipeline.StatusSystemStopped)
@@ -160,11 +160,11 @@ func expectedPipelines() map[string]*pipeline.Instance {
 	return map[string]*pipeline.Instance{running.ID: running, degraded.ID: degraded}
 }
 
-func expectedConnectors(srcPos opencdc.Position) map[string]*connector.Instance {
+func ExpectedConnectors(srcPos opencdc.Position) map[string]*connector.Instance {
 	srcCfg := connector.Config{Name: "source", Settings: map[string]string{pathSetting: "/data/in"}}
 	dstCfg := connector.Config{Name: "destination", Settings: map[string]string{pathSetting: "/data/out"}}
 	src := &connector.Instance{
-		ID:               sourceID,
+		ID:               SourceID,
 		Type:             connector.TypeSource,
 		Config:           srcCfg,
 		PipelineID:       pipelineID,
@@ -182,7 +182,7 @@ func expectedConnectors(srcPos opencdc.Position) map[string]*connector.Instance 
 		PipelineID: pipelineID,
 		Plugin:     filePlugin,
 		State: connector.DestinationState{Positions: map[string]opencdc.Position{
-			sourceID: destinationPosition,
+			SourceID: destinationPosition,
 		}},
 		ProvisionedBy:    connector.ProvisionTypeConfig,
 		CreatedAt:        fixtureTime,
@@ -227,12 +227,12 @@ func WriteFixture(ctx context.Context, db database.DB) error {
 			return cerrors.Errorf("processor %q: %w", id, err)
 		}
 	}
-	return persistConnectors(ctx, db, logger, expectedConnectors(sourcePosition))
+	return PersistConnectors(ctx, db, logger, ExpectedConnectors(SourcePosition))
 }
 
-// persistConnectors writes conns through a Persister and waits until the
+// PersistConnectors writes conns through a Persister and waits until the
 // flush has committed.
-func persistConnectors(ctx context.Context, db database.DB, logger log.CtxLogger, conns map[string]*connector.Instance) error {
+func PersistConnectors(ctx context.Context, db database.DB, logger log.CtxLogger, conns map[string]*connector.Instance) error {
 	p := connector.NewPersister(logger, db, time.Hour, len(conns)+1)
 	p.ConnectorStarted()
 	errs := make(chan error, len(conns))

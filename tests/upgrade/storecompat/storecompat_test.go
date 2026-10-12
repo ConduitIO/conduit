@@ -16,21 +16,14 @@ package storecompat
 
 import (
 	"context"
-	"io/fs"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/badger"
 	"github.com/conduitio/conduit-commons/database/sqlite"
-	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -80,106 +73,24 @@ func TestStoreCompat_OldFixtureReopensAndResumes(t *testing.T) {
 				t.Fatalf("fixture %s was written by %s %s, want %s; regenerate it with the old library pinned (see internal/gen)",
 					f.dir, f.module, got, f.writtenBy)
 			}
-			t.Logf("fixture written by %s %s, reading with %s", f.module, f.writtenBy, selectedVersion(ctx, f.module))
+			t.Logf("fixture written by %s %s, reading with %s", f.module, f.writtenBy, GoListVersion(ctx, f.module))
 
-			dir := copyFixture(t, f.dir)
+			dir := CopyFixture(t, f.dir)
 
 			db, err := f.open(ctx, dir)
 			is.NoErr(err)
-			assertState(t, ctx, db, sourcePosition)
+			AssertState(t, ctx, db, SourcePosition)
 
 			// Resume: persist the next position through the runtime's path.
-			conns := expectedConnectors(resumedPosition)
-			src := conns[sourceID]
-			is.NoErr(persistConnectors(ctx, db, log.Nop(), map[string]*connector.Instance{src.ID: src}))
+			conns := ExpectedConnectors(ResumedPosition)
+			src := conns[SourceID]
+			is.NoErr(PersistConnectors(ctx, db, log.Nop(), map[string]*connector.Instance{src.ID: src}))
 			is.NoErr(db.Close())
 
 			db, err = f.open(ctx, dir)
 			is.NoErr(err)
 			t.Cleanup(func() { _ = db.Close() })
-			assertState(t, ctx, db, resumedPosition)
+			AssertState(t, ctx, db, ResumedPosition)
 		})
 	}
-}
-
-// assertState checks that db holds exactly the fixture state, with srcPos
-// as the source connector's position.
-func assertState(t *testing.T, ctx context.Context, db database.DB, srcPos opencdc.Position) {
-	t.Helper()
-	is := is.New(t)
-
-	pipelines, err := pipeline.NewStore(db).GetAll(ctx)
-	is.NoErr(err)
-	is.Equal(len(pipelines), len(expectedPipelines()))
-	for id, want := range expectedPipelines() {
-		got, ok := pipelines[id]
-		if !ok {
-			t.Fatalf("pipeline %q missing after reopen", id)
-		}
-		is.Equal(got.GetStatus(), want.GetStatus())
-		is.Equal(got, want)
-	}
-
-	connectors, err := connector.NewStore(db, log.Nop()).GetAll(ctx)
-	is.NoErr(err)
-	wantConns := expectedConnectors(srcPos)
-	is.Equal(len(connectors), len(wantConns))
-	for id, want := range wantConns {
-		got, ok := connectors[id]
-		if !ok {
-			t.Fatalf("connector %q missing after reopen", id)
-		}
-		is.Equal(got, want)
-	}
-
-	processors, err := processor.NewStore(db).GetAll(ctx)
-	is.NoErr(err)
-	is.Equal(len(processors), len(expectedProcessors()))
-	for id, want := range expectedProcessors() {
-		got, ok := processors[id]
-		if !ok {
-			t.Fatalf("processor %q missing after reopen", id)
-		}
-		is.Equal(got, want)
-	}
-}
-
-// selectedVersion reports the version of module this build selects, for
-// the test log only. Test binaries carry no dependency build info, so ask
-// the go command; an error is reported in place of the version.
-func selectedVersion(ctx context.Context, module string) string {
-	out, err := exec.CommandContext(ctx, "go", "list", "-m", "-f", "{{if .Replace}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}", module).Output()
-	if err != nil {
-		return "unknown (" + err.Error() + ")"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// copyFixture copies a fixture directory into a temp dir so the committed
-// files are never opened for writing.
-func copyFixture(t *testing.T, src string) string {
-	t.Helper()
-	dst := t.TempDir()
-	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, b, 0o600)
-	})
-	if err != nil {
-		t.Fatalf("copy fixture %s: %v", src, err)
-	}
-	return dst
 }
