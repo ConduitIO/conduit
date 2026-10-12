@@ -73,9 +73,15 @@ moved a request's verdict; regenerate the golden in the same PR if the change is
 Transcripts record the hash of the system prompt they were captured under. If it differs from the
 current prompt, replay **fails** with "prompt changed; re-capture with ...": replaying output
 recorded under another prompt proves nothing about this one. Re-capture the transcripts
-(`generate-capture.yml`) and regenerate the golden in the same PR as any prompt change. A PR that
-changes `replay_expected.json` without touching the transcripts gets a warning annotation and a
-job-summary note, because that is how a score could move with no model output behind it.
+(`generate-capture.yml`) and regenerate the golden in the same PR as any prompt change.
+
+The transcripts are **self-attested**: nothing cryptographically ties a committed completion to a real
+provider call, so human review of transcript diffs is the control. The PR job makes the cheap bypasses
+loud (`.github/scripts/check_transcript_provenance.py`). It fails a PR that changes a transcript's
+recorded `systemPromptSHA256` without changing its recorded responses, because a real re-capture
+always produces new responses. It warns when `replay_expected.json` changed and no transcript's
+responses did; touching only the manifest or hash fields does not silence that warning. Tying the
+manifest to a `generate-capture.yml` run ID is a follow-up.
 
 **Live, weekly** (`generate-eval (live)`, Mondays 06:00 UTC, also manually dispatchable). The
 corpus runs against the live Anthropic model, three passes, and the job publishes medians,

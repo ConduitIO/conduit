@@ -52,18 +52,28 @@ name: generate-eval
 # (generate-capture.yml) and regenerate the golden in the SAME PR as any
 # prompt change, or builtin spec change that reaches the prompt.
 #
-# # Golden changes are made visible
+# # The fixtures are self-attested
 #
-# The "Flag golden changes without re-capture" step annotates a PR that
-# changes testdata/replay_expected.json without touching the transcripts or
-# manifest. That is legitimate when a code change moves verdicts, but it is
-# also how a score could be edited upward with nothing recorded behind it, so
-# the job summary and a warning put it in front of the reviewer. It is a
-# warning, not a failure: a failure would block every honest verdict-moving
-# fix.
+# Nothing cryptographically ties a committed completion to a real provider
+# call: a PR can edit a transcript, the golden, or both. HUMAN REVIEW OF
+# TRANSCRIPT DIFFS IS THE CONTROL. The checks below only make the cheap ways
+# around it loud, and the script that runs them lives in the PR under review,
+# so a change to .github/scripts/ deserves the same scrutiny as a transcript.
+# "Model output" here means each turn's recorded completionText/tokensUsed.
+# The manifest and hash fields do not count.
 #
-# Not yet a required check: it is advisory until it has a clean soak on
-# main, then the branch-protection toggle is a maintainer action.
+#  - FAIL: a transcript's systemPromptSHA256 changed but its recorded
+#    responses did not. A real re-capture always produces new responses, so
+#    a hash-only edit exists only to get past the prompt-drift gate.
+#  - WARN: replay_expected.json changed and no transcript's responses did.
+#    Legitimate when a code change moves verdicts; also how a score could be
+#    edited upward with nothing recorded behind it. A warning, not a failure,
+#    because a failure would block every honest verdict-moving fix. Touching
+#    only manifest.yaml does not silence it.
+#
+# Follow-up, not done here: have generate-capture.yml record its run ID in
+# the manifest and verify the run exists through the API with a read-only
+# token. That would turn "self-attested" into "attested by a workflow run".
 
 on:
   pull_request:
@@ -96,28 +106,14 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Flag golden changes without re-capture
+      - name: Check transcript provenance and flag golden changes
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          d=cmd/conduit/internal/generate/testdata
-          changed=$(git diff --name-only "$BASE_SHA"...HEAD -- "$d")
-          if grep -qx "$d/replay_expected.json" <<<"$changed" && \
-             ! grep -qE "^$d/transcripts/" <<<"$changed"; then
-            msg="replay_expected.json changed but no transcript or manifest did: verdicts moved with no new model output behind them. Confirm a code change explains every moved request."
-            echo "::warning title=generate-eval golden changed without re-capture::$msg"
-            {
-              echo "## Golden changed without re-capture"
-              echo
-              echo "$msg"
-              echo
-              echo '```diff'
-              git diff "$BASE_SHA"...HEAD --stat -- "$d/replay_expected.json"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+          python3 .github/scripts/test_check_transcript_provenance.py
+          python3 .github/scripts/check_transcript_provenance.py "$BASE_SHA"
 
       - name: Build the replay test binary
         run: |
