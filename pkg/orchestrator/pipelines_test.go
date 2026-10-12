@@ -134,7 +134,8 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, true).AnyTimes()
 	plsMock.EXPECT().
 		Update(gomock.AssignableToTypeOf(ctxType), plBefore.ID, newConfig).
 		Return(want, nil)
@@ -164,7 +165,8 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, false).AnyTimes()
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
 	is.Equal(got, nil)
@@ -216,7 +218,8 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, true).AnyTimes()
 	plsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(nil)
@@ -242,7 +245,8 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, false).AnyTimes()
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
@@ -290,7 +294,8 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, true).AnyTimes()
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, ErrPipelineHasProcessorsAttached)) // sentinel still in the chain
@@ -317,7 +322,8 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, true).AnyTimes()
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	is.True(cerrors.Is(err, ErrPipelineHasConnectorsAttached)) // sentinel still in the chain
@@ -350,6 +356,7 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -398,6 +405,7 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, false).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -447,6 +455,7 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -493,7 +502,8 @@ func TestPipelineOrchestrator_Delete_StatusRunningNoRun(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
-	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false)
+	lifecycleMock.EXPECT().IsActive(plBefore.ID).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(plBefore.ID).Return(func() {}, true).AnyTimes()
 	plsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(nil)

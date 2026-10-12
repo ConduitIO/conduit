@@ -138,4 +138,49 @@ type LifecycleService interface {
 	// IsActive reports whether the pipeline has a run that is starting,
 	// live, or waiting out a recovery backoff, regardless of its status.
 	IsActive(pipelineID string) bool
+	// TryLockForMutation atomically checks that the pipeline has no run (the
+	// IsActive test) and, if so, refuses every Start of it until unlock is
+	// called, so a run cannot be admitted between the check and a config
+	// write (#2961). It reports false, holding nothing, when the pipeline has
+	// a run. unlock is idempotent. Hold it only across store writes.
+	TryLockForMutation(pipelineID string) (unlock func(), ok bool)
+}
+
+// mutationMark holds the lifecycle's mutation mark for one orchestrator call
+// (#2961). Declare it BEFORE the call's rollback.R and defer release before
+// r.MustExecute, so deferred calls run rollback first and release the mark
+// last: the compensating writes of a failed call are still config writes and
+// must stay excluded from Start.
+//
+// Lock ordering: the mark is a counter under the lifecycle's publishMu, not a
+// mutex the orchestrator holds. publishMu is taken only inside
+// TryLockForMutation/unlock, as a leaf; the orchestrator takes no other lock
+// of its own, and never calls the lifecycle (Start, Stop, StopAndWait) while
+// marked. So there is no orchestrator-to-lifecycle lock cycle to form.
+type mutationMark struct {
+	unlock func()
+}
+
+// acquire marks pipelineID as being mutated, or returns the pipeline-running
+// error msg describes when the pipeline has a run. A second acquire on the
+// same mark is a programming error and keeps the first.
+func (m *mutationMark) acquire(l LifecycleService, pipelineID, msg string) error {
+	if m.unlock != nil {
+		return nil
+	}
+	unlock, ok := l.TryLockForMutation(pipelineID)
+	if !ok {
+		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
+		// wrapped, ConduitError adds the code.
+		return pipelineRunningErr(msg)
+	}
+	m.unlock = unlock
+	return nil
+}
+
+func (m *mutationMark) release() {
+	if m.unlock != nil {
+		m.unlock()
+		m.unlock = nil
+	}
 }

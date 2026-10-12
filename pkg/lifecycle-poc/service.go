@@ -140,6 +140,20 @@ type Service struct {
 	// admission.go.
 	starting map[string]*reservation
 
+	// mutating counts the orchestrator calls that are writing a pipeline's
+	// config, per pipeline ID. Guarded by publishMu. reserve refuses a Start
+	// while an entry exists; TryLockForMutation refuses to add one while a
+	// run does.
+	//
+	// Lock ordering (#2961): the only order that exists is statusLock ->
+	// publishMu (fencing.go). TryLockForMutation and its unlock take publishMu
+	// alone and call nothing while holding it. The orchestrator holds no mutex
+	// of its own across a config write: what it holds is this counter, which
+	// is data under publishMu, not a lock a Start can block on. Start never
+	// waits for a mutation (it is refused), so no wait-for edge runs from the
+	// lifecycle to the orchestrator and a cycle cannot form.
+	mutating map[string]int
+
 	// testAtReservation, if set, is called by reserve before it takes
 	// publishMu. testAfterBackoffWait, if set, is called by StartWithBackoff
 	// once the backoff wait is over, before the restart reserves. They let a

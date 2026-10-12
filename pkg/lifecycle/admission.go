@@ -16,6 +16,7 @@ package lifecycle
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -115,6 +116,56 @@ func errPipelineRunning(pipelineID string) error {
 	return err
 }
 
+func errPipelineConfigChanging(pipelineID string) error {
+	err := conduiterr.Wrap(
+		pipeline.CodePipelineConfigChanging,
+		fmt.Sprintf("can't start pipeline %s: %s", pipelineID, pipeline.ErrPipelineConfigChanging),
+		pipeline.ErrPipelineConfigChanging,
+	)
+	err.Suggestion = "an update or delete of the pipeline, its connectors or its processors is being written; retry the start shortly"
+	return err
+}
+
+// TryLockForMutation is the orchestrator's half of the admission rule: it
+// atomically checks that pipelineID has no run (the IsActive test) and, if
+// so, marks the pipeline as being mutated until unlock is called. While the
+// mark is held, Start is refused with pipeline.config_changing, so a run can
+// never be built from, or published against, a config that is changing under
+// it (#2961). It reports false, holding nothing, when the pipeline has a run.
+//
+// Invariant 2: the check and the mark happen under publishMu, the same lock
+// reserve takes, so exactly one of "mutation" and "run" is admitted.
+//
+// The mark is a counter in a map guarded by publishMu, not a lock: the
+// caller holds no mutex a Start could block on, and concurrent mutations of
+// one pipeline do not exclude each other (the stores serialize them). unlock
+// is idempotent. Hold the mark only across store writes, never across plugin
+// validation or any node or worker operation.
+func (s *Service) TryLockForMutation(pipelineID string) (unlock func(), ok bool) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+	if _, active := s.starting[pipelineID]; active {
+		return nil, false
+	}
+	if _, active := s.runningPipelines.Get(pipelineID); active {
+		return nil, false
+	}
+	if s.mutating == nil {
+		s.mutating = make(map[string]int)
+	}
+	s.mutating[pipelineID]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.publishMu.Lock()
+			defer s.publishMu.Unlock()
+			if s.mutating[pipelineID]--; s.mutating[pipelineID] <= 0 {
+				delete(s.mutating, pipelineID)
+			}
+		})
+	}, true
+}
+
 // reserve admits a start of pipelineID. predecessor is nil for an external
 // Start and the backoff run for a recovery restart. It returns
 // errPipelineRunning if a run is starting or live, and errRecoverySuperseded
@@ -134,6 +185,12 @@ func (s *Service) reserve(pipelineID string, predecessor *runnablePipeline) (*re
 			return nil, errRecoverySuperseded
 		}
 		return nil, errPipelineRunning(pipelineID)
+	}
+	// #2961: a config write is in flight. TryLockForMutation only grants the
+	// mark while no run is registered, so a recovery restart (whose
+	// predecessor is registered) can never meet it.
+	if s.mutating[pipelineID] > 0 {
+		return nil, errPipelineConfigChanging(pipelineID)
 	}
 	cur, ok := s.runningPipelines.Get(pipelineID)
 	switch {

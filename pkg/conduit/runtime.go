@@ -347,6 +347,9 @@ type lifecycleService interface {
 	// orchestrator.LifecycleService: Delete and Update are admitted by run
 	// liveness, not by status (#2899 item 2).
 	IsActive(pipelineID string) bool
+	// TryLockForMutation is the other half of that interface: the orchestrator
+	// excludes Start while it writes config (#2961).
+	TryLockForMutation(pipelineID string) (unlock func(), ok bool)
 	Init(ctx context.Context) error
 }
 

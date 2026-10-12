@@ -36,6 +36,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -112,6 +113,7 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -158,6 +160,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -200,6 +203,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -264,6 +268,7 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -317,6 +322,7 @@ func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -379,6 +385,7 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -413,6 +420,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -463,6 +471,7 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -534,6 +543,7 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(true).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, false).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),
@@ -570,6 +580,7 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
 	lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).AnyTimes()
+	lifecycleMock.EXPECT().TryLockForMutation(gomock.Any()).Return(func() {}, true).AnyTimes()
 
 	pl := &pipeline.Instance{
 		ID: uuid.NewString(),

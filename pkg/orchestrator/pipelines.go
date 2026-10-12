@@ -27,12 +27,13 @@ import (
 type PipelineOrchestrator base
 
 func (po *PipelineOrchestrator) Start(ctx context.Context, id string) error {
-	// TODO lock pipeline
+	// Serialized against config writes by the lifecycle's admission, not by
+	// a lock held here: Start is refused (pipeline.config_changing) while a
+	// write is marked, and a write is refused while a run is admitted (#2961).
 	return po.lifecycle.Start(ctx, id)
 }
 
 func (po *PipelineOrchestrator) Stop(ctx context.Context, id string, force bool) error {
-	// TODO lock pipeline
 	return po.lifecycle.Stop(ctx, id, force)
 }
 
@@ -63,12 +64,12 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 	// live or waiting out a recovery backoff, whatever its status says
 	// (#2899 item 2). The status lags the run; a pending restart would run
 	// against the changed config.
-	// TODO lock pipeline: the check and the update are two steps, so a Start
-	// can still admit a run between them (#2961).
-	if po.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock, so no Start can slip a run in before the write lands.
+	var mark mutationMark
+	defer mark.release()
+	if err := mark.acquire(po.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
 	}
 	return po.pipelines.Update(ctx, pl.ID, cfg)
 }
@@ -88,12 +89,12 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	// live or waiting out a recovery backoff, whatever its status says
 	// (#2899 item 2). Deleting under a starting or recovering run left that
 	// run moving data for a pipeline that no longer exists.
-	// TODO lock pipeline: the check and the delete are two steps, so a Start
-	// can still admit a run between them (#2961).
-	if po.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the delete is written.
+	var mark mutationMark
+	defer mark.release()
+	if err := mark.acquire(po.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return err
 	}
 	if len(pl.ConnectorIDs) != 0 {
 		// Invariant: errors.Is(err, ErrPipelineHasConnectorsAttached) still holds —
@@ -123,7 +124,6 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		// sentinel wrapped, ConduitError adds the code.
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("pipeline %q cannot be updated", pl.ID))
 	}
-	// TODO lock pipeline
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
 	if po.lifecycle.IsActive(pl.ID) {
@@ -157,5 +157,12 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, err
 	}
 
+	// #2961: Validate may start a plugin process, so it runs before the mark;
+	// the IsActive test above is the early refusal, this the authoritative one.
+	var mark mutationMark
+	defer mark.release()
+	if err := mark.acquire(po.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
+	}
 	return po.pipelines.UpdateDLQ(ctx, id, dlq)
 }
