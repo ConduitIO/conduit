@@ -281,7 +281,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	is.NoErr(ls.WaitPipeline(pl.ID))
 }
 
-// TestServiceLifecycle_DestinationSDKBatching_NotRefused pins that the default
+// TestServiceLifecycle_DestinationSDKBatching_NotRefused is a pin, not a
+// regression test: it fails only if someone adds the arch-v2 refusal to this
+// engine. It pins that the default
 // (v1) engine keeps starting pipelines whose destination and DLQ set
 // sdk.batch.size > 1. Only the preview arch-v2 engine refuses them
 // (pipeline.archv2_destination_batching_unsupported, #2979): v1 reads
@@ -328,7 +330,9 @@ func TestServiceLifecycle_DestinationSDKBatching_NotRefused(t *testing.T) {
 		}, ps)
 
 	is.NoErr(ls.Start(ctx, pl.ID))
-	time.Sleep(100 * time.Millisecond)
+	// Poll until the source's last position is acked (all records delivered
+	// through the batching destination), instead of sleeping.
+	waitForSourceAcked(t, source, wantRecords)
 	is.Equal(pipeline.StatusRunning, pl.GetStatus())
 
 	is.NoErr(ls.Stop(ctx, pl.ID, false))

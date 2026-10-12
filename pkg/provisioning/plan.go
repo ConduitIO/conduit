@@ -379,6 +379,13 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 	return fresh, nil
 }
 
+// startConfigPreflighter is implemented by lifecycle services that refuse some
+// configs at Start (pkg/lifecycle-poc). ApplyPlanLive consults it before it
+// stops a running pipeline.
+type startConfigPreflighter interface {
+	PreflightPipelineConfig(cfg config.Pipeline) error
+}
+
 // transactionalImport wraps importPipeline in a single DB transaction, exactly
 // as provisionPipeline does (service.go). Without it, importPipeline's actions
 // each commit their own writes (and a single action can write more than once,
@@ -554,6 +561,18 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		}
 		fresh.AppliedMode = ApplyModeProvisioned
 		return fresh, nil
+	}
+
+	// Refuse a desired config the lifecycle service would refuse at Start, while
+	// the pipeline is still running and nothing is committed. Without this, the
+	// StopAndWait -> import -> Start sequence below would stop a healthy
+	// pipeline, commit the config, and only then be refused at Start, leaving the
+	// pipeline stopped (#2979: arch-v2 and destination sdk.batch.size). Optional
+	// interface: only the arch-v2 service has start-time config restrictions.
+	if pf, ok := s.lifecycleService.(startConfigPreflighter); ok {
+		if err := pf.PreflightPipelineConfig(desired); err != nil {
+			return fresh, err
+		}
 	}
 
 	// Live-eligible diff on a running pipeline: apply in place (swap the changed
