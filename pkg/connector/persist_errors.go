@@ -25,8 +25,8 @@ import (
 // Why it must not block: Persister runs every callback of a flush and closes
 // that flush's callbacksDone only once all of them have returned. A callback
 // stuck on an unbuffered errs channel nobody reads (after the node stopped
-// reading, during teardown, after a failed Open, or always under arch-v2,
-// #2929) holds callbacksDone open, and every unbounded
+// reading, during teardown, after a failed Open, or under arch-v2 once
+// funnel.Worker.WatchConnectorErrors has stopped, #2929) holds callbacksDone open, and every unbounded
 // Persister.WaitPendingWrites caller (lifecycle StopAndWait, Persister.Wait
 // at runtime shutdown) hangs with it (#2925).
 //
