@@ -63,8 +63,28 @@ jobs:
   # Dry run unless the repository variable GHCR_CLEANUP_APPLY is 'true' (for
   # the schedule) or the `cleanup-apply` input is set (manual run). Read the
   # dry-run plan in the job summary before turning it on.
+  #
+  # Ordering. `needs` runs this after the nightly tag is pushed, and the
+  # concurrency group stops two cleanups (schedule + manual) overlapping. It
+  # cannot wait for release.yml, which the tag push starts in a separate
+  # workflow run, and does not need to: a nightly built today is never
+  # expired, so the image being pushed is not in the delete set. What the
+  # script's live-tag recheck cannot see is an UNTAGGED manifest pushed after
+  # its snapshot, which matters only if a stable release is being pushed while
+  # a cleanup applies. Do not apply during a stable release.
+  #
+  # Rate limits. Apply deletes at most 400 versions per run (the first apply
+  # has ~2,200 to delete) and stops on a 403/429, so the backlog drains over
+  # several nights; see docs/releases.md.
   cleanup-nightly-images:
     name: Delete expired nightly images and their signatures
+    needs: trigger-nightly
+    # Run even if the tag push failed (e.g. a manual re-run, where the tag
+    # already exists); only a cancelled workflow skips the cleanup.
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: ghcr-nightly-cleanup
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,6 +92,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here pushes; do not leave a token in .git/config
 
       # The planner decides what gets deleted from a public registry. Its
       # tests run against a real tag list; if they fail, nothing is deleted.
@@ -97,7 +119,8 @@ jobs:
             echo "Mode: $([[ "$APPLY" == "true" ]] && echo apply || echo 'dry run')"
             echo
             echo '```'
-            grep -v '^  expire ' cleanup.log
+            # grep exits 1 when every line is filtered out; that must not skip `exit "$status"`
+            grep -v '^  expire ' cleanup.log || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

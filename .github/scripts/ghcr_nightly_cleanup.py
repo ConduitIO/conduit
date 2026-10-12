@@ -33,12 +33,26 @@ registry no longer has (404). That is what the old cleanup left behind.
 
 Apply mode re-checks every version's tags in the GitHub Packages API right
 before deleting it, so a tag added after the registry snapshot (a stable
-release retagging a digest mid-run) still protects it. Any failed delete
-makes the script exit 1; the old step logged 2,219 failed deletes and
-reported success.
+release retagging a digest mid-run) still protects it. That recheck sees only
+TAGGED versions: an untagged manifest that a release pushed after the snapshot
+is invisible to it. The workflow therefore runs the cleanup after the tag push
+and never concurrently with itself (see trigger-nightly.yml).
+
+Apply mode is bounded. It deletes whole images, at most --max-deletes versions per run (the
+first apply has ~2,200 to delete, and GITHUB_TOKEN is limited to roughly 1,000
+requests an hour), paces itself, and stops cleanly on a rate limit (403/429,
+X-RateLimit-Remaining, Retry-After), a permission 403 or repeated network
+errors; the backlog drains over several runs. Before deleting anything it
+refuses to act on a snapshot that looks truncated (see sanity_check). Any
+failed delete makes the script exit 1; the old step logged 2,219 failed
+deletes and reported success.
+
+Exit codes: 0 done, or stopped early by the delete cap or a rate limit after
+making progress; 1 failed deletes, permission or network trouble; 2 refused
+to act (unsafe plan, implausible snapshot, no token).
 
 Usage:
-  ghcr_nightly_cleanup.py --image ghcr.io/conduitio/conduit --keep-days 7 [--apply]
+  ghcr_nightly_cleanup.py --image ghcr.io/conduitio/conduit --keep-days 7 [--apply] [--max-deletes 400]
   ghcr_nightly_cleanup.py --snapshot-out snap.json   # save the registry state
   ghcr_nightly_cleanup.py --snapshot-in snap.json    # plan from saved state
 
@@ -55,6 +69,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -69,6 +84,20 @@ DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 # Tags that must never lose their image. A plan that would delete one is a
 # bug in the planner, not a decision, so it aborts instead of applying.
 STABLE_TAG = re.compile(r"^(latest|latest-nightly|v\d+(\.\d+){0,2})$")
+STABLE_RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
+# A snapshot with fewer tags than this is treated as truncated. The registry
+# holds ~570 today and the stable releases alone are far above this floor.
+MIN_TAGS = 50
+# Apply mode limits. GITHUB_TOKEN gets ~1,000 requests an hour, and GitHub's
+# secondary limit for content-changing requests (DELETE included) is documented
+# as 80 a minute and 500 an hour, hence a default cap of 400 and ~0.8 s pacing.
+DEFAULT_MAX_DELETES = 400
+DEFAULT_DELETE_INTERVAL = 0.8
+RATE_LIMIT_FLOOR = 25  # stop when X-RateLimit-Remaining falls to this
+MAX_CONSECUTIVE_NET_ERRORS = 3
+# The live tagged-version count may trail the snapshot a little (a push between
+# the two reads) but not by this much.
+LIVE_COVERAGE = 0.9
 
 MANIFEST_ACCEPT = ", ".join([
     "application/vnd.oci.image.index.v1+json",
@@ -84,6 +113,46 @@ INDEX_TYPES = {
 
 class PlanError(Exception):
     """The plan violates a safety property; nothing may be deleted."""
+
+
+def next_link(headers):
+    """The rel="next" target of an RFC 8288 Link header, or None."""
+    m = re.search(r"<([^>]+)>;\s*rel=\"next\"", headers.get("Link", "") or "")
+    return m.group(1) if m else None
+
+
+def sanity_check(snapshot):
+    """Refuse a snapshot that looks truncated or from the wrong image.
+
+    A partial tag list is the dangerous input: kept images missing from it are
+    not protected. Every real snapshot has `latest`, at least one stable
+    vX.Y.Z release and far more than MIN_TAGS tags.
+    """
+    tags = snapshot.get("tags", {})
+    problems = []
+    if "latest" not in tags:
+        problems.append("no `latest` tag")
+    if not any(STABLE_RELEASE_TAG.match(t) for t in tags):
+        problems.append("no stable vX.Y.Z tag")
+    if len(tags) < MIN_TAGS:
+        problems.append(f"only {len(tags)} tags (expected at least {MIN_TAGS})")
+    if problems:
+        raise PlanError("implausible registry snapshot, not trusting it: " + "; ".join(problems))
+
+
+def check_against_live(result, live):
+    """Cross-check the snapshot against the Packages API version list.
+
+    Every tagged digest in the snapshot is a package version, so the API must
+    list about as many tagged versions as the snapshot has tagged digests. A
+    snapshot far smaller than that is missing kept images.
+    """
+    tagged_live = sum(1 for _id, tags in live.values() if tags)
+    in_snapshot = len(result["tags_by_digest"])
+    if in_snapshot < LIVE_COVERAGE * tagged_live:
+        raise PlanError(
+            f"snapshot has {in_snapshot} tagged images but the Packages API lists "
+            f"{tagged_live} tagged versions; the snapshot looks truncated")
 
 
 def referrer_tags(digest):
@@ -176,6 +245,17 @@ def plan(snapshot, today, keep_days):
         if STABLE_TAG.match(tag) and digest in delete:
             raise PlanError(f"plan would delete {digest}, which {tag} points at")
 
+    # One group per image (or orphaned referrer tag): the root plus the rest
+    # of its closure that is being deleted. Apply deletes a group as a unit.
+    # Once an image's tagged root is gone, its untagged children cannot be
+    # found from the tag list any more, so a run that stopped between the root
+    # and its children would leak them permanently.
+    groups = []
+    for root in sorted(expired, key=lambda d: sorted(tags_by_digest[d])):
+        groups.append({"root": root, "members": sorted(closure(root) & delete)})
+    for tag in sorted(orphans):
+        groups.append({"root": tags[tag], "members": sorted(closure(tags[tag]) & delete)})
+
     return {
         "cutoff": cutoff,
         "expired": sorted(expired, key=lambda d: sorted(tags_by_digest[d])),
@@ -183,6 +263,7 @@ def plan(snapshot, today, keep_days):
         "delete": delete,
         "protected": protected,
         "tags_by_digest": tags_by_digest,
+        "groups": groups,
     }
 
 
@@ -211,8 +292,8 @@ class Registry:
                 out.extend(json.load(r).get("tags") or [])
                 link = r.headers.get("Link", "")
             # Link: </v2/<repo>/tags/list?last=...&n=1000>; rel="next"
-            m = re.search(r"<([^>]+)>;\s*rel=\"next\"", link)
-            path = "/tags/list?" + urllib.parse.urlparse(m.group(1)).query if m else None
+            nxt = next_link({"Link": link})
+            path = "/tags/list?" + urllib.parse.urlparse(nxt).query if nxt else None
         return out
 
     def manifest(self, ref):
@@ -291,13 +372,14 @@ class Packages:
                 for v in json.load(r):
                     out[v["name"]] = (v["id"], v["metadata"]["container"]["tags"])
                 link = r.headers.get("Link", "")
-            m = re.search(r"<([^>]+)>;\s*rel=\"next\"", link)
-            url = m.group(1) if m else None
+            url = next_link({"Link": link})
         return out
 
     def delete(self, version_id):
-        with self._req(f"{self.base}/versions/{version_id}", method="DELETE"):
-            pass
+        """Delete a version; return X-RateLimit-Remaining if the API sent it."""
+        with self._req(f"{self.base}/versions/{version_id}", method="DELETE") as r:
+            remaining = r.headers.get("X-RateLimit-Remaining")
+        return int(remaining) if remaining and remaining.isdigit() else None
 
 
 def deletable_now(version_tags, result):
@@ -324,33 +406,149 @@ def packages_for(image, token):
     return Packages(org, package, token)
 
 
-def apply(result, api, log):
-    """Delete the plan's manifests through `api`; return (deleted, skipped, failed)."""
+class Outcome:
+    """What an apply run did and why it stopped (stopped is None if it finished)."""
+
+    def __init__(self):
+        self.deleted = self.skipped = self.failed = self.net_errors = 0
+        self.unprocessed = 0
+        self.stopped = None  # max-deletes | rate-limit | forbidden | network
+
+    @property
+    def exit_code(self):
+        if self.failed or self.stopped in ("forbidden", "network"):
+            return 1
+        if self.stopped == "rate-limit" and not self.deleted:
+            return 1  # no progress at all: do not let a green run hide it
+        return 0
+
+    def summary(self):
+        text = (f"deleted {self.deleted}, skipped {self.skipped}, failed {self.failed}, "
+                f"network errors {self.net_errors}")
+        if self.stopped:
+            text += f"; stopped early ({self.stopped}), {self.unprocessed} planned versions left for the next run"
+        return text
+
+
+def rate_limited(err):
+    """True if an HTTPError is GitHub saying 'slow down' rather than 'no'."""
+    if err.code == 429:
+        return True
+    if err.code != 403:
+        return False
+    h = err.headers or {}
+    return h.get("X-RateLimit-Remaining") == "0" or h.get("Retry-After") is not None
+
+
+def _error_body(err):
+    try:
+        return err.fp.read()[:200] if err.fp else b""
+    except OSError:
+        return b""
+
+
+def apply(result, api, log, max_deletes=DEFAULT_MAX_DELETES,
+          interval=0.0, sleep=time.sleep):
+    """Delete the plan's manifests through `api`; return an Outcome.
+
+    Stops (without raising) at max_deletes, on a rate limit, on a permission
+    403, or after MAX_CONSECUTIVE_NET_ERRORS network errors in a row. The
+    remaining versions are picked up by the next run, which re-plans from a
+    fresh snapshot. Raises PlanError, before any delete, if the snapshot
+    disagrees with the Packages API.
+    """
     live = api.versions()
-    # Roots first, then referrer indexes, then the rest. If a run dies part
-    # way, a root deleted without its signature leaves an orphaned referrer
-    # tag, which the next run's orphan sweep deletes.
-    roots = set(result["expired"])
-    ref_indexes = {d for _tag, d in _referrer_digests(result)}
-    order = sorted(result["delete"], key=lambda d: (d not in roots, d not in ref_indexes, d))
-    deleted, skipped, failed = 0, 0, 0
-    for digest in order:
-        if digest not in live:
-            skipped += 1  # already gone
+    check_against_live(result, live)
+    out = Outcome()
+    # Decide which images are off limits before deleting anything. The live
+    # tags are the freshest view we have: an image whose root gained a tag
+    # since the snapshot (a stable release retagging a nightly) is skipped as
+    # a whole, children included, and so is everything it shares with others.
+    # This sees tagged versions only; see the module docstring.
+    held_back = set()
+    for g in result["groups"]:
+        if g["root"] in live and not deletable_now(live[g["root"]][1], result):
+            log(f"SKIP image {g['root']}: live tags {live[g['root']][1]} no longer match the plan")
+            held_back |= set(g["members"])
+    for g in result["groups"]:
+        for m in g["members"]:
+            if m in live and m not in held_back and not deletable_now(live[m][1], result):
+                log(f"SKIP {m}: live tags {live[m][1]} no longer match the plan")
+                held_back.add(m)
+    # Within an image: children and signatures first, the tagged root last. If
+    # the run dies mid-image the root is still tagged, so the next run plans
+    # the same image again and finishes it.
+    planned = set()
+    todo = []
+    for g in result["groups"]:
+        members = [m for m in g["members"] if m not in held_back and m not in planned]
+        members.sort(key=lambda m: (m == g["root"], m))
+        planned.update(members)
+        todo.append([m for m in members if m in live])
+    out.skipped = len(planned - set(live))  # already gone
+    out.skipped += len({m for g in result["groups"] for m in g["members"]} & held_back & set(live))
+    consecutive_net = 0
+    for gi, members in enumerate(todo):
+        if not members:
             continue
-        version_id, version_tags = live[digest]
-        if not deletable_now(version_tags, result):
-            log(f"SKIP {digest}: live tags {version_tags} no longer match the plan")
-            skipped += 1
-            continue
-        try:
-            api.delete(version_id)
-            deleted += 1
-        except urllib.error.HTTPError as e:
-            failed += 1
-            body = e.fp.read()[:200] if e.fp else b""
-            log(f"FAIL {digest} (version {version_id}): HTTP {e.code} {body!r}")
-    return deleted, skipped, failed
+        left = sum(len(g) for g in todo[gi:])
+        # Never split an image across runs; the first image always runs so a
+        # small --max-deletes cannot stall the drain.
+        if out.deleted and out.deleted + len(members) > max_deletes:
+            out.stopped, out.unprocessed = "max-deletes", left
+            log(f"reached --max-deletes {max_deletes}")
+            break
+        stop = False
+        for mi, digest in enumerate(members):
+            handled = mi + 1
+            version_id = live[digest][0]
+            try:
+                remaining = api.delete(version_id)
+            except urllib.error.HTTPError as e:
+                if rate_limited(e):
+                    out.stopped = "rate-limit"
+                    handled = mi  # this version was not deleted
+                    h = e.headers or {}
+                    log(f"rate limited at version {version_id}: HTTP {e.code}, "
+                        f"Retry-After={h.get('Retry-After')}, "
+                        f"X-RateLimit-Reset={h.get('X-RateLimit-Reset')}; stopping")
+                    stop = True
+                else:
+                    out.failed += 1
+                    body = _error_body(e)
+                    log(f"FAIL {digest} (version {version_id}): HTTP {e.code} {body!r}")
+                    # GitHub refuses to delete a public package version with
+                    # more than 5,000 downloads. That is per version, so it
+                    # must not stop the run.
+                    if e.code in (401, 403) and b"download" not in body.lower():
+                        # Every later delete would fail the same way.
+                        out.stopped = "forbidden"
+                        log("token lacks permission to delete package versions; stopping")
+                        stop = True
+                    consecutive_net = 0
+            except OSError as e:  # URLError, socket timeouts, resets
+                out.net_errors += 1
+                consecutive_net += 1
+                log(f"NETWORK {digest} (version {version_id}): {e!r}")
+                if consecutive_net >= MAX_CONSECUTIVE_NET_ERRORS:
+                    out.stopped = "network"
+                    log(f"{consecutive_net} network errors in a row; stopping")
+                    stop = True
+            else:
+                consecutive_net = 0
+                out.deleted += 1
+                if remaining is not None and remaining <= RATE_LIMIT_FLOOR:
+                    out.stopped = "rate-limit"
+                    log(f"X-RateLimit-Remaining is {remaining}; stopping before the limit")
+                    stop = True
+                elif interval:
+                    sleep(interval)
+            if stop:
+                out.unprocessed = left - handled
+                break
+        if stop:
+            break
+    return out
 
 
 def _referrer_digests(result):
@@ -375,7 +573,7 @@ def report(result, log):
         log(f"  delete signature/attestation tag {t}")
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     p.add_argument("--image", default="ghcr.io/conduitio/conduit")
     p.add_argument("--keep-days", type=int, default=7)
@@ -383,13 +581,26 @@ def main():
     p.add_argument("--snapshot-in")
     p.add_argument("--snapshot-out")
     p.add_argument("--apply", action="store_true", help="delete; default is a dry run")
-    args = p.parse_args()
+    p.add_argument("--max-deletes", type=int, default=DEFAULT_MAX_DELETES,
+                   help="delete at most this many versions per run (default %(default)s)")
+    p.add_argument("--delete-interval", type=float, default=DEFAULT_DELETE_INTERVAL,
+                   help="seconds between deletes (default %(default)s)")
+    args = p.parse_args(argv)
+    if args.max_deletes < 1:
+        p.error("--max-deletes must be at least 1")
 
-    if args.snapshot_in:
-        with open(args.snapshot_in) as f:
-            snap = json.load(f)
-    else:
-        snap = snapshot_registry(args.image)
+    def error(msg):
+        print(f"::error::{msg}", file=sys.stderr)
+
+    try:
+        if args.snapshot_in:
+            with open(args.snapshot_in) as f:
+                snap = json.load(f)
+        else:
+            snap = snapshot_registry(args.image)
+    except (OSError, RuntimeError, ValueError) as e:  # network, HTTP, bad JSON
+        error(f"could not read the registry, nothing deleted: {e!r}")
+        return 1
     if args.snapshot_out:
         with open(args.snapshot_out, "w") as f:
             json.dump(snap, f, indent=1, sort_keys=True)
@@ -398,9 +609,10 @@ def main():
              else datetime.datetime.now(datetime.timezone.utc).date())
     log = lambda s: print(s, flush=True)  # noqa: E731
     try:
+        sanity_check(snap)
         result = plan(snap, today, args.keep_days)
     except PlanError as e:
-        print(f"::error::refusing to delete anything: {e}", file=sys.stderr)
+        error(f"refusing to delete anything: {e}")
         return 2
     report(result, log)
 
@@ -409,14 +621,24 @@ def main():
         return 0
     token = os.environ.get("GH_TOKEN")
     if not token:
-        print("::error::--apply needs GH_TOKEN", file=sys.stderr)
+        error("--apply needs GH_TOKEN")
         return 2
-    deleted, skipped, failed = apply(result, packages_for(args.image, token), log)
-    log(f"deleted {deleted}, skipped {skipped}, failed {failed}")
-    if failed:
-        print(f"::error::{failed} package version deletes failed", file=sys.stderr)
+    try:
+        out = apply(result, packages_for(args.image, token), log,
+                    max_deletes=args.max_deletes, interval=args.delete_interval)
+    except PlanError as e:
+        error(f"refusing to delete anything: {e}")
+        return 2
+    except OSError as e:  # listing versions failed; nothing was deleted yet
+        error(f"could not list package versions, nothing deleted: {e!r}")
         return 1
-    return 0
+    log(out.summary())
+    if out.exit_code:
+        error(f"cleanup incomplete: {out.summary()}")
+    elif out.stopped:
+        print(f"::warning::cleanup stopped early ({out.stopped}); "
+              f"{out.unprocessed} versions remain for the next run", file=sys.stderr)
+    return out.exit_code
 
 
 if __name__ == "__main__":

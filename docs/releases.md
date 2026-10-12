@@ -45,7 +45,15 @@ the planner (`.github/scripts/ghcr_nightly_cleanup.py`) follows digests instead 
   `vX.Y.Z` tag on the same digest keeps it;
 - nothing reachable from a kept image is deleted, so a stable release's signature and attestations are never touched;
 - a `sha256-<digest>` tag whose subject no longer exists in the registry is deleted as an orphan;
-- right before each delete it re-reads the version's live tags and skips it if a tag was added since the plan.
+- right before each delete it re-reads the version's live tags and skips it if a tag was added since the plan. This
+  recheck covers **tagged versions only**; an untagged manifest that a release pushes after the plan is read is not
+  visible to it, so do not apply while a stable release is being pushed. The job runs after the nightly tag push
+  (`needs`) and never overlaps another cleanup (concurrency group). It cannot wait for `release.yml`, which the tag
+  push starts separately; that is fine because the nightly being built has today's date and is never expired.
+
+Before it deletes anything the script refuses to act on a registry snapshot that lacks the `latest` tag or any stable
+`vX.Y.Z` tag, has fewer than 50 tags, or is much smaller than the version list GitHub's Packages API reports (exit
+code 2).
 
 The job is a dry run until the repository variable `GHCR_CLEANUP_APPLY` is `true`; a manual run can also apply with
 the `cleanup-apply` input. Each run writes its plan to the job summary. To see the plan locally (anonymous registry
@@ -55,9 +63,28 @@ access, no token needed):
 python3 .github/scripts/ghcr_nightly_cleanup.py --image ghcr.io/conduitio/conduit --keep-days 7
 ```
 
+Apply mode is rate-limited on purpose. The first apply has about 2,200 versions to delete, and `GITHUB_TOKEN` gets
+roughly 1,000 API requests an hour (GitHub also limits content-changing requests, DELETE included, to about 80 a
+minute and 500 an hour). A run therefore deletes at most `--max-deletes` versions (default 400), about 0.8 s apart, and
+stops without error when it hits the cap. It also stops on an HTTP 429, on a 403 that carries `Retry-After` or
+`X-RateLimit-Remaining: 0`, and when `X-RateLimit-Remaining` drops to 25. The next night's run re-plans from a fresh
+snapshot and continues, so the backlog drains over about six nights. A plain 403 (no permission), or three network
+errors in a row, stops the run and fails the job. Exit codes: 0 done, or stopped early after progress; 1 a delete
+failed or the run could not continue; 2 the planner refused to act.
+
+An image is deleted as a unit: its platform and attestation manifests and signatures first, the tagged root last. The
+cap is applied between images, never inside one (a run can stop a few versions under the cap), because the untagged
+children of an image are only findable through its tagged root; deleting the root and stopping would strand them for
+good. If the live-tag recheck finds that an image's root gained a tag, the whole image is kept, not just the root.
+
 Deleting needs a token that can delete versions of the `conduit` package. The job uses `GITHUB_TOKEN` with
 `packages: write`, which requires the repository to have the **Admin** role on the package (package settings, "Manage
 Actions access"). If deletes fail, the job fails and lists the HTTP status of each failed delete.
+
+GitHub does not let anyone delete a version of a **public** package that has more than 5,000 downloads. A nightly
+image that popular fails every night, with the HTTP status and message in the job log. It counts as a failed delete and
+keeps the job red until GitHub support removes it; the other deletes in the run are unaffected (a 403 whose message
+mentions downloads does not stop the run).
 
 ## Signatures and SBOMs
 
