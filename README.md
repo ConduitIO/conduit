@@ -144,7 +144,7 @@ rpm -i conduit_<version>_Linux_<arch>.rpm
 
 Requirements:
 
-- [Go](https://golang.org/)
+- [Go](https://go.dev/) 1.26 or newer
 - [Make](https://www.gnu.org/software/make/)
 
 ```shell
@@ -396,6 +396,8 @@ try it out.
 You can run a full Conduit engine in-process, inside your own Go application, and
 drive its lifecycle with ordinary function calls — no subprocess, no socket. The
 engine that powers the CLI is the one you embed.
+
+Embedding requires Go 1.26 or newer.
 
 ```sh
 go get github.com/conduitio/conduit
