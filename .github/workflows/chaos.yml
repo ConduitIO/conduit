@@ -91,7 +91,10 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -qE '^(pkg/connector/|pkg/pipeline/|pkg/lifecycle/|pkg/lifecycle-poc/|tests/chaos/)'; then
+          # go.mod/go.sum: a dependency bump can change the data path without
+          # touching any tree above (storage engines, codecs and SDKs all
+          # arrive through go.mod), so it runs the suite too.
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/pipeline/|pkg/lifecycle/|pkg/lifecycle-poc/|tests/chaos/)'; then
             echo "reason=data-path change detected" >> "$GITHUB_OUTPUT"
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
