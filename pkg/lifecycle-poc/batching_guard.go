@@ -92,6 +92,12 @@ func connectorSettingPointer(index int, key string) string {
 	return fmt.Sprintf("/connectors/%d/settings/%s", index, jsonPointerEscape(key))
 }
 
+// dlqSettingPointer is the pointer to a dead-letter-queue setting in the
+// pipeline config document.
+func dlqSettingPointer(key string) string {
+	return "/dead-letter-queue/settings/" + jsonPointerEscape(key)
+}
+
 func batchingOffenders(dests []batchingDest, dlq map[string]string) []batchingOffender {
 	var offenders []batchingOffender
 	for _, d := range dests {
@@ -113,7 +119,7 @@ func batchingOffenders(dests []batchingDest, dlq map[string]string) []batchingOf
 	if key, value, bad := sdkBatchSizeAboveOne(dlq); bad {
 		offenders = append(offenders, batchingOffender{
 			label:      "the dead letter queue",
-			configPath: "/dead-letter-queue/settings/" + jsonPointerEscape(key),
+			configPath: dlqSettingPointer(key),
 			value:      value,
 		})
 	}
@@ -160,7 +166,9 @@ func (s *Service) checkDestinationBatching(ctx context.Context, pl *pipeline.Ins
 	}
 
 	if offenders := batchingOffenders(dests, pl.DLQ.Settings); len(offenders) > 0 {
-		return errDestinationBatchingUnsupported(pl.ID, offenders)
+		// An API-created pipeline has no config document, so a pointer into one
+		// (and a structured fix addressing it) would address nothing.
+		return errDestinationBatchingUnsupported(pl.ID, offenders, pl.ProvisionedBy != pipeline.ProvisionTypeAPI)
 	}
 	return nil
 }
@@ -186,7 +194,7 @@ func (s *Service) PreflightPipelineConfig(cfg config.Pipeline) error {
 		})
 	}
 	if offenders := batchingOffenders(dests, cfg.DLQ.Settings); len(offenders) > 0 {
-		return errDestinationBatchingUnsupported(cfg.ID, offenders)
+		return errDestinationBatchingUnsupported(cfg.ID, offenders, true)
 	}
 	return nil
 }
@@ -194,10 +202,17 @@ func (s *Service) PreflightPipelineConfig(cfg config.Pipeline) error {
 // errDestinationBatchingUnsupported builds the refusal. Every offender is named
 // in the message; ConfigPath and Fix address the first one, because a
 // ConduitError carries a single path. Fixing it and re-running reports the next.
-func errDestinationBatchingUnsupported(pipelineID string, offenders []batchingOffender) error {
+// withDocument is false for an API-created pipeline, which has no config
+// document: ConfigPath and Fix are then omitted and the message alone names the
+// connector (id and name) and the setting.
+func errDestinationBatchingUnsupported(pipelineID string, offenders []batchingOffender, withDocument bool) error {
 	parts := make([]string, len(offenders))
 	for i, o := range offenders {
-		parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, sdkBatchSizeSetting, o.value, o.configPath)
+		if withDocument {
+			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, sdkBatchSizeSetting, o.value, o.configPath)
+		} else {
+			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, sdkBatchSizeSetting, o.value)
+		}
 	}
 	ce := conduiterr.New(
 		CodeArchV2DestinationBatchingUnsupported,
@@ -207,9 +222,11 @@ func errDestinationBatchingUnsupported(pipelineID string, offenders []batchingOf
 				"withholds its acks until it flushes, so the pipeline can stall (sdk.batch.delay 0) or slow sharply",
 			pipelineID, strings.Join(parts, "; ")),
 	)
-	ce.ConfigPath = offenders[0].configPath
 	ce.Suggestion = "remove sdk.batch.size (and sdk.batch.delay) from the destination" +
 		" so it writes without SDK batching, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out"
-	ce.Fix = &conduiterr.Fix{ConfigPath: offenders[0].configPath, Op: "remove"}
+	if withDocument {
+		ce.ConfigPath = offenders[0].configPath
+		ce.Fix = &conduiterr.Fix{ConfigPath: offenders[0].configPath, Op: "remove"}
+	}
 	return ce
 }

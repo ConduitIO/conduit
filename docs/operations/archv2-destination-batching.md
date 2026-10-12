@@ -22,6 +22,10 @@ one, as a JSON pointer into the pipeline config document: `/connectors/<index>/s
 `<index>` is the connector's position in `connectors:`, or `/dead-letter-queue/settings/sdk.batch.size` when the
 dead-letter queue is the offender. Fix it and re-run to see the next one, if any.
 
+A pipeline created through the API (rather than a pipeline config file) has no config document to point into, so for
+it the error carries no config path and no structured fix. The message still names the connector id and name and the
+setting; remove `sdk.batch.size` from that connector's settings through the API.
+
 The pipeline is not started. Nothing is read from the source and nothing is acknowledged upstream.
 
 Before this check (v0.20.0) the same configuration started and then, depending on write size and delay, either

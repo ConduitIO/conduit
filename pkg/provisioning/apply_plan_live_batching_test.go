@@ -40,6 +40,11 @@ type archV2Lifecycle struct {
 	v2 *lifecyclev2.Service
 }
 
+// Compile-time guard: if *lifecycle-poc.Service stops implementing the
+// preflight interface (a rename or signature drift), ApplyPlanLive's type
+// assertion would silently stop firing and the live-apply guard would vanish.
+var _ startConfigPreflighter = (*lifecyclev2.Service)(nil)
+
 func (l archV2Lifecycle) PreflightPipelineConfig(cfg config.Pipeline) error {
 	return l.v2.PreflightPipelineConfig(cfg)
 }

@@ -91,4 +91,8 @@ var (
 // sdk.batch.delay) from the destination, or run without
 // --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See
 // docs/operations/archv2-destination-batching.md.
+//
+// A pipeline created through the API has no config document, so for it the
+// error carries no ConfigPath and no Fix; the message still names the
+// connector id and name and the setting.
 var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)
