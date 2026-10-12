@@ -117,6 +117,12 @@ type pubNodeBase struct {
 
 	// msgChan is an internal channel where messages from msgFetcher are collected
 	msgChan chan *Message
+	// done is closed as soon as nothing will read from msgChan anymore: the
+	// trigger returned its final error, or cleanup was called, whichever
+	// happens first. Every send into msgChan and every internal error
+	// forward must select on it, otherwise it can block forever (#2969).
+	// Guarded by lock, the channel itself is closed without holding lock.
+	done chan struct{}
 }
 
 // Trigger sets up 2 goroutines, one that listens to the external error channel
@@ -145,21 +151,16 @@ func (n *pubNodeBase) Trigger(
 
 	n.running = true
 	n.msgChan = make(chan *Message)
+	done := make(chan struct{})
+	n.done = done
+	var doneOnce sync.Once
+	markDone := func() { doneOnce.Do(func() { close(done) }) }
 	internalErrChan := make(chan error)
 
 	if externalErrChan != nil {
 		// spawn goroutine that forwards external errors into the internal error
 		// channel
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case err := <-externalErrChan:
-					internalErrChan <- err
-				}
-			}
-		}()
+		go forwardErrors(ctx, done, externalErrChan, internalErrChan)
 	}
 
 	var firstTriggerCall sync.Once
@@ -171,32 +172,83 @@ func (n *pubNodeBase) Trigger(
 			if msgFetcher == nil {
 				return
 			}
-			go func() {
-				for {
-					msgs, err := msgFetcher(ctx)
-					if err != nil {
-						if !cerrors.Is(err, context.Canceled) {
-							// ignore context error because it is going to be caught
-							// by nodeBase.Receive anyway
-							internalErrChan <- err
-						}
-						return
-					}
-					for _, msg := range msgs {
-						n.msgChan <- msg
-					}
-				}
-			}()
+			go fetchMessages(ctx, done, msgFetcher, n.msgChan, internalErrChan)
 		})
-		return n.nodeBase.Receive(ctx, logger, n.msgChan, internalErrChan)
+		msg, err := n.nodeBase.Receive(ctx, logger, n.msgChan, internalErrChan)
+		if err != nil || msg == nil {
+			// The trigger is finished, nothing reads msgChan from here on.
+			// Release anything blocked on sending into it (InjectControlMessage
+			// in particular) before the owner starts tearing down (#2969).
+			markDone()
+		}
+		return msg, err
 	}
 	cleanup := func() {
-		// TODO make sure spawned goroutines are stopped and internal channels
-		//  are drained
+		// Also covers nodes that stop without the trigger failing (e.g. a
+		// failed Send). Must happen before n.cleanup, which needs n.lock.
+		// The spawned goroutines select on done and exit; a msgFetcher call
+		// that is still blocked in the connector returns once the connector
+		// is torn down or ctx is canceled, then exits at its next send.
+		markDone()
 		n.cleanup(ctx, logger)
 	}
 
 	return trigger, cleanup, nil
+}
+
+// forwardErrors forwards errors from the external error channel into the
+// internal one until ctx is canceled or done is closed. It never blocks past
+// either (#2969).
+func forwardErrors(ctx context.Context, done <-chan struct{}, external <-chan error, internal chan<- error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case err := <-external:
+			select {
+			case internal <- err:
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+// fetchMessages continuously calls fetch and hands the result to msgChan or
+// internalErrChan until fetch fails or done is closed. Every hand-over selects
+// on done so the goroutine can't leak once nobody receives anymore (#2969).
+func fetchMessages(
+	ctx context.Context,
+	done <-chan struct{},
+	fetch msgFetcherFunc,
+	msgChan chan<- *Message,
+	internalErrChan chan<- error,
+) {
+	for {
+		msgs, err := fetch(ctx)
+		if err != nil {
+			if !cerrors.Is(err, context.Canceled) {
+				// ignore context error because it is going to be caught
+				// by nodeBase.Receive anyway
+				select {
+				case internalErrChan <- err:
+				case <-done:
+				}
+			}
+			return
+		}
+		for _, msg := range msgs {
+			select {
+			case msgChan <- msg:
+			case <-done:
+				return
+			}
+		}
+	}
 }
 
 // InjectControlMessage can be used to inject a message into the message stream.
@@ -205,16 +257,28 @@ func (n *pubNodeBase) Trigger(
 // create a separate channel for signals which makes it performant and easiest
 // to implement.
 func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType, r opencdc.Record) error {
+	// Invariant 7 (#2969): never block on the send while holding n.lock.
+	// cleanup needs n.lock, so a send nobody receives would wedge shutdown
+	// forever. Take what we need under the lock, then send without it.
 	n.lock.Lock()
-	defer n.lock.Unlock()
 	if !n.running {
+		n.lock.Unlock()
 		return cerrors.New("tried to inject control message but PubNode is not running")
 	}
+	msgChan, done := n.msgChan, n.done
+	n.lock.Unlock()
 
+	// msgChan is unbuffered and never closed, so a send either completes
+	// because the node received the message, or we give up. Giving up is an
+	// error, never a silent success: the caller must know the stop message was
+	// not delivered. Invariants 1 and 3 are untouched, no record passes through
+	// here, and the run's cause stays the error that made the node stop.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case n.msgChan <- &Message{controlMessageType: msgType, Record: r}:
+	case <-done:
+		return cerrors.New("tried to inject control message but PubNode has stopped running")
+	case msgChan <- &Message{controlMessageType: msgType, Record: r}:
 		return nil
 	}
 }
