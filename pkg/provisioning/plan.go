@@ -622,8 +622,8 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// this method now holds the pipeline's lock for its entire body, so a
 	// second ApplyPlanLive/ApplyPlan call for the same ID cannot interleave.
 	// A raw lifecycleService.Start call from outside provisioning entirely
-	// (bypassing this package) is a separate, pre-existing surface this lock
-	// does not reach — unchanged from PR1, and out of scope here.
+	// (bypassing this package) is not excluded by this lock; the mutation
+	// mark taken below, around the import, is what refuses it (#2961).
 	if err := s.lifecycleService.StopAndWait(ctx, desired.ID); err != nil {
 		return fresh, cerrors.Errorf("could not stop pipeline %q to apply live changes: %w", desired.ID, err)
 	}
