@@ -1,0 +1,12 @@
+stage                               calls       total_ms      mean_us       max_us
+lock.processingLock               1585250          179.4         0.11       2689.5
+loop.total(read..ack)             1585250        20035.3        12.64       4243.0
+read.connector.Source.Read(Recv)      1585250        16440.7        10.37       3075.5
+read.metrics.Observe              1585250          355.5         0.22        359.2
+sharedMu.held                     1585249         1905.1         1.20       2402.3
+sharedMu.wait                     1585249           43.4         0.03         69.6
+stage.DLQ.Ack                     1585249           58.1         0.04        211.7
+stage.Source.Ack                  1585249          877.0         0.55       1198.6
+stage.dest(write+waitacks)        1585249           48.2         0.03         49.0
+stage.read(Source.Read)           1585250        17187.2        10.84       3076.4
+stage.updateTimer                 1585249          291.1         0.18        479.6

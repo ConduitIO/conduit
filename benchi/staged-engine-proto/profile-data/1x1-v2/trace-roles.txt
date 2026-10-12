@@ -1,0 +1,41 @@
+goroutine creations (creator stack top 4):
+     86773  github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.ConnectorMetricsImpl.Observe < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*SourceTask).Do < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*Worker).doTaskAttempt < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*Worker).doTask
+     86772  github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.ConnectorMetricsImpl.Observe < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*DestinationTask).Do < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*Worker).doTaskAttempt < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*Worker).doTask
+        16  github.com/conduitio/conduit/pkg/connector.(*Persister).flushNow
+         8  github.com/dgraph-io/badger/v4.(*DB).doWrites
+         8  github.com/conduitio/conduit/pkg/connector.(*Persister).triggerFlush < github.com/conduitio/conduit/pkg/connector.(*Persister).Persist < github.com/conduitio/conduit/pkg/connector.(*Source).Ack < github.com/conduitio/conduit/pkg/lifecycle-poc/funnel.(*Worker).Ack
+         1  runtime.traceStartReadCPU < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime.(*traceAdvancerState).start < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber < runtime/trace.(*traceMultiplexer).subscribeTraceStartWriter < runtime/trace.Start
+trace span: 2s
+
+engine.persister  (goroutines=16, observed=15.959s)
+   NotExist                                  100.0%  15.958217s
+
+engine.source.deliverDeferredAcks  (goroutines=1, observed=1.813s)
+   waiting:chan receive                       94.7%  1.717162s
+   Running                                     2.0%  36.694ms
+   Runnable                                    1.6%  28.417ms
+   waiting:select                              1.1%  19.174ms
+   waiting:sync                                0.6%  11.228ms
+
+engine.workerLoop  (goroutines=1, observed=2s)
+   waiting:select                             50.5%  1.010698s
+   Runnable                                   26.2%  523.769ms
+   Running                                    23.2%  464.205ms
+
+plugin.dest.Run  (goroutines=1, observed=2s)
+   waiting:select                             73.3%  1.46658s
+   Running                                    20.3%  406.799ms
+   Syscall                                     3.7%  74.839ms
+   Runnable                                    2.6%  51.843ms
+
+plugin.source.runAck  (goroutines=1, observed=1.813s)
+   waiting:select                             97.6%  1.768848s
+   Running                                     1.3%  23.932ms
+   Runnable                                    1.1%  19.891ms
+
+plugin.source.runRead  (goroutines=1, observed=2s)
+   Running                                    51.7%  1.033655s
+   waiting:select                             27.2%  544.469ms
+   Runnable                                   21.1%  421.962ms

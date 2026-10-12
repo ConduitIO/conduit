@@ -1,0 +1,10 @@
+credits=2 rep1: 49898 rec/s/sink  (761205 recs over 15.3s, 1 sinks)  cores_used=1.51 v
+credits=2 rep2: 49693 rec/s/sink  (756704 recs over 15.2s, 1 sinks)  cores_used=1.55 v
+credits=16 rep1: 72678 rec/s/sink  (1107234 recs over 15.2s, 1 sinks)  cores_used=1.91 
+credits=16 rep2: 72528 rec/s/sink  (1104055 recs over 15.2s, 1 sinks)  cores_used=1.89 
+credits=256 rep1: 72327 rec/s/sink  (1101838 recs over 15.2s, 1 sinks)  cores_used=1.91 
+credits=256 rep2: 72104 rec/s/sink  (1099784 recs over 15.3s, 1 sinks)  cores_used=1.92 
+credits=4000 rep1: 71794 rec/s/sink  (1092017 recs over 15.2s, 1 sinks)  cores_used=1.92 
+credits=4000 rep2: 72571 rec/s/sink  (1106183 recs over 15.2s, 1 sinks)  cores_used=1.92 
+lat1ms credits=2: 1548 rec/s/sink  (23628 recs over 15.3s, 1 sinks)  cores_used=0.31 vml
+lat1ms credits=4000: 57471 rec/s/sink  (877349 recs over 15.3s, 1 sinks)  cores_used=1.62 v

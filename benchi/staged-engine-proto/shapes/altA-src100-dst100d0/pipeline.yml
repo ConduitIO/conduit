@@ -1,0 +1,25 @@
+# staged-engine prototype shape altA-src100-dst100d0: source batch 100/10ms, destination sdk.batch.size=100 with delay 0 (SDK never flushes by time): arch-v2 main hangs here.
+# Harness conventions as in benchi/archv2-gate/shapes: builtin:generator to builtin:file under /sink,
+# records counted at the sink.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.batch.size: "100"
+          sdk.batch.delay: "10ms"
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
+          sdk.batch.size: "100"

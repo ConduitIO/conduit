@@ -171,11 +171,25 @@ func TestSIGKILL_NSource_H2_AckStreamFault_InvariantHolds(t *testing.T) {
 
 	// The poison error must surface (issue #2740's explicit requirement),
 	// not a silent success.
+	//
+	// Staged engine: there is no poison flag to trip any more. A destination
+	// has ONE AckReader, so a failed ack read cannot leave acks that a sibling
+	// then reads as its own; the destination's failure is sticky, and every
+	// write in flight on it, from either source, fails with that error. So
+	// worker B's outcome is the destination's own failure, not the poison code
+	// (which only the synchronous doTask path, used by tests and the DLQ,
+	// still returns). The invariant is unchanged and asserted just the same:
+	// B fails loudly, attributed to the shared destination's fault, and the
+	// bypass marker above never appears.
 	errBCodeLine, ok := cp.line(markerH2ErrBCode)
 	is.True(ok)
-	if !strings.Contains(errBCodeLine, funnel.CodeSharedDestinationPoisoned.Reason()) {
-		t.Fatalf("worker B's error code line was %q, want it to contain %q (CodeSharedDestinationPoisoned)\n%s",
-			errBCodeLine, funnel.CodeSharedDestinationPoisoned.Reason(), cp.diagnostics())
+	errBLine, ok := cp.line(markerH2ErrB)
+	is.True(ok)
+	if !strings.Contains(errBCodeLine, funnel.CodeSharedDestinationPoisoned.Reason()) &&
+		!strings.Contains(errBLine, "injected H2 ack-stream fault") {
+		t.Fatalf("worker B neither returned %q nor failed with the shared destination's fault; "+
+			"B's error line was %q (code line %q)\n%s",
+			funnel.CodeSharedDestinationPoisoned.Reason(), errBLine, errBCodeLine, cp.diagnostics())
 	}
 
 	errALine, ok := cp.line(markerH2ErrA)

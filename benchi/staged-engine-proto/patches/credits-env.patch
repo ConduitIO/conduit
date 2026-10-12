@@ -1,0 +1,23 @@
+diff --git a/pkg/lifecycle-poc/funnel/bench_credits.go b/pkg/lifecycle-poc/funnel/bench_credits.go
+new file mode 100644
+index 00000000..6257a014
+--- /dev/null
++++ b/pkg/lifecycle-poc/funnel/bench_credits.go
+@@ -0,0 +1,17 @@
++// BENCH-ONLY: NOT part of any Conduit change. Lets the credit-window
++// sensitivity runs set the window from the environment.
++package funnel
++
++import (
++	"os"
++	"strconv"
++)
++
++func init() {
++	if v, err := strconv.ParseInt(os.Getenv("CONDUIT_BENCH_CREDIT_RECORDS"), 10, 64); err == nil && v > 0 {
++		defaultCreditRecords = v
++	}
++	if v, err := strconv.Atoi(os.Getenv("CONDUIT_BENCH_UNACKED_RECORDS")); err == nil && v > 0 {
++		maxUnackedRecords = v
++	}
++}

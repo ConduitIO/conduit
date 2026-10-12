@@ -1,0 +1,234 @@
+diff --git a/pkg/conduit/runtime.go b/pkg/conduit/runtime.go
+index 017aa14b..0f05e48d 100644
+--- a/pkg/conduit/runtime.go
++++ b/pkg/conduit/runtime.go
+@@ -54,6 +54,8 @@ import (
+ 	"github.com/conduitio/conduit/pkg/http/openapi"
+ 	"github.com/conduitio/conduit/pkg/lifecycle"
+ 	lifecycle_v2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
++	profiling_funnel "github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
++	runtimetrace "runtime/trace"
+ 	"github.com/conduitio/conduit/pkg/orchestrator"
+ 	"github.com/conduitio/conduit/pkg/pipeline"
+ 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
+@@ -850,6 +852,48 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
+ 			}
+ 		})
+ 	}
++	// PROFILING-ONLY (not part of any PR): env-driven extra profiles.
++	if p := os.Getenv("CONDUIT_PROF_TRACE"); p != "" {
++		delay, _ := time.ParseDuration(os.Getenv("CONDUIT_PROF_TRACE_DELAY"))
++		dur, _ := time.ParseDuration(os.Getenv("CONDUIT_PROF_TRACE_DUR"))
++		if dur == 0 {
++			dur = 2 * time.Second
++		}
++		go func() {
++			time.Sleep(delay)
++			f, err := os.Create(p)
++			if err != nil {
++				return
++			}
++			_ = runtimetrace.Start(f)
++			time.Sleep(dur)
++			runtimetrace.Stop()
++			_ = f.Close()
++		}()
++	}
++	if p := os.Getenv("CONDUIT_PROF_MUTEX"); p != "" {
++		runtime.SetMutexProfileFraction(5)
++		deferFunc(func() {
++			f, err := os.Create(p)
++			if err != nil {
++				return
++			}
++			defer f.Close()
++			_ = pprof.Lookup("mutex").WriteTo(f, 0)
++		})
++	}
++	if p := os.Getenv("CONDUIT_PROF_BLOCK"); p != "" {
++		runtime.SetBlockProfileRate(10000) // sample ~1 event per 10us blocked
++		deferFunc(func() {
++			f, err := os.Create(p)
++			if err != nil {
++				return
++			}
++			defer f.Close()
++			_ = pprof.Lookup("block").WriteTo(f, 0)
++		})
++	}
++	deferFunc(profiling_funnel.DumpStageStatsToEnvFile)
+ 	if r.Config.Dev.BlockProfile != "" {
+ 		runtime.SetBlockProfileRate(1)
+ 		deferFunc(func() {
+diff --git a/pkg/lifecycle-poc/funnel/destination.go b/pkg/lifecycle-poc/funnel/destination.go
+index b8ae4bb0..dce52656 100644
+--- a/pkg/lifecycle-poc/funnel/destination.go
++++ b/pkg/lifecycle-poc/funnel/destination.go
+@@ -94,6 +94,9 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
+ 
+ 	start := time.Now()
+ 	err := t.destination.Write(ctx, records)
++	stageEnd("dest.Write", start)
++	__aw := stageStart()
++	defer func() { stageEnd("dest.waitAcks(Ack loop)", __aw) }()
+ 	if err != nil {
+ 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
+ 	}
+diff --git a/pkg/lifecycle-poc/funnel/worker.go b/pkg/lifecycle-poc/funnel/worker.go
+index d86c996a..59013009 100644
+--- a/pkg/lifecycle-poc/funnel/worker.go
++++ b/pkg/lifecycle-poc/funnel/worker.go
+@@ -297,9 +297,11 @@ func (w *Worker) Do(ctx context.Context) error {
+ 		// (and, at a fan-out, from cloneRuns), NOT from the wrapper being
+ 		// fresh. Naming the wrapper as the boundary is what hid the fan-out
+ 		// straddle bug - see validateRunsWholeBeforeFanOut.
++		__t := stageStart()
+ 		if err := w.doTask(ctx, w.FirstTask, &Batch{}, newRunAckNacker(w)); err != nil {
+ 			return err
+ 		}
++		stageEnd("loop.total(read..ack)", __t)
+ 		w.logger.Trace(ctx).Msg("batch done")
+ 	}
+ 	return nil
+@@ -442,7 +444,11 @@ func (w *Worker) doTask(
+ 	// See TaskNode.MarkSharedBoundary and
+ 	// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
+ 	if taskNode.sharedBoundary {
++		__w := stageStart()
+ 		taskNode.sharedMu.Lock()
++		stageEnd("sharedMu.wait", __w)
++		__h := stageStart()
++		defer func() { stageEnd("sharedMu.held", __h) }()
+ 		defer taskNode.sharedMu.Unlock()
+ 
+ 		// H2 (adversarial review of #2734): refuse to enter a shared
+@@ -519,7 +525,16 @@ func (w *Worker) doTaskAttempt(
+ 		Bool("tainted", b.tainted).
+ 		Msg("executing task")
+ 
++	__t := stageStart()
+ 	err := t.Do(ctx, b)
++	switch t.(type) {
++	case *SourceTask:
++		stageEnd("stage.read(Source.Read)", __t)
++	case *DestinationTask:
++		stageEnd("stage.dest(write+waitacks)", __t)
++	default:
++		stageEnd("stage.processor", __t)
++	}
+ 
+ 	w.logger.Trace(ctx).
+ 		Err(err).
+@@ -612,7 +627,9 @@ func (w *Worker) doTaskAttempt(
+ 		//   before acquiring the lock.
+ 		w.lastReadAt = time.Now()
+ 
++		__l := stageStart()
+ 		release, err := w.acquireProcessingLock(ctx)
++		stageEnd("lock.processingLock", __l)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -919,7 +936,9 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
+ 		return err
+ 	}
+ 
++	__a := stageStart()
+ 	err := w.Source.Ack(ctx, originalBatch.positions)
++	stageEnd("stage.Source.Ack", __a)
+ 	if err != nil && !isClosedSourceStream(err) {
+ 		return cerrors.Errorf("failed to ack %d records in source: %w", len(originalBatch.positions), err)
+ 	}
+@@ -928,8 +947,12 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
+ 	// not mask the source's real cause (#1659). Safe under invariant 3: Source.Ack
+ 	// does not persist a position on this error path.
+ 
++	__d := stageStart()
+ 	w.DLQ.Ack(ctx, batch)
++	stageEnd("stage.DLQ.Ack", __d)
++	__u := stageStart()
+ 	w.updateTimer(batch.records)
++	stageEnd("stage.updateTimer", __u)
+ 	return nil
+ }
+ 
+diff --git a/pkg/lifecycle-poc/funnel/zz_profile_stats.go b/pkg/lifecycle-poc/funnel/zz_profile_stats.go
+new file mode 100644
+index 00000000..bebf2d82
+--- /dev/null
++++ b/pkg/lifecycle-poc/funnel/zz_profile_stats.go
+@@ -0,0 +1,74 @@
++// PROFILING-ONLY instrumentation. Not part of any PR.
++package funnel
++
++import (
++	"fmt"
++	"io"
++	"os"
++	"sort"
++	"sync"
++	"sync/atomic"
++	"time"
++)
++
++type stageStat struct {
++	n, ns, max atomic.Int64
++}
++
++var stageStats sync.Map
++
++func stageAdd(name string, d time.Duration) {
++	v, ok := stageStats.Load(name)
++	if !ok {
++		v, _ = stageStats.LoadOrStore(name, &stageStat{})
++	}
++	s := v.(*stageStat)
++	s.n.Add(1)
++	s.ns.Add(int64(d))
++	for {
++		m := s.max.Load()
++		if int64(d) <= m || s.max.CompareAndSwap(m, int64(d)) {
++			break
++		}
++	}
++}
++
++func stageStart() time.Time { return time.Now() }
++func stageEnd(name string, t time.Time) { stageAdd(name, time.Since(t)) }
++
++// DumpStageStats writes the table to w.
++func DumpStageStats(w io.Writer) {
++	type row struct {
++		name      string
++		n, ns, mx int64
++	}
++	var rows []row
++	stageStats.Range(func(k, v any) bool {
++		s := v.(*stageStat)
++		rows = append(rows, row{k.(string), s.n.Load(), s.ns.Load(), s.max.Load()})
++		return true
++	})
++	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
++	fmt.Fprintf(w, "%-28s %12s %14s %12s %12s\n", "stage", "calls", "total_ms", "mean_us", "max_us")
++	for _, r := range rows {
++		mean := float64(0)
++		if r.n > 0 {
++			mean = float64(r.ns) / float64(r.n) / 1e3
++		}
++		fmt.Fprintf(w, "%-28s %12d %14.1f %12.2f %12.1f\n", r.name, r.n, float64(r.ns)/1e6, mean, float64(r.mx)/1e3)
++	}
++}
++
++// DumpStageStatsToEnvFile dumps to $CONDUIT_STAGE_STATS if set.
++func DumpStageStatsToEnvFile() {
++	p := os.Getenv("CONDUIT_STAGE_STATS")
++	if p == "" {
++		return
++	}
++	f, err := os.Create(p)
++	if err != nil {
++		return
++	}
++	defer f.Close()
++	DumpStageStats(f)
++}

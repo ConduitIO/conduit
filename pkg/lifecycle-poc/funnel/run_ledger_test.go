@@ -104,7 +104,7 @@ func TestRunLedger_RetryHead_NotAckedUntilTailResolves(t *testing.T) {
 	splitNode.Next = []*TaskNode{deferNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, splitNode, batch, newRunAckNacker(parent)))
@@ -154,7 +154,7 @@ func TestRunLedger_FilterHead_NotAckedUntilTailResolves(t *testing.T) {
 	splitNode.Next = []*TaskNode{deferNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, splitNode, batch, newRunAckNacker(parent)))
@@ -231,7 +231,7 @@ func TestRunLedger_PositionRewriteThenSplit_NoPrematureAck(t *testing.T) {
 	splitNode.Next = []*TaskNode{deferNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, rewriteNode, batch, newRunAckNacker(parent)))
@@ -295,7 +295,7 @@ func TestRunLedger_OutputCapProcessor_ConvergesAndAcksOnce(t *testing.T) {
 	splitNode.Next = []*TaskNode{capNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, splitNode, batch, newRunAckNacker(parent)))
@@ -390,7 +390,7 @@ func TestRunLedger_NonIdempotentProcessor_TransformsExactlyOnce(t *testing.T) {
 	markNode.Next = []*TaskNode{destNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, splitNode, batch, newRunAckNacker(parent)))
@@ -424,7 +424,7 @@ func TestRunLedger_InSourceOrderRelease_DeferredRunBlocksLaterPosition(t *testin
 	splitNode.Next = []*TaskNode{deferNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	is.NoErr(w.doTask(ctx, splitNode, batch, newRunAckNacker(parent)))
@@ -940,7 +940,7 @@ func TestRunLedger_FanOut_RunCutBeforeFanOut_FailsLoud(t *testing.T) {
 	cutNode.Next = []*TaskNode{destANode, destBNode}
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	batch := NewBatch(slices.Clone(records))
 	err := w.doTask(ctx, splitNode, batch, newRunAckNacker(parent))

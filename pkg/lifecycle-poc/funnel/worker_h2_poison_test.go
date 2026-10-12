@@ -153,8 +153,8 @@ func TestNSource_H2_AckStreamErrorPoisonsSharedDestination(t *testing.T) {
 	is.NoErr(sink.Open(ctx))
 	defer func() { is.NoErr(sink.Close(ctx)) }()
 
-	wA := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
-	wB := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	wA := &Worker{logger: log.Nop()}
+	wB := &Worker{logger: log.Nop()}
 	parentA := &fakeParentAckNacker{}
 	parentB := &fakeParentAckNacker{}
 

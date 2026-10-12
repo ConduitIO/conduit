@@ -1,0 +1,77 @@
+# staged-engine prototype shape 4x4-noschema: 4x4 with SDK schema extraction (payload and key) off on every connector (diagnostic).
+# Harness conventions as in benchi/archv2-gate/shapes: builtin:generator to builtin:file under /sink,
+# records counted at the sink.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: src-2
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: src-3
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: src-4
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: sink-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-2.jsonl
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: sink-3
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-3.jsonl
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"
+      - id: sink-4
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-4.jsonl
+          sdk.schema.extract.payload.enabled: "false"
+          sdk.schema.extract.key.enabled: "false"

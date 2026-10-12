@@ -92,8 +92,7 @@ func TestDoTask_RetryThatSplits_DoesNotSkipRecords(t *testing.T) {
 	node := &TaskNode{Task: task}
 
 	w := &Worker{
-		logger:         log.Nop(),
-		processingLock: make(chan struct{}, 1),
+		logger: log.Nop(),
 	}
 
 	b := NewBatch(records)

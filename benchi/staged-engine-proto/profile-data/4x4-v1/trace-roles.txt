@@ -1,0 +1,69 @@
+goroutine creations (creator stack top 4):
+    184660  github.com/conduitio/conduit/pkg/lifecycle/stream.(*FanoutNode).Run < github.com/conduitio/conduit/pkg/lifecycle.(*Service).runPipeline.func3 < gopkg.in/tomb%2ev2.(*Tomb).run
+        25  github.com/conduitio/conduit/pkg/connector.(*Persister).flushNow
+         5  github.com/dgraph-io/badger/v4.(*DB).doWrites
+         5  github.com/conduitio/conduit/pkg/connector.(*Persister).triggerFlush < github.com/conduitio/conduit/pkg/connector.(*Persister).Persist < github.com/conduitio/conduit/pkg/connector.(*Source).Ack < github.com/conduitio/conduit/pkg/lifecycle/stream.(*SourceAckerNode).registerAckHandler.func1
+         1  runtime.traceStartReadCPU < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime.(*traceAdvancerState).start < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber < runtime/trace.(*traceMultiplexer).subscribeTraceStartWriter < runtime/trace.Start
+trace span: 2s
+
+engine.persister  (goroutines=10, observed=8.916s)
+   NotExist                                  100.0%  8.915277s
+
+engine.source.deliverDeferredAcks  (goroutines=4, observed=7.027s)
+   waiting:chan receive                       99.4%  6.982193s
+
+plugin.dest.Run  (goroutines=4, observed=8.001s)
+   waiting:select                             68.3%  5.463569s
+   Running                                    15.1%  1.209243s
+   Runnable                                   13.7%  1.093019s
+   Syscall                                     2.8%  224.524ms
+
+plugin.source.runAck  (goroutines=4, observed=7.027s)
+   waiting:select                             99.6%  7.000393s
+
+plugin.source.runRead  (goroutines=4, observed=8.001s)
+   waiting:select                             90.8%  7.261277s
+   Running                                     8.5%  681.918ms
+   Runnable                                    0.7%  53.358ms
+
+v1.DestinationAckerNode  (goroutines=8, observed=16.002s)
+   waiting:select                             64.5%  10.325041s
+   Runnable                                   18.3%  2.925887s
+   waiting:chan receive                       10.9%  1.73899s
+   Running                                     6.3%  1.012112s
+
+v1.DestinationNode  (goroutines=4, observed=8.001s)
+   waiting:select                             74.3%  5.943107s
+   Runnable                                   14.8%  1.185107s
+   Running                                    10.9%  872.187ms
+
+v1.FaninNode  (goroutines=1, observed=2s)
+   waiting:select                             67.4%  1.349104s
+   Runnable                                   25.2%  504.093ms
+   Running                                     7.4%  147.107ms
+
+v1.FanoutNode  (goroutines=45750, observed=12h42m29.472s)
+   NotExist                                  100.0%  12h42m25.887881s
+
+v1.MetricsNode  (goroutines=8, observed=16.002s)
+   waiting:select                             92.2%  14.760672s
+   Running                                     5.0%  807.74ms
+   Runnable                                    2.7%  433.543ms
+
+v1.SourceAckerNode  (goroutines=4, observed=8.001s)
+   waiting:select                             97.4%  7.7942s
+   Running                                     1.9%  150.279ms
+   Runnable                                    0.7%  56.304ms
+
+v1.SourceNode  (goroutines=6, observed=12.001s)
+   waiting:select                             64.7%  7.770418s
+   waiting:chan send                          32.6%  3.908431s
+   Running                                     1.6%  197.149ms
+   Runnable                                    1.0%  124.734ms
+
+v1.stream  (goroutines=2, observed=4s)
+   waiting:chan send                          97.7%  3.907416s
+   Runnable                                    1.2%  49.232ms
+   Running                                     1.0%  38.208ms

@@ -84,12 +84,19 @@ type Worker struct {
 	FirstTask *TaskNode
 	DLQ       *DLQ
 
-	lastReadAt time.Time
+	// lastReadAt is the unix-nano time of the last batch read, the fallback
+	// for the pipeline-latency timer when a record lost its ReadAt metadata.
+	lastReadAt atomic.Int64
 	timer      metrics.Timer
 
-	// processingLock is a lock in form of a channel with a buffer size of 1 to
-	// be able to acquire the lock with a context timeout.
-	processingLock chan struct{}
+	// pl holds the staged-engine state: read-ahead credits, the per-source ack
+	// ledger and the reader/coordinator goroutines. See worker_pipeline.go.
+	pl *pipelineState
+	// pipelined is set when Worker.Do runs. Only then do destination tasks
+	// submit writes asynchronously; doTask called directly (tests, tools) keeps
+	// the synchronous write-and-wait behavior.
+	pipelined atomic.Bool
+
 	// stop stores the information if a graceful stop was triggered.
 	stop atomic.Bool
 	// teardownMu guards sourceTornDown and serializes teardown so the source is
@@ -146,7 +153,7 @@ func NewWorker(
 		logger:    logger.WithComponent("funnel.Worker"),
 		timer:     timer,
 
-		processingLock: make(chan struct{}, 1),
+		pl: newPipelineState(),
 	}, nil
 }
 
@@ -198,31 +205,59 @@ func (w *Worker) Open(ctx context.Context) (err error) {
 	return nil
 }
 
-// Stop stops the worker from processing more records. It does not stop the
-// current batch from being processed. If a batch is currently being processed,
-// the method will block and trigger the stop after the batch is processed.
+// Stop stops the worker from processing more records, gracefully.
+//
+// Staged-engine protocol (Invariant 7: shutdown drains, then acks the prefix):
+//
+//  1. Quiesce: the reader stops admitting new batches. A batch it is already
+//     reading is held, not dropped, so the quiesce can be rolled back.
+//  2. Wait until every admitted batch is dispatched (processors done, sent to
+//     the destinations or resolved), then until the ledger is drained: every
+//     admitted position was released (Source.Ack returned) or failed. Both
+//     waits are bounded by ctx. If ctx expires first the quiesce is rolled
+//     back, nothing was armed, and the error is returned: the worker is still
+//     running, exactly like the old "could not acquire the processing lock".
+//  3. Arm the stop flag, then tear the source down. Teardown is what releases
+//     a reader blocked in Read, and it is only reached once nothing is in
+//     flight, so it cannot break an ack. A batch the reader got after step 1
+//     is discarded unacked and replays on restart.
+//
+// If the ledger failed on its own while draining, the pipeline is already
+// going down with that error (Do returns it); Stop then arms and tears down
+// like the old code did once the failing batch had unwound.
+//
+// Known gap (prototype): v1 calls Destination.Stop(lastPosition) before
+// waiting for acks so an SDK batcher with batch.size>1 and delay=0 flushes its
+// tail. This engine does not, so such a destination makes Stop time out
+// (rolled back, nothing acked early). See the PR description.
 func (w *Worker) Stop(ctx context.Context) error {
-	// The lock is locked every time a batch is being processed. We lock it
-	// to be sure no batch is currently being processed.
-	release, err := w.acquireProcessingLock(ctx)
-	if err != nil {
-		return err
+	p := w.pl
+	if p != nil && !w.stop.Load() {
+		p.setQuiesced(true)
+		err := p.ledger.waitDispatched(ctx)
+		if err == nil {
+			err = p.ledger.waitDrained(ctx)
+		}
+		if err != nil {
+			if ledgerErr := p.ledger.failure(); ledgerErr == nil || !cerrors.Is(err, ledgerErr) {
+				// Not a ledger failure: the stop deadline passed or ctx was
+				// canceled. Roll back; nothing was armed.
+				p.setQuiesced(false)
+				return err
+			}
+			// The ledger failed by itself; the worker is terminating with
+			// that error. Fall through and arm so the stop completes.
+		}
 	}
-	defer release()
 
-	// Lock acquired: no batch is currently being processed, but a new batch's
-	// first task can already be blocked in (or about to start) a source Read,
-	// unprotected by processingLock by design (see doTask) so a slow Read
-	// doesn't hold up Stop. Set stop *before* tearing down the source: doTask
-	// only treats a plugin.ErrPluginNotRunning from that Read as a graceful
-	// stop when w.stop.Load() is already true (see doTask's IsFirst check). If
-	// tearDownSource ran first, a Read racing the teardown could observe the
-	// torn-down plugin (ErrPluginNotRunning) before this flag flips, and get
-	// misreported as a real failure instead of a graceful stop — confirmed by
-	// repro under `-race -count=800` (pkg/lifecycle-poc/service_test.go
-	// TestServiceLifecycle_PipelineStop flaking with "failed to read from
-	// source: plugin is not running").
-	w.stop.Store(true)
+	// Set stop *before* tearing down the source: the reader only treats a
+	// plugin.ErrPluginNotRunning from Read as a graceful stop when w.stop is
+	// already true. If tearDownSource ran first, a Read racing the teardown
+	// could observe the torn-down plugin before this flag flips and get
+	// misreported as a real failure instead of a graceful stop (reproduced
+	// under `-race -count=800` as TestServiceLifecycle_PipelineStop flaking
+	// with "failed to read from source: plugin is not running").
+	w.arm()
 	if err := w.tearDownSource(ctx); err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
@@ -235,24 +270,11 @@ func (w *Worker) Stop(ctx context.Context) error {
 // so it stays true even when Stop returns a teardown error. Callers use this to
 // distinguish "Stop returned an error but the worker is genuinely stopping"
 // (teardown failed after the flag was set) from "Stop failed before arming"
-// (lock-acquisition timeout) — the two have opposite implications for whether a
+// (drain deadline) — the two have opposite implications for whether a
 // deliberate-stop marker should be rolled back. See
 // lifecycle-poc.Service.stopRunnablePipeline.
 func (w *Worker) Stopping() bool {
 	return w.stop.Load()
-}
-
-// acquireProcessingLock tries to acquire the processing lock. It returns a
-// release function that should be called to release the lock. If the context is
-// canceled before the lock is acquired, it returns the context error.
-func (w *Worker) acquireProcessingLock(ctx context.Context) (release func(), err error) {
-	select {
-	case w.processingLock <- struct{}{}:
-		return func() { <-w.processingLock }, nil
-	case <-ctx.Done():
-		// lock not acquired
-		return func() {}, ctx.Err()
-	}
 }
 
 func (w *Worker) Close(ctx context.Context) error {
@@ -262,9 +284,15 @@ func (w *Worker) Close(ctx context.Context) error {
 	// stop Stop already tore it down and this is a no-op; on a fatal-error path
 	// Stop is never called, so this is where the source's resources are released
 	// (without it the source connector/plugin would leak).
+	tornDown := true
 	if err := w.tearDownSource(ctx); err != nil {
+		tornDown = false
 		errs = append(errs, cerrors.Errorf("failed to tear down source: %w", err))
 	}
+	// Stop the staged-engine goroutines before closing the tasks they use. The
+	// reader may be blocked in Source.Read until the teardown above released
+	// it, so it is only joined when the teardown succeeded.
+	w.pl.shutdown(tornDown)
 
 	for task := range w.FirstTask.Tasks() {
 		err := task.Close(ctx)
@@ -282,27 +310,11 @@ func (w *Worker) Close(ctx context.Context) error {
 }
 
 // Do processes records from the source until the worker is stopped. It returns
-// no error if the worker is stopped gracefully.
+// no error if the worker is stopped gracefully. See worker_pipeline.go for the
+// staged engine it runs.
 func (w *Worker) Do(ctx context.Context) error {
-	for !w.stop.Load() {
-		w.logger.Trace(ctx).Msg("starting next batch")
-		// Invariant 1/3 (enforcement site, #2723): wrap the Worker in a fresh
-		// runAckNacker for this batch-read pass. A split run's original
-		// position must not reach w.Ack/w.Nack until every one of its members
-		// is terminal - see run_ledger.go.
-		//
-		// NB: runAckNacker itself is stateless - it holds only the parent. All
-		// completion state lives in the *splitRun values inside Batch.runs, so
-		// isolation between passes comes from NewBatch allocating fresh runs
-		// (and, at a fan-out, from cloneRuns), NOT from the wrapper being
-		// fresh. Naming the wrapper as the boundary is what hid the fan-out
-		// straddle bug - see validateRunsWholeBeforeFanOut.
-		if err := w.doTask(ctx, w.FirstTask, &Batch{}, newRunAckNacker(w)); err != nil {
-			return err
-		}
-		w.logger.Trace(ctx).Msg("batch done")
-	}
-	return nil
+	w.pl.ledger.nackGate = w.DLQ.failFast
+	return w.doPipelined(ctx)
 }
 
 // maxRetryAttempts bounds Worker.doTask's RecordFlagRetry self-recursion (see
@@ -441,7 +453,8 @@ func (w *Worker) doTask(
 	//
 	// See TaskNode.MarkSharedBoundary and
 	// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
-	if taskNode.sharedBoundary {
+	lockFree := w.pipelined.Load() && isAsync(taskNode)
+	if taskNode.sharedBoundary && !lockFree {
 		taskNode.sharedMu.Lock()
 		defer taskNode.sharedMu.Unlock()
 
@@ -471,7 +484,7 @@ func (w *Worker) doTask(
 	}
 
 	err := w.doTaskAttempt(ctx, taskNode, b, acker, nil)
-	if err != nil && taskNode.sharedBoundary {
+	if err != nil && taskNode.sharedBoundary && !lockFree {
 		// H2 (adversarial review of #2734): ANY error escaping a pass
 		// through a shared subtree can desynchronize the shared
 		// destination's single gRPC ack stream from this point on - most
@@ -501,7 +514,6 @@ func (w *Worker) doTask(
 	return err
 }
 
-//nolint:gocyclo // TODO: refactor
 func (w *Worker) doTaskAttempt(
 	ctx context.Context,
 	taskNode *TaskNode,
@@ -518,6 +530,31 @@ func (w *Worker) doTaskAttempt(
 		Int("split_count", len(b.splitRecords)).
 		Bool("tainted", b.tainted).
 		Msg("executing task")
+
+	if at, ok := t.(asyncTask); ok && w.pipelined.Load() {
+		// Invariant 1 (enforcement site): the write is only SUBMITTED here.
+		// The continuation below runs when the destination's AckReader matched
+		// the batch's acks to this write, so every ack/nack vote that reaches
+		// the ledger still comes from an explicit destination ack for a write
+		// of exactly these records. Returning early does not ack anything.
+		err := at.Submit(ctx, b, func(derr error) {
+			if derr != nil {
+				w.pl.ledger.fail(cerrors.Errorf("task %s: %w", t.ID(), derr))
+				return
+			}
+			if err := w.afterTask(ctx, taskNode, b, acker, retry); err != nil {
+				var he *haltError
+				if cerrors.As(err, &he) {
+					return // the halting nack is in the ledger; the coordinator fails on it in order
+				}
+				w.pl.ledger.fail(err)
+			}
+		})
+		if err != nil {
+			return cerrors.Errorf("task %s: %w", t.ID(), err)
+		}
+		return nil
+	}
 
 	err := t.Do(ctx, b)
 
@@ -594,7 +631,7 @@ func (w *Worker) doTaskAttempt(
 			// whole - and the shared sink - are unaffected and stay up for
 			// as long as any sibling worker is still running. See
 			// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
-			w.stop.Store(true)
+			w.arm()
 			if tdErr := w.tearDownSource(ctx); tdErr != nil {
 				return cerrors.Errorf("source finished but failed to tear down: %w", tdErr)
 			}
@@ -604,31 +641,27 @@ func (w *Worker) doTaskAttempt(
 	}
 
 	if taskNode.IsFirst() {
-		// The first task has some specifics:
-		// - Store last time we read a batch from the source for metrics.
-		// - It locks the stop lock, so that no stop signal can be received while
-		//   the batch is being processed.
-		// - It checks if the source was torn down after receiving the batch and
-		//   before acquiring the lock.
-		w.lastReadAt = time.Now()
-
-		release, err := w.acquireProcessingLock(ctx)
-		if err != nil {
-			return err
-		}
-		// Unlock after the batch is end-to-end processed.
-		defer release()
-
-		if w.stop.Load() {
-			// The source was already torn down, we won't be able to deliver
-			// any acks so throw away the batch and gracefully return.
-			w.logger.Warn(ctx).
-				Str("task_id", t.ID()).
-				Int("batch_size", len(b.records)).
-				Msg("stop signal received just before starting to process next batch, gracefully stopping without flushing the batch")
-			return nil
-		}
+		// Direct doTask use only (tests, tools): the staged engine reads in
+		// its own goroutine and never runs the source task through here.
+		w.lastReadAt.Store(time.Now().UnixNano())
 	}
+
+	return w.afterTask(ctx, taskNode, b, acker, retry)
+}
+
+// afterTask is everything that happens once a task's Do has returned without
+// error: ack the batch if it is done, hand it to the next task(s), or split a
+// tainted batch into same-flag sub-batches and route each. It is also the
+// continuation of an asynchronous destination task, run by the AckReader when
+// the destination confirmed (or rejected) the batch.
+func (w *Worker) afterTask(
+	ctx context.Context,
+	taskNode *TaskNode,
+	b *Batch,
+	acker ackNacker,
+	retry *retryAttempt,
+) error {
+	t := taskNode.Task
 
 	if !b.tainted {
 		w.logger.Trace(ctx).
@@ -678,7 +711,7 @@ func (w *Worker) doTaskAttempt(
 		w.logger.Trace(ctx).
 			Str("task_id", t.ID()).
 			Int("batch_size", len(b.records)).
-			Str("record_flag", b.recordStatuses[0].Flag.String()).
+			Str("record_flag", subBatch.recordStatuses[0].Flag.String()).
 			Msg("collected sub-batch")
 
 		switch subBatch.recordStatuses[0].Flag {
@@ -871,6 +904,19 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 			return err
 		}
 
+		if w.pipelined.Load() && allAsync(taskNode.Next) {
+			// Every branch is a bare asynchronous destination: submitting is
+			// quick and never runs user code, so no goroutine per branch (and
+			// per batch) is needed. Backpressure from a full window on one
+			// destination simply delays the next branch's submit.
+			for _, nextTask := range taskNode.Next {
+				if err := w.doTask(ctx, nextTask, b.clone(), newRunAckNacker(multiAcker)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
 		p := pool.New().WithErrors()
 		for _, nextTask := range taskNode.Next {
 			branchBatch := b.clone()
@@ -1031,7 +1077,7 @@ func (w *Worker) updateTimer(records []opencdc.Record) {
 		if err != nil {
 			// If the record metadata has changed and does not include ReadAt
 			// fallback to the time the worker received the record.
-			readAt = w.lastReadAt
+			readAt = time.Unix(0, w.lastReadAt.Load())
 		}
 		w.timer.UpdateSince(readAt)
 	}
@@ -1060,7 +1106,12 @@ type TaskNode struct {
 	// acquisition site).
 	sharedBoundary bool
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
-	// MarkSharedBoundary and the lock acquisition in doTask.
+	// MarkSharedBoundary and the lock acquisition in doTask. The staged engine
+	// skips it for a shared root that is just an asynchronous destination: that
+	// destination's writer is the only caller of Write and its AckReader the only
+	// caller of Ack, which is what the lock and the poison flag (H2) existed to
+	// guarantee. The lock stays for any root that runs processors: pipeline-level
+	// processors are single instances and not safe for concurrent calls.
 	sharedMu *sync.Mutex
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
@@ -1167,6 +1218,20 @@ func (t *TaskNode) iterator() func(yield func(*TaskNode) bool) bool {
 		}
 		return true
 	}
+}
+
+func isAsync(n *TaskNode) bool {
+	_, ok := n.Task.(asyncTask)
+	return ok
+}
+
+func allAsync(nodes []*TaskNode) bool {
+	for _, n := range nodes {
+		if _, ok := n.Task.(asyncTask); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 type ackNacker interface {

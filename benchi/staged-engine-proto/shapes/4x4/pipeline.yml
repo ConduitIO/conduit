@@ -1,0 +1,60 @@
+# staged-engine prototype shape 4x4: four generator sources, four file sinks, default config.
+# Every record from every source reaches every sink; the reported rate is records per second per sink.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: src-2
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: src-3
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: src-4
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
+      - id: sink-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-2.jsonl
+      - id: sink-3
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-3.jsonl
+      - id: sink-4
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-4.jsonl

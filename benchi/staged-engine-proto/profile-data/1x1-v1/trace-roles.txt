@@ -1,0 +1,75 @@
+goroutine creations (creator stack top 4):
+        18  github.com/conduitio/conduit/pkg/connector.(*Persister).flushNow
+         9  github.com/conduitio/conduit/pkg/connector.(*Persister).triggerFlush < github.com/conduitio/conduit/pkg/connector.(*Persister).Persist < github.com/conduitio/conduit/pkg/connector.(*Source).Ack < github.com/conduitio/conduit/pkg/lifecycle/stream.(*SourceAckerNode).registerAckHandler.func1
+         9  github.com/dgraph-io/badger/v4.(*DB).doWrites
+         1  runtime.traceStartReadCPU < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime.(*traceAdvancerState).start < runtime.StartTrace < runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber
+         1  runtime/trace.(*traceMultiplexer).startLocked < runtime/trace.(*traceMultiplexer).addedSubscriber < runtime/trace.(*traceMultiplexer).subscribeTraceStartWriter < runtime/trace.Start
+trace span: 2s
+
+engine.persister  (goroutines=18, observed=17.608s)
+   NotExist                                  100.0%  17.606597s
+
+engine.source.deliverDeferredAcks  (goroutines=1, observed=1.86s)
+   waiting:chan receive                       95.7%  1.78022s
+   Running                                     2.1%  39.973ms
+   waiting:select                              1.2%  21.678ms
+   Runnable                                    0.9%  17.228ms
+
+plugin.dest.Run  (goroutines=1, observed=2s)
+   waiting:select                             60.1%  1.202244s
+   Running                                    24.9%  498.58ms
+   Runnable                                   10.7%  213.701ms
+   Syscall                                     4.2%  84.42ms
+
+plugin.source.runAck  (goroutines=1, observed=1.86s)
+   waiting:select                             97.4%  1.811559s
+   Running                                     1.4%  26.426ms
+   Runnable                                    1.2%  22.266ms
+
+plugin.source.runRead  (goroutines=1, observed=2s)
+   Running                                    52.7%  1.053084s
+   waiting:select                             44.1%  881.214ms
+   Runnable                                    3.2%  64.117ms
+
+v1.DestinationAckerNode  (goroutines=2, observed=4s)
+   waiting:chan receive                       42.4%  1.696392s
+   waiting:select                             25.4%  1.016259s
+   Runnable                                   24.4%  976.58ms
+   Running                                     7.7%  309.21ms
+
+v1.DestinationNode  (goroutines=1, observed=2s)
+   waiting:select                             64.3%  1.285907s
+   Runnable                                   26.2%  523.481ms
+   Running                                     9.5%  190.391ms
+
+v1.FaninNode  (goroutines=1, observed=2s)
+   waiting:select                             92.9%  1.858062s
+   Runnable                                    3.7%  73.115ms
+   Running                                     3.4%  68.847ms
+
+v1.FanoutNode  (goroutines=1, observed=2s)
+   waiting:select                             93.3%  1.866266s
+   Runnable                                    3.5%  69.463ms
+   Running                                     3.2%  64.292ms
+
+v1.MetricsNode  (goroutines=2, observed=4s)
+   waiting:select                             91.2%  3.64737s
+   Runnable                                    4.8%  190.679ms
+   Running                                     4.0%  161.896ms
+
+v1.SourceAckerNode  (goroutines=1, observed=2s)
+   waiting:select                             89.8%  1.796838s
+   Runnable                                    5.2%  103.376ms
+   Running                                     5.0%  99.824ms
+
+v1.SourceNode  (goroutines=1, observed=2s)
+   waiting:select                             87.2%  1.744087s
+   Runnable                                    6.5%  130.094ms
+   Running                                     6.3%  125.861ms
+
+v1.stream  (goroutines=1, observed=2s)
+   waiting:chan send                          82.4%  1.64758s
+   Runnable                                    9.0%  179.031ms
+   Running                                     4.9%  97.856ms
+   waiting:select                              3.7%  73.586ms

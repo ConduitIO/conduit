@@ -386,7 +386,7 @@ func TestNSource_SharedBoundary_RetryDoesNotSelfDeadlock(t *testing.T) {
 	node.MarkSharedBoundary() // exactly what funnel.Sink does for the shared tail
 
 	parent := &fakeParentAckNacker{}
-	w := &Worker{logger: log.Nop(), processingLock: make(chan struct{}, 1)}
+	w := &Worker{logger: log.Nop()}
 
 	done := make(chan error, 1)
 	go func() { done <- w.doTask(ctx, node, NewBatch(slices.Clone(records)), parent) }()
