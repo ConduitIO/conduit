@@ -31,6 +31,11 @@ ARMS = [("v1", "main", False), ("v2-main", "main", True), ("v2-proto", "proto", 
 # with the SOURCE connector's sdk.batch.size=100 / delay=10ms. It differs from
 # v2-main only by the pipeline file, so it runs a different shape directory.
 ALTA = ("v2-altA", "main", True)
+# Optional fourth arm (--anchor-shape): arch-v2 main WITHOUT source batching,
+# the anchor to the previous AWS run. With --suffix the three base arms are
+# renamed (e.g. "+batch") so a table never confuses batched and unbatched arms.
+ANCHOR = ("v2-main-nobatch", "main", True)
+SUFFIX = ""
 
 
 def run_once(here, binary, v2, shape, warmup, window, out, envs):
@@ -48,8 +53,9 @@ def run_once(here, binary, v2, shape, warmup, window, out, envs):
                 note="stop_timeout" if "STOP_TIMEOUT" in p.stderr else ""), ""
 
 
-def arms_for(alta_shape):
-    return ARMS + ([ALTA] if alta_shape else [])
+def arms_for(alta_shape, anchor_shape=""):
+    base = [(n + SUFFIX, i, v) for n, i, v in ARMS]
+    return base + ([ALTA] if alta_shape else []) + ([ANCHOR] if anchor_shape else [])
 
 
 def resummarize(d):
@@ -59,6 +65,9 @@ def resummarize(d):
     env = json.load(open(os.path.join(d, "env.json")))
     class A: pass
     a = A(); a.shape = env["shape"]; a.rounds = env["rounds"]; a.warmup = env["warmup"]; a.window = env["window"]; a.env = env["env"]
+    global SUFFIX
+    SUFFIX = env.get("suffix", "")
+    a.anchor_shape = env.get("anchor_shape", "")
     a.alta_shape = env.get("alta_shape", ""); a.note = env.get("note", "")
     open(os.path.join(d, "summary.md"), "w").write(summarize(rows, a))
 
@@ -77,7 +86,11 @@ def main():
     ap.add_argument("--env", action="append", default=[])
     ap.add_argument("--note", default="")
     ap.add_argument("--alta-shape", default="", help="shape directory for the optional v2-altA arm (source batch 100)")
+    ap.add_argument("--anchor-shape", default="", help="shape directory for the optional v2-main-nobatch arm")
+    ap.add_argument("--suffix", default="", help="appended to the v1/v2-main/v2-proto arm names, e.g. +batch")
     a = ap.parse_args()
+    global SUFFIX
+    SUFFIX = a.suffix
     here = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(a.out, exist_ok=True)
     bins = {"main": os.path.abspath(a.main), "proto": os.path.abspath(a.proto)}
@@ -85,13 +98,13 @@ def main():
     csvp = os.path.join(a.out, "runs.csv")
     for r in range(1, a.rounds + 1):
         # rotate which arm leads, palindrome within the round
-        arms = arms_for(a.alta_shape)
+        arms = arms_for(a.alta_shape, a.anchor_shape)
         k = (r - 1) % len(arms)
         order = arms[k:] + arms[:k]
         seq = [(arm, "a") for arm in order] + [(arm, "b") for arm in reversed(order)]
         for (name, img, v2), ab in seq:
             t0 = time.time()
-            shape = a.alta_shape if name == ALTA[0] else a.shape
+            shape = a.alta_shape if name == ALTA[0] else a.anchor_shape if name == ANCHOR[0] else a.shape
             res, err = run_once(here, bins[img], v2, shape, a.warmup, a.window, os.path.join(a.out, "tmp"), a.env)
             if res is None:
                 print(f"round {r} {name}-{ab}: FAILED\n{err[-400:]}", file=sys.stderr)
@@ -103,14 +116,14 @@ def main():
                 w = csv.DictWriter(f, fieldnames=["round", "arm", "rep", "t_start", "t_end", "rate", "recs", "secs", "sinks", "cores", "vmload", "hostload", "note"])
                 w.writeheader(); w.writerows(rows)
     json.dump(dict(shape=a.shape, rounds=a.rounds, warmup=a.warmup, window=a.window, env=a.env, note=a.note,
-                   main=a.main, proto=a.proto, alta_shape=a.alta_shape, started=time.strftime("%FT%TZ", time.gmtime())),
+                   main=a.main, proto=a.proto, alta_shape=a.alta_shape, anchor_shape=a.anchor_shape, suffix=a.suffix, started=time.strftime("%FT%TZ", time.gmtime())),
               open(os.path.join(a.out, "env.json"), "w"), indent=2)
     open(os.path.join(a.out, "summary.md"), "w").write(summarize(rows, a))
     print(open(os.path.join(a.out, "summary.md")).read())
 
 
 def summarize(rows, a):
-    names = [n for n, _, _ in arms_for(a.alta_shape)]
+    names = [n for n, _, _ in arms_for(a.alta_shape, getattr(a, "anchor_shape", ""))]
     by = {n: {"a": {}, "b": {}} for n in names}
     for r in rows:
         by[r["arm"]][r["rep"]][r["round"]] = r["rate"]
@@ -157,7 +170,10 @@ def summarize(rows, a):
         out.append(f"- **{x} vs {y}**: median-to-median {((med[x]-med[y])/med[y]*100):+.1f}%; per-round "
                    + ", ".join(f"{d:+.1f}%" for d in per))
     out.append("## Comparisons\n")
-    pair("v2-main", "v1"); pair("v2-proto", "v1"); pair("v2-proto", "v2-main")
+    x = SUFFIX
+    pair("v2-main" + x, "v1" + x); pair("v2-proto" + x, "v1" + x); pair("v2-proto" + x, "v2-main" + x)
+    if getattr(a, "anchor_shape", ""):
+        pair("v2-main" + x, "v2-main-nobatch"); pair("v1" + x, "v2-main-nobatch"); pair("v2-proto" + x, "v2-main-nobatch")
     if a.alta_shape:
         pair("v2-altA", "v1"); pair("v2-altA", "v2-main"); pair("v2-proto", "v2-altA")
     out.append("\nRead every delta against the arms' A/A floors above; a delta inside the floor is not\n"
