@@ -1,0 +1,44 @@
+{
+  "run_id": "20261012t164605z",
+  "region": "us-west-1",
+  "account": "132836343092",
+  "created_at": "2026-10-12T16:46:05.126711Z",
+  "expires_at": "2026-10-12T22:46:05.126711Z",
+  "instance_type": "c7i.4xlarge",
+  "ami": "ami-0298380f140c1c3ca",
+  "vpc": "vpc-bc58f7da",
+  "subnet": "subnet-20de4746",
+  "bucket": "conduit-archv2-gate-early-132836343092-20261012t164605z",
+  "prefix": "runs/20261012t164605z",
+  "role_name": "conduit-archv2-gate-early-20261012t164605z",
+  "inline_policy_name": "put-results-only",
+  "instance_profile_name": "conduit-archv2-gate-early-20261012t164605z",
+  "security_group_id": "sg-0442f9631071d50b6",
+  "instance_id": "i-0e92d5d754e3f1768",
+  "volume_ids": [
+    "vol-043e9206c3e8f277e"
+  ],
+  "launched_at": "2026-10-12T16:46:21.205165Z",
+  "main_sha": "c60003bbea8a1af4a74e50dd332435a84d2e9190",
+  "fanout_pr": "2978",
+  "fanout_sha": "98f8411e20a7a8c83863453815c5bc2f6fe1cc53",
+  "harness_pr": "2978",
+  "harness_sha": "aeb43a3086df61fd74c0682b01fcf481e702abd2",
+  "rounds": 5,
+  "max_minutes": 360,
+  "deleted": [
+    "sg-0442f9631071d50b6",
+    "instance-profile/conduit-archv2-gate-early-20261012t164605z",
+    "role/conduit-archv2-gate-early-20261012t164605z"
+  ],
+  "bucket_kept": true,
+  "terminated_at": "2026-10-12T22:03Z",
+  "cleanup_verified": {
+    "instance i-0e92d5d754e3f1768": "terminated",
+    "volume vol-043e9206c3e8f277e": "NotFound",
+    "sg-0442f9631071d50b6": "NotFound",
+    "role": "NoSuchEntity",
+    "instance-profile": "NoSuchEntity",
+    "other running instances/volumes in us-west-1": "none"
+  }
+}

@@ -51,14 +51,18 @@ def main():
         e = ", ".join(x.replace("CONDUIT_BENCH_", "") for x in env["env"])
 
         def c(n):
+            if n not in by:
+                return "-"
             return "HANG" if m[n] != m[n] else f"{m[n]:.0f} (+/-{f[n][1]:.1f}%)"
 
         def pct(x, y):
+            if x not in by or y not in by:
+                return "-"
             if m[x] != m[x] or m[y] != m[y]:
-                return "n/a"
+                return "n/a (hang)"
             return f"{(m[x]-m[y])/m[y]*100:+.1f}%"
 
-        line = (f"| {os.path.basename(d)} | {env['shape']}{' ' + e if e else ''} | {env['rounds']} x {env['window']}s | "
+        line = (f"| {os.path.basename(d.rstrip('/'))} | {env['shape']}{' ' + e if e else ''} | {env['rounds']} x {env['window']}s | "
                 + " | ".join(c(n) for n in arms)
                 + f" | {pct('v2-proto','v1')} | {pct('v2-proto','v2-main')} | {pct('v2-main','v1')} |")
         if has_alta:

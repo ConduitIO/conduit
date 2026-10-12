@@ -1,0 +1,26 @@
+2026-10-12T16:46:31Z bootstrap start
+2026-10-12T16:47:41Z docker 25.0.16 and go version go1.26.9 linux/amd64 installed
+2026-10-12T16:47:45Z building binaries
+2026-10-12T16:48:22Z binaries built
+2026-10-12T16:48:25Z quiet 60s before sessions
+2026-10-12T16:49:26Z session 01-1x1-bufferedacks start (shape 1x1, 5 rounds, 10s warmup, 40s window, args: --alta-shape 1x1-srcbatch100 --env CONDUIT_BENCH_DEST_ACK_LATENCY=1us)
+2026-10-12T17:27:19Z session 01-1x1-bufferedacks exit 0
+2026-10-12T17:27:20Z session 02-2x2 start (shape 2x2, 5 rounds, 10s warmup, 40s window, args: )
+2026-10-12T17:56:45Z session 02-2x2 exit 0
+2026-10-12T17:56:47Z session 03-4x4 start (shape 4x4, 5 rounds, 10s warmup, 40s window, args: )
+2026-10-12T18:30:12Z session 03-4x4 exit 0
+2026-10-12T18:30:14Z session 04-1x1 start (shape 1x1, 5 rounds, 10s warmup, 40s window, args: --alta-shape 1x1-srcbatch100)
+2026-10-12T19:08:17Z session 04-1x1 exit 0
+2026-10-12T19:08:19Z session 05-1x1-streambuf64 start (shape 1x1, 5 rounds, 10s warmup, 40s window, args: --env CONDUIT_BENCH_STREAM_BUFFER=64)
+2026-10-12T19:37:58Z session 05-1x1-streambuf64 exit 0
+2026-10-12T19:38:00Z session 06-2x2-streambuf64 start (shape 2x2, 5 rounds, 10s warmup, 40s window, args: --env CONDUIT_BENCH_STREAM_BUFFER=64)
+2026-10-12T20:10:09Z session 06-2x2-streambuf64 exit 0
+2026-10-12T20:10:11Z session 07-1x1-noschema start (shape 1x1-noschema, 5 rounds, 10s warmup, 40s window, args: )
+2026-10-12T20:38:39Z session 07-1x1-noschema exit 0
+2026-10-12T20:38:41Z session 08-1x1-lat1ms start (shape 1x1, 5 rounds, 10s warmup, 40s window, args: --env CONDUIT_BENCH_DEST_ACK_LATENCY=1ms)
+2026-10-12T21:06:06Z session 08-1x1-lat1ms exit 0
+2026-10-12T21:06:08Z session 09-1x1-destbatch100 start (shape 1x1-destbatch, 5 rounds, 10s warmup, 40s window, args: )
+2026-10-12T21:33:30Z session 09-1x1-destbatch100 exit 0
+2026-10-12T21:33:32Z session 10-1x1-srcbatch100 start (shape 1x1-srcbatch100, 5 rounds, 10s warmup, 40s window, args: )
+2026-10-12T22:02:57Z session 10-1x1-srcbatch100 exit 0
+2026-10-12T22:03:01Z DONE, halting (instance terminates on halt)
