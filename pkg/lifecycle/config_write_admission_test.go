@@ -25,7 +25,9 @@ package lifecycle
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
@@ -42,17 +44,22 @@ import (
 
 // startProbe attempts a Start of the pipeline each time a config write runs.
 type startProbe struct {
-	ctx    context.Context
-	ls     *Service
-	id     string
-	errs   []error
-	onFire func()
+	ctx  context.Context
+	ls   *Service
+	id   string
+	errs []error
+	// gate, if set, holds the first fire (the config write) until it is
+	// closed, after closing entered: a store write that hangs.
+	gate    chan struct{}
+	entered chan struct{}
+	once    sync.Once
 }
 
 func (p *startProbe) fire() {
 	p.errs = append(p.errs, p.ls.Start(p.ctx, p.id))
-	if p.onFire != nil {
-		p.onFire()
+	if p.gate != nil {
+		p.once.Do(func() { close(p.entered) })
+		<-p.gate
 	}
 }
 
@@ -215,9 +222,15 @@ func TestConfigWrite_PipelineUpdateDLQ_StartRefusedInsideWindow(t *testing.T) {
 	r.startAndStop(t)
 }
 
-// A deleted pipeline must not get a live run. The pipeline here has no
-// connectors, so Start cannot build a run for it: the assertion is that Start
-// was refused at admission, not that it failed later.
+// A deleted pipeline must not get a live run. LIMITATION: the orchestrator
+// only deletes a pipeline with no connectors, and a pipeline with none cannot
+// start (the build fails with "can't build pipeline without any source
+// connectors"), so no run can actually be produced for a pipeline being
+// deleted. What this proves is the admission decision: without the mark Start
+// is admitted past reserve for a pipeline that is being deleted (and fails
+// later, at build, only for that unrelated reason); with it Start is refused
+// at admission. The data-bearing variant of the race is covered by the
+// connector and processor cases, whose pipelines can start.
 func TestConfigWrite_PipelineDelete_StartRefusedInsideWindow(t *testing.T) {
 	is := is.New(t)
 	r := newConfigWriteRun(t)
@@ -440,4 +453,82 @@ func TestTryLockForMutation(t *testing.T) {
 		defer unlock()
 		r.startAndStop(t)
 	})
+}
+
+// #2961 review: reserve checked the mutation mark before the predecessor
+// checks, so a recovery restart whose run had been superseded got
+// config_changing instead of errRecoverySuperseded. The cleanup goroutine
+// treats superseded as "leave the pipeline to the new run"; any other error
+// writes Degraded and fires OnFailure, which can trip exit-on-degraded.
+func TestReserve_StalePredecessorWithMarkHeld_IsSuperseded(t *testing.T) {
+	is := is.New(t)
+	r := newConfigWriteRun(t)
+	unlock, ok := r.ls.TryLockForMutation(r.pl.ID)
+	is.True(ok)
+	defer unlock()
+
+	// A predecessor that is no longer the registered run (it was superseded
+	// and its replacement is gone, so the write could take the mark).
+	stale := &runnablePipeline{pipeline: r.pl}
+	_, err := r.ls.reserve(r.pl.ID, stale)
+	is.True(cerrors.Is(err, errRecoverySuperseded))
+	is.True(!cerrors.Is(err, pipeline.ErrPipelineConfigChanging))
+
+	// An external Start is still refused for the write.
+	_, err = r.ls.reserve(r.pl.ID, nil)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineConfigChanging))
+}
+
+// A store write that hangs holds the mark for as long as it hangs. It must
+// refuse Start of that pipeline and nothing else: Stop and other pipelines
+// are not blocked, and Start is admitted once the write returns.
+func TestConfigWrite_HungStoreWrite_RefusesOnlyStartOfThatPipeline(t *testing.T) {
+	is := is.New(t)
+	r := newConfigWriteRun(t)
+	r.probe.gate = make(chan struct{})
+	r.probe.entered = make(chan struct{})
+	t.Cleanup(func() { closeIfOpen(r.probe.gate) })
+
+	other, err := r.pls.Service.Create(r.probe.ctx, "other-pipeline", pipeline.Config{Name: "other"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	updateErr := make(chan error, 1)
+	go func() {
+		_, err := r.orch.Pipelines.Update(r.probe.ctx, r.pl.ID, pipeline.Config{Name: "renamed"})
+		updateErr <- err
+	}()
+	select {
+	case <-r.probe.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the config write never reached the store")
+	}
+
+	// Each call must return while the write hangs. A call that blocked on the
+	// write would hit the timer, which is only a failure guard.
+	returns := func(what string, f func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() { defer close(done); f() }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s blocked behind a hung config write", what)
+		}
+	}
+	var startErr, otherErr error
+	returns("Start of the same pipeline", func() { startErr = r.ls.Start(r.probe.ctx, r.pl.ID) })
+	is.True(cerrors.Is(startErr, pipeline.ErrPipelineConfigChanging))
+
+	returns("Stop of the same pipeline", func() { _ = r.ls.Stop(r.probe.ctx, r.pl.ID, false) })
+
+	returns("Start of another pipeline", func() { otherErr = r.ls.Start(r.probe.ctx, other.ID) })
+	is.True(!cerrors.Is(otherErr, pipeline.ErrPipelineConfigChanging)) // admitted; fails later at build, it has no connectors
+
+	unlock, ok := r.ls.TryLockForMutation(other.ID)
+	is.True(ok) // another pipeline can still be written
+	unlock()
+
+	close(r.probe.gate)
+	is.NoErr(<-updateErr)
+	r.startAndStop(t) // admitted once the write returned
 }

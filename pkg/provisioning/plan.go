@@ -46,6 +46,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -534,6 +535,24 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		}
 	}
 
+	// #2961: the isRunning checks above read the pipeline's status, which
+	// lags the run, and an external Start can still land between them and the
+	// import. For a pipeline with no run, mark it as being mutated, which
+	// refuses a Start until the import has committed. A refusal means a run
+	// exists after all, so fall through to the running branch. Held for the
+	// import only: never across StopAndWait or the final Start.
+	if !running {
+		if unlockMark, ok := s.lifecycleService.TryLockForMutation(desired.ID); ok {
+			defer unlockMark()
+			if err := s.transactionalImport(ctx, desired); err != nil {
+				return fresh, err
+			}
+			fresh.AppliedMode = ApplyModeProvisioned
+			return fresh, nil
+		}
+		running = true
+	}
+
 	// Gate every non-empty apply to a running pipeline behind operator
 	// authorization — not just EffectRestart changes. In Wave-of-#2588,
 	// applying ANY change to a running pipeline goes through the full
@@ -552,15 +571,6 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 			"equivalent config/env setting) to authorize live applies, or stop the pipeline first and apply while " +
 			"it's stopped"
 		return fresh, ce
-	}
-
-	if !running {
-		// Nothing live to disrupt — identical to ApplyPlan's tail.
-		if err := s.transactionalImport(ctx, desired); err != nil {
-			return fresh, err
-		}
-		fresh.AppliedMode = ApplyModeProvisioned
-		return fresh, nil
 	}
 
 	// Refuse a desired config the lifecycle service would refuse at Start, while
@@ -618,6 +628,17 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, cerrors.Errorf("could not stop pipeline %q to apply live changes: %w", desired.ID, err)
 	}
 
+	// #2961: StopAndWait returned, but an external Start may have run since.
+	// Mark the pipeline so none can until the import has committed. A refusal
+	// means a run was admitted in that gap; nothing has been changed, so say
+	// so and let the caller retry.
+	unlockMark, ok := s.lifecycleService.TryLockForMutation(desired.ID)
+	if !ok {
+		return fresh, cerrors.Errorf("pipeline %q was started again while its apply was draining it; "+
+			"nothing was changed, retry the apply: %w", desired.ID, pipeline.ErrPipelineRunning)
+	}
+	defer unlockMark() // idempotent; also released explicitly below, before Start
+
 	if err := s.transactionalImport(ctx, desired); err != nil {
 		// The pipeline is already stopped (StopAndWait above) and the
 		// transaction guarantees the store wasn't left partially mutated
@@ -626,7 +647,9 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, err
 	}
 
-	if err := s.lifecycleService.Start(ctx, desired.ID); err != nil {
+	// Release before Start: Start is refused while the mark is held.
+	unlockMark()
+	if err := s.startAfterApply(ctx, desired.ID); err != nil {
 		// The new config is already durably committed; only the restart
 		// failed. Leave the pipeline stopped with the valid new config and
 		// surface the error so an operator/agent can retry Start once the
@@ -715,6 +738,35 @@ func (s *Service) rollbackInPlace(ctx context.Context, pipelineID string, oldCon
 		}
 	}
 }
+
+// startAfterApply is the Start that ends ApplyPlanLive's restart path. Start
+// is refused with pipeline.config_changing while an orchestrator write holds
+// the pipeline's mutation mark (#2961). The orchestrator refuses to change a
+// pipeline provisioned by config before it takes the mark, so a write that
+// can hold it against this pipeline is unexpected; the config is already
+// committed, so retrying briefly is cheaper and safer than leaving the
+// pipeline stopped. Any other error, and a mark that outlasts the retries, is
+// returned as before.
+func (s *Service) startAfterApply(ctx context.Context, id string) error {
+	var err error
+	for attempt := 0; attempt < startAfterApplyAttempts; attempt++ {
+		err = s.lifecycleService.Start(ctx, id)
+		if !cerrors.Is(err, pipeline.ErrPipelineConfigChanging) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(startAfterApplyDelay):
+		}
+	}
+	return err
+}
+
+const (
+	startAfterApplyAttempts = 5
+	startAfterApplyDelay    = 100 * time.Millisecond
+)
 
 // isRunning reports whether the pipeline identified by id currently has
 // live, in-process work per isRunningStatus. A not-yet-existing pipeline

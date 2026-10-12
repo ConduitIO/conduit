@@ -129,11 +129,12 @@ func TestApplyPlanLive_RunningPipeline_StopsAppliesRestarts(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	var order []string
+	expectMark(t, lifecycleSrv, &order)
 
 	old, desired := settingsUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
 
-	var order []string
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").DoAndReturn(func(context.Context, string) error {
 		order = append(order, "stop")
 		return nil
@@ -156,7 +157,7 @@ func TestApplyPlanLive_RunningPipeline_StopsAppliesRestarts(t *testing.T) {
 	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true) // authorized: applying to a running pipeline requires the operator flag
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
-	is.Equal(order, []string{"stop", "import", "start"})
+	is.Equal(order, []string{"stop", "mark", "import", "unmark", "start"})
 	is.Equal(applied.AppliedMode, ApplyModeRestart) // ground truth: non-live-eligible change restarted
 }
 
@@ -168,7 +169,8 @@ func TestApplyPlanLive_StoppedPipeline_NoLifecycleCalls(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, _, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 
@@ -256,6 +258,7 @@ func TestApplyPlanLive_ImportFails_RunningPipeline_LeftStopped(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
@@ -294,6 +297,7 @@ func TestApplyPlanLive_RestartFails_LeftStoppedWithNewConfig(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
@@ -407,11 +411,12 @@ func TestApplyPlanLive_RestartOnRunning_AllowedWithFlag(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	var order []string
+	expectMark(t, lifecycleSrv, &order)
 
 	old, desired := restartFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
 
-	var order []string
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").DoAndReturn(func(context.Context, string) error {
 		order = append(order, "stop")
 		return nil
@@ -436,7 +441,7 @@ func TestApplyPlanLive_RestartOnRunning_AllowedWithFlag(t *testing.T) {
 	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
 	is.NoErr(err)
 	is.Equal(applied.Hash, diff.Hash)
-	is.Equal(order, []string{"stop", "delete", "create", "start"})
+	is.Equal(order, []string{"stop", "mark", "delete", "create", "unmark", "start"})
 }
 
 // TestApplyPlanLive_RestartOnRunning_GateSkippedWhenNotRunning confirms the
@@ -448,7 +453,8 @@ func TestApplyPlanLive_RestartOnRunning_GateSkippedWhenNotRunning(t *testing.T) 
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := restartFixture()
 	// expectExport (unlike expectExportRunning) returns an instance with no
@@ -516,6 +522,7 @@ func TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
 
@@ -594,4 +601,28 @@ func pipelineInstanceFor(cfg config.Pipeline, status pipeline.Status) *pipeline.
 	}
 	instance.SetStatus(status)
 	return instance
+}
+
+// expectMark expects exactly one TryLockForMutation, granted, and requires
+// exactly one unlock by the end of the test: a leaked mark would leave the
+// pipeline unstartable (#2961). If order is non-nil it records "mark" and
+// "unmark" in it.
+func expectMark(t *testing.T, lifecycleSrv *mock.LifecycleService, order *[]string) {
+	t.Helper()
+	var unlocks atomic.Int32
+	lifecycleSrv.EXPECT().TryLockForMutation("p1").DoAndReturn(func(string) (func(), bool) {
+		if order != nil {
+			*order = append(*order, "mark")
+		}
+		return func() {
+			if unlocks.Add(1) == 1 && order != nil {
+				*order = append(*order, "unmark")
+			}
+		}, true
+	}).Times(1)
+	t.Cleanup(func() {
+		if got := unlocks.Load(); got < 1 {
+			t.Errorf("mutation mark never released")
+		}
+	})
 }

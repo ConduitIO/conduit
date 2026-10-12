@@ -186,10 +186,14 @@ func (s *Service) reserve(pipelineID string, predecessor *runnablePipeline) (*re
 		}
 		return nil, errPipelineRunning(pipelineID)
 	}
-	// #2961: a config write is in flight. TryLockForMutation only grants the
-	// mark while no run is registered, so a recovery restart (whose
-	// predecessor is registered) can never meet it.
-	if s.mutating[pipelineID] > 0 {
+	// #2961: a config write is in flight. Only an external Start is refused
+	// for it. A recovery restart (predecessor != nil) must reach the
+	// staleness checks below and get errRecoverySuperseded when it was
+	// superseded: its cleanup treats that as "leave the pipeline to the new
+	// run", while any other error would write Degraded and fire OnFailure.
+	// A mark can be held while a stale predecessor asks: the superseding
+	// run may be gone and a write may have started since.
+	if predecessor == nil && s.mutating[pipelineID] > 0 {
 		return nil, errPipelineConfigChanging(pipelineID)
 	}
 	cur, ok := s.runningPipelines.Get(pipelineID)
