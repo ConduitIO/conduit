@@ -23,14 +23,19 @@ package provisioning
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
+	lifecyclev2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -51,6 +56,12 @@ type markLifecycle struct {
 	// startsRefusedBeforeOK makes the first n Starts that meet no mark still
 	// fail with ErrPipelineConfigChanging (a concurrent API write).
 	startsRefusedBeforeOK int
+	// runningAfterStop makes a run appear right after StopAndWait returns, as
+	// if an external Start won the gap before the mark.
+	runningAfterStop bool
+	// startRunning makes a Start that meets no mark fail with
+	// ErrPipelineRunning, as if an external Start won the gap before it.
+	startRunning bool
 	// startLog holds the outcome of every Start, in order.
 	startLog []error
 	// events records "stop", "mark", "unmark", "start" in order.
@@ -61,6 +72,9 @@ func (m *markLifecycle) StopAndWait(context.Context, string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "stop")
+	if m.runningAfterStop {
+		m.running = true
+	}
 	return nil
 }
 
@@ -90,6 +104,8 @@ func (m *markLifecycle) Start(context.Context, string) error {
 	switch {
 	case m.marks > 0:
 		err = pipeline.ErrPipelineConfigChanging
+	case m.startRunning:
+		err = pipeline.ErrPipelineRunning
 	case m.startsRefusedBeforeOK > 0:
 		m.startsRefusedBeforeOK--
 		err = pipeline.ErrPipelineConfigChanging
@@ -207,8 +223,122 @@ func TestApplyPlanLive_Mark_Running_RunAdmittedAfterStopAndWait_NothingChanged(t
 	is.NoErr(err)
 	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
 	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning))
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, pipeline.CodePipelineRunning)
+	is.True(ce.Suggestion != "")
+	is.True(strings.Contains(err.Error(), "nothing was changed"))
 	is.Equal(len(ml.startLog), 0) // and no restart
 	is.Equal(ml.marks, 0)
+}
+
+// The live-eligible fallback has already saved the new config (applyInPlace
+// commits before it falls through to the restart path). If a Start then wins
+// the gap, the error must not claim nothing was changed.
+func TestApplyPlanLive_Mark_LiveEligibleFallback_RunAdmitted_DoesNotClaimNothingChanged(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
+	ml.runningAfterStop = true
+	old, desired := processorUpdateFixture()
+	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	// applyInPlace's import commits once; the restart path's import must not run.
+	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
+		Return(&processor.Instance{ID: "p1:proc:1"}, nil).Times(1)
+	ml.LifecycleService.EXPECT().ReconfigureProcessor(gomock.Any(), "p1", "p1:proc:1").
+		Return(lifecyclev1.ErrProcessorNotLiveReconfigurable)
+
+	diff, err := srv.Plan(ctx, desired)
+	is.NoErr(err)
+	is.True(diff.LiveEligible())
+	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
+	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning))
+	var ce *conduiterr.ConduitError
+	is.True(cerrors.As(err, &ce))
+	is.Equal(ce.Code, pipeline.CodePipelineRunning)
+	is.True(strings.Contains(err.Error(), "already saved"))
+	is.True(!strings.Contains(err.Error(), "nothing was changed"))
+	is.Equal(len(ml.startLog), 0)
+	is.Equal(ml.marks, 0)
+}
+
+// An external Start lands between provisioning's release of the mark and its
+// own Start. It was admitted after the import committed, so the pipeline runs
+// on the new config: the apply succeeded.
+func TestApplyPlanLive_Mark_Running_ExternalStartBeatsOwnStart_IsSuccess(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
+	ml.startRunning = true
+	old, desired := settingsUpdateFixture()
+	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
+		Return(&connector.Instance{ID: "p1:conn:src"}, nil)
+
+	diff, err := srv.Plan(ctx, desired)
+	is.NoErr(err)
+	applied, err := srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
+	is.NoErr(err)
+	is.Equal(applied.AppliedMode, ApplyModeRestart)
+	is.Equal(len(ml.startLog), 1) // no retry: running is not a transient refusal
+	is.Equal(ml.marks, 0)
+}
+
+// The same "Start refused inside the import" case against the REAL lifecycle
+// services of both engines. A refused Start returns at reserve, before any
+// node is built, so no plugin is needed.
+func TestApplyPlanLive_Mark_RealLifecycle_StartRefusedInsideImport(t *testing.T) {
+	cfg := &lifecyclev1.ErrRecoveryCfg{MinDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 2, MaxRetriesWindow: time.Minute}
+	pls := staticPipelineService{}
+	engines := map[string]LifecycleService{
+		"v1": lifecyclev1.NewService(log.Nop(), cfg, noopV2ConnectorService{}, noopV1ProcessorService{}, noopV2ConnectorPluginService{}, pls),
+		"v2": lifecyclev2.NewService(log.Nop(), cfg, noopV2ConnectorService{}, noopV2ProcessorService{}, noopV2ConnectorPluginService{}, pls, true),
+	}
+	for name, lc := range engines {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			srv, pipSrv, connSrv, procSrv, _ := newMarkService(t)
+			srv.lifecycleService = lc
+			old, desired := settingsUpdateFixture()
+			expectExport(pipSrv, connSrv, procSrv, old)
+
+			var inside error
+			connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
+				DoAndReturn(func(context.Context, string, string, connector.Config) (*connector.Instance, error) {
+					inside = lc.Start(ctx, "p1") // the external Start, inside the import
+					return &connector.Instance{ID: "p1:conn:src"}, nil
+				})
+
+			diff, err := srv.Plan(ctx, desired)
+			is.NoErr(err)
+			_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, false)
+			is.NoErr(err)
+			is.True(cerrors.Is(inside, pipeline.ErrPipelineConfigChanging))
+
+			// The mark is gone: a Start is admitted past reserve again (it
+			// fails later at build, which the noop services cannot do).
+			err = lc.Start(ctx, "p1")
+			is.True(!cerrors.Is(err, pipeline.ErrPipelineConfigChanging))
+		})
+	}
+}
+
+// staticPipelineService serves one pipeline "p1" to the real lifecycle
+// services, enough for Start to reach admission.
+type staticPipelineService struct{}
+
+func (staticPipelineService) Get(_ context.Context, id string) (*pipeline.Instance, error) {
+	if id != "p1" {
+		return nil, pipeline.ErrInstanceNotFound
+	}
+	return &pipeline.Instance{ID: id}, nil
+}
+
+func (staticPipelineService) List(context.Context) map[string]*pipeline.Instance { return nil }
+
+func (staticPipelineService) UpdateStatus(context.Context, string, pipeline.Status, string) error {
+	return nil
 }
 
 // A failed import still releases the mark, and the pipeline is left stopped.
@@ -268,4 +398,12 @@ func TestApplyPlanLive_Mark_Running_OwnStartGivesUpAfterRetries(t *testing.T) {
 	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
 	is.True(cerrors.Is(err, pipeline.ErrPipelineConfigChanging))
 	is.Equal(len(ml.startLog), startAfterApplyAttempts)
+}
+
+// noopV1ProcessorService adds the one method pkg/lifecycle's ProcessorService
+// has beyond arch-v2's. It is never called: a refused Start returns first.
+type noopV1ProcessorService struct{ noopV2ProcessorService }
+
+func (noopV1ProcessorService) MakeRunnableProcessorForReconfigure(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
+	return nil, cerrors.New("noopV1ProcessorService: not implemented")
 }

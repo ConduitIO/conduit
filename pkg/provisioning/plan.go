@@ -593,6 +593,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// swapped live (e.g. it is parallelized): the config is already committed, so
 	// we fall through to the restart path below, which rebuilds every node from
 	// it, applying the whole diff uniformly.
+	configCommitted := false // the in-place step saved the new config
 	if fresh.LiveEligible() {
 		oldConfig, err := s.Export(ctx, desired.ID)
 		if err != nil {
@@ -606,6 +607,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 			fresh.AppliedMode = ApplyModeInPlace
 			return fresh, nil
 		}
+		configCommitted = true
 		// Fall through to the restart path: the config is committed, so
 		// StopAndWait -> (idempotent) import -> Start rebuilds from it. The
 		// reported mode is restart, not in_place — this is exactly the fallback
@@ -630,12 +632,20 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 
 	// #2961: StopAndWait returned, but an external Start may have run since.
 	// Mark the pipeline so none can until the import has committed. A refusal
-	// means a run was admitted in that gap; nothing has been changed, so say
-	// so and let the caller retry.
+	// means a run was admitted in that gap. This step changed nothing, but on
+	// the live-eligible fallback the in-place step already saved the new
+	// config, so the message must not say nothing was changed.
 	unlockMark, ok := s.lifecycleService.TryLockForMutation(desired.ID)
 	if !ok {
-		return fresh, cerrors.Errorf("pipeline %q was started again while its apply was draining it; "+
-			"nothing was changed, retry the apply: %w", desired.ID, pipeline.ErrPipelineRunning)
+		state := "nothing was changed"
+		if configCommitted {
+			state = "the new config was already saved by the in-place step and no further changes were made; " +
+				"the pipeline is running with the new config saved but its nodes not rebuilt from it"
+		}
+		ce := conduiterr.Wrap(pipeline.CodePipelineRunning, fmt.Sprintf(
+			"pipeline %q was started again while its apply was draining it; %s", desired.ID, state), pipeline.ErrPipelineRunning)
+		ce.Suggestion = "retry the apply; it will stop the pipeline again and rebuild it from the saved config"
+		return fresh, ce
 	}
 	defer unlockMark() // idempotent; also released explicitly below, before Start
 
@@ -649,7 +659,16 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 
 	// Release before Start: Start is refused while the mark is held.
 	unlockMark()
-	if err := s.startAfterApply(ctx, desired.ID); err != nil {
+	err = s.startAfterApply(ctx, desired.ID)
+	if cerrors.Is(err, pipeline.ErrPipelineRunning) {
+		// An external Start landed between the release above and this Start.
+		// It built its run after the import committed (the mark refused it
+		// until then), so the pipeline is running on the new config: success.
+		s.logger.Info(ctx).Str("pipeline_id", desired.ID).
+			Msg("pipeline was started by another caller after the apply committed; it runs on the new config")
+		err = nil
+	}
+	if err != nil {
 		// The new config is already durably committed; only the restart
 		// failed. Leave the pipeline stopped with the valid new config and
 		// surface the error so an operator/agent can retry Start once the
