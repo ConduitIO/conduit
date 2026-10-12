@@ -35,7 +35,9 @@ import (
 // kept as sent. Keys absent from update are not added back: an update
 // replaces the whole settings map, as it always has. The trade-off, accepted
 // when this was decided, is that a setting whose real value is literally
-// "***" cannot be set through an update.
+// "***" cannot be set through the API: an update keeps the stored value, and
+// Create and Apply refuse it (RefuseRedactedSettings). Only provisioning from
+// YAML, which does not go through the orchestrator, can set it.
 //
 // A redacted value for a key that has no stored value is refused with
 // CodeRedactedSettingWithoutStoredValue rather than stored, because keeping

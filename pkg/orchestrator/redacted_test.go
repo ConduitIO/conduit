@@ -111,6 +111,27 @@ func TestRestoreRedactedSettingsForPlugin(t *testing.T) {
 		})
 	}
 
+	// Precedence: a key that has no stored value AND a changed plugin is
+	// reported as plugin_changed, not without_stored_value. The plugin check
+	// runs first so the caller is told the more fundamental problem.
+	t.Run("plugin change wins over missing stored value", func(t *testing.T) {
+		is := is.New(t)
+		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:http", stored,
+			map[string]string{"nostored": log.Redacted}, "/config/settings")
+		is.True(got == nil)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code, CodeRedactedSettingPluginChanged)
+		is.Equal(ce.ConfigPath, "/config/settings/nostored")
+
+		// Same plugin: the missing-value code applies.
+		_, err = restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored,
+			map[string]string{"nostored": log.Redacted}, "/config/settings")
+		ce, ok = conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code, CodeRedactedSettingWithoutStoredValue)
+	})
+
 	t.Run("plugin change with real values is fine", func(t *testing.T) {
 		is := is.New(t)
 		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:http", stored,
