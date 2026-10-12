@@ -248,10 +248,10 @@ class FakePackages:
 
 
 def delete_order(result):
-    """Digests in the order apply() deletes them: image by image, root last."""
+    """Digests in the order apply() deletes them: image by image, dependencies first, root last."""
     seen, out = set(), []
     for g in result["groups"]:
-        for m in sorted(g["members"], key=lambda m: (m == g["root"], m)):
+        for m in g["members"]:
             if m not in seen:
                 seen.add(m)
                 out.append(m)
@@ -511,6 +511,248 @@ class Apply(unittest.TestCase):
         with self.assertRaises(c.PlanError):
             self.run_apply(api)
         self.assertEqual(api.deleted, [])
+
+
+class SimRegistry:
+    """A registry that apply() can delete from and snapshot_registry() can re-read.
+
+    docs: {digest: [(child digest, media type)]}; tags: {tag: digest}. Deleting
+    a digest removes its document and its tags, but leaves any surviving
+    parent's list of it alone, as a real registry does.
+    """
+
+    IDX = "application/vnd.oci.image.index.v1+json"
+    IMG = "application/vnd.oci.image.manifest.v1+json"
+
+    def __init__(self, tags, children):
+        self.tags = dict(tags)
+        self.docs = {}
+        for t in set(tags.values()) | {k for ks in children.values() for k in ks}:
+            self.docs[t] = []
+        for parent, kids in children.items():
+            self.docs[parent] = [(k, self.IDX if k in children else self.IMG) for k in kids]
+
+    # snapshot_registry() side
+    def tag_names(self):
+        return list(self.tags)
+
+    def manifest(self, ref):
+        digest = self.tags[ref] if ref in self.tags else ref
+        if digest not in self.docs:
+            raise http_error(404)
+        return digest, list(self.docs[digest])
+
+    def exists(self, digest):
+        return digest in self.docs
+
+    def snapshot(self):
+        sim = self
+
+        class R:
+            def tags(self):
+                return sim.tag_names()
+
+            manifest = staticmethod(sim.manifest)
+            exists = staticmethod(sim.exists)
+
+        with mock.patch.object(c, "Registry", lambda image: R()):
+            return c.snapshot_registry("ghcr.io/conduitio/conduit")
+
+    # Packages API side
+    def delete_digest(self, digest):
+        self.docs.pop(digest, None)
+        self.tags = {t: x for t, x in self.tags.items() if x != digest}
+
+    def packages(self, fail_at=None, error=None):
+        sim = self
+        by_id = {}
+        tagged = {}
+        for t, x in self.tags.items():
+            tagged.setdefault(x, []).append(t)
+        live = {}
+        for i, x in enumerate(sorted(self.docs)):
+            live[x] = (i, tagged.get(x, []))
+            by_id[i] = x
+
+        class P:
+            calls = 0
+            deleted = []
+
+            def versions(self):
+                return live
+
+            def delete(self, vid):
+                n = P.calls
+                P.calls += 1
+                if fail_at is not None and n == fail_at:
+                    raise error
+                sim.delete_digest(by_id[vid])
+                P.deleted.append(by_id[vid])
+
+        return P()
+
+
+def synthetic_signed_image():
+    """A kept stable image, plus one expired nightly with 9 versions in its group:
+    root R lists platforms A, B and attestation manifests; R, A have referrer indexes."""
+    R, A, B, AT1, AT2 = d(1), d(2), d(3), d(4), d(5)
+    SIG, BUNDLE, ASIG, ABUNDLE = d(6), d(7), d(8), d(9)
+    tags = {"latest": d(90), "v0.19.0": d(90), "v0.20.0-nightly.20261001": R,
+            "sha256-" + R[7:]: SIG, "sha256-" + A[7:]: ASIG}
+    tags.update({f"pr-{i}": d(100 + i) for i in range(60)})
+    children = {R: [A, B, AT1, AT2], SIG: [BUNDLE], ASIG: [ABUNDLE]}
+    return tags, children, {R, A, B, AT1, AT2, SIG, BUNDLE, ASIG, ABUNDLE}
+
+
+class DeletionOrder(unittest.TestCase):
+    def test_every_manifest_comes_after_everything_it_lists_and_root_last(self):
+        tags, children, group = synthetic_signed_image()
+        r = c.plan({"tags": tags, "children": children, "missing": []}, day("2026-10-15"), 7)
+        (g,) = r["groups"]
+        order = g["members"]
+        self.assertEqual(set(order), group)
+        self.assertEqual(order[-1], d(1))
+        pos = {m: i for i, m in enumerate(order)}
+        for parent, kids in children.items():
+            for k in kids:
+                self.assertLess(pos[k], pos[parent], f"{k} must go before {parent}")
+        # Referrer indexes are deleted before the manifest they are about.
+        self.assertLess(pos[d(6)], pos[d(1)])
+        self.assertLess(pos[d(8)], pos[d(2)])
+
+    def test_real_signed_nightlies_delete_the_bundle_before_its_index(self):
+        r = c.plan(real(), day("2026-10-15"), 7)
+        order = next(g for g in r["groups"] if g["root"] == N1007)["members"]
+        self.assertLess(order.index(SIG1007_BUNDLE), order.index(SIG1007_INDEX))
+        self.assertLess(order.index(SIG1007_INDEX), order.index(N1007))
+        self.assertEqual(order[-1], N1007)
+
+
+class InterruptedImages(unittest.TestCase):
+    """Whatever stops a run at whatever position, the next runs strand nothing."""
+
+    def finish(self, sim, group, kept):
+        """Replan from the (half-deleted) registry and delete with no faults."""
+        for night in range(5):
+            snap = sim.snapshot()
+            r = c.plan(snap, day("2026-10-15"), 7)
+            if not r["delete"]:
+                break
+            api = sim.packages()
+            out = c.apply(r, api, lambda m: None, max_deletes=10**6)
+            self.assertEqual((out.failed, out.stopped), (0, None))
+        self.assertFalse(set(sim.docs) & group, f"stranded: {set(sim.docs) & group}")
+        self.assertTrue(kept <= set(sim.docs), "a kept manifest was deleted")
+
+    def run_with_fault_at(self, k, error):
+        tags, children, group = synthetic_signed_image()
+        sim = SimRegistry(tags, children)
+        kept = set(sim.docs) - group
+        r = c.plan(sim.snapshot(), day("2026-10-15"), 7)
+        api = sim.packages(fail_at=k, error=error)
+        out = c.apply(r, api, lambda m: None, max_deletes=10**6)
+        return sim, group, kept, api, out
+
+    def test_stop_for_a_rate_limit_at_every_position_strands_nothing(self):
+        for k in range(len(synthetic_signed_image()[2]) + 1):
+            with self.subTest(position=k):
+                sim, group, kept, api, out = self.run_with_fault_at(k, http_error(429, {"Retry-After": "1"}))
+                if k < len(group):
+                    self.assertEqual(out.stopped, "rate-limit")
+                    self.assertEqual(len(api.deleted), k)
+                    self.assertIn(d(1), sim.docs)  # the tagged root is still there to re-plan from
+                self.finish(sim, group, kept)
+
+    def test_a_failed_delete_at_every_position_abandons_the_image_and_keeps_its_root(self):
+        for kind, error in (("http 500", http_error(500)), ("http 404", http_error(404)),
+                            ("network", urllib.error.URLError("reset")), ("timeout", TimeoutError("t"))):
+            for k in range(len(synthetic_signed_image()[2])):
+                with self.subTest(error=kind, position=k):
+                    sim, group, kept, api, out = self.run_with_fault_at(k, error)
+                    self.assertEqual(len(api.deleted), k)  # nothing after the failure
+                    self.assertIn(d(1), sim.docs)  # never the root: it is the only way back
+                    self.assertEqual(out.aborted_images, 1)
+                    self.assertEqual(out.exit_code, 1)
+                    self.finish(sim, group, kept)
+
+    def test_old_order_would_have_stranded_a_child(self):
+        # The failure the abandon rule exists for: delete on past a failed child,
+        # then the root, and the child can never be found again.
+        tags, children, group = synthetic_signed_image()
+        sim = SimRegistry(tags, children)
+        for m in group - {d(3)}:  # everything but platform B, as a run that skipped B would
+            sim.delete_digest(m)
+        snap = sim.snapshot()
+        self.assertEqual(c.plan(snap, day("2026-10-15"), 7)["delete"], set())
+        self.assertIn(d(3), sim.docs)  # B is stranded
+
+    def test_half_deleted_nested_index_does_not_break_the_snapshot(self):
+        top, inner, leaf = d(1), d(2), d(3)
+        tags = {"v0.20.0-nightly.20261001": top, "latest": d(90), "v0.19.0": d(90)}
+        tags.update({f"pr-{i}": d(100 + i) for i in range(60)})
+        sim = SimRegistry(tags, {top: [inner], inner: [leaf]})
+        sim.delete_digest(inner)  # parent still lists the nested index
+        snap = sim.snapshot()
+        self.assertEqual(snap["children"][inner], [])
+
+
+class FailureBackoff(unittest.TestCase):
+    def setUp(self):
+        self.r = c.plan(real(), day("2026-10-15"), 7)
+        self.live = {x: (i, []) for i, x in enumerate(sorted(self.r["delete"]))}
+        self.live[N1007] = (9001, ["v0.20.0-nightly.20261007"])
+        self.live[SIG1007_INDEX] = (9002, ["sha256-" + N1007[7:]])
+
+    def test_every_delete_404s_stops_after_five(self):
+        # A token without the Admin role on the package: 404 for every delete.
+        errors = {v[0]: http_error(404) for v in self.live.values()}
+        api = FakePackages(self.live, errors=errors)
+        calls = []
+        orig = api.delete
+        api.delete = lambda vid: (calls.append(vid), orig(vid))[1]
+        out = c.apply(self.r, api, lambda m: None, max_deletes=10**6)
+        self.assertEqual(len(calls), c.MAX_CONSECUTIVE_FAILURES)
+        self.assertEqual((out.deleted, out.failed, out.stopped), (0, 5, "errors"))
+        self.assertEqual(out.exit_code, 1)
+
+    def test_a_success_resets_the_failure_streak(self):
+        order = delete_order(self.r)
+        errors = {self.live[x][0]: http_error(500) for x in order[:4] + order[5:9]}
+        api = FakePackages(self.live, errors=errors)
+        out = c.apply(self.r, api, lambda m: None, max_deletes=10**6)
+        self.assertIsNone(out.stopped)  # 4 failures, a success, 4 failures: never 5 in a row
+        self.assertEqual(out.failed, 8)
+
+    def test_failures_are_paced_like_successes(self):
+        errors = {v[0]: http_error(500) for v in self.live.values()}
+        sleeps = []
+        c.apply(self.r, FakePackages(self.live, errors=errors), lambda m: None,
+                max_deletes=10**6, interval=0.5, sleep=sleeps.append)
+        self.assertEqual(sleeps, [0.5] * (c.MAX_CONSECUTIVE_FAILURES - 1))  # not after the final, stopping one
+
+    def test_failures_count_against_the_cap(self):
+        errors = {self.live[x][0]: http_error(500) for x in delete_order(self.r)[:3]}
+        api = FakePackages(self.live, errors=errors)
+        calls = []
+        orig = api.delete
+        api.delete = lambda vid: (calls.append(vid), orig(vid))[1]
+        out = c.apply(self.r, api, lambda m: None, max_deletes=10)
+        self.assertEqual(len(calls), 10)
+        self.assertEqual(out.stopped, "max-deletes")
+
+    def test_a_failed_image_does_not_block_the_next_one(self):
+        tags, children, group = synthetic_signed_image()
+        tags["v0.20.0-nightly.20261002"] = d(50)
+        children[d(50)] = [d(51)]
+        r = c.plan({"tags": tags, "children": children, "missing": []}, day("2026-10-15"), 7)
+        live = {x: (i, []) for i, x in enumerate(sorted(r["delete"]))}
+        first = r["groups"][0]["members"][0]
+        api = FakePackages(live, errors={live[first][0]: http_error(500)})
+        out = c.apply(r, api, lambda m: None, max_deletes=10**6)
+        self.assertEqual(out.aborted_images, 1)
+        self.assertIn(live[d(51)][0], api.deleted)  # the second image went through
+        self.assertIn(live[d(50)][0], api.deleted)
+        self.assertNotIn(live[d(1)][0], api.deleted)  # the first image's root did not
 
 
 class SanityCheck(unittest.TestCase):

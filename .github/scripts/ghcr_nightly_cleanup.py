@@ -42,7 +42,10 @@ Apply mode is bounded. It deletes whole images, at most --max-deletes versions p
 first apply has ~2,200 to delete, and GITHUB_TOKEN is limited to roughly 1,000
 requests an hour), paces itself, and stops cleanly on a rate limit (403/429,
 X-RateLimit-Remaining, Retry-After), a permission 403 or repeated network
-errors; the backlog drains over several runs. Before deleting anything it
+errors; the backlog drains over several runs. An image is deleted in
+dependency order with its tagged root last, and if any delete in it fails the
+rest of it is abandoned and the root is never deleted, so the next run can
+still reach every member. Before deleting anything it
 refuses to act on a snapshot that looks truncated (see sanity_check). Any
 failed delete makes the script exit 1; the old step logged 2,219 failed
 deletes and reported success.
@@ -95,6 +98,9 @@ DEFAULT_MAX_DELETES = 400
 DEFAULT_DELETE_INTERVAL = 0.8
 RATE_LIMIT_FLOOR = 25  # stop when X-RateLimit-Remaining falls to this
 MAX_CONSECUTIVE_NET_ERRORS = 3
+# HTTP errors with no success in between. A token without the Admin role gets
+# 404 on every delete; do not send 2,000 of them.
+MAX_CONSECUTIVE_FAILURES = 5
 # The live tagged-version count may trail the snapshot a little (a push between
 # the two reads) but not by this much.
 LIVE_COVERAGE = 0.9
@@ -250,11 +256,34 @@ def plan(snapshot, today, keep_days):
     # Once an image's tagged root is gone, its untagged children cannot be
     # found from the tag list any more, so a run that stopped between the root
     # and its children would leak them permanently.
+    #
+    # Members are in deletion order: every manifest comes after everything it
+    # lists or has a referrer index for, and the root comes last. A manifest
+    # deleted before the manifests it lists would strand them the same way: a
+    # signature index gone before its bundle leaves the bundle unreachable.
+    def deletion_order(root):
+        order, seen = [], set()
+
+        def visit(d):
+            if d in seen:
+                return
+            seen.add(d)
+            for k in children.get(d, []):
+                visit(k)
+            for rt in referrer_tags(d):
+                if rt in tags:
+                    visit(tags[rt])
+            if d in delete:
+                order.append(d)
+
+        visit(root)
+        return order
+
     groups = []
     for root in sorted(expired, key=lambda d: sorted(tags_by_digest[d])):
-        groups.append({"root": root, "members": sorted(closure(root) & delete)})
+        groups.append({"root": root, "members": deletion_order(root)})
     for tag in sorted(orphans):
-        groups.append({"root": tags[tag], "members": sorted(closure(tags[tag]) & delete)})
+        groups.append({"root": tags[tag], "members": deletion_order(tags[tag])})
 
     return {
         "cutoff": cutoff,
@@ -319,6 +348,18 @@ class Registry:
             raise
 
 
+def _manifest_or_gone(reg, digest):
+    """A nested index that a surviving parent still lists but the registry no
+    longer has (half-deleted image) has no children; it must not abort the
+    snapshot every night."""
+    try:
+        return reg.manifest(digest)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return digest, []
+        raise
+
+
 def snapshot_registry(image):
     reg = Registry(image)
     tag_list = reg.tags()
@@ -337,7 +378,7 @@ def snapshot_registry(image):
     while nested - set(children):
         batch = sorted(nested - set(children))
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            for digest, kids in pool.map(reg.manifest, batch):
+            for digest, kids in pool.map(_manifest_or_gone, [reg] * len(batch), batch):
                 children[digest] = [k for k, _ in kids]
                 nested |= {k for k, media in kids if media in INDEX_TYPES}
     # Subjects of referrer tags that are not reachable from any tag: ask the
@@ -412,11 +453,12 @@ class Outcome:
     def __init__(self):
         self.deleted = self.skipped = self.failed = self.net_errors = 0
         self.unprocessed = 0
-        self.stopped = None  # max-deletes | rate-limit | forbidden | network
+        self.aborted_images = 0
+        self.stopped = None  # max-deletes | rate-limit | forbidden | network | errors
 
     @property
     def exit_code(self):
-        if self.failed or self.stopped in ("forbidden", "network"):
+        if self.failed or self.aborted_images or self.stopped in ("forbidden", "network", "errors"):
             return 1
         if self.stopped == "rate-limit" and not self.deleted:
             return 1  # no progress at all: do not let a green run hide it
@@ -424,7 +466,7 @@ class Outcome:
 
     def summary(self):
         text = (f"deleted {self.deleted}, skipped {self.skipped}, failed {self.failed}, "
-                f"network errors {self.net_errors}")
+                f"network errors {self.net_errors}, images left half-done {self.aborted_images}")
         if self.stopped:
             text += f"; stopped early ({self.stopped}), {self.unprocessed} planned versions left for the next run"
         return text
@@ -475,37 +517,41 @@ def apply(result, api, log, max_deletes=DEFAULT_MAX_DELETES,
             if m in live and m not in held_back and not deletable_now(live[m][1], result):
                 log(f"SKIP {m}: live tags {live[m][1]} no longer match the plan")
                 held_back.add(m)
-    # Within an image: children and signatures first, the tagged root last. If
-    # the run dies mid-image the root is still tagged, so the next run plans
-    # the same image again and finishes it.
+    # Within an image: dependencies first, the tagged root last (see plan()).
+    # If the run dies or a delete fails mid-image the root is still tagged, so
+    # the next run plans the same image again and finishes it. Hence a failed
+    # delete abandons the rest of its image: deleting on, and above all
+    # deleting the root, would strand the member that failed.
     planned = set()
     todo = []
     for g in result["groups"]:
         members = [m for m in g["members"] if m not in held_back and m not in planned]
-        members.sort(key=lambda m: (m == g["root"], m))
         planned.update(members)
         todo.append([m for m in members if m in live])
     out.skipped = len(planned - set(live))  # already gone
     out.skipped += len({m for g in result["groups"] for m in g["members"]} & held_back & set(live))
-    consecutive_net = 0
+    consecutive_net = consecutive_http = 0
+    attempts = 0  # failures count against the cap too
     for gi, members in enumerate(todo):
         if not members:
             continue
         left = sum(len(g) for g in todo[gi:])
         # Never split an image across runs; the first image always runs so a
         # small --max-deletes cannot stall the drain.
-        if out.deleted and out.deleted + len(members) > max_deletes:
+        if attempts and attempts + len(members) > max_deletes:
             out.stopped, out.unprocessed = "max-deletes", left
             log(f"reached --max-deletes {max_deletes}")
             break
-        stop = False
+        stop = abandon = False
         for mi, digest in enumerate(members):
             handled = mi + 1
             version_id = live[digest][0]
+            attempts += 1
             try:
                 remaining = api.delete(version_id)
             except urllib.error.HTTPError as e:
                 if rate_limited(e):
+                    attempts -= 1
                     out.stopped = "rate-limit"
                     handled = mi  # this version was not deleted
                     h = e.headers or {}
@@ -515,6 +561,8 @@ def apply(result, api, log, max_deletes=DEFAULT_MAX_DELETES,
                     stop = True
                 else:
                     out.failed += 1
+                    consecutive_http += 1
+                    abandon = True
                     body = _error_body(e)
                     log(f"FAIL {digest} (version {version_id}): HTTP {e.code} {body!r}")
                     # GitHub refuses to delete a public package version with
@@ -525,26 +573,35 @@ def apply(result, api, log, max_deletes=DEFAULT_MAX_DELETES,
                         out.stopped = "forbidden"
                         log("token lacks permission to delete package versions; stopping")
                         stop = True
-                    consecutive_net = 0
+                    elif consecutive_http >= MAX_CONSECUTIVE_FAILURES:
+                        out.stopped = "errors"
+                        log(f"{consecutive_http} failed deletes in a row, none succeeded; stopping")
+                        stop = True
             except OSError as e:  # URLError, socket timeouts, resets
                 out.net_errors += 1
                 consecutive_net += 1
+                abandon = True
                 log(f"NETWORK {digest} (version {version_id}): {e!r}")
                 if consecutive_net >= MAX_CONSECUTIVE_NET_ERRORS:
                     out.stopped = "network"
                     log(f"{consecutive_net} network errors in a row; stopping")
                     stop = True
             else:
-                consecutive_net = 0
+                consecutive_net = consecutive_http = 0
                 out.deleted += 1
                 if remaining is not None and remaining <= RATE_LIMIT_FLOOR:
                     out.stopped = "rate-limit"
                     log(f"X-RateLimit-Remaining is {remaining}; stopping before the limit")
                     stop = True
-                elif interval:
-                    sleep(interval)
+            if interval and not stop:
+                sleep(interval)  # after failures too: do not hammer a failing API
             if stop:
                 out.unprocessed = left - handled
+                break
+            if abandon:
+                out.aborted_images += 1
+                log(f"ABANDON image {members[-1]}: {len(members) - mi - 1} versions left, "
+                    "root not deleted; the next run finishes it")
                 break
         if stop:
             break

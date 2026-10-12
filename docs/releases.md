@@ -72,10 +72,23 @@ snapshot and continues, so the backlog drains over about six nights. A plain 403
 errors in a row, stops the run and fails the job. Exit codes: 0 done, or stopped early after progress; 1 a delete
 failed or the run could not continue; 2 the planner refused to act.
 
-An image is deleted as a unit: its platform and attestation manifests and signatures first, the tagged root last. The
-cap is applied between images, never inside one (a run can stop a few versions under the cap), because the untagged
-children of an image are only findable through its tagged root; deleting the root and stopping would strand them for
-good. If the live-tag recheck finds that an image's root gained a tag, the whole image is kept, not just the root.
+An image is deleted as a unit, in dependency order: every manifest after everything it lists (a signature index after
+its bundle, a platform manifest after its attestations), the tagged root last. The cap is applied between images,
+never inside one (a run can stop a few versions under the cap). Both rules exist because the untagged children of an
+image are only findable through its tagged root; deleting the root first, or stopping after it, would strand them for
+good. For the same reason, if any delete in an image fails (an HTTP error or a network error), the rest of that image
+is abandoned and its root is never deleted; the next run plans the image again and finishes it. An abandoned image
+fails the job. If the live-tag recheck finds that an image's root gained a tag, the whole image is kept, not just the
+root.
+
+A run also stops after 5 failed deletes in a row with no success in between (for example a token without the Admin
+role, where every delete is a 404), and it paces failures like successes. Failed attempts count against the cap.
+
+**Stopping early on a rate limit exits 0.** If a run makes progress and then hits the cap or a rate limit, the job is
+green and carries a `::warning::` annotation, because the next run is expected to continue. That also means a drain
+that keeps being rate limited nightly stays green. Check the "stopped early ... planned versions left" line in the job
+summary while the backlog drains. Making the job fail after several consecutive rate-limited nights needs state
+between runs (for example the conclusion of earlier runs) and is a follow-up, not part of this change.
 
 Deleting needs a token that can delete versions of the `conduit` package. The job uses `GITHUB_TOKEN` with
 `packages: write`, which requires the repository to have the **Admin** role on the package (package settings, "Manage
