@@ -109,7 +109,8 @@ var catalog = []ToolInfo{
 		Name: ToolStart,
 		Description: "Starts a pipeline registered in a running Conduit (transitions to Running). " +
 			"Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is " +
-			"already running (pipeline.running), or if Conduit is shutting down (pipeline.shutting_down). " +
+			"already running (pipeline.running), while its previous run is still stopping (pipeline.stopping; " +
+			"retry shortly), or if Conduit is shutting down (pipeline.shutting_down). " +
 			"Same engine as `conduit pipelines start`.",
 		Mutates: true,
 	},

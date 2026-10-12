@@ -389,6 +389,10 @@ func TestServiceLifecycle_Start_AlreadyRunning(t *testing.T) {
 		testPipelineService{pl.ID: pl},
 	)
 
+	// Admission is by run liveness, not status (#2899 item 2): register a
+	// live run for the pipeline.
+	ls.runningPipelines.Set(pl.ID, &runnablePipeline{pipeline: pl})
+
 	err := ls.Start(ctx, pl.ID)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, pipeline.ErrPipelineRunning)) // sentinel still in the chain
@@ -1402,11 +1406,14 @@ func TestServiceLifecycle_Recovery_LiveEntryPublishedBeforeRunningStatus(t *test
 //
 // This is existing behavior (unchanged by #2806) that the fix must not
 // regress: StartWithBackoff compares the runnablePipeline it was given
-// against whatever is currently published under the same ID, and returns
-// nil without restarting if they differ.
+// against whatever is currently published under the same ID, and declines
+// without restarting if they differ. Since #2899 item 2 that comparison is
+// the restart's reservation, and the refusal is errRecoverySuperseded.
 func TestServiceLifecycle_StartWithBackoff_SupersededRunDoesNotRestart(t *testing.T) {
 	is := is.New(t)
 	logger := log.New(zerolog.Nop())
+	pipelineID := uuid.NewString()
+	pipelines := testPipelineService{pipelineID: &pipeline.Instance{ID: pipelineID, Config: pipeline.Config{Name: "test"}}}
 
 	ls := NewService(
 		logger,
@@ -1414,10 +1421,9 @@ func TestServiceLifecycle_StartWithBackoff_SupersededRunDoesNotRestart(t *testin
 		testConnectorService{},
 		testProcessorService{},
 		testConnectorPluginService{},
-		testPipelineService{},
+		pipelines,
 	)
 
-	pipelineID := uuid.NewString()
 	staleRp := &runnablePipeline{
 		pipeline:         &pipeline.Instance{ID: pipelineID, Config: pipeline.Config{Name: "test"}},
 		backoff:          testErrRecoveryCfg().toBackoff(),
@@ -1434,7 +1440,9 @@ func TestServiceLifecycle_StartWithBackoff_SupersededRunDoesNotRestart(t *testin
 	ls.runningPipelines.Set(pipelineID, freshRp)
 
 	err := ls.StartWithBackoff(context.Background(), staleRp)
-	is.NoErr(err) // the pointer guard must return nil, not attempt to restart a superseded run
+	// The restart reserves with staleRp as its predecessor and is refused
+	// (#2899 item 2): it must not restart a superseded run.
+	is.True(cerrors.Is(err, errRecoverySuperseded))
 
 	got, ok := ls.runningPipelines.Get(pipelineID)
 	is.True(ok)

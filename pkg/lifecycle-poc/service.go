@@ -135,6 +135,23 @@ type Service struct {
 	// positive. Zero in production; only this package's tests set it.
 	statusWriteTimeout time.Duration
 
+	// starting holds the reservation of every Start that has been admitted
+	// and has not yet published its run. Guarded by publishMu. See
+	// admission.go.
+	starting map[string]*reservation
+
+	// testAtReservation, if set, is called by reserve before it takes
+	// publishMu. testAfterBackoffWait, if set, is called by StartWithBackoff
+	// once the backoff wait is over, before the restart reserves. They let a
+	// test line up an external Start against a pending restart. Nil in
+	// production.
+	testAtReservation    func(pipelineID string, predecessor *runnablePipeline)
+	testAfterBackoffWait func(rp *runnablePipeline)
+	// testAfterFinishing, if set, is called by the cleanup goroutine right
+	// after it moves the run to phaseFinishing, before it classifies how
+	// the run ended. Nil in production.
+	testAfterFinishing func(rp *runnablePipeline)
+
 	// testAfterStopSnapshot, if set, is called by the cleanup goroutine right
 	// after it has read the run's stop request, before it classifies the run.
 	// It lets a test change the request in exactly that window (e.g. a
@@ -173,6 +190,7 @@ func NewService(
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
 		terminalErrors:   csync.NewMap[string, error](),
+		starting:         make(map[string]*reservation),
 		metricsDisabled:  metricsDisabled,
 	}
 }
@@ -263,6 +281,35 @@ type runnablePipeline struct {
 	// the stop still degrades the run; anything after the stop ends it
 	// stopped, with the error recorded (#2901).
 	stopFailedFirst bool
+
+	// reservation is the admission this run was started under, consumed when
+	// the run is published. Nil for a run started without Start (tests).
+	reservation *reservation
+	// phase, superseded and supersededCh are guarded by Service.publishMu.
+	// See admission.go. superseded is set when a Start takes over the
+	// pipeline while this run is finishing or waiting out a recovery
+	// backoff; supersededCh is closed at the same time to end that wait.
+	phase        runPhase
+	superseded   bool
+	supersededCh chan struct{}
+}
+
+// supersede marks rp as taken over by a new Start. publishMu must be held.
+func (rp *runnablePipeline) supersede() {
+	if rp.superseded {
+		return
+	}
+	rp.superseded = true
+	close(rp.supersededChLocked())
+}
+
+// supersededChLocked returns the channel closed when rp is superseded.
+// publishMu must be held.
+func (rp *runnablePipeline) supersededChLocked() chan struct{} {
+	if rp.supersededCh == nil {
+		rp.supersededCh = make(chan struct{})
+	}
+	return rp.supersededCh
 }
 
 const (
@@ -391,13 +438,22 @@ func (s *Service) Init(
 }
 
 // Start builds and starts a pipeline with the given ID.
-// If the pipeline is already running, Start returns ErrPipelineRunning. Once
-// StopAll has been called, Start refuses with an error coded
-// pipeline.CodeShuttingDown (errors.Is(err, pipeline.ErrShuttingDown) holds).
+// If the pipeline has a run that is starting or live, Start returns
+// ErrPipelineRunning; the pipeline's status is not consulted (see
+// admission.go). A run waiting out a recovery backoff is taken over: its
+// pending restart is abandoned. Once StopAll has been called, Start refuses
+// with an error coded pipeline.CodeShuttingDown (errors.Is(err,
+// pipeline.ErrShuttingDown) holds).
 func (s *Service) Start(
 	ctx context.Context,
 	pipelineID string,
 ) error {
+	return s.startRun(ctx, pipelineID, nil)
+}
+
+// startRun is Start, and the recovery restart when predecessor is the run
+// waiting out its backoff.
+func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *runnablePipeline) error {
 	// Invariant 7: once shutdown has begun no new run starts (#2901). The
 	// authoritative check is runPipeline's admission; this one just avoids
 	// building a run that would be refused.
@@ -410,9 +466,14 @@ func (s *Service) Start(
 		return err
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
-		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, pipeline.ErrPipelineRunning)
+	// Invariant 2: admit by run liveness, under publishMu, before building:
+	// at most one run per pipeline ID holds a reservation or a live entry.
+	res, err := s.reserve(pl.ID, predecessor)
+	if err != nil {
+		return err
 	}
+	// A no-op once the publication has consumed the reservation.
+	defer s.releaseReservation(pl.ID, res)
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building tasks")
@@ -421,6 +482,7 @@ func (s *Service) Start(
 	if err != nil {
 		return cerrors.Errorf("could not build tasks for pipeline %s: %w", pl.ID, err)
 	}
+	rp.reservation = res
 
 	// If this pipeline was already running (i.e. this Start is a recovery
 	// restart driven by StartWithBackoff), carry its backoff state onto the new
@@ -453,20 +515,61 @@ func (s *Service) Start(
 // Stop will attempt to gracefully stop a given pipeline by calling each worker's
 // Stop method. If the force flag is set to true, the pipeline will be stopped
 // forcefully by cancelling the context.
+//
+// Stop is admitted by run liveness, not by the pipeline's status (#2899 item
+// 2): it reaches a run that is live or waiting out a recovery backoff whatever
+// its status shows. A Stop that arrives while a Start is still building the
+// run is recorded and applied as soon as the run is published.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
+	// Invariant 7 (#2901): the stop request is recorded under publishMu, the
+	// lock a recovery restart reserves under, so a restart either sees the
+	// request and is abandoned, or is already published and is stopped
+	// itself. Recording it after the lookup let a restart reserve in between
+	// and run on after Stop returned.
+	s.publishMu.Lock()
+	if res, ok := s.starting[pipelineID]; ok {
+		if res.stop == nil {
+			res.stop = &pendingStop{}
+		}
+		res.stop.force = res.stop.force || force
+		if res.predecessor != nil {
+			// A recovery restart is building. If its build fails, the run
+			// it restarts must end stopped, not degraded.
+			_, _ = res.predecessor.markStopRequested(false)
+		}
+		s.publishMu.Unlock()
+		return nil
+	}
 	rp, ok := s.runningPipelines.Get(pipelineID)
+	var phase runPhase
+	var mark *stopMark
+	if ok {
+		phase = rp.phase
+		token, first := rp.markStopRequested(false)
+		mark = &stopMark{token: token, first: first}
+	}
+	s.publishMu.Unlock()
 
 	if !ok {
 		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
 	}
-
-	// Read the status once: separate reads let a Recovering -> Running
-	// transition in between refuse the stop (#2912 S4, as in pkg/lifecycle).
-	if status := rp.pipeline.GetStatus(); status != pipeline.StatusRunning && status != pipeline.StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", status, pipeline.ErrPipelineNotRunning)
+	if phase != phaseLive {
+		// The workers are already dead: recording the stop is the whole
+		// job. A run in backoff finishes stopped, with the error it failed
+		// with, when its wait ends (#2901); a finishing run that would go on
+		// to recover does not. Telling dead workers to stop would only fail.
+		return nil
 	}
 
-	return s.stopRunnablePipeline(ctx, rp, force, false)
+	return s.stopRunnablePipelineMarked(ctx, rp, force, false, mark)
+}
+
+// stopMark is a stop request already recorded on a run (markStopRequested's
+// result), handed to stopRunnablePipelineMarked so it does not record a
+// second one and can still roll this one back.
+type stopMark struct {
+	token uint64
+	first bool
 }
 
 // StopAll will ask all the running pipelines to stop gracefully
@@ -518,6 +621,12 @@ func (s *Service) StopAll(ctx context.Context, force bool) error {
 // stopRunnablePipeline stops rp gracefully or forcefully. system is true for
 // a shutdown (StopAll), false for a user Stop; see stopKind.
 func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force, system bool) error {
+	return s.stopRunnablePipelineMarked(ctx, rp, force, system, nil)
+}
+
+// stopRunnablePipelineMarked is stopRunnablePipeline for a caller that has
+// already recorded the stop request (mark), or nil to record it here.
+func (s *Service) stopRunnablePipelineMarked(ctx context.Context, rp *runnablePipeline, force, system bool, mark *stopMark) error {
 	switch force {
 	case false:
 		s.logger.Info(ctx).
@@ -534,7 +643,13 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// instead of misreading it as a spontaneous failure and
 		// auto-restarting via recoverPipeline. See the intentionalStop field
 		// doc.
-		stopToken, firstRequest := rp.markStopRequested(system)
+		var stopToken uint64
+		var firstRequest bool
+		if mark != nil {
+			stopToken, firstRequest = mark.token, mark.first
+		} else {
+			stopToken, firstRequest = rp.markStopRequested(system)
+		}
 
 		// H1 (adversarial review of #2734): every worker's Stop call is
 		// dispatched CONCURRENTLY, all against the SAME ctx deadline,
@@ -717,7 +832,9 @@ func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline
 		// explicitly stopped. Since #2901 a force stop is recorded as a stop
 		// request too, so the run ends UserStopped (SystemStopped from
 		// StopAll) with ErrForceStop recorded, rather than Degraded.
-		_, _ = rp.markStopRequested(system)
+		if mark == nil {
+			_, _ = rp.markStopRequested(system)
+		}
 		rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 		return nil
 	}
@@ -791,6 +908,16 @@ func (s *Service) waitInternal() error {
 // docs/design-documents/20260706-forceful-stop-test-determinism.md, which
 // diagnosed and fixed the identical bug in the sibling pkg/lifecycle package.
 func (s *Service) WaitPipeline(id string) error {
+	// A run that is still being built is waited for: once its reservation is
+	// consumed (published) or released (start failed), the lookups below
+	// answer for it.
+	s.publishMu.Lock()
+	res := s.starting[id]
+	s.publishMu.Unlock()
+	if res != nil {
+		<-res.done
+	}
+
 	p, ok := s.runningPipelines.Get(id)
 	if ok && p.t != nil {
 		return p.t.Wait()
@@ -1773,6 +1900,13 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		// this goroutine writes its own terminal status to the same
 		// *pipeline.Instance. See the comment on startupDone above.
 		<-startupDone
+		// The workers are dead: from here a Start may take the pipeline
+		// over (admission.go). Recovery moves the run to backoff if it is
+		// not taken over first.
+		s.setPhase(rp, phaseFinishing)
+		if s.testAfterFinishing != nil {
+			s.testAfterFinishing(rp)
+		}
 
 		// Invariant 7: from here the terminal tail (terminal error, map
 		// removal, notify) runs whatever the status writes return, and this
@@ -1855,17 +1989,22 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				recoveryErr := s.recoverPipeline(ctx, rp)
 				switch {
 				case recoveryErr == nil:
-					// Recovery restarted the pipeline (or an external Start
-					// already replaced the running entry). The live run now owns
+					// Recovery restarted the pipeline. The live run now owns
 					// terminal cleanup, so return early WITHOUT running the
 					// cleanup tail below — deleting the runningPipelines entry
 					// here would delete the new run's entry. Mirrors v1's
-					// return nil (pkg/lifecycle/service.go). This early return is
-					// also what lets StartWithBackoff's "am I still the live
-					// pipeline" guard observe a concurrent restart during the
-					// backoff wait: the old entry must stay in runningPipelines
-					// until Start swaps in the new one.
+					// return nil (pkg/lifecycle/service.go). A Start that took
+					// the pipeline over during the backoff is the
+					// errRecoverySuperseded case below, not this one.
 					return nil
+				case cerrors.Is(recoveryErr, errRecoverySuperseded):
+					// A Start took the pipeline over while this run was
+					// finishing or waiting out its backoff (#2899 item 2). The
+					// new run owns the pipeline's status, terminal error and
+					// notifications; this run only removes its own entry (a
+					// no-op once the new run is published).
+					s.deleteRunningPipelineIfCurrent(rp.pipeline.ID, rp)
+					return err
 				case cerrors.Is(recoveryErr, errGracefulShutdownDuringRecovery):
 					// A graceful shutdown began while we were parked in the
 					// backoff wait. Finalize as a system stop with the error the
@@ -1979,7 +2118,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	//     this run's entry on its way through its own terminal block;
 	//   - a failed UpdateStatus below is logged, not returned (#2899), so it
 	//     cannot make the caller treat this live run as a failed start.
-	s.publishRunningPipeline(rp.pipeline.ID, rp)
+	pendingStop := s.publishRunningPipeline(rp.pipeline.ID, rp)
 
 	// All N+1 goroutines (every worker plus the cleanup goroutine) are now
 	// registered on the tomb, so release the workers: none of them can any
@@ -2015,6 +2154,17 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 	// see it. The publication above happened before this read, and StopAll
 	// sets the flag before it reads runningPipelines, so at least one of the
 	// two sees the other. Stop it the way StopAll would have.
+	if pendingStop != nil {
+		// A user Stop arrived while this run was being built (#2899 item 2).
+		// Apply it now, as Stop would have.
+		if err := s.stopRunnablePipeline(context.Background(), rp, pendingStop.force, false); err != nil {
+			s.logger.Warn(ctx).
+				Err(err).
+				Str(log.PipelineIDField, rp.pipeline.ID).
+				Msg("could not stop pipeline that was stopped while starting")
+		}
+	}
+
 	if s.runs.shuttingDown() {
 		if err := s.stopRunnablePipeline(context.Background(), rp, false, true); err != nil {
 			s.logger.Warn(ctx).
@@ -2148,10 +2298,16 @@ func (s *Service) logStatusNotPersisted(ctx context.Context, pipelineID string, 
 // publishRunningPipeline makes rp the live run for id in runningPipelines,
 // replacing any previous entry. It takes publishMu so it is ordered against
 // deleteRunningPipelineIfCurrent.
-func (s *Service) publishRunningPipeline(id string, rp *runnablePipeline) {
+//
+// The run's reservation becomes this entry in the same critical section, so a
+// concurrent Start sees one or the other, never neither (invariant 2). It
+// returns a Stop that arrived while the run was being built; the caller
+// applies it.
+func (s *Service) publishRunningPipeline(id string, rp *runnablePipeline) *pendingStop {
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	s.runningPipelines.Set(id, rp)
+	return s.consumeReservationLocked(rp)
 }
 
 // deleteRunningPipelineIfCurrent removes id's entry from runningPipelines only
@@ -2204,6 +2360,15 @@ func (s *Service) finishStopped(ctx context.Context, rp *runnablePipeline, statu
 // (at-least-once).
 func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
+
+	// Invariant 2: a run that a Start has already taken over must not
+	// restart the pipeline too.
+	if !s.setPhase(rp, phaseBackoff) {
+		return errRecoverySuperseded
+	}
+	// Whatever the recovery returns without restarting, the run is
+	// finishing again afterwards.
+	defer s.setPhase(rp, phaseFinishing)
 	if !s.metricsDisabled {
 		measure.PipelineRecoveringCount.WithValues(rp.pipeline.Config.Name).Inc()
 	}
@@ -2225,9 +2390,10 @@ func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) err
 // pipeline. Ported from pkg/lifecycle.Service.StartWithBackoff.
 //
 // Return contract (interpreted by runPipeline's recovery arm):
-//   - nil: the pipeline was restarted, or an external Start already replaced the
-//     running entry while we waited — either way the live run owns terminal
-//     cleanup and the caller must NOT run its cleanup tail.
+//   - nil: the pipeline was restarted; the new run owns terminal cleanup and
+//     the caller must NOT run its cleanup tail.
+//   - errRecoverySuperseded: a Start took the pipeline over while we waited;
+//     the caller removes its own entry and does nothing else.
 //   - errGracefulShutdownDuringRecovery: a graceful shutdown began during the
 //     backoff wait; the caller finalizes a system stop instead of restarting.
 //   - errIntentionalStopDuringRecovery: a user Stop arrived during the backoff
@@ -2268,6 +2434,9 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...],
 	// 10m, 10m,... balancing recovery time against downtime.
+	s.publishMu.Lock()
+	superseded := rp.supersededChLocked()
+	s.publishMu.Unlock()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -2275,15 +2444,13 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		// Invariant 7 (#2901): end the wait as soon as shutdown begins, so
 		// Wait is not held up by a backoff of up to MaxDelay.
 		return errGracefulShutdownDuringRecovery
+	case <-superseded:
+		// A Start took over the pipeline (#2899 item 2).
+		return errRecoverySuperseded
 	case <-time.After(duration):
 	}
-
-	// The user may have stopped or restarted the pipeline while we were waiting.
-	// If the live entry is no longer this rp, an external Start already replaced
-	// it — that run owns cleanup, so return nil and do not restart.
-	actualRp, ok := s.runningPipelines.Get(rp.pipeline.ID)
-	if !ok || actualRp != rp {
-		return nil
+	if s.testAfterBackoffWait != nil {
+		s.testAfterBackoffWait(rp)
 	}
 
 	// If a graceful shutdown began while we waited, do not restart — finalize a
@@ -2300,13 +2467,33 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		return errIntentionalStopDuringRecovery
 	}
 
-	err := s.Start(ctx, rp.pipeline.ID)
+	// Invariant 2: the restart reserves like Start does, passing rp, so it
+	// is granted only if rp is still the registered run and no Start took
+	// over in the meantime. This replaces an unlocked "am I still the live
+	// run" check that an external Start could race (#2899 item 2).
+	err := s.startRun(ctx, rp.pipeline.ID, rp)
 	if cerrors.Is(err, pipeline.ErrShuttingDown) {
 		// Shutdown began between the check above and Start's admission
 		// (#2901): same outcome as a shutdown during the wait.
 		return errGracefulShutdownDuringRecovery
 	}
+	if err != nil && rp.intentionalStop.Load() {
+		// A Stop arrived while the restart was building (it is recorded on
+		// rp as well as on the restart's reservation) and the restart then
+		// failed: the run ends stopped, not degraded, and does not notify.
+		return errIntentionalStopDuringRecovery
+	}
 	return err
+}
+
+// predecessorStopErr is reserve's check for a recovery restart: the run it
+// restarts must not have been asked to stop. publishMu must be held, which
+// is also where Stop records the request.
+func predecessorStopErr(rp *runnablePipeline) error {
+	if rp.intentionalStop.Load() {
+		return errIntentionalStopDuringRecovery
+	}
+	return nil
 }
 
 // notify notifies all registered FailureHandlers about an error.
