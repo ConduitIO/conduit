@@ -61,3 +61,27 @@ func TestApplyAvroMaxElements_RejectsNegative(t *testing.T) {
 	is := is.New(t)
 	is.True(ApplyAvroMaxElements(-1) != nil)
 }
+
+// TestAvroLimit_EncodeIsNotCapped documents an asymmetry the limit has by
+// design: it bounds decoding only. A source's schema middleware still
+// encodes an array over schema.avro.max-elements, and the same pipeline's
+// destination (or avro.decode) then rejects it. The record is therefore not
+// lost at the source, but a destination-side failure fails the whole write
+// batch. If a codec upgrade starts capping encode, this test fails and the
+// release notes and design doc need revisiting.
+func TestAvroLimit_EncodeIsNotCapped(t *testing.T) {
+	is := is.New(t)
+	srd, err := avro.Parse([]byte(`{"type":"record","name":"encasym","fields":[{"name":"a","type":{"type":"array","items":"null"}}]}`))
+	is.NoErr(err)
+
+	over := make([]any, DefaultAvroMaxElements+1)
+	b, err := srd.Marshal(map[string]any{"a": over})
+	is.NoErr(err) // encode succeeds over the cap
+
+	var v map[string]any
+	decodeErr := srd.Unmarshal(b, &v)
+	is.True(decodeErr != nil) // ...and decode of the same bytes is refused
+	ce, ok := conduiterr.Get(ClassifyDecodeError(decodeErr))
+	is.True(ok)
+	is.Equal(ce.Code, CodeAvroLimitExceeded)
+}
