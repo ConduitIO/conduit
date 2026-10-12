@@ -29,29 +29,40 @@ import (
 // reads an entity and sends its settings back would otherwise overwrite every
 // credential with the literal "***".
 //
-// It returns a copy of update in which every value that is exactly
-// log.Redacted is replaced by the stored value for the same key. Any other
-// value, including one that merely contains "***", is a real new value and is
-// kept as sent. Keys absent from update are not added back: an update
-// replaces the whole settings map, as it always has. The trade-off, accepted
-// when this was decided, is that a setting whose real value is literally
-// "***" cannot be set through the API: an update keeps the stored value, and
-// Create and Apply refuse it (RefuseRedactedSettings). Only provisioning from
-// YAML, which does not go through the orchestrator, can set it.
+// Rule (security decision, 2026-10-12): a value that is exactly log.Redacted
+// keeps the stored value for its key ONLY when no other setting in the same
+// update changes. That is the pure round trip, and an update that changes
+// nothing besides re-sending the redacted values. "Changes" means a non-"***"
+// value that differs from the stored one, a key that has no stored value
+// (added), or a stored key that the update leaves out (removed). If anything
+// changed, every "***" in the update is refused with
+// CodeRedactedSettingWithOtherChanges; the caller must send real values.
 //
-// A redacted value for a key that has no stored value is refused with
-// CodeRedactedSettingWithoutStoredValue rather than stored, because keeping
-// "nothing" would silently store "***". All such keys are named in the
-// message; ConfigPath points at the first one, under pathPrefix (the JSON
-// pointer of the settings map in the request, e.g. "/config/settings").
+// Why: with a per-key rule, a caller could point a connector's host or URL at
+// a server it controls, send "***" for the password, and Conduit would send
+// the stored password there. The API is unauthenticated by default, so "can
+// modify" would have meant "can read secrets". The remaining limitation is
+// that only a pure round trip keeps secrets: to change one setting, the
+// client must re-send the real value of every secret.
 //
-// Security: "***" re-binds the stored value to whatever the rest of the new
-// settings point at. An update that changes a host or URL and sends "***" for
-// the password makes the connector use the stored password against the new
-// host. The API never returns the secret, but it can send it elsewhere. That
-// is accepted for a same-plugin update (a caller who can update a connector
-// can already redirect the pipeline's data); across a plugin change it is
-// refused, see restoreRedactedSettingsForPlugin.
+// When nothing is refused, the result is a copy of update in which every value
+// that is exactly log.Redacted is replaced by the stored value for the same
+// key. Any other value, including one that merely contains "***", is a real
+// value and is kept as sent. Keys absent from update are not added back: an
+// update replaces the whole settings map, as it always has. A setting whose
+// real value is literally "***" cannot be set through an update.
+//
+// Precedence of refusals (the caller wraps this with the plugin check, see
+// restoreRedactedSettingsForPlugin):
+//
+//  1. CodeRedactedSettingPluginChanged (checked by the wrapper, first)
+//  2. CodeRedactedSettingWithoutStoredValue: a "***" key has no stored value;
+//     keeping "nothing" would silently store "***". All such keys are named
+//     in the message; ConfigPath points at the first one, under pathPrefix
+//     (the JSON pointer of the settings map in the request, e.g.
+//     "/config/settings").
+//  3. CodeRedactedSettingWithOtherChanges: as above. The message names the
+//     pointer of every "***" key; ConfigPath is the first.
 //
 // Neither map is mutated. It must run before the settings are validated, so
 // the plugin validates the real values, not the placeholder.
@@ -61,12 +72,17 @@ func restoreRedactedSettings(stored, update map[string]string, pathPrefix string
 	}
 
 	out := make(map[string]string, len(update))
-	var missing []string
+	var missing, redacted []string
+	changed := false // any setting other than a "***" key differs from stored
 	for k, v := range update {
 		if v != log.Redacted {
 			out[k] = v
+			if storedValue, ok := stored[k]; !ok || storedValue != v {
+				changed = true // changed value or added key
+			}
 			continue
 		}
+		redacted = append(redacted, k)
 		storedValue, ok := stored[k]
 		if !ok {
 			missing = append(missing, k)
@@ -83,6 +99,30 @@ func restoreRedactedSettings(stored, update map[string]string, pathPrefix string
 		))
 		e.ConfigPath = pathPrefix + "/" + escapeJSONPointer(missing[0])
 		e.Suggestion = fmt.Sprintf("send the real value for these settings, or leave them out; %q only means \"keep the stored value\" for a setting that already has one", log.Redacted)
+		return nil, e
+	}
+
+	if len(redacted) == 0 {
+		return out, nil
+	}
+	for k := range stored {
+		if _, ok := update[k]; !ok {
+			changed = true // removed key
+		}
+	}
+	if changed {
+		// Invariant: a stored secret is never re-bound to changed settings.
+		sort.Strings(redacted)
+		paths := make([]string, len(redacted))
+		for i, k := range redacted {
+			paths[i] = pathPrefix + "/" + escapeJSONPointer(k)
+		}
+		e := conduiterr.New(CodeRedactedSettingWithOtherChanges, fmt.Sprintf(
+			"setting(s) at %s are %q (keep the stored value), but other settings in this update change; the stored value is kept only when nothing else changes",
+			quoteAll(paths), log.Redacted,
+		))
+		e.ConfigPath = paths[0]
+		e.Suggestion = fmt.Sprintf("when changing other settings, send the real value for every setting that is %q; %q only keeps stored values in an update that changes nothing else", log.Redacted, log.Redacted)
 		return nil, e
 	}
 	return out, nil

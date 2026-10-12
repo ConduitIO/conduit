@@ -26,35 +26,32 @@ import (
 func TestRestoreRedactedSettings(t *testing.T) {
 	stored := map[string]string{"password": "s3cret", "host": "db", "token": "t0k"}
 
-	testCases := []struct {
+	// "***" keeps the stored value only when nothing else in the update
+	// changes (security decision, 2026-10-12).
+	keptCases := []struct {
 		name   string
 		update map[string]string
 		want   map[string]string
 	}{
 		{
-			name:   "all redacted keeps every stored value",
+			name:   "pure round trip keeps every stored value",
 			update: map[string]string{"password": log.Redacted, "host": log.Redacted, "token": log.Redacted},
 			want:   stored,
 		},
 		{
-			name:   "a real value replaces the stored one",
-			update: map[string]string{"password": "new", "host": log.Redacted, "token": log.Redacted},
-			want:   map[string]string{"password": "new", "host": "db", "token": "t0k"},
+			name:   "several *** alongside an unchanged non-secret field",
+			update: map[string]string{"password": log.Redacted, "token": log.Redacted, "host": "db"},
+			want:   stored,
 		},
 		{
-			name:   "a key left out stays out",
-			update: map[string]string{"password": log.Redacted},
-			want:   map[string]string{"password": "s3cret"},
+			name:   "no *** at all: every value is real and replaces",
+			update: map[string]string{"password": "new", "host": "other", "port": "5432"},
+			want:   map[string]string{"password": "new", "host": "other", "port": "5432"},
 		},
 		{
 			name:   "only an exact match is the placeholder",
 			update: map[string]string{"password": " ***", "host": "****", "token": "a***"},
 			want:   map[string]string{"password": " ***", "host": "****", "token": "a***"},
-		},
-		{
-			name:   "a new key with a real value is added",
-			update: map[string]string{"password": log.Redacted, "port": "5432"},
-			want:   map[string]string{"password": "s3cret", "port": "5432"},
 		},
 		{
 			name:   "empty update",
@@ -67,7 +64,7 @@ func TestRestoreRedactedSettings(t *testing.T) {
 			want:   nil,
 		},
 	}
-	for _, tc := range testCases {
+	for _, tc := range keptCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			before := map[string]string{}
@@ -83,17 +80,77 @@ func TestRestoreRedactedSettings(t *testing.T) {
 			}
 		})
 	}
+
+	refusedCases := []struct {
+		name      string
+		update    map[string]string
+		wantPaths []string // every *** key's pointer, sorted
+	}{
+		{
+			// The exfiltration case: same plugin, host repointed, password "***".
+			name:      "changed host with *** password",
+			update:    map[string]string{"password": log.Redacted, "token": log.Redacted, "host": "evil.example"},
+			wantPaths: []string{"/config/settings/password", "/config/settings/token"},
+		},
+		{
+			name:      "a changed value that merely contains ***",
+			update:    map[string]string{"password": log.Redacted, "host": "a***b", "token": log.Redacted},
+			wantPaths: []string{"/config/settings/password", "/config/settings/token"},
+		},
+		{
+			name:      "added key",
+			update:    map[string]string{"password": log.Redacted, "host": "db", "token": log.Redacted, "port": "5432"},
+			wantPaths: []string{"/config/settings/password", "/config/settings/token"},
+		},
+		{
+			name:      "removed key (a real key left out)",
+			update:    map[string]string{"password": log.Redacted, "token": log.Redacted},
+			wantPaths: []string{"/config/settings/password", "/config/settings/token"},
+		},
+		{
+			name:      "removed key (only *** keys remain)",
+			update:    map[string]string{"password": log.Redacted},
+			wantPaths: []string{"/config/settings/password"},
+		},
+	}
+	for _, tc := range refusedCases {
+		t.Run("refused: "+tc.name, func(t *testing.T) {
+			is := is.New(t)
+			got, err := restoreRedactedSettings(stored, tc.update, "/config/settings")
+			is.True(got == nil)
+			ce, ok := conduiterr.Get(err)
+			is.True(ok)
+			is.Equal(ce.Code, CodeRedactedSettingWithOtherChanges)
+			is.Equal(ce.ConfigPath, tc.wantPaths[0]) // ConfigPath is the first *** key
+			for _, p := range tc.wantPaths {
+				is.True(strings.Contains(ce.Message, p)) // the message names every *** key's path
+			}
+			is.True(strings.Contains(ce.Suggestion, "real"))
+			is.True(!strings.Contains(ce.Message, "s3cret")) // never echoes a stored value
+		})
+	}
 }
 
 func TestRestoreRedactedSettingsForPlugin(t *testing.T) {
 	stored := map[string]string{"password": "s3cret", "host": "db"}
 
-	t.Run("same plugin restores", func(t *testing.T) {
+	t.Run("same plugin, pure round trip restores", func(t *testing.T) {
+		is := is.New(t)
+		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored,
+			map[string]string{"password": log.Redacted, "host": log.Redacted}, "/config/settings")
+		is.NoErr(err)
+		is.Equal(got, stored)
+	})
+
+	t.Run("same plugin, host changed with *** password is refused", func(t *testing.T) {
 		is := is.New(t)
 		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored,
 			map[string]string{"password": log.Redacted, "host": "evil"}, "/config/settings")
-		is.NoErr(err)
-		is.Equal(got, map[string]string{"password": "s3cret", "host": "evil"})
+		is.True(got == nil)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code, CodeRedactedSettingWithOtherChanges)
+		is.Equal(ce.ConfigPath, "/config/settings/password")
 	})
 
 	for _, newPlugin := range []string{"builtin:http", "builtin:pg@v0.2.0", ""} {
@@ -111,25 +168,34 @@ func TestRestoreRedactedSettingsForPlugin(t *testing.T) {
 		})
 	}
 
-	// Precedence: a key that has no stored value AND a changed plugin is
-	// reported as plugin_changed, not without_stored_value. The plugin check
-	// runs first so the caller is told the more fundamental problem.
-	t.Run("plugin change wins over missing stored value", func(t *testing.T) {
+	// Precedence, most fundamental problem first:
+	//  1. the plugin changed        -> plugin_changed
+	//  2. a *** key has no stored value -> without_stored_value
+	//  3. any other setting changed -> with_other_changes
+	t.Run("precedence", func(t *testing.T) {
+		code := func(storedPlugin, newPlugin string, update map[string]string) conduiterr.Code {
+			t.Helper()
+			_, err := restoreRedactedSettingsForPlugin(storedPlugin, newPlugin, stored, update, "/config/settings")
+			ce, ok := conduiterr.Get(err)
+			if !ok {
+				t.Fatalf("want a ConduitError, got %v", err)
+			}
+			return ce.Code
+		}
 		is := is.New(t)
-		got, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:http", stored,
-			map[string]string{"nostored": log.Redacted}, "/config/settings")
-		is.True(got == nil)
-		ce, ok := conduiterr.Get(err)
-		is.True(ok)
-		is.Equal(ce.Code, CodeRedactedSettingPluginChanged)
-		is.Equal(ce.ConfigPath, "/config/settings/nostored")
 
-		// Same plugin: the missing-value code applies.
-		_, err = restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored,
-			map[string]string{"nostored": log.Redacted}, "/config/settings")
-		ce, ok = conduiterr.Get(err)
-		is.True(ok)
-		is.Equal(ce.Code, CodeRedactedSettingWithoutStoredValue)
+		// All three problems at once: plugin changed wins.
+		all := map[string]string{"nostored": log.Redacted, "password": log.Redacted, "host": "evil"}
+		is.Equal(code("builtin:pg", "builtin:http", all), CodeRedactedSettingPluginChanged)
+		// Same plugin: no stored value wins over other changes.
+		is.Equal(code("builtin:pg", "builtin:pg", all), CodeRedactedSettingWithoutStoredValue)
+		// Same plugin, every *** has a stored value, something else changed.
+		is.Equal(code("builtin:pg", "builtin:pg", map[string]string{"password": log.Redacted, "host": "evil"}), CodeRedactedSettingWithOtherChanges)
+		// Plugin changed beats other changes even with stored values.
+		is.Equal(code("builtin:pg", "builtin:http", map[string]string{"password": log.Redacted, "host": "evil"}), CodeRedactedSettingPluginChanged)
+		// No *** at all: nothing to refuse, whatever changed.
+		_, err := restoreRedactedSettingsForPlugin("builtin:pg", "builtin:pg", stored, map[string]string{"host": "evil"}, "/config/settings")
+		is.NoErr(err)
 	})
 
 	t.Run("plugin change with real values is fine", func(t *testing.T) {

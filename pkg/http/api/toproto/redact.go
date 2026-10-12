@@ -44,9 +44,10 @@ import "github.com/conduitio/conduit/pkg/foundation/log"
 // package.
 //
 // The inverse lives in pkg/orchestrator (restoreRedactedSettings): in an
-// Update RPC, a value that is exactly log.Redacted keeps the stored value, so
-// a client can send a redacted response back without overwriting
-// credentials (#2913). Changing the placeholder here changes that contract.
+// Update RPC, values that are exactly log.Redacted keep the stored values, but
+// only when no other setting in the update changes, so a client can send a
+// redacted response back without overwriting credentials (#2913). Changing the
+// placeholder here changes that contract.
 func redactSettings(in map[string]string) map[string]string {
 	if in == nil {
 		return nil

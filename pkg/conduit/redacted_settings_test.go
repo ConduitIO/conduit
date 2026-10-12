@@ -17,6 +17,7 @@ package conduit
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -281,9 +282,10 @@ func TestRedactedRoundTrip_GRPC(t *testing.T) {
 }
 
 // TestRedactedSettings_HTTPGateway covers the same semantics through the HTTP
-// gateway: a round trip keeps stored values, a real value replaces one, a
-// key left out is removed (an update replaces the whole map, as before), and
-// "***" for a key with no stored value is refused without changing anything.
+// gateway: a pure round trip keeps stored values; "***" next to any other
+// change (changed value, added key, removed key) is refused; an update with
+// only real values replaces the map, as before; and "***" for a key with no
+// stored value is refused without changing anything.
 func TestRedactedSettings_HTTPGateway(t *testing.T) {
 	h := startAPI(t)
 
@@ -349,50 +351,107 @@ func TestRedactedSettings_HTTPGateway(t *testing.T) {
 				is.Equal(tg.stored(h.stored(t, f)), tg.orig)
 			})
 
-			t.Run("a real value replaces the stored one", func(t *testing.T) {
+			// Security decision (2026-10-12): "***" keeps the stored value only
+			// when no other setting in the update changes. Otherwise a caller
+			// could repoint a host and have the stored password sent there.
+			secretKey := func() string { // a key other than changeKey
+				for k := range tg.orig {
+					if k != tg.changeKey {
+						return k
+					}
+				}
+				return ""
+			}()
+
+			t.Run("*** with a changed value is refused (credential exfiltration)", func(t *testing.T) {
 				is := is.New(t)
 				f := h.newFixture(t)
 
 				update := redactedCopy(tg.orig)
+				update[tg.changeKey] = "evil-value"
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
+				is.Equal(code, http.StatusBadRequest)
+				is.True(strings.Contains(body, orchestrator.CodeRedactedSettingWithOtherChanges.Reason()))
+				is.True(strings.Contains(body, secretKey))
+				is.Equal(tg.stored(h.stored(t, f)), tg.orig) // nothing changed
+			})
+
+			t.Run("an update with only real values replaces them", func(t *testing.T) {
+				is := is.New(t)
+				f := h.newFixture(t)
+
+				update := map[string]string{}
+				for k, v := range tg.orig {
+					update[k] = v
+				}
 				update[tg.changeKey] = "new-value"
 				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusOK)
+				is.Equal(tg.stored(h.stored(t, f)), update)
+			})
 
-				want := map[string]string{}
-				for k, v := range tg.orig {
-					want[k] = v
-				}
-				want[tg.changeKey] = "new-value"
-				is.Equal(tg.stored(h.stored(t, f)), want)
+			t.Run("*** next to an unchanged real value is kept", func(t *testing.T) {
+				is := is.New(t)
+				f := h.newFixture(t)
+
+				update := redactedCopy(tg.orig)
+				update[tg.changeKey] = tg.orig[tg.changeKey] // same as stored
+				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
+				is.Equal(code, http.StatusOK)
+				is.Equal(tg.stored(h.stored(t, f)), tg.orig)
 			})
 
 			t.Run("a value that only contains *** is a real value", func(t *testing.T) {
 				is := is.New(t)
 				f := h.newFixture(t)
 
-				update := redactedCopy(tg.orig)
+				update := map[string]string{}
+				for k, v := range tg.orig {
+					update[k] = v
+				}
 				update[tg.changeKey] = "a***b"
 				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
 				is.Equal(code, http.StatusOK)
 				is.Equal(tg.stored(h.stored(t, f))[tg.changeKey], "a***b")
 			})
 
-			t.Run("a key left out is removed, as before", func(t *testing.T) {
+			t.Run("*** with an added key is refused", func(t *testing.T) {
+				is := is.New(t)
+				f := h.newFixture(t)
+
+				update := redactedCopy(tg.orig)
+				update["extra"] = "x"
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
+				is.Equal(code, http.StatusBadRequest)
+				is.True(strings.Contains(body, orchestrator.CodeRedactedSettingWithOtherChanges.Reason()))
+				is.Equal(tg.stored(h.stored(t, f)), tg.orig)
+			})
+
+			t.Run("*** with a removed key is refused", func(t *testing.T) {
 				is := is.New(t)
 				f := h.newFixture(t)
 
 				update := redactedCopy(tg.orig)
 				delete(update, tg.changeKey)
-				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
-				is.Equal(code, http.StatusOK)
+				code, body := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
+				is.Equal(code, http.StatusBadRequest)
+				is.True(strings.Contains(body, orchestrator.CodeRedactedSettingWithOtherChanges.Reason()))
+				is.Equal(tg.stored(h.stored(t, f)), tg.orig)
+			})
 
-				want := map[string]string{}
+			t.Run("a key left out of an all-real update is removed, as before", func(t *testing.T) {
+				is := is.New(t)
+				f := h.newFixture(t)
+
+				update := map[string]string{}
 				for k, v := range tg.orig {
 					if k != tg.changeKey {
-						want[k] = v
+						update[k] = v
 					}
 				}
-				is.Equal(tg.stored(h.stored(t, f)), want)
+				code, _ := h.httpJSON(t, http.MethodPut, tg.path(f), tg.body(tg.plugin, update))
+				is.Equal(code, http.StatusOK)
+				is.Equal(tg.stored(h.stored(t, f)), update)
 			})
 
 			t.Run("*** for a key with no stored value is refused", func(t *testing.T) {
@@ -541,4 +600,61 @@ func TestRedactedSettingWithoutStoredValue_GRPCStatus(t *testing.T) {
 	is.True(ok)
 	is.Equal(st.Code(), codes.InvalidArgument)
 	is.True(strings.Contains(st.Message(), `"not.stored"`))
+}
+
+// The exfiltration case over gRPC: same plugin, one setting changed, "***" for
+// the rest. Refused as InvalidArgument with the stable reason, for all three
+// entities, and nothing is stored.
+func TestRedactedSettingWithOtherChanges_GRPCStatus(t *testing.T) {
+	h := startAPI(t)
+	ctx := context.Background()
+
+	check := func(t *testing.T, err error) {
+		t.Helper()
+		is := is.New(t)
+		st, ok := grpcstatus.FromError(err)
+		is.True(ok)
+		is.Equal(st.Code(), codes.InvalidArgument)
+		is.True(strings.Contains(st.Message(), "/settings/"))
+		is.True(!strings.Contains(st.Message(), "secret")) // no stored value echoed
+		var reasons []string
+		for _, d := range st.Details() {
+			reasons = append(reasons, fmt.Sprint(d))
+		}
+		is.True(strings.Contains(strings.Join(reasons, " "), orchestrator.CodeRedactedSettingWithOtherChanges.Reason()))
+	}
+
+	t.Run("connector", func(t *testing.T) {
+		f := h.newFixture(t)
+		s := redactedCopy(storedConnectorSettings)
+		s["level"] = "error"
+		_, err := h.connectors.UpdateConnector(ctx, &apiv1.UpdateConnectorRequest{
+			Id: f.connectorID, Plugin: "builtin:log", Config: &apiv1.Connector_Config{Name: "dest", Settings: s},
+		})
+		check(t, err)
+		conn, _, _ := h.stored(t, f)
+		is.New(t).Equal(conn, storedConnectorSettings)
+	})
+	t.Run("processor", func(t *testing.T) {
+		f := h.newFixture(t)
+		s := redactedCopy(storedProcessorSettings)
+		s["field"] = ".Metadata.other"
+		_, err := h.processors.UpdateProcessor(ctx, &apiv1.UpdateProcessorRequest{
+			Id: f.processorID, Plugin: "field.set", Config: &apiv1.Processor_Config{Settings: s, Workers: 1},
+		})
+		check(t, err)
+		_, proc, _ := h.stored(t, f)
+		is.New(t).Equal(proc, storedProcessorSettings)
+	})
+	t.Run("dlq", func(t *testing.T) {
+		f := h.newFixture(t)
+		s := redactedCopy(storedDLQSettings)
+		s["level"] = "error"
+		_, err := h.pipelines.UpdateDLQ(ctx, &apiv1.UpdateDLQRequest{
+			Id: f.pipelineID, Dlq: &apiv1.Pipeline_DLQ{Plugin: "builtin:log", Settings: s, WindowSize: 1},
+		})
+		check(t, err)
+		_, _, dlq := h.stored(t, f)
+		is.New(t).Equal(dlq, storedDLQSettings)
+	})
 }
