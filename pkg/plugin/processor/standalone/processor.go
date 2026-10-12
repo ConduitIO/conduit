@@ -17,6 +17,7 @@ package standalone
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -46,6 +47,29 @@ const (
 	conduitLogLevelKey    = "CONDUIT_LOG_LEVEL"
 )
 
+// Bounds on the lifecycle commands that have no natural caller deadline. They
+// are variables only so tests can shrink them; nothing outside tests writes them.
+var (
+	// specificationTimeout bounds Specification(), whose signature carries no
+	// context. It used to be 5s, which a -race build running the interpreter
+	// under CI load exceeded (#2981); the point of the bound is to turn a stuck
+	// guest into an error, not to police a slow-but-working one.
+	specificationTimeout = 30 * time.Second
+	// teardownCommandTimeout bounds the Teardown command, so a guest that never
+	// answers cannot stall shutdown forever.
+	teardownCommandTimeout = 5 * time.Second
+	// moduleStopTimeout bounds how long Teardown waits for the module to exit
+	// after the command channel is closed, before it kills the module.
+	moduleStopTimeout = 5 * time.Second
+)
+
+// ErrCommandTimeout is wrapped by errors from a command that did not complete
+// because its context ended (deadline or cancellation; the wrapped ctx.Err()
+// says which) or because the plugin had to be killed for not stopping. After a
+// command was abandoned mid-flight the processor is unusable (see
+// wasmProcessor.abandon), so callers should tear it down.
+var ErrCommandTimeout = cerrors.New("processor plugin command did not complete")
+
 type wasmProcessor struct {
 	sdk.UnimplementedProcessor
 	protoconv protoConverter
@@ -62,6 +86,15 @@ type wasmProcessor struct {
 	// commandResponses is used to communicate replies between the actual
 	// processor (the WASM module) and wasmProcessor
 	commandResponses chan tuple[*processorv1.CommandResponse, error]
+
+	// abandoned is closed (once, via abandonOnce) when executeCommand gives up on
+	// a command whose request the guest already accepted. The guest will still
+	// try to deliver that command's response; abandoned lets the host module drop
+	// it instead of blocking forever, and makes every later command fail fast so
+	// the stale response can never be paired with a newer request (the protocol
+	// carries no correlation id).
+	abandoned   chan struct{}
+	abandonOnce sync.Once
 
 	// moduleStopped is used to know when the module stopped running
 	moduleStopped chan struct{}
@@ -93,6 +126,7 @@ func newWASMProcessor(
 	commandRequests := make(chan *processorv1.CommandRequest)
 	commandResponses := make(chan tuple[*processorv1.CommandResponse, error])
 	moduleStopped := make(chan struct{})
+	abandoned := make(chan struct{})
 
 	// Build the per-processor egress capability from the resolved policy. The
 	// policy is bound here, per instance — never on the shared Registry — so one
@@ -116,6 +150,7 @@ func newWASMProcessor(
 			logger,
 			commandRequests,
 			commandResponses,
+			abandoned,
 			schemaService,
 			httpService,
 		),
@@ -159,6 +194,7 @@ func newWASMProcessor(
 		module:           mod,
 		commandRequests:  commandRequests,
 		commandResponses: commandResponses,
+		abandoned:        abandoned,
 		moduleStopped:    moduleStopped,
 	}
 
@@ -193,14 +229,19 @@ func (p *wasmProcessor) run(ctx context.Context) {
 }
 
 func (p *wasmProcessor) Specification() (sdk.Specification, error) {
+	return p.specification(context.Background())
+}
+
+// specification is Specification with a caller context: the command is bounded
+// by whichever expires first, ctx or specificationTimeout.
+func (p *wasmProcessor) specification(ctx context.Context) (sdk.Specification, error) {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Specify{
 			Specify: &processorv1.Specify_Request{},
 		},
 	}
 
-	// the function has no context parameter, so we need to set a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, specificationTimeout)
 	defer cancel()
 
 	resp, err := p.executeCommand(ctx, req)
@@ -293,13 +334,30 @@ func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) [
 }
 
 func (p *wasmProcessor) Teardown(ctx context.Context) error {
-	// TODO: we should probably have a timeout for the teardown command in case
-	//  the plugin is stuck
-	teardownErr := p.executeTeardownCommand(ctx)
+	var teardownErr error
+	if p.isAbandoned() {
+		// The guest is still busy with (or stuck on) a command we stopped waiting
+		// for, so it cannot service a Teardown command; closeModule below still
+		// asks it to exit and kills it if it does not.
+		teardownErr = cerrors.Errorf("skipping teardown command: %w", ErrCommandTimeout)
+	} else {
+		tctx, cancel := context.WithTimeout(ctx, teardownCommandTimeout)
+		teardownErr = p.executeTeardownCommand(tctx)
+		cancel()
+	}
 	// close module regardless of teardown error
 	stopErr := p.closeModule(ctx)
 
-	return cerrors.Join(teardownErr, stopErr, p.moduleError)
+	// moduleError is written by run before it closes moduleStopped; only read it
+	// once that has happened (closeModule may have given up and killed the module).
+	var moduleErr error
+	select {
+	case <-p.moduleStopped:
+		moduleErr = p.moduleError
+	default:
+	}
+
+	return cerrors.Join(teardownErr, stopErr, moduleErr)
 }
 
 func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
@@ -326,7 +384,19 @@ func (p *wasmProcessor) closeModule(ctx context.Context) error {
 	// signaling it to exit.
 	close(p.commandRequests)
 
+	timer := time.NewTimer(moduleStopTimeout)
+	defer timer.Stop()
+
 	select {
+	case <-timer.C:
+		// The guest neither answered nor exited (e.g. it is stuck inside a
+		// command). Kill it rather than wait forever. ctx may already be
+		// cancelled, so the kill must not depend on it.
+		p.logger.Error(ctx).Msg("processor plugin did not stop in time, killing plugin")
+		if err := p.module.CloseWithExitCode(context.WithoutCancel(ctx), 1); err != nil {
+			return fmt.Errorf("failed to kill processor plugin: %w", err)
+		}
+		return fmt.Errorf("processor plugin did not stop within %v: %w", moduleStopTimeout, ErrCommandTimeout)
 	case <-ctx.Done():
 		// kill the plugin
 		p.logger.Error(ctx).Msg("context canceled while waiting for teardown, killing plugin")
@@ -342,11 +412,24 @@ func (p *wasmProcessor) closeModule(ctx context.Context) error {
 
 // executeCommand sends a command request to the WASM module and waits for the
 // response. It returns the response, or an error if the response is an error.
-// If the context is canceled, it returns ctx.Err().
+// If the context is done, it returns an error wrapping both ctx.Err() and
+// ErrCommandTimeout.
+//
+// If ctx ends AFTER the guest accepted the request, the command is abandoned:
+// the guest keeps running it and will try to deliver a response nobody reads.
+// The processor is marked unusable (see abandon) and later commands fail fast
+// rather than risk pairing that stale response with a newer request.
 func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.CommandRequest) (*processorv1.CommandResponse, error) {
 	select {
+	case <-p.abandoned:
+		return nil, p.abandonedError(req)
+	default:
+	}
+
+	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		// Nothing was sent, so nothing is outstanding: not an abandonment.
+		return nil, fmt.Errorf("%w while sending command %T: %w", ErrCommandTimeout, req.Request, ctx.Err())
 	case <-p.moduleStopped:
 		return nil, cerrors.Errorf("processor plugin stopped while trying to send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case p.commandRequests <- req:
@@ -357,9 +440,10 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 	var err error
 	select {
 	case <-ctx.Done():
-		// TODO if this happens we should probably kill the plugin, as it's
-		//  probably stuck
-		return nil, ctx.Err()
+		// The guest is still working on req and will want to send a response. Kill
+		// is left to Teardown; here we only make sure nothing blocks on it.
+		p.abandon()
+		return nil, fmt.Errorf("%w while waiting for response to command %T: %w", ErrCommandTimeout, req.Request, ctx.Err())
 	case <-p.moduleStopped:
 		return nil, cerrors.Errorf("processor plugin stopped while waiting for response to command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case crTuple := <-p.commandResponses:
@@ -376,4 +460,22 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 	}
 
 	return resp, nil
+}
+
+// abandon records that a command was given up on. It is idempotent.
+func (p *wasmProcessor) abandon() {
+	p.abandonOnce.Do(func() { close(p.abandoned) })
+}
+
+func (p *wasmProcessor) isAbandoned() bool {
+	select {
+	case <-p.abandoned:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *wasmProcessor) abandonedError(req *processorv1.CommandRequest) error {
+	return cerrors.Errorf("refusing command %T: an earlier command was abandoned and the plugin must be torn down: %w", req.Request, ErrCommandTimeout)
 }

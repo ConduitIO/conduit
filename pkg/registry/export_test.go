@@ -14,6 +14,13 @@
 
 package registry
 
+import (
+	"context"
+
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+)
+
 // This file exists ONLY to give the external registry_test package (in
 // install_test.go) a seam into the unexported chaos-injection hook (see
 // chaos.go) for the SIGKILL-simulation chaos tests. Being a _test.go file,
@@ -59,4 +66,14 @@ func CheckMinConduitVersionForTest(minVer, running string) error {
 // prerelease carve-out after PR #2822's review Finding 2 scope fix.
 func CheckMinVersionForTest(label, minVer, running string) error {
 	return checkMinVersion(label, minVer, running)
+}
+
+// ValidateProcessorWASMForTest exposes validateProcessorWASM (installprocessor.go)
+// with its WASM loader replaced by inspect, restored when the test ends. See
+// inspectSpecification for why the loader is injectable (#2981).
+func ValidateProcessorWASMForTest(t interface{ Cleanup(func()) }, inspect func(ctx context.Context, logger log.CtxLogger, path string) (sdk.Specification, error)) func(ctx context.Context, wasmPath, name, version string) error {
+	orig := inspectSpecification
+	inspectSpecification = inspect
+	t.Cleanup(func() { inspectSpecification = orig })
+	return validateProcessorWASM
 }

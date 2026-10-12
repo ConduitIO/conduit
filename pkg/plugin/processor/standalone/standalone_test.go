@@ -38,6 +38,7 @@ const (
 	testPluginChaosDir        = testPluginDir + "chaos/"
 	testPluginMalformedDir    = testPluginDir + "malformed/"
 	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
+	testPluginStallDir        = testPluginDir + "stall/"
 )
 
 var (
@@ -48,14 +49,17 @@ var (
 	ChaosProcessorBinary     []byte
 	MalformedProcessorBinary []byte
 	SpecifyErrorBinary       []byte
+	StallBinary              []byte
 
 	ChaosProcessorModule wazero.CompiledModule
 	SpecifyErrorModule   wazero.CompiledModule
+	StallModule          wazero.CompiledModule
 
 	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
 		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
 		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
 		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
+		testPluginStallDir + "processor.wasm":        {&StallBinary, &StallModule},
 	}
 )
 

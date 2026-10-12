@@ -136,6 +136,7 @@ var installExitCodes = exitcodedoc.Render(
 	exitcodedoc.Entry{Code: registry.CodeIncompatibleVersion, When: "no version compatible with this Conduit"},
 	exitcodedoc.Entry{Code: index.CodeVersionYanked, When: "the requested version was yanked"},
 	exitcodedoc.Entry{Code: registry.CodeInvalidProcessorArtifact, When: "artifact is not a loadable standalone processor, or its name/version disagrees with the index"},
+	exitcodedoc.Entry{Code: registry.CodeProcessorValidationTimeout, When: "the processor did not answer the install-time validation check in time"},
 	exitcodedoc.Entry{Code: index.CodeIndexStale, When: "index is older than the maximum staleness"},
 	exitcodedoc.Entry{Code: index.CodeIndexRollback, When: "index is older than one already seen"},
 	exitcodedoc.Entry{Code: index.CodeSchemaTooNew, When: "index schema is newer than this build understands"},

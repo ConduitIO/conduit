@@ -300,7 +300,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	specs, err := p.Specification()
+	specs, err := p.specification(ctx)
 	if err != nil {
 		return blueprint{}, err
 	}
