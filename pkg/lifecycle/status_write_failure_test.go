@@ -170,6 +170,11 @@ type statusFaultRun struct {
 
 func newStatusFaultRun(t *testing.T, db *statusFaultDB, fail func(pipeline.Status, int) bool, nodes ...stream.Node) *statusFaultRun {
 	t.Helper()
+	return newStatusFaultRunCfg(t, testErrRecoveryCfg(), db, fail, nodes...)
+}
+
+func newStatusFaultRunCfg(t *testing.T, cfg *ErrRecoveryCfg, db *statusFaultDB, fail func(pipeline.Status, int) bool, nodes ...stream.Node) *statusFaultRun {
+	t.Helper()
 	logger := log.Nop()
 	inner := pipeline.NewService(logger, db)
 	pl, err := inner.Create(context.Background(), uuid.NewString(), pipeline.Config{Name: "p-" + uuid.NewString()}, pipeline.ProvisionTypeAPI)
@@ -182,7 +187,6 @@ func newStatusFaultRun(t *testing.T, db *statusFaultDB, fail func(pipeline.Statu
 		pl:       pl,
 		failures: make(chan FailureEvent, 4),
 	}
-	cfg := testErrRecoveryCfg()
 	r.ls = NewService(logger, cfg, testConnectorService{}, testProcessorService{}, testConnectorPluginService{}, r.ps)
 	r.ls.OnFailure(func(e FailureEvent) { r.failures <- e })
 	r.rp = &runnablePipeline{
