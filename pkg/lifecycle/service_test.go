@@ -839,9 +839,17 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	// sleep is needed here.
 	ls.StopAll(ctx, wantErr)
 
+	// Wait must return: nothing restarts.
 	err = ls.Wait(10 * time.Second)
-	is.True(err != context.DeadlineExceeded) // Wait must return: nothing restarts
-	is.True(cerrors.Is(err, wantErr))
+	is.True(err != context.DeadlineExceeded)
+	// Wait joins the errors of the runs that are still registered when it
+	// takes its snapshot. The source returns wantErr as soon as StopAll
+	// reaches it, so the run can finish and deregister itself before Wait
+	// looks (#2952, about 1 in 500 under CPU starvation): Wait then has no
+	// run to report and returns nil. Either answer is correct; the run's
+	// own outcome is asserted deterministically below through WaitPipeline,
+	// which is served from the recorded terminal error once the run is gone.
+	is.True(err == nil || cerrors.Is(err, wantErr))
 
 	// The run was stopped by the shutdown, with the reason recorded, and
 	// was not recovered.
