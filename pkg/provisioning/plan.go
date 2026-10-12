@@ -579,10 +579,8 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// pipeline, commit the config, and only then be refused at Start, leaving the
 	// pipeline stopped (#2979: arch-v2 and destination sdk.batch.size). Optional
 	// interface: only the arch-v2 service has start-time config restrictions.
-	if pf, ok := s.lifecycleService.(startConfigPreflighter); ok {
-		if err := pf.PreflightPipelineConfig(desired); err != nil {
-			return fresh, err
-		}
+	if err := s.preflightStart(desired); err != nil {
+		return fresh, err
 	}
 
 	// Live-eligible diff on a running pipeline: apply in place (swap the changed
@@ -595,11 +593,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// it, applying the whole diff uniformly.
 	configCommitted := false // the in-place step saved the new config
 	if fresh.LiveEligible() {
-		oldConfig, err := s.Export(ctx, desired.ID)
-		if err != nil {
-			return fresh, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
-		}
-		swappedAll, err := s.applyInPlace(ctx, desired, oldConfig, fresh)
+		swappedAll, err := s.tryApplyInPlace(ctx, desired, fresh)
 		if err != nil {
 			return fresh, err
 		}
@@ -772,6 +766,26 @@ func (s *Service) startAfterApply(ctx context.Context, id string) error {
 		}
 	}
 	return err
+}
+
+// preflightStart refuses a desired config the lifecycle service would refuse
+// at Start, if it has such restrictions (see startConfigPreflighter).
+func (s *Service) preflightStart(desired config.Pipeline) error {
+	if pf, ok := s.lifecycleService.(startConfigPreflighter); ok {
+		return pf.PreflightPipelineConfig(desired)
+	}
+	return nil
+}
+
+// tryApplyInPlace exports the current config and applies the diff to the
+// running pipeline in place. swappedAll is false, with a nil error, when a
+// processor cannot be swapped live: the config is then already committed.
+func (s *Service) tryApplyInPlace(ctx context.Context, desired config.Pipeline, fresh Diff) (swappedAll bool, err error) {
+	oldConfig, err := s.Export(ctx, desired.ID)
+	if err != nil {
+		return false, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
+	}
+	return s.applyInPlace(ctx, desired, oldConfig, fresh)
 }
 
 // runAdmittedErr is returned when a run was admitted between StopAndWait and
