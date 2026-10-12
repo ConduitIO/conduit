@@ -128,6 +128,16 @@ func TestDebouncer_TriggerDuringApply_QueuesExactlyOneFollowUp(t *testing.T) {
 	awaitApply(t, applied)
 	assertNoApply(t, applied)
 
+	// "Exactly one follow-up" includes the window: the triggers sent during the
+	// apply must not have requested a second debounce window (#2981). Reading
+	// callCount is safe: the second apply has completed its send on applied, and
+	// the first one finished before close(release) was observed by run.
+	select {
+	case d := <-clock.calls:
+		t.Fatalf("unexpected extra debounce window (%v) for triggers sent during the apply", d)
+	default:
+	}
+
 	is.Equal(callCount, 2)
 }
 
