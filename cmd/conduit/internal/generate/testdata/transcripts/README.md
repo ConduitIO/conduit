@@ -6,6 +6,10 @@ provider by `TestCaptureTranscripts` (`generate-capture.yml`), and replayed on e
 `../replay_expected.json`. Re-capturing changes what replay sees, so regenerate the golden in the
 same PR (`CONDUIT_GENERATE_REPLAY_UPDATE=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/`).
 
+**Any change to the system prompt (`BuildSystemPrompt`) or to a builtin spec that reaches it
+requires re-capturing the transcripts in the same PR.** Replay fails with "prompt changed;
+re-capture with ..." when a transcript's `systemPromptSha256` no longer matches.
+
 ## Layout
 
 ```text
@@ -30,7 +34,8 @@ that capture run (e.g. `anthropic/claude-sonnet-5`).
   unchanged id, which bijection alone would miss.
 
 Grounding staleness (the system prompt or the compiled-in connector catalog moving since capture)
-is classified (`generate.Staleness`) and returned as data, never as a load error — see
+is classified (`generate.Staleness`) and returned as data, never as a load error. `TestReplayEval`
+then fails on any non-fresh transcript — see
 `transcript.go`'s doc comments and
 `docs/design-documents/20260722-conduit-generate.md` §10.
 

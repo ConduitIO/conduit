@@ -60,6 +60,16 @@ import (
 // A golden diff that makes scores go up without a code change explaining it
 // is the review signal (plan F6): replay can prove the code is stable, not
 // that the transcripts are honest.
+//
+// # The system prompt is gated
+//
+// Every transcript records the SHA-256 of the system prompt it was captured
+// against. If it differs from the current BuildSystemPrompt(BuiltinCatalog())
+// hash (a prompt wording change, or a builtin connector/processor spec change
+// that reaches the prompt), the test FAILS with "prompt changed; re-capture
+// with ...". Re-capture the transcripts (generate-capture.yml) and regenerate
+// the golden in the SAME PR as the prompt change; the new transcripts are
+// then the reviewable evidence of how the model behaves under the new prompt.
 func TestReplayEval(t *testing.T) {
 	if os.Getenv(envEvalOffline) == "1" {
 		assertNoProviderEnv(t)
@@ -86,7 +96,7 @@ func TestReplayEval(t *testing.T) {
 
 	ctx := context.Background()
 	result := replayResult{SchemaVersion: replayResultSchemaVersion}
-	var stale []string
+	var stale, drifted []string
 	for _, dir := range dirs {
 		loaded, err := LoadTranscripts(dir, requests)
 		if err != nil {
@@ -100,6 +110,7 @@ func TestReplayEval(t *testing.T) {
 			lt, ok := loaded.ByID[req.ID]
 			if ok && lt.Staleness != StalenessFresh {
 				stale = append(stale, fmt.Sprintf("%s/%s: %s", corpus, req.ID, lt.Staleness))
+				drifted = append(drifted, corpus+"/"+req.ID)
 			}
 		}
 	}
@@ -114,10 +125,14 @@ func TestReplayEval(t *testing.T) {
 		writeReplayArtifacts(t, out, got, result, stale)
 	}
 	for _, s := range stale {
-		// Staleness is never a failure (plan §3.3): a connector bump must not
-		// turn every PR red. It is surfaced, and the scheduled job is where a
-		// re-capture is decided.
 		t.Logf("STALE transcript: %s", s)
+	}
+	// A transcript recorded against a different system prompt is not evidence
+	// about today's prompt: replaying it would keep the gate green after the
+	// prompt was replaced wholesale. So drift is a failure, and the fix
+	// (re-capture) belongs in the same PR as the prompt change.
+	if msg := promptDriftFailure(drifted); msg != "" {
+		t.Fatal(msg)
 	}
 
 	if os.Getenv(envReplayUpdate) == "1" {
@@ -156,6 +171,25 @@ const (
 
 	replayResultSchemaVersion = 1
 )
+
+// recaptureCommand is what the prompt-drift failure tells the author to run.
+const recaptureCommand = "run the generate-capture workflow (gh workflow run generate-capture.yml), or locally: " +
+	"CONDUIT_GENERATE_CAPTURE=1 ANTHROPIC_API_KEY=... go test -tags=generate_capture -count=1 -timeout 30m " +
+	"-run TestCaptureTranscripts ./cmd/conduit/internal/generate/... ; then regenerate the golden with " +
+	envReplayUpdate + "=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/ and commit all of it in this PR"
+
+// promptDriftFailure is the failure message for transcripts ("<corpus>/<id>")
+// whose recorded system-prompt hash no longer matches the current prompt, or
+// "" when none drifted.
+func promptDriftFailure(drifted []string) string {
+	if len(drifted) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("prompt changed; re-capture with: %s.\n"+
+		"%d transcript(s) were recorded against a different system prompt, so replaying them says nothing about "+
+		"the current one: %s",
+		recaptureCommand, len(drifted), strings.Join(drifted, ", "))
+}
 
 // replayResult is the golden's shape.
 type replayResult struct {

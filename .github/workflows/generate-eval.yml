@@ -42,12 +42,25 @@ name: generate-eval
 # committed golden (the test enforces the golden itself; the cmp below is the
 # cross-run check).
 #
-# # Staleness is a warning, never a failure
+# # A changed system prompt fails the job
 #
-# A transcript captured against an older system prompt or connector catalog
-# still replays; the job annotates it so the scheduled job / a re-capture
-# can act. Turning PRs red on every connector bump would make this a gate
-# people route around.
+# Each transcript records the SHA-256 of the system prompt it was captured
+# against. TestReplayEval FAILS ("prompt changed; re-capture with ...") when
+# it differs from the current prompt, because replaying output recorded
+# under a different prompt says nothing about the current one: replacing the
+# prompt with "You are a helpful assistant." used to stay green. Re-capture
+# (generate-capture.yml) and regenerate the golden in the SAME PR as any
+# prompt change, or builtin spec change that reaches the prompt.
+#
+# # Golden changes are made visible
+#
+# The "Flag golden changes without re-capture" step annotates a PR that
+# changes testdata/replay_expected.json without touching the transcripts or
+# manifest. That is legitimate when a code change moves verdicts, but it is
+# also how a score could be edited upward with nothing recorded behind it, so
+# the job summary and a warning put it in front of the reviewer. It is a
+# warning, not a failure: a failure would block every honest verdict-moving
+# fix.
 #
 # Not yet a required check: it is advisory until it has a clean soak on
 # main, then the branch-protection toggle is a maintainer action.
@@ -77,10 +90,34 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
+
+      - name: Flag golden changes without re-capture
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          d=cmd/conduit/internal/generate/testdata
+          changed=$(git diff --name-only "$BASE_SHA"...HEAD -- "$d")
+          if grep -qx "$d/replay_expected.json" <<<"$changed" && \
+             ! grep -qE "^$d/transcripts/" <<<"$changed"; then
+            msg="replay_expected.json changed but no transcript or manifest did: verdicts moved with no new model output behind them. Confirm a code change explains every moved request."
+            echo "::warning title=generate-eval golden changed without re-capture::$msg"
+            {
+              echo "## Golden changed without re-capture"
+              echo
+              echo "$msg"
+              echo
+              echo '```diff'
+              git diff "$BASE_SHA"...HEAD --stat -- "$d/replay_expected.json"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build the replay test binary
         run: |

@@ -70,15 +70,22 @@ the run. The job is not path-filtered. It is advisory today, not a required chec
 Replay measures Conduit's code against frozen model output. A golden diff means a code change
 moved a request's verdict; regenerate the golden in the same PR if the change is intended
 (`CONDUIT_GENERATE_REPLAY_UPDATE=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/`).
-Transcripts captured against an older system prompt or connector catalog still replay and are
-flagged as stale warnings, never failures.
+Transcripts record the hash of the system prompt they were captured under. If it differs from the
+current prompt, replay **fails** with "prompt changed; re-capture with ...": replaying output
+recorded under another prompt proves nothing about this one. Re-capture the transcripts
+(`generate-capture.yml`) and regenerate the golden in the same PR as any prompt change. A PR that
+changes `replay_expected.json` without touching the transcripts gets a warning annotation and a
+job-summary note, because that is how a score could move with no model output behind it.
 
 **Live, weekly** (`generate-eval (live)`, Mondays 06:00 UTC, also manually dispatchable). The
 corpus runs against the live Anthropic model, three passes, and the job publishes medians,
 per-category and per-request tables as the run summary and a `result.json` artifact. It has no PR
 trigger, read-only permissions, and a fork guard. A median under either floor turns the run red. A
 transport failure (no response after two retries) discards the whole pass; a majority of discarded
-passes is `INCONCLUSIVE` and reports no numbers. Cost is about $1 per pass at list price.
+passes is `INCONCLUSIVE` and reports no numbers. Cost is about $1.31 per pass (measured), about
+$4 a weekly run; a manual dispatch is capped at 5 passes. The `generate-eval` environment must be
+restricted to `main` with a required reviewer, and `ANTHROPIC_API_KEY` must be an environment
+secret there (see the workflow header).
 
 ## Latest numbers
 

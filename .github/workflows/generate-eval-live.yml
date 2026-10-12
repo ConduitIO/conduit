@@ -35,9 +35,32 @@ name: generate-eval-live
 #   red, because "never produces a number" has to be visible too.
 # The summary and artifact are published in every case.
 #
-# Cost: roughly $1 per pass at list price over the 28-request corpus, so
-# ~$3 a run and ~$12-15 a month weekly. Bounded by captureProvider's call and
-# token ceilings, the test's own 35-minute deadline, and timeout-minutes.
+# Cost: measured at about $1.31 per pass over the 28-request corpus (the
+# 2026-10-08 capture: 3 passes, $3.93), so ~$4 a weekly run and ~$17 a month.
+# A manual dispatch is capped at 5 passes (~$6.50), below. Bounded by
+# captureProvider's call and token ceilings, the test's own 35-minute
+# deadline, and timeout-minutes.
+#
+# # REQUIRED repository settings (not expressible in this file)
+#
+# `workflow_dispatch` can be run against ANY branch by anyone with write
+# access, and runs the workflow file as it exists on that branch. Without the
+# settings below, a writer can push a modified copy of this workflow to a
+# branch, dispatch it there, and read ANTHROPIC_API_KEY. Before this workflow
+# is trusted with the key:
+#
+#  1. The `generate-eval` environment must restrict deployment branches to
+#     `main` (Settings > Environments > generate-eval > Deployment branches
+#     and tags) AND require a reviewer (Required reviewers).
+#  2. ANTHROPIC_API_KEY must be an ENVIRONMENT secret on `generate-eval`, not
+#     a repository secret. A repository secret is readable by any workflow in
+#     the repo, environment gate or not; an environment secret is released
+#     only to jobs that pass the environment's protection rules.
+#
+# As of this change the environment has no protection rules and the key is
+# repository-scoped, so neither holds. generate-capture.yml uses the same
+# `generate-eval` environment and the same secret and has the same exposure.
+# Fix the settings before the first dispatch of either workflow.
 
 on:
   schedule:
@@ -47,7 +70,7 @@ on:
   workflow_dispatch:
     inputs:
       passes:
-        description: 'Passes over the corpus (median is reported; default 3)'
+        description: 'Passes over the corpus (median is reported; default 3; max 5, about $1.31 each)'
         required: false
         default: '3'
 
@@ -83,8 +106,9 @@ jobs:
         run: |
           set -euo pipefail
           # Empty on a scheduled run; the test then uses its default.
-          if [ -n "$PASSES" ] && ! [[ "$PASSES" =~ ^[1-9][0-9]?$ ]]; then
-            echo "::error::passes must be an integer between 1 and 99, got '$PASSES'"
+          # Capped at 5: each pass costs about $1.31 of API spend.
+          if [ -n "$PASSES" ] && ! [[ "$PASSES" =~ ^[1-5]$ ]]; then
+            echo "::error::passes must be an integer between 1 and 5, got '$PASSES'"
             exit 1
           fi
 
