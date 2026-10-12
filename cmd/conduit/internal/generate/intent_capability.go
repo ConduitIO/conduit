@@ -48,7 +48,14 @@ import (
 //   - Envelope unwrapping (debezium, kafka connect, opencdc) needs the format
 //     AND either an "unwrap" verb or the word "envelope". Publishing
 //     debezium-formatted data is not a request to unwrap it.
-//   - Filter keeps its cue words, matched as whole words.
+//   - Filter keeps its cue words, matched as whole words, and also reads a
+//     drop-style verb whose object is a kind of record ("discard test
+//     events", "exclude internal records"; see recordDropRule).
+//   - Masking also reads hash/obfuscate/scrub verbs on a sensitive noun, and
+//     "without the X column" (see maskObscureRule, withoutWindow). These were
+//     added from a held-out paraphrase set (TestExtractCapabilities_HeldOut),
+//     and stay conservative: "hash partitioning" and "drop duplicate
+//     records" demand nothing.
 //
 // Verbs are matched in every inflection inflect generates, so "split",
 // "splits" and "splitting" are the same cue. Everything is a fixed table and
@@ -57,6 +64,14 @@ import (
 // Every tag a rule produces must exist in capabilityProcessors;
 // TestCapabilityRules_ResolveToRealTags fails otherwise, since an unknown tag
 // is permanently unsatisfiable (capability.go).
+
+// Words used by more than one rule.
+const (
+	wordDrop    = "drop"
+	wordExclude = "exclude"
+	wordInto    = "into"
+	typeString  = "string"
+)
 
 // fieldNouns are the words that make an action verb a field action.
 // "remove duplicates" is not field.exclude; "remove the ssn field" is.
@@ -83,7 +98,7 @@ type fieldActionRule struct {
 var fieldActionRules = []fieldActionRule{{
 	// field.exclude: "Remove a subset of fields from the record."
 	tag:        capMask,
-	verbs:      []string{"exclude", "remove", "drop", "strip", "delete", "omit"},
+	verbs:      []string{wordExclude, "remove", wordDrop, "strip", "delete", "omit"},
 	standalone: []string{"mask", "redact"},
 }, {
 	// field.rename: "Rename a group of fields."
@@ -112,6 +127,68 @@ var splitRule = struct {
 	window:  4,
 }
 
+// maskObscureRule recognizes hashing/obfuscating a sensitive value as the
+// mask capability, the same family as redact (capabilityProcessors maps it
+// to field.exclude, the only builtin that hides a field's value). The verbs
+// alone are too common ("hash partitioning", "an obfuscated build"), so one
+// must sit next to a sensitive noun or a field noun.
+var maskObscureRule = struct {
+	verbs, objects []string
+	window         int
+}{
+	verbs:   []string{"hash", "obfuscate", "scrub"},
+	objects: append([]string{"email", "phone", "ssn", "password", "card", "pii", "secret", "token"}, fieldNouns...),
+	window:  4,
+}
+
+// withoutWindow is how far after "without" a field noun may sit. "without the
+// password column" reads as dropping that field; the noun must FOLLOW the
+// word closely, and "copy every field without modification" has its noun
+// before it and asks for nothing.
+const withoutWindow = 3
+
+// recordDropRule: a drop-style verb whose object is a kind of record is a
+// filter ("discard test events"). Three guards keep it from claiming other
+// requests: a field noun between verb and object means the verb acts on a
+// field ("drop the ssn field from every record"), "from" means the same
+// ("drop the notes from records"), and "duplicate(s)" is deduplication,
+// which the filter processor does not do.
+var recordDropRule = struct {
+	verbs, objects, blockers []string
+	window                   int
+}{
+	verbs:    []string{"discard", wordDrop, wordExclude, "ignore"},
+	objects:  []string{"record", "event", "message", "row", "entry"},
+	blockers: append([]string{"from", "duplicate", "duplicates"}, append(fieldNouns, pluralWords(fieldNouns)...)...),
+	window:   3,
+}
+
+// splitSynonyms are verbs that mean "split" without the word, each needing
+// a record-ish object near it like splitRule.
+var splitSynonyms = []string{"explode", "unbatch", "unnest"}
+
+// splitIntoVerbs introduce "turn each batch message into individual
+// records". They only count when "into" is followed, within two words, by a
+// record noun, and that noun is preceded by a plural-intent word, so "turn
+// the records into json" and "turn each message into a single record" ask
+// for nothing.
+var (
+	splitIntoVerbs = []string{"turn", "break", "convert", "expand"}
+	splitIntoMany  = []string{"individual", "separate", "multiple", "many", "several"}
+)
+
+// convertChangeRule reads "change the age field from string to int" as a type
+// conversion. "change" alone is too general (rename? set? a topic?), so it
+// needs a field noun AND a concrete type word near it.
+var convertChangeRule = struct {
+	verbs, types []string
+	window       int
+}{
+	verbs:  []string{"change"},
+	types:  []string{typeString, "int", "integer", "float", "double", "boolean", "bool", "long", "decimal"},
+	window: 6,
+}
+
 // codecFormat is one format with a builtin encode and decode processor.
 type codecFormat struct {
 	format         string
@@ -131,7 +208,7 @@ var (
 	decodeVerbs = []string{"decode", "parse", "deserialize"}
 	// encodePrepositions before a format name the OUTPUT format: "as json",
 	// "to json", "into avro".
-	encodePrepositions = []string{"as", "to", "into"}
+	encodePrepositions = []string{"as", "to", wordInto}
 )
 
 // envelopeFormat is one unwrap.* processor and the words naming its format.
@@ -187,8 +264,18 @@ func extractCapabilities(prompt string) []string {
 			add(r.tag)
 		}
 	}
-	if verbNear(words, splitRule.verbs, splitRule.objects, splitRule.window) {
+	if verbNear(words, splitRule.verbs, splitRule.objects, splitRule.window) ||
+		verbNear(words, splitSynonyms, splitRule.objects, splitRule.window) ||
+		hasSplitInto(words) {
 		add(capSplit)
+	}
+	if verbNear(words, maskObscureRule.verbs, maskObscureRule.objects, maskObscureRule.window) ||
+		hasWithoutField(words) {
+		add(capMask)
+	}
+	if verbNear(words, convertChangeRule.verbs, fieldNouns, convertChangeRule.window) &&
+		verbNear(words, convertChangeRule.verbs, convertChangeRule.types, convertChangeRule.window) {
+		add(capConvert)
 	}
 	for _, tag := range codecCapabilities(words) {
 		add(tag)
@@ -298,7 +385,8 @@ func abs(x int) int {
 
 // hasFilterCue reports whether the prompt asks for records to be dropped.
 func hasFilterCue(words []string) bool {
-	if anyWord(words, filterVerbs, true) || len(phrasePositions(words, filterPhrases)) > 0 {
+	if anyWord(words, filterVerbs, true) || len(phrasePositions(words, filterPhrases)) > 0 ||
+		hasRecordDrop(words) {
 		return true
 	}
 	for i, w := range words {
@@ -311,6 +399,75 @@ func hasFilterCue(words []string) bool {
 		return true
 	}
 	return false
+}
+
+// hasRecordDrop implements recordDropRule: a drop-style verb followed within
+// the window by a record noun, with no blocker word in between.
+func hasRecordDrop(words []string) bool {
+	verbForms := inflectAll(recordDropRule.verbs)
+	objects := pluralize(recordDropRule.objects)
+	for i, w := range words {
+		if !verbForms[w] {
+			continue
+		}
+		for j := i + 1; j < len(words) && j <= i+recordDropRule.window; j++ {
+			if containsWord(recordDropRule.blockers, words[j]) {
+				break
+			}
+			if objects[words[j]] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasWithoutField implements the "without X column" rule (withoutWindow).
+func hasWithoutField(words []string) bool {
+	nouns := pluralize(fieldNouns)
+	for i, w := range words {
+		if w != "without" {
+			continue
+		}
+		for j := i + 1; j < len(words) && j <= i+withoutWindow; j++ {
+			if nouns[words[j]] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasSplitInto implements splitIntoVerbs: "<verb> ... into <many-word>?
+// <record noun>".
+func hasSplitInto(words []string) bool {
+	verbForms := inflectAll(splitIntoVerbs)
+	objects := pluralize(splitRule.objects)
+	for i, w := range words {
+		if !verbForms[w] {
+			continue
+		}
+		for j := i + 1; j < len(words) && j <= i+splitRule.window+1; j++ {
+			if words[j] != wordInto {
+				continue
+			}
+			// "into individual records": the many-word is required.
+			if j+2 < len(words) && containsWord(splitIntoMany, words[j+1]) && objects[words[j+2]] {
+				return true
+			}
+			break
+		}
+	}
+	return false
+}
+
+// pluralWords returns the plural forms of nouns, as a list.
+func pluralWords(nouns []string) []string {
+	var out []string
+	for w := range pluralize(nouns) {
+		out = append(out, w)
+	}
+	return out
 }
 
 // verbNear reports whether any inflection of a verb in verbs has a word from

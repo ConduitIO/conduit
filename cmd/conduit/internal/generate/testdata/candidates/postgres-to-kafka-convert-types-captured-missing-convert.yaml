@@ -1,3 +1,6 @@
+# HAND-EDITED, not model output: the "-captured-good" fixture of the same request with its
+# processors block (field.convert) removed. It stands for the shape the live eval accepted 3/3 before
+# the judge fix, and is not a transcript of any real completion.
 version: "2.2"
 pipelines:
   - id: postgres-orders-to-kafka

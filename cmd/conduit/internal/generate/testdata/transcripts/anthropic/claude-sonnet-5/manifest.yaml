@@ -1,3 +1,11 @@
+# NOTE: the headline medians below (medianSemanticMatchCount: 19, medianSemanticMatchRate,
+# passScores) describe the ORIGINAL 3-pass capture of 2026-10-08. Eight transcripts
+# (file-to-file-base64-decode, kafka-connect-unwrap-to-postgres, kafka-to-s3-split-batches,
+# postgres-cdc-debezium-unwrap-to-kafka, postgres-to-kafka-filter-and-encode,
+# postgres-to-log-debug-tap, postgres-to-s3-mask-pii, s3-to-log-audit) were re-captured afterwards,
+# one pass each, after the intent judge changed (#2939), and those re-captures are NOT reflected in
+# these numbers. Do not read 19 as the current corpus score. The current replay numbers are in
+# ../../../replay_expected.json; model-quality numbers come from the weekly live eval.
 schemaVersion: 1
 provider: anthropic
 model: claude-sonnet-5

@@ -102,7 +102,7 @@ var connectorAliases = map[string]string{
 // mentioned connector to a role.
 var (
 	sourceCues      = []string{"from", roleSource, "out of", "read", "read from"}
-	destinationCues = []string{"to", "into", roleDestination, "sink", "onto", "write", "write to"}
+	destinationCues = []string{"to", wordInto, roleDestination, "sink", "onto", "write", "write to"}
 )
 
 // cueWindow is how many words before a connector mention are searched for a
