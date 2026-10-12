@@ -25,7 +25,7 @@ import (
 // one-record-in-one-record-out and cannot run it. Record fan-out needs the
 // preview engine, pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled
 // with --preview.pipeline-arch-v2 or preview.pipeline-arch-v2: true; the
-// postgres-pgvector-rag template is one such pipeline. Graduation of v2 to the
-// default engine is evaluated in v0.21 against a written gate. FailedPrecondition:
+// postgres-pgvector-rag template is one such pipeline. A single pipeline engine
+// that supports record fan-out is planned (design #2971). FailedPrecondition:
 // the pipeline as configured cannot run on this engine.
 var CodeFanOutRequiresArchV2 = conduiterr.Register("pipeline.fanout_requires_arch_v2", codes.FailedPrecondition)
