@@ -116,6 +116,7 @@ func TestApplyPlanLive_NoPreflightOnDefaultEngine(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := batchingApplyFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)
