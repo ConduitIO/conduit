@@ -281,6 +281,64 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	is.NoErr(ls.WaitPipeline(pl.ID))
 }
 
+// TestServiceLifecycle_DestinationSDKBatching_NotRefused is a pin, not a
+// regression test: it fails only if someone adds the arch-v2 refusal to this
+// engine. It pins that the default
+// (v1) engine keeps starting pipelines whose destination and DLQ set
+// sdk.batch.size > 1. Only the preview arch-v2 engine refuses them
+// (pipeline.archv2_destination_batching_unsupported, #2979): v1 reads
+// destination acks on their own goroutine, so SDK batching works here.
+func TestServiceLifecycle_DestinationSDKBatching_NotRefused(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	ctrl := gomock.NewController(t)
+	wantRecords := generateRecords(10)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+	destination.Config.Settings = map[string]string{"sdk.batch.size": "100", "sdk.batch.delay": "0"}
+	// Same as the last active config, so no LifecycleOnCreated event fires.
+	destination.LastActiveConfig = destination.Config
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl.DLQ.Settings = map[string]string{"sdk.batch.size": "50"}
+
+	_, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	_, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
+		source.ID:      source,
+		destination.ID: destination,
+		testDLQID:      dlq,
+	},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		}, ps)
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+	// Poll until the source's last position is acked (all records delivered
+	// through the batching destination), instead of sleeping.
+	waitForSourceAcked(t, source, wantRecords)
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	is.NoErr(ls.Stop(ctx, pl.ID, false))
+	is.NoErr(ls.WaitPipeline(pl.ID))
+}
+
 func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
