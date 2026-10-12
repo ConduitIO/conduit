@@ -53,6 +53,13 @@ var (
 	// Postgres); badger ignores the context, so a hung write there can hold
 	// it longer.
 	CodePipelineStopping = conduiterr.Register("pipeline.stopping", codes.Unavailable)
+	// CodePipelineConfigChanging is raised when a pipeline start is refused
+	// because an update, delete or connector/processor change on that pipeline
+	// is writing its config. Starting inside that window would build the run
+	// from a half-applied config, or for a pipeline that is being deleted. The
+	// change is a short store write, never a node operation. Unavailable: retry
+	// the start shortly.
+	CodePipelineConfigChanging = conduiterr.Register("pipeline.config_changing", codes.Unavailable)
 	// CodeStatusPersistFailed is raised when a pipeline's status could not be
 	// written to the pipeline store. The in-memory status, which the API, the
 	// CLI and the lifecycle read, has already moved; the store still holds

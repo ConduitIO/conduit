@@ -35,6 +35,8 @@ func (p *ProcessorOrchestrator) Create(
 	cfg processor.Config,
 	cond string,
 ) (*processor.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -58,10 +60,10 @@ func (p *ProcessorOrchestrator) Create(
 
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
-	if p.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the processor is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
 	}
 
 	// Nothing is stored yet, so "***" (the API's redaction placeholder) has
@@ -153,6 +155,8 @@ func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.
 }
 
 func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -184,10 +188,10 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
-	if p.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the processor is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
 	}
 
 	// "***" (the API's redaction placeholder) keeps the stored value, so a
@@ -217,6 +221,8 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 }
 
 func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -245,10 +251,10 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
-	if p.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the delete is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return err
 	}
 
 	err = p.processors.Delete(ctx, id)

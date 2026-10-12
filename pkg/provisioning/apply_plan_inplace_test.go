@@ -121,6 +121,7 @@ func TestApplyPlanLive_ProcessorUpdate_NotLiveReconfigurable_FallsBackToRestart(
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := processorUpdateFixture()
 	expectExportRunning(pipSrv, connSrv, procSrv, old)

@@ -46,6 +46,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -534,6 +535,24 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		}
 	}
 
+	// #2961: the isRunning checks above read the pipeline's status, which
+	// lags the run, and an external Start can still land between them and the
+	// import. For a pipeline with no run, mark it as being mutated, which
+	// refuses a Start until the import has committed. A refusal means a run
+	// exists after all, so fall through to the running branch. Held for the
+	// import only: never across StopAndWait or the final Start.
+	if !running {
+		if unlockMark, ok := s.lifecycleService.TryLockForMutation(desired.ID); ok {
+			defer unlockMark()
+			if err := s.transactionalImport(ctx, desired); err != nil {
+				return fresh, err
+			}
+			fresh.AppliedMode = ApplyModeProvisioned
+			return fresh, nil
+		}
+		running = true
+	}
+
 	// Gate every non-empty apply to a running pipeline behind operator
 	// authorization — not just EffectRestart changes. In Wave-of-#2588,
 	// applying ANY change to a running pipeline goes through the full
@@ -554,25 +573,14 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, ce
 	}
 
-	if !running {
-		// Nothing live to disrupt — identical to ApplyPlan's tail.
-		if err := s.transactionalImport(ctx, desired); err != nil {
-			return fresh, err
-		}
-		fresh.AppliedMode = ApplyModeProvisioned
-		return fresh, nil
-	}
-
 	// Refuse a desired config the lifecycle service would refuse at Start, while
 	// the pipeline is still running and nothing is committed. Without this, the
 	// StopAndWait -> import -> Start sequence below would stop a healthy
 	// pipeline, commit the config, and only then be refused at Start, leaving the
 	// pipeline stopped (#2979: arch-v2 and destination sdk.batch.size). Optional
 	// interface: only the arch-v2 service has start-time config restrictions.
-	if pf, ok := s.lifecycleService.(startConfigPreflighter); ok {
-		if err := pf.PreflightPipelineConfig(desired); err != nil {
-			return fresh, err
-		}
+	if err := s.preflightStart(desired); err != nil {
+		return fresh, err
 	}
 
 	// Live-eligible diff on a running pipeline: apply in place (swap the changed
@@ -583,12 +591,9 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// swapped live (e.g. it is parallelized): the config is already committed, so
 	// we fall through to the restart path below, which rebuilds every node from
 	// it, applying the whole diff uniformly.
+	configCommitted := false // the in-place step saved the new config
 	if fresh.LiveEligible() {
-		oldConfig, err := s.Export(ctx, desired.ID)
-		if err != nil {
-			return fresh, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
-		}
-		swappedAll, err := s.applyInPlace(ctx, desired, oldConfig, fresh)
+		swappedAll, err := s.tryApplyInPlace(ctx, desired, fresh)
 		if err != nil {
 			return fresh, err
 		}
@@ -596,6 +601,7 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 			fresh.AppliedMode = ApplyModeInPlace
 			return fresh, nil
 		}
+		configCommitted = true
 		// Fall through to the restart path: the config is committed, so
 		// StopAndWait -> (idempotent) import -> Start rebuilds from it. The
 		// reported mode is restart, not in_place — this is exactly the fallback
@@ -612,11 +618,22 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 	// this method now holds the pipeline's lock for its entire body, so a
 	// second ApplyPlanLive/ApplyPlan call for the same ID cannot interleave.
 	// A raw lifecycleService.Start call from outside provisioning entirely
-	// (bypassing this package) is a separate, pre-existing surface this lock
-	// does not reach — unchanged from PR1, and out of scope here.
+	// (bypassing this package) is not excluded by this lock; the mutation
+	// mark taken below, around the import, is what refuses it (#2961).
 	if err := s.lifecycleService.StopAndWait(ctx, desired.ID); err != nil {
 		return fresh, cerrors.Errorf("could not stop pipeline %q to apply live changes: %w", desired.ID, err)
 	}
+
+	// #2961: StopAndWait returned, but an external Start may have run since.
+	// Mark the pipeline so none can until the import has committed. A refusal
+	// means a run was admitted in that gap. This step changed nothing, but on
+	// the live-eligible fallback the in-place step already saved the new
+	// config, so the message must not say nothing was changed.
+	unlockMark, ok := s.lifecycleService.TryLockForMutation(desired.ID)
+	if !ok {
+		return fresh, runAdmittedErr(desired.ID, configCommitted)
+	}
+	defer unlockMark() // idempotent; also released explicitly below, before Start
 
 	if err := s.transactionalImport(ctx, desired); err != nil {
 		// The pipeline is already stopped (StopAndWait above) and the
@@ -626,7 +643,10 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, err
 	}
 
-	if err := s.lifecycleService.Start(ctx, desired.ID); err != nil {
+	// Release before Start: Start is refused while the mark is held.
+	unlockMark()
+	err = s.startAfterApply(ctx, desired.ID)
+	if err != nil {
 		// The new config is already durably committed; only the restart
 		// failed. Leave the pipeline stopped with the valid new config and
 		// surface the error so an operator/agent can retry Start once the
@@ -715,6 +735,78 @@ func (s *Service) rollbackInPlace(ctx context.Context, pipelineID string, oldCon
 		}
 	}
 }
+
+// startAfterApply is the Start that ends ApplyPlanLive's restart path. Start
+// is refused with pipeline.config_changing while an orchestrator write holds
+// the pipeline's mutation mark (#2961). The orchestrator refuses to change a
+// pipeline provisioned by config before it takes the mark, so a write that
+// can hold it against this pipeline is unexpected; the config is already
+// committed, so retrying briefly is cheaper and safer than leaving the
+// pipeline stopped. Any other error, and a mark that outlasts the retries, is
+// returned as before.
+func (s *Service) startAfterApply(ctx context.Context, id string) error {
+	var err error
+	for attempt := 0; attempt < startAfterApplyAttempts; attempt++ {
+		err = s.lifecycleService.Start(ctx, id)
+		if cerrors.Is(err, pipeline.ErrPipelineRunning) {
+			// An external Start landed between the release of the mark and
+			// this Start. The mark refused every Start until the import
+			// committed, so that run was built from the new config: success.
+			s.logger.Info(ctx).Str("pipeline_id", id).
+				Msg("pipeline was started by another caller after the apply committed; it runs on the new config")
+			return nil
+		}
+		if !cerrors.Is(err, pipeline.ErrPipelineConfigChanging) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(startAfterApplyDelay):
+		}
+	}
+	return err
+}
+
+// preflightStart refuses a desired config the lifecycle service would refuse
+// at Start, if it has such restrictions (see startConfigPreflighter).
+func (s *Service) preflightStart(desired config.Pipeline) error {
+	if pf, ok := s.lifecycleService.(startConfigPreflighter); ok {
+		return pf.PreflightPipelineConfig(desired)
+	}
+	return nil
+}
+
+// tryApplyInPlace exports the current config and applies the diff to the
+// running pipeline in place. swappedAll is false, with a nil error, when a
+// processor cannot be swapped live: the config is then already committed.
+func (s *Service) tryApplyInPlace(ctx context.Context, desired config.Pipeline, fresh Diff) (swappedAll bool, err error) {
+	oldConfig, err := s.Export(ctx, desired.ID)
+	if err != nil {
+		return false, cerrors.Errorf("could not export current config of pipeline %q for in-place apply: %w", desired.ID, err)
+	}
+	return s.applyInPlace(ctx, desired, oldConfig, fresh)
+}
+
+// runAdmittedErr is returned when a run was admitted between StopAndWait and
+// the mutation mark. committed is true on the live-eligible fallback, where
+// the in-place step had already saved the new config.
+func runAdmittedErr(id string, committed bool) error {
+	state := "nothing was changed"
+	if committed {
+		state = "the new config was already saved by the in-place step and no further changes were made; " +
+			"the pipeline is running with the new config saved but its nodes not rebuilt from it"
+	}
+	ce := conduiterr.Wrap(pipeline.CodePipelineRunning, fmt.Sprintf(
+		"pipeline %q was started again while its apply was draining it; %s", id, state), pipeline.ErrPipelineRunning)
+	ce.Suggestion = "retry the apply; it will stop the pipeline again and rebuild it from the saved config"
+	return ce
+}
+
+const (
+	startAfterApplyAttempts = 5
+	startAfterApplyDelay    = 100 * time.Millisecond
+)
 
 // isRunning reports whether the pipeline identified by id currently has
 // live, in-process work per isRunningStatus. A not-yet-existing pipeline

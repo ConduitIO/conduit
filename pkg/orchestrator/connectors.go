@@ -45,6 +45,8 @@ func (c *ConnectorOrchestrator) Create(
 	pipelineID string,
 	config connector.Config,
 ) (*connector.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -54,7 +56,6 @@ func (c *ConnectorOrchestrator) Create(
 	}
 	r.AppendPure(txn.Discard)
 
-	// TODO lock pipeline
 	pl, err := c.pipelines.Get(ctx, pipelineID)
 	if err != nil {
 		return nil, cerrors.Errorf("couldn't get pipeline: %w", err)
@@ -81,6 +82,12 @@ func (c *ConnectorOrchestrator) Create(
 
 	err = c.Validate(ctx, t, plugin, config)
 	if err != nil {
+		return nil, err
+	}
+	// #2961: Validate may start a plugin process, so it runs before the mark.
+	// The IsActive test above is the early refusal; this is the authoritative
+	// one, atomic with the mark that excludes Start until the writes finish.
+	if err := mark.acquire(c.lifecycle, pl.ID, "cannot create connector: "+pipeline.ErrPipelineRunning.Error()); err != nil {
 		return nil, err
 	}
 
@@ -117,6 +124,8 @@ func (c *ConnectorOrchestrator) Get(ctx context.Context, id string) (*connector.
 }
 
 func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
@@ -146,10 +155,10 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	}
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
-	if c.lifecycle.IsActive(pl.ID) {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the delete is written.
+	if err := mark.acquire(c.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return err
 	}
 	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
 	if err != nil {
@@ -176,6 +185,8 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 }
 
 func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
@@ -215,6 +226,11 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 
 	err = c.Validate(ctx, conn.Type, conn.Plugin, config)
 	if err != nil {
+		return nil, err
+	}
+	// #2961: Validate may start a plugin process, so it runs before the mark;
+	// the IsActive test above is the early refusal, this the authoritative one.
+	if err := mark.acquire(c.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
 		return nil, err
 	}
 
