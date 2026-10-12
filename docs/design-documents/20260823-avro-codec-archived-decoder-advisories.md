@@ -486,6 +486,11 @@ surface the "new advisory, no fix" case automatically.
    middleware returns `(0, err)` for the whole `Write` call, so one over-limit record fails every
    record in that batch: all of them are nacked with the error and go to the DLQ, or halt the
    pipeline, together.
+   Where the pipeline ends up when there is no DLQ: the classic engine is Degraded on the
+   `avro.decode` and processor paths and Recovering for destination-side failures; architecture v2
+   is Recovering. Recovering with the default DLQ and infinite retries re-reads the same record
+   forever; that loop is not Avro-specific and is tracked in #2997. Runbook:
+   `docs/operations/avro-limit-exceeded.md`.
    A cross-codec check re-run for that PR found byte-identical encodings and identical decoded
    values in both directions. The three advisories stay reachable in Conduit through the built-in
    `conduit-connector-postgres` v0.14.2, which imports `hamba/avro/v2` directly; they clear with

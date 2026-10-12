@@ -35,10 +35,12 @@ const DefaultAvroMaxElements = 1_000_000
 // CodeAvroLimitExceeded is raised when an Avro payload declares an array or
 // map with more elements than schema.avro.max-elements allows (default
 // 1,000,000). The record is not decoded and nothing is truncated: it fails
-// like any other decode error, so it goes to the pipeline's dead-letter
-// queue or stops the pipeline according to the DLQ configuration. Raise
-// schema.avro.max-elements (0 removes the limit) if such records are
-// legitimate. ResourceExhausted: the payload exceeds a configured limit.
+// like any other decode error. With a DLQ enabled (threshold above 0) it is
+// routed to the dead-letter queue; otherwise the pipeline is degraded
+// (classic engine, avro.decode and processor paths) or recovering (classic
+// engine destination path, and architecture v2), and a recovering pipeline
+// re-reads the same record. Raise schema.avro.max-elements (0 removes the
+// limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit.
 var CodeAvroLimitExceeded = conduiterr.Register("schema.avro.limit_exceeded", codes.ResourceExhausted)
 
 // avroLimitMarkers are the decoder messages conduit-commons' Avro codec
@@ -70,7 +72,8 @@ func ClassifyDecodeError(err error) error {
 			ce.ConfigPath = AvroMaxElementsConfigPath
 			ce.Suggestion = "the Avro payload declares more array or map elements than " +
 				AvroMaxElementsConfigPath + " allows; if such records are legitimate, raise " +
-				AvroMaxElementsConfigPath + " (0 removes the limit) and restart Conduit"
+				AvroMaxElementsConfigPath + " (0 removes the limit) and restart Conduit; " +
+				"the setting does not govern standalone plugins, which decode with their own SDK"
 			return ce
 		}
 	}
