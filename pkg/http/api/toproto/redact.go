@@ -42,6 +42,12 @@ import "github.com/conduitio/conduit/pkg/foundation/log"
 // requests need the real values to configure the connector/processor, and
 // config-as-code provisioning parses YAML directly, never through this
 // package.
+//
+// The inverse lives in pkg/orchestrator (restoreRedactedSettings): in an
+// Update RPC, values that are exactly log.Redacted keep the stored values, but
+// only when no other setting in the update changes, so a client can send a
+// redacted response back without overwriting credentials (#2913). Changing the
+// placeholder here changes that contract.
 func redactSettings(in map[string]string) map[string]string {
 	if in == nil {
 		return nil
