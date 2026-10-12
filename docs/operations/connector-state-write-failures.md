@@ -47,7 +47,7 @@ error the same way:
   the run's own error is usually the later, less useful
   `failed to tear down source: plugin is not running`, because the worker tears the source down a
   second time on close and records that failure instead (#2966). If you see that message on a
-  stopped arch-v2 pipeline, look for the persist error in the log line above.
+  stopped arch-v2 pipeline, look for the persist error in the log lines above.
 
 Under arch-v2 the error the run failed with reads
 `worker for source <id> stopped with error: connector <id> reported an error: ...`, followed by
