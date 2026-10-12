@@ -86,6 +86,19 @@ To accept any release or nightly from this repository instead of one exact tag, 
 Releases up to and including v0.19.0 and nightlies built before signing landed are not signed; for those only
 `checksums.txt` is available.
 
+## Pinned release tooling
+
+`release.yml` pins everything that runs with release permissions to an exact version, so a tag builds with the same
+tools the nightlies before it used:
+
+- every action by full commit SHA, with the version in a trailing comment (`uses: owner/action@<sha> # vX.Y.Z`).
+  Dependabot's `github-actions` updates move the SHA and the comment together.
+- GoReleaser by exact version (`version:` input of `goreleaser/goreleaser-action`), and cosign and syft by exact version
+  in their installer steps. Dependabot does not see these; bump them by hand.
+
+Bump a tool in its own PR, never in the run-up to a release tag, and let at least one nightly go green on it before
+tagging. The nightly is the only end-to-end test of the release pipeline.
+
 ## How to release
 
 In order to create a new Conduit release, you'll need to create a new issue using the [Conduit release template](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=release&projects=&template=4-conduit-release.md&title=%5BRelease%5D+Conduit+vX.Y.Z).
