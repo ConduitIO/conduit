@@ -77,6 +77,8 @@ type reservation struct {
 	done chan struct{}
 	// predecessor is the run a recovery restart restarts, nil for a Start.
 	predecessor *runnablePipeline
+	// took is the run this Start superseded, if any (fencing.go).
+	took *runnablePipeline
 }
 
 type pendingStop struct {
@@ -95,7 +97,9 @@ func errPipelineStopping(pipelineID string) error {
 		fmt.Sprintf("can't start pipeline %s: %s", pipelineID, pipeline.ErrPipelineStopping),
 		pipeline.ErrPipelineStopping,
 	)
-	err.Suggestion = "the pipeline's previous run is still finishing; retry the start in a moment"
+	err.Suggestion = "the pipeline's previous run is still writing its final status; retry the start shortly. " +
+		"The wait is bounded (30s) only on databases that honour request contexts (SQLite, Postgres); " +
+		"on badger a hung write can hold it longer"
 	return err
 }
 
@@ -156,6 +160,10 @@ func (s *Service) reserve(pipelineID string, predecessor *runnablePipeline) (*re
 	}
 
 	res := &reservation{done: make(chan struct{}), predecessor: predecessor}
+	if predecessor == nil && ok {
+		// The backoff run this Start took over (fencing.go).
+		res.took = cur
+	}
 	if s.starting == nil {
 		s.starting = make(map[string]*reservation)
 	}
@@ -164,14 +172,17 @@ func (s *Service) reserve(pipelineID string, predecessor *runnablePipeline) (*re
 }
 
 // releaseReservation drops res if the start it admitted did not publish a
-// run. It is a no-op once the publication consumed res.
-func (s *Service) releaseReservation(pipelineID string, res *reservation) {
+// run, and reports whether it did. It is a no-op once the publication
+// consumed res.
+func (s *Service) releaseReservation(pipelineID string, res *reservation) bool {
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	if s.starting[pipelineID] == res {
 		delete(s.starting, pipelineID)
 		close(res.done)
+		return true
 	}
+	return false
 }
 
 // consumeReservationLocked hands rp's reservation over to the published

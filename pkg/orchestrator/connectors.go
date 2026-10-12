@@ -65,7 +65,9 @@ func (c *ConnectorOrchestrator) Create(
 		// sentinel wrapped, ConduitError adds the code.
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("cannot add a connector to the pipeline %q", pl.ID))
 	}
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if c.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr("cannot create connector: " + pipeline.ErrPipelineRunning.Error())
@@ -136,7 +138,9 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if c.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
@@ -187,7 +191,9 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin st
 	if err != nil {
 		return nil, err
 	}
-	if pl.GetStatus() == pipeline.StatusRunning {
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	if c.lifecycle.IsActive(pl.ID) {
 		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
