@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
@@ -86,6 +88,7 @@ func (c *UninstallCommand) Usage() string { return "uninstall <name>[@version]" 
 // uninstallExitCodes is the "Exit codes" block of uninstall's --help, with
 // each exit code computed from the real mapping (#2907).
 var uninstallExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: conduiterr.CodeInvalidArgument, When: "bad <name>[@version] argument or missing --connectors.path"},
 	exitcodedoc.Entry{Code: registry.CodeConnectorNotInstalled, When: "no such connector installed"},
 	exitcodedoc.Entry{Code: registry.CodeAmbiguousUninstall, When: "several versions installed and no @version given"},
 	exitcodedoc.Entry{Code: registry.CodeConnectorInUse, When: "a pipeline uses the connector and --force was not given"},
