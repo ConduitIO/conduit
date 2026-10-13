@@ -89,6 +89,113 @@ To propose a new template:
 6. Push to the branch
 7. Create new pull request
 
+## Changing a pipeline engine
+
+The engines are `pkg/lifecycle` (v1, default) and `pkg/lifecycle-poc` (arch-v2, behind
+`--preview.pipeline-arch-v2`), plus the layer under them: `pkg/connector` (source and destination
+wrappers, the position persister) and the plugin boundary in `pkg/plugin`. Read
+[Life of a record](docs/architecture/life-of-a-record.md) and
+[Guarantees](docs/architecture/guarantees.md) first. The second page says which promises a test enforces
+and which do not; a change that touches a promise updates its row in the same PR.
+
+### Pick the tier
+
+Every PR declares one in its description.
+
+- **Tier 1, data path.** Record flow, ack, position or checkpoint logic, the state layer, the connector
+  protocol, serialization formats. Needs a design doc or ADR (or an explicit waiver for a small fix), a
+  failure-mode analysis in the PR (what could this break, which metric or alert would show it, how do we
+  roll back), chaos and upgrade tests updated or justified as unaffected, and sign-off from a human who did
+  not write the change. No merge on automated review alone, and none in the 48 hours before a release cut.
+- **Tier 2, features.** Connectors, processors, CLI, UI, registry. One reviewer, tests green, docs in the
+  same PR.
+- **Tier 3, chore.** Dependencies, CI, typos, comments. One approval, green CI.
+
+If you are unsure, it is Tier 1. Test-only and CI-only changes to the engine packages are Tier 2 or 3.
+
+### Design-doc template
+
+Non-trivial engine work starts with a doc in `docs/design-documents/`, named `YYYYMMDD-slug.md`. A doc that
+does not enumerate failure modes is not done.
+
+```markdown
+# Title
+
+## Summary
+Two or three sentences: what changes and why.
+
+## Context
+The problem, and the constraints (compatibility, performance, invariants 1 to 7 that the change touches).
+
+## Decision
+What we will do, in enough detail to implement. State each invariant at the place it is enforced.
+
+## Alternatives
+At least two, each with why it lost.
+
+## Consequences
+What gets easier, what gets harder, what is now a public contract.
+
+## Failure modes
+For each of: crash mid-operation, network partition, duplicate delivery, out-of-order delivery, malformed
+input, disk full, slow or withheld acks. What happens, and which test shows it.
+
+## Upgrade / rollback
+How state, config and protocol move between versions, and how to go back.
+
+## Observability
+Metrics, logs and error codes an operator would use to see this working or failing.
+
+## Related
+ADRs, issues, PRs.
+```
+
+A significant decision also gets an immutable ADR in `docs/architecture-decision-records/`.
+
+### Prove the change is safe
+
+In this order, cheapest first:
+
+1. **Write the invariant test on both engines.** `pkg/internal/enginetest` is an in-process kit of fake
+   sources and destinations you control: record count and batch size, read, write and ack latency, acks in
+   chunks or through a buffered pump, SDK-style destination batching, nacks, errors, stalls and crashes.
+   `pkg/internal/enginetest/engines` runs the same pipeline on v1 and v2. Nothing waits on a sleep: tests
+   block on signals (`WaitAcked`, `WaitDelivered`) and gates, and a `Ledger` fails the test at the exact
+   `Ack` call that happened before the record was durable.
+
+   ```go
+   src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 10})
+   dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst"})
+   dst.AckGate.Close() // the destination withholds its acks
+
+   run, _ := eng.Start(ctx, engines.Topology{
+       Sources:      []*enginetest.Source{src},
+       Destinations: []*enginetest.Destination{dst},
+   })
+   _ = dst.WaitDelivered(ctx, 1)
+   // src.AckedCount() is 0 here: the source cannot have been acked yet.
+   dst.AckGate.Open()
+   ```
+
+   Copy the closest case from `pkg/internal/enginetest/engines/invariants_test.go`. A bug fix ships with
+   the test that fails without it. If the case only fails on one engine, say so with a skip that links the
+   issue, as the existing ones do.
+2. **Run the engine packages with the race detector:**
+   `go test -race ./pkg/internal/... ./pkg/lifecycle/... ./pkg/lifecycle-poc/... ./pkg/connector/...`
+3. **Run the chaos suite** for anything on the data path, as CI does:
+   `go test -race -count=3 -shuffle=on ./tests/chaos/...`. It kills a real child process with SIGKILL and
+   checks the position store. The engine tests do not replace it: they use no persister and no process
+   boundary.
+4. **Measure with `make bench-engine`** before and after, and compare:
+   `make bench-engine BENCH_ENGINE_OUT=base.txt`, change, `make bench-engine BENCH_ENGINE_OUT=head.txt`,
+   then `make bench-engine-compare OLD=base.txt NEW=head.txt`. It runs seven reference shapes (1x1, 2x2, 4x4,
+   source batch 100, ack latency, buffered acks, destination batching) on both engines in about a minute and
+   a half. On an engine PR a CI job posts the same comparison as a comment, with a noise floor measured on
+   unchanged code. Both are indicative: they drive fakes, so they show engine overhead and say nothing about
+   connector throughput. A throughput claim needs a benchi run with committed configs and an environment spec.
+5. **Update the docs.** The matching row in `docs/architecture/guarantees.md`, the flow in
+   `docs/architecture/life-of-a-record.md` if the behaviour changed, and `llms.txt` if anything user-facing did.
+
 ## License
 
 Apache 2.0, see [LICENSE](LICENSE.md).
