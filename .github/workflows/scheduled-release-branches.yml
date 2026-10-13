@@ -1,0 +1,129 @@
+name: scheduled release branches
+
+# GitHub only fires `schedule` triggers on the default branch, so the nightly
+# chaos, govulncheck and flake-hunt workflows never run against a release
+# branch on their own. This workflow closes that gap: once a night it
+# dispatches each of them (workflow_dispatch) against every branch listed in
+# .github/release-branches.txt, waits for the result, and fails if any run
+# fails. That makes the "two consecutive green nightlies" quiet window
+# measurable on the release branch (docs/releases.md, "Release branches").
+#
+# WHY A DISPATCHER AND NOT A `matrix: ref: [main, release/...]` IN EACH
+# WORKFLOW:
+#   * chaos.yml's job name `tests/chaos (race, x3)` is a REQUIRED status
+#     context. Putting a matrix on that job renames the check on every PR
+#     (GitHub suffixes matrix values), which would leave the required context
+#     pending forever and block all merges. A dispatcher leaves chaos.yml,
+#     govulncheck.yml and flake-hunt.yml untouched.
+#   * The dispatched run uses the release branch's own copy of the workflow
+#     file, so the branch is tested by the CI it actually ships with, and a
+#     workflow_dispatch run takes chaos.yml's "always run the suite" path, so
+#     the always-report/fail-closed detector semantics are unchanged.
+#   * The ref list lives in one file (.github/release-branches.txt).
+# Cost: the dispatched runs only exist as workflow_dispatch runs, and a
+# fire-and-forget dispatch would fail silently (no one is notified for a
+# bot-dispatched run). So each job here waits on the run it started and
+# exits nonzero on failure, which surfaces through this scheduled workflow.
+#
+# Requires the target workflow to have a workflow_dispatch trigger on the
+# branch (chaos.yml, govulncheck.yml and flake-hunt.yml all do). If a new
+# release branch is cut from a commit that predates that, the dispatch fails
+# loudly with HTTP 422.
+#
+# Schedule: after the main-branch runs (flake-hunt 3:30, chaos 4:45,
+# govulncheck 5:15) so the two sets do not contend for runners.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Only this branch (default: every branch in .github/release-branches.txt)'
+        required: false
+        default: ''
+
+permissions: {}
+
+jobs:
+  refs:
+    name: read release branch list
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      refs: ${{ steps.read.outputs.refs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/release-branches.txt
+          persist-credentials: false
+      - id: read
+        env:
+          ONLY_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "$ONLY_REF" ]; then
+            refs=$(jq -cn --arg r "$ONLY_REF" '[$r]')
+          else
+            refs=$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' .github/release-branches.txt | jq -R . | jq -cs .)
+          fi
+          if [ "$refs" = "[]" ]; then
+            echo "::error::no release branches listed in .github/release-branches.txt"
+            exit 1
+          fi
+          echo "refs=$refs" >> "$GITHUB_OUTPUT"
+          echo "dispatching against: $refs"
+
+  dispatch:
+    name: ${{ matrix.workflow }} @ ${{ matrix.ref }}
+    needs: refs
+    runs-on: ubuntu-latest
+    # flake-hunt (whole suite, -count=3 -race) is the long pole.
+    timeout-minutes: 150
+    permissions:
+      actions: write # create workflow_dispatch events
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJSON(needs.refs.outputs.refs) }}
+        workflow: [chaos.yml, govulncheck.yml, flake-hunt.yml]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REF: ${{ matrix.ref }}
+      WORKFLOW: ${{ matrix.workflow }}
+    steps:
+      - name: Dispatch and wait
+        run: |
+          set -euo pipefail
+          # Fail now if the branch is gone, rather than as an opaque 422.
+          gh api "repos/$GITHUB_REPOSITORY/branches/${REF//\//%2F}" --silent
+
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run "$WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref "$REF"
+
+          # `gh workflow run` does not return the run id. Find the run this
+          # dispatch created: workflow_dispatch on that branch, created at or
+          # after $started. Oldest such run, in case of a concurrent manual one.
+          run_id=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" \
+              --branch "$REF" --event workflow_dispatch --limit 20 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$started\")] | sort_by(.createdAt) | .[0].databaseId // empty")
+            [ -n "$run_id" ] && break
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::dispatched $WORKFLOW on $REF but no run appeared within 5 minutes"
+            exit 1
+          fi
+          url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          echo "$WORKFLOW on $REF: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # --exit-status: nonzero if the run did not succeed.
+          if ! gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 >/dev/null; then
+            echo "::error::$WORKFLOW failed on $REF: $url"
+            exit 1
+          fi

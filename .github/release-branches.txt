@@ -1,0 +1,12 @@
+# Release branches that get the scheduled checks (chaos, govulncheck, flake hunt).
+#
+# GitHub cron only fires on the default branch, so
+# .github/workflows/scheduled-release-branches.yml reads this file and
+# dispatches those workflows against each branch listed here. This is the ONE
+# place to edit when a release line opens or closes: one branch per line,
+# blank lines and # comments ignored. Every branch listed must exist, or the
+# dispatcher fails (a retired branch left here should be loud, not silent).
+#
+# The branch's own copy of each workflow is what runs, so the release branch
+# is tested by the CI definition it ships with.
+release/v0.20.x
