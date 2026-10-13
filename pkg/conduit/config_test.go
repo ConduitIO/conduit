@@ -35,17 +35,18 @@ func TestDefaultConfig_UIEnabledByDefault(t *testing.T) {
 	is.True(cfg.API.HTTP.UI.Enabled)
 }
 
+// TestDefaultConfig_StandaloneEnvWarningOnByDefault: the warning is on unless an operator opts out.
+func TestDefaultConfig_StandaloneEnvWarningOnByDefault(t *testing.T) {
+	is := is.New(t)
+	is.True(DefaultConfig().Connectors.Standalone.EnvWarning)
+}
+
 // TestDefaultConfig_AllowUnsignedDisabledByDefault locks in DeVaris's Tier-1
 // posture decision: the --allow-unsigned escape-hatch CAPABILITY is off
 // unless an operator explicitly opts in (install.allowUnsigned: true) — a
 // fresh config must never permit an unsigned connector install by default,
 // regardless of flag/TTY/env var (see pkg/registry/policy.Decide, which
 // checks OperatorPolicy first and refuses unconditionally when it's false).
-func TestDefaultConfig_StandaloneEnvWarningOnByDefault(t *testing.T) {
-	is := is.New(t)
-	is.True(DefaultConfig().Connectors.Standalone.EnvWarning)
-}
-
 func TestDefaultConfig_AllowUnsignedDisabledByDefault(t *testing.T) {
 	is := is.New(t)
 	cfg := DefaultConfigWithBasePath(t.TempDir())

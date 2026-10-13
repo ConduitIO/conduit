@@ -20,7 +20,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"sync"
 
@@ -110,7 +109,7 @@ func (r *Registry) Init(ctx context.Context, connUtilsAddr string, maxReceiveRec
 		Msg("standalone connector plugins initialized")
 
 	if r.envWarning && count > 0 {
-		warnSensitiveEnv(ctx, r.logger, os.Environ(), runtime.GOOS == "windows")
+		warnSensitiveEnv(ctx, r.logger, os.Environ())
 	}
 }
 

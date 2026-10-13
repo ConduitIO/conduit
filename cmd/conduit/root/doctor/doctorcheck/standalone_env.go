@@ -30,11 +30,18 @@ import (
 // look like credentials. It is advisory (Warn, never Fail) and executes nothing.
 //
 // The check reads the directory the same way pluginsDirCheck does and reports
-// only when at least one plugin binary candidate is present, mirroring the
-// "standalone plugins enabled and installed" condition of the startup warning.
+// only when at least one non-directory file is present. That is slightly
+// broader than the startup warning, which counts plugins that loaded
+// successfully: a stray non-plugin file in connectors.path makes doctor warn
+// where the engine would stay quiet. Doctor never executes plugins here.
+//
+// When redact is set (the MCP tool, whose result reaches a model provider and,
+// over HTTP, every bearer-token holder), the finding carries only a count. The
+// full names stay in the local CLI doctor and in the engine's startup log.
 type standaloneEnvCheck struct {
 	connectorsDir string
 	enabled       bool
+	redact        bool
 }
 
 func (c standaloneEnvCheck) Name() string { return NamePluginsStandaloneEnv }
@@ -74,8 +81,8 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 		}
 	}
 
-	names := standalone.SensitiveHostEnvNames()
-	if len(names) == 0 {
+	found := standalone.ClassifyHostEnv()
+	if found.Total() == 0 {
 		return check.CheckResult{
 			Status:     check.StatusPass,
 			Category:   CategoryPlugins,
@@ -84,14 +91,37 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 		}
 	}
 
+	suggestion := "install only trusted plugins, or start Conduit with a minimal environment; " +
+		"after reviewing the list, set " + configKeyStandaloneEnv + "=false to silence this (see " + standalone.EnvWarningDocsPath + ")"
+
+	if c.redact {
+		return check.CheckResult{
+			Status:     check.StatusWarn,
+			Category:   CategoryPlugins,
+			Code:       standalone.CodeEnvPassedToPlugins.Reason(),
+			ConfigPath: configKeyStandaloneEnv,
+			Message: fmt.Sprintf("%d host environment variable(s) with sensitive-looking names will be passed to standalone plugin processes "+
+				"(names withheld from this interface; run 'conduit doctor' locally for names; "+
+				"this is the environment of this process, which may differ from the engine's); "+
+				"v0.21 will restrict the plugin environment to an allowlist", found.Total()),
+			Suggestion: suggestion,
+		}
+	}
+
+	list := strings.Join(found.Names, ", ")
+	if extra := found.NonStandardSummary(); extra != "" {
+		if list != "" {
+			list += " and "
+		}
+		list += extra
+	}
 	return check.CheckResult{
 		Status:     check.StatusWarn,
 		Category:   CategoryPlugins,
 		Code:       standalone.CodeEnvPassedToPlugins.Reason(),
 		ConfigPath: configKeyStandaloneEnv,
 		Message: fmt.Sprintf("%d host environment variable(s) will be passed to standalone plugin processes: %s; "+
-			"v0.21 will restrict the plugin environment to an allowlist", len(names), strings.Join(names, ", ")),
-		Suggestion: "install only trusted plugins, or start Conduit with a minimal environment; " +
-			"after reviewing the list, set " + configKeyStandaloneEnv + "=false to silence this (see " + standalone.EnvWarningDocsPath + ")",
+			"v0.21 will restrict the plugin environment to an allowlist", found.Total(), list),
+		Suggestion: suggestion,
 	}
 }
