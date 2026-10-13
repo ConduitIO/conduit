@@ -352,7 +352,8 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
     changes (#341 S5 item 9).
 
   These checks run against the live config before the stop, again against the config the cutover saves before
-  the stop, and `--check-rollback` runs them against the live config before an operator restarts Debezium by hand.
+  the stop, and `--check-rollback` runs them before an operator restarts Debezium by hand: against the live config on
+  Kafka 3.5+, and against the journal's saved config on older workers, where the cutover deleted the connector.
 
   **One code family per stage.** `kc.lint.postgres_slot_drop_on_stop` and `kc.lint.postgres_lsn_flush_mode` are
   the lint-time findings for the same configurations: warnings for plain `migrate` and `kc lint`, errors under
@@ -388,8 +389,9 @@ manual reset and rollback"), and every step that could lose data is gated by the
 so the check:
 
 1. reports `unsafe` if Debezium's slot is lost, invalidated, or recreated since the stop, if Debezium's slot was
-   ahead of its offset at the stop and Conduit has not yet durably delivered past that point, if Debezium's live
-   config fails the slot-safety checks or Kafka Connect's validation, or if both Debezium and the pipeline run;
+   ahead of its offset at the stop and Conduit has not yet durably delivered past that point, if Debezium's config
+   (the live config on Kafka 3.5+, the journal's saved config on older workers) fails the slot-safety checks, Kafka
+   Connect's validation, or the comparison with the journalled slot, or if both Debezium and the pipeline run;
 2. tells the operator when to stop the pipeline, when to restart Debezium, and, with `--watch`, follows the restart
    to prove the slot Debezium streams from is the original one;
 3. returns `ready_to_delete_pipeline` once Debezium's confirmed position has passed Conduit's slot, and
@@ -421,10 +423,11 @@ skips after an ungraceful stop, and the check warns about them. Automated reset 
 | `slot_advanced`, `slot_in_use`, `slot_unowned`, `slot_create_blocked` | slot and journal checks, including re-runs |
 | `start_failed`, `import_pending` | starting the pipeline |
 | `operation_in_progress`, `lock_unavailable` | `--cutover`, while another holds the per-slot lock, or when the lock cannot be taken or is lost (Mutual exclusion) |
-| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_connector_state`, `rollback_check_privileges`, `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`, `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`, `rollback_check_offset_unreadable`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
+| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_connector_state`, `rollback_check_privileges`, `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`, `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`, `rollback_check_offset_unreadable`, `rollback_check_connect_unreachable`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
 | `rollback_in_progress` | `--cutover` while a rollback watch log exists (Crash-safe cutover) |
 | `postgres.import.*`, `postgres.logrepl.*` (passed through) | the connector's import refusals, and its slot preconditions outside the import (`slot_missing`, `slot_invalidated`, `slot_plugin`, `publication_missing`), with the connector's fix texts (#341 S13) |
-| `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
+| `offset_not_found`, `ambiguous_partition`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
+| `connector_running` | Debezium is in any state other than exactly `STOPPED` or a 404 when the journal records `debezium.stopMethod: delete` (#341 D11). Used by: `--cutover` without `--stop-connector`; a `--cutover` re-run that finds Debezium running again after the stop; `--cutover --without-import`; `--check-rollback --abandon` |
 
 Because Debezium's slot and offsets are never touched by the fresh strategy, this path exists at all, which is why
 fresh is the v0.21 default. #3029 owns the CLI mechanics and #341 the connector side.
