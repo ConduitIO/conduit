@@ -181,7 +181,8 @@ func wasmProcessorTarget() installTarget {
 // All refusals use CodeInvalidProcessorArtifact (FailedPrecondition): the
 // fetched artifact, as published, does not meet the precondition for install.
 // The one exception is a check that ran out of time, which is reported as
-// CodeProcessorValidationTimeout: it says nothing about the artifact.
+// CodeProcessorValidationTimeout: it says nothing about the artifact. A
+// cancelled context is passed through as context.Canceled for the same reason.
 func validateProcessorWASM(ctx context.Context, wasmPath, name, version string) error {
 	spec, err := inspectSpecification(ctx, log.Nop(), wasmPath)
 	if err != nil && cerrors.Is(err, context.DeadlineExceeded) {
@@ -192,6 +193,13 @@ func validateProcessorWASM(ctx context.Context, wasmPath, name, version string) 
 			"processor artifact for %q@%s: install-time WASM validation timed out before the module answered", name, version), err)
 		e.Suggestion = "retry the install; if it times out again the module may be stuck in Specification(), so check that the published artifact is a working standalone processor"
 		return e
+	}
+	if err != nil && cerrors.Is(err, context.Canceled) {
+		// The caller gave up (Ctrl-C, shutdown). That says nothing about the
+		// artifact, so it must not be reported as an invalid one: pass the
+		// cancellation through, wrapped for context, so errors.Is(err,
+		// context.Canceled) and the CLI's "deliberate cancel" handling still work.
+		return fmt.Errorf("processor install of %q@%s cancelled during WASM validation: %w", name, version, err)
 	}
 	if err != nil {
 		e := conduiterr.Wrap(CodeInvalidProcessorArtifact, fmt.Sprintf(

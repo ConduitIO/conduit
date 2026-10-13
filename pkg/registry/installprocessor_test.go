@@ -427,8 +427,8 @@ func TestInstallProcessor_MissingProcessorsPath(t *testing.T) {
 // of #2981: when the install-time WASM check runs out of time (a stalled guest,
 // or the caller's deadline) the error carries registry.processor_validation_timeout
 // plus a suggestion, not the "artifact is invalid" code, which would blame a
-// publisher for what may be a slow machine. Anything that is not a deadline stays
-// CodeInvalidProcessorArtifact. The hang itself is covered where it lives, in the
+// publisher for what may be a slow machine. Anything that is neither a deadline
+// nor a cancellation stays CodeInvalidProcessorArtifact (see the cancel test). The hang itself is covered where it lives, in the
 // standalone package (TestWASMProcessor_AbandonedCommand_TeardownReturns).
 func TestValidateProcessorWASM_DeadlineMapsToStableTimeoutCode(t *testing.T) {
 	cases := []struct {
@@ -438,7 +438,6 @@ func TestValidateProcessorWASM_DeadlineMapsToStableTimeoutCode(t *testing.T) {
 	}{
 		{"spec command timed out", fmt.Errorf("%w while waiting for response: %w", standalone.ErrCommandTimeout, context.DeadlineExceeded), registry.CodeProcessorValidationTimeout},
 		{"caller deadline", context.DeadlineExceeded, registry.CodeProcessorValidationTimeout},
-		{"user cancelled", context.Canceled, registry.CodeInvalidProcessorArtifact},
 		{"compile failure", cerrors.New("invalid magic number"), registry.CodeInvalidProcessorArtifact},
 	}
 	for _, tc := range cases {
@@ -453,4 +452,18 @@ func TestValidateProcessorWASM_DeadlineMapsToStableTimeoutCode(t *testing.T) {
 			assert.NotEmpty(t, ce.Suggestion)
 		})
 	}
+}
+
+// TestValidateProcessorWASM_CancelIsNotAnInvalidArtifact: Ctrl-C during an
+// install is the caller giving up, not evidence of a bad artifact. It must come
+// back as context.Canceled, never as registry.invalid_processor_artifact.
+func TestValidateProcessorWASM_CancelIsNotAnInvalidArtifact(t *testing.T) {
+	validate := registry.ValidateProcessorWASMForTest(t, func(context.Context, log.CtxLogger, string) (sdk.Specification, error) {
+		return sdk.Specification{}, fmt.Errorf("%w while waiting for response: %w", standalone.ErrCommandTimeout, context.Canceled)
+	})
+	err := validate(context.Background(), "unused.wasm", "p", "1.0.0")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	_, isConduitErr := conduiterr.Get(err)
+	assert.False(t, isConduitErr, "a cancellation must not be dressed up as a ConduitError code: %v", err)
 }

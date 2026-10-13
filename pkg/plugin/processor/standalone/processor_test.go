@@ -256,22 +256,25 @@ func TestWASMProcessor_Configure_Schema_Success(t *testing.T) {
 	is.NoErr(underTest.Teardown(ctx))
 }
 
-// shrinkModuleStopTimeout shrinks the module stop window so the kill-path test is fast.
-// It writes a package-level variable, so tests using it must not be parallel.
-func shrinkModuleStopTimeout(t *testing.T, stop time.Duration) {
+// setStopTimeouts overrides how long Teardown waits for the module to exit and
+// to be confirmed dead after a kill. They are package-level variables, so tests
+// using this must not be parallel.
+func setStopTimeouts(t *testing.T, stop, killWait time.Duration) {
 	t.Helper()
-	old := moduleStopTimeout
-	moduleStopTimeout = stop
-	t.Cleanup(func() { moduleStopTimeout = old })
+	oldStop, oldKill, oldGrace := moduleStopTimeout, moduleKillWait, moduleKillGrace
+	// TestRuntime has close-on-done, so cancellation alone must do the job; a
+	// huge grace keeps the test from ever reaching the outside-close fallback.
+	moduleStopTimeout, moduleKillWait, moduleKillGrace = stop, killWait, killWait
+	t.Cleanup(func() { moduleStopTimeout, moduleKillWait, moduleKillGrace = oldStop, oldKill, oldGrace })
 }
 
 // cancelOnceGuestAccepts interposes a forwarding channel in front of the
 // guest's command channel and calls onAccepted right after the guest has taken
 // a request. The test uses it to expire a command's context at exactly the
 // moment the guest owns the request, with no sleeps or timing assumptions: the
-// stall guest then cannot have answered yet, so the host must be the one to give
-// up. (Expiring the context any earlier means the request was never sent, which
-// leaves nothing outstanding and so does not exercise the bug.)
+// guest then cannot have answered yet (it sleeps or spins), so the host must be
+// the one to give up. (Expiring the context any earlier means the request was
+// never sent, which leaves nothing outstanding and so does not exercise the bug.)
 //
 // closeModule closes p.commandRequests; the forwarder propagates that to the
 // real channel so the guest still sees "no more commands".
@@ -321,6 +324,10 @@ func teardownWithin(t *testing.T, p *wasmProcessor, guard time.Duration) error {
 // until the test binary's 10m alarm fired.
 func TestWASMProcessor_AbandonedCommand_TeardownReturns(t *testing.T) {
 	is := is.New(t)
+	// Never time out waiting for the module: the point is that the guest comes
+	// back by itself once its late reply is dropped. If the fix regressed, the
+	// test fails on teardownWithin's guard, not on a race between two timeouts.
+	setStopTimeouts(t, time.Hour, time.Hour)
 
 	// log.Nop: the guest outlives the test body by a few seconds and its
 	// goroutine logs when it stops; a t-bound logger would panic after the test.
@@ -342,18 +349,23 @@ func TestWASMProcessor_AbandonedCommand_TeardownReturns(t *testing.T) {
 
 	// The guest wakes after ~3s, its response is dropped, it sees the closed
 	// command channel and exits, so Teardown completes without a kill.
-	err = teardownWithin(t, underTest, 60*time.Second)
+	err = teardownWithin(t, underTest, 2*time.Minute)
 	is.True(cerrors.Is(err, ErrCommandTimeout)) // the skipped teardown command is reported
 	is.True(!strings.Contains(err.Error(), "did not stop within"))
 }
 
-// TestWASMProcessor_StuckModule_TeardownKills covers a guest that does not come
-// back within the stop window: Teardown must kill it and return, not wait.
-func TestWASMProcessor_StuckModule_TeardownKills(t *testing.T) {
+// TestWASMProcessor_SpinningModule_TeardownKills covers a guest that never
+// comes back and burns a core: Teardown must stop it, not just stop waiting.
+// The spin guest never calls the host and never returns, so there is no margin
+// between "slow" and "stuck" for the test to depend on, and the kill goes
+// through wazero's close-on-context-done (from inside the guest's own call), so
+// it is also free of the race a Module.Close from another goroutine has with
+// the guest's host calls.
+func TestWASMProcessor_SpinningModule_TeardownKills(t *testing.T) {
 	is := is.New(t)
-	shrinkModuleStopTimeout(t, 200*time.Millisecond)
+	setStopTimeouts(t, 200*time.Millisecond, time.Minute)
 
-	underTest, err := newWASMProcessor(context.Background(), TestRuntime, StallModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
+	underTest, err := newWASMProcessor(context.Background(), TestRuntime, SpinModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
 	is.NoErr(err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -363,10 +375,45 @@ func TestWASMProcessor_StuckModule_TeardownKills(t *testing.T) {
 	_, err = underTest.executeCommand(ctx, specifyRequest())
 	is.True(cerrors.Is(err, ErrCommandTimeout))
 
-	// The guest is asleep for ~3s, far beyond the 200ms stop window.
-	err = teardownWithin(t, underTest, 60*time.Second)
+	err = teardownWithin(t, underTest, 2*time.Minute)
 	is.True(cerrors.Is(err, ErrCommandTimeout))
-	is.True(strings.Contains(err.Error(), "did not stop within"))
+	is.True(strings.Contains(err.Error(), "was killed"))
+
+	// The guest's run goroutine (and with it the CPU burn) is gone, not merely
+	// abandoned: moduleStopped is closed by run's defer.
+	select {
+	case <-underTest.moduleStopped:
+	default:
+		t.Fatal("Teardown reported the spinning guest killed but its run goroutine is still alive")
+	}
+}
+
+// TestWASMProcessor_Teardown_Twice: a second Teardown must not panic on the
+// already-closed command channel.
+func TestWASMProcessor_Teardown_Twice(t *testing.T) {
+	is := is.New(t)
+
+	underTest, err := newWASMProcessor(context.Background(), TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
+	is.NoErr(err)
+
+	is.NoErr(underTest.Teardown(context.Background()))
+	err = underTest.Teardown(context.Background())
+	is.True(cerrors.Is(err, plugin.ErrPluginNotRunning))
+}
+
+// TestWASMProcessor_CallerContextCancel_DoesNotKillGuest: the context that
+// created the processor ending (a pipeline stopping) must not abort the guest;
+// a graceful Teardown afterwards still has to work.
+func TestWASMProcessor_CallerContextCancel_DoesNotKillGuest(t *testing.T) {
+	is := is.New(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
+	is.NoErr(err)
+	cancel()
+
+	is.NoErr(underTest.Open(context.Background()))
+	is.NoErr(underTest.Teardown(context.Background()))
 }
 
 // TestWASMProcessor_Specification_HonorsCallerContext: a caller deadline shorter
@@ -385,5 +432,5 @@ func TestWASMProcessor_Specification_HonorsCallerContext(t *testing.T) {
 	_, err = underTest.specification(ctx)
 	is.True(cerrors.Is(err, ErrCommandTimeout))
 
-	_ = teardownWithin(t, underTest, 60*time.Second)
+	_ = teardownWithin(t, underTest, 2*time.Minute)
 }

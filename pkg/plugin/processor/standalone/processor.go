@@ -61,6 +61,14 @@ var (
 	// moduleStopTimeout bounds how long Teardown waits for the module to exit
 	// after the command channel is closed, before it kills the module.
 	moduleStopTimeout = 5 * time.Second
+	// moduleKillWait bounds how long Teardown waits for a module to actually
+	// stop after being killed. A guest spinning on the CPU stops within
+	// milliseconds; one inside a long host call (a sleep) stops when that call
+	// returns, so this is a bound on how long we wait, not a guarantee.
+	moduleKillWait = 5 * time.Second
+	// moduleKillGrace is how long kill waits for the context cancellation alone
+	// to stop the module before falling back to closing it from outside.
+	moduleKillGrace = time.Second
 )
 
 // ErrCommandTimeout is wrapped by errors from a command that did not complete
@@ -95,6 +103,17 @@ type wasmProcessor struct {
 	// carries no correlation id).
 	abandoned   chan struct{}
 	abandonOnce sync.Once
+
+	// cancelRun cancels the context the guest's _start runs under. It is the
+	// kill switch: see closeModule.
+	cancelRun context.CancelFunc
+	// closeOnce guards close(commandRequests) so Teardown can be called more
+	// than once (a second call used to panic on the closed channel).
+	closeOnce sync.Once
+	// closed is closed together with commandRequests. executeCommand checks it
+	// first: a select that includes a send on a closed channel can panic when
+	// that case is chosen, so commands after Teardown must never reach it.
+	closed chan struct{}
 
 	// moduleStopped is used to know when the module stopped running
 	moduleStopped chan struct{}
@@ -195,12 +214,24 @@ func newWASMProcessor(
 		commandRequests:  commandRequests,
 		commandResponses: commandResponses,
 		abandoned:        abandoned,
+		closed:           make(chan struct{}),
 		moduleStopped:    moduleStopped,
 	}
 
+	// The guest runs under its OWN cancellable context, detached from the
+	// caller's: cancelling the context that created the processor (a pipeline
+	// stopping) must not abort the guest mid-command, because a graceful
+	// shutdown still has to deliver Teardown. Only closeModule cancels it, to
+	// stop a guest that will not exit. Where the runtime is built with
+	// WithCloseOnContextDone (install-time validation) cancelling it closes the
+	// module even if the guest is spinning on the CPU; on the live runtime it
+	// does not, see kill and wasmengine.New.
+	runCtx, cancelRun := context.WithCancel(context.WithoutCancel(ctx))
+	p.cancelRun = cancelRun
+
 	// Needs to run in a goroutine because the WASM module is blocking as long
 	// as the "main" function is running
-	go p.run(ctx)
+	go p.run(runCtx)
 
 	return p, nil
 }
@@ -209,6 +240,7 @@ func newWASMProcessor(
 // until the module is closed.
 func (p *wasmProcessor) run(ctx context.Context) {
 	defer close(p.moduleStopped)
+	defer p.cancelRun() // release the context's resources once the guest is gone
 
 	_, err := p.module.ExportedFunction("_start").Call(ctx)
 
@@ -338,7 +370,10 @@ func (p *wasmProcessor) Teardown(ctx context.Context) error {
 	if p.isAbandoned() {
 		// The guest is still busy with (or stuck on) a command we stopped waiting
 		// for, so it cannot service a Teardown command; closeModule below still
-		// asks it to exit and kills it if it does not.
+		// asks it to exit and, if it does not, tries to kill it (best effort on the
+		// live runtime, see kill). Skipping the guest's own Teardown handler here is
+		// accepted: standalone processors are stateless by contract, so there is
+		// nothing the handler must flush (DeVaris, review of #2996).
 		teardownErr = cerrors.Errorf("skipping teardown command: %w", ErrCommandTimeout)
 	} else {
 		tctx, cancel := context.WithTimeout(ctx, teardownCommandTimeout)
@@ -381,32 +416,67 @@ func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
 
 func (p *wasmProcessor) closeModule(ctx context.Context) error {
 	// Closing the command channel will send an error code to the WASM module
-	// signaling it to exit.
-	close(p.commandRequests)
+	// signaling it to exit. Once: Teardown may be called again.
+	p.closeOnce.Do(func() {
+		close(p.closed)
+		close(p.commandRequests)
+	})
 
 	timer := time.NewTimer(moduleStopTimeout)
 	defer timer.Stop()
 
 	select {
 	case <-timer.C:
-		// The guest neither answered nor exited (e.g. it is stuck inside a
-		// command). Kill it rather than wait forever. ctx may already be
-		// cancelled, so the kill must not depend on it.
+		// The guest neither answered nor exited (stuck inside a command, or
+		// spinning). Kill it rather than wait forever.
 		p.logger.Error(ctx).Msg("processor plugin did not stop in time, killing plugin")
-		if err := p.module.CloseWithExitCode(context.WithoutCancel(ctx), 1); err != nil {
-			return fmt.Errorf("failed to kill processor plugin: %w", err)
+		if !p.kill(moduleKillWait) {
+			return fmt.Errorf("processor plugin did not stop within %v and could not be confirmed dead after %v: %w", moduleStopTimeout, moduleKillWait, ErrCommandTimeout)
 		}
-		return fmt.Errorf("processor plugin did not stop within %v: %w", moduleStopTimeout, ErrCommandTimeout)
+		return fmt.Errorf("processor plugin did not stop within %v and was killed: %w", moduleStopTimeout, ErrCommandTimeout)
 	case <-ctx.Done():
-		// kill the plugin
+		// The caller will not wait: kill without waiting for confirmation.
 		p.logger.Error(ctx).Msg("context canceled while waiting for teardown, killing plugin")
-		err := p.module.CloseWithExitCode(ctx, 1)
-		if err != nil {
-			return fmt.Errorf("failed to kill processor plugin: %w", err)
-		}
+		p.cancelRun()
 		return ctx.Err()
 	case <-p.moduleStopped:
 		return nil
+	}
+}
+
+// kill stops the guest and reports whether the module stopped within wait.
+//
+// It first cancels the context the guest's _start runs under. On a runtime
+// built with close-on-done (the install-time runtime; see wasmengine.New) wazero
+// then closes the module from inside the guest's own call, which stops even a
+// guest spinning in pure computation and does not race with its host calls.
+// The live record-path runtime is built WITHOUT it (it costs throughput), so
+// there the cancel does nothing, and after moduleKillGrace we fall back to
+// Module.CloseWithExitCode from this goroutine. That fallback is best effort: it
+// does not stop a CPU-bound guest (the goroutine and the core stay busy until
+// the process exits) and it can race with a guest host call in flight. It is
+// what the pre-existing ctx.Done kill did.
+//
+// A guest blocked in a host call that ignores the context (a sleep) is only
+// seen to stop when that call returns, so false means "not confirmed dead",
+// not "still running forever".
+func (p *wasmProcessor) kill(wait time.Duration) bool {
+	p.cancelRun()
+	if p.waitStopped(moduleKillGrace) {
+		return true
+	}
+	_ = p.module.CloseWithExitCode(context.Background(), 1)
+	return p.waitStopped(wait)
+}
+
+func (p *wasmProcessor) waitStopped(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-p.moduleStopped:
+		return true
+	case <-t.C:
+		return false
 	}
 }
 
@@ -421,6 +491,8 @@ func (p *wasmProcessor) closeModule(ctx context.Context) error {
 // rather than risk pairing that stale response with a newer request.
 func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.CommandRequest) (*processorv1.CommandResponse, error) {
 	select {
+	case <-p.closed:
+		return nil, cerrors.Errorf("processor plugin is shut down, cannot send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case <-p.abandoned:
 		return nil, p.abandonedError(req)
 	default:

@@ -39,6 +39,7 @@ const (
 	testPluginMalformedDir    = testPluginDir + "malformed/"
 	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
 	testPluginStallDir        = testPluginDir + "stall/"
+	testPluginSpinDir         = testPluginDir + "spin/"
 )
 
 var (
@@ -50,16 +51,19 @@ var (
 	MalformedProcessorBinary []byte
 	SpecifyErrorBinary       []byte
 	StallBinary              []byte
+	SpinBinary               []byte
 
 	ChaosProcessorModule wazero.CompiledModule
 	SpecifyErrorModule   wazero.CompiledModule
 	StallModule          wazero.CompiledModule
+	SpinModule           wazero.CompiledModule
 
 	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
 		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
 		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
 		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
 		testPluginStallDir + "processor.wasm":        {&StallBinary, &StallModule},
+		testPluginSpinDir + "processor.wasm":         {&SpinBinary, &SpinModule},
 	}
 )
 
@@ -94,7 +98,9 @@ func TestMain(m *testing.M) {
 	// optimizing compiler instead. See wasmengine.ConfigureForTests.
 	wasmengine.ConfigureForTests()
 
-	TestRuntime = newRuntime(ctx)
+	// Close-on-context-done on: the spin-guest kill test needs it (it is how the
+	// install-time runtime is built). Throughput is irrelevant to these tests.
+	TestRuntime = newRuntime(ctx, true)
 
 	_, err := wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
 	exitOnError(err, "error instantiating WASI")
