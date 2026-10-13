@@ -19,15 +19,16 @@ analysis, alternatives and failure modes are in
 
 ## Decision
 
-- Add `connectors.ambient-credentials.{enabled,allow-endpoints,allow-resources,allow-any-resource}`,
-  default off. `enabled=true` requires a non-empty `allow-resources` or `allow-any-resource`.
+- Add `connectors.ambient-credentials.{enabled,allow-endpoints,allow-resources,allow-any-resource,allow-proxy}`,
+  default off. `enabled=true` requires a non-empty `allow-resources` (exact bucket names, no wildcards) or
+  `allow-any-resource`, and refuses to start with a proxy variable set unless `allow-proxy` is true.
 - Pass the policy to built-in connectors on the context, through a small additive
   `conduit-commons/hostpolicy` package. Absent policy means deny. No `conduit-connector-sdk` or
   `conduit-connector-protocol` change.
 - Accept a pipeline-supplied endpoint only on an exact, https `allow-endpoints` match; otherwise use only
-  the SDK's endpoint resolution. Refuse cross-host redirects and `169.254.0.0/16` / `fd00:ec2::254`.
-- Standalone and external connectors are out of scope for v0.21. Protection there is cooperative only,
-  because the policy is not delivered to them (see ConduitIO/conduit#3043 for the plugin environment).
+  the SDK's endpoint resolution (`AWS_ENDPOINT_URL*` is checked the same way). Refuse cross-host redirects and `169.254.0.0/16` / `fd00:ec2::254`.
+- Standalone plugins are out of scope for this decision; plugin environment handling is covered by
+  ConduitIO/conduit#3043.
 
 ## Consequences
 
@@ -35,7 +36,7 @@ analysis, alternatives and failure modes are in
   setting.
 - A pipeline must say `builtin:s3` to get the built-in connector when a registry `s3` is installed,
   because a bare name resolves to the standalone plugin first.
-- The registry copy of `s3` cannot use the ambient chain until a v0.22 follow-up.
+- The registry copy of `s3` cannot use the ambient chain through this policy.
 - Static keys with a custom internal endpoint are unchanged and remain out of scope.
 - `conduit-commons` gains a package and needs a release before the `conduit` and `s3` changes.
 
