@@ -540,6 +540,9 @@ Decided by DeVaris:
    discussion of its own; the report already has the shape).
 3. **Registry shape.** Results go in the `conformance` object of #2948, not in a separate `acceptance` entry.
 4. **Adoption.** Connector repos adopt suite v2 before the Certified cuts.
+5. **The process death hook.** `AcceptanceProcessDeathDriver` stays, flagged and counted in the report
+   (`exceptions: ["process_death_hook"]`, `process_death_hook_calls`). For any connector that uses it, the attested
+   kill -9 test is mandatory for Certified. Subprocess plus SIGKILL (`conduit-connector-sdk#403`) is the real fix.
 
 Still open:
 
