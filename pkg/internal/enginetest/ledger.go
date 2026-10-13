@@ -68,7 +68,11 @@ func RawShape(size int) Shape {
 
 // Position is the position the preset shapes give record i of srcID.
 func Position(srcID string, i int) opencdc.Position {
-	return opencdc.Position(srcID + "/" + strconv.Itoa(i))
+	// One allocation: this runs once per record, including inside benchmarks.
+	b := make([]byte, 0, len(srcID)+1+8)
+	b = append(b, srcID...)
+	b = append(b, '/')
+	return opencdc.Position(strconv.AppendInt(b, int64(i), 10))
 }
 
 // Ledger records, at the moment a source is acked, whether each acked record
@@ -76,8 +80,12 @@ func Position(srcID string, i int) opencdc.Position {
 // acknowledge a record upstream before it is durably handled downstream) at the
 // offending Ack call instead of after the fact.
 //
-// A record is durable when the destination flushed it, or when it reached the
-// DLQ destination (a nacked record that the DLQ accepted is durably handled).
+// A record is durable when the destination handed its (non-error) ack to the
+// engine in Ack, i.e. the moment the engine could know. Flushing inside Write
+// is deliberately not enough: an engine that acks the source after Write
+// without waiting for the destination's ack must be caught. A record is also
+// durable when it reached the DLQ destination (a nacked record that the DLQ
+// accepted is durably handled).
 // Share one Ledger between the Source (SourceConfig.Ledger) and every
 // Destination (DestinationConfig.Ledger), and name the destinations a record
 // must reach with Require.
@@ -87,11 +95,15 @@ type Ledger struct {
 	dlq        string
 	durable    map[string]map[string]struct{} // destination ID -> position
 	violations []string
+	failed     chan struct{} // closed on the first violation
 }
 
 // NewLedger returns an empty ledger.
 func NewLedger() *Ledger {
-	return &Ledger{durable: make(map[string]map[string]struct{})}
+	return &Ledger{
+		durable: make(map[string]map[string]struct{}),
+		failed:  make(chan struct{}),
+	}
 }
 
 // Require names the destinations a record must be durable in before its source
@@ -125,6 +137,12 @@ func (l *Ledger) markDurable(destinationID string, pos opencdc.Position) {
 func (l *Ledger) checkAck(sourceID string, positions []opencdc.Position) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.required) == 0 {
+		// A ledger that requires nothing checks nothing. Fail loudly instead
+		// of reporting a vacuous pass.
+		l.addViolationLocked("ledger has no Require() destinations: it would pass every ack; call Require")
+		return
+	}
 	for _, pos := range positions {
 		for _, dest := range l.required {
 			if _, ok := l.durable[dest][string(pos)]; ok {
@@ -138,6 +156,17 @@ func (l *Ledger) checkAck(sourceID string, positions []opencdc.Position) {
 			))
 		}
 	}
+}
+
+// Failed returns a channel closed at the first violation, so a test can stop
+// waiting for a broken engine instead of running into its timeout.
+func (l *Ledger) Failed() <-chan struct{} { return l.failed }
+
+func (l *Ledger) addViolationLocked(v string) {
+	if len(l.violations) == 0 {
+		close(l.failed)
+	}
+	l.violations = append(l.violations, v)
 }
 
 // Violations returns every ack-before-durable event seen so far. An empty

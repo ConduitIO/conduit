@@ -71,8 +71,8 @@ type DestinationConfig struct {
 	// (Delivered and Nacked return nil; the counters still work). Benchmarks set
 	// it so memory does not grow with b.N.
 	Discard bool
-	// Ledger, if set, is told when a record becomes durable (is flushed and
-	// acked, not nacked).
+	// Ledger, if set, is told when a record becomes durable: when Ack hands its
+	// non-error ack to the engine, not when it is flushed.
 	Ledger *Ledger
 }
 
@@ -89,6 +89,7 @@ type Destination struct {
 	mu        sync.Mutex
 	opened    bool
 	pending   []opencdc.Record
+	origPos   map[string]opencdc.Position // ledger bookkeeping: record position -> source position
 	timer     *time.Timer
 	queue     []connector.DestinationAck
 	delivered []opencdc.Record
@@ -114,9 +115,10 @@ func NewDestination(cfg DestinationConfig) *Destination {
 		cfg.ID = "dst"
 	}
 	d := &Destination{
-		cfg:   cfg,
-		torn:  make(chan struct{}),
-		errCh: make(chan error, 1),
+		cfg:     cfg,
+		origPos: make(map[string]opencdc.Position),
+		torn:    make(chan struct{}),
+		errCh:   make(chan error, 1),
 	}
 	if cfg.AckPump {
 		d.pumpWake = make(chan struct{}, 1)
@@ -223,13 +225,15 @@ func (d *Destination) flushLocked() {
 			d.delivered = append(d.delivered, rec)
 		}
 		if d.cfg.Ledger != nil {
-			// The record is durably handled from here on, before its ack is
-			// even visible to the engine.
-			d.cfg.Ledger.markDurable(d.cfg.ID, originalPosition(rec))
+			// Remembered, not yet durable as far as the engine is concerned:
+			// the Ledger is told when Ack hands the ack over (markAcked), so a
+			// source ack that does not wait for the destination's ack is a
+			// violation even though the fake flushed inside Write.
+			d.origPos[string(rec.Position)] = originalPosition(rec)
 		}
 	}
 	d.deliveredCnt.add(len(d.pending))
-	d.pending = nil
+	d.pending = d.pending[:0]
 
 	if d.cfg.AckPump {
 		d.pumpQ = append(d.pumpQ, acks)
@@ -239,7 +243,11 @@ func (d *Destination) flushLocked() {
 		}
 		return
 	}
-	d.queue = append(d.queue, acks...)
+	if len(d.queue) == 0 {
+		d.queue = acks // no copy in the common case of an empty queue
+	} else {
+		d.queue = append(d.queue, acks...)
+	}
 	d.queued.Fire()
 }
 
@@ -283,11 +291,12 @@ func (d *Destination) Ack(ctx context.Context) ([]connector.DestinationAck, erro
 			return nil, err
 		}
 		n := len(d.queue)
-		wake := d.queued.C()
-		d.mu.Unlock()
 		if n > 0 {
+			d.mu.Unlock()
 			break
 		}
+		wake := d.queued.C() // only allocate the wake channel when we must wait
+		d.mu.Unlock()
 		select {
 		case <-wake:
 		case <-ctx.Done():
@@ -320,8 +329,11 @@ func (d *Destination) Ack(ctx context.Context) ([]connector.DestinationAck, erro
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	acks := append([]connector.DestinationAck(nil), d.queue[:n]...)
+	// The queue is append-only elsewhere, so a capped sub-slice is safe to hand
+	// out without copying.
+	acks := d.queue[:n:n]
 	d.queue = d.queue[n:]
+	d.markAckedLocked(acks)
 	return acks, nil
 }
 
@@ -348,7 +360,30 @@ func (d *Destination) ackPumped(ctx context.Context) ([]connector.DestinationAck
 	if err := sleep(ctx, d.cfg.AckLatency, d.torn); err != nil {
 		return nil, d.closedOr(err)
 	}
+	d.mu.Lock()
+	d.markAckedLocked(acks)
+	d.mu.Unlock()
 	return acks, nil
+}
+
+// markAckedLocked tells the Ledger that the records behind these acks are
+// durably handled. This is the durability event the Ledger keys on, because
+// it is the moment the engine is told: a source ack before it is an ack that
+// did not wait for the destination.
+func (d *Destination) markAckedLocked(acks []connector.DestinationAck) {
+	if d.cfg.Ledger == nil {
+		return
+	}
+	for _, a := range acks {
+		orig, ok := d.origPos[string(a.Position)]
+		if !ok {
+			continue
+		}
+		delete(d.origPos, string(a.Position))
+		if a.Error == nil {
+			d.cfg.Ledger.markDurable(d.cfg.ID, orig)
+		}
+	}
 }
 
 // Stop implements the arch v1 Destination interface. Like the SDK's Stop it

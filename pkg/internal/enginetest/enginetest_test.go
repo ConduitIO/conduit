@@ -82,8 +82,21 @@ func TestSource_LedgerFlagsAckBeforeDurable(t *testing.T) {
 	s2 := enginetest.NewSource(enginetest.SourceConfig{ID: "s", Ledger: l2})
 	recs2, _ := s2.Read(ctx)
 	is.NoErr(d2.Write(ctx, recs2))
+
+	// Flushed inside Write but the engine has not been handed the ack: an
+	// engine that acked the source now would be acking early.
 	is.NoErr(s2.Ack(ctx, []opencdc.Position{recs2[0].Position}))
-	is.Equal(l2.Violations(), []string(nil))
+	is.Equal(len(l2.Violations()), 1)
+
+	l3 := enginetest.NewLedger().Require("d")
+	d3 := enginetest.NewDestination(enginetest.DestinationConfig{ID: "d", Ledger: l3})
+	s3 := enginetest.NewSource(enginetest.SourceConfig{ID: "s", Ledger: l3})
+	recs3, _ := s3.Read(ctx)
+	is.NoErr(d3.Write(ctx, recs3))
+	_, err = d3.Ack(ctx) // the engine is told
+	is.NoErr(err)
+	is.NoErr(s3.Ack(ctx, []opencdc.Position{recs3[0].Position}))
+	is.Equal(l3.Violations(), []string(nil))
 }
 
 func TestDestination_BatchingFlushesOnSizeOnly(t *testing.T) {
@@ -178,4 +191,13 @@ func TestDestination_AckPumpDeliversThroughChannel(t *testing.T) {
 	a2, err := d.Ack(ctx)
 	is.NoErr(err)
 	is.Equal(len(a1)+len(a2), 2)
+}
+
+func TestLedger_WithoutRequireFailsLoudly(t *testing.T) {
+	is := is.New(t)
+	l := enginetest.NewLedger()
+	s := enginetest.NewSource(enginetest.SourceConfig{ID: "s", Ledger: l})
+	recs, _ := s.Read(context.Background())
+	is.NoErr(s.Ack(context.Background(), []opencdc.Position{recs[0].Position}))
+	is.Equal(len(l.Violations()), 1)
 }

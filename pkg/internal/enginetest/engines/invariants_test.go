@@ -66,6 +66,23 @@ func start(t *testing.T, ctx context.Context, eng engines.Engine, topo engines.T
 	return run
 }
 
+// waitAckedOrViolation waits for n source acks, and fails the test at once if
+// the ledger sees an ack that preceded the destination's. Without it a broken
+// engine shows up as a timeout instead of the violation.
+func waitAckedOrViolation(t *testing.T, ctx context.Context, src *enginetest.Source, l *enginetest.Ledger, n int) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- src.WaitAcked(ctx, n) }()
+	select {
+	case <-l.Failed():
+		t.Fatalf("invariant 1 violated: %v", l.Violations())
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("source acked %d of %d: %v", src.AckedCount(), n, err)
+		}
+	}
+}
+
 func positions(src string, n int) []opencdc.Position {
 	out := make([]opencdc.Position, n)
 	for i := range out {
@@ -93,14 +110,18 @@ func TestInvariant1_NoSourceAckBeforeDestinationAck(t *testing.T) {
 			Destinations: []*enginetest.Destination{dst},
 		})
 
-		// The destination has the record (it is durable there) but the engine
-		// has not been told so: the source must not be acked.
+		// The destination has flushed the record but has not handed the engine
+		// its ack: the source must not be acked. The Ledger is what makes this
+		// deterministic for a broken engine: it counts a record durable only when
+		// Destination.Ack returns the ack, so an engine that acks the source after
+		// Write, without waiting, leaves a violation at that Ack call whatever the
+		// scheduling. (The AckedCount check below is a fast failure, not the proof.)
 		is.NoErr(dst.WaitWritten(ctx, 1))
 		is.NoErr(dst.WaitDelivered(ctx, 1))
 		is.Equal(src.AckedCount(), 0)
 
 		dst.AckGate.Open()
-		is.NoErr(src.WaitAcked(ctx, 10))
+		waitAckedOrViolation(t, ctx, src, ledger, 10)
 		is.NoErr(run.Stop(ctx))
 		is.NoErr(run.Wait(ctx))
 
@@ -503,6 +524,68 @@ func TestMemoryBound_RecordsInFlightWithWithheldAcks(t *testing.T) {
 		// have started, so exactly one batch was pulled from the source.
 		is.Equal(src.ReadCalls(), 1)
 		is.Equal(src.Produced(), batch)
+		is.Equal(src.AckedCount(), 0)
+	})
+}
+
+// Invariant 1 with SDK-style batching in the path: the destination holds records
+// until a batch of 5 is pending, flushes inside Write, and the Ledger still
+// counts a record durable only when its ack is handed to the engine. The flush
+// delay is an hour so the timer never fires: the batch filling is the only flush.
+func TestInvariant1_WithSDKBatching_AckOnlyAfterDestinationAck(t *testing.T) {
+	eachEngine(t, func(t *testing.T, eng engines.Engine) {
+		is := is.New(t)
+		ctx := testCtx(t)
+
+		ledger := enginetest.NewLedger().Require("dst").DLQ("dlq")
+		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 20, BatchSize: 5, Ledger: ledger})
+		dst := enginetest.NewDestination(enginetest.DestinationConfig{
+			ID: "dst", Ledger: ledger,
+			Batching: enginetest.Batching{Size: 5, Delay: time.Hour},
+		})
+		dst.AckGate.Close()
+
+		run := start(t, ctx, eng, engines.Topology{
+			Sources:      []*enginetest.Source{src},
+			Destinations: []*enginetest.Destination{dst},
+		})
+		is.NoErr(dst.WaitDelivered(ctx, 5))
+		dst.AckGate.Open()
+		waitAckedOrViolation(t, ctx, src, ledger, 20)
+		is.NoErr(run.Stop(ctx))
+		is.NoErr(run.Wait(ctx))
+
+		is.Equal(ledger.Violations(), []string(nil))
+	})
+}
+
+// Invariant 7, the half the engines leave open: a graceful stop while the
+// destination withholds acks never completes on either engine (v1's Stop returns
+// and the run does not end; v2's Stop blocks). #2990 tracks it. The assertion is
+// what must hold when it is fixed: Stop and Wait finish within a bound, with the
+// run ending in a coded error or a clean stop, and nothing acked that was not
+// acked downstream.
+func TestInvariant7_GracefulStopWithWithheldAcksIsBounded(t *testing.T) {
+	t.Skip("graceful stop waits unboundedly for withheld acks on v1 and v2: #2990")
+	eachEngine(t, func(t *testing.T, eng engines.Engine) {
+		is := is.New(t)
+		ctx := testCtx(t)
+
+		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Discard: true})
+		dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst", Discard: true})
+		dst.AckGate.Close()
+		run := start(t, ctx, eng, engines.Topology{
+			Sources:      []*enginetest.Source{src},
+			Destinations: []*enginetest.Destination{dst},
+		})
+		is.NoErr(dst.WaitWritten(ctx, 1))
+
+		bound, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		_ = run.Stop(bound)
+		is.NoErr(bound.Err()) // Stop returned inside the bound
+		_ = run.Wait(bound)
+		is.NoErr(bound.Err()) // and so did the run
 		is.Equal(src.AckedCount(), 0)
 	})
 }
