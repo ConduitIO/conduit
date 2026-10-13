@@ -66,6 +66,20 @@ env:
   BENCH_TIME: '3x'
 
 jobs:
+  # Its own job and NOT continue-on-error: a failing comparer self-test must be
+  # visible. (A step failure inside a continue-on-error job is hidden.)
+  comparer-selftest:
+    name: bench-engine comparer self-test
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - working-directory: .github/scripts
+        run: python3 -m unittest -v test_bench_engine_compare
+
   bench:
     name: bench-engine (indicative, non-blocking)
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -82,10 +96,6 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-
-      - name: Self-test the comparer
-        working-directory: .github/scripts
-        run: python3 -m unittest -v test_bench_engine_compare
 
       - name: Build head and base benchmark binaries
         id: build
@@ -148,6 +158,9 @@ jobs:
           mkdir -p "$out/upload"
           cp "$out/base-a.txt" "$out/base-b.txt" "$out/head.txt" "$out/upload/"
           printf '%s' "$BASE_OK" > "$out/upload/base_ok"
+          # pull_request checks out the MERGE ref, so the head binary was built
+          # from a merge commit, not from the PR head SHA. Record it.
+          git rev-parse HEAD | tr -d '\n' > "$out/upload/merge_sha"
 
       # Untrusted output: produced by PR code. bench-engine-comment.yml parses it
       # as data.

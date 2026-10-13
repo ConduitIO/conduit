@@ -54,6 +54,10 @@ MAX_NAMES = 100              # distinct benchmarks
 MAX_SAMPLES = 50             # per benchmark per file
 MAX_RATE = 1e15              # records/s; anything above is not a measurement
 
+# Strict ASCII decimal as `go test` prints it. float() would also accept
+# "1_000", Unicode digits, "nan", "inf" and surrounding junk.
+NUM_RE = re.compile(r"^[0-9]{1,20}(?:\.[0-9]{1,20})?(?:[eE][+-]?[0-9]{1,3})?$")
+
 LINE = re.compile(r"^Benchmark(?P<name>\S+?)(?:-\d+)?\s+\d+\s+(?P<rest>.*)$")
 
 
@@ -89,10 +93,9 @@ def parse(path):
         for value, unit in zip(fields[0::2], fields[1::2]):
             if unit != METRIC:
                 continue
-            try:
-                v = float(value)
-            except ValueError:
+            if not NUM_RE.match(value):
                 continue
+            v = float(value)
             if not math.isfinite(v) or v <= 0 or v > MAX_RATE:
                 continue
             if name not in out and len(out) >= MAX_NAMES:
@@ -117,10 +120,15 @@ def noise_floor(base_a, base_b):
     return max(aa, spread)
 
 
+def natural_key(name):
+    """Sort 1x1, 2x2, 4x4, 10x10 numerically and the rest alphabetically."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"([0-9]+)", name)]
+
+
 def compare(base_a, base_b, head):
     """Return one row dict per benchmark present in head or base_a."""
     rows = []
-    for name in sorted(set(base_a) | set(head)):
+    for name in sorted(set(base_a) | set(head), key=natural_key):
         a, b, h = base_a.get(name, []), base_b.get(name, []), head.get(name, [])
         row = {"name": name, "base": None, "head": None, "delta": None, "floor": None, "verdict": "n/a"}
         if a:
@@ -171,9 +179,11 @@ def render(rows, args):
     if args.base_ok != "true":
         lines += [
             "> The base revision did not build with this PR's benchmark harness, so there is no comparison. "
-            "Head numbers only.",
+            "No table is shown.",
             "",
         ]
+    if args.base_ok != "true":
+        rows = []  # no comparison, so no table: head-only numbers invite misreading
     if rows:
         lines += [
             "| benchmark | base | head | delta | noise floor | read |",
@@ -185,13 +195,15 @@ def render(rows, args):
                 f"{fmt_pct(r['delta'], sign=True)} | {fmt_pct(r['floor'])} | {r['verdict']} |"
             )
         lines.append("")
-    else:
+    elif args.base_ok == "true":
         lines += ["No benchmark results were produced.", ""]
     foot = [
         f"base `{args.base_sha[:10]}`" if SHA_RE.match(args.base_sha) else "",
-        f"head `{args.head_sha[:10]}`" if SHA_RE.match(args.head_sha) else "",
+        f"PR head `{args.head_sha[:10]}`" if SHA_RE.match(args.head_sha) else "",
     ]
     foot = ", ".join(x for x in foot if x)
+    if SHA_RE.match(args.merge_sha):
+        foot += f"; benchmarked on merge commit `{args.merge_sha[:10]}`"
     if URL_RE.match(args.run_url):
         foot += f" - [run]({args.run_url})"
     lines.append(f"<sub>{foot}. Wall-clock shapes (`acklatency`) depend on runner timer granularity.</sub>")
@@ -207,6 +219,7 @@ def main(argv=None):
     p.add_argument("--base-ok", default="false", help='"true" if the base built; read strictly')
     p.add_argument("--base-sha", default="")
     p.add_argument("--head-sha", default="")
+    p.add_argument("--merge-sha", default="", help="commit the head binary was built from (pull_request runs the merge ref)")
     p.add_argument("--run-url", default="")
     args = p.parse_args(argv)
 

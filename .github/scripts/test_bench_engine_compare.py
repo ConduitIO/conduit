@@ -14,7 +14,7 @@ def bench(name, rates):
 
 
 def args(**kw):
-    base = dict(base_ok="true", run_url="", base_sha="aaaaaaaaaaaa", head_sha="bbbbbbbbbbbb")
+    base = dict(base_ok="true", run_url="", base_sha="aaaaaaaaaaaa", head_sha="bbbbbbbbbbbb", merge_sha="")
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -82,10 +82,25 @@ class RenderTest(unittest.TestCase):
         self.assertIn("indicative, not a gate", out)
         self.assertIn("`X`", out)
 
-    def test_base_not_built_is_reported_and_results_empty(self):
-        out = c.render([], args(base_ok="false"))
+    def test_base_not_built_is_reported_and_no_table_is_shown(self):
+        rows = c.compare({}, {}, {"X": [5.0]})
+        out = c.render(rows, args(base_ok="false"))
         self.assertIn("did not build", out)
-        self.assertIn("No benchmark results were produced.", out)
+        self.assertNotIn("| benchmark |", out)
+        self.assertNotIn("`X`", out)
+
+    def test_merge_sha_is_shown_when_valid_only(self):
+        self.assertIn("merge commit `cccccccccc`", c.render([], args(merge_sha="c" * 40)))
+        self.assertNotIn("merge commit", c.render([], args(merge_sha="zz`x")))
+
+    def test_rows_sort_naturally(self):
+        names = ["Engine/10x10/v1", "Engine/2x2/v1", "Engine/1x1/v1", "Engine/4x4/v2"]
+        rows = c.compare({n: [1.0] for n in names}, {}, {})
+        self.assertEqual([r["name"] for r in rows],
+                         ["Engine/1x1/v1", "Engine/2x2/v1", "Engine/4x4/v2", "Engine/10x10/v1"])
+
+    def test_empty_results_say_so(self):
+        self.assertIn("No benchmark results were produced.", c.render([], args()))
 
 
 class HostileInputTest(unittest.TestCase):
@@ -114,7 +129,7 @@ class HostileInputTest(unittest.TestCase):
             self.assertNotIn(ch, inner)
 
     def test_non_finite_and_out_of_range_numbers_are_dropped(self):
-        for v in ["NaN", "Inf", "-Inf", "+Inf", "0", "-5", "1e999", "1e16"]:
+        for v in ["NaN", "Inf", "-Inf", "+Inf", "0", "-5", "1e999", "1e16", "1_000", "١٢٣", "1e+", "0x10", "1e5000", "٣.٥"]:
             path = self.write(f"BenchmarkEngine/ok/v1-16   3   1 ns/op   {v} records/s\n")
             self.assertEqual(c.parse(path), {}, v)
 
