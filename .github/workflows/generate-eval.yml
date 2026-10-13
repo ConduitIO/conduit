@@ -42,15 +42,22 @@ name: generate-eval
 # committed golden (the test enforces the golden itself; the cmp below is the
 # cross-run check).
 #
-# # A changed system prompt fails the job
+# # A changed system prompt fails THIS job, and only this job
 #
 # Each transcript records the SHA-256 of the system prompt it was captured
-# against. TestReplayEval FAILS ("prompt changed; re-capture with ...") when
-# it differs from the current prompt, because replaying output recorded
-# under a different prompt says nothing about the current one: replacing the
-# prompt with "You are a helpful assistant." used to stay green. Re-capture
-# (generate-capture.yml) and regenerate the golden in the SAME PR as any
-# prompt change, or builtin spec change that reaches the prompt.
+# against. This workflow sets CONDUIT_GENERATE_EVAL_STRICT=1, under which
+# TestReplayEval FAILS ("prompt changed; re-capture with ...") when it
+# differs from the current prompt: replaying output recorded under a
+# different prompt says nothing about the current one, and replacing the
+# prompt with "You are a helpful assistant." used to stay green.
+#
+# The same test also runs in the REQUIRED `test` job without the flag. There
+# prompt drift is only a logged warning and a golden mismatch under drift is
+# informational, because a builtin connector bump changes the prompt and a
+# paid re-capture must not block every merge. So this job is the advisory
+# prompt gate: it can be red while the required checks are green. Re-capture
+# (generate-capture.yml) and regenerate the golden in the same PR as any
+# intended prompt change.
 #
 # # The fixtures are self-attested
 #
@@ -155,6 +162,7 @@ jobs:
               HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 \
               http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 \
               CONDUIT_GENERATE_EVAL_OFFLINE=1 \
+              CONDUIT_GENERATE_EVAL_STRICT=1 \
               CONDUIT_GENERATE_REPLAY_OUT="$EVAL_DIR/out/run$i" \
               ./generate.test -test.run '^TestReplayEval$' -test.count=1 -test.v
           done

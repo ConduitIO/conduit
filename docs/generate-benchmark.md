@@ -71,9 +71,15 @@ Replay measures Conduit's code against frozen model output. A golden diff means 
 moved a request's verdict; regenerate the golden in the same PR if the change is intended
 (`CONDUIT_GENERATE_REPLAY_UPDATE=1 go test -run '^TestReplayEval$' ./cmd/conduit/internal/generate/`).
 Transcripts record the hash of the system prompt they were captured under. If it differs from the
-current prompt, replay **fails** with "prompt changed; re-capture with ...": replaying output
-recorded under another prompt proves nothing about this one. Re-capture the transcripts
-(`generate-capture.yml`) and regenerate the golden in the same PR as any prompt change.
+current prompt, replay is not representative: replaying output recorded under another prompt proves
+nothing about this one. The advisory `generate-eval (replay)` workflow runs with
+`CONDUIT_GENERATE_EVAL_STRICT=1` and **fails** with "prompt changed; re-capture with ...". The
+required `test` job runs the same test without the flag, where drift is a logged warning and a
+golden mismatch under drift is informational, so a builtin connector bump does not block merges
+until a paid re-capture. Re-capture the transcripts (`generate-capture.yml`) and regenerate the
+golden in the same PR as any intended prompt change. A PR that changes `replay_expected.json`
+without changing any transcript's recorded responses gets a warning annotation and job-summary
+note, because that is how a score could move with no model output behind it.
 
 The transcripts are **self-attested**: nothing cryptographically ties a committed completion to a real
 provider call, so human review of transcript diffs is the control. The PR job makes the cheap bypasses

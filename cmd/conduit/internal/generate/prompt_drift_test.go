@@ -60,3 +60,38 @@ func TestPromptDrift_FreshProducesNoFailure(t *testing.T) {
 		t.Fatalf("no drift must not fail, got: %s", msg)
 	}
 }
+
+// TestReplayOutcome pins both modes. Strict fails on drift; the default only
+// warns, and a golden mismatch under drift is informational. Without drift a
+// golden mismatch fails in both.
+func TestReplayOutcome(t *testing.T) {
+	drift := []string{"anthropic/claude-sonnet-5/req-a"}
+	const diff = "replay result differs"
+	for _, tc := range []struct {
+		name       string
+		strict     bool
+		drifted    []string
+		goldenDiff string
+		wantFail   string // substring, "" = must pass
+		wantWarn   string
+	}{
+		{"strict drift fails", true, drift, "", "prompt changed; re-capture with", ""},
+		{"strict drift with golden diff fails", true, drift, diff, "prompt changed; re-capture with", ""},
+		{"default drift warns", false, drift, "", "", "prompt changed since capture; replay results are not representative; re-capture with"},
+		{"default drift, golden diff is informational", false, drift, diff, "", diff},
+		{"default no drift, golden diff fails", false, nil, diff, diff, ""},
+		{"strict no drift, golden diff fails", true, nil, diff, diff, ""},
+		{"clean passes", false, nil, "", "", ""},
+		{"clean strict passes", true, nil, "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fail, warn := replayOutcome(tc.strict, tc.drifted, tc.goldenDiff)
+			if (tc.wantFail == "") != (fail == "") || !strings.Contains(fail, tc.wantFail) {
+				t.Errorf("fail = %q, want containing %q", fail, tc.wantFail)
+			}
+			if (tc.wantWarn == "") != (warn == "") || !strings.Contains(warn, tc.wantWarn) {
+				t.Errorf("warn = %q, want containing %q", warn, tc.wantWarn)
+			}
+		})
+	}
+}
