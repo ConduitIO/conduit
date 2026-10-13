@@ -632,19 +632,29 @@ Three loss mechanisms follow if the message is treated like a change with the ne
   applies its own `Delivered` check, and on a skip returns without emitting. The `ResumePoint` gains a
   `MessageLSN`: a non-transactional message is delivered iff `m <= MessageLSN`. `MessageLSN` is
   `Key.CommitLSN` when the checkpoint key is known, the checkpoint's `LSN` when the checkpoint is keyless,
-  `Lc` for a position imported from a Debezium offset (see below), and `0` after a `messages` toggle
+  `Lc` for the resume point of a Debezium offset import (see below), and `0` after a `messages` toggle
   (see _The `messages` option is part of the numbering_). All of them skip only what was acked; a spurious
   redelivery is possible, a loss is not.
-- **Imported positions keep `Lc` for the message check.** The offset import (postgres#341) builds the change
+- **Imported resume points keep `Lc` for the message check.** The offset import (postgres#341) builds the change
   key `(Lc - 1, MaxUint64)` so that every transaction committing at or after `Lc` is delivered. If the message
   check used `Key.CommitLSN` it would test `m <= Lc - 1` and redeliver the non-transactional message Debezium
   committed last, which sits at `m <= Lc`. For an imported position the check therefore uses `Lc` itself,
   inclusive: `m <= Lc` is exact, because the end of a message record cannot equal the end of a commit record.
   This is resolved on this side, so #341's duplicate prediction (the replay after import) stays correct as
-  written. The resume code needs `Lc` to be readable from the imported position; how #341 stores it (the natural
-  fit is `LastLSN`, which the legacy rule already uses) is #341's to state, and is an open question relayed
-  to that lane. Whether #341's partial-transaction rule applies to transactional messages in the partial
-  transaction is also #341's to state; this document counts them in `Seq` like any change.
+  written (postgres#341 S14, head `8bf2a513`).
+  - **Where `Lc` lives.** Not in `LastLSN`: the import writes no position. `Lc` is the connector setting
+    `offset.lsn_commit`, re-read at every start while the position is empty (including a restart after a crash
+    before the first durable ack). The connector builds the in-memory resume point from it:
+    `Key = (Lc - 1, MaxUint64)`, `LSN = Lc`, `MessageLSN = Lc`. Once a position exists the setting is ignored.
+  - **Messages are on after import.** Migrated Debezium Postgres to Kafka pipelines run this mode by default, so
+    the `messages` option is effective from PostgreSQL 14. The first durable ack writes an ordinary position in
+    the effective numbering, with `tx_seq_msgs: true`.
+  - **No commit-granularity fallback on this path.** The import's resume point stores no numbering, so the
+    flag-versus-option comparison (see _The `messages` option is part of the numbering_) does not run for it. It
+    runs only against a stored position, and the first one is written already in the effective numbering, so
+    import to first ack never triggers `debezium.resume_commit_granularity`.
+  - **Transactional messages** in the partial transaction are changes of it: counted in `Seq`, and subject to
+    #341's partial rule like any other change (S14).
 - **`emitted` advances for messages, with one exception.** The handler returns a non-zero LSN for every message
   it was handed, as it does for every change (the D4 invariant at the enforcement site), so `emitted` advances,
   including for a message the D4 skip drops. The exception is a message dropped by the **prefix include/exclude
