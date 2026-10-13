@@ -254,17 +254,23 @@ re-snapshot;** offset import for them is v0.22.
 
 - [ ] `conduit migrate kafka-connect` v1: reads Kafka Connect worker and connector configs and
       emits Conduit pipeline config plus a compatibility report. Never silently drops config it
-      can't translate. Covers Debezium Postgres and MySQL, JDBC sink, S3 sink, Elasticsearch and
+      can't translate. Covers Debezium Postgres and MySQL, JDBC source and sink, S3 sink, Elasticsearch and
       OpenSearch sink, and Kafka→Kafka (MirrorMaker-style)
 - [ ] `conduit kc lint` — lint Kafka Connect configs, including KIP-1188 override risks
 - [ ] `conduit kc diff` — diff connector-config versions and check schema compatibility against the
       registry. Both `kc` commands are useful without switching runtimes
 - [ ] **Postgres CDC, Debezium parity** (connector v0.15.0), certified
 - [ ] **Debezium offset import for Postgres**, so a migrated Postgres pipeline resumes without a
-      re-snapshot
+      re-snapshot. v0.21 ships the fresh-slot strategy only: Conduit creates its own replication
+      slot at the imported position. Reusing the Debezium slot is v0.22
+- [ ] **Debezium-compatible output mode for Postgres**: envelope, topic naming, key schema, Schema
+      Registry subject strategy, tombstones, decimal and time encodings — with a harness that diffs
+      Conduit's output against real Debezium on the same database
 - [ ] **MySQL CDC beta**, certified from the labs `mysql` connector
 - [ ] **JDBC sink family** certified from the labs SQL connectors, with the Postgres and MySQL
-      destinations
+      destinations; **JDBC source** mapped onto the existing Postgres and MySQL connectors
+      (snapshot plus polling) and certified on that path. Anything that cannot be mapped is
+      reported as approximated, and that is blocking
 - [ ] **Elasticsearch** certified from labs, with OpenSearch
 - [ ] **Kafka→Kafka** with header, partition and topic preservation, plus a Redpanda profile
 - [ ] **S3 sink** format and partitioning parity with the Kafka Connect S3 sink, and the AWS default
@@ -351,9 +357,10 @@ re-snapshot;** offset import for them is v0.22.
       default, and the v1 engine is removed after the flip, against a gate fixed in advance
 - [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
       `connect-offsets`, so they resume without a re-snapshot as Postgres does from v0.21
-- [ ] **Debezium-compatible output mode**: envelope, topic naming, key schema, Schema Registry
-      subject strategy, tombstones, decimal and time encodings — with a harness that diffs
-      Conduit's output against real Debezium on the same database
+- [ ] Postgres offset import by reusing the Debezium replication slot (v0.21 ships the fresh-slot
+      strategy only)
+- [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
+      against real Debezium on the same database
 - [ ] SMT compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs,
       mapped automatically by `migrate` — including the five missing today (Flatten,
       ExtractChangedRecordState, EventRouter, PartitionRouting, TimezoneConverter) and typed values
@@ -403,7 +410,7 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] Kafka Queues (share groups) source mode
 - [ ] OpenLineage events
 - [ ] Published, reproducible [benchi](https://github.com/ConduitIO/benchi) results vs Kafka Connect
-- [ ] Pipeline-wide batching and allocation reduction, with profiling as a CI gate
+- [ ] Profiling as a CI gate
 - [ ] **Catalog:** HTTP/webhooks on the HTTP family core — a rebuilt source whose response waits for
       the ack, plus a destination
 - [ ] Open connector-protocol spec and acceptance suite (v2, from v0.21) published as a certification
