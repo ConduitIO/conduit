@@ -322,7 +322,8 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
   #3029 creates the Conduit slot while Debezium runs, waits until Debezium's committed `lsn_commit` passes the
   slot's start, stops Debezium (`--stop-connector`), writes the pipeline and **starts it by default**, then waits
   for the import-complete signal. `--no-start` opts out and leaves the written pipeline `stopped`.
-  A pipeline with blocking report entries is not started by the cutover unless `--accept-gaps` was passed to `migrate`; the cutover reports why instead.
+  A pipeline with blocking report entries is not started by the cutover unless `--accept-gaps` was passed to
+  `migrate`; the cutover reports why instead.
   (Decided 2026-10-12; #3029 is being updated to say so.)
 - Preflights belong to #341 and run in the connector and in `--dry-run`/`--cutover`, not offline: the
   Postgres minor-version gate for the partial-decoding fix, the publication check and the database checks.
