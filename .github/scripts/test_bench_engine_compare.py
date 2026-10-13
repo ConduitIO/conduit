@@ -153,6 +153,17 @@ class HostileInputTest(unittest.TestCase):
         out = c.render([], args(run_url="https://github.com/ConduitIO/conduit/actions/runs/123"))
         self.assertIn("[run](https://github.com/ConduitIO/conduit/actions/runs/123)", out)
 
+    def test_trailing_newline_fails_every_validator(self):
+        self.assertIsNone(c.SHA_RE.fullmatch("abcdef1\n"))
+        self.assertIsNone(c.NAME_RE.fullmatch("Engine/1x1\n"))
+        self.assertIsNone(c.NUM_RE.fullmatch("100\n"))
+        self.assertIsNone(c.URL_RE.fullmatch("https://github.com/o/r/actions/runs/1\n"))
+        out = c.render([], args(base_sha="abcdef1\n", head_sha="abcdef1\n", merge_sha="abcdef1\n",
+                                run_url="https://github.com/o/r/actions/runs/1\n"))
+        self.assertNotIn("[run]", out)
+        self.assertNotIn("merge commit", out)
+        self.assertNotIn("base `", out)
+
     def test_base_ok_is_read_strictly(self):
         self.assertIn("did not build", c.render([], args(base_ok="true; rm -rf /")))
         self.assertNotIn("did not build", c.render([], args(base_ok="true")))

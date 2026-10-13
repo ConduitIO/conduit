@@ -110,7 +110,7 @@ jobs:
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
             });
-            const mine = comments.find((c) => c.user.login === 'github-actions[bot]' && c.body.startsWith(marker));
+            const mine = comments.find((c) => c.user?.login === 'github-actions[bot]' && c.body.startsWith(marker));
             if (mine) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
             } else {

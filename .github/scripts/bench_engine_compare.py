@@ -45,18 +45,19 @@ METRIC = "records/s"
 MIN_DELTA = 0.02
 FLOOR_FACTOR = 2
 
-NAME_RE = re.compile(r"^[A-Za-z0-9_/.-]{1,100}$")
-SHA_RE = re.compile(r"^[0-9a-f]{7,64}$")
-URL_RE = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$")
+NAME_RE = re.compile(r"[A-Za-z0-9_/.-]{1,100}")
+SHA_RE = re.compile(r"[0-9a-f]{7,64}")
+URL_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+")
 MAX_BYTES = 1 << 20          # per input file
 MAX_LINES = 5000             # per input file
 MAX_NAMES = 100              # distinct benchmarks
 MAX_SAMPLES = 50             # per benchmark per file
 MAX_RATE = 1e15              # records/s; anything above is not a measurement
 
+# All validation regexes are used with fullmatch(): `$` would accept a trailing newline.
 # Strict ASCII decimal as `go test` prints it. float() would also accept
 # "1_000", Unicode digits, "nan", "inf" and surrounding junk.
-NUM_RE = re.compile(r"^[0-9]{1,20}(?:\.[0-9]{1,20})?(?:[eE][+-]?[0-9]{1,3})?$")
+NUM_RE = re.compile(r"[0-9]{1,20}(?:\.[0-9]{1,20})?(?:[eE][+-]?[0-9]{1,3})?")
 
 LINE = re.compile(r"^Benchmark(?P<name>\S+?)(?:-\d+)?\s+\d+\s+(?P<rest>.*)$")
 
@@ -87,13 +88,13 @@ def parse(path):
         if not m:
             continue
         name = m.group("name")
-        if not NAME_RE.match(name):
+        if not NAME_RE.fullmatch(name):
             continue
         fields = m.group("rest").split()
         for value, unit in zip(fields[0::2], fields[1::2]):
             if unit != METRIC:
                 continue
-            if not NUM_RE.match(value):
+            if not NUM_RE.fullmatch(value):
                 continue
             v = float(value)
             if not math.isfinite(v) or v <= 0 or v > MAX_RATE:
@@ -198,13 +199,13 @@ def render(rows, args):
     elif args.base_ok == "true":
         lines += ["No benchmark results were produced.", ""]
     foot = [
-        f"base `{args.base_sha[:10]}`" if SHA_RE.match(args.base_sha) else "",
-        f"PR head `{args.head_sha[:10]}`" if SHA_RE.match(args.head_sha) else "",
+        f"base `{args.base_sha[:10]}`" if SHA_RE.fullmatch(args.base_sha) else "",
+        f"PR head `{args.head_sha[:10]}`" if SHA_RE.fullmatch(args.head_sha) else "",
     ]
     foot = ", ".join(x for x in foot if x)
-    if SHA_RE.match(args.merge_sha):
+    if SHA_RE.fullmatch(args.merge_sha):
         foot += f"; benchmarked on merge commit `{args.merge_sha[:10]}`"
-    if URL_RE.match(args.run_url):
+    if URL_RE.fullmatch(args.run_url):
         foot += f" - [run]({args.run_url})"
     lines.append(f"<sub>{foot}. Wall-clock shapes (`acklatency`) depend on runner timer granularity.</sub>")
     return "\n".join(lines) + "\n"
