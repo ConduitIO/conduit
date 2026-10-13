@@ -5,6 +5,10 @@ for Conduit, so that new catalog work promotes and certifies what is there inste
 `ConduitIO` and `conduitio-labs` on GitHub, the built-in processors on `main`, and the standalone processors that
 live outside both organizations.
 
+Update 2026-10-12: `conduit-connector-mysql` and `conduit-connector-elasticsearch` were transferred from
+`conduitio-labs` to `ConduitIO`; their rows, organization counts and links below reflect that. Every other figure is
+unchanged from 2026-10-08.
+
 A machine-readable copy of the connector table, one row per repository, is in
 [`docs/data/catalog-inventory.csv`](data/catalog-inventory.csv). It is meant to seed a future connector scorecard;
 regenerate it rather than hand-editing it.
@@ -14,24 +18,24 @@ The public connector list for users stays on the documentation site
 
 ## Summary
 
-- **78 `conduit-connector-*` repositories** are connectors or connector prototypes: 9 in `ConduitIO`, 69 in
+- **78 `conduit-connector-*` repositories** are connectors or connector prototypes: 11 in `ConduitIO`, 67 in
   `conduitio-labs`. None is archived. 72 are Go, 4 are Java (an SDK proof of concept, two SDK examples and
   `s3-iceberg`), 2 contain no code (`qdrant`, `socket`). 61 have a source, 57 a destination, 42 both.
 - **Six connectors are in the registry index**: `file`, `generator`, `kafka`, `log`, `postgres`, `pgvector`, plus
   the `ai.chunk` and `ai.embed` processors. The built-in `s3` connector is not in the registry index.
 - **Maintenance**: 9 connectors have had a human commit since the June 2026 restart (the 7 `ConduitIO` connectors
-  with code, plus `mongo` and `mysql` in labs). 53 receive only automated dependency updates. 15 are stale or
+  with code, `mysql` (moved to `ConduitIO`) and `mongo` in labs). 53 receive only automated dependency updates. 15 are stale or
   dormant (connector SDK older than v0.12, or no commits since 2024 or earlier).
 - **SDK drift**: 27 connectors pin the current connector SDK (v0.14.x), 35 pin v0.12–v0.13, 10 pin something older.
 - **Tests**: 37 call `sdk.AcceptanceTest`; 35 ship a docker-compose integration harness. The built-in `postgres`,
-  `s3`, `generator` and `log` connectors and labs `mysql`, `salesforce`, `dynamodb` and `http` have no acceptance
+  `s3`, `generator` and `log` connectors and `mysql`, labs `salesforce`, `dynamodb` and `http` have no acceptance
   test.
 - **CI on labs is weaker than it looks**: labs test workflows run on pull requests only, and dependabot merges do
   not trigger push builds, so no labs connector except `mongo` and `mysql` has a recent test run on its default
   branch. Tests that need cloud credentials skip themselves when the secret is absent, which is always the case on
   dependabot pull requests. 8 connectors have a failing latest test run.
 - **Licensing**: 30 repositories have no `LICENSE` file that GitHub can detect, including the built-in `log`
-  connector and labs `mysql`. Most carry Apache-2.0 headers in their source files.
+  connector and `mysql`. Most carry Apache-2.0 headers in their source files.
 - **Change capture**: 25 connectors read changes after an initial snapshot. Only 6 do it from a database log or
   native change stream (`postgres`, `mysql`, `mongo`, `vitess`, `dynamodb`, `spanner`); 5 use triggers or tracking
   tables (`sql-server`, `oracle`, `db2`, `sap-hana`, and Snowflake streams); the rest poll.
@@ -79,11 +83,13 @@ or earlier or a prototype, _placeholder_ = no code.
 
 | Connector | S | D | Change capture | SDK | Acc | Int | CI (latest test run) | Latest tag | Reg | License | Last human commit | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [elasticsearch](https://github.com/ConduitIO/conduit-connector-elasticsearch) | Y | Y | - | v0.12.0 | Y | Y | failure 2026-05-12 | v0.4.0 | - | Apache-2.0 | 2025-03-06 | deps-only |
 | [ephemeris](https://github.com/ConduitIO/conduit-connector-ephemeris) | Y | - | - | v0.2.0 | - | - | none | - | - | none | 2022-07-28 | dormant |
 | [file](https://github.com/ConduitIO/conduit-connector-file) (builtin) | Y | Y | - | v0.14.1 | Y | - | success 2026-07-23 | v0.10.8 | Y | Apache-2.0 | 2026-07-23 | active |
 | [generator](https://github.com/ConduitIO/conduit-connector-generator) (builtin) | Y | - | - | v0.14.1 | - | - | success 2026-07-23 | v0.10.6 | Y | Apache-2.0 | 2026-07-23 | active |
 | [kafka](https://github.com/ConduitIO/conduit-connector-kafka) (builtin) | Y | Y | - | v0.14.1 | Y | Y | success 2026-07-23 | v0.12.5 | Y | Apache-2.0 | 2026-07-23 | active |
 | [log](https://github.com/ConduitIO/conduit-connector-log) (builtin) | - | Y | - | v0.14.1 | - | - | success 2026-07-23 | v0.7.5 | Y | none | 2026-07-23 | active |
+| [mysql](https://github.com/ConduitIO/conduit-connector-mysql) | Y | Y | log (binlog) | v0.14.1 | - | Y | success 2026-09-07 | v0.3.0 | - | none | 2026-08-05 | active |
 | [pgvector](https://github.com/ConduitIO/conduit-connector-pgvector) | - | Y | - | v0.14.1 | Y | Y | success 2026-09-11 | v0.1.0 | Y | Apache-2.0 | 2026-08-24 | active |
 | [postgres](https://github.com/ConduitIO/conduit-connector-postgres) (builtin) | Y | Y | log (logical replication) | v0.14.1 | - | Y | success 2026-10-08 | v0.14.3 | Y | Apache-2.0 | 2026-08-31 | active |
 | [qdrant](https://github.com/ConduitIO/conduit-connector-qdrant) | - | Y | - | - | - | - | none | - | - | Apache-2.0 | 2026-07-26 | placeholder |
@@ -120,7 +126,6 @@ Notes:
 | [discord](https://github.com/conduitio-labs/conduit-connector-discord) | Y | - | - | v0.6.0 | - | Y | none | - | - | Apache-2.0 | 2025-03-11 | stale |
 | [dropbox](https://github.com/conduitio-labs/conduit-connector-dropbox) | Y | Y | API polling | v0.14.1 | - | - | success 2026-01-06 | v0.1.1 | - | none | 2025-06-03 | deps-only |
 | [dynamodb](https://github.com/conduitio-labs/conduit-connector-dynamodb) | Y | Y | log (DynamoDB Streams) | v0.14.1 | - | Y | success 2026-05-29 | v0.4.3 | - | Apache-2.0 | 2025-07-23 | deps-only |
-| [elasticsearch](https://github.com/conduitio-labs/conduit-connector-elasticsearch) | Y | Y | - | v0.12.0 | Y | Y | failure 2026-05-12 | v0.4.0 | - | Apache-2.0 | 2025-03-06 | deps-only |
 | [enhanced-generator](https://github.com/conduitio-labs/conduit-connector-enhanced-generator) | Y | - | - | v0.14.1 | - | - | failure 2026-01-06 | v0.9.7 | - | Apache-2.0 | 2025-02-27 | deps-only |
 | [file-java-poc](https://github.com/conduitio-labs/conduit-connector-file-java-poc) | - | Y | - | - | - | - | none | - | - | none | 2023-05-12 | dormant |
 | [firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) | Y | Y | - | v0.7.2 | Y | - | success 2026-10-08 | - | - | Apache-2.0 | 2025-03-12 | stale |
@@ -142,7 +147,6 @@ Notes:
 | [marketo](https://github.com/conduitio-labs/conduit-connector-marketo) | Y | - | API polling | v0.12.0 | Y | - | none | v0.3.0 | - | Apache-2.0 | 2025-01-08 | deps-only |
 | [materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | - | Y | - | v0.12.0 | Y | Y | success 2026-03-31 | v0.3.0 | - | Apache-2.0 | 2025-03-12 | deps-only |
 | [mongo](https://github.com/conduitio-labs/conduit-connector-mongo) | Y | Y | log (change streams) | v0.14.1 | Y | Y | success 2026-08-05 | v0.3.0 | - | Apache-2.0 | 2026-08-05 | active |
-| [mysql](https://github.com/conduitio-labs/conduit-connector-mysql) | Y | Y | log (binlog) | v0.14.1 | - | Y | success 2026-09-07 | v0.3.0 | - | none | 2026-08-05 | active |
 | [nats-jetstream](https://github.com/conduitio-labs/conduit-connector-nats-jetstream) | Y | Y | - | v0.12.0 | Y | Y | failure 2026-02-24 | v0.3.1 | - | Apache-2.0 | 2025-03-11 | deps-only |
 | [nats-pubsub](https://github.com/conduitio-labs/conduit-connector-nats-pubsub) | Y | Y | - | v0.12.0 | Y | Y | success 2026-05-07 | v0.4.0 | - | Apache-2.0 | 2025-03-06 | deps-only |
 | [neo4j](https://github.com/conduitio-labs/conduit-connector-neo4j) | Y | Y | - | v0.12.0 | Y | Y | success 2026-01-06 | v0.1.0 | - | Apache-2.0 | 2025-03-06 | deps-only |
@@ -310,10 +314,10 @@ equivalents rather than an expression language.
 | Path | Existing connectors | Gap to Certified | Estimate |
 | --- | --- | --- | --- |
 | Postgres CDC → Kafka | `postgres` (core, log-based, chaos harness, integration, registry) + `kafka` (core, acceptance, integration, registry) | Add the SDK acceptance suite to `postgres`; a kill test with Kafka as the sink; re-run and commit the existing benchi configs against current versions | 2–3 engineer-weeks |
-| MySQL CDC → Kafka | `mysql` (labs, binlog, integration harness, active) + `kafka` | Move to `ConduitIO`, add a `LICENSE`; acceptance suite; port the `postgres` kill harness; publish workflow and registry entry; re-run benchi | 4–6 engineer-weeks |
+| MySQL CDC → Kafka | `mysql` (`ConduitIO` since 2026-10-12, binlog, integration harness, active) + `kafka` | Add a `LICENSE`; acceptance suite; port the `postgres` kill harness; publish workflow and registry entry; re-run benchi | 4–6 engineer-weeks |
 | Kafka → S3 (Parquet) | `kafka` + `s3` (core, Parquet and JSON output, MinIO integration) | Acceptance suite for `s3`; kill test on the destination; benchi config; registry entry | 2–3 engineer-weeks |
-| Kafka → JDBC | `postgres` destination (core); labs `mysql`, `sql-server`, `oracle`, `db2`, `sap-hana` destinations; no generic JDBC destination | Certify `postgres` and `mysql` destinations first; the others need real-database CI (SQL Server and Oracle containers, Db2 and HANA are heavier); interim path is a JDBC sink through the Kafka Connect wrapper | 2–3 engineer-weeks for Postgres + MySQL; 2–3 per additional database |
-| Kafka → Elasticsearch / OpenSearch | `elasticsearch` (labs, ES 5–8, acceptance per version, integration) | Fix the failing CI and bump the SDK; test against OpenSearch or add an OpenSearch mode; kill test; benchi | 3–4 engineer-weeks |
+| Kafka → JDBC | `postgres` destination (core); `mysql`, labs `sql-server`, `oracle`, `db2`, `sap-hana` destinations; no generic JDBC destination | Certify `postgres` and `mysql` destinations first; the others need real-database CI (SQL Server and Oracle containers, Db2 and HANA are heavier); interim path is a JDBC sink through the Kafka Connect wrapper | 2–3 engineer-weeks for Postgres + MySQL; 2–3 per additional database |
+| Kafka → Elasticsearch / OpenSearch | `elasticsearch` (`ConduitIO` since 2026-10-12, ES 5–8, acceptance per version, integration) | Fix the failing CI and bump the SDK; test against OpenSearch or add an OpenSearch mode; kill test; benchi | 3–4 engineer-weeks |
 | CDC → Snowflake | `snowflake` (labs; destination stages files and merges, documented as early-stage; source uses Snowflake streams) | Destination hardening (idempotent merge on retry, schema drift policy); credentialed CI account; benchi (config exists in `streaming-benchmarks`) | 4–6 engineer-weeks |
 | CDC → Iceberg | `s3-iceberg` (labs, Java, dormant) only | Build a native destination; use `s3-iceberg` as the behavior reference | 8–12 engineer-weeks |
 | CDC → BigQuery | `bigquery` (labs) is source only | Build a destination | 4–6 engineer-weeks |
@@ -354,9 +358,9 @@ configuration.
 | `file`, `stdin`, `stdout` | `file`, `log` (core) | Exists |
 | `generate` | `generator` (core); `enhanced-generator` (labs) | Exists |
 | `sql_select`, `sql_insert`, `sql_raw` | `postgres`, `mysql`, `sql-server`, `oracle`, `db2`, `sap-hana`, `snowflake`, `redshift`, `clickhouse` | Exists per database; no generic SQL driver connector |
-| `postgres_cdc`, `mysql_cdc`, `mongodb_cdc` | `postgres` (core), `mysql`, `mongo` (labs) | Exists |
+| `postgres_cdc`, `mysql_cdc`, `mongodb_cdc` | `postgres` (core), `mysql` (core), `mongo` (labs) | Exists |
 | `cassandra` | `cassandra` (labs, destination) | Exists |
-| `elasticsearch` | `elasticsearch` (labs) | Exists |
+| `elasticsearch` | `elasticsearch` (core) | Exists |
 | `opensearch` | none documented | Missing |
 | `snowflake_put`, `snowflake_streaming` | `snowflake` (labs) | Exists (early-stage destination) |
 | `sftp` | `sftp` (labs) | Exists |
@@ -419,7 +423,7 @@ Verdicts: **REUSE** = promote and certify an existing asset; **EXTEND** = existi
 | Curated processor library | CONSOLIDATE | Built-ins, `ai.chunk`, `ai.embed`, `hl7` | Settle the embedding and text-generation overlaps; decide on `json.query` against the ADR; publish or drop `json.cleanup` and `pdf.totext`; keep `hl7` in labs |
 | NATS JetStream native (v0.22) | EXTEND | `nats-jetstream` (labs) | Fix CI, SDK bump, move to `ConduitIO`, kill test |
 | Iceberg destination (v0.22) | BUILD | `s3-iceberg` as behavior reference | Everything |
-| MySQL CDC beta/GA (v0.22–v0.23) | EXTEND | `mysql` (labs, active) | See golden paths |
+| MySQL CDC beta/GA (v0.22–v0.23) | EXTEND | `mysql` (core, active) | See golden paths |
 | SQL Server and MongoDB CDC (v0.24) | EXTEND (MongoDB), BUILD (SQL Server log-based) | `mongo` is log-based; `sql-server` uses triggers | MongoDB: certification. SQL Server: a log-based reader; the trigger implementation stays as a fallback |
 | Qdrant (v0.24+) | BUILD | Placeholder repository | Everything; `pgvector` as the template |
 | Windows and aggregations (v0.27) | BUILD | `aggregate` prototype (not durable) | Everything, on the state API |
