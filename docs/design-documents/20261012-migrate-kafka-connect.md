@@ -319,11 +319,20 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
   "will-run"` in plain words: the connector re-snapshots. This is also what `--slot-strategy fresh` alone does, and it
   is safe to run beside the original connector.
 - Plain `migrate` (no `--cutover`) writes the pipeline `stopped` and starts nothing. The `--cutover` path of
-  #3029 creates the Conduit slot while Debezium runs, waits until Debezium's committed `lsn_commit` passes the
-  slot's start, stops Debezium (`--stop-connector`), writes the pipeline and **starts it by default**, then waits
-  for the import-complete signal. `--no-start` opts out and leaves the written pipeline `stopped`.
-  A pipeline with blocking report entries is not started by the cutover unless `--accept-gaps` was passed to
-  `migrate`; the cutover reports why instead.
+  #3029 runs in this order:
+  1. **Every check that does not depend on Debezium's offset runs first, before Debezium is touched:** blocking
+     report entries (a pipeline with blocking entries and no `--accept-gaps` is refused here, never after the
+     stop), plugin availability, Postgres version, source identity, publication, tables, and the CDC and
+     snapshot mode.
+  2. Create the Conduit slot while Debezium runs.
+  3. Wait until Debezium's committed `lsn_commit` passes the slot's start.
+  4. Stop Debezium (`--stop-connector`).
+  5. Write the pipeline and **start it by default**, then wait for the import-complete signal. `--no-start`
+     opts out and leaves the written pipeline `stopped`.
+
+  The rule is that nothing that can be known to fail beforehand may fail after Debezium has stopped, since a
+  failure after the stop is downtime. Checks that need the offset or the new slot's consistent point (steps 2-3)
+  cannot move earlier; they are the connector's #341 preflights.
   (Decided 2026-10-12; #3029 is being updated to say so.)
 - Preflights belong to #341 and run in the connector and in `--dry-run`/`--cutover`, not offline: the
   Postgres minor-version gate for the partial-decoding fix, the publication check and the database checks.
@@ -333,7 +342,10 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
 - `snapshot.mode` interacts as in the mapping table above. Snapshot-in-progress and incremental-snapshot
   offsets are refused by the connector, so a Debezium connector that is mid-snapshot cannot be cut over yet.
 - `--slot-strategy reuse` (taking over Debezium's own slot, which also avoids the second slot) is v0.22. In v0.21
-  `migrate` exits 2 with `kc.resume_unavailable` and the fix "use `--slot-strategy fresh --import-offset`".
+  `migrate` fails with the single code `postgres.import.slot_reuse_unsupported` and the fix "use
+  `--slot-strategy fresh --import-offset`". Its exit code comes from the same `postgres.import.*` mapping as every
+  other import refusal (ADR 20260706, deterministic CLI exit codes), not from a rule of its own; the validation
+  class (2) is expected, to be confirmed against how the connector registers the code.
 
 Rollback with the fresh-slot strategy is a restart of the Debezium connector (its slot and offsets were never
 touched), which is why this is the v0.21 default; `rollback` in #3029 owns the mechanics.
@@ -609,7 +621,8 @@ form and are public contracts from first release.
 | `kc.errors_all_without_dlq` | migrate, lint | tolerance all without DLQ | add DLQ topic |
 | `kc.secret_plaintext` | migrate, lint | literal secret in the input | use a config provider reference |
 | `kc.secret_stored_expanded` | migrate | #2988 caveat applies to this pipeline | see #2988 |
-| `kc.resume_unavailable` | migrate | `--slot-strategy reuse` requested (v0.22), or `snapshot.mode=never` without `--import-offset` | `--slot-strategy fresh` with `--import-offset`, or wait for v0.22 |
+| `kc.resume_unavailable` | migrate | `snapshot.mode=never` without `--import-offset` (a fresh slot has no history to resume from) | re-run with `--import-offset` |
+| `postgres.import.slot_reuse_unsupported` | migrate | `--slot-strategy reuse` requested; slot reuse is v0.22 | `--slot-strategy fresh --import-offset` |
 | `migrate.kafka_connect.*`, `postgres.import.*` | migrate | offset-import errors defined in #3029 and the connector design (#341), passed through unchanged; a failed import never falls back to a re-snapshot without `--allow-resnapshot` | per code |
 | `kc.input_version_unverified` | migrate, lint, diff | input API version other than the verified default (Strimzi `v1beta2`) | warning |
 | `kc.target_not_certified` | migrate | emitted target is not Certified in the registry index | warning |
@@ -784,7 +797,7 @@ document has been updated to match; this section is the record.
     pipeline resumes from the imported offset (`logrepl.import.debeziumOffset`) with no re-snapshot, subject to
     #341's preflights (Postgres minor-version gate for the partial-decoding fix, publication and database
     checks). Design: `conduit-connector-postgres#341`; CLI: #3029. Only reusing Debezium's own slot
-    (`--slot-strategy reuse`) is v0.22 and fails with `kc.resume_unavailable` until then.
+    (`--slot-strategy reuse`) is v0.22 and fails with `postgres.import.slot_reuse_unsupported` until then.
 
 ## Open questions
 
