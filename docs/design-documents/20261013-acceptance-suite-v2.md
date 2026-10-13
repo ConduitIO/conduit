@@ -364,7 +364,7 @@ Suite v2 deliberately does not cover, and the Certified bar is silent on:
 For a data-integrity test suite the failure that matters is a false pass.
 
 - **Suite passes a broken connector.** Mitigation: a mutant test per case in the SDK repo (a reference connector
-  with 22 fault-injecting variants plus four unverifiable-claim configurations, each run in a subprocess
+  with 21 fault-injecting variants (22 runs) plus four unverifiable-claim configurations, each run in a subprocess
   restricted to the case that must fail it). Two cases have no mutant, with reasons: DST-02, because acks are sent
   by the SDK's destination adapter and a connector cannot block them (the case guards the adapter's ack path),
   and the Core group, which is v1's own. A new case lands with a mutant that it kills.
