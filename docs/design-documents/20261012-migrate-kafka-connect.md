@@ -291,7 +291,7 @@ so the command stays honest if a certification slips.
 | `table.include.list` (comma-separated regexes of `schema.table`) | source `tables` | translated when every entry is a literal name; a regex metacharacter makes it `unsupported` with fix "list the tables explicitly, or use `*`" (blocking). `table.exclude.list`: same. |
 | `schema.include.list` | folded into `tables` | approximated when combined with a table list, otherwise `unsupported`. |
 | `slot.name`, `publication.name` | `logrepl.slotName`, `logrepl.publicationName` | approximated: the pipeline receives generated names (`conduit_<pipeline>`) with reason "separate slot so KC and Conduit can run side by side and rollback stays possible". Non-blocking. Reusing the Debezium names is v0.22. |
-| `plugin.name` | none | `pgoutput`: translated (no-op); `decoderbufs`, `wal2json`: unsupported (blocking), Conduit reads `pgoutput`. |
+| `plugin.name` | none | `pgoutput` and `decoderbufs` (Debezium's default): translated (no-op). Under the fresh-slot strategy Conduit creates its own `pgoutput` slot, so Debezium's plugin only matters to the offset import, which accepts both (#341 S4). `wal2json`, `wal2json_streaming`: unsupported (blocking); the import refuses them (`postgres.import.plugin_unsupported`). |
 | `snapshot.mode` | `snapshotMode` (`initial`, `never`) | `initial`: translated; `never`: translated; with `--import-offset` the pipeline resumes from the imported offset, without it a fresh slot has no history, so the entry is approximated and blocking (`kc.resume_unavailable`) with fix "re-run with `--import-offset`"; `always`, `initial_only`, `when_needed`, `no_data`, `exported`, `custom`: unsupported (blocking). |
 | `topic.prefix` (and legacy `database.server.name`) | `kafka` destination `topic` template | translated for Postgres to a Kafka destination (Debezium-compatible output mode). Template reproduces `<prefix>.<schema>.<table>` where the schema comes from the table list. For any other combination (Debezium MySQL to Kafka) approximated and **blocking**, output format differs (OpenCDC). For a non-Kafka destination, approximated with a warning. |
 | `topic.naming.strategy`, `topic.delimiter` | | unsupported for non-default values. |
@@ -392,8 +392,9 @@ so the check:
    config fails the slot-safety checks or Kafka Connect's validation, or if both Debezium and the pipeline run;
 2. tells the operator when to stop the pipeline, when to restart Debezium, and, with `--watch`, follows the restart
    to prove the slot Debezium streams from is the original one;
-3. returns `ready_to_drop` only once Debezium's confirmed position has passed Conduit's slot; the operator then
-   deletes the pipeline and drops Conduit's slot last.
+3. returns `ready_to_delete_pipeline` once Debezium's confirmed position has passed Conduit's slot, and
+   `ready_to_drop` only after the pipeline is deleted, with Conduit's durable progress re-checked against Debezium's
+   stop position in both; the operator drops Conduit's slot last.
 
 It never drops a slot, never stops or starts anything and never deletes a pipeline. `--cutover` holds a per-slot
 lock, a temporary replication slot that a pooler cannot share (`operation_in_progress`, `lock_unavailable`).
@@ -420,7 +421,9 @@ skips after an ungraceful stop, and the check warns about them. Automated reset 
 | `slot_advanced`, `slot_in_use`, `slot_unowned`, `slot_create_blocked` | slot and journal checks, including re-runs |
 | `start_failed`, `import_pending` | starting the pipeline |
 | `operation_in_progress`, `lock_unavailable` | `--cutover`, while another holds the per-slot lock, or when the lock cannot be taken or is lost (Mutual exclusion) |
-| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
+| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_connector_state`, `rollback_check_privileges`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
+| `rollback_in_progress` | `--cutover` while a rollback watch log exists (Crash-safe cutover) |
+| `postgres.import.*`, `postgres.logrepl.*` (passed through) | the connector's import refusals, and its slot preconditions outside the import (`slot_missing`, `slot_invalidated`, `slot_plugin`, `publication_missing`), with the connector's fix texts (#341 S13) |
 | `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
 
 Because Debezium's slot and offsets are never touched by the fresh strategy, this path exists at all, which is why
