@@ -129,8 +129,7 @@ One pass of `Worker.Do`:
 4. `DestinationTask.Do` calls `Destination.Write` with the whole batch and then `Destination.Ack` until
    every position has an ack. **The pass does not return until then.** This is the stop-and-wait that the
    single-engine proposal (#2971) aims to replace, and why a destination that holds acks until it has a full
-   batch stalls
-   v2 ([#2990](https://github.com/ConduitIO/conduit/issues/2990)).
+   batch stalls v2 ([#2990](https://github.com/ConduitIO/conduit/issues/2990)).
 5. Votes go to `multiAckNacker`, which tracks ack/nack per original source position, not per batch
    (ADR [`20260731-archv2-fanout-ack-model`](../architecture-decision-records/20260731-archv2-fanout-ack-model.md)).
    A position is acked when every branch acked it; the first nack wins. It releases the leading run of
