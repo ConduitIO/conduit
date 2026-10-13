@@ -84,6 +84,7 @@ bump, which is planned in #3004.
     `slot_create_blocked`, `reset_unsafe`, `reset_pending`.
   - Start: `start_failed`, `import_pending`.
   - Rollback: `rollback_slot_lost`, `rollback_pending`.
+  - Debezium startup options (round 7): `slot_advance_on_start_unsupported`.
   - Any mutating command: `operation_in_progress`, `lock_unavailable`
     (rounds 5 and 6).
 
@@ -118,6 +119,16 @@ is refused before the stop; `--without-import` has preconditions and a
 require-existing-slot mode; pipelines are written with
 `logrepl.autoCleanup: false`; `config_masked` refuses only literal masks;
 slot adoption and orphaned walsenders at `creating_slot` are specified.
+
+**Round 7, partial (2026-10-12).** The round-7 blockers in the automated
+`--reset` and rollback attach proof are waiting on DeVaris's decision whether
+to keep those commands in v0.21; they are not addressed here. Marked
+**(Round 7)** below: lock keepalives, hashed lock names, a second lock on
+Debezium's slot, a headroom preflight, fail-closed lock errors, pgbouncer ≥
+1.23, managed-platform verification; two reads per poll and the corrected
+equality proof; refusal of Debezium startup options that move the slot or
+offset; #3033 pinned at `53b767d1`; Kc for keyless checkpoints; default-refuse
+recorded as recommended, pending DeVaris.
 
 **Round 6 (2026-10-12).** Marked **(Round 6)** below: the attach proof
 follows `confirmed_flush_lsn` across walsender pids, because Debezium
@@ -222,6 +233,15 @@ marked _before slot creation_ also run before `CREATE_REPLICATION_SLOT`.
 - the plugin and the database identity;
 - Debezium's settings:
   - `slot.drop.on.stop=true` is refused with `slot_drop_on_stop`;
+  - **(Round 7)** Debezium 3.4+ `offset.mismatch.strategy` set to
+    `trust_offset`, `trust_greater_lsn` or `trust_slot`, and Debezium 2.7
+    `slot.seek.to.known.offset.on.start=true`, are refused with
+    `slot_advance_on_start_unsupported`. The first two advance Debezium's slot
+    with `pg_replication_slot_advance` on every start and reconnect
+    (`PostgresReplicationConnection` L738–739), with no flush behind it;
+    `trust_slot` moves the offset forward to the slot, which skips
+    (Lc, F_d] on a restart; the 2.7 option advances the slot at start. All
+    three values and the 2.7 option are in the test matrix;
   - `lsn.flush.mode=manual`, `lsn.flush.mode=connector_and_driver`, or
     `flush.lsn.source=false` is refused with `lsn_flush_mode_unsupported`.
     **(Round 4)** `connector_and_driver` was accepted before. The driver
@@ -278,15 +298,21 @@ starts the pipeline on Conduit's slot with no skip rule.
   no flush cap and no F ≤ Lc check are needed in the connector. The resume
   point is Key zero, `MessageLSN = 0`, no `Partial` (#341 S13, B2); the
   import's `MessageLSN = Lc` applies only to a real import. The 4th-pass
-  `"resume": "slotOnly"` is withdrawn; if DeVaris keeps it, the same resume
-  point applies.
+  `"resume": "slotOnly"` is withdrawn. #3033, signed off at `53b767d1`,
+  specifies the same resume point for `requireExistingSlot`.
 - **(Round 6) Codes and scope.** Every non-import slot precondition, in the
   CLI and the connector, uses `postgres.logrepl.slot_missing`,
   `slot_invalidated` and `slot_plugin` (plus `publication_missing`), each with
   a fix text in #341 S13; `postgres.import.slot_*` is for the import path
   only. `requireExistingSlot` catches a **missing** slot, not one dropped and
-  recreated under the same name. #341 S13 also carries a proposal, pending
-  DeVaris, to refuse slot creation for any non-empty position.
+  recreated under the same name.
+- **(Round 7) Default-refuse, recommended, pending DeVaris.** #341 S13 makes
+  `requireExistingSlot` tri-state: unset refuses slot creation when the
+  position is non-empty (snapshot positions included), `true` always refuses
+  (what the CLI writes), explicit `false` allows it with a WARN
+  (`postgres.logrepl.slot_recreated`) and a `slot_recreated` metric. It ships
+  with a behaviour-change release note and runbook entries for slot drop,
+  restore, `pg_upgrade` below 17, failover and RDS blue/green.
 - **Duplicates:** every change Debezium produced into Kafka with commit at or
   after C, up to the last record it produced before it stopped, which can be
   past Lc. No loss.
@@ -303,21 +329,46 @@ evaluated; the chosen fix is a **temporary replication slot** as the lock:
 
 - Every mutating command (`--cutover`, `--cutover --without-import`,
   `--reset`, `rollback`) opens a replication connection and runs
-  `CREATE_REPLICATION_SLOT conduit_migrate_lock_<slot> TEMPORARY PHYSICAL`
-  without `RESERVE_WAL`. If the name exists, it refuses with
+  `CREATE_REPLICATION_SLOT <lock name> TEMPORARY PHYSICAL` without
+  `RESERVE_WAL`. **(Round 7)** The lock name is `conduit_migrate_lock_` plus
+  the first 32 hex characters of the SHA-256 of the protected slot's name
+  (53 bytes), because Postgres silently truncates names over 63 bytes and
+  long slot names would collide. If the name exists, it refuses with
   `operation_in_progress` and prints the holder's `active_pid`,
-  `application_name` and `client_addr`.
+  `application_name`, `client_addr` and `backend_start`; the fix text says to
+  end a stale holder's session with `SELECT pg_terminate_backend(<pid>)`,
+  which drops the temporary slot with it, then re-run.
+- **(Round 7) Two locks.** Two pipelines can cut over from one Debezium
+  connector, so every command takes a lock keyed on Conduit's slot and one
+  keyed on Debezium's slot, in a fixed order (by lock name).
 - Postgres drops a temporary slot when its session ends, so a killed CLI
   leaves nothing. Replication connections cannot be multiplexed by a
   transaction pooler. Without `RESERVE_WAL` the slot retains no WAL and no
   `xmin`, and creating it does not wait for transactions.
-- It costs one `max_replication_slots` entry and one `max_wal_senders`
-  connection. If either is exhausted, the command refuses with
-  `lock_unavailable` before it changes anything.
-- Before every mutating step the command checks that the lock slot exists
-  with `active_pid` equal to its own walsender's pid; if not, it aborts with
-  `lock_unavailable`, and a re-run resumes from the journal. TCP keepalives
-  and a `SELECT 1` every 10 s keep the idle connection alive.
+- Each lock costs one `max_replication_slots` entry and one
+  `max_wal_senders` connection. **(Round 7)** A headroom preflight requires
+  at least 2 free walsenders and 1 free slot beyond the one Conduit's
+  pipeline needs; otherwise `lock_unavailable`, naming the setting.
+- **(Round 7)** "Already exists" is `operation_in_progress`; every other
+  create error (exhausted slots or walsenders, missing `REPLICATION`
+  privilege, a platform that rejects the command, a connection failure) is
+  `lock_unavailable`, fail closed.
+- **(Round 7)** Through pgbouncer, replication connections need pgbouncer
+  1.23 or later in session mode; the CLI detects a pooler and refuses below
+  that with `lock_unavailable`.
+- **(Round 7)** The lock connection sets server-side keepalives in its
+  startup options, `options=-c tcp_keepalives_idle=5 -c
+  tcp_keepalives_interval=2 -c tcp_keepalives_count=2 -c
+  tcp_user_timeout=10000`, so a partitioned CLI's session, and its lock,
+  goes within about 20 s (the round-7 probe) instead of about two hours.
+- Before every mutating step the command checks that both lock slots exist
+  with `active_pid` equal to its own walsenders' pids; if not, it aborts with
+  `lock_unavailable`, and a re-run resumes from the journal. A `SELECT 1`
+  every 10 s keeps the idle connection busy.
+- **(Round 7)** The test plan requires Aurora, RDS, Cloud SQL and Azure
+  Database for PostgreSQL to be verified to accept `CREATE_REPLICATION_SLOT …
+  TEMPORARY PHYSICAL` before sign-off; where it is not accepted, the CLI
+  refuses with `lock_unavailable`.
 
 `--cutover` also refuses with `operation_in_progress` while the journal
 records a `--reset` or `rollback` in progress: re-run that operation to
@@ -491,19 +542,21 @@ blips change it too. The proof now follows the slot's position:
 
 - Poll at least once a second; journal each poll's `active`, `active_pid`,
   `backend_start`, `confirmed_flush_lsn` and `pg_current_wal_lsn()`.
+  **(Round 7)** Each poll reads `pg_replication_slots` and
+  `pg_stat_activity` twice and requires agreement; a mismatch counts as a
+  change of walsender. The WAL position is diagnostic only.
 - The first `active` sighting must have `confirmed_flush_lsn` ≤ the bound
   (final Lc for `--reset` after the stop, `reset_target` before it;
   max(final Lc, F_stop) for `rollback`).
 - A new walsender (pid or `backend_start` changed, or an inactive gap) is
   accepted only if its first sighting shows `confirmed_flush_lsn` **equal** to
-  F_last, the last value under the old one. With F_last below W_last (the
-  `pg_current_wal_lsn()` at the old walsender's last poll), that proves
-  continuity: a recreated slot starts at or above WAL-at-creation ≥ W_last and
-  never moves back. With F_last = W_last (an idle database), it is accepted
-  too, because a recreated slot showing F_last has nothing between F_last and
-  its start, so nothing can be skipped. This refines the review's strict
-  F_last < W_last, which would send every normal reconnect on an idle
-  database to `*_pending`.
+  F_last, the last value under the old one. **(Round 7, corrected)**
+  Equality is a proof: a recreated slot's `confirmed_flush_lsn` is
+  **strictly above** the WAL insert position at its creation, because
+  creating it writes its own `xl_running_xacts` (the round-7 probe measured
+  insert + `0x38` on PG 17 and 18), and that insert position is at or above
+  F_last. A slot never moves back, so a recreated slot cannot show F_last,
+  on a busy or an idle database alike.
 - Anything else ends in `reset_pending` or `rollback_pending`, both slots
   kept. The check before the drop applies the same rules.
 
@@ -683,7 +736,8 @@ differ, this section is the source for the offset-import flow.
      the stop fails on `confirmed_flush_lsn`: `rollback_slot_lost`.
    - **(Round 6)** If Conduit's slot is missing (a degraded pipeline), F_c is
      replaced by Kc, the persisted position's commit LSN (acks are FIFO, so
-     every commit below it was delivered); the wait in step 4 is then only the
+     every commit below it was delivered; **round 7:** for a keyless
+     checkpoint, Kc is the checkpoint's LSN, as in #3033 L699); the wait in step 4 is then only the
      attach proof and Debezium's committed Lc moving, and step 5 skips the
      slot drop.
    - If F_stop > final Lc, Conduit's durable F_c ≥ F_stop. Debezium will
