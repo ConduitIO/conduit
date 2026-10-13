@@ -29,6 +29,28 @@ build: check-go-version
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+# bench-engine runs the in-process engine benchmarks (fake connectors, no Docker)
+# on both pipeline engines. Output is plain `go test -bench` text, which is what
+# benchstat reads: save one run per revision and compare with bench-engine-compare.
+# It measures engine overhead, not connector throughput; throughput claims need
+# benchi (see docs/architecture/guarantees.md and CONTRIBUTING.md).
+BENCH_ENGINE_COUNT ?= 6
+BENCH_ENGINE_TIME ?= 3x
+BENCH_ENGINE_OUT ?= bench-engine.txt
+# benchstat is not a repo dependency: it is fetched on demand at a pinned version.
+BENCHSTAT_VERSION ?= v0.0.0-20261009192801-be2c69fb417e
+
+.PHONY: bench-engine
+bench-engine:
+	go test -run '^$$' -bench '^BenchmarkEngine$$' -benchtime=$(BENCH_ENGINE_TIME) -count=$(BENCH_ENGINE_COUNT) ./pkg/internal/enginetest/engines | tee $(BENCH_ENGINE_OUT)
+
+# bench-engine-compare prints the deltas and noise between two bench-engine
+# outputs: make bench-engine-compare OLD=base.txt NEW=head.txt
+.PHONY: bench-engine-compare
+bench-engine-compare:
+	@test -n "$(OLD)" -a -n "$(NEW)" || { echo "usage: make bench-engine-compare OLD=base.txt NEW=head.txt"; exit 2; }
+	go run golang.org/x/perf/cmd/benchstat@$(BENCHSTAT_VERSION) $(OLD) $(NEW)
+
 .PHONY: escape-analysis
 escape-analysis:
 	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt
