@@ -221,7 +221,7 @@ published as a JSON Schema alongside the golden test, per the CLI contract schem
     }],
     "transforms": [ {"alias": "route", "class": "org.apache.kafka.connect.transforms.RegexRouter",
                      "status": "translated", "processor": "field.set"} ],
-    "resume": {"strategy": "fresh-slot", "snapshot": "skipped",
+    "resume": {"strategy": "fresh", "snapshot": "skipped",
                "import": {"setting": "logrepl.import.debeziumOffset", "source": "connect-offsets", "topic": "connect-offsets", "key": "[\"orders-cdc\",{\"server\":\"orders\"}]"},
                "preflights": "pending", "notes": ["..."]},
     "unreadKeys": []
@@ -313,7 +313,7 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
 - With `--slot-strategy fresh --import-offset`, the pipeline file contains `logrepl.import.debeziumOffset` with the
   raw offset read from the REST API (KIP-875), the `connect-offsets` topic or a saved export. This is the only
   place `migrate` talks to anything but its input files, it is read-only, and it never contacts the database.
-  The report records `resume.strategy: "fresh-slot"`, `resume.snapshot: "skipped"` and the import locator
+  The report records `resume.strategy: "fresh"`, `resume.snapshot: "skipped"` and the import locator
   (`resume.import`: source, topic, key). The offset is not a secret.
 - Without `--import-offset`, the pipeline has no import setting and the report says `resume.snapshot:
   "will-run"` in plain words: the connector re-snapshots. This is also what `--slot-strategy fresh` alone does, and it
