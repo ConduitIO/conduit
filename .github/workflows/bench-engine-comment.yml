@@ -1,0 +1,112 @@
+name: bench-engine comment
+
+# Second half of the engine benchmark pair; the first half is bench-engine.yml,
+# which runs PR code with a read-only token and uploads raw results.
+#
+# This workflow runs on `workflow_run` in the context of the DEFAULT branch with
+# a pull-requests:write token. That is the dangerous combination ("pwn
+# requests", GitHub Security Lab), so the rules are strict:
+#
+#   - It NEVER checks out, builds or executes PR code. The only checkout is the
+#     default branch, for the comparer script that already lives there.
+#   - The artifact is untrusted: PR code produced it. It is read by the comparer
+#     as data (size caps, strict number parsing, an allowlist for benchmark
+#     names, Markdown-safe rendering), and nothing from it reaches a shell or an
+#     expression.
+#   - The PR number comes from the workflow_run event payload and is checked to
+#     be an integer here; it is never read from the artifact. SHAs and the run
+#     URL come from the payload too.
+#   - It is advisory: it posts one comment and gates nothing. Not a required
+#     context.
+#
+# workflow_run only fires for workflow files on the default branch, so this does
+# nothing until it is merged.
+
+on:
+  workflow_run:
+    workflows: ['bench-engine (indicative)']
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: post benchmark comment (non-blocking)
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      # Default branch only: trusted comparer script, no PR code.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Validate the PR number
+        id: pr
+        env:
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          set -eu
+          case "$PR_NUMBER" in
+            ''|*[!0-9]*) echo "no valid PR number in the event payload; nothing to comment on"; exit 1 ;;
+          esac
+          if [ "${#PR_NUMBER}" -gt 9 ]; then echo "PR number out of range"; exit 1; fi
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bench-engine-results
+          path: ${{ runner.temp }}/results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Build comment (artifact parsed as data)
+        env:
+          BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        run: |
+          set -eu
+          r="$RUNNER_TEMP/results"
+          # Only the four expected, regular files are read; the comparer also
+          # refuses symlinks and oversized input.
+          base_ok=false
+          if [ -f "$r/base_ok" ] && [ ! -L "$r/base_ok" ] && [ "$(head -c 8 "$r/base_ok")" = "true" ]; then base_ok=true; fi
+          python3 .github/scripts/bench_engine_compare.py \
+            --base-a "$r/base-a.txt" --base-b "$r/base-b.txt" --head "$r/head.txt" \
+            --out "$RUNNER_TEMP/comment.md" --base-ok "$base_ok" \
+            --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" --run-url "$RUN_URL"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post or update the PR comment
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          COMMENT_FILE: ${{ runner.temp }}/comment.md
+        with:
+          script: |
+            const fs = require('fs');
+            let body = fs.readFileSync(process.env.COMMENT_FILE, 'utf8');
+            if (body.length > 20000) body = body.slice(0, 20000);
+            const marker = '<!-- bench-engine-comment -->';
+            if (!body.startsWith(marker)) throw new Error('comment does not start with the marker');
+            const { owner, repo } = context.repo;
+            const issue_number = Number.parseInt(process.env.PR_NUMBER, 10);
+            if (!Number.isSafeInteger(issue_number) || issue_number <= 0) throw new Error('bad PR number');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const mine = comments.find((c) => c.user.type === 'Bot' && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

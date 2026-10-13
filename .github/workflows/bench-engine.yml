@@ -17,7 +17,7 @@ name: bench-engine (indicative)
 # on this one runner, five rounds, rotating the order each round so position in
 # the round does not favour any of them. The comparer
 # (.github/scripts/bench_engine_compare.py) reports medians, the delta, and a
-# noise floor taken from the unchanged base code, then the job upserts one PR
+# noise floor taken from the unchanged base code, then bench-engine-comment.yml upserts one PR
 # comment.
 #
 # The base tree is built with the HEAD's pkg/internal/enginetest harness copied
@@ -25,6 +25,17 @@ name: bench-engine (indicative)
 # even while the base has no harness yet. If the head's harness does not compile
 # against the base's engine code (a PR that changes an engine API the harness
 # calls), the comment says so and shows head numbers only.
+#
+# SECURITY MODEL (this workflow is half of a pair; read both headers):
+#   - THIS workflow runs PR code (the benchmark binaries) on `pull_request`,
+#     never `pull_request_target`, with `contents: read` only. It gets no write
+#     token and no secrets, and checkout does not persist credentials. Its only
+#     output is a plain artifact of raw `go test -bench` text.
+#   - The comment is posted by bench-engine-comment.yml, a `workflow_run`
+#     workflow that never checks out or runs PR code. It treats the artifact as
+#     untrusted data: PR code produced it.
+#   - No PR-controlled field (title, branch name, body) is interpolated into a
+#     shell script or expression here. Only the base SHA is used, via env.
 #
 # Cost: two test-binary builds plus about 3 x 5 x 13 s of benchmark time, roughly
 # six minutes on ubuntu-latest. Same-repo PRs only: a fork's token cannot comment.
@@ -39,6 +50,7 @@ on:
       - 'pkg/internal/enginetest/**'
       - 'go.mod'
       - '.github/workflows/bench-engine.yml'
+      - '.github/workflows/bench-engine-comment.yml'
       - '.github/scripts/bench_engine_compare.py'
       - '.github/scripts/test_bench_engine_compare.py'
 
@@ -48,7 +60,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
 
 env:
   ROUNDS: '5'
@@ -66,6 +77,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-go@v6
         with:
@@ -127,40 +139,21 @@ jobs:
             done
           done
 
-      - name: Build comment
+      - name: Collect results
         env:
           BASE_OK: ${{ steps.build.outputs.base_ok }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -u
           out="$RUNNER_TEMP/bench"
-          status=""
-          if [ "$BASE_OK" != "true" ]; then
-            status="The base revision did not build with this PR's benchmark harness, so there is no comparison. Head numbers only."
-          fi
-          python3 .github/scripts/bench_engine_compare.py \
-            --base-a "$out/base-a.txt" --base-b "$out/base-b.txt" --head "$out/head.txt" \
-            --out "$out/comment.md" --status "$status" \
-            --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" --run-url "$RUN_URL"
-          cat "$out/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$out/upload"
+          cp "$out/base-a.txt" "$out/base-b.txt" "$out/head.txt" "$out/upload/"
+          printf '%s' "$BASE_OK" > "$out/upload/base_ok"
 
-      - name: Post or update the PR comment
-        uses: actions/github-script@v8
+      # Untrusted output: produced by PR code. bench-engine-comment.yml parses it
+      # as data.
+      - uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync(`${process.env.RUNNER_TEMP}/bench/comment.md`, 'utf8');
-            const marker = '<!-- bench-engine-comment -->';
-            const { owner, repo } = context.repo;
-            const issue_number = context.payload.pull_request.number;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner, repo, issue_number, per_page: 100,
-            });
-            const mine = comments.find((c) => c.user.type === 'Bot' && c.body.includes(marker));
-            if (mine) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
-            }
+          name: bench-engine-results
+          path: ${{ runner.temp }}/bench/upload
+          retention-days: 3
+          if-no-files-found: error

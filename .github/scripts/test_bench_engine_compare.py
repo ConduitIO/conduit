@@ -14,7 +14,7 @@ def bench(name, rates):
 
 
 def args(**kw):
-    base = dict(status="", base_sha="aaaaaaaaaaaa", head_sha="bbbbbbbbbbbb", run_url="")
+    base = dict(base_ok="true", run_url="", base_sha="aaaaaaaaaaaa", head_sha="bbbbbbbbbbbb")
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -82,10 +82,65 @@ class RenderTest(unittest.TestCase):
         self.assertIn("indicative, not a gate", out)
         self.assertIn("`X`", out)
 
-    def test_status_line_and_empty_results(self):
-        out = c.render([], args(status="base did not build"))
-        self.assertIn("> base did not build", out)
+    def test_base_not_built_is_reported_and_results_empty(self):
+        out = c.render([], args(base_ok="false"))
+        self.assertIn("did not build", out)
         self.assertIn("No benchmark results were produced.", out)
+
+
+class HostileInputTest(unittest.TestCase):
+    def write(self, text):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.unlink, path)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        return path
+
+    def test_hostile_benchmark_names_never_reach_the_comment(self):
+        names = ["Engine/x`|[click](http://evil)<script>@channel", "A|B", "A`B", "<img src=x>",
+                 "@channel", "[l](http://x)", "a b", "x" * 101]
+        for name in names:
+            path = self.write(f"Benchmark{name}-16   3   1 ns/op   100 records/s\n")
+            out = c.render(c.compare(c.parse(path), {}, c.parse(path)), args())
+            self.assertNotIn("evil", out, name)
+            self.assertNotIn("<script", out, name)
+            self.assertNotIn("<img", out, name)
+            self.assertNotIn("@channel", out, name)
+            self.assertIn("No benchmark results", out, name)
+
+    def test_code_span_cannot_be_broken_out_of(self):
+        inner = c.code_span("a`|<b>@c[d](e)")[1:-1]
+        for ch in "`|<>@[]()":
+            self.assertNotIn(ch, inner)
+
+    def test_non_finite_and_out_of_range_numbers_are_dropped(self):
+        for v in ["NaN", "Inf", "-Inf", "+Inf", "0", "-5", "1e999", "1e16"]:
+            path = self.write(f"BenchmarkEngine/ok/v1-16   3   1 ns/op   {v} records/s\n")
+            self.assertEqual(c.parse(path), {}, v)
+
+    def test_caps_on_size_names_and_samples(self):
+        many = "".join(f"BenchmarkEngine/n{i}-16 3 1 ns/op 10 records/s\n" for i in range(500))
+        self.assertEqual(len(c.parse(self.write(many))), c.MAX_NAMES)
+        same = "BenchmarkEngine/a-16 3 1 ns/op 10 records/s\n" * 500
+        self.assertEqual(len(c.parse(self.write(same))["Engine/a"]), c.MAX_SAMPLES)
+        self.assertEqual(c.parse(self.write("x" * (c.MAX_BYTES + 10))), {})
+
+    def test_symlink_input_is_ignored(self):
+        target = self.write("BenchmarkEngine/a-16 3 1 ns/op 10 records/s\n")
+        link = target + ".lnk"
+        os.symlink(target, link)
+        self.addCleanup(os.unlink, link)
+        self.assertEqual(c.parse(link), {})
+
+    def test_untrusted_sha_and_url_are_validated(self):
+        out = c.render([], args(base_sha="x](http://evil)", head_sha="`", run_url="http://evil/x"))
+        self.assertNotIn("evil", out)
+        out = c.render([], args(run_url="https://github.com/ConduitIO/conduit/actions/runs/123"))
+        self.assertIn("[run](https://github.com/ConduitIO/conduit/actions/runs/123)", out)
+
+    def test_base_ok_is_read_strictly(self):
+        self.assertIn("did not build", c.render([], args(base_ok="true; rm -rf /")))
+        self.assertNotIn("did not build", c.render([], args(base_ok="true")))
 
 
 if __name__ == "__main__":
