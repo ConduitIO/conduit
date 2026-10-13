@@ -110,7 +110,7 @@ format is detected, not declared; `--format {properties,json,rest-export,strimzi
 | `--worker FILE` | Worker properties (or a Strimzi `KafkaConnect` CR) that supply defaults for converters, client security and config providers. Optional; without it, worker-level defaults are reported as unknown rather than assumed. |
 | `--registry-url URL` | Schema Registry URL, used only to fill the `conduit.yaml` fragment and the report. Never contacted by `migrate`. |
 | `--slot-strategy {fresh,reuse}` | Postgres only, same name and values as #341/#3029. `fresh` (default, and the only value that works in v0.21): Conduit creates its own slot and publication while Debezium keeps running. `reuse` (take over Debezium's own slot) is v0.22 and fails with `postgres.import.slot_reuse_unsupported` until then. |
-| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never`, `cdcMode: logrepl` and `logrepl.autoCleanup: false` into the pipeline. Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector] [--no-start]` and `rollback` are specified in #3029, with the other cutover flags listed under _Resume_ (`--without-import`, `--reset`, `--reset-timeout`, `--journal-dir`, `--debezium-secret`, `--slot-create-timeout`, `--cutover-wait-timeout`, `--start-timeout`, `--rollback-timeout`, `--emit-cutover-marker`); this document fixes only how `migrate` feeds them. |
+| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never`, `cdcMode: logrepl`, `logrepl.autoCleanup: false`, `logrepl.requireExistingSlot: true` (pending DeVaris confirmation) and the cutover-marker prefix in `debezium.message.prefix.exclude.list` into the pipeline (#3029, "Pipelines the CLI writes"). Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector] [--no-start]` and `rollback` are specified in #3029, with the other cutover flags listed under _Resume_ (`--without-import`, `--reset`, `--reset-timeout`, `--journal-dir`, `--debezium-secret`, `--slot-create-timeout`, `--cutover-wait-timeout`, `--start-timeout`, `--rollback-timeout`, `--emit-cutover-marker`, `--pipelines-path`); this document fixes only how `migrate` feeds them. |
 | `--accept-gaps` | Write blocking pipelines as `status: running` instead of `stopped`. Recorded in the report. |
 | `--json`, `--quiet`, `--strict` | Per the CLI output conventions. `--strict` exits 2 on any `approximated` entry too. |
 
@@ -351,7 +351,9 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
   **One code family per stage.** `kc.lint.postgres_slot_drop_on_stop` and `kc.lint.postgres_lsn_flush_mode` are
   the lint-time findings for the same configurations: warnings for plain `migrate` and `kc lint`, errors under
   `kc lint --for-cutover`. The `--cutover` refusal itself always emits the `migrate.kafka_connect.*` code above,
-  never a `kc.lint.*` or `postgres.import.*` code. The mapping is fixed: `kc.lint.postgres_slot_drop_on_stop` →
+  never a `kc.lint.*` or `postgres.import.*` code. This rule covers these two slot-safety refusals only; other
+  import refusals, such as `postgres.import.slot_reuse_unsupported` or the connector's preflight codes, keep their
+  `postgres.import.*` codes. The mapping is fixed: `kc.lint.postgres_slot_drop_on_stop` →
   `migrate.kafka_connect.slot_drop_on_stop`; `kc.lint.postgres_lsn_flush_mode` →
   `migrate.kafka_connect.lsn_flush_mode_unsupported`.
 
@@ -379,12 +381,16 @@ what lies between them. It:
 1. refuses to proceed if Debezium's slot is lost, invalidated, or recreated since the stop
    (`rollback_slot_lost`); waits (`rollback_pending`, nothing changed) if Debezium's slot was ahead of its offset
    at the stop and Conduit has not yet durably delivered past that point; and checks the saved config, its
-   secrets and the Connect REST API, all before it touches Conduit;
-2. stops the Conduit pipeline;
-3. restarts Debezium and waits until it is streaming and its confirmed position has passed Conduit's slot;
-4. only then drops Conduit's slot and publication and deletes the pipeline (written with
-   `logrepl.autoCleanup: false`, so the delete cannot drop the slot first);
-5. exits with `rollback_pending` on timeout, leaving both slots in place.
+   secrets, the Connect REST API and Connect's config validation, all before it touches Conduit;
+2. stops the Conduit pipeline (setting `status: stopped` first when it is file-provisioned);
+3. restarts Debezium and waits until it is streaming and its confirmed position has passed Conduit's slot, with an
+   attach proof that the slot it streams from is the original one;
+4. only then deletes the pipeline, then drops Conduit's slot and publication;
+5. exits with `rollback_pending` on timeout or a failed attach proof, leaving both slots in place.
+
+All mutating commands hold a per-slot advisory lock (`operation_in_progress`). Loss is none for the pipeline's
+tables; tables Debezium captures outside the pipeline can miss changes Debezium itself skips after an ungraceful
+stop, and rollback warns about them.
 
 **Cutover flags and codes.** #3029 is the source for each; this table is the index.
 
@@ -399,6 +405,7 @@ what lies between them. It:
 | `--start-timeout` (10m) | bounds waiting for the durable import-complete signal (same) |
 | `--rollback-timeout` (30m) | bounds rollback's wait for Debezium (Rollback) |
 | `--emit-cutover-marker` | opt-in non-transactional marker message to move an idle Debezium; accepted by `--cutover`, `--reset` and `rollback` (Decisions, Q3) |
+| `--pipelines-path DIR` | write the pipeline as a file in Conduit's `pipelines.path` instead of through the API; updates and deletes then need an engine reload (Pipelines the CLI writes) |
 
 | Code (`migrate.kafka_connect.*`) | When |
 | --- | --- |
@@ -408,6 +415,7 @@ what lies between them. It:
 | `reset_unsafe`, `reset_pending` | `--reset` |
 | `start_failed`, `import_pending` | starting the pipeline |
 | `rollback_slot_lost`, `rollback_pending` | `rollback` |
+| `operation_in_progress` | any mutating command, while another holds the per-slot lock or a reset or rollback is unfinished (Mutual exclusion) |
 | `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
 
 Because Debezium's slot and offsets are never touched by the fresh strategy, this path exists at all, which is why
@@ -534,7 +542,27 @@ does not contact the registry; `kc diff --registry` does (read-only, below).
 ### Error handling and the DLQ
 
 `errors.tolerance=none` (default): `dead-letter-queue.window-nack-threshold: 0`, so the first failed record
-stops the pipeline, matching KC. `errors.tolerance=all`: a DLQ is mandatory for sinks and `migrate` refuses to
+stops the pipeline, matching KC.
+
+**Pipelines that output Debezium format** (Debezium-compatible output mode, #3033) always get
+`dead-letter-queue.window-size: 1` and `window-nack-threshold: 0`, written explicitly, never left to the
+default. Dead-lettering one event of a key breaks per-key order for consumers, and #3033 refuses any other window
+at pipeline start with `debezium.dlq_not_halting`. `migrate` never writes a config that would then fail at
+start, so on these pipelines `errors.tolerance=all` is not translated to "does not stop": the entry is
+`unsupported`, **blocking**, code `kc.errors_tolerance_all_debezium_output`, reason "a Debezium-format pipeline
+halts on the first failed record", fix "accept that the pipeline halts on a failed record, or keep this connector
+on Kafka Connect". The pipeline is written `stopped` with the halting DLQ; `--accept-gaps` writes it `running`
+with the same halting DLQ, so it starts and halts on a failure instead of skipping. `kc lint` reports the same
+configuration as `kc.lint.errors_tolerance_all_debezium_output` (error under `--for-cutover`, warning
+otherwise). The mapping:
+
+| KC | Pipeline outputs Debezium format | Any other pipeline |
+| --- | --- | --- |
+| `errors.tolerance=none` | `window-size: 1`, `window-nack-threshold: 0` | `window-nack-threshold: 0` |
+| `errors.tolerance=all`, DLQ topic set | `window-size: 1`, `window-nack-threshold: 0`; entry blocking, `kc.errors_tolerance_all_debezium_output` | DLQ to the topic, window set so the pipeline does not stop (below) |
+| `errors.tolerance=all`, no DLQ topic | as the row above | `kc.errors_all_without_dlq`, blocking (sinks) |
+
+For other pipelines: `errors.tolerance=all`: a DLQ is mandatory for sinks and `migrate` refuses to
 emit `all` without one: if `errors.deadletterqueue.topic.name` is absent the entry is `unsupported`,
 blocking, code `kc.errors_all_without_dlq`, fix "set a DLQ topic or choose `none`", because translating it
 literally means silently dropping records (Invariant 3). With a DLQ topic: `dead-letter-queue.plugin:
@@ -601,6 +629,7 @@ runs the same check itself before stopping Debezium; `--strict` escalates warnin
 | `kc.lint.unknown_key` | warning | key not in the known set for the connector class (typos like `tasks.maxx`); known sets ship as data files per supported class and are version-tagged |
 | `kc.lint.deprecated_key` | warning | Debezium 2.x/3.x renamed keys: `database.server.name` to `topic.prefix`, `table.whitelist`/`table.blacklist` to `.include.list`/`.exclude.list`, `database.history.*` to `schema.history.internal.*`, `column.blacklist` family |
 | `kc.lint.errors_all_without_dlq` | error | `errors.tolerance=all` without `errors.deadletterqueue.topic.name` on a sink: records silently dropped |
+| `kc.lint.errors_tolerance_all_debezium_output` | warning; error when linting for cutover | `errors.tolerance=all` on a Debezium Postgres connector whose migration outputs Debezium format: the migrated pipeline halts on the first failed record instead of skipping it |
 | `kc.lint.dlq_replication` | warning | DLQ topic configured without `errors.deadletterqueue.topic.replication.factor` (defaults to 3 and fails on small clusters) or without `errors.deadletterqueue.context.headers.enable`, so failed records arrive with no error context |
 | `kc.lint.tasks_max_exceeds_source_limit` | warning | `tasks.max` greater than 1 on Debezium connectors (they run one task; extra tasks are ignored or rejected) |
 | `kc.lint.client_override_policy` | warning | `producer.override.*`, `consumer.override.*`, `admin.override.*` in a connector when the worker's `connector.client.config.override.policy` is `None` (the default, overrides are rejected at validation) or absent from the provided worker file (unknown); and the converse, `All` policy on a shared worker where any connector can retune clients |
@@ -684,6 +713,7 @@ form and are public contracts from first release.
 | `kc.smt_unsupported` | migrate | SMT, or SMT configuration, outside the exact subset | v0.22 pack entry or custom processor |
 | `kc.converter_unsupported`, `kc.converter_unknown` | migrate | converter has no equivalent, or none found | set converter explicitly |
 | `kc.errors_all_without_dlq` | migrate, lint | tolerance all without DLQ | add DLQ topic |
+| `kc.errors_tolerance_all_debezium_output` | migrate | `errors.tolerance=all` on a pipeline that outputs Debezium format, which always halts on the first failed record (#3033 `debezium.dlq_not_halting`) | accept halting, or keep the connector on Kafka Connect |
 | `kc.secret_plaintext` | migrate, lint | literal secret in the input | use a config provider reference |
 | `kc.secret_stored_expanded` | migrate | #2988 caveat applies to this pipeline | see #2988 |
 | `kc.resume_unavailable` | migrate | `snapshot.mode=never` without `--import-offset` (a fresh slot has no history to resume from) | re-run with `--import-offset` |
