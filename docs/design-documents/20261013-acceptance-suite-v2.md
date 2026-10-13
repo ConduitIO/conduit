@@ -424,7 +424,8 @@ For a data-integrity test suite the failure that matters is a false pass.
   subprocess restricted to the case that must fail it, and a test that pins the effective redelivery bound at
   exactly the declared one: a source redelivering N passes, N+1 fails).
   Two cases have no mutant, with reasons: DST-02, because acks are sent by the SDK's destination adapter and a
-  connector cannot block them (the case guards the adapter's ack path), and the Core group, which is v1's own. A new case lands with a mutant that it kills.
+  connector cannot block them (the case guards the adapter's ack path), and the Core group, which is v1's own.
+  A new case lands with a mutant that it kills.
 - **Suite fails a correct connector (flake).** Timeouts guard against loss, not slowness (10x the driver
   timeout, at least 10 seconds), and reads end on a quiet period. Cases that need the source to continue from a
   snapshot into change capture ack what they read, like a pipeline; a source may legitimately wait for acks.
