@@ -388,7 +388,8 @@ what lies between them. It:
 4. only then deletes the pipeline, then drops Conduit's slot and publication;
 5. exits with `rollback_pending` on timeout or a failed attach proof, leaving both slots in place.
 
-All mutating commands hold a per-slot advisory lock (`operation_in_progress`). Loss is none for the pipeline's
+All mutating commands hold a per-slot lock, a temporary replication slot that a pooler cannot share
+(`operation_in_progress`, `lock_unavailable`). Loss is none for the pipeline's
 tables; tables Debezium captures outside the pipeline can miss changes Debezium itself skips after an ungraceful
 stop, and rollback warns about them.
 
@@ -415,7 +416,7 @@ stop, and rollback warns about them.
 | `reset_unsafe`, `reset_pending` | `--reset` |
 | `start_failed`, `import_pending` | starting the pipeline |
 | `rollback_slot_lost`, `rollback_pending` | `rollback` |
-| `operation_in_progress` | any mutating command, while another holds the per-slot lock or a reset or rollback is unfinished (Mutual exclusion) |
+| `operation_in_progress`, `lock_unavailable` | any mutating command, while another holds the per-slot lock or a reset or rollback is unfinished; or when the lock cannot be taken or is lost (Mutual exclusion) |
 | `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
 
 Because Debezium's slot and offsets are never touched by the fresh strategy, this path exists at all, which is why
@@ -548,18 +549,18 @@ stops the pipeline, matching KC.
 `dead-letter-queue.window-size: 1` and `window-nack-threshold: 0`, written explicitly, never left to the
 default. Dead-lettering one event of a key breaks per-key order for consumers, and #3033 refuses any other window
 at pipeline start with `debezium.dlq_not_halting`. `migrate` never writes a config that would then fail at
-start, so on these pipelines `errors.tolerance=all` is not translated to "does not stop": the entry is
-`unsupported`, **blocking**, code `kc.errors_tolerance_all_debezium_output`, reason "a Debezium-format pipeline
-halts on the first failed record", fix "accept that the pipeline halts on a failed record, or keep this connector
-on Kafka Connect". The pipeline is written `stopped` with the halting DLQ; `--accept-gaps` writes it `running`
-with the same halting DLQ, so it starts and halts on a failure instead of skipping. `kc lint` reports the same
-configuration as `kc.lint.errors_tolerance_all_debezium_output` (error under `--for-cutover`, warning
-otherwise). The mapping:
+start, so on these pipelines `errors.tolerance=all` is not translated to "does not stop". The entry is
+**`approximated`** (non-blocking), code `kc.errors_all_debezium_output`, reason "a Debezium-format pipeline halts
+on the first failed record instead of skipping it, so per-key order is kept; the halt needs an operator". It is
+approximated rather than blocking because the difference cannot drop or reshape data: halting is the stricter
+behaviour. `--strict` escalates it, as it does every approximation. The pipeline is written with the halting DLQ
+and its normal status. The code stem matches `kc.errors_all_without_dlq`. `kc lint` reports the same
+configuration as `kc.lint.errors_all_debezium_output` (warning). The mapping:
 
 | KC | Pipeline outputs Debezium format | Any other pipeline |
 | --- | --- | --- |
 | `errors.tolerance=none` | `window-size: 1`, `window-nack-threshold: 0` | `window-nack-threshold: 0` |
-| `errors.tolerance=all`, DLQ topic set | `window-size: 1`, `window-nack-threshold: 0`; entry blocking, `kc.errors_tolerance_all_debezium_output` | DLQ to the topic, window set so the pipeline does not stop (below) |
+| `errors.tolerance=all`, DLQ topic set | `window-size: 1`, `window-nack-threshold: 0`; entry approximated, `kc.errors_all_debezium_output` | DLQ to the topic, window set so the pipeline does not stop (below) |
 | `errors.tolerance=all`, no DLQ topic | as the row above | `kc.errors_all_without_dlq`, blocking (sinks) |
 
 For other pipelines: `errors.tolerance=all`: a DLQ is mandatory for sinks and `migrate` refuses to
@@ -629,7 +630,7 @@ runs the same check itself before stopping Debezium; `--strict` escalates warnin
 | `kc.lint.unknown_key` | warning | key not in the known set for the connector class (typos like `tasks.maxx`); known sets ship as data files per supported class and are version-tagged |
 | `kc.lint.deprecated_key` | warning | Debezium 2.x/3.x renamed keys: `database.server.name` to `topic.prefix`, `table.whitelist`/`table.blacklist` to `.include.list`/`.exclude.list`, `database.history.*` to `schema.history.internal.*`, `column.blacklist` family |
 | `kc.lint.errors_all_without_dlq` | error | `errors.tolerance=all` without `errors.deadletterqueue.topic.name` on a sink: records silently dropped |
-| `kc.lint.errors_tolerance_all_debezium_output` | warning; error when linting for cutover | `errors.tolerance=all` on a Debezium Postgres connector whose migration outputs Debezium format: the migrated pipeline halts on the first failed record instead of skipping it |
+| `kc.lint.errors_all_debezium_output` | warning | `errors.tolerance=all` on a Debezium Postgres connector whose migration outputs Debezium format: the migrated pipeline halts on the first failed record instead of skipping it |
 | `kc.lint.dlq_replication` | warning | DLQ topic configured without `errors.deadletterqueue.topic.replication.factor` (defaults to 3 and fails on small clusters) or without `errors.deadletterqueue.context.headers.enable`, so failed records arrive with no error context |
 | `kc.lint.tasks_max_exceeds_source_limit` | warning | `tasks.max` greater than 1 on Debezium connectors (they run one task; extra tasks are ignored or rejected) |
 | `kc.lint.client_override_policy` | warning | `producer.override.*`, `consumer.override.*`, `admin.override.*` in a connector when the worker's `connector.client.config.override.policy` is `None` (the default, overrides are rejected at validation) or absent from the provided worker file (unknown); and the converse, `All` policy on a shared worker where any connector can retune clients |
@@ -713,7 +714,7 @@ form and are public contracts from first release.
 | `kc.smt_unsupported` | migrate | SMT, or SMT configuration, outside the exact subset | v0.22 pack entry or custom processor |
 | `kc.converter_unsupported`, `kc.converter_unknown` | migrate | converter has no equivalent, or none found | set converter explicitly |
 | `kc.errors_all_without_dlq` | migrate, lint | tolerance all without DLQ | add DLQ topic |
-| `kc.errors_tolerance_all_debezium_output` | migrate | `errors.tolerance=all` on a pipeline that outputs Debezium format, which always halts on the first failed record (#3033 `debezium.dlq_not_halting`) | accept halting, or keep the connector on Kafka Connect |
+| `kc.errors_all_debezium_output` | migrate | approximated: `errors.tolerance=all` on a pipeline that outputs Debezium format, which always halts on the first failed record (#3033 `debezium.dlq_not_halting`) | accept halting, or keep the connector on Kafka Connect; `--strict` fails on it |
 | `kc.secret_plaintext` | migrate, lint | literal secret in the input | use a config provider reference |
 | `kc.secret_stored_expanded` | migrate | #2988 caveat applies to this pipeline | see #2988 |
 | `kc.resume_unavailable` | migrate | `snapshot.mode=never` without `--import-offset` (a fresh slot has no history to resume from) | re-run with `--import-offset` |
