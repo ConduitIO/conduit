@@ -23,7 +23,11 @@ In short:
 - Strict snapshot positions carry the key as exact text and resume with typed binds (integers) or an explicit
   `CAST(? AS DECIMAL(p,s))`. Spiked on MySQL 8.0.39 and 8.4.11, including one form that looks right and is not.
 
-This is a payload contract change and Tier 1. It needs sign-off before code.
+- The `binlog_row_image` Open check (with `binlog_format` and `binlog_row_value_options`) refuses a non-`FULL`
+  server in `strict`. In `legacy` it warns in N and refuses from N+1.
+
+This is a payload contract change and Tier 1. All open questions are decided (see Decisions recorded), and the
+implementation PRs still need DeVaris's sign-off.
 
 ## Context
 
@@ -238,14 +242,15 @@ reinterpret that stored key, which means shipping a repair for the defective v1 
 path. That is more state-format logic than the problem is worth, and it is the part that most needs the
 upgrade test. The cost is a re-snapshot for a pipeline that hits an overflow during a `legacy` snapshot.
 That pipeline was emitting corrupted values for that column before this change, so the re-snapshot output
-is the correct one. Revisit if sign-off finds large `legacy` snapshots common.
+is the correct one. Revisit if large `legacy` snapshots turn out to be common.
 
 What `legacy` still gets wrong, by design, because the shape forces it: `NULL` is a zero value, and `DECIMAL`
 loses precision above about 15 significant digits. These are named in the startup warning, with the affected
-tables and columns. Whether to treat those two as more corruption than a shape contract can excuse is an
-open question (see Open questions).
+tables and columns. Decided (Decisions recorded, 5): per-column warnings only. `legacy` does not refuse
+tables with nullable or decimal columns.
 
-The row-image check below applies to both modes.
+The row-image check below applies to both modes, staged differently: it refuses in `strict`, and in `legacy`
+it warns in N and refuses from N+1.
 
 ### The type stamp in the position
 
@@ -368,7 +373,8 @@ real.
 - **Open check.** `Open` reads `@@GLOBAL.binlog_format`, `@@GLOBAL.binlog_row_image` and
   `@@GLOBAL.binlog_row_value_options` and fails with a stable error per variable, each naming the value and
   the fix (the `SET GLOBAL` statement, or the parameter group on managed services):
-  - `binlog_row_image` other than `FULL`: `MYSQL_BINLOG_ROW_IMAGE`.
+  - `binlog_row_image` other than `FULL`: `MYSQL_BINLOG_ROW_IMAGE`. Staged by mode (Decisions recorded, 4):
+    `strict` refuses at `Open`. `legacy` logs the same error text as a warning in N and refuses from N+1.
   - `binlog_format` other than `ROW`: `MYSQL_BINLOG_FORMAT`. The connector's contract is row events.
     Unverified: what canal emits under `STATEMENT` or `MIXED`; the check turns whatever it is into a named
     error.
@@ -383,12 +389,16 @@ real.
     `SHOW GLOBAL VARIABLES LIKE '<name>'`, which returns zero rows for an unknown name without an error
     (observed on 8.0.39), and treats an absent variable as unset. Re-run on 8.4.11 in round 3 with the same
     results (defaults `ROW`, `FULL`, empty; `PARTIAL_JSON` and `MINIMAL` accepted and read back; absent name
-    returns zero rows). 5.7 and MariaDB are unverified. `MINIMAL` and `NOBLOB` are both refused: observed, `MINIMAL` omits
+    returns zero rows). 5.7 and MariaDB are unverified. `MINIMAL` and `NOBLOB` are both rejected: observed, `MINIMAL` omits
   the primary key from the after image and every unchanged column, and `NOBLOB` omits unchanged `BLOB` and
   `TEXT` columns. A user with only `SELECT` and the two replication privileges can read the global variables
   (observed on 8.0.39). The check applies to `legacy` as well as `strict`, because the corruption exists in both
-  today; this halts pipelines that currently run on a non-`FULL` server, which is deliberate and flagged
-  under Open questions.
+  today, but the two modes are staged differently so that nothing that runs today stops on upgrade without a
+  release of notice. `strict` is a new opt-in, so it refuses immediately. A `legacy` pipeline on a non-`FULL`
+  server is already emitting zero values and a zero primary key, so in N it warns (one line naming the
+  variable, its value and the fix), and from N+1 it refuses with the same code. The release notes for N say
+  so. The decision names `binlog_row_image`; `binlog_format` and `binlog_row_value_options` sit in the same
+  check and follow the same staging, so that one check has one rule.
 - **Runtime net.** In `strict`, a nil for a `NOT NULL` column halts with `MYSQL_NULL_IN_NOT_NULL` (table,
   column, config path `binlog_row_image`, fix text), instead of being passed through. That catches the
   primary key and every other `NOT NULL` column when a writer session overrides the image.
@@ -396,9 +406,9 @@ real.
   `MINIMAL` while the global stays `FULL` passes the Open check (observed). For a nullable column that the
   statement did not touch, the nil is indistinguishable from `NULL` at the connector, and `strict` would
   emit `NULL` for a value that exists. This cannot be closed in the connector with the current `canal`
-  API. The proposal is to ship with the Open check and the runtime net and document the residual risk, and
-  to open an upstream change to expose `SkippedColumns` on `canal.RowsEvent`, after which any skipped
-  column halts. A decision for sign-off.
+  API. Decided (Decisions recorded, 6): ship with the Open check and the runtime net, document the residual
+  risk, and open the upstream change to expose `SkippedColumns` on `canal.RowsEvent`, after which any skipped
+  column halts. The upstream issue text is drafted in the appendix; DeVaris files it.
 
 - **Read replicas and read-only sources.** The design adds no writes to the source and no privilege beyond
   `SELECT`, the two replication privileges and what the connector already requires for snapshots: `LOCK
@@ -490,12 +500,12 @@ sorted).
 Why `string` is the default and not `decimal` as in Debezium: records in Conduit routinely pass through
 JSON-oriented processors and destinations, where a `big.Rat` or a base64 `bytes` value is a worse surprise
 than a string. Parity with Debezium's default is a documented difference, and `types.decimal=decimal` gives
-it. This is a judgment call for sign-off.
+it. Decided (Decisions recorded, 1).
 
 ### BIGINT UNSIGNED
 
 - `long` (default): schema unchanged, so keys and consumers are not disturbed. A value above 2^63-1 stops
-  the source with error `MYSQL_UNSIGNED_OVERFLOW` (name proposed), carrying the table, column, and the config
+  the source with error `MYSQL_UNSIGNED_OVERFLOW`, carrying the table, column, and the config
   path `types.bigintUnsigned`, and the fix "set `types.bigintUnsigned` to `decimal` or `string` for this
   connector". The source does not skip, truncate or wrap the value. In both modes, in both paths. Snapshot
   parses the driver's digit string with `ParseUint`; CDC compares the `uint64`.
@@ -757,7 +767,7 @@ the connector already owns.
 | `BIGINT UNSIGNED` value above 2^63-1 under `long` | Source returns `MYSQL_UNSIGNED_OVERFLOW`, no record emitted, position not advanced. Pipeline stops until the operator changes the setting. Both modes, both paths. In `legacy` during the snapshot phase (as the Transition table defines it, including a finished snapshot with no CDC ack yet) the code is `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` with a remedy that is valid there (table under What `legacy` is) |
 | Any integer outside its Avro type under `strict` | Same error class; replaces warn-and-return-raw |
 | Nullability lookup fails, or a canal column has no `information_schema` row (permissions, table dropped) | `Open` fails with `MYSQL_NULLABILITY_UNAVAILABLE` naming the table and column; no fallback to "assume NOT NULL" |
-| `binlog_row_image` is not `FULL`, `binlog_format` is not `ROW`, or `binlog_row_value_options` is non-empty at `Open` | `Open` fails with `MYSQL_BINLOG_ROW_IMAGE`, `MYSQL_BINLOG_FORMAT` or `MYSQL_BINLOG_ROW_VALUE_OPTIONS` |
+| `binlog_row_image` is not `FULL`, `binlog_format` is not `ROW`, or `binlog_row_value_options` is non-empty at `Open` | `strict`: `Open` fails with `MYSQL_BINLOG_ROW_IMAGE`, `MYSQL_BINLOG_FORMAT` or `MYSQL_BINLOG_ROW_VALUE_OPTIONS`. `legacy`: the same text is logged as a warning in N and `Open` fails from N+1 |
 | New pipeline with no `types.mode` | N: runs `legacy` with warnings. N+1 and later: `Open` fails with `MYSQL_TYPES_MODE_REQUIRED` |
 | Writer session overrides the row image to `MINIMAL` or `NOBLOB` | A nil in a `NOT NULL` column halts with `MYSQL_NULL_IN_NOT_NULL`. A skipped nullable column is emitted as `NULL`: documented residual risk, closable only with an upstream `canal` change |
 | NULL in a key column | Halts with `MYSQL_NULL_IN_NOT_NULL` |
@@ -784,14 +794,16 @@ generates code from version 1 will break; that is the compatibility cost and the
 rollout. Versions can go backwards (re-registering an older text returns its old version).
 
 1. **Release N (v0.21 target):** ship the settings. Nothing changes for an existing pipeline except the
-   unsigned halt (a bug fix, both modes), the Open checks on the binlog variables (both modes) and the
-   per-column startup warnings in `legacy`. A pipeline opts into `strict` by setting it: from no position
+   unsigned halt (a bug fix, both modes), the Open checks on the binlog variables (refused in `strict`, a
+   warning in `legacy`) and the per-column startup warnings in `legacy`. A pipeline opts into `strict` by
+   setting it: from no position
    directly (row 2), or through the token procedure (rows 5-6). `strict` pipelines write v2 positions.
    Unstamped positions are `legacy`. A new pipeline with no `types.mode` runs `legacy` and warns (row 1).
 2. **Switching an existing pipeline** (row 6): stop; destinations and consumers get ready for the new schema
    version; set `types.mode=strict` and `types.acceptChangeFrom=legacy`; start. Refused in the snapshot
    phase. Leave the token until the log line reports an acked record under the new stamp.
-3. **Release N+1:** a pipeline with no position and no `types.mode` is refused (`MYSQL_TYPES_MODE_REQUIRED`).
+3. **Release N+1:** the binlog variable checks refuse in `legacy` too (`MYSQL_BINLOG_ROW_IMAGE` and the other
+   two). A pipeline with no position and no `types.mode` is refused (`MYSQL_TYPES_MODE_REQUIRED`).
    Existing `legacy` positions still run, with the same warnings. **Release N+2:** `legacy` is removed; row 3
    becomes a refusal: `cdc` phase points to row 6, `snapshot` phase gets `MYSQL_LEGACY_SNAPSHOT_REMOVED` and a
    re-snapshot on a new connector instance. Decided (see What `legacy` is).
@@ -901,7 +913,8 @@ Written before the implementation (review the tests first):
   from the callout; N+2 refuses with `MYSQL_LEGACY_SNAPSHOT_REMOVED`; the same position after one acked CDC
   record is refused in N+2 with the row 6 instruction, and row 6 then succeeds.
 - Open checks: `binlog_format=STATEMENT`/`MIXED`, `binlog_row_value_options=PARTIAL_JSON` and `MINIMAL`/`NOBLOB`
-  each fail `Open` with their code; an absent variable is treated as unset.
+  each fail `Open` with their code in `strict`; an absent variable is treated as unset. In `legacy`, the same
+  inputs log the warning and start in N, and fail `Open` in N+1 (the release is a test parameter).
 - kill -9 at the mode switch (new): SIGKILL (a) between the first record under the new stamp and its ack,
   and (b) after the ack; restart each time with the token present and absent; assert refusal, or resume
   without loss, and that the next emitted record carries the new stamp. Covers rows 6, 11 and the crash note.
@@ -921,25 +934,67 @@ Written before the implementation (review the tests first):
   types across the restart. The connector's existing crash test (`crash_integration_test.go`) is the base.
 - Acceptance suite stays green in both modes.
 
-## Open questions for sign-off
+## Decisions recorded
 
-1. Default for `types.decimal`: `string` (proposed) or `decimal` for Debezium parity.
-2. Is halting on `BIGINT UNSIGNED` overflow acceptable as the default, or should `types.bigintUnsigned`
-   default to `decimal`/`string` and accept the key-type change?
-3. Staging: decided (DeVaris, 2026-10-12); moved to Decisions under "Legacy lifecycle (decided)". The number is
-   kept so the other questions keep theirs.
-4. Row image: refuse non-`FULL` at `Open` in both modes (proposed; it stops pipelines that run today on a
-   server with `MINIMAL`, which are emitting zero values and a zero primary key), or refuse only in `strict`
-   and warn in `legacy`.
-5. `legacy` keeps `NULL` as zero and `DECIMAL` as `double` because the shape requires it. Acceptable for two
-   minor versions, or should `legacy` also refuse tables with nullable or decimal columns unless the operator
-   acknowledges the loss?
-6. The session-level row-image residual risk: ship documented, and open the upstream `canal` change.
-7. The snapshot-resume defect for decimal and large-integer keys (mysql#204): track as its own sev-0 item
-   and fix on `legacy` positions separately. The fix for `strict` is in this design, and the `legacy`
-   snapshot-phase overflow depends on it staying unfixed in place (see What `legacy` is).
-8. Where the code lives at implementation time: the connector has moved from `conduitio-labs` to `ConduitIO`
-   (certification decision 7), so the implementation PR lands in `ConduitIO/conduit-connector-mysql`.
+Decided by DeVaris, 2026-10-12, accepting the recommendations on the open questions. The numbers are the
+original question numbers (3 was decided earlier and is recorded under Legacy lifecycle).
+
+1. **`types.decimal` defaults to `string`.** Not `decimal`. Debezium parity is a documented difference, and
+   `types.decimal=decimal` gives it. See DECIMAL and NUMERIC.
+2. **Halt on `BIGINT UNSIGNED` overflow.** `types.bigintUnsigned` defaults to `long`, and a value above 2^63-1
+   halts with `MYSQL_UNSIGNED_OVERFLOW` in both modes and both paths. `decimal` and `string` stay opt-ins. See
+   BIGINT UNSIGNED.
+3. **Legacy lifecycle.** See Legacy lifecycle (decided).
+4. **Row image.** A non-`FULL` `binlog_row_image` is refused at `Open` in `strict`. In `legacy` it warns in N
+   and is refused from N+1. `binlog_format` and `binlog_row_value_options`, which share the check, follow the
+   same staging (an extension of the decision, for one rule per check). See Row images.
+5. **`legacy` warns per column and nothing more.** It keeps `NULL` as zero and `DECIMAL` as `double` for N and
+   N+1, with one warning per affected column. It does not refuse tables with nullable or decimal columns.
+6. **Session-level row-image residual risk: ship documented, and open the upstream `canal` change.** The
+   decision is to open it. Nothing has been filed; the issue text is drafted in the appendix for DeVaris to
+   file.
+7. **mysql#204 is tracked separately** as its own sev-0 item, with the `legacy` fix designed on its own. The
+   `strict` fix is in this design, and the `legacy` snapshot-phase overflow handling depends on #204 staying
+   unfixed in place (see What `legacy` is).
+8. **The implementation lives in `ConduitIO/conduit-connector-mysql`** (certification decision 7).
+
+## Open questions
+
+None.
+
+## Appendix: draft upstream issue for the canal change
+
+Draft only. To be filed by DeVaris against the `go-mysql-org/go-mysql` repository (the `canal` package).
+Not filed.
+
+Title: `canal: expose RowsEvent.SkippedColumns so handlers can tell "not in the row image" from NULL`
+
+Body:
+
+> When the server logs a partial row image (`binlog_row_image=MINIMAL` or `NOBLOB`, set globally or per
+> session), `replication.RowsEvent` records the columns that are absent from the image in `SkippedColumns`
+> and leaves their values nil (`replication/row_event.go`, the row decoding loop). `canal` builds its own
+> `canal.RowsEvent` in `canal/sync.go` and does not copy `SkippedColumns` (`canal/rows.go`). A `canal`
+> handler therefore sees nil for both "the column is NULL" and "the column was not in the row image", and
+> cannot tell them apart.
+>
+> For a consumer that must not emit a wrong value, that is a data-integrity problem: a nullable column the
+> statement did not touch is indistinguishable from `NULL`. A global `binlog_row_image` check does not
+> help, because the variable is also a session variable and a writer session can set `MINIMAL` while the
+> global stays `FULL`.
+>
+> Request: add `SkippedColumns [][]int` (same type as `replication.RowsEvent.SkippedColumns`; confirm against
+> the source) to
+> `canal.RowsEvent` and populate it in `canal/sync.go`. No behavior change for handlers that ignore it.
+>
+> Reproduction: set `binlog_row_image=MINIMAL` in a writer session, run
+> `UPDATE t SET a = 1 WHERE id = 1` on a table with a nullable column `b` that has a value, and read the
+> event through a `canal` handler. The after image has `b == nil` and nothing in `canal.RowsEvent` says the
+> column was skipped. Read from the `go-mysql` v1.14.0 source; DeVaris to confirm the reproduction before
+> filing.
+>
+> Context: the `conduit-connector-mysql` design for NULL handling, in the Conduit org.
+> We would use the field to halt on any skipped column.
 
 ## Related
 
