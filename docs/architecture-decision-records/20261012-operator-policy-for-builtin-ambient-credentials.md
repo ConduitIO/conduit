@@ -2,15 +2,15 @@
 
 ## Summary
 
-**Status: Proposed (pending DeVaris on open questions 1-3 of the design doc). Not yet binding.** Three points
-below are proposals, not decisions: the package home, mandatory `allow-resources`, and the link-local
-refusal list. An ADR takes effect only once merged; do not merge this until they are decided.
+**Status: Accepted (DeVaris, 2026-10-12).** The package home, mandatory `allow-resources` and the IP guard
+scope below are decided. An ADR takes effect once merged.
 
 Built-in connectors may use the host's ambient cloud identity (the AWS default credential chain) only
 when the operator enables it in the engine configuration. The setting is off by default, cannot be
 changed from a pipeline config, and reaches connectors through the call context. When on, custom
 endpoints must be listed exactly by the operator and use https, and cross-host redirects are refused.
-Proposed, pending sign-off: link-local addresses are refused and a resource allowlist is required.
+Link-local and metadata addresses are always refused, private ranges are not, and a resource allowlist
+(exact names) is mandatory.
 
 ## Context
 
@@ -23,34 +23,33 @@ analysis, alternatives and failure modes are in
 
 ## Decision
 
-- Add `connectors.ambient-credentials.{enabled,allow-endpoints,allow-resources,allow-any-resource,allow-proxy}`,
+- Add `connectors.ambient-credentials.{enabled,allow-endpoints,allow-resources,allow-proxy}`,
   default off. `enabled=true` refuses to start with a proxy variable set unless `allow-proxy` is true.
-  Proposed (open question 2): `enabled=true` also requires a non-empty `allow-resources` (exact bucket
-  names, no wildcards) or `allow-any-resource`, and startup fails rather than warns.
+  `enabled=true` also requires a non-empty `allow-resources` (exact bucket names, no wildcards), and startup
+  fails rather than warns. There is no setting that turns the resource allowlist off.
 - Pass the policy to built-in connectors on the context. Absent policy means deny. No
-  `conduit-connector-sdk` or `conduit-connector-protocol` change. Proposed (open question 1): a small
-  additive `conduit-commons/hostpolicy` package; the alternative is `conduit-connector-sdk`, which couples
-  this to an SDK release.
+  `conduit-connector-sdk` or `conduit-connector-protocol` change. The policy package is a small
+  additive `conduit-commons/hostpolicy`; the alternative, `conduit-connector-sdk`, was rejected because it
+  couples this to an SDK release.
 - Accept a pipeline-supplied endpoint only on an exact, https `allow-endpoints` match; otherwise use only
   the SDK's endpoint resolution (the check runs on the endpoint the SDK resolved, whatever its source:
-  `AWS_ENDPOINT_URL*`, profile `endpoint_url`, `services` section). Refuse cross-host redirects. Proposed (open
-  question 3): also refuse link-local addresses (`169.254.0.0/16`, `fd00:ec2::254`, `fd00:ec2::23`,
-  IPv4-mapped forms) for every endpoint, allowlisted or not, except under `allow-proxy`; private ranges
-  stay allowed for allowlisted hosts.
+  `AWS_ENDPOINT_URL*`, profile `endpoint_url`, `services` section). Refuse cross-host redirects. Also refuse
+  link-local and metadata addresses (`169.254.0.0/16`, `fd00:ec2::254`, `fd00:ec2::23`, IPv4-mapped forms)
+  for every endpoint, allowlisted or not, except under `allow-proxy` (the dial control cannot see past a
+  proxy); private ranges stay allowed for allowlisted hosts.
   Credential-acquisition overrides (`AWS_ENDPOINT_URL_STS`, `_SSO`, IMDS) are out of scope.
   Exactly one static key set is a config error, never a fall-through to ambient.
 - Standalone plugins are out of scope; see #3043.
 
 ## Consequences
 
-- If the `allow-resources` proposal is accepted, operators who want ambient credentials must configure an
-  allowlist; "any bucket" needs an explicit setting.
+- Operators who want ambient credentials must configure a resource allowlist. There is no "any bucket"
+  setting; they list the buckets.
 - A pipeline must say `builtin:s3` to get the built-in connector when a registry `s3` is installed,
   because a bare name resolves to the standalone plugin first.
 - The registry copy of `s3` cannot use the ambient chain through this policy.
 - Static keys with a custom internal endpoint are unchanged and remain out of scope.
-- If the package-home proposal is accepted, `conduit-commons` gains a package and needs a release before
-  the `conduit` and `s3` changes.
+- `conduit-commons` gains a package and needs a release before the `conduit` and `s3` changes.
 
 ## Related
 

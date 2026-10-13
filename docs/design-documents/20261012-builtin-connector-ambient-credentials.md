@@ -8,13 +8,15 @@ host. Conduit's API is unauthenticated by default, so "pipeline author" means "a
 API". This design adds an operator-owned, engine-level policy that built-in connectors can read but
 pipeline configs cannot change: ambient credentials are off by default; when on, custom endpoints must be
 on an operator allowlist, over https only (a pipeline-supplied endpoint is accepted only on an exact
-allowlist match); and cross-host redirects are never followed. The
+allowlist match); the resources (buckets) the identity may touch are named by the operator, exact names
+only, and startup fails without them; and cross-host redirects are never followed. The
 engine hands the policy to built-in connectors through the call context, using a small shared package in
 `conduit-commons`. No `conduit-connector-sdk` change and no `conduit-connector-protocol` change is
 needed. Standalone plugins are out of scope; see #3043.
 
 This unblocks `conduit-connector-s3#1027` (default credential chain, issue #1021), which stays a draft on
-hold until this is signed off.
+hold until the policy ships. The open questions on this design are decided (see Decisions recorded); this
+remains a draft design doc until it is merged.
 
 Risk tier: Tier 1 (security boundary; touches how connectors authenticate to external systems). It does
 not change record flow, acks, positions or serialization.
@@ -100,7 +102,7 @@ Goals:
 - Ambient credentials are off unless the operator turns them on, and a pipeline config cannot turn them
   on.
 - When on, the connector accepts a custom endpoint only if the operator listed that exact https host,
-  refuses cross-host redirects, and never connects to link-local addresses.
+  refuses cross-host redirects, and never connects to link-local or metadata addresses.
 - The mechanism is generic (any built-in connector that wants ambient identity uses it), and needs no
   per-connector code in the engine.
 - Refusals are stable, machine-actionable errors; use is observable.
@@ -126,8 +128,7 @@ New keys under `connectors.ambient-credentials`, next to `connectors.path`:
 | --- | --- | --- | --- |
 | `connectors.ambient-credentials.enabled` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ENABLED` | `false` | Built-in connectors may use the process's ambient cloud identity |
 | `connectors.ambient-credentials.allow-endpoints` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS` | empty | The only custom endpoints that may receive ambient-credential-signed requests. `https://host[:port]` entries; exact host match, no suffix or wildcard matching. Parsed with `egress.ParseAllowEntry` (`pkg/plugin/processor/egress/policy.go:132`), with the additional rule that the scheme must be `https` |
-| `connectors.ambient-credentials.allow-resources` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES` | empty | Connector-defined resource names the ambient identity may touch; for `s3`, bucket names, exact match only. A `*` anywhere in an entry is a startup error (see below). Required non-empty when `enabled=true`, unless `allow-any-resource` is set |
-| `connectors.ambient-credentials.allow-any-resource` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ANY_RESOURCE` | `false` | Explicit opt-out of the resource allowlist: any resource the host identity can reach is allowed. Logged at WARN at startup |
+| `connectors.ambient-credentials.allow-resources` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES` | empty | Connector-defined resource names the ambient identity may touch; for `s3`, bucket names, exact match only. A `*` anywhere in an entry is a startup error (see below). Mandatory: must be non-empty when `enabled=true`, and startup fails otherwise |
 | `connectors.ambient-credentials.allow-proxy` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_PROXY` | `false` | Explicit opt-in to use ambient credentials while an HTTP proxy is configured in the process environment (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, either case). Logged at WARN at startup |
 
 ```yaml
@@ -141,20 +142,21 @@ Bucket names are globally registrable, so a pattern such as `acme-ingest-*` is u
 `acme-ingest-evil` in their own account, and a role that can write to it would then send data there. For
 that reason `allow-resources` takes exact names and a wildcard is refused, not warned about: an entry
 containing `*` is a startup error with the stable code `config.ambient_resource_wildcard`. Refusing is
-cheaper than a warning nobody reads, and an operator with many buckets lists them or uses
-`allow-any-resource` knowingly.
+cheaper than a warning nobody reads, and an operator with many buckets lists them.
 
-An operator who really wants "any bucket the role can reach" must say so (`allow-any-resource: true`); an
-empty list never means "any".
+There is no "any bucket" setting. An empty list never means "any", and no flag turns the allowlist off. An
+earlier revision had an `allow-any-resource` escape hatch; it was removed when `allow-resources` was decided
+to be mandatory with exact names (Decisions recorded, 2). An operator who wants every bucket a role can reach
+lists them.
 
 Behavior:
 
 - Validated in `Config.Validate` the way `egressCeiling` is: a malformed or non-https endpoint is a
-  startup error; `enabled=true` with an empty `allow-resources` and `allow-any-resource=false` is a
+  startup error; `enabled=true` with an empty `allow-resources` is a
   startup error (the zero value of a safety knob must not mean "everything"); a wildcard in
   `allow-resources` is a startup error (`config.ambient_resource_wildcard`); `enabled=true` with a proxy
   variable set and `allow-proxy=false` is a startup error (`config.ambient_proxy_env`); `allow-endpoints`,
-  `allow-resources`, `allow-any-resource` or `allow-proxy` set while `enabled=false` is a startup warning, not an error
+  `allow-resources` or `allow-proxy` set while `enabled=false` is a startup warning, not an error
   (inert but harmless; failing would make a config that is off by default awkward to stage).
 - **Endpoint rule: no suffix matching.** Under ambient credentials a pipeline-supplied `aws.endpoint` is
   accepted only if it exactly matches an `allow-endpoints` entry. A suffix rule such as `.amazonaws.com`
@@ -204,12 +206,16 @@ Behavior:
   signed requests to an unlisted host.
 - **https only.** Under ambient credentials every endpoint (allowlisted or SDK-resolved) must use
   `https`. An `http://` allowlist entry is a startup error, and `http://` redirect targets are refused.
-- **Link-local is always refused (except under `allow-proxy`, below).** Under ambient credentials no
-  connection is made to `169.254.0.0/16`, `fd00:ec2::254` (IMDS over IPv6), `fd00:ec2::23` (EKS Pod
+- **Link-local and metadata addresses are always refused (except under `allow-proxy`, below).** Under
+  ambient credentials no connection is made to `169.254.0.0/16`, `fd00:ec2::254` (IMDS over IPv6), `fd00:ec2::23` (EKS Pod
   Identity agent, IPv6) or the IPv4-mapped forms of the IPv4 range (for example
   `::ffff:169.254.169.254`), for any endpoint, allowlisted or not, checked on the resolved address at
   dial time (see Decision 3). The check unmaps IPv4-mapped IPv6 addresses (`netip.Addr.Unmap`) before
-  matching. Reason: a custom endpoint must not become a path to IMDS or the pod credential agent.
+  matching. Reason: a custom endpoint must not become a path to IMDS or the pod credential agent. Scope of the guard
+  (Decisions recorded, 3): link-local and these metadata addresses only. Private ranges (RFC 1918, ULA),
+  loopback and other internal addresses are not blocked, because an operator who allowlists
+  `https://minio.internal:9000` has chosen a private address on purpose. This differs from
+  `processors.egress`, which also blocks loopback and private ranges.
 - **Proxy variables are refused unless opted in.** The dial control sees only the address the client
   dials. The AWS SDK's default transport uses `http.ProxyFromEnvironment`
   (`aws-sdk-go-v2@v1.47.0/aws/transport/http/client.go:244`), so with `HTTPS_PROXY` set the client dials
@@ -242,7 +248,7 @@ Behavior:
 
 ### 2. Passing the policy to connectors
 
-A new package `github.com/conduitio/conduit-commons/hostpolicy` (name open, see Open questions):
+A new package `github.com/conduitio/conduit-commons/hostpolicy` (home decided, see Decisions recorded):
 
 ```go
 // Policy is the operator's decision about ambient credentials. The zero value denies.
@@ -250,7 +256,6 @@ type Policy struct {
     AmbientCredentials bool
     AllowEndpoints     []Endpoint // parsed https host/port entries, exact match
     AllowResources     []string
-    AllowAnyResource   bool
     AllowProxy         bool
     Observe            func(ctx context.Context, d Decision) // engine metric/log hook; may be nil
 }
@@ -258,7 +263,7 @@ type Policy struct {
 func WithPolicy(ctx context.Context, p Policy) context.Context
 func FromContext(ctx context.Context) Policy // zero (deny) when absent
 func (p Policy) CheckEndpoint(u *url.URL) error  // https + exact allowlist match
-func (p Policy) CheckResource(name string) error // allowlist / allow-any-resource; rejects ARN and alias forms
+func (p Policy) CheckResource(name string) error // exact allowlist match; rejects ARN and alias forms
 func (p Policy) CheckProxy(env func(string) string) error // refuses when a proxy variable is set and !AllowProxy
 func RedirectGuard() func(*http.Request, []*http.Request) error // refuses any cross-host or non-https redirect
 func DialControl() func(network, address string, c syscall.RawConn) error // refuses link-local at dial time
@@ -301,8 +306,8 @@ When neither static key is set:
    (`arn:aws:s3:<region>:<account>:accesspoint/<name>`) and access-point or multi-region aliases
    (`...-s3alias`, `...--ol-s3`) in the bucket parameter; these resolve to a resource, often in another
    account, that a bucket-name allowlist cannot reason about. They are refused with
-   `connector.resource_not_allowed` whatever the allowlist says, including under `allow-any-resource`
-   (an ARN or alias entry in `allow-resources` is itself a startup error). The reserved forms are: any
+   `connector.resource_not_allowed` whatever the allowlist says (an ARN or alias entry in `allow-resources` is
+   itself a startup error). The reserved forms are: any
    value starting `arn:` (access points, Outposts `arn:aws:s3-outposts:`, multi-region access points);
    the suffixes `-s3alias`, `--ol-s3` (object lambda), `--op-s3` (Outposts access point alias) and
    `--x-s3` (directory buckets, S3 Express One Zone, for example `name--usw2-az1--x-s3`); and a `.mrap`
@@ -367,7 +372,7 @@ the engine imports the connector).
 | `connector.credentials_incomplete` | the missing one of `aws.accessKeyId` / `aws.secretAccessKey` | only one of the two static keys is set | set both for static credentials, or neither to use ambient credentials (if the operator allows them) |
 | `connector.endpoint_not_allowed` | `aws.endpoint`, or "SDK-configured endpoint" when it came from the environment or shared config | endpoint is not https, or is not on the ambient-credentials allowlist | use static credentials with this endpoint, or add it to `connectors.ambient-credentials.allow-endpoints` |
 | `connector.redirect_refused` | `aws.endpoint` | refused redirect to a different host or a non-https URL | none for the pipeline author; report the endpoint to the operator |
-| `connector.endpoint_link_local` | `aws.endpoint` | endpoint resolves to a link-local address (including `fd00:ec2::23` and IPv4-mapped forms), which is never permitted with ambient credentials | use a different endpoint |
+| `connector.endpoint_link_local` | `aws.endpoint` | endpoint resolves to a link-local or metadata address (including `fd00:ec2::23` and IPv4-mapped forms), which is never permitted with ambient credentials | use a different endpoint |
 | `connector.resource_not_allowed` | `aws.bucket` | resource is not on the operator's allowlist, or is an access-point ARN or alias | use an allowed plain bucket name or ask the operator to extend `connectors.ambient-credentials.allow-resources` |
 | `connector.proxy_not_allowed` | `aws.endpoint` | a proxy is configured in the process environment and the operator has not opted in | ask the operator to unset the proxy variables or set `connectors.ambient-credentials.allow-proxy=true` |
 | `config.ambient_resource_wildcard` | `connectors.ambient-credentials.allow-resources` | wildcard entries are not allowed; bucket names are globally registrable | list exact bucket names (startup error, not a pipeline error) |
@@ -379,16 +384,23 @@ is a connector-side responsibility and needs its own test.
 
 ### 5. Observability
 
-- INFO log once per connector `Open`: `ambient credentials in use` with connector ID, plugin name,
-  resolved region, and the endpoint host (never keys, never the role ARN session token).
-- WARN log per refusal with the code and config path.
-- Counter `conduit_connector_ambient_credentials_total{plugin, outcome}` where outcome is `used`,
-  `denied_disabled`, `denied_endpoint`,
-  `denied_redirect`, `denied_link_local`, `denied_resource`, `denied_proxy`, driven through
-  `Policy.Observe`. (Metric name to be checked against the existing `conduit_*` naming when
-  implemented.)
-- `conduit run` startup logs the effective policy (enabled, number of allowlisted endpoints and
-  resources, `allow-any-resource`, `allow-proxy`) so an operator can see what is on.
+Naming follows the conventions in the `conduit` repo (checked at this PR's base): metrics are defined in
+`pkg/foundation/metrics/measure/measure.go` with a `conduit_` prefix and snake_case labels (`plugin`,
+`pipeline_name`, `component_id`), new counters carry the Prometheus `_total` suffix (as
+`conduit_inspector_dropped_records_total` and `conduit_pipeline_status_persist_failures_total` do), and each
+metric is listed in `docs/metrics.md`. Log fields are snake_case (`decision`, `reason`, `request_host`, as
+the egress service logs them), and the logger component is `package.Type` (`egress.Service`).
+
+- INFO log once per connector `Open`, message `ambient credentials in use`, fields `connector_id`, `plugin`,
+  `region`, `endpoint_host` (never keys, never the role ARN session token). Logger component
+  `connector.AmbientCredentials`.
+- WARN log per refusal, message `ambient credentials denied`, fields `decision="deny"`, `reason` (the stable
+  error code, for example `connector.endpoint_not_allowed`), `config_path`, `plugin`, `connector_id`.
+- Counter `conduit_connector_ambient_credentials_total{plugin, outcome}` in `measure.go`, documented in
+  `docs/metrics.md`, where outcome is `used`, `denied_disabled`, `denied_endpoint`, `denied_redirect`,
+  `denied_link_local`, `denied_resource`, `denied_proxy`, driven through `Policy.Observe`.
+- `conduit run` startup logs the effective policy (message `ambient credentials policy`; fields `enabled`,
+  `allow_endpoints_count`, `allow_resources_count`, `allow_proxy`) so an operator can see what is on.
 - `conduit doctor` shows the same effective policy as a check, from the `conduit.Config` it already
   carries (`cmd/conduit/root/doctor/doctor.go:66,81`), and fails the check on the startup-error
   combinations above, so a bad config is found before `conduit run`. Allowlisted endpoints and resource
@@ -459,19 +471,19 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
 | --- | --- |
 | Policy missing from context (older engine, standalone, test) | Deny. Ambient chain not loaded. Static keys still work |
 | `enabled=true`, but the host has no credentials | The SDK resolves lazily; first call fails with the SDK error (scrubbed for authors), nothing is acked (invariant 1). Same as the original #1027 behavior |
-| `enabled=true` with no `allow-resources` and no `allow-any-resource` | Startup error from `Config.Validate` |
+| `enabled=true` with no `allow-resources` | Startup error from `Config.Validate` |
 | Author sets `aws.endpoint` to a tenant-controlled AWS-suffix host (`*.execute-api...`, ELB, EC2 DNS) | `connector.endpoint_not_allowed`; no suffix match exists |
 | Allowlisted or custom hostname resolves to `169.254.169.254` / `fd00:ec2::254` / `fd00:ec2::23` / `::ffff:169.254.169.254` (no proxy) | Dial refused (`connector.endpoint_link_local`) |
 | Endpoint allowlist typo | Startup error for a malformed entry; a well-formed wrong entry causes `connector.endpoint_not_allowed` at pipeline `Configure` |
 | Pipeline already running when the operator turns the setting off | Takes effect on the next engine start. The policy is read at engine start and held by the registry, like the egress ceiling; there is no live reload. Running connectors keep their already-built client |
 | Proxy variable set with ambient credentials enabled | Startup error unless `allow-proxy: true`; connector also refuses at `Configure` |
 | `allow-resources` contains a wildcard, or an ARN or alias | Startup error |
-| `aws.bucket` is an access-point ARN or alias | `connector.resource_not_allowed`, even under `allow-any-resource` |
+| `aws.bucket` is an access-point ARN or alias | `connector.resource_not_allowed`, whatever the allowlist says |
 | `AWS_ENDPOINT_URL_S3`, `AWS_ENDPOINT_URL`, or the profile's `endpoint_url` / `services` section names an unlisted host | `connector.endpoint_not_allowed`, from the check on the SDK-resolved endpoint |
 | Only one static key set | `connector.credentials_incomplete`; never falls through to ambient |
 | Proxy allowed (`allow-proxy`) and a request is routed to a link-local address through it | Not stopped: the link-local refusal is void under `allow-proxy`. The operator accepted this |
 | Redirect to a non-permitted host mid-stream | Request is not sent, error returned, the record is not acked and the pipeline follows its normal error policy (invariants 1 and 3 hold; this is a refused write, not a dropped one) |
-| DNS answers differently between check and dial (rebinding) | The allowlist is on the host name the operator listed, which the operator trusts. The link-local refusal is enforced on the dialed address (dial control), so rebinding to link-local fails. Other private ranges are not blocked for allowlisted hosts (an operator may list `https://minio.internal`); see Open questions |
+| DNS answers differently between check and dial (rebinding) | The allowlist is on the host name the operator listed, which the operator trusts. The link-local refusal is enforced on the dialed address (dial control), so rebinding to link-local fails. Other private ranges are not blocked (an operator may list `https://minio.internal`): decided, see Decisions recorded, 3 |
 | `aws.region` crafted to alter the endpoint | Region is validated against `^[a-z0-9-]+$`; SDK endpoint resolution also rejects invalid host labels |
 | Engine restart after upgrade with old pipelines that used static keys | Unchanged; the policy is not consulted |
 | Pipeline created before upgrade relied on the chain | Not possible: `aws.accessKeyId` and `aws.secretAccessKey` are `validate:"required"` in `conduit-connector-s3` `config/config.go:59-61` at `e8f04f2` (the code `conduit` v0.9.4 pins is the same source; the tag itself was not diffed) |
@@ -521,7 +533,7 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
     replaced and still reaches the log in full; a 12-digit number outside those contexts (for example a
     request ID) is left intact.
   - Wildcard in `allow-resources` fails startup; access-point ARN and alias forms in `aws.bucket` are
-    refused, including with `allow-any-resource=true`.
+    refused whatever the allowlist says.
   - Proxy: `HTTPS_PROXY` set with `enabled=true` fails startup unless `allow-proxy`; the connector refuses
     at `Configure`; no request reaches a stub proxy in the refused case.
   - Each SDK endpoint source pointing at an unlisted host is refused, one test per source:
@@ -532,11 +544,12 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
   - Exactly one of `aws.accessKeyId` / `aws.secretAccessKey` set returns `connector.credentials_incomplete`
     with the policy on and off, and the default chain is never loaded.
   - Bucket forms `arn:...`, `x--ol-s3`, `x--op-s3`, `x-s3alias`, `name--usw2-az1--x-s3` are refused,
-    including under `allow-any-resource`.
+    whatever the allowlist says.
   - With `allow-proxy=true`, a test documents that link-local is not refused (so the void is a tested,
     stated behavior, not a surprise).
-  - `enabled=true` with empty `allow-resources` fails startup; `allow-any-resource=true` is accepted and
-    warns.
+  - `enabled=true` with empty `allow-resources` fails startup, and no other setting makes it start.
+  - A private-range allowlisted endpoint (for example a host resolving to `10.x`) is not refused by the dial
+    control: the guard scope is link-local and metadata addresses only.
 - Policy cannot be flipped from a pipeline or from tooling:
   - MCP `validate` and `dry_run` with a config that includes `connectors.ambient-credentials.*`-style
     keys, or connector settings named like policy keys, do not change the effective policy and do not
@@ -553,27 +566,29 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
 - Chaos: the policy does not touch the data path, so the SIGKILL suite is unaffected; justify that in the
   implementation PR rather than extend it.
 
-## Open questions for DeVaris
+## Decisions recorded
 
-1. **Package home.** `conduit-commons/hostpolicy` is the proposal (no SDK or protocol change, both repos
-   already depend on it). The alternative is `conduit-connector-sdk`, which gives connectors one import
-   but couples this to an SDK release. Confirm.
-2. **`allow-resources` is mandatory.** `enabled=true` requires a non-empty `allow-resources`
-   or an explicit `allow-any-resource: true`, because a bucket in an attacker's account that trusts the
-   host role is an exfiltration path the endpoint allowlist does not cover. Exact names only,
-   no wildcards. Confirm the extra setting is acceptable and that startup should fail rather than warn.
-3. **IP guard.** Proposed: refuse `169.254.0.0/16` and `fd00:ec2::254` for every endpoint
-   under ambient credentials, allowlisted or not. The IPv6 pod-agent address `fd00:ec2::23` and IPv4-mapped forms are included.
-   `processors.egress` also blocks loopback and private
-   ranges; for connectors an operator who allowlists `https://minio.internal:9000` has chosen a private
-   address on purpose, so those are not blocked. Confirm. (Static keys plus a custom internal endpoint
-   remain out of scope, stated above.)
-4. **Metric and log naming** to be aligned with existing conventions during implementation.
+Decided by DeVaris, 2026-10-12, accepting the recommendations. The ADR is Accepted.
+
+1. **Package home: `conduit-commons/hostpolicy`.** No SDK or protocol change. `conduit-connector-sdk` was the
+   alternative and lost because it couples this to an SDK release.
+2. **`allow-resources` is mandatory, with exact names.** `enabled=true` requires a non-empty list and startup
+   fails without it. The earlier `allow-any-resource` setting conflicted with this and is removed from the
+   design (config table, policy struct, behavior, failure modes, tests, and the ADR).
+3. **IP guard: always block link-local and metadata addresses; do not block private ranges.** The scope is
+   `169.254.0.0/16`, `fd00:ec2::254`, `fd00:ec2::23` and the IPv4-mapped forms. Technical limit, unchanged:
+   under `allow-proxy` the dial control sees only the proxy address, so the guard cannot apply to the real
+   destination; that opt-in was decided separately (see Decision 1, `allow-proxy`).
+4. **Metric and log naming follow the existing conventions.** Concrete names are in Observability.
+
+## Open questions
+
+None.
 
 ## Related
 
 - `conduit-connector-s3#1021` (credential chain), `#1022` (endpoint warning), `#994` (custom endpoint),
-  `#1027` (draft, on hold until this is signed off), `#1028`.
+  `#1027` (draft, on hold until the policy ships), `#1028`.
 - `docs/architecture-decision-records/20261012-operator-policy-for-builtin-ambient-credentials.md` (the decision recorded).
 - `ConduitIO/conduit#3043` (standalone plugins; out of scope here).
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the egress ceiling this mirrors).
