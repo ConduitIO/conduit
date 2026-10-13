@@ -22,14 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/matryer/is"
-	"github.com/stealthrocket/wazergo"
-	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 // TestWASMProcessor_LiveRuntime_StuckModule_TeardownReturns covers the live
@@ -42,29 +36,17 @@ import (
 // TestWASMProcessor_AbandonedCommand_TeardownReturns and the spin test.
 func TestWASMProcessor_LiveRuntime_StuckModule_TeardownReturns(t *testing.T) {
 	is := is.New(t)
-	ctx := context.Background()
 	// Short stop window and grace so the fallback is reached; the guest sleeps 3s.
 	oldStop, oldKill, oldGrace := moduleStopTimeout, moduleKillWait, moduleKillGrace
 	moduleStopTimeout, moduleKillWait, moduleKillGrace = 200*time.Millisecond, 10*time.Second, 100*time.Millisecond
 	t.Cleanup(func() { moduleStopTimeout, moduleKillWait, moduleKillGrace = oldStop, oldKill, oldGrace })
 
-	rt := newRuntime(ctx, false) // the live configuration
-	defer rt.Close(ctx)
-	_, err := wasi_snapshot_preview1.Instantiate(ctx, rt)
-	is.NoErr(err)
-	host, err := wazergo.Compile(ctx, rt, hostModule)
-	is.NoErr(err)
-	var mod wazero.CompiledModule
-	mod, err = rt.CompileModule(ctx, StallBinary)
-	is.NoErr(err)
+	underTest := newLiveProcessor(t, StallBinary)
 
-	underTest, err := newWASMProcessor(ctx, rt, mod, host, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
-	is.NoErr(err)
-
-	cctx, cancel := context.WithCancel(ctx)
+	cctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cancelOnceGuestAccepts(underTest, cancel)
-	_, err = underTest.executeCommand(cctx, specifyRequest())
+	_, err := underTest.executeCommand(cctx, specifyRequest())
 	is.True(cerrors.Is(err, ErrCommandTimeout))
 
 	err = teardownWithin(t, underTest, 2*time.Minute)

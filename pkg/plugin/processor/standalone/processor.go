@@ -107,12 +107,15 @@ type wasmProcessor struct {
 	// cancelRun cancels the context the guest's _start runs under. It is the
 	// kill switch: see closeModule.
 	cancelRun context.CancelFunc
-	// closeOnce guards close(commandRequests) so Teardown can be called more
-	// than once (a second call used to panic on the closed channel).
+	// closeOnce guards close(closed) so Teardown can be called more than once.
 	closeOnce sync.Once
-	// closed is closed together with commandRequests. executeCommand checks it
-	// first: a select that includes a send on a closed channel can panic when
-	// that case is chosen, so commands after Teardown must never reach it.
+	// closed is closed when the processor shuts down (closeModule). It is the
+	// ONLY shutdown signal: commandRequests is deliberately never closed, because
+	// executeCommand may be sending on it concurrently from another goroutine (a
+	// Process running while Teardown starts), and a send on a closed channel
+	// panics no matter how it is guarded (any "already closed?" check is
+	// check-then-act). The host's command_request selects on closed and tells the
+	// guest there are no more commands; executeCommand selects on it and refuses.
 	closed chan struct{}
 
 	// moduleStopped is used to know when the module stopped running
@@ -146,6 +149,7 @@ func newWASMProcessor(
 	commandResponses := make(chan tuple[*processorv1.CommandResponse, error])
 	moduleStopped := make(chan struct{})
 	abandoned := make(chan struct{})
+	closed := make(chan struct{})
 
 	// Build the per-processor egress capability from the resolved policy. The
 	// policy is bound here, per instance — never on the shared Registry — so one
@@ -170,6 +174,7 @@ func newWASMProcessor(
 			commandRequests,
 			commandResponses,
 			abandoned,
+			closed,
 			schemaService,
 			httpService,
 		),
@@ -214,7 +219,7 @@ func newWASMProcessor(
 		commandRequests:  commandRequests,
 		commandResponses: commandResponses,
 		abandoned:        abandoned,
-		closed:           make(chan struct{}),
+		closed:           closed,
 		moduleStopped:    moduleStopped,
 	}
 
@@ -415,18 +420,18 @@ func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
 }
 
 func (p *wasmProcessor) closeModule(ctx context.Context) error {
-	// Closing the command channel will send an error code to the WASM module
-	// signaling it to exit. Once: Teardown may be called again.
-	p.closeOnce.Do(func() {
-		close(p.closed)
-		close(p.commandRequests)
-	})
+	// Closing p.closed makes the host's command_request return an error code to
+	// the WASM module, signaling it to exit. Once: Teardown may be called again.
+	p.closeOnce.Do(func() { close(p.closed) })
 
 	timer := time.NewTimer(moduleStopTimeout)
 	defer timer.Stop()
 
 	select {
 	case <-timer.C:
+		if p.stopped() {
+			return nil // it exited just as the timer fired: not a kill
+		}
 		// The guest neither answered nor exited (stuck inside a command, or
 		// spinning). Kill it rather than wait forever.
 		p.logger.Error(ctx).Msg("processor plugin did not stop in time, killing plugin")
@@ -435,6 +440,9 @@ func (p *wasmProcessor) closeModule(ctx context.Context) error {
 		}
 		return fmt.Errorf("processor plugin did not stop within %v and was killed: %w", moduleStopTimeout, ErrCommandTimeout)
 	case <-ctx.Done():
+		if p.stopped() {
+			return nil // select can pick ctx.Done even though the guest already exited cleanly
+		}
 		// The caller will not wait: kill without waiting for confirmation.
 		p.logger.Error(ctx).Msg("context canceled while waiting for teardown, killing plugin")
 		p.cancelRun()
@@ -492,7 +500,7 @@ func (p *wasmProcessor) waitStopped(d time.Duration) bool {
 func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.CommandRequest) (*processorv1.CommandResponse, error) {
 	select {
 	case <-p.closed:
-		return nil, cerrors.Errorf("processor plugin is shut down, cannot send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
+		return nil, p.shutDownError(req)
 	case <-p.abandoned:
 		return nil, p.abandonedError(req)
 	default:
@@ -502,6 +510,11 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 	case <-ctx.Done():
 		// Nothing was sent, so nothing is outstanding: not an abandonment.
 		return nil, fmt.Errorf("%w while sending command %T: %w", ErrCommandTimeout, req.Request, ctx.Err())
+	case <-p.closed:
+		// Shutdown began after the check above. commandRequests is never closed,
+		// so reaching the send case below would be harmless, but there is no
+		// longer a guest to take the request.
+		return nil, p.shutDownError(req)
 	case <-p.moduleStopped:
 		return nil, cerrors.Errorf("processor plugin stopped while trying to send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case p.commandRequests <- req:
@@ -550,4 +563,18 @@ func (p *wasmProcessor) isAbandoned() bool {
 
 func (p *wasmProcessor) abandonedError(req *processorv1.CommandRequest) error {
 	return cerrors.Errorf("refusing command %T: an earlier command was abandoned and the plugin must be torn down: %w", req.Request, ErrCommandTimeout)
+}
+
+func (p *wasmProcessor) shutDownError(req *processorv1.CommandRequest) error {
+	return cerrors.Errorf("processor plugin is shut down, cannot send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
+}
+
+// stopped reports whether the module has already stopped, without blocking.
+func (p *wasmProcessor) stopped() bool {
+	select {
+	case <-p.moduleStopped:
+		return true
+	default:
+		return false
+	}
 }

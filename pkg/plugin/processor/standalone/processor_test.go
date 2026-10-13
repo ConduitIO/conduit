@@ -276,18 +276,26 @@ func setStopTimeouts(t *testing.T, stop, killWait time.Duration) {
 // the one to give up. (Expiring the context any earlier means the request was
 // never sent, which leaves nothing outstanding and so does not exercise the bug.)
 //
-// closeModule closes p.commandRequests; the forwarder propagates that to the
-// real channel so the guest still sees "no more commands".
+// Shutdown needs no help from the forwarder: the guest learns about it from
+// the processor's closed channel, not from the request channel closing.
 func cancelOnceGuestAccepts(p *wasmProcessor, onAccepted func()) {
 	guest := p.commandRequests
 	proxy := make(chan *processorv1.CommandRequest)
 	p.commandRequests = proxy
 	go func() {
-		defer close(guest)
-		for req := range proxy {
+		for {
 			select {
-			case guest <- req:
-				onAccepted()
+			case req := <-proxy:
+				select {
+				case guest <- req:
+					onAccepted()
+				case <-p.closed:
+					return
+				case <-p.moduleStopped:
+					return
+				}
+			case <-p.closed:
+				return
 			case <-p.moduleStopped:
 				return
 			}
@@ -395,6 +403,11 @@ func TestWASMProcessor_Teardown_Twice(t *testing.T) {
 
 	underTest, err := newWASMProcessor(context.Background(), TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
 	is.NoErr(err)
+
+	// A round trip first, so the guest is certainly up and listening: otherwise
+	// under heavy load its start-up can outlast Teardown's own 5s command bound
+	// and the first Teardown legitimately reports a timeout.
+	is.NoErr(underTest.Open(context.Background()))
 
 	is.NoErr(underTest.Teardown(context.Background()))
 	err = underTest.Teardown(context.Background())

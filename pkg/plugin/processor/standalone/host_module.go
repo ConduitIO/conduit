@@ -79,6 +79,7 @@ func hostModuleOptions(
 	requests <-chan *processorv1.CommandRequest,
 	responses chan<- tuple[*processorv1.CommandResponse, error],
 	abandoned <-chan struct{},
+	closed <-chan struct{},
 	schemaService pprocutils.SchemaService,
 	httpService pprocutils.HTTPService,
 ) hostModuleOption {
@@ -87,6 +88,7 @@ func hostModuleOptions(
 		m.commandRequests = requests
 		m.commandResponses = responses
 		m.abandoned = abandoned
+		m.closed = closed
 		m.schemaService = schemaService
 		m.httpService = httpService
 	})
@@ -102,7 +104,11 @@ type hostModuleInstance struct {
 	// commandResponses, so command_response must drop instead of blocking. A nil
 	// channel (tests building the instance by hand) never fires, which keeps the
 	// original blocking behaviour.
-	abandoned     <-chan struct{}
+	abandoned <-chan struct{}
+	// closed is closed by wasmProcessor when it shuts down. command_request then
+	// returns ErrorCodeNoMoreCommands, which makes the guest exit. commandRequests
+	// itself is never closed (see wasmProcessor.closed). Nil never fires.
+	closed        <-chan struct{}
 	schemaService pprocutils.SchemaService
 	// httpService is the per-processor egress capability, bound host-side to this
 	// instance's resolved egress policy. It is genuinely per-instance state — never
@@ -126,11 +132,12 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	m.logger.Trace(ctx).Msg("executing command_request")
 
 	if m.parkedCommandRequest == nil {
-		// No parked command, so we need to wait for the next one. If the command
-		// channel is closed, then we return an error.
-		var ok bool
-		m.parkedCommandRequest, ok = <-m.commandRequests
-		if !ok {
+		// No parked command, so we need to wait for the next one. If the
+		// processor is shutting down, we return an error, which tells the guest
+		// there are no more commands and to exit.
+		select {
+		case m.parkedCommandRequest = <-m.commandRequests:
+		case <-m.closed:
 			return pprocutils.ErrorCodeNoMoreCommands
 		}
 	}
