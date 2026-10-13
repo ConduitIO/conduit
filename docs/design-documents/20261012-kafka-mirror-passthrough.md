@@ -279,9 +279,17 @@ run (Spike results 9).
      immediately, at the first read or at any refresh, with `KAFKA_TOPIC_CONFIG_UNREADABLE`. A config that was
      readable and stops being readable means the ACLs changed, which is an operator action to surface, not
      to ride out.
-   - `errors.As(err, &shardErrs)` with `*kadm.ShardErrors`: request-level transport failure (connection,
-     timeout, a shard that could not be mapped to a broker). Transient at a refresh. Context cancellation is
-     not counted: it means shutdown.
+   - `errors.As(err, &shardErrs)` with `*kadm.ShardErrors`: request-level failure (connection, timeout, a
+     shard that could not be mapped to a broker). `ShardErrors.Unwrap() []error` returns every shard's error
+     (kadm v1.17.2 `errors.go`, read), so `errors.Is` and `errors.As` see through it. Before treating it as
+     transient, test the shards: if any wraps `kerr.SaslAuthenticationFailed`, `kerr.UnsupportedSaslMechanism`
+     or `kerr.IllegalSaslState` (kgo returns the `kerr` value from the SASL handshake unwrapped,
+     `kgo/broker.go`, read), or `kgo.ErrClientClosed`, or is a `*kadm.AuthError`, it is fail-fast like the
+     top-level cases: credentials will not heal by waiting, and a closed client will not reopen. Otherwise it
+     is transient at a refresh. Context cancellation is not counted: it means shutdown. A SASL failure that
+     the client-side mechanism reports as a plain error, or the `ErrFirstReadEOF` "is SASL missing?" guess,
+     cannot be told apart from a network error, so it stays transient and is bounded by
+     `topicConfigRefreshMaxFailures`.
    - Any other error type: not classified, so not assumed transient. Fail fast.
 2. No error at the top level, then inspect the entry for the topic in the returned `ResourceConfigs`. A
    missing or empty entry is unreadable (fail). Otherwise read `ResourceConfig.Err` (`kadm` fills it with
@@ -383,24 +391,33 @@ nothing, and shows no error. Round 3 replaced that with a connector-side bound t
    not honour its context while waiting.
 2. One timer per `Write` call starts before the first enqueue and covers the enqueue loop as well as the
    wait for callbacks. `Client.Produce` blocks when the client buffer is full (franz-go v1.20.7
-   `kgo/producer.go`, read): it returns when space frees up, when the passed context is done, or when the
-   client is closed. So each `Produce` gets a context that carries the timer's deadline, and the timer's expiry
-   also closes the client, which releases a `Produce` stuck in the enqueue loop. The timer is never derived
+   `kgo/producer.go`, read; observed on franz-go v1.20.7 in a reviewer's spike, see _What was not
+   verified_): it returns when space frees up, when the passed context is done, or when the client is
+   closed. So each `Produce` gets a context that carries the timer's deadline, and the timer's expiry also
+   closes the client, which releases a `Produce` stuck in the enqueue loop. The timer is never derived
    from `Record.Timestamp`. Old `CreateTime` values have no effect on it.
 3. Poison flag. The connector holds an atomic flag (or `sync.Once` around `Close`) that is set before
    `Client.Close()` is called and checked before every `Produce`. A produce on a poisoned producer returns the
    poisoned error and never reaches the client, because a `Produce` issued after `Close()` can go without ever
-   calling back (read, see _What was not verified_), and a `ProduceSync` in that state deadlocks (reported).
+   calling back (observed on franz-go v1.20.7, see _What was not verified_), and a `ProduceSync` in that
+   state deadlocks (reported).
    The flag check does not close the race with a concurrent `Close()` (for example from `Teardown`) between
    the check and the `Produce`, so the wait never depends on callbacks alone: it selects on all callbacks
-   done, the timer, and `ctx.Done()`. No mutex is held across a `Produce` call or across the wait; the
-   flag is the only shared state on that path, and results are written to per-index slots that the waiter reads
-   after it stops waiting.
-4. On expiry the waiter stops waiting for callbacks and evaluates the slots once. If every promise has
-   already resolved with a nil error, `Write` returns nil: the records are confirmed, nothing is nacked, and
-   the producer is not closed. Otherwise the connector poisons the producer and calls `Client.Close()`, which
-   fails every unresolved promise with "client closed" at once (observed, Spike results 10). It returns
-   `KAFKA_PRODUCE_TIMEOUT` with the index of the first record whose promise did not resolve successfully.
+   done, the timer, `ctx.Done()` and a `closed` channel that the connector closes inside the same
+   `sync.Once` as `Client.Close()`. When a `Produce` loses the race with `Close()` and never calls back,
+   the `closed` case ends the wait at once instead of leaving it to the timer. No mutex is held across a `Produce` call or
+   across the wait; the flag is the only shared state on that path, and results are written to per-index
+   slots that the waiter reads after it stops waiting.
+4. When the waiter stops waiting for any reason other than all callbacks done (timer expiry or `ctx.Done()`),
+   it evaluates the slots once and does the same thing on both paths. If every promise has already resolved
+   with a nil error, `Write` returns nil: the records are confirmed, nothing is nacked, and the producer is not
+   closed. Otherwise the connector poisons the producer and calls `Client.Close()`, which fails every
+   unresolved promise with "client closed" at once (observed, Spike results 10), and nacks from the index of
+   the first record whose promise did not resolve successfully. On timer expiry the error is
+   `KAFKA_PRODUCE_TIMEOUT`; on `ctx.Done()` it is the context error. A cancelled context is not left
+   half-handled: abandoning the wait without closing would leave in-flight produces running whose records
+   the engine has already been told failed, and the next `Write` would race them.
+   The closed channel case (point 3) takes the same path with the `closed` error.
    Records before that index are acked, the rest are nacked (the SDK acks `batch[:n]` and nacks `batch[n:]`).
    This relies on per-index results, i.e. the #308 fix. Callbacks that run after the waiter returned write
    to slots nobody reads; they cannot change the result.
@@ -443,30 +460,45 @@ above the broker's worst healthy produce latency.
 
 ###### Shutdown
 
-Read from the engine (`conduit` `pkg/lifecycle/stream/destination.go`, lines 85-96 and the write loop below
-them, and `pkg/conduit/runtime.go`):
+Read from the engine (`conduit` `pkg/lifecycle/stream/destination.go`, `pkg/connector/destination.go`,
+`pkg/lifecycle/service.go`, `pkg/conduit/runtime.go`) and from `conduit-connector-sdk` v0.14.2
+`destination.go`. All of it is read, not run:
 
-- The destination node calls `Write` in its message loop. The deferred cleanup runs only after the loop has
-  returned: `Destination.Stop`, then `openMsgTracker.Wait()` (waits for all open messages to be acked or
-  nacked), then `Destination.Teardown`, which is where the connector's `Close` runs. A `Write` that is blocked
-  keeps the loop from returning, so none of `Stop`, the wait or `Teardown` has started. `Teardown` cannot
-  unblock a stuck `Write`.
-- The only things that end a stuck `Write` are `produceTimeout` expiring, the context passed to `Write`
-  being cancelled (the connector's wait selects on `ctx.Done()`; whether the engine cancels it on SIGTERM is
-  not verified), or the broker coming back.
-- On SIGTERM the runtime stops pipelines and then waits `exitTimeout`, 30 s (`pkg/conduit/runtime.go:85`, used
-  at `ls.Wait(exitTimeout)`, lines 909 and 953), after which it logs that pipelines did not stop in time and
-  carries on shutting down. What the process does after that was not examined.
-- SIGTERM with the broker unreachable therefore does not complete a graceful drain: the default
-  `produceTimeout` (2m) is longer than `exitTimeout`, so the runtime stops waiting first. For that pipeline
-  this is equivalent to `kill -9`, which invariant 7 already requires to be recoverable. Nothing is acked for
-  records the broker did not confirm, the position does not advance past the last confirmed record, and the
-  restart re-reads from the committed offset. Duplicates possible, no loss. What is lost is only the final
-  checkpoint flush.
+- The engine's `Destination.Write` does not call the connector's `Write`. It only hands the record to the
+  gRPC stream: `stream.Send` (`pkg/connector/destination.go`, `Write` at line 239, the `Send` at line 251). The
+  connector's own `Write(ctx)` runs inside the SDK `Run` loop (`destinationPluginAdapter.Run`,
+  `destination.go:187`, the write call at line 201) with the stream context.
+- The destination node's cleanup runs only after its message loop has returned
+  (`pkg/lifecycle/stream/destination.go`, deferred func): `Destination.Stop`, then `openMsgTracker.Wait()`
+  (all open messages acked or nacked), then `Destination.Teardown`, where the connector's `Close` runs. The
+  real stall points are `Destination.Stop`, in which the SDK waits up to `stopTimeout` (1 m,
+  `source.go:39`, used at `destination.go:253`) for the last position to be written and then up to 1 m to
+  flush, and `openMsgTracker.Wait()`. Both run before `Teardown`, so `Teardown` cannot unblock a stuck
+  `Write`.
+- The things that end a stuck connector `Write` are `produceTimeout` expiring, the stream context being
+  cancelled (the connector's wait selects on `ctx.Done()`), or the broker coming back. The legacy lifecycle
+  never cancels that context on SIGTERM: `StopAll` is graceful only (`pkg/lifecycle/service.go:661`), and the
+  forced stop after a timeout is an open TODO (`service.go:689`). The stream context is cancelled by
+  `Teardown` (`stopStream`, `pkg/connector/destination.go`), which runs after the stall.
+- On SIGTERM the legacy runtime calls `StopAll` and then waits `exitTimeout`, 30 s
+  (`pkg/conduit/runtime.go:85`, `ls.Wait(exitTimeout)` at line 909), after which it logs that pipelines did
+  not stop in time and carries on shutting down.
+- Arch-v2 differs: `registerCleanupV2` (`runtime.go`, from line 915) calls `StopAll(ctx, false)`, and on
+  the last of six 5 s intervals calls `StopAll(ctx, true)`, so the pipelines are force-stopped about 25 s
+  into the 30 s window. Whether a forced stop cancels the connector's `Write` context there was not
+  examined.
+- SIGTERM with the broker unreachable therefore does not complete a graceful drain on the legacy engine: the
+  default `produceTimeout` (2m) is longer than `exitTimeout`, so the runtime stops waiting first. For that
+  pipeline this is equivalent to `kill -9`, which invariant 7 already requires to be recoverable. Nothing is
+  acked for records the broker did not confirm, the position does not advance past the last confirmed
+  record, and the restart re-reads from the committed offset. Duplicates possible, no loss. What is lost
+  is only the final checkpoint flush.
 - `Client.Close()` itself is not the long pole: observed under 10 ms with the broker paused and with it stopped,
   with no context, and it made a `ProduceSync` that had been blocked for 25 s return `client closed`.
 - `kill -9` is unchanged: unacked records are re-read.
-- Not verified: the real shutdown time through a running pipeline. The test plan adds a pipeline-level test.
+- Not verified: the real shutdown time through a running pipeline, on either engine. The test plan adds a
+  pipeline-level test.
+
 If the source topic is `LogAppendTime`, `kafka.timestamp` is the broker append time and is written to
 the destination as CreateTime. That is the closest available behaviour and is documented.
 
@@ -632,7 +664,7 @@ returns that record's index: earlier records are acked, this one and the rest of
 | Record timestamp outside `message.timestamp.before/after.max.ms` (or `difference.max.ms`) | Record fails client-side, `KAFKA_TIMESTAMP_OUT_OF_RANGE`. If the broker still returns `INVALID_TIMESTAMP` (config changed, or not described), the whole produce batch fails on Kafka, including valid records in it (spike); the destination re-reads the topic config once and reports the config values |
 | Record timestamp older than `now - retention.ms` | Record fails, `KAFKA_TIMESTAMP_OLDER_THAN_RETENTION`. Kafka deletes such records within seconds of the segment closing, regardless of how recently they were written (spike) |
 | Broker unreachable or paused while records are in flight (mirror mode) | `produceTimeout` expires (the timer covers the enqueue loop too), the producer is poisoned and closed, `KAFKA_PRODUCE_TIMEOUT`, unconfirmed records nacked, none acked. Reported-error records may still land (paused-broker spike): duplicates on redelivery, no loss. Pipeline halts |
-| SIGTERM with in-flight produces and an unreachable broker | The engine does not run `Stop`, the open-message wait or `Teardown` until `Write` returns (read), so only `produceTimeout` ends a stuck `Write`. The runtime stops waiting at `exitTimeout` (30 s, read), earlier than the default `2m`: that is a hard stop for the pipeline. Unconfirmed records are not acked, position not advanced, restart re-reads: duplicates, no loss. See _Shutdown_ |
+| SIGTERM with in-flight produces and an unreachable broker | The engine does not run `Stop`, the open-message wait or `Teardown` until the connector's `Write` returns (read), so only `produceTimeout` ends a stuck `Write`. The runtime stops waiting at `exitTimeout` (30 s, read), earlier than the default `2m`: that is a hard stop for the pipeline. Unconfirmed records are not acked, position not advanced, restart re-reads: duplicates, no loss. See _Shutdown_ |
 | Transient DescribeConfigs failure at refresh (`*kadm.ShardErrors`, retriable code) | Last good config kept, warning and counter, retry within 10 s; `KAFKA_TOPIC_CONFIG_UNREADABLE` after `topicConfigRefreshMaxFailures` consecutive failures. Authorization errors and non-retriable codes fail immediately; `UNKNOWN_TOPIC_OR_PARTITION` is a missing topic, not transient |
 | Schema-attached record (decoded to structured data by the SDK) | Record fails, `KAFKA_MIRROR_PAYLOAD_NOT_RAW`; fix: disable `sdk.schema.extract.*` |
 | `mirror` with `deliveryTimeout` > 0 | Config validation fails, `KAFKA_DELIVERY_TIMEOUT_WITH_TIMESTAMP`; otherwise franz-go times out old-timestamp records immediately (spike) |
@@ -740,16 +772,21 @@ convention.
   - Timer fires with every promise already resolved nil: the call returns nil, the producer is not poisoned.
   - Timer fires with a mix: records before the first unresolved index are acked, the rest nacked, and late
     callbacks after the return do not change the result or race.
-  - The wait also returns on `ctx.Done()`.
+  - The wait also returns on `ctx.Done()`, and then behaves as on timer expiry: the producer is poisoned, the
+    client is closed, and nack starts from the first unresolved record.
+  - A `Close()` that wins the race against a `Produce` which then never calls back ends the wait through the
+    `closed` channel, not the timer (assert the return time is far below `produceTimeout`).
 - Shutdown: a pipeline-level test sends SIGTERM with a paused destination broker and in-flight records;
   asserts that the runtime stops waiting at `exitTimeout` (30 s), no ack past the last confirmed record, and a
   restart that loses nothing. Same with SIGKILL. It also records whether the `Write` context is cancelled on
-  SIGTERM, which this document could not establish.
+  SIGTERM, which this document has only read from the engine (legacy engine; on arch-v2 the forced stop
+  fires at about 25 s).
 - Config refresh: DescribeConfigs failing transiently (broker paused for less than the failure budget) keeps
   the last good config and does not halt; `topicConfigRefreshMaxFailures` consecutive failures halt with
   `KAFKA_TOPIC_CONFIG_UNREADABLE`; an authorization failure at refresh halts at once.
 - Error classification: table-driven over constructed values: `*kadm.AuthError` (wrapped, `errors.As`) fails
-  at once; `*kadm.ShardErrors` is transient at refresh and fails the record on the first read; a
+  at once; `*kadm.ShardErrors` of plain transport errors is transient at refresh and fails the record on the first
+  read, while one wrapping `kerr.SaslAuthenticationFailed` or `kgo.ErrClientClosed` fails at once; a
   `ResourceConfig.Err` of `UNKNOWN_TOPIC_OR_PARTITION` yields `KAFKA_DESTINATION_TOPIC_MISSING` even though
   `kerr.IsRetriable` is true for it (ordering test); a retriable code (for example `LEADER_NOT_AVAILABLE`) is
   transient at refresh; a non-retriable, non-auth code (for example `INVALID_REQUEST`) fails at once; a missing
@@ -890,12 +927,13 @@ compose project and ephemeral host ports. Results are observations on those vers
 - Whether `ForceMetadataRefresh` taking 5.0 s on Redpanda is the client `MetadataMinAge` or the broker.
 - The bounded wait on Redpanda, with TLS or SASL connections, or with several partitions and brokers; and
   through the connector's own `Produce` (the spike used franz-go directly).
-- A `Produce` that blocks on a full client buffer being released by the `produceTimeout` context or by
-  `Close()`: read from franz-go v1.20.7 `kgo/producer.go` (the blocked call selects on `ctx.Done()` and the
-  client context), not run. Likewise `Produce` after `Close()` never calling back: reported, and consistent with
-  the same source (the non-blocking path has no closed check), not run.
-- Whether the engine cancels the `Write` context on SIGTERM, and what the process does after the runtime's
-  `exitTimeout` expires. The sequence in _Shutdown_ is read from the engine, not run.
+- Observed on franz-go v1.20.7 in a reviewer's spike (not in this repo; I did not re-run it): a
+  300-iteration race between `Produce` and `Close()`, worst `Write` 2.002 s against a 2 s timeout, 12
+  TOCTOU hits (a `Produce` that lost the race to `Close()` and never called back), no hangs. A `Produce`
+  blocked on a full buffer was released by its context deadline (1.5 s) and by `Close()` (500 ms).
+  The `closed` channel in the waiter exists for the TOCTOU hits, which otherwise wait for the timer.
+- Whether a forced stop on arch-v2 cancels the connector's `Write` context. The legacy engine's behaviour
+  and the arch-v2 force-stop timing (about 25 s) are read from the engine, not run.
 - Classification of DescribeConfigs errors: the types and codes are read from kadm v1.17.2 and kerr (franz-go
   v1.20.7); only the authorization case was run against a broker (Spike results 9, and that run did not record
   the Go type of the returned error). The transient/fail-fast split, the 10 s retry interval and the default of 3
