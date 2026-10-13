@@ -345,17 +345,23 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
     with `connector_and_driver` the driver flushes keepalive LSNs, so Debezium's slot passes its committed offset
     and a restarted Debezium would skip what lies between. #341 S5 and #3029 make the same decision.
 
+  - Debezium 3.4+ `offset.mismatch.strategy` set to `trust_offset`, `trust_greater_lsn` or `trust_slot`, or
+    Debezium 2.7 `slot.seek.to.known.offset.on.start=true` (`migrate.kafka_connect.slot_advance_on_start_unsupported`):
+    each moves Debezium's slot or its offset at start, with no flushed offset behind the move, so a restart can skip
+    changes (#341 S5 item 9).
+
   These checks run against the live config before the stop, again against the config the cutover saves before
   the stop, and again before `--reset` or `rollback` restarts Debezium.
 
   **One code family per stage.** `kc.lint.postgres_slot_drop_on_stop` and `kc.lint.postgres_lsn_flush_mode` are
   the lint-time findings for the same configurations: warnings for plain `migrate` and `kc lint`, errors under
   `kc lint --for-cutover`. The `--cutover` refusal itself always emits the `migrate.kafka_connect.*` code above,
-  never a `kc.lint.*` or `postgres.import.*` code. This rule covers these two slot-safety refusals only; other
+  never a `kc.lint.*` or `postgres.import.*` code. This rule covers these slot-safety refusals only; other
   import refusals, such as `postgres.import.slot_reuse_unsupported` or the connector's preflight codes, keep their
   `postgres.import.*` codes. The mapping is fixed: `kc.lint.postgres_slot_drop_on_stop` →
   `migrate.kafka_connect.slot_drop_on_stop`; `kc.lint.postgres_lsn_flush_mode` →
-  `migrate.kafka_connect.lsn_flush_mode_unsupported`.
+  `migrate.kafka_connect.lsn_flush_mode_unsupported`; `kc.lint.postgres_slot_advance_on_start` →
+  `migrate.kafka_connect.slot_advance_on_start_unsupported`.
 
   The rule is that nothing that can be known to fail beforehand may fail after Debezium has stopped, since a
   failure after the stop is downtime. Checks that need the offset or the new slot's consistent point (steps 2-3)
@@ -410,7 +416,7 @@ stop, and rollback warns about them.
 
 | Code (`migrate.kafka_connect.*`) | When |
 | --- | --- |
-| `slot_drop_on_stop`, `lsn_flush_mode_unsupported`, `config_masked`, `pipeline_exists` | before the stop |
+| `slot_drop_on_stop`, `lsn_flush_mode_unsupported`, `slot_advance_on_start_unsupported`, `config_masked`, `pipeline_exists` | before the stop |
 | `identity_mismatch`; `identity_ahead` (warning) | after the stop (Identity proof) |
 | `slot_advanced`, `slot_in_use`, `slot_unowned`, `slot_create_blocked` | slot and journal checks, including re-runs |
 | `reset_unsafe`, `reset_pending` | `--reset` |
@@ -637,6 +643,7 @@ runs the same check itself before stopping Debezium; `--strict` escalates warnin
 | `kc.lint.kip1188_override_risk` | warning (placeholder) | reserved for KIP-1188 override-related behavior; placeholder by decision: the rule body is not specified until the KIP text is verified from a primary source |
 | `kc.lint.postgres_slot_drop_on_stop` | warning; error when linting for cutover | Debezium Postgres `slot.drop.on.stop=true`: a restart re-snapshots or loses position, and `--cutover` refuses it before stopping Debezium |
 | `kc.lint.postgres_lsn_flush_mode` | warning; error when linting for cutover | Debezium Postgres `lsn.flush.mode=manual` or `connector_and_driver`, or `flush.lsn.source=false`: the confirmed position cannot be relied on for cutover or rollback |
+| `kc.lint.postgres_slot_advance_on_start` | warning; error when linting for cutover | Debezium Postgres `offset.mismatch.strategy` (`trust_offset`, `trust_greater_lsn`, `trust_slot`) or `slot.seek.to.known.offset.on.start=true`: the slot or the offset moves at start; maps to `migrate.kafka_connect.slot_advance_on_start_unsupported` at cutover |
 | `kc.lint.postgres_no_heartbeat` | info | Debezium Postgres with `heartbeat.interval.ms` unset or 0 on a low-traffic table: idle-slot WAL retention on the Debezium side. Informational for migration, since Conduit's Postgres connector does not need it |
 | `kc.lint.postgres_snapshot_never_without_slot` | warning | `snapshot.mode=never` where the config also sets `slot.drop.on.stop` or gives no slot name: first start has nothing to resume from |
 | `kc.lint.converter_mismatch` | warning | connector converter differs from worker default in a way that changes subject names or wire format (for example Avro on key, JSON on value) |
