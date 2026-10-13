@@ -15,8 +15,9 @@ written but held in `status: stopped` until a human accepts the gap.
 
 This is roadmap item "v0.21: migrate-design" (ROADMAP.md, v0.21: `migrate kafka-connect` v1, `kc lint`,
 `kc diff`). It is a design document only; no code lands with it. Risk tier of this PR: Tier 3 (docs). The
-implementation PRs it describes are Tier 2 (CLI), except the pieces that adopt a Debezium replication slot or
-Kafka consumer-group offsets, which are Tier 1 (see _Failure modes_).
+implementation PRs it describes are Tier 2 (CLI), except the pieces that touch a Debezium replication slot,
+position import or Kafka consumer-group offsets, which are Tier 1 (see _Failure modes_).
+Reusing the Debezium slot is v0.22; v0.21 ships the fresh-slot strategy only (see _Decisions_).
 
 ## Context
 
@@ -59,7 +60,7 @@ connector repositories.
   Debezium offset import and the Postgres CDC completion work (separate lane); Protobuf decode for Schema
   Registry (#2882 design sign-off); Go toolchain and Avro library replacement; #2988 (secrets passed as
   `${VAR}` are stored expanded, in plaintext, in Conduit's DB); the v0.22 SMT pack; Debezium-compatible
-  output mode (v0.22); KC REST API compatibility and the JAR host (v0.23).
+  output mode for Postgres (pulled into v0.21, see _Decisions_); KC REST API compatibility and the JAR host (v0.23).
 
 ### Problem
 
@@ -106,7 +107,7 @@ format is detected, not declared; `--format {properties,json,rest-export,strimzi
 | `--dry-run` | Produce the report only, write no files. This is the "zero-risk front door". |
 | `--worker FILE` | Worker properties (or a Strimzi `KafkaConnect` CR) that supply defaults for converters, client security and config providers. Optional; without it, worker-level defaults are reported as unknown rather than assumed. |
 | `--registry-url URL` | Schema Registry URL, used only to fill the `conduit.yaml` fragment and the report. Never contacted by `migrate`. |
-| `--slot-mode {new,adopt}` | Postgres only. `new` (default): the pipeline uses its own slot and publication names. `adopt`: reuse the Debezium slot (see _Debezium Postgres_ and _Failure modes_). |
+| `--slot-mode new` | Postgres only. The pipeline uses its own slot and publication names. This is the only value in v0.21 and the default. `adopt` (reuse the Debezium slot, no re-snapshot) is v0.22 and is rejected with `kc.resume_unavailable` until then. |
 | `--accept-gaps` | Write blocking pipelines as `status: running` instead of `stopped`. Recorded in the report. |
 | `--json`, `--quiet`, `--strict` | Per the CLI output conventions. `--strict` exits 2 on any `approximated` entry too. |
 
@@ -151,7 +152,9 @@ file, line and column (or JSON pointer) so that every report entry and lint find
    auth from `${VAR}`. No other verb is ever sent. The Connect REST API returns secret values masked or
    resolved depending on the worker's config provider setup; `${provider:path:key}` references pass through
    as references (see _Secrets_).
-4. **Strimzi `KafkaConnector` custom resource** (`apiVersion: kafka.strimzi.io/*`, `spec.class`,
+4. **Strimzi `KafkaConnector` custom resource** (`apiVersion: kafka.strimzi.io/v1beta2` by default; other
+   `kafka.strimzi.io/*` versions are read on a
+   best-effort basis with a `kc.input_version_unverified` note; `spec.class`,
    `spec.tasksMax`, `spec.config`, `spec.state`; multi-document YAML supported) and, via `--worker`, the
    `KafkaConnect` CR's `spec.config`. Strimzi `${secrets:ns/name:key}` and `${strimzidir:...}` references are
    config-provider references and are handled as in _Secrets_. Strimzi-only fields (`spec.autoRestart`,
@@ -169,8 +172,12 @@ A source KC connector (Debezium, JDBC source) becomes `source: <db connector>` p
 those topics. A sink KC connector becomes `source: builtin:kafka` plus `destination: <target>`.
 MirrorMaker-style Kafka to Kafka becomes `source: builtin:kafka` plus `destination: builtin:kafka`.
 
-Pipeline `status` is `stopped` when the connector has any **blocking** report entry (below), otherwise
-`running`. A pipeline for a KC connector whose `spec.state`/REST state was `PAUSED` is also written `stopped`.
+A Debezium-sourced Postgres pipeline with a Kafka destination is emitted with Debezium-compatible output mode
+enabled by default (the mode is a v0.21 deliverable, see _Decisions_). If the build `migrate` targets does not
+list the mode, the output-format entry is blocking as in any other combination. Pipeline `status` is `stopped`
+when the connector has any **blocking** report entry (below), otherwise `running`. A pipeline for a KC connector whose
+`spec.state`/REST state was `PAUSED` is also
+written `stopped`.
 
 ### Output: the compatibility report
 
@@ -199,10 +206,12 @@ published as a JSON Schema alongside the golden test, per the CLI contract schem
          "target": {"configPath": "/pipelines/0/connectors/0/settings/url"}},
         {"key": "database.password", "status": "translated", "secret": true,
          "target": {"configPath": "/pipelines/0/connectors/0/settings/url", "env": "KC_ORDERS_CDC_DATABASE_PASSWORD"}},
-        {"key": "topic.prefix", "status": "approximated", "code": "kc.key_approximated",
-         "reason": "Conduit writes the table name; the Debezium topic is <prefix>.<schema>.<table>. A destination topic template reproduces the name, but the message format is OpenCDC, not the Debezium envelope.",
-         "target": {"configPath": "/pipelines/0/connectors/1/settings/topic"},
-         "blocking": true, "fix": "Accept OpenCDC output (--accept-gaps) or wait for Debezium-compatible output mode (v0.22)."},
+        {"key": "topic.prefix", "status": "translated",
+         "reason": "A destination topic template reproduces <prefix>.<schema>.<table>; the pipeline uses Debezium-compatible output mode, so the message format matches too.",
+         "target": {"configPath": "/pipelines/0/connectors/1/settings/topic"}},
+        {"key": "decimal.handling.mode", "status": "unsupported", "code": "kc.key_unsupported", "blocking": true,
+         "reason": "Value \"double\" is not among the encodings Debezium-compatible output mode supports.",
+         "fix": "Use \"precise\" or \"string\", or keep consumers on the old encoding by not migrating this connector yet."},
         {"key": "heartbeat.interval.ms", "status": "unsupported", "code": "kc.key_unsupported",
          "reason": "...", "blocking": false, "fix": "..."}
       ]
@@ -258,11 +267,11 @@ so the command stays honest if a certification slips.
 | KC connector class | Conduit target | Certification dependency (v0.21) | Notes |
 | --- | --- | --- | --- |
 | `io.debezium.connector.postgresql.PostgresConnector` | `builtin:postgres` v0.15.0 source, `builtin:kafka` destination | postgres v0.15.0: add SDK acceptance suite, Kafka-sink kill test, re-run committed benchi configs; Postgres CDC completion (flush gate, monotonic flush reporting) | Detailed below. |
-| `io.debezium.connector.mysql.MySqlConnector` | `mysql` source (labs, move to `ConduitIO`), `builtin:kafka` destination | mysql: move to `ConduitIO`, add `LICENSE`, acceptance suite, port the postgres kill harness, registry entry. Roadmap currently places "MySQL CDC beta" in v0.22 | Gaps below. |
-| `io.confluent.connect.jdbc.JdbcSourceConnector` | `postgres` or `mysql` source (CDC), `builtin:kafka` destination | same as the two rows above | Approximation; detailed below. |
-| `io.confluent.connect.jdbc.JdbcSinkConnector` | `builtin:kafka` source, `postgres` destination or `mysql` destination | postgres destination and mysql destination certified. Roadmap currently places the JDBC sink family in v0.22 | Other databases: `kc.connector_class_unsupported` plus fix text pointing to the labs trigger-based connectors (not certified) and the v0.23 JAR host. |
+| `io.debezium.connector.mysql.MySqlConnector` | `mysql` source (labs, move to `ConduitIO`), `builtin:kafka` destination | mysql: move to `ConduitIO`, add `LICENSE`, acceptance suite, port the postgres kill harness, registry entry. MySQL CDC beta is in the v0.21 roadmap (see _Decisions_) | Gaps below; v0.21 is re-snapshot-only. |
+| `io.confluent.connect.jdbc.JdbcSourceConnector` | `postgres` or `mysql` source, `builtin:kafka` destination | same as the two rows above | Translated where the config maps, otherwise blocking approximation; detailed below. |
+| `io.confluent.connect.jdbc.JdbcSinkConnector` | `builtin:kafka` source, `postgres` destination or `mysql` destination | postgres destination and mysql destination certified. in the v0.21 roadmap (see _Decisions_) | Other databases: `kc.connector_class_unsupported` plus fix text pointing to the labs trigger-based connectors (not certified) and the v0.23 JAR host. |
 | `io.confluent.connect.s3.S3SinkConnector` | `builtin:kafka` source, `builtin:s3` destination | s3: acceptance suite, destination kill test, benchi configuration, registry entry | Detailed below. |
-| `io.confluent.connect.elasticsearch.ElasticsearchSinkConnector` | `builtin:kafka` source, `elasticsearch` destination (labs) | elasticsearch: fix failing CI, bump SDK from v0.12, ES and OpenSearch coverage, kill test, benchi. Roadmap currently places this in v0.22 | OpenSearch: same class family; mapped to `elasticsearch` with `version` per the connector; if an OpenSearch mode is added it is selected by `connection.url` probing at run time, not by `migrate`. |
+| `io.confluent.connect.elasticsearch.ElasticsearchSinkConnector` | `builtin:kafka` source, `elasticsearch` destination (labs) | elasticsearch: fix failing CI, bump SDK from v0.12, ES and OpenSearch coverage, kill test, benchi. in the v0.21 roadmap (see _Decisions_) | OpenSearch is in the v0.21 scope: same class family, mapped to the same Conduit destination; how the target is selected (a `version` value or an OpenSearch mode) is fixed by the certification work, and `migrate` never probes the cluster. |
 | `org.apache.kafka.connect.mirror.MirrorSourceConnector` (and `MirrorCheckpointConnector`, `MirrorHeartbeatConnector`) | `builtin:kafka` source, `builtin:kafka` destination | kafka: already Certified path per inventory (acceptance and integration present) | Detailed below. |
 
 **Debezium Postgres.**
@@ -272,33 +281,31 @@ so the command stays honest if a certification slips.
 | `database.hostname`, `.port`, `.user`, `.dbname`, `.password` | source `url` (`postgres://user:${KC_..._PASSWORD}@host:port/db`) | translated. `database.sslmode` and friends become URL query parameters. |
 | `table.include.list` (comma-separated regexes of `schema.table`) | source `tables` | translated when every entry is a literal name; a regex metacharacter makes it `unsupported` with fix "list the tables explicitly, or use `*`" (blocking). `table.exclude.list`: same. |
 | `schema.include.list` | folded into `tables` | approximated when combined with a table list, otherwise `unsupported`. |
-| `slot.name`, `publication.name` | `logrepl.slotName`, `logrepl.publicationName` | translated under `--slot-mode adopt`; under the default `new` they receive generated names (`conduit_<pipeline>`) and the entry is approximated with reason "separate slot so KC and Conduit can run side by side and rollback stays possible". |
+| `slot.name`, `publication.name` | `logrepl.slotName`, `logrepl.publicationName` | approximated: the pipeline receives generated names (`conduit_<pipeline>`) with reason "separate slot so KC and Conduit can run side by side and rollback stays possible". Non-blocking. Reusing the Debezium names is v0.22. |
 | `plugin.name` | none | `pgoutput`: translated (no-op); `decoderbufs`, `wal2json`: unsupported (blocking), Conduit reads `pgoutput`. |
-| `snapshot.mode` | `snapshotMode` (`initial`, `never`) | `initial`: translated; `never`: translated, but `resume` section requires the slot-adopt flow or reports `kc.resume_unavailable`; `always`, `initial_only`, `when_needed`, `no_data`, `exported`, `custom`: unsupported (blocking). |
-| `topic.prefix` (and legacy `database.server.name`) | `kafka` destination `topic` template | approximated (blocking, output format differs). Template reproduces `<prefix>.<schema>.<table>` where the schema comes from the table list. |
+| `snapshot.mode` | `snapshotMode` (`initial`, `never`) | `initial`: translated; `never`: translated, but with a fresh slot there is no history to resume from, so the entry is approximated and blocking (`kc.resume_unavailable`) with fix "use `initial`, or wait for slot reuse (v0.22)"; `always`, `initial_only`, `when_needed`, `no_data`, `exported`, `custom`: unsupported (blocking). |
+| `topic.prefix` (and legacy `database.server.name`) | `kafka` destination `topic` template | translated for Postgres to a Kafka destination (Debezium-compatible output mode). Template reproduces `<prefix>.<schema>.<table>` where the schema comes from the table list. For any other combination (Debezium MySQL to Kafka) approximated and **blocking**, output format differs (OpenCDC). For a non-Kafka destination, approximated with a warning. |
 | `topic.naming.strategy`, `topic.delimiter` | | unsupported for non-default values. |
 | `skipped.operations` | `filter` processor with a `condition` on `.Operation` | translated. |
 | `column.exclude.list`, `column.include.list` | `field.exclude` on `.Payload.After.<col>` and `.Payload.Before.<col>` with a `condition` on the collection | `exclude`: translated; `include`: unsupported until include-list `ReplaceField` lands (v0.22 pack). |
-| `tombstones.on.delete`, `decimal.handling.mode`, `time.precision.mode`, `binary.handling.mode`, `hstore.handling.mode`, `interval.handling.mode`, `provide.transaction.metadata` | | unsupported (blocking): these shape the Debezium envelope; Debezium-compatible output mode is v0.22. |
-| `heartbeat.interval.ms`, `heartbeat.action.query` | none | unsupported, non-blocking only if the report also verifies the table list is high-traffic; otherwise blocking. Confirm with the Postgres CDC completion lane whether the connector covers idle-database slot advancement. |
+| `tombstones.on.delete`, `decimal.handling.mode`, `time.precision.mode`, `binary.handling.mode`, `hstore.handling.mode`, `interval.handling.mode`, `provide.transaction.metadata` | | translated when the pipeline uses Debezium-compatible output mode (the default for Debezium-sourced Kafka pipelines, which carries the envelope, tombstone and type-encoding behavior); for each option the mode does not yet support, unsupported and blocking. For non-Kafka destinations the keys are unsupported and a warning. The supported option set is defined by the output-mode design (v0.21) and `migrate` reads it from that mode's option list, not from a constant. |
+| `heartbeat.interval.ms`, `heartbeat.action.query` | none | unsupported, **warning** (non-blocking): the v0.15.0 Postgres work found no idle-database slot-advancement problem and dropped the heartbeat writer. |
 | `signal.*`, `incremental.snapshot.*`, `snapshot.select.statement.overrides`, `snapshot.locking.mode` | | unsupported. |
 | `max.batch.size`, `max.queue.size`, `poll.interval.ms` | `sdk.batch.size` / none | approximated (non-blocking). |
 
-_Resume._ A migrated pipeline can start in one of three ways, and the report states which, in
-`result.resume`:
+_Resume._ v0.21 ships one strategy, and the report states it in `result.resume`:
 
-1. `new-slot` (default): new slot, `snapshotMode` as translated. A `snapshot.mode=initial` connector
-   re-snapshots. Safe to run next to the original connector; rollback is "stop Conduit".
-2. `adopt` with offset import: the pipeline reuses the Debezium slot and publication and its position is
-   seeded from the connector's offset record in `offset.storage.topic` (`connect-offsets`), so there is no
-   re-snapshot. The offset import itself (format, versioning, validation against the slot's
-   `confirmed_flush_lsn`) is designed in its own document and is Tier 1. This document only fixes the
-   contract: `migrate` emits `result.resume.import = {source: "connect-offsets", topic, key}` and the YAML
-   carries no offset data; the import is a separate command run against the Kafka cluster and the
-   stopped KC connector.
-3. `adopt` without offset import available: refused. `migrate` exits 2 with `kc.resume_unavailable` and the
-   fix "use `--slot-mode new` (re-snapshot) or wait for offset import". It never emits an adopt pipeline that
-   would silently re-snapshot or skip.
+1. `new-slot` (the only v0.21 strategy): new slot and publication, `snapshotMode` as translated. A
+   `snapshot.mode=initial` connector re-snapshots, and the report says so in plain words
+   (`resume.snapshot: "will-run"`). Safe to run next to the original connector; rollback is "stop Conduit".
+2. `adopt` (v0.22): reuse the Debezium slot and publication, with the position seeded from the connector's
+   offset record in `offset.storage.topic` (`connect-offsets`) so there is no re-snapshot. The offset import
+   (format, versioning, validation against the slot's `confirmed_flush_lsn`) is designed in its own
+   document and is Tier 1. The contract this document fixes for it: `migrate` will emit
+   `result.resume.import = {source: "connect-offsets", topic, key}`, the YAML carries no offset data, and the
+   import is a separate command run against the Kafka cluster with the KC connector stopped.
+3. `--slot-mode adopt` requested in v0.21: refused. `migrate` exits 2 with `kc.resume_unavailable` and the fix
+   "use `--slot-mode new` (re-snapshot)". It never emits a pipeline that would silently re-snapshot or skip.
 
 **Debezium MySQL.** Source keys map to labs `mysql`: `database.hostname|port|user|password` to `dsn`,
 `table.include.list` to `tables`, `snapshot.mode=initial` to `snapshot.enabled=true`, `schema_only`/`never` to
@@ -307,20 +314,29 @@ _Resume._ A migrated pipeline can start in one of three ways, and the report sta
 and GTID settings (not exposed), `include.schema.changes`, all envelope-shaping keys, and offset import
 (MySQL binlog coordinates are out of scope of the offset-import lane as scoped; MySQL migrations re-snapshot
 in v0.21). If the MySQL certification does not land in v0.21, `migrate` still reports this connector but
-sets `kc.target_not_certified` and the pipeline `stopped`.
+sets `kc.target_not_certified` and the pipeline `stopped`. For the v0.21 beta, MySQL migration is
+re-snapshot-only, and the report says so plainly on every MySQL connector: `resume.snapshot: "will-run"`, with
+the note "This migration re-snapshots the selected tables; binlog position is not imported."
 
-**JDBC source.** There is no polling JDBC source in the catalog. For `connection.url` pointing to PostgreSQL
-or MySQL, `migrate` emits the CDC connector as an **approximation**: log-based capture also sees updates
-and deletes that `mode=timestamp|incrementing` polling misses, needs `wal_level=logical` (or binlog
-access) that polling did not need, and emits OpenCDC records, not the flat rows the JDBC source produced.
-Always blocking, code `kc.key_approximated` on `mode`, with the fix text listing the prerequisites. `mode=bulk`
-(repeated full table reads) is `unsupported`. Other databases: `kc.connector_class_unsupported`. `query`,
-`timestamp.column.name`, `incrementing.column.name`, `topic.prefix` (applied as above) are reported
-individually.
+**JDBC source.** Translated to the existing `postgres` or `mysql` source (snapshot, then log-based change
+capture) where the KC config maps: `connection.url` points at PostgreSQL or MySQL, tables are named
+(`table.whitelist`/`table.include.list`), and no free-form `query` is used. `mode=bulk` maps to the snapshot;
+`mode=incrementing|timestamp|timestamp+incrementing` map to snapshot plus change capture on the same tables.
+That is `approximated` and non-blocking, with the differences stated in `reason`: log-based capture also sees
+updates and deletes that polling misses, needs `wal_level=logical` (or binlog access) that polling did not
+need, and emits OpenCDC records, not the flat rows the JDBC source produced (the migration harness checks
+the last point against the original connector). Where the config does not map (`query`, `mode` plus columns
+that have no table-level equivalent, `validate.non.null`, unsupported column types), the entry is
+`approximated` and **blocking**, code `kc.key_approximated`, and the pipeline is `stopped`. Other databases:
+`kc.connector_class_unsupported`. `timestamp.column.name`, `incrementing.column.name`, `topic.prefix` (applied
+as above) are reported individually. The poll-interval keys are approximated, non-blocking.
 
 **JDBC sink.** Kafka source with `groupID` set to the KC sink's consumer group, `connect-<name>`, and
 `readFromBeginning: false`, so a sink picks up from its committed offsets. This is a design assumption that
-needs a test before it ships (see _Failure modes_). `connection.url` (`jdbc:postgresql://...`) to destination
+is **a marked dependency**: whether the `kafka` source starts from committed consumer-group offsets is
+being checked by the certification lane (open question). Until it is confirmed, `readFromBeginning: true` is
+emitted, the entry is approximated, and the report says the sink replays from the beginning (at-least-once
+holds, duplicates are possible) (see _Failure modes_). `connection.url` (`jdbc:postgresql://...`) to destination
 `url`/`dsn`; `table.name.format` to `table` (template: `${topic}` becomes the collection metadata);
 `insert.mode` `insert` is translated, `upsert` and `update` depend on the destination's key handling and are
 approximated until the certification acceptance tests cover them; `pk.mode` and `pk.fields` map to key
@@ -457,11 +473,13 @@ Rules, all enforced by tests:
    `kc.secret_plaintext` (it is also a lint rule): the input file is itself a leak.
 5. **#2988.** Today `${VAR}` in a pipeline YAML is expanded at parse time and the expanded value is stored in
    Conduit's database in plaintext. So a pipeline `migrate` generates is safe at rest only as a file; once
-   provisioned, the secret lands in the store. Until #2988's design (store the reference and resolve at
-   connector open, or reuse the `CONDUIT_SECRET_*` resolver, or encrypt at rest) ships, `migrate` emits a
-   connector-level note `kc.secret_stored_expanded` on every pipeline that carries a secret, and the
-   REPORT.md "before you deploy" section says so. We do not invent a workaround in `migrate`; the fix is in
-   the engine. This design needs no change when #2988 lands: the contract `${VAR}` in the file stays.
+   provisioned, the secret lands in the store. If #2988 is not fixed by the v0.21 release, `migrate` ships
+   with a connector-level warning `kc.secret_stored_expanded` on every pipeline that carries a secret, and the
+   REPORT.md "before you deploy" section says so. The warning is emitted only when the running engine lacks
+   the fix (`migrate` asks the build for the capability), so it disappears once the fix lands, without a new
+   `migrate` release. #2988's design (store the reference and resolve at connector open, reuse the
+   `CONDUIT_SECRET_*` resolver, or encrypt at rest) lives in the engine, not here. We do not invent a
+   workaround in `migrate`, and the file contract `${VAR}` does not change when #2988 lands.
 
 ### `conduit kc lint`
 
@@ -479,9 +497,9 @@ rules; `--strict` escalates warnings; severity is per rule.
 | `kc.lint.dlq_replication` | warning | DLQ topic configured without `errors.deadletterqueue.topic.replication.factor` (defaults to 3 and fails on small clusters) or without `errors.deadletterqueue.context.headers.enable`, so failed records arrive with no error context |
 | `kc.lint.tasks_max_exceeds_source_limit` | warning | `tasks.max` greater than 1 on Debezium connectors (they run one task; extra tasks are ignored or rejected) |
 | `kc.lint.client_override_policy` | warning | `producer.override.*`, `consumer.override.*`, `admin.override.*` in a connector when the worker's `connector.client.config.override.policy` is `None` (the default, overrides are rejected at validation) or absent from the provided worker file (unknown); and the converse, `All` policy on a shared worker where any connector can retune clients |
-| `kc.lint.kip1188_override_risk` | warning (placeholder) | reserved for KIP-1188 override-related behavior; see Open question 4: the rule body is not specified until the KIP text and the worker versions affected are confirmed against primary sources |
+| `kc.lint.kip1188_override_risk` | warning (placeholder) | reserved for KIP-1188 override-related behavior; placeholder by decision: the rule body is not specified until the KIP text is verified from a primary source |
 | `kc.lint.postgres_slot_drop_on_stop` | warning | Debezium Postgres `slot.drop.on.stop=true` outside test setups: a restart re-snapshots or loses position |
-| `kc.lint.postgres_no_heartbeat` | warning | Debezium Postgres with `heartbeat.interval.ms` unset or 0 and a table list on a low-traffic table: idle-slot WAL retention |
+| `kc.lint.postgres_no_heartbeat` | info | Debezium Postgres with `heartbeat.interval.ms` unset or 0 on a low-traffic table: idle-slot WAL retention on the Debezium side. Informational for migration, since Conduit's Postgres connector does not need it |
 | `kc.lint.postgres_snapshot_never_without_slot` | warning | `snapshot.mode=never` where the config also sets `slot.drop.on.stop` or gives no slot name: first start has nothing to resume from |
 | `kc.lint.converter_mismatch` | warning | connector converter differs from worker default in a way that changes subject names or wire format (for example Avro on key, JSON on value) |
 | `kc.lint.json_schemas_enabled` | info | `JsonConverter` with `schemas.enable=true`: per-message schema overhead and a Conduit migration blocker |
@@ -491,7 +509,7 @@ rules; `--strict` escalates warnings; severity is per rule.
 | `kc.lint.migration_blocker` | info | any key or SMT that `migrate` would classify `unsupported`/blocking, with the migrate code, so lint is a cheap preview of the migrate report |
 
 `kc.lint.client_override_policy` is based on KIP-458 (connector client config override policy). KIP-1188 is
-deliberately not described beyond its placeholder; see Open questions.
+deliberately not described beyond its placeholder; see _Decisions_.
 
 Exit codes: 0 clean; 2 when any `error` finding exists (or any finding under `--strict`); 3 on unreachable
 `--from-rest`.
@@ -560,7 +578,8 @@ form and are public contracts from first release.
 | `kc.errors_all_without_dlq` | migrate, lint | tolerance all without DLQ | add DLQ topic |
 | `kc.secret_plaintext` | migrate, lint | literal secret in the input | use a config provider reference |
 | `kc.secret_stored_expanded` | migrate | #2988 caveat applies to this pipeline | see #2988 |
-| `kc.resume_unavailable` | migrate | adopt requested without offset import | `--slot-mode new` or wait |
+| `kc.resume_unavailable` | migrate | slot reuse requested (v0.22), or `snapshot.mode=never` with a fresh slot | `--slot-mode new`, or wait for v0.22 |
+| `kc.input_version_unverified` | migrate, lint, diff | input API version other than the verified default (Strimzi `v1beta2`) | warning |
 | `kc.target_not_certified` | migrate | emitted target is not Certified in the registry index | warning |
 | `kc.lint.*` | lint | rule findings as tabled | per rule |
 | `kc.diff.*` | diff | `subject_added`, `subject_orphaned`, `schema_incompatible`, `registry_unreachable`, `change_identity`, `change_behavior` | per finding |
@@ -613,11 +632,11 @@ a plausible-looking pipeline that behaves differently.
    with `kc diff`-style semantic comparison; (e) require every difference to be explained by a report entry
    with `approximated` or `unsupported` status that covers that field. An unexplained difference fails the
    case. This turns the report from a claim into a tested property. Harness runs against real Debezium for
-   CDC envelope differences until Debezium-compatible output mode lands, at which point the expected set of
-   differences shrinks and the cases are tightened.
-5. **Resume cases** (Tier 1, with the offset-import lane): `kill -9` Conduit mid-snapshot after adopting a
-   slot, restart, verify no gap and no loss; sink group-offset adoption with a still-running KC consumer to
-   confirm rebalance behavior and that no record is skipped.
+   CDC envelope differences with Debezium-compatible output mode on for Postgres; the expected differences for MySQL and
+   non-Kafka destinations stay in the report.
+5. **Resume cases** (Tier 1): `kill -9` Conduit mid-snapshot on a fresh slot, restart, verify no gap and no
+   loss; (v0.22, with the offset-import lane: the same after adopting a slot); sink group-offset adoption
+   with a still-running KC consumer to confirm rebalance behavior and that no record is skipped.
 6. **CLI contract tests**: envelope schema golden for all three commands, exit codes, `--json` output has no
    stray stdout, `NO_COLOR`.
 7. **Docs.** `conduit.io` docs source and `llms.txt` updated in the same implementation PRs (migration
@@ -660,16 +679,16 @@ a plausible-looking pipeline that behaves differently.
 | Key falls through translation | Silent behavior change | completeness invariant: unknown keys are `kc.key_unknown`, blocking; property test over corpus and fuzz |
 | Secret leaks into output, logs or diffs | Credential exposure | redacting value type, canary property test, `kc diff` compares secrets by hash only and never prints it |
 | Generated pipeline subtly differs from KC (typed field becomes string, topic layout changes) | Downstream breakage or corrupted data | emit-if-exact for SMTs; blocking approximations stop the pipeline; migration harness requires every observed difference to be in the report |
-| **Two consumers on one Postgres slot** (adopt mode while KC still runs) | Slot fights or split delivery | default is `--slot-mode new`; adopt requires offset import, which checks the KC connector is stopped (REST state) and the slot is inactive; runbook |
-| **Rollback after adopt**: Conduit advances the slot's confirmed flush, then Debezium is restarted from its older stored offset | Debezium resumes from the slot's later position and the interval is lost to it | state this in the report and runbook: after adopt, rollback means a new slot and a re-snapshot, not "restart KC". This is why `new` is the default and why adopt is Tier 1 with its own design |
-| Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | design assumption must be proven by the resume test before the group-adopt behavior ships; until then, `readFromBeginning` is set explicitly and the report says "replays from the beginning", at-least-once preserved |
+| **Two consumers on one Postgres slot** | Slot fights or split delivery | v0.21 never reuses the Debezium slot (`--slot-mode new` only); in v0.22 adopt requires offset import, which checks that the KC connector is stopped (REST state) and the slot is inactive; runbook |
+| **Rollback after adopt** (v0.22, not reachable in v0.21): Conduit advances the slot's confirmed flush, then Debezium is restarted from its older stored offset | Debezium resumes from the slot's later position and the interval is lost to it | state this in the report and runbook: after adopt, rollback means a new slot and a re-snapshot, not "restart KC". This is why `new` is the default and why adopt is Tier 1 with its own design |
+| Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | marked dependency on the certification lane's check of the `kafka` source; until it is confirmed, `readFromBeginning: true` is set explicitly and the report says "replays from the beginning", at-least-once preserved |
 | At-least-once vs KC's stronger guarantees (S3 sink, exactly-once source, KIP-618) | Duplicates after crash | connector-level note in the report; never claimed equivalent |
-| Output-format change (OpenCDC, not Debezium envelope; S3 layout) | Consumers break | blocking entries stop the pipeline; Debezium-compatible output mode (v0.22) removes the Debezium case |
+| Output-format change (OpenCDC, not Debezium envelope; S3 layout) | Consumers break | blocking entries stop the pipeline; Debezium-compatible output mode removes the Postgres-to-Kafka case in v0.21; Debezium MySQL and S3 layout remain blocking |
 | Input is itself malformed or hostile (huge file, deep JSON, ReDoS in key regexes) | Crash or hang | size and depth limits, fuzzing, RE2 only |
 | `--from-rest` against a production worker | Load or exposure | GET only, bounded concurrency, no connector secrets requested beyond what the API returns; a read of a masked value is reported as `[hidden]` and becomes a secret variable |
 | Certification slips (a mapped connector is not Certified at release) | The release story ("every emitted connector is certified") breaks | `kc.target_not_certified` warning and `stopped` pipeline; the registry index, not a constant in code, is the source |
 | Known-key sets drift as Debezium/Confluent connectors release | False `unknown_key`/`key_unknown` | versioned data files, a CI job that diffs against upstream docs on a schedule |
-| Roadmap and catalog drift (see Open questions 1-2) | Plan says v0.22 for items this design treats as v0.21 | resolved before implementation, in ROADMAP.md |
+| Roadmap drift | ROADMAP.md (#2945) still lists items this design now treats as v0.21 | the roadmap amendment is tracked outside this PR; see _Decisions_ item 1 |
 
 ## Upgrade, rollback and compatibility
 
@@ -698,30 +717,41 @@ a plausible-looking pipeline that behaves differently.
 - Migration progress as a product metric is a number of migrations completed by design partners, tracked
   in the early-adopter discussion, not in the binary.
 
+## Decisions
+
+Approved by DeVaris on 2026-10-12, in answer to the open questions in the first draft. The body of this
+document has been updated to match; this section is the record.
+
+1. **Scope.** The v0.21 roadmap includes MySQL CDC beta, JDBC sink and source, Elasticsearch and OpenSearch,
+   Postgres offset import, and a Debezium-compatible output mode for Postgres (newly pulled in). ROADMAP.md
+   (#2945) is amended separately; this PR does not edit it.
+2. **JDBC source.** Translate to the existing Postgres or MySQL connectors where the Kafka Connect config maps
+   (snapshot plus change capture); otherwise `approximated` and blocking.
+3. **Blocking gaps.** The pipeline is written as `status: stopped`. Unchanged.
+4. **KIP-1188.** `kc.lint.kip1188_override_risk` stays a placeholder until the KIP text is verified from a
+   primary source. No semantics are specified.
+5. **Secrets (#2988).** `migrate` ships with the `kc.secret_stored_expanded` warning if #2988 is not fixed by the
+   release. The warning goes away once the fix lands.
+6. **Debezium output format.** A Postgres CDC pipeline to a Kafka destination is a blocking gap unless it uses the
+   Debezium-compatible output mode, which ships in v0.21. With the mode available, `migrate` emits it by
+   default for Debezium-sourced Kafka-destination pipelines. For other destinations the difference is a warning.
+7. **`heartbeat.interval.ms`.** A warning, not blocking. The Postgres v0.15.0 work found no idle-database
+   slot-advancement problem and removed the heartbeat writer.
+8. **MySQL.** Re-snapshot-only migration is acceptable for the v0.21 beta, and the report states it plainly.
+9. **Kafka source resume from existing consumer-group offsets.** Still open; the certification lane is checking.
+   Kept as a marked dependency (see _JDBC sink_ and _Failure modes_).
+10. **Strimzi.** Default to `v1beta2`.
+11. **Offset import.** v0.21 ships the fresh-slot strategy only (`--slot-mode new`). Reusing the Debezium slot
+    is v0.22.
+
 ## Open questions
 
-1. **Release placement.** ROADMAP.md (#2945) puts offset import, MySQL CDC beta, JDBC-sink certification and
-   Elasticsearch certification in v0.22, while the v0.21 theme requires every emitted connector certified in
-   v0.21 and Postgres resume from Debezium offsets. Confirm v0.21 scope and amend the roadmap.
-2. **JDBC source default.** Emit log-based CDC as a blocking approximation (this design), or treat the JDBC
-   source as unsupported until a polling source exists?
-3. **Blocking semantics.** Write blocking pipelines as `status: stopped` (this design) or refuse to write
-   them at all?
-4. **KIP-1188.** The roadmap names "KIP-1188 override risks" but the KIP text could not be confirmed from
-   primary sources while writing this. The rule is a placeholder; the design needs the KIP's actual
-   semantics (which override, which versions) before `kc.lint.kip1188_override_risk` has a body.
-5. **#2988 gate.** Ship `migrate` with the `kc.secret_stored_expanded` warning before #2988 is fixed, or
-   gate secret-bearing output on it?
-6. **Debezium output default.** Is a Postgres CDC pipeline whose output is OpenCDC rather than the Debezium
-   envelope blocking until v0.22 (this design), or only a warning?
-7. **Heartbeats and idle slots.** Does the Postgres v0.15.0 CDC completion work cover idle-database slot
-   advancement? It decides whether `heartbeat.interval.ms` is non-blocking.
-8. **MySQL.** No schema history and no binlog offset import in v0.21; acceptable to ship MySQL migration as
-   re-snapshot-only?
-9. **Kafka group adoption.** Does the `kafka` source start from committed group offsets when `groupID`
-   already exists? If not, the sink resume story needs a connector change (Tier 1).
-10. **Strimzi API versions.** The design accepts any `kafka.strimzi.io/*` version for `KafkaConnector` and
-    `KafkaConnect`; confirm which versions design partners run.
+1. **Kafka source and existing consumer groups** (Decision 9). Does the `kafka` source start from committed
+   group offsets when `groupID` already exists? If not, resuming a migrated sink needs a connector change
+   (Tier 1), and migrated sinks replay from the beginning in v0.21.
+2. **Output-mode option set.** The list of Debezium envelope options the output mode supports (decimal, time,
+   tombstone, binary, hstore, interval encodings) is defined by that mode's own design; the mapping rows here
+   read it, and any option outside it stays unsupported and blocking.
 
 ## Related
 
