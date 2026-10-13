@@ -917,24 +917,39 @@ Each item must be verified, with the result linked from the implementation
 PR it belongs to, before that PR merges. The list is the same as in #341
 ("Pre-merge gate for the implementation PRs").
 
-1. The lock session on PG 14–18: one replication session creates two
-   `TEMPORARY PHYSICAL` slots and then Conduit's logical slot, and all are
-   dropped on disconnect.
-2. The same on Aurora, RDS, Cloud SQL and Azure Database for PostgreSQL.
-3. A new slot's `confirmed_flush_lsn` is strictly above the insert position
-   at its creation, on every supported major.
-4. Kafka Connect's config validation against a running connector.
-5. Debezium's attach-time flush (a liveness risk for R8).
-6. `pg_stat_activity` visibility of another role's walsender, with and
-   without `pg_read_all_stats` or `pg_monitor`.
-7. Conduit pipeline ids and delete semantics (attached connectors and
-   processors, `OnDelete` with `LastActiveConfig`).
-8. Kafka 3.5 `stopConnector`: the asynchronous stop and the observed
-   `STOPPED`, and the 404 after a delete on older workers.
-9. Debezium offset and reconnect behaviour per version, including
-   `offset.mismatch.strategy` and `slot.seek.to.known.offset.on.start`.
-10. This runbook, executed end to end in the `test/debezium` harness for
-    every case in #341 S12's Tests list.
+The final review's list, items 1–10, followed by the items the author lane
+had that it does not cover (11–13):
+
+1. Aurora, RDS, Cloud SQL and Azure accept `CREATE_REPLICATION_SLOT …
+   TEMPORARY PHYSICAL` on a replication connection with the `-c tcp_*`
+   startup options, and drop it on disconnect (#341 S15).
+2. On PG 14–18, one session can hold both locks and also create the slot.
+   Only PG 17 has been probed (#341 S15).
+3. Debezium `config/validate` while the slot is active: does it error, and
+   does it open a JDBC connection only? (#341 S12, R6)
+4. Does Debezium send a status update carrying its offset LSN when it
+   attaches? If it does, normal restarts give a false
+   `continuity_unproven` (#341 S15, R8).
+5. Debezium 3.4+: the effective default of `offset.mismatch.strategy`. If it
+   is not "unset", the refusal fires on every cutover (#341 S5 item 9).
+6. Kafka 3.5+: `PUT /resume` on a STOPPED connector resumes from the stored
+   offsets, and a STOPPED status in `/status` means the final offset commit
+   has happened (#341 S9, S12).
+7. The check role has `pg_read_all_stats` on each managed platform (#341 S12,
+   "Privileges").
+8. Fixture capture of `lsn_commit` and `lsn` semantics for each Debezium
+   version, as #341 already plans.
+9. How the CLI picks the pipeline id, and the delete sequence (connectors and
+   processors first) (#341 S16, "Pipelines the CLI writes" here).
+10. The `0x38` strictly-above result on PG 14–16 (#341 S15).
+11. The runbook, executed end to end in the `test/debezium` harness for every
+    case in #341 S12's Tests list, on Kafka 3.5+ and on an older worker.
+12. Debezium's WAL position search followed by `reconnect()` under a new
+    walsender, per Debezium version, which the equality rule is built for
+    (#341 S15).
+13. Workers older than Kafka 3.5: after the stop-equivalent `DELETE`,
+    `/status` returns 404 only once the task has stopped and committed its
+    final offset (#341 S9, S12).
 
 ### Other review fixes on the CLI side
 
