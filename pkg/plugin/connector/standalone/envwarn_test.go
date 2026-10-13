@@ -98,7 +98,7 @@ func TestClassifyEnv(t *testing.T) {
 		},
 		{
 			name:    "benign and excluded",
-			environ: []string{"PATH=/bin", "HOME=/root", "LANG=C", "KEYBOARD=us", "PWD=/tmp", "OLDPWD=/", "GOPATH=/g"},
+			environ: []string{"PATH=/bin", "HOME=/root", "LANG=C", "KEYBOARD=us", "PWD=/tmp", "OLDPWD=/", "TOKENIZERS_PARALLELISM=false", "tokenizers_parallelism=false", "GOPATH=/g"},
 			want:    []string{},
 		},
 		{
