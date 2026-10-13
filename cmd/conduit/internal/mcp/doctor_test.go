@@ -16,7 +16,6 @@ package mcp
 
 import (
 	"context"
-	json "github.com/goccy/go-json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/check"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
