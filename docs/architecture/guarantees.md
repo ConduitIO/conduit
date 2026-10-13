@@ -20,8 +20,12 @@ The **chaos tests** SIGKILL a real child process against a real position store
 ([`tests/chaos`](../../tests/chaos)). They exercise the **connector layer** (`connector.Source`, the
 persister, the position store), not the engines: the child's read/ack loop (`runReadAckLoop` in
 `tests/chaos/child.go`) calls `Source.Read` and `Source.Ack` directly and bypasses both the v1 node graph and
-the v2 funnel. No SIGKILL test drives v1's node graph, and none drives the v2 worker; the property-4 test
-that does use a `funnel.Worker` is in-process and does not crash anything. Rows below that cite chaos tests
+the v2 funnel. No SIGKILL test drives v1's node graph, and none drives the v2 worker. Four tests in the package do
+drive an in-process `funnel.Worker` against the real connector and position store, with no process kill:
+`TestSchemaDrift_TransportHalf_*` (`property4_test.go`), `TestArchV2_LiveApplyDrain_UnderLoad_NoGap` and
+`TestArchV2_LiveApplyDrain_StuckDestination_O2Bound` (`archv2_drain_test.go`), and
+`TestArchV2_StoreFault_FailsRunWithoutAck` (`archv2_storefault_test.go`). They are v2-only; v1 has no
+equivalent. Rows below that cite chaos tests
 are marked "Connector layer (engine-independent)" for that reason. Neither kind of test runs against a real
 connector plugin or a real network.
 
@@ -95,8 +99,8 @@ single-engine design ([#2971](https://github.com/ConduitIO/conduit/pull/2971)) r
 > the process gives up after the exit timeout and the records are replayed from the last persisted position.
 
 What happens at the timeout differs. v2 escalates to a force stop on the last of its six 5 s waits, then
-gives up at 30 s. v1 has no force step in the runtime shutdown path (`registerCleanup` in
-`pkg/conduit/runtime.go` calls `StopAll` and waits up to 30 s); it simply stops waiting.
+gives up at 30 s. v1 has no force step in the runtime shutdown path (`registerCleanupV1` in
+`pkg/conduit/runtime.go` calls `StopAll` and waits up to 30 s; v2's is `registerCleanupV2`); it simply stops waiting.
 
 Invariant 7. "Drains" and "exits within a bound" are two promises; the second is the weaker one today.
 
@@ -104,7 +108,9 @@ Invariant 7. "Drains" and "exits within a bound" are two promises; the second is
 | --- | --- | --- | --- |
 | A graceful stop acks every record the destination durably handled, then tears all connectors down | v1, v2 | Enforced | `TestInvariant7_StopDrainsInFlightRecords` |
 | A graceful stop completes when a source `Read` is parked | v1, v2 | Enforced | `TestInvariant7_StopWhileSourceReadIsStalled` |
-| The final position is flushed before teardown completes | v1, v2 | Enforced | [`TestServiceLifecycle_StopAndWait_DrainsAndPersists`](../../pkg/lifecycle/stop_and_wait_test.go) (both engines), `TestSIGTERM_GracefulTeardown_DrainsDeferredAck`, `TestArchV2_LiveApplyDrain_UnderLoad_NoGap` |
+| The final position is flushed before teardown completes | v1, v2 | Enforced | [`TestServiceLifecycle_StopAndWait_DrainsAndPersists`](../../pkg/lifecycle/stop_and_wait_test.go) (service level, both engines) |
+| The final deferred ack is delivered on SIGTERM teardown | Connector layer (engine-independent) | Enforced | `TestSIGTERM_GracefulTeardown_DrainsDeferredAck` |
+| A graceful drain under load leaves no gap and the position durable | v2 (in-process worker) | Enforced | `TestArchV2_LiveApplyDrain_UnderLoad_NoGap`; no v1 equivalent |
 | A force stop releases a pipeline wedged on withheld acks and acks nothing it should not | v1, v2 | Enforced | `TestInvariant7_ForceStopReleasesAPipelineWedgedOnAcks` |
 | A graceful stop with a destination that withholds acks completes | v1, v2 | **Does not hold** | The engines wait for the acks, with no bound: v1's `Stop` returns but the run never ends, v2's `Stop` blocks. [#2990](https://github.com/ConduitIO/conduit/issues/2990) tracks the v2 SIGTERM hang. A bounded `Stop` on v2 is tested at the worker level (`TestArchV2_LiveApplyDrain_StuckDestination_O2Bound`), which returns a deadline error rather than completing the stop |
 | The process exits within the exit timeout (30 s) of SIGTERM | v1, v2 | Not yet enforced | `pkg/conduit/runtime.go` waits 30 s (v2 force-stops at 25 s, v1 does not). No test starts a wedged pipeline and asserts the exit time |
