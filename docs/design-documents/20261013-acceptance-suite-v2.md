@@ -196,7 +196,7 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 | DST-11 | `throughput_smoke` | destination | Records/s over N seconds (default 3), recorded, not asserted; all acks successful | none |
 | SRC-01 | `pipelined_and_lagging_acks` | source | Acks arrive from another goroutine, lagging reads by 50 records, while reading continues; no deadlock or loss; restart from the last position is clean | 2, 3 |
 | SRC-02 | `mixed_batch_sizes` | source | 1, 100 and 10000 records, snapshot then CDC, delivered once each. A duplicate fails the case, see the policy below | 3 |
-| SRC-03 | `crash_resume_no_gap` | source | Six kills: three while reading the snapshot (50 of 100 records acked by the third); one right after the ack that completes the snapshot, resumed from exactly that position before any change is written (the boundary); then three while capturing changes (changes written after `Open`, a partial ack, a restart from that CDC position, more changes written after each restart). Seven restarts with a position are exercised; a source that misbehaves only from its eighth restart is not caught, and a test states that limit. The kill follows the connector's `Ack` return, not a sleep, and `Teardown` does not run. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`); redelivered records are not acked again, so the resume position never moves backwards. The data set scales with the bound | 2, 3 |
+| SRC-03 | `crash_resume_no_gap` | source | Seven kills: three while reading the snapshot (50 of 100 records acked by the third); one right after the ack that completes the snapshot, resumed from exactly that position before any change is written (the boundary); then three while capturing changes (changes written after `Open`, a partial ack, a restart from that CDC position, more changes written after each restart). Seven restarts with a position are exercised; a source that misbehaves only from its eighth restart is not caught, and a test states that limit. The kill follows the connector's `Ack` return, not a sleep, and `Teardown` does not run. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`); redelivered records are not acked again, so the resume position never moves backwards. The data set scales with the bound | 2, 3 |
 | SRC-04 | `ordering_per_key` | claim `OrdersByKey` | Records sharing a key arrive in write order in the snapshot, in changes written after `Open`, and across a restart: half of the snapshot is acked, the source is killed, the rest arrives after resuming, followed by keyed changes | 4 |
 | SRC-05 | `schema_evolution` | claim `evolve` | A field added while the source runs reaches the output intact | 6 |
 | SRC-06 | `large_record` | source | A 1 MiB record arrives intact | 3, 6 |
@@ -243,15 +243,18 @@ nothing in this suite or in index-CI runs it. The attestation is mandatory for e
 
 **The process death hook.** In-process, a killed source keeps its server-side session (a replication slot's
 walsender, a lock) until `Teardown`, which a real kill would have ended by closing the process's sockets. A driver
-may therefore implement `AcceptanceProcessDeathDriver`. The interface is narrow on purpose: the driver names a
-session once (`KilledSessionID`, for example the slot name) and the suite later asks it to release exactly that
-(`ReleaseSession(ctx, id)`), with no source instance, no test handle and no record in reach. It is meant for what
-the OS or server does by itself, like Postgres's `pg_terminate_backend` of the walsender that holds the slot, and
-must never persist, commit or flush for the connector. Any use is recorded in the report
-(`exceptions: ["process_death_hook"]`, `process_death_hook_calls`). A connector that needs the hook has **not**
-passed a real kill, so for it the attested kill -9 test is the only evidence of crash behavior, and the registry
-entry says so. The target design that removes the hook is a subprocess killed with SIGKILL, the section 5
-launcher (`conduit-connector-sdk#403`).
+may therefore implement `AcceptanceProcessDeathDriver`. Its signature is narrow: the driver names a session once
+(`KilledSessionID`, for example the slot name) and the suite later asks it to release exactly that
+(`ReleaseSession(ctx, id)`); the suite hands the hook no source instance, no test handle and no record. That is a
+property of the signature, not a guarantee. The driver creates the source (`Connector().NewSource`), so a driver
+can still reach the instance, and a driver can rescue a connector with the hook or without it. With the hook, the
+rescue is **flagged and counted** (`exceptions: ["process_death_hook"]`, `process_death_hook_calls`). Without it,
+a rescue is possible and **caught only by the attested kill -9 test**. The hook is meant for what the OS or server
+does by itself, like Postgres's `pg_terminate_backend` of the walsender that holds the slot, and must never
+persist, commit or flush for the connector. A connector that needs the hook has **not** passed a real kill, so for
+it the attested kill -9 test is the only evidence of crash behavior, and the registry entry says so. The real fix
+is the subprocess killed with SIGKILL, the section 5 launcher (`conduit-connector-sdk#403`); until it exists, the
+suite does not claim to prevent a rescue, only to make the honest uses visible.
 
 ### 3. Capability declaration
 
@@ -339,10 +342,16 @@ itself. Until that job exists, `certified` rests on maintainer review of the rep
 other item of the bar. This document does not claim the report authenticates anything.
 
 What the report carries so that a registry-side run can be tied to it: a random `run_id`, the SHA-256 of the test
-executable (`test_binary_sha256`) and of the suite's source files (`suite_source_hash`), and `exceptions`, the list
+executable (`test_binary_sha256`) and of the suite's source files (`suite_source_hash`, line endings normalized), the
+build settings of the binary (`build`: Go version, GOOS/GOARCH, `-race`, `-trimpath`, CGO, tags; from its build
+information), and `exceptions`, the list
 of everything that weakens the run (`synthetic`, `write_only`, `process_death_hook`,
 `max_redelivery_above_default`, and `waiver:<name>` for each declared waiver). None of these is a signature. They
-let a registry re-run compare what it built with what the report claims.
+let a registry re-run compare what it built with what the report claims. The binary hash is stable only in a pinned
+build environment: the module path of the build, `-race`, CGO, the toolchain and GOOS/GOARCH all change it, and so
+do the directories unless the build uses `-trimpath`. It matches a re-run with identical build settings and is
+otherwise informational, which is why the settings are in the report. CI should build the test binary with
+`-trimpath` and compare the settings before it compares the hash.
 
 **CI must delete the report before it runs.** The report path is written at the start of the run, but a job that
 reads a report it did not just produce can be fed one produced elsewhere or earlier. The workflow removes the
