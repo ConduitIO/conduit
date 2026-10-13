@@ -96,6 +96,7 @@ optional allowlist (IAM least privilege on the host role is the real boundary, a
 ## Goals and non-goals
 
 Goals:
+
 - Ambient credentials are off unless the operator turns them on, and a pipeline config cannot turn them
   on.
 - When on, the connector accepts a custom endpoint only if the operator listed that exact https host,
@@ -105,6 +106,7 @@ Goals:
 - Refusals are stable, machine-actionable errors; use is observable.
 
 Non-goals:
+
 - Authenticating the Conduit API (separate work).
 - Governing standalone plugins (out of scope; see Decision 6).
 - A policy language, per-pipeline grants, or multi-tenancy. This is a single operator ceiling.
@@ -146,6 +148,7 @@ An operator who really wants "any bucket the role can reach" must say so (`allow
 empty list never means "any".
 
 Behavior:
+
 - Validated in `Config.Validate` the way `egressCeiling` is: a malformed or non-https endpoint is a
   startup error; `enabled=true` with an empty `allow-resources` and `allow-any-resource=false` is a
   startup error (the zero value of a safety knob must not mean "everything"); a wildcard in
@@ -221,6 +224,17 @@ Behavior:
   the requested host, not the network path, and **the link-local refusal is void**: the dial control sees
   only the proxy's address, so a request to IMDS through the proxy is not stopped by this design. Redirect
   refusal still applies. Static keys are unaffected.
+- **Decided: `allow-proxy` as designed.** A proxy variable with ambient credentials is a startup error
+  unless `allow-proxy: true`, and under `allow-proxy` the link-local refusal does not apply (the operator
+  has accepted that the proxy is trusted).
+- **Out of scope: credential-acquisition endpoint overrides.** The SDK also honors
+  `AWS_ENDPOINT_URL_STS`, `AWS_ENDPOINT_URL_SSO`, `AWS_EC2_METADATA_SERVICE_ENDPOINT` (and the matching
+  profile keys), which redirect where credentials are fetched, not where S3 data goes. The policy checks
+  only the S3 data-path endpoint; these overrides are not checked. Residual risk: whoever controls the
+  engine's environment or shared config can point credential acquisition at a host they choose, and
+  that host sees the identity-exchange request (for example a web-identity token sent to a fake STS).
+  This is the operator's environment, which is already trusted with the credentials themselves; a
+  pipeline author cannot set these. Operators should treat them as sensitive engine configuration.
 - The setting applies only to the ambient chain. If a pipeline supplies both static keys, the connector
   uses them and the policy is not consulted. If it supplies exactly one, that is a configuration error
   (`connector.credentials_incomplete`), whatever the policy says; a half-specified static pair never
@@ -257,6 +271,7 @@ The engine's builtin `source.go` and `destination.go` adapters put the policy on
 client it builds. Enforcement stays in the connector, because only the connector knows its HTTP client.
 
 Properties that make this safe:
+
 - **Absent means deny.** A connector run outside the engine, in a standalone plugin process, in a unit
   test, or by an older engine, sees the zero `Policy` and refuses ambient credentials. There is no
   "unset means allow" state to get wrong.
@@ -368,7 +383,8 @@ is a connector-side responsibility and needs its own test.
   resolved region, and the endpoint host (never keys, never the role ARN session token).
 - WARN log per refusal with the code and config path.
 - Counter `conduit_connector_ambient_credentials_total{plugin, outcome}` where outcome is `used`,
-  `denied_disabled`, `denied_endpoint`, `denied_redirect`, `denied_link_local`, `denied_resource`, `denied_proxy`, driven through
+  `denied_disabled`, `denied_endpoint`,
+  `denied_redirect`, `denied_link_local`, `denied_resource`, `denied_proxy`, driven through
   `Policy.Observe`. (Metric name to be checked against the existing `conduit_*` naming when
   implemented.)
 - `conduit run` startup logs the effective policy (enabled, number of allowlisted endpoints and
@@ -386,6 +402,7 @@ context value, so a cooperating connector sees the zero (deny) policy and refuse
 Standalone plugins are out of scope; see #3043.
 
 Consequences for operators and pipeline authors:
+
 - A bare `s3` resolves to an installed registry copy first (`service.go:185-191`), which gets no policy.
   A pipeline that wants the built-in `s3` and its ambient-credential policy must say `builtin:s3`. The
   runbook and the connector docs state this, and the `connector.ambient_credentials_disabled` suggestion
@@ -414,7 +431,6 @@ Consequences for operators and pipeline authors:
 the main property, and it works with no engine change. Rejected as the design because it makes every
 connector invent its own variable, name and parsing, with no common allowlist or redirect handling. It
 is also invisible to `conduit run` (no startup validation, no policy log, no typo detection).
-
 
 **B. Only STS assume-role with an explicit role ARN, never the whole chain.** Narrows the blast radius
 because the pipeline names a role. Rejected: the call to STS is still made with the host identity, any
@@ -553,16 +569,13 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
    address on purpose, so those are not blocked. Confirm. (Static keys plus a custom internal endpoint
    remain out of scope, stated above.)
 4. **Metric and log naming** to be aligned with existing conventions during implementation.
-5. **Proxy opt-in.** Ambient credentials are refused when a proxy variable is set, unless
-   `allow-proxy: true`. Confirm a startup error is the right strictness, and that the link-local refusal
-   being void under `allow-proxy` is acceptable.
 
 ## Related
 
 - `conduit-connector-s3#1021` (credential chain), `#1022` (endpoint warning), `#994` (custom endpoint),
   `#1027` (draft, on hold until this is signed off), `#1028`.
 - `docs/architecture-decision-records/20261012-operator-policy-for-builtin-ambient-credentials.md` (the decision recorded).
-- ConduitIO/conduit#3043 (standalone plugins; out of scope here).
+- `ConduitIO/conduit#3043` (standalone plugins; out of scope here).
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the egress ceiling this mirrors).
 - `docs/operations/live-restart-apply.md` (operator-only authorization flag precedent).
 - `docs/catalog/v0.21-certification-gaps.md` (PR #3034), section "s3#1021 credential chain".
