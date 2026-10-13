@@ -48,19 +48,23 @@ func structuredRecord() opencdc.Record {
 // boundary floats, unicode, and nesting.
 func TestEstimateJSONSize_ByteExactVsEncoder(t *testing.T) {
 	cases := map[string]opencdc.StructuredData{
-		"simple":       {"id": "12345"},
-		"url with &":   {"url": "https://example.com/x?a=1&b=2&c=3"},
-		"escapes":      {"s": "line1\nline2\ttab \"quote\" back\\slash"},
-		"html chars":   {"s": "a&b<c>d"},
-		"backspace/ff": {"s": "a\bb\fc\x01d"}, // goccy uses //, not shortcuts
-		"escaped key":    {"a\"b\nc": "v"}, // keys are escaped too
+		"simple":         {"id": "12345"},
+		"url with &":     {"url": "https://example.com/x?a=1&b=2&c=3"},
+		"escapes":        {"s": "line1\nline2\ttab \"quote\" back\\slash"},
+		"html chars":     {"s": "a&b<c>d"},
+		"backspace/ff":   {"s": "a\bb\fc\x01d"}, // goccy v0.11 uses the \b and \f shortcuts (2 bytes each)
+		"escaped key":    {"a\"b\nc": "v"},      // keys are escaped too
 		"epoch ms float": {"ts": float64(1_700_000_000_123)},
 		"float boundaries": {
 			"big":    1e20,  // 'f' format: 21 digits
 			"bigger": 1e21,  // 'e' format
-			"small":  1e-7,  // 'e' format (goccy keeps 1e-07, no exponent trim)
+			"small":  1e-7,  // 'e' format (goccy v0.11 trims the exponent: 1e-7)
 			"tiny":   1e-6,  // 'f' format
-			"neg":    -12.5, // sign
+			"e10":    1e-10, // two-digit exponent: nothing to trim
+			"e100":   -1.5e-100,
+			"negexp": -2e-9,   // single-digit exponent, trimmed
+			"huge":   1.5e300, // positive exponent keeps its sign
+			"neg":    -12.5,   // sign
 		},
 		"unicode":  {"s": "héllo wörld 日本語"},
 		"bool/nil": {"a": true, "b": false, "c": nil},
