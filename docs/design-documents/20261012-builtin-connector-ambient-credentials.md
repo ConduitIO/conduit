@@ -7,10 +7,12 @@ chain: environment, `~/.aws`, web identity, ECS/EC2 role) lets any pipeline auth
 host. Conduit's API is unauthenticated by default, so "pipeline author" means "anyone who can reach the
 API". This design adds an operator-owned, engine-level policy that built-in connectors can read but
 pipeline configs cannot change: ambient credentials are off by default; when on, custom endpoints must be
-on an operator allowlist; and redirects are never followed to hosts the policy does not permit. The
+on an operator allowlist, over https only, and the AWS endpoint is never taken from the pipeline; and
+cross-host redirects are never followed. The
 engine hands the policy to built-in connectors through the call context, using a small shared package in
 `conduit-commons`. No `conduit-connector-sdk` change and no `conduit-connector-protocol` change is
-needed. Standalone connector plugins are out of scope for v0.21 and fail closed.
+needed. Standalone and external connectors are out of scope for v0.21: the policy does not reach them
+and any protection there is cooperative only.
 
 This unblocks `conduit-connector-s3#1027` (default credential chain, issue #1021), which stays a draft on
 hold until this is signed off.
@@ -34,6 +36,14 @@ chain. An automated security review found two problems:
    Go's HTTP client strips `Authorization` on a cross-host redirect but copies other headers, and SigV4
    also sends `X-Amz-Security-Token`; a redirect from an allowed host therefore leaks a session token
    unless the client refuses it.
+
+What "the API is open" means in the engine today, read at `81c6306`: the HTTP API has no authentication
+(`pkg/conduit/config.go:90`), and the default bind is `:8080`, all interfaces (`config.go:357`). The engine
+does not refuse a non-loopback bind. The only startup refusal tied to `isLoopbackBind` is the CORS wildcard
+`*` combined with a non-loopback bind (`config.go:454`), and a warning for the same combination
+(`runtime.go:1209-1217`). That protects against a web page reaching the API; it does not stop a direct
+network client. So on a default install, anyone who can reach port 8080 can create a pipeline. This design
+does not change that; it limits what such a pipeline can do with the host's identity.
 
 ### How built-in connectors are built today
 
@@ -61,12 +71,22 @@ Read from this repo at `81c6306`:
   authorization that no API caller can set. `CONDUIT_SECRET_*` is resolved only for the processor
   egress service and is not visible to connectors.
 - Standalone connector plugins are separate processes started through
-  `conduit-connector-protocol/pconnector/client`. The client sets `cmd.Env` to an empty slice with a
-  comment saying "clean env", but go-plugin v1.8.0 then appends `os.Environ()` unless `SkipHostEnv` is
-  set (`client.go:655`), and nothing sets it. So a standalone plugin inherits the host environment,
-  including `AWS_*`, and can reach IMDS and `~/.aws` like any process on the host. The engine cannot
-  stop a standalone plugin from using ambient credentials. It can only tell a cooperating plugin what
-  the operator decided.
+  `conduit-connector-protocol/pconnector/client`. The protocol client sets `cmd.Env` to an empty slice with
+  a comment saying "clean env" (`pconnector/client/client.go:44-45`, protocol v0.9.5), but go-plugin
+  v1.8.0 appends `os.Environ()` to the command environment unless `SkipHostEnv` is set
+  (`go-plugin@v1.8.0/client.go:655`), and conduit never sets it (no occurrence in this repo). A
+  standalone plugin therefore inherits the engine's entire environment, and runs as the same OS user, so
+  it also reaches IMDS and `~/.aws`. The engine cannot stop a standalone plugin from using ambient
+  credentials. Closing that inheritance is handled in a separate hardening change, see the standalone
+  plugin environment design doc: `<link: standalone-plugin-env design doc PR>`. This design does not
+  depend on it and does not assume it has landed.
+- A pipeline that names a plain `s3` (no prefix) resolves standalone first: `PluginTypeAny` tries
+  `standaloneReg.NewDispenser` and falls back to the built-in only on error
+  (`pkg/plugin/connector/service.go:185-191`, `newDispenser`). `builtin:s3` selects the built-in
+  (`service.go:183`).
+- A third kind exists in code: `pkg/plugin/connector/external` dispenses a connector already running at a
+  known address (go-plugin `Reattach`). At `81c6306` nothing outside its own tests imports it, so no
+  pipeline can reach it yet; its `doc.go` limits it to loopback (Mode 1) for now.
 
 ### Threat model
 
@@ -88,8 +108,8 @@ optional allowlist (IAM least privilege on the host role is the real boundary, a
 Goals:
 - Ambient credentials are off unless the operator turns them on, and a pipeline config cannot turn them
   on.
-- When on, the connector refuses non-AWS endpoints that the operator has not allowlisted, and refuses
-  redirects to hosts the policy does not permit.
+- When on, the connector accepts a custom endpoint only if the operator listed that exact https host,
+  refuses cross-host redirects, and never connects to link-local addresses.
 - The mechanism is generic (any built-in connector that wants ambient identity uses it), and needs no
   per-connector code in the engine.
 - Refusals are stable, machine-actionable errors; use is observable.
@@ -99,7 +119,10 @@ Non-goals:
 - Governing standalone plugins in v0.21.
 - A policy language, per-pipeline grants, or multi-tenancy. This is a single operator ceiling.
 - Changing how static keys work. Static keys in a pipeline config keep working exactly as today, with any
-  endpoint, as they only expose what the author already holds.
+  endpoint, as they only expose what the author already holds. In particular, static keys plus a custom
+  internal endpoint (an author pointing signed requests at an internal host) is out of scope here: it is
+  a plain SSRF concern that the engine's connector layer does not address today, and this design does not
+  claim to.
 
 ## Decision
 
@@ -110,8 +133,9 @@ New keys under `connectors.ambient-credentials`, next to `connectors.path`:
 | Key (flag / yaml) | Env | Default | Meaning |
 | --- | --- | --- | --- |
 | `connectors.ambient-credentials.enabled` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ENABLED` | `false` | Built-in connectors may use the process's ambient cloud identity |
-| `connectors.ambient-credentials.allow-endpoints` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS` | empty | Extra non-AWS endpoints that may receive ambient-credential-signed requests. `scheme://host[:port]` entries, same syntax and parser as `processors.egress.allow` |
-| `connectors.ambient-credentials.allow-resources` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES` | empty (any) | Optional connector-defined resource names the ambient identity may touch; for `s3`, bucket names (exact match, or a single trailing `*`) |
+| `connectors.ambient-credentials.allow-endpoints` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS` | empty | The only custom endpoints that may receive ambient-credential-signed requests. `https://host[:port]` entries; exact host match, no suffix or wildcard matching. Parsed with the `processors.egress.allow` parser, with the additional rule that the scheme must be `https` |
+| `connectors.ambient-credentials.allow-resources` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES` | empty | Connector-defined resource names the ambient identity may touch; for `s3`, bucket names (exact match, or a single trailing `*`). Required non-empty when `enabled=true`, unless `allow-any-resource` is set |
+| `connectors.ambient-credentials.allow-any-resource` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ANY_RESOURCE` | `false` | Explicit opt-out of the resource allowlist: any resource the host identity can reach is allowed. Logged at WARN at startup |
 
 ```yaml
 connectors:
@@ -120,14 +144,32 @@ connectors:
     allow-resources: ["acme-ingest-*"]
 ```
 
+An operator who really wants "any bucket the role can reach" must say so (`allow-any-resource: true`); an
+empty list never means "any".
+
 Behavior:
-- Validated in `Config.Validate` the way `egressCeiling` is: a malformed endpoint is a startup error;
-  `allow-endpoints` or `allow-resources` set while `enabled=false` is a startup warning, not an error (it
-  is inert but harmless; failing would make a config that is off by default awkward to stage).
-- Requests to AWS service endpoints (host suffixes `.amazonaws.com`, `.amazonaws.com.cn`, `.api.aws`)
-  are always permitted when `enabled=true`. Partitions with other suffixes (for example ISO regions) and
-  S3-compatible stores are reached through `allow-endpoints`. The suffix list lives in the S3 connector,
-  because "what is an AWS host" is connector knowledge, not engine knowledge.
+- Validated in `Config.Validate` the way `egressCeiling` is: a malformed or non-https endpoint is a
+  startup error; `enabled=true` with an empty `allow-resources` and `allow-any-resource=false` is a
+  startup error (the zero value of a safety knob must not mean "everything"); `allow-endpoints`,
+  `allow-resources` or `allow-any-resource` set while `enabled=false` is a startup warning, not an error
+  (inert but harmless; failing would make a config that is off by default awkward to stage).
+- **Endpoint rule: no suffix matching.** Under ambient credentials a pipeline-supplied `aws.endpoint` is
+  accepted only if it exactly matches an `allow-endpoints` entry. A suffix rule such as `.amazonaws.com`
+  is rejected as a design: tenants can create hosts under it that they control (API Gateway
+  `*.execute-api.<region>.amazonaws.com`, ELB and EC2 public DNS names), so a suffix match would let an
+  author receive SigV4-signed requests, which is the exfiltration this policy exists to stop. When
+  `aws.endpoint` is unset, the connector uses only the AWS SDK's own endpoint resolution (from the
+  validated `aws.region`), never a host derived from pipeline input. S3-compatible stores and non-standard
+  partitions are reached by listing their exact endpoint in `allow-endpoints`. One thing not verified
+  here: the S3 connector also honors the `AWS_ENDPOINT_URL` environment variable when `aws.endpoint` is
+  empty (`config/config.go` at `conduit-connector-s3@e8f04f2`). That value is operator-controlled, so it
+  is inside the trust boundary, but the implementation must decide whether it too is checked against
+  `allow-endpoints`; the safe default is yes.
+- **https only.** Under ambient credentials every endpoint (allowlisted or SDK-resolved) must use
+  `https`. An `http://` allowlist entry is a startup error, and `http://` redirect targets are refused.
+- **Link-local is always refused.** Under ambient credentials no connection is made to
+  `169.254.0.0/16` or `fd00:ec2::254`, for any endpoint, allowlisted or not, checked on the resolved
+  address at dial time (see Decision 3). Reason: a custom endpoint must not become a path to IMDS.
 - The setting applies only to the ambient chain. If a pipeline supplies both static keys, the connector
   uses them and the policy is not consulted.
 
@@ -139,15 +181,18 @@ A new package `github.com/conduitio/conduit-commons/hostpolicy` (name open, see 
 // Policy is the operator's decision about ambient credentials. The zero value denies.
 type Policy struct {
     AmbientCredentials bool
-    AllowEndpoints     []Endpoint // parsed scheme/host/port entries
+    AllowEndpoints     []Endpoint // parsed https host/port entries, exact match
     AllowResources     []string
+    AllowAnyResource   bool
     Observe            func(ctx context.Context, d Decision) // engine metric/log hook; may be nil
 }
 
 func WithPolicy(ctx context.Context, p Policy) context.Context
 func FromContext(ctx context.Context) Policy // zero (deny) when absent
-func (p Policy) CheckEndpoint(u *url.URL) error  // generic allowlist match
-func (p Policy) RedirectGuard(allowHost func(host string) bool) func(*http.Request, []*http.Request) error
+func (p Policy) CheckEndpoint(u *url.URL) error  // https + exact allowlist match
+func (p Policy) CheckResource(name string) error // allowlist / allow-any-resource
+func RedirectGuard() func(*http.Request, []*http.Request) error // refuses any cross-host or non-https redirect
+func DialControl() func(network, address string, c syscall.RawConn) error // refuses link-local at dial time
 ```
 
 The engine's builtin `source.go` and `destination.go` adapters put the policy on the context next to
@@ -165,9 +210,9 @@ Properties that make this safe:
 - **Protocol and SDK untouched.** `pconnector.PluginConfig` stays as is; the SDK already forwards context
   values.
 
-The error taxonomy and the redirect helper live in the same package so every connector refuses the same
-way. Provider-specific parts (the AWS host suffixes, the SDK `config.LoadDefaultConfig` call, an
-`http.Client` with `CheckRedirect` set) stay in the S3 connector.
+The error taxonomy, the redirect guard and the dial control live in the same package so every connector
+refuses the same way. Provider-specific parts (the SDK `config.LoadDefaultConfig` call, building the
+`http.Client`) stay in the S3 connector. There is no AWS host list anywhere.
 
 ### 3. Connector behavior (what `s3#1027` becomes)
 
@@ -175,17 +220,41 @@ When neither static key is set:
 
 1. `policy.AmbientCredentials` false: fail at `Configure` with `connector.ambient_credentials_disabled`.
    No AWS call is made and the default chain is not loaded.
-2. True: build the client with `LoadDefaultConfig` and an `http.Client` whose `CheckRedirect` is
-   `policy.RedirectGuard(isAWSHost)`. A redirect to a host that is neither an AWS service host nor an
-   allowlisted endpoint returns `connector.redirect_refused` and the request is not sent.
-3. If `aws.endpoint` is set: it must be an AWS host or match `allow-endpoints`; otherwise
-   `connector.endpoint_not_allowed`. Checked in `Configure`, so a bad pipeline fails when created or
-   validated, not on the first record.
-4. If `allow-resources` is non-empty, `bucket` must match; otherwise `connector.resource_not_allowed`.
-5. `aws.region` is validated against `^[a-z0-9-]+$` before it can influence an endpoint.
+2. True: `aws.region` is validated against `^[a-z0-9-]+$`, `bucket` (`aws.bucket`) is checked with
+   `CheckResource`, and the client is built with `LoadDefaultConfig`.
+3. If `aws.endpoint` is set it must pass `CheckEndpoint`: https and an exact `allow-endpoints` match;
+   otherwise `connector.endpoint_not_allowed`. If it is unset, only the SDK's own resolution is used.
+   Checked in `Configure`, so a bad pipeline fails when created or validated, not on the first record.
+   Test case that must be in the suite: `https://x.execute-api.us-east-1.amazonaws.com` is refused.
+4. The S3 service client (not the shared `aws.Config`) gets an `http.Client` with
+   `CheckRedirect = hostpolicy.RedirectGuard()` and a `net.Dialer` with `Control = hostpolicy.DialControl()`.
+   The guard refuses every redirect whose host differs from the original request's host and every
+   non-https redirect, returning `connector.redirect_refused`; the dial control refuses link-local
+   addresses on the resolved IP, which also covers a DNS name that resolves to `169.254.169.254`.
+   Why the service client only: `config.LoadDefaultConfig` builds the credential providers from
+   `cfg.HTTPClient`; for example `imds.NewFromConfig` copies `cfg.HTTPClient`
+   (`aws-sdk-go-v2/feature/ec2/imds@v1.20.3/api_client.go:112`), and the instance-role provider uses that
+   IMDS client (`config@v1.33.5/resolve_credentials.go:421-423`). A link-local guard on `cfg.HTTPClient`
+   would block the credential fetch itself. The same applies to STS for web identity. Whether the S3
+   client needs any cross-host redirect in normal operation (for example a region redirect) is not
+   verified; the design assumes not and the S3 tests must show it.
+5. A refused redirect is terminal. The error must not be retried on the same client: the SDK retryer wraps
+   the HTTP client, so the implementation marks the error non-retryable, and a test with retries
+   configured to the maximum asserts exactly one request reached the first server. The exact SDK
+   mechanism for marking it is not verified here.
+6. Error text from the AWS SDK that reaches a pipeline author (pipeline status, `Configure` errors) is
+   scrubbed: role ARNs (`arn:aws...:<12-digit account>:...`) and bare 12-digit account IDs are replaced
+   with a placeholder. The unscrubbed text goes only to the engine log, which the operator owns. Applies
+   to credential-resolution failures (STS `AssumeRoleWithWebIdentity`, IMDS) and to S3 `AccessDenied`
+   messages, which can embed the assumed-role ARN.
 
-Also checked on every dial/redirect, not only at `Configure`, so config reload or a server-chosen
-redirect cannot widen the set.
+The redirect guard and the dial control run on every request, not only at `Configure`, so a
+server-chosen redirect or a DNS change cannot widen the set.
+
+Note on Go's own behavior: `net/http` removes `Authorization`, `Www-Authenticate`, `Cookie` and `Cookie2`
+on a redirect to a host that is not the same domain or a subdomain (`shouldCopyHeaderOnRedirect`, Go
+1.25.5 `net/http/client.go:992`) and copies all other headers, including `X-Amz-Security-Token`. It also
+keeps `Authorization` on a redirect to a subdomain. The guard above is stricter than both.
 
 ### 4. Errors
 
@@ -198,11 +267,14 @@ the engine imports the connector).
 | Code | Config path | Message | Suggestion |
 | --- | --- | --- | --- |
 | `connector.ambient_credentials_disabled` | `aws.accessKeyId` | ambient credentials are not enabled on this Conduit instance | set `aws.accessKeyId` and `aws.secretAccessKey`, or ask the operator to set `connectors.ambient-credentials.enabled=true` |
-| `connector.endpoint_not_allowed` | `aws.endpoint` | endpoint host is not an AWS host and is not allowlisted for ambient credentials | use static credentials with this endpoint, or add it to `connectors.ambient-credentials.allow-endpoints` |
-| `connector.redirect_refused` | `aws.endpoint` | refused redirect to a host that is not permitted | none for the pipeline author; report the endpoint to the operator |
-| `connector.resource_not_allowed` | `bucket` | resource is not on the operator's allowlist | use an allowed resource or ask the operator to extend `connectors.ambient-credentials.allow-resources` |
+| `connector.endpoint_not_allowed` | `aws.endpoint` | endpoint is not https, or is not on the ambient-credentials allowlist | use static credentials with this endpoint, or add it to `connectors.ambient-credentials.allow-endpoints` |
+| `connector.redirect_refused` | `aws.endpoint` | refused redirect to a different host or a non-https URL | none for the pipeline author; report the endpoint to the operator |
+| `connector.endpoint_link_local` | `aws.endpoint` | endpoint resolves to a link-local address, which is never permitted with ambient credentials | use a different endpoint |
+| `connector.resource_not_allowed` | `aws.bucket` | resource is not on the operator's allowlist | use an allowed resource or ask the operator to extend `connectors.ambient-credentials.allow-resources` |
 
-Messages never include credential values, and the engine's existing log redaction applies.
+Messages never include credential values, and the engine's existing log redaction applies. Role ARNs and
+account IDs in AWS error text are scrubbed before they reach a pipeline author (Decision 3, item 6); this
+is a connector-side responsibility and needs its own test.
 
 ### 5. Observability
 
@@ -210,33 +282,50 @@ Messages never include credential values, and the engine's existing log redactio
   resolved region, and the endpoint host (never keys, never the role ARN session token).
 - WARN log per refusal with the code and config path.
 - Counter `conduit_connector_ambient_credentials_total{plugin, outcome}` where outcome is `used`,
-  `denied_disabled`, `denied_endpoint`, `denied_redirect`, `denied_resource`, driven through
+  `denied_disabled`, `denied_endpoint`, `denied_redirect`, `denied_link_local`, `denied_resource`, driven through
   `Policy.Observe`. (Metric name to be checked against the existing `conduit_*` naming when
   implemented.)
 - `conduit run` startup logs the effective policy (enabled, number of allowlisted endpoints and
-  resources) so an operator can see what is on.
+  resources, `allow-any-resource`) so an operator can see what is on.
+- `conduit doctor` shows the same effective policy as a check, from the `conduit.Config` it already
+  carries (`cmd/conduit/root/doctor/doctor.go:66,81`), and fails the check on the startup-error
+  combinations above, so a bad config is found before `conduit run`. Allowlisted endpoints and resource
+  patterns are shown; there are no secrets in them.
 - Runbook entry under `docs/operations/` (symptom: pipeline fails with one of the codes; diagnosis; fix).
 
-### 6. Standalone plugins
+### 6. Standalone and external connectors
 
-Out of scope for enforcement in v0.21, and they fail closed by construction: a standalone process gets no
-context value, so `FromContext` returns the deny policy. Consequence: the registry copy of `s3` cannot
-use the ambient chain until a follow-up lands. Operators who need ambient credentials use the built-in
-`s3`.
+Out of scope for enforcement in v0.21. The policy does not reach them: a standalone process gets no
+context value, so a cooperating connector sees the zero (deny) policy and refuses ambient credentials.
+That is the whole protection, and it is cooperative only. A standalone plugin inherits the engine's
+environment and runs as the same OS user (Context), so nothing in this design stops it from reading
+`AWS_*`, `~/.aws` or IMDS itself. This design does not claim otherwise.
+
+Consequences for operators and pipeline authors:
+- A bare `s3` resolves to an installed registry copy first (`service.go:185-191`), which gets no policy.
+  A pipeline that wants the built-in `s3` and its ambient-credential policy must say `builtin:s3`. The
+  runbook and the connector docs state this, and the `connector.ambient_credentials_disabled` suggestion
+  mentions it. With a registry `s3` installed, a bare `s3` in a pipeline silently selects it.
+- The registry copy of `s3` cannot use the ambient chain until a follow-up lands.
+- External connectors (`pkg/plugin/connector/external`, Reattach-based) are not wired into the registry
+  or `CreatePipeline` at `81c6306`, so there is nothing to enforce yet. The process is out of band and
+  gets no context value, the same as standalone, so the policy would not apply. Whoever wires that
+  package in must either carry the policy to it or document it as outside the policy. This design flags
+  it and does not decide it.
 
 Follow-up for v0.22, needing its own short design: the engine adds `CONDUIT_CONNECTOR_AMBIENT_*`
 variables to the plugin's environment next to the existing `EnvConduitConnectorToken` entries in
 `standalone/registry.go`, and `conduit-connector-sdk`'s `Serve` converts them to the same context value.
-That is an SDK change, not a protocol change. It stays cooperative, because a standalone plugin inherits
-the host environment today and can ignore the policy. Setting `SkipHostEnv` in the protocol client would
-make the "clean env" comment true, but it is a behavior change for every standalone plugin (they would
-lose `PATH`, proxies, `AWS_*` they may rely on), so it needs its own decision and is not proposed here.
+That is an SDK change, not a protocol change, and it stays cooperative. The environment-inheritance
+problem itself is a separate hardening change (`<link: standalone-plugin-env design doc PR>`); setting
+`SkipHostEnv` is a behavior change for every standalone plugin (they would lose `PATH`, proxies, `AWS_*`
+they may rely on) and is decided there, not here.
 
 ### 7. What this does and does not change in the SDK and protocol
 
 | Component | Change | Notes |
 | --- | --- | --- |
-| `conduit` | Yes | config keys, validation, registry holds the policy, adapters add it to the context, error codes, metric, docs |
+| `conduit` | Yes | config keys, validation, registry holds the policy, adapters add it to the context, error codes, metric, `conduit doctor` check, docs, ADR |
 | `conduit-commons` | Yes, additive | new `hostpolicy` package; needs a release and a `go.mod` bump in `conduit` and `s3` |
 | `conduit-connector-s3` | Yes | s3#1027 rebased onto the policy; the code moved into `config.LoadAWSConfig` stays |
 | `conduit-connector-sdk` | No | context values already reach connector methods |
@@ -280,29 +369,31 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
 | Failure | Behavior |
 | --- | --- |
 | Policy missing from context (older engine, standalone, test) | Deny. Ambient chain not loaded. Static keys still work |
-| `enabled=true`, but the host has no credentials | The SDK resolves lazily; first call fails with the SDK error, nothing is acked (invariant 1). Same as the original #1027 behavior |
+| `enabled=true`, but the host has no credentials | The SDK resolves lazily; first call fails with the SDK error (scrubbed for authors), nothing is acked (invariant 1). Same as the original #1027 behavior |
+| `enabled=true` with no `allow-resources` and no `allow-any-resource` | Startup error from `Config.Validate` |
+| Author sets `aws.endpoint` to a tenant-controlled AWS-suffix host (`*.execute-api...`, ELB, EC2 DNS) | `connector.endpoint_not_allowed`; no suffix match exists |
+| Allowlisted or custom hostname resolves to `169.254.169.254` / `fd00:ec2::254` | Dial refused (`connector.endpoint_link_local`) |
 | Endpoint allowlist typo | Startup error for a malformed entry; a well-formed wrong entry causes `connector.endpoint_not_allowed` at pipeline `Configure` |
 | Pipeline already running when the operator turns the setting off | Takes effect on the next engine start. The policy is read at engine start and held by the registry, like the egress ceiling; there is no live reload. Running connectors keep their already-built client |
 | Redirect to a non-permitted host mid-stream | Request is not sent, error returned, the record is not acked and the pipeline follows its normal error policy (invariants 1 and 3 hold; this is a refused write, not a dropped one) |
-| DNS answers differently between check and dial (rebinding) | The endpoint check is on the host name the operator allowlisted, which the operator trusts. For the AWS suffix match the name is checked on every request, not only at `Configure`. IP-level blocking (as in `processors.egress`) is not applied to AWS hosts or allowlisted hosts; see Open questions |
+| DNS answers differently between check and dial (rebinding) | The allowlist is on the host name the operator listed, which the operator trusts. The link-local refusal is enforced on the dialed address (dial control), so rebinding to link-local fails. Other private ranges are not blocked for allowlisted hosts (an operator may list `https://minio.internal`); see Open questions |
 | `aws.region` crafted to alter the endpoint | Region is validated against `^[a-z0-9-]+$`; SDK endpoint resolution also rejects invalid host labels |
 | Engine restart after upgrade with old pipelines that used static keys | Unchanged; the policy is not consulted |
-| Pipeline created before upgrade relied on the chain | Not possible: before #1027 static keys were required |
+| Pipeline created before upgrade relied on the chain | Not possible: `aws.accessKeyId` and `aws.secretAccessKey` are `validate:"required"` in `conduit-connector-s3` `config/config.go:59-61` at `e8f04f2` (the code `conduit` v0.9.4 pins is the same source; the tag itself was not diffed) |
 | Engine crash/kill -9 mid-write | Not affected; no state or position change |
 
 ## Upgrade and rollback
 
 - Additive. New config keys default off; no state, position or pipeline-config format changes.
 - Upgrade order: release `conduit-commons`, bump it in `conduit` and `s3`, merge the `conduit` change,
-  then un-hold and rebase `s3#1027`, then bump `s3` in `conduit`. Each step is independently safe: a new
-  engine with the old `s3` (static keys only) ignores the policy; a new `s3` with an engine that does not
-  supply a policy denies ambient credentials.
-- Rollback: revert the `conduit` PR; the pipelines that used static keys continue to work. Pipelines that
-  relied on ambient credentials stop working (fail at `Configure` with a clear error). That is the safe
-  failure.
-- Config rollback caveat: an older `conduit` binary reading a `conduit.yaml` that contains
-  `connectors.ambient-credentials.*` may reject or ignore the unknown key. Not verified; check before
-  the release notes claim either.
+  then un-hold and rebase `s3#1027`, then bump `s3` in `conduit`. The intent is that each step is
+  independently safe: a new engine with the old `s3` (static keys only) ignores the policy; a new `s3`
+  with an engine that does not supply a policy denies ambient credentials. Both are consequences of the
+  design, not yet of any code; the implementation PRs must carry tests for them.
+- Rollback and downgrade behavior (what an older `conduit` does with a `conduit.yaml` containing
+  `connectors.ambient-credentials.*`, and what happens to pipelines when the engine is reverted) is not
+  verified. It is not claimed here. The implementation PR runs an N to N-1 config test and the release
+  notes state the result.
 
 ## Testing
 
@@ -314,12 +405,38 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
   userinfo in URL, trailing dot, uppercase host, IDN and IP-literal hosts; fuzz target on endpoint parsing
   and matching (the project already fuzzes parsers).
 - `s3`: each refusal returns its code and config path; static keys with a custom endpoint are unaffected;
-  `httptest` server that redirects to a second server proves no request reaches the second (and no
-  `X-Amz-Security-Token` is sent there); ambient chain in tests isolated from developer credentials, as in
+  the redirect test above; ambient chain in tests isolated from developer credentials, as in
   the existing `credentials_test.go`.
+- Security regressions that must exist before any ambient-credential code merges:
+  - `https://x.execute-api.us-east-1.amazonaws.com` (and an ELB and an EC2 public DNS name) as
+    `aws.endpoint` is refused with `connector.endpoint_not_allowed` under ambient credentials, and is
+    accepted only if that exact host is in `allow-endpoints`.
+  - `http://` endpoint and `http://` allowlist entry are refused.
+  - `169.254.169.254`, `[fd00:ec2::254]`, and a hostname resolving to them are refused, including when
+    the host is allowlisted; and the instance-role credential fetch still works (guard not on
+    `cfg.HTTPClient`).
+  - Redirect header leak, through the real wrapper: a test builds the connector with
+    `sdk.NewSourcePlugin` / `sdk.NewDestinationPlugin` (the same wrapper the engine uses), points it at
+    an `httptest` server that answers 307 to a second server, and asserts the second server receives
+    zero requests. A control run with the guard disabled asserts the second server does receive
+    `X-Amz-Security-Token`, so the test proves it can detect the leak. Retries are set to the maximum
+    and the assertion is that the first server sees one request (a refused redirect is not retried).
+  - Scrubbing: a fake error containing a role ARN and a 12-digit account ID reaches the author with both
+    replaced and still reaches the log in full.
+  - `enabled=true` with empty `allow-resources` fails startup; `allow-any-resource=true` is accepted and
+    warns.
+- Policy cannot be flipped from a pipeline or from tooling:
+  - MCP `validate` and `dry_run` with a config that includes `connectors.ambient-credentials.*`-style
+    keys, or connector settings named like policy keys, do not change the effective policy and do not
+    load the AWS default chain. At `81c6306` only `pkg/conduit/runtime.go` builds the built-in connector
+    registry, and the MCP tools are offline engines; the test asserts this rather than relying on that
+    reading.
+  - Provisioning (pipeline YAML import and `conduit pipelines apply`) with such keys in connector
+    settings is passed to the connector as ordinary settings and never reaches the policy.
 - End to end in `conduit`: a pipeline using built-in `s3` without keys against an engine with the default
-  config fails with `connector.ambient_credentials_disabled`; the same with the setting on and a stub
-  endpoint on the allowlist starts.
+  config fails with `connector.ambient_credentials_disabled`; the same with the setting on, a resource
+  allowlist and a stub https endpoint on the allowlist starts; `builtin:s3` versus bare `s3` with a
+  standalone `s3` installed picks the expected implementation.
 - Not run in CI: a real IRSA/instance-role run. Needs manual verification before release notes claim it.
 - Chaos: the policy does not touch the data path, so the SIGKILL suite is unaffected; justify that in the
   implementation PR rather than extend it.
@@ -329,22 +446,26 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
 1. **Package home.** `conduit-commons/hostpolicy` is my pick (no SDK or protocol change, both repos
    already depend on it). The alternative is `conduit-connector-sdk`, which gives connectors one import
    but couples this to an SDK release. Confirm.
-2. **`allow-resources`.** I included it because a bucket in an attacker's account that trusts the host
-   role is an exfiltration path that the endpoint allowlist does not cover. It adds one setting and a
-   per-connector meaning. Ship in v0.21 or defer?
-3. **IP guard for allowlisted endpoints.** `processors.egress` blocks loopback, link-local and private
-   ranges at dial time. For connectors, an operator who allowlists `http://minio.internal:9000` has chosen
-   a private address on purpose. I propose no IP guard for allowlisted hosts, and a guard that always
-   blocks link-local (169.254.0.0/16, to protect IMDS from being reached through a custom endpoint) even
-   when allowlisted. Confirm.
+2. **`allow-resources` is mandatory.** Per review, `enabled=true` requires a non-empty `allow-resources`
+   or an explicit `allow-any-resource: true`, because a bucket in an attacker's account that trusts the
+   host role is an exfiltration path the endpoint allowlist does not cover. This is now in the design,
+   not an option. Confirm the extra setting is acceptable and that startup should fail rather than warn.
+3. **IP guard.** Decided in this draft: refuse `169.254.0.0/16` and `fd00:ec2::254` for every endpoint
+   under ambient credentials, allowlisted or not. `processors.egress` also blocks loopback and private
+   ranges; for connectors an operator who allowlists `https://minio.internal:9000` has chosen a private
+   address on purpose, so those are not blocked. Confirm. (Static keys plus a custom internal endpoint
+   remain out of scope, stated above.)
 4. **Metric and log naming** to be aligned with existing conventions during implementation.
 5. **Standalone follow-up** (environment variables read by the SDK) targeted at v0.22. Confirm the
-   deferral, knowing the registry `s3` cannot use ambient credentials until then.
+   deferral, knowing the registry `s3` cannot use ambient credentials until then, and that the environment-inheritance
+   fix is tracked separately.
 
 ## Related
 
 - `conduit-connector-s3#1021` (credential chain), `#1022` (endpoint warning), `#994` (custom endpoint),
   `#1027` (draft, on hold until this is signed off), `#1028`.
+- `docs/architecture-decision-records/20261012-operator-policy-for-builtin-ambient-credentials.md` (the decision recorded).
+- Standalone plugin environment design doc: `<link: standalone-plugin-env design doc PR>`.
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the egress ceiling this mirrors).
 - `docs/operations/live-restart-apply.md` (operator-only authorization flag precedent).
 - `docs/catalog/v0.21-certification-gaps.md` (PR #3034), section "s3#1021 credential chain".
