@@ -233,7 +233,9 @@ The canonical pipeline — CDC → chunk → embed → vector store — as a hea
 - [ ] Databricks / Delta Lake
 - [ ] Elasticsearch / OpenSearch
 - [ ] NATS JetStream
-- [ ] Redpanda (native, tuned)
+- [ ] Redpanda (native, tuned). The `kafka` connector already serves Redpanda and runs its
+      integration tests against it in CI; the archived `conduitio-labs/conduit-connector-redpanda`
+      is retired. "Tuned" means Redpanda-specific docs and benchi results, not a separate connector
 - [ ] Kinesis / SQS / SNS
 - [ ] Google Pub/Sub
 - [ ] Redis
@@ -326,7 +328,7 @@ The engine stays single-node (Principle 8); distribution is scheduling:
 ## Documentation (parallel track, starts Phase 0)
 
 - [ ] Getting-started rewrite around the 5-minute path; per-broker quickstarts (Kafka, NATS,
-      Redpanda, Hazelcast, none)
+      Redpanda, Hazelcast, none). Redpanda uses the `kafka` connector
 - [ ] "Migrating from Kafka Connect" section: concept mapping (worker→instance, task→pipeline,
       SMT→processor, converter→schema), per-connector guides for the top 10 KC connectors
 - [ ] "AI data pipelines with Conduit": RAG sync, embedding pipelines, vector store patterns
