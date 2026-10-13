@@ -33,7 +33,6 @@ import (
 // contains variables that standalone connector plugin processes will inherit
 // and whose names look like credentials or configuration secrets. Operators
 // can alert on the log field `code` or on the doctor finding code.
-//
 // By design this is a log/finding code, not an error code: no API or CLI call
 // fails with it. It is registered in conduiterr so the code set that
 // llms.txt publishes, and that alerting can rely on, stays complete.
@@ -111,8 +110,10 @@ var (
 	exactNames = map[string]struct{}{
 		"HTTP_PROXY": {}, "HTTPS_PROXY": {}, "ALL_PROXY": {},
 	}
-	// excluded names look like suffix matches or are common shell variables.
-	excludedNames = map[string]struct{}{"PWD": {}, "OLDPWD": {}}
+	// excludedNames contain a sensitive-looking substring or suffix but carry
+	// no credential: common shell variables and a tuning flag whose name
+	// contains TOKEN.
+	excludedNames = map[string]struct{}{"PWD": {}, "OLDPWD": {}, "TOKENIZERS_PARALLELISM": {}}
 )
 
 // isSensitiveEnvName reports whether name looks like it carries a credential.
