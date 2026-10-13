@@ -42,8 +42,13 @@ import (
 // the compiler runtime for a module that is loaded, inspected and discarded.
 // The knob lives in pkg/internal/wasmengine so it cannot be reached from
 // outside this module. Production always gets wazero's default engine.
-func newRuntime(ctx context.Context) wazero.Runtime {
-	return wasmengine.New(ctx)
+//
+// closeOnContextDone enables wazero's close-on-context-done, which lets a stuck
+// or spinning guest be killed but slows the record path (see wasmengine.New for
+// the measurement), so the live Registry passes false and only the throwaway
+// install-time runtime passes true.
+func newRuntime(ctx context.Context, closeOnContextDone bool) wazero.Runtime {
+	return wasmengine.New(ctx, closeOnContextDone)
 }
 
 // Registry is a directory registry of processor plugins, organized by plugin
@@ -95,7 +100,7 @@ func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutil
 	}
 
 	// we are using the wasm compiler, context is not used
-	runtime := newRuntime(ctx)
+	runtime := newRuntime(ctx, false)
 	// TODO close runtime on shutdown
 
 	_, err := wasi_snapshot_preview1.Instantiate(ctx, runtime)
@@ -300,7 +305,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	specs, err := p.Specification()
+	specs, err := p.specification(ctx)
 	if err != nil {
 		return blueprint{}, err
 	}

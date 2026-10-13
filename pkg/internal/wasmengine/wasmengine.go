@@ -48,14 +48,26 @@ const (
 
 // New constructs the wazero runtime used to compile and run standalone WASM
 // processors. It is a variable so test binaries can swap the engine via
-// ConfigureForTests; production always leaves it at wazero.NewRuntime.
+// ConfigureForTests; production always leaves it at the default below.
 //
 // wazero.NewRuntime selects the engine automatically: the wazevo optimizing
 // compiler where the host architecture supports it (amd64/arm64 on mainstream
 // OSes) and the interpreter everywhere else. So "production uses the compiler"
 // is a per-host statement, not a universal one — Conduit's linux/386 build, for
 // instance, already runs the interpreter in production.
-var New = wazero.NewRuntime
+//
+// closeOnContextDone selects wazero's WithCloseOnContextDone: the runtime then
+// checks the context passed to a guest call and closes the module when it is
+// done, which is the only way to stop a guest spinning on the CPU (closing a
+// running module from another goroutine does not stop it, and trips the race
+// detector inside wazero). It is NOT free: on the compiler engine it made a
+// 10-record Process batch of the chaos test processor ~4.5x slower
+// (BenchmarkWASMProcessor_Process: 0.40ms to 1.83ms; the interpreter +1%), so
+// the live record path leaves it off and only the throwaway install-time
+// runtime, which runs an untrusted artifact once, turns it on.
+var New = func(ctx context.Context, closeOnContextDone bool) wazero.Runtime {
+	return wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().WithCloseOnContextDone(closeOnContextDone))
+}
 
 // ConfigureForTests picks the wazero engine for the calling TEST binary. By
 // default it swaps in wazero's INTERPRETER; setting CONDUIT_TEST_WASM_ENGINE=compiler
@@ -96,7 +108,7 @@ func ConfigureForTests() {
 	if os.Getenv(EngineEnvVar) == EngineCompiler {
 		return
 	}
-	New = func(ctx context.Context) wazero.Runtime {
-		return wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfigInterpreter())
+	New = func(ctx context.Context, closeOnContextDone bool) wazero.Runtime {
+		return wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfigInterpreter().WithCloseOnContextDone(closeOnContextDone))
 	}
 }

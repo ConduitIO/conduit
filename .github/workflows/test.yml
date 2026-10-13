@@ -53,6 +53,20 @@ jobs:
         # in production, on the wire, to a user or agent.
         run: go test ./pkg/http/api/status/... -run 'Codes|Registry' -v -race
 
+      - name: Live-runtime WASM processor tests (no -race, compiler engine)
+        # Every other test command here runs with -race, and the standalone
+        # package's TestMain builds its shared runtime WITH wazero's
+        # close-on-context-done (the install-time configuration). The live
+        # record-path runtime is built WITHOUT it, and its kill fallback closes a
+        # module that is mid host call, which wazero's own code races on under
+        # -race, so those tests are `//go:build !race` and would otherwise never
+        # run (#2981, review of #2996). CONDUIT_TEST_WASM_ENGINE=compiler also
+        # runs them on wazero's optimizing compiler, the production default on
+        # amd64/arm64, where the rest of the suite uses the interpreter.
+        env:
+          CONDUIT_TEST_WASM_ENGINE: compiler
+        run: go test -count=1 -v -run 'LiveRuntime' ./pkg/plugin/processor/standalone/
+
       - name: generate_capture build+lint gate (M2, round-4 review of #2814)
         # cmd/conduit/internal/generate/transcript_capture_test.go
         # (`//go:build generate_capture`) is ~3,200 lines carrying every

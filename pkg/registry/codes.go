@@ -110,6 +110,14 @@ var (
 	// so anything else is a malformed or spoofed index entry. FailedPrecondition
 	// — the index entry as published does not meet the precondition for install.
 	CodeInvalidProcessorArtifact = conduiterr.Register("registry.invalid_processor_artifact", codes.FailedPrecondition)
+	// CodeProcessorValidationTimeout is raised when the install-time WASM check
+	// of a processor artifact (compile it, ask it for its Specification) does not
+	// finish before its deadline. Distinct from CodeInvalidProcessorArtifact: the
+	// artifact was not shown to be bad, the check just did not complete, so
+	// "retry" is a sensible next step and a verdict on the artifact is not.
+	// codes.DeadlineExceeded, which the CLI reports as an environment failure
+	// (exit 3) rather than a validation one (exit 2). Nothing is installed.
+	CodeProcessorValidationTimeout = conduiterr.Register("registry.processor_validation_timeout", codes.DeadlineExceeded)
 	// CodeProcessorNotInstalled is raised on an UninstallProcessor/manifest
 	// lookup miss. Distinct from CodeConnectorNotInstalled so an operator/agent
 	// can tell which install directory (--processors.path vs --connectors.path)
