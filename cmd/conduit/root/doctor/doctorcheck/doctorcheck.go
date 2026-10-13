@@ -36,6 +36,7 @@ const (
 	NamePluginsBuiltin          = "plugins.builtin"
 	NameEngineReachable         = "engine.reachable"
 	NamePluginsStandaloneCompat = "plugins.standalone_compat"
+	NamePluginsStandaloneEnv    = "plugins.standalone_env"
 )
 
 // Categories doctor's own checks use for human-output grouping (see
@@ -56,6 +57,7 @@ const (
 	configKeyConfigPath     = "config.path"
 	configKeyAPIGRPCAddress = "api.grpc.address"
 	configKeyConnectorsPath = "connectors.path"
+	configKeyStandaloneEnv  = "connectors.standalone.env-warning"
 )
 
 // Options configures DefaultChecks.
@@ -97,6 +99,7 @@ func CheckNames() []string {
 		NamePluginsBuiltin,
 		NameEngineReachable,
 		NamePluginsStandaloneCompat,
+		NamePluginsStandaloneEnv,
 	}
 }
 
@@ -131,6 +134,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		pluginsDirCheck{name: NamePluginsConnectorsDir, path: cfg.Connectors.Path, configKey: configKeyConnectorsPath},
 		pluginsDirCheck{name: NamePluginsProcessorsDir, path: cfg.Processors.Path, configKey: "processors.path"},
 		pluginsBuiltinCheck{cfg: cfg},
+		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning},
 		engineReachableCheck{cfg: cfg, requireServer: opts.RequireServer},
 	)
 

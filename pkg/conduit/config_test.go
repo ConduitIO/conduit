@@ -41,6 +41,11 @@ func TestDefaultConfig_UIEnabledByDefault(t *testing.T) {
 // fresh config must never permit an unsigned connector install by default,
 // regardless of flag/TTY/env var (see pkg/registry/policy.Decide, which
 // checks OperatorPolicy first and refuses unconditionally when it's false).
+func TestDefaultConfig_StandaloneEnvWarningOnByDefault(t *testing.T) {
+	is := is.New(t)
+	is.True(DefaultConfig().Connectors.Standalone.EnvWarning)
+}
+
 func TestDefaultConfig_AllowUnsignedDisabledByDefault(t *testing.T) {
 	is := is.New(t)
 	cfg := DefaultConfigWithBasePath(t.TempDir())
