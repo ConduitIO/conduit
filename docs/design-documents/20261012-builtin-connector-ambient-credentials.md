@@ -133,7 +133,7 @@ New keys under `connectors.ambient-credentials`, next to `connectors.path`:
 | Key (flag / yaml) | Env | Default | Meaning |
 | --- | --- | --- | --- |
 | `connectors.ambient-credentials.enabled` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ENABLED` | `false` | Built-in connectors may use the process's ambient cloud identity |
-| `connectors.ambient-credentials.allow-endpoints` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS` | empty | The only custom endpoints that may receive ambient-credential-signed requests. `https://host[:port]` entries; exact host match, no suffix or wildcard matching. Parsed with the `processors.egress.allow` parser, with the additional rule that the scheme must be `https` |
+| `connectors.ambient-credentials.allow-endpoints` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS` | empty | The only custom endpoints that may receive ambient-credential-signed requests. `https://host[:port]` entries; exact host match, no suffix or wildcard matching. Parsed with `egress.ParseAllowEntry` (`pkg/plugin/processor/egress/policy.go:132`), with the additional rule that the scheme must be `https` |
 | `connectors.ambient-credentials.allow-resources` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES` | empty | Connector-defined resource names the ambient identity may touch; for `s3`, bucket names (exact match, or a single trailing `*`). Required non-empty when `enabled=true`, unless `allow-any-resource` is set |
 | `connectors.ambient-credentials.allow-any-resource` | `CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ANY_RESOURCE` | `false` | Explicit opt-out of the resource allowlist: any resource the host identity can reach is allowed. Logged at WARN at startup |
 
