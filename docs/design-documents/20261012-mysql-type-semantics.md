@@ -615,6 +615,14 @@ Temporal-as-string, `BIT` as `fixed[8]`, `FLOAT`/`DOUBLE`, `ENUM`/`SET`/`JSON` a
 silent-corruption cases in the findings, and changing them would widen the compatibility surface of this
 change. They get their own item if needed.
 
+### Legacy lifecycle (decided)
+
+Decided by DeVaris, 2026-10-12 (formerly open question 3). Positioned pipelines keep `legacy` for N and N+1
+with per-column warnings and a committed removal in N+2. A no-position pipeline with no `types.mode` warns in N
+and is refused in N+1 with `MYSQL_TYPES_MODE_REQUIRED`. A `legacy` snapshot-phase pipeline is refused at N+2
+with `MYSQL_LEGACY_SNAPSHOT_REMOVED`. Rejected: flipping the default to `strict` for no-position pipelines
+(guesses wrong for an idle old pipeline) and flipping everything at once. The Transition table encodes this.
+
 ### Invariant comment
 
 The enforcement site (`formatValue` and the schema builder) gets `// Invariant 6: a value that cannot be
@@ -918,11 +926,8 @@ Written before the implementation (review the tests first):
 1. Default for `types.decimal`: `string` (proposed) or `decimal` for Debezium parity.
 2. Is halting on `BIGINT UNSIGNED` overflow acceptable as the default, or should `types.bigintUnsigned`
    default to `decimal`/`string` and accept the key-type change?
-3. Staging (decided by DeVaris, 2026-10-12): positioned pipelines keep `legacy` for N and N+1 with per-column
-   warnings and a committed removal in N+2; a no-position pipeline with no `types.mode` warns in N and is
-   refused in N+1; a `legacy` snapshot-phase pipeline is refused at N+2 with
-   `MYSQL_LEGACY_SNAPSHOT_REMOVED`. Rejected: flipping the default to `strict` for no-position pipelines
-   (guesses wrong for an idle old pipeline) and flipping everything at once.
+3. Staging: decided (DeVaris, 2026-10-12); moved to Decisions under "Legacy lifecycle (decided)". The number is
+   kept so the other questions keep theirs.
 4. Row image: refuse non-`FULL` at `Open` in both modes (proposed; it stops pipelines that run today on a
    server with `MINIMAL`, which are emitting zero values and a zero primary key), or refuse only in `strict`
    and warn in `legacy`.
