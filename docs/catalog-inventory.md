@@ -24,8 +24,8 @@ The public connector list for users stays on the documentation site
 - **Six connectors are in the registry index**: `file`, `generator`, `kafka`, `log`, `postgres`, `pgvector`, plus
   the `ai.chunk` and `ai.embed` processors. The built-in `s3` connector is not in the registry index.
 - **Maintenance**: 9 connectors have had a human commit since the June 2026 restart (the 7 `ConduitIO` connectors
-  with code, `mysql` (moved to `ConduitIO`) and `mongo` in labs). 53 receive only automated dependency updates. 15 are stale or
-  dormant (connector SDK older than v0.12, or no commits since 2024 or earlier).
+  with code, `mysql` (moved to `ConduitIO`) and `mongo` in labs). 53 receive only automated dependency updates.
+  15 are stale or dormant (connector SDK older than v0.12, or no commits since 2024 or earlier).
 - **SDK drift**: 27 connectors pin the current connector SDK (v0.14.x), 35 pin v0.12–v0.13, 10 pin something older.
 - **Tests**: 37 call `sdk.AcceptanceTest`; 35 ship a docker-compose integration harness. The built-in `postgres`,
   `s3`, `generator` and `log` connectors and `mysql`, labs `salesforce`, `dynamodb` and `http` have no acceptance
