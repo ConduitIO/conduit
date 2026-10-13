@@ -5,9 +5,7 @@
 Least privilege: a standalone connector plugin should receive the environment it needs to run, and
 nothing more. This change has the engine pass a fixed allowlist of variables (plus any the operator
 names) to plugin processes instead of the engine's whole environment. It reduces what a plugin receives
-by default. It is not a sandbox: a plugin runs as the same OS user as the engine and can still read
-other sources of the same data (for example `/proc/<pid>/environ` of a same-user process, or files under
-the user's home directory), so this removes passive exposure only.
+by default. It is not a sandbox; a same-user plugin can reach other sources of the same data.
 
 Operators control it with `connectors.standalone.env-passthrough`. The same filtered environment applies
 to every place the engine starts a plugin process (see _Mechanism_). No `conduit-connector-protocol`
@@ -17,9 +15,9 @@ change and no SDK change. The rollout schedule is undecided; see _Rollout option
 
 Standalone connector plugins are separate OS processes started by `go-plugin` through the protocol client
 (`conduit-connector-protocol`). The engine passes a handful of `CONDUIT_CONNECTOR_*` variables to them
-through `client.WithEnvVar` options. Beyond those, the environment a plugin receives is not something
-operators currently control, and it is wider than a plugin needs to do its job. The engine's own
-configuration surface (`CONDUIT_*`) in particular is meant for the engine.
+through `client.WithEnvVar` options. Operators have no control over the rest of a plugin's environment,
+and a plugin needs only a small part of it. The engine's own configuration surface (`CONDUIT_*`) is meant
+for the engine, not for plugins.
 
 `Option` in the protocol client is an exported interface, so the engine can restrict the environment and
 add variables with its own option, without touching the protocol module.
@@ -66,15 +64,15 @@ runtime and diagnostics see the same environment:
 
 ### Allowlist
 
-Matching is exact for names, prefix for `LC_*`, and case-insensitive on Windows.
+Matching is exact for names, prefix for `LC_*` and `XDG_*`, and case-insensitive on Windows. The table lists what an allowlisted plugin receives.
 
 | Group | Variables |
 | --- | --- |
-| Process basics | `PATH`, `HOME`, `TMPDIR`, `TEMP`, `TMP`, `TZ` |
+| Process basics | `PATH`, `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `TEMP`, `TMP`, `TZ`, `XDG_*` |
 | Locale | `LANG`, `LC_*` |
-| Network | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and the lowercase forms |
+| Network | `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and the lowercase forms |
 | TLS roots | `SSL_CERT_FILE`, `SSL_CERT_DIR` |
-| Windows | `SYSTEMROOT`, `windir`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `COMSPEC`, `PATHEXT` |
+| Windows | `SYSTEMROOT`, `SystemDrive`, `windir`, `USERPROFILE`, `USERNAME`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ALLUSERSPROFILE`, `ProgramFiles`, `ProgramFiles(x86)`, `ProgramW6432`, `COMSPEC`, `PATHEXT`, `PROCESSOR_ARCHITECTURE` |
 | Go runtime | `GODEBUG`, `GOMAXPROCS`, `GOMEMLIMIT` |
 | Conduit | `CONDUIT_CONNECTOR_*`, only the entries the engine itself sets via `WithEnvVar` |
 
@@ -87,7 +85,11 @@ allowlisted because many plugins cannot reach the network without them; operator
 the URL should know the plugin receives them. Docs will say so.
 
 Everything else, including cloud-provider variables, `*_TOKEN`, `*_SECRET`, `*_PASSWORD` and the engine's
-own `CONDUIT_*` settings, is not passed unless named by the operator.
+own `CONDUIT_*` settings, is not passed unless named by the operator (host `CONDUIT_*` can never be named,
+see _Config key_).
+
+In `inherit` mode a host-set `CONDUIT_CONNECTOR_*` variable can override the engine's own entry of the same
+name (existing behavior, unchanged by this document).
 
 ### Config key
 
@@ -96,15 +98,17 @@ own `CONDUIT_*` settings, is not passed unless named by the operator.
 
 | Value | Meaning |
 | --- | --- |
-| `inherit` | The full host environment (the behavior before this change). Escape hatch; default depends on the rollout option. |
+| `inherit` | The full host environment. Escape hatch; default depends on the rollout option. |
 | `allowlist` | `SkipHostEnv` plus the table above. |
 | `allowlist:NAME1,NAME2,PREFIX_*` | The allowlist plus the named variables or prefixes, set engine-wide. |
 
 Unknown values fail config validation with a stable error code, the config path and a suggestion listing
 the valid values. `allowlist:*` (and any bare `*`) is rejected with the same kind of error: it is
 `inherit` by another name, and one spelling for that is enough. A prefix must have a non-empty stem before
-the `*`. The setting is read at
-startup; changing it needs a restart (same as `connectors.path`).
+the `*`. Any name or prefix whose stem starts with `CONDUIT_` (`CONDUIT_*`, `CONDUIT_FOO`, `CONDUIT_CONN*`)
+is also a config validation error with its own stable code: host `CONDUIT_*` is never passed, so accepting
+such an entry would be silently ineffective. The setting is read at startup; changing it needs a restart
+(same as `connectors.path`).
 
 ### Open question: per-connector opt-in (proposed, not decided)
 
@@ -122,7 +126,7 @@ DeVaris to decide whether to include it now.
 Choice not made. Both are written out so the decision is explicit.
 
 **Option A: flip to `allowlist` as the default in v0.21, with a loud `inherit` escape hatch.** Operators
-who need the old behavior set `inherit`; the engine logs a WARN at every start in that mode. One release
+who need the full environment set `inherit`; the engine logs a WARN at every start in that mode. One release
 of change, no period of continued over-exposure.
 
 **Option B: staged.**
@@ -139,7 +143,7 @@ The sections below describe both options where they differ.
 ## Alternatives considered
 
 **A. Denylist of sensitive prefixes (`AWS_*`, `*_TOKEN`, ...).** Lost: a denylist fails open. Any secret
-under a name nobody listed (`PGPASSWORD`, `MY_COMPANY_KEY`, a vendor token) is still inherited, and the list
+under a name nobody listed (`PGPASSWORD`, `MY_COMPANY_KEY`, a vendor token) is still passed, and the list
 needs permanent maintenance. The reverse failure (a missing allowlist entry) is loud and fixable; a missing
 denylist entry is silent. We do use sensitive prefixes, but only to make the v0.21 warning useful, not as
 the control.
@@ -151,10 +155,10 @@ still reasonable as an input to a future operator-visible review ("this plugin a
 enforcement.
 
 **C. Do nothing, document it.** Lost: documentation alone leaves the default unchanged, so every plugin
-keeps receiving more than it needs. Documentation is still part of the change.
+keeps passing more than it needs. Documentation is still part of the change.
 
 **D. Flip to the allowlist with no transition.** This is Option A under _Rollout options_; it is a live
-candidate, not a rejected one. Cost: working deployments that relied on inherited variables break at
+candidate, not a rejected one. Cost: working deployments that need variables outside the allowlist break at
 upgrade, loudly. Mitigation: release notes lead with it, the escape hatch exists, and the failure table
 below gives the one-line fix.
 
@@ -169,11 +173,11 @@ invariants 1 to 7 are unaffected. The failures are start-up and configuration fa
 
 | Failure | Behavior | Mitigation |
 | --- | --- | --- |
-| Plugin relied on inherited cloud credentials (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`) | After the flip, plugin starts but auth fails at first connection; surfaces as the plugin's own error | Docs list `allowlist:NAMES`; preferred fix is putting credentials in connector config; under Option B the v0.21 WARN names the prefixes in use |
-| Plugin relied on in-cluster discovery (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`) | Plugin using the Kubernetes in-cluster client fails to find the API server | Name them via `allowlist:KUBERNETES_SERVICE_*`; documented |
+| Plugin needs cloud credentials from the environment (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`) | After the flip, plugin starts but auth fails at first connection; surfaces as the plugin's own error | Docs list `allowlist:NAMES`; preferred fix is putting credentials in connector config; under Option B the v0.21 WARN names the prefixes in use |
+| Plugin needs in-cluster discovery (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`) | Plugin using the Kubernetes in-cluster client fails to find the API server | Name them via `allowlist:KUBERNETES_SERVICE_*`; documented |
 | Plugin needs proxy or custom CA settings | Proxy and `SSL_CERT_*` are in the allowlist; other settings (`CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`) are not | Name them via `allowlist:`; revisit the allowlist from first-release feedback |
 | Plugin is a script or wrapper needing `PATH`, `HOME`, interpreter vars | `PATH`/`HOME` pass; interpreter-specific variables (`JAVA_HOME`, `PYTHONPATH`) do not | Named via `allowlist:`; documented |
-| Windows | Missing `SYSTEMROOT`/`windir` breaks Winsock and many runtimes; missing profile/shell variables break others | The Windows group is allowlisted and matched case-insensitively. The repository has no Windows CI runner (no workflow uses one): either add a `windows-latest` unit job for the filter in the code PR, or the Windows behavior is stated as untested in the release notes. Decision pending |
+| Windows | Missing `SYSTEMROOT`/`windir` breaks Winsock and many runtimes; missing profile/shell variables break others | The Windows group is allowlisted and matched case-insensitively; see _Testing plan_ for the Windows job and the rollout A condition. Decision pending |
 | Locale / timezone | Wrong collation or time rendering if `LANG`/`LC_*`/`TZ` dropped | All allowlisted |
 | Variable set but empty | Passed through as empty | n/a |
 | Plugin env var collides with `CONDUIT_CONNECTOR_*` set by the engine | Engine entries are appended last and win | Test for duplicate keys |
@@ -194,13 +198,13 @@ invariants 1 to 7 are unaffected. The failures are start-up and configuration fa
 
 ## Observability
 
-- Startup WARN in `inherit` mode (once per engine start, not per plugin): states that standalone plugins
-  receive the full engine environment, gives the count of variables passed, and points at the config key.
+- Startup WARN in `inherit` mode (once per engine start, not per plugin): states that the full engine
+  environment is passed to standalone plugins, gives the count of variables passed, and points at the config key.
   Under Option B it also lists the names (never values) of variables matching sensitive-looking prefixes
   and suffixes; this list is a diagnostic aid for the transition, not a control.
 - Startup INFO in `allowlist` mode: the resolved list of operator-added names.
 - Metric `conduit_standalone_plugin_env_vars_passed{mode}` (gauge, set at plugin start) so fleets can see
-  which engines still inherit everything.
+  which engines pass the full environment.
 - Each start logs the number of variables passed to the plugin process at debug level.
 - Runbook entry under `docs/operations/`: symptom "standalone plugin fails to authenticate or connect
   after upgrade", diagnosis (compare plugin docs with the resolved passthrough list), remediation
@@ -209,27 +213,28 @@ invariants 1 to 7 are unaffected. The failures are start-up and configuration fa
 ## Relationship to PR #3041
 
 The built-in connector credential policy in PR #3041 covers built-in connectors only. Standalone plugins
-are out of scope there; this document reduces what they receive by default and is not a sandbox. Neither
-document changes how credentials delivered through a metadata endpoint or a mounted file reach a process.
+are out of scope there; this document narrows what an allowlisted plugin receives and is not a sandbox.
 
 ## Testing plan
 
 - Unit: allowlist resolution, `LC_*`/prefix matching, case-insensitive matching on Windows, duplicate
   keys, mode parsing and error codes (including rejection of `allowlist:*`).
 - Integration: a test plugin that dumps its environment. The test sets a sentinel secret in the engine's
-  environment (for example `CONDUIT_TEST_SENTINEL_SECRET`) and asserts it is absent from the plugin's
+  environment under a non-`CONDUIT_` name (for example `SENTINEL_SECRET_X`; every host `CONDUIT_*` is
+  excluded anyway, so a `CONDUIT_` sentinel would prove nothing) and asserts it is absent from the plugin's
   environment in all three spawn paths (specification load, dispense, `conduit doctor`) under `allowlist`,
   and present only where explicitly named via `allowlist:NAME`. Also assert the exact variable set in
   `inherit`, `allowlist` and `allowlist:NAMES`, and that no host `CONDUIT_*` variable appears.
-- Windows: the repository has no Windows runner. Either add a `windows-latest` unit job for the filter
-  (and a plugin opening a TCP connection), or document the Windows path as untested.
+- Windows: the repository has no Windows runner. Filter logic, including case-insensitive matching, is
+  tested as pure functions on Linux. In addition, one `windows-latest` job spawns a test plugin that makes
+  a TCP connection under `allowlist`; it starts non-required. Under rollout Option A, the default does not
+  flip on Windows if that job slips (Windows keeps `inherit` until the job exists and passes). Also test
+  rejection of `CONDUIT_`-stem entries in `allowlist:`.
 - Docs: `conduit.io` configuration reference, `llms.txt`, and the migration note, updated together.
 
 ## Consequences
 
-- Plugin processes receive a fixed, documented set of variables by default instead of the whole engine
-  environment. This reduces passive exposure; it is not a sandbox. A same-user plugin can still read
-  process or file sources of the same data.
+- Plugin processes receive a fixed, documented set of variables plus operator-named ones by default. This is not a sandbox; a same-user plugin can reach other sources of the same data.
 - Some existing plugin deployments need a one-line config change at the default flip.
 - The sandboxing work (Alternative E) remains the layer that would make this a boundary.
 
