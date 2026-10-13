@@ -75,8 +75,9 @@ and "Review fixes" sections have the full reasoning.
 ### Decisions that change the CLI
 
 - **Q4: fresh slot only in v0.21.**
-  - `--slot-strategy fresh|reuse` is replaced by `--slot-mode`. Its only v0.21
-    value is `new`, which is also the default.
+  - The flag stays `--slot-strategy fresh|reuse`, matching #3026. `fresh` is
+    the default and the only strategy v0.21 executes. `--slot-strategy reuse`
+    is refused with `postgres.import.slot_reuse_unsupported`.
   - Reusing Debezium's slot (and its rollback offset write-back) moves to
     v0.22, gated per Debezium version on a passing rollback test.
   - In v0.21, `rollback` restarts the Debezium connector from the saved config
