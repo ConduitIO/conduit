@@ -412,7 +412,7 @@ skips after an ungraceful stop, and the check warns about them. Automated reset 
 | `--start-timeout` (10m) | bounds waiting for the durable import-complete signal (same) |
 | `--emit-cutover-marker` | opt-in non-transactional marker message to move an idle Debezium during `--cutover` (Decisions, Q3) |
 | `--pipelines-path DIR` | write the pipeline as a file in Conduit's `pipelines.path` instead of through the API; updates then need an engine reload, and deletes an engine restart (Pipelines the CLI writes) |
-| `--check-rollback [--watch] [--watch-timeout 30m] [--pg-url] [--connect-url] [--conduit-url] [--json]`, `--check-rollback --abandon --reason <text>` | read-only apart from its watch log: the safety checks and verdict for going back to Debezium by hand, and ending a failed attempt so `--cutover` can go forward (Going back to Debezium) |
+| `--check-rollback [--watch] [--watch-timeout 30m] [--pg-url] [--connect-url] [--conduit-url] [--offsets-from] [--bootstrap-servers] [--offsets-topic] [--json]`, `--check-rollback --abandon --reason <text> [--json]` | read-only apart from its watch log: the safety checks and verdict for going back to Debezium by hand, and ending a failed attempt so `--cutover` can go forward (Going back to Debezium) |
 
 | Code (`migrate.kafka_connect.*`) | When |
 | --- | --- |
@@ -421,7 +421,7 @@ skips after an ungraceful stop, and the check warns about them. Automated reset 
 | `slot_advanced`, `slot_in_use`, `slot_unowned`, `slot_create_blocked` | slot and journal checks, including re-runs |
 | `start_failed`, `import_pending` | starting the pipeline |
 | `operation_in_progress`, `lock_unavailable` | `--cutover`, while another holds the per-slot lock, or when the lock cannot be taken or is lost (Mutual exclusion) |
-| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_connector_state`, `rollback_check_privileges`, `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`, `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
+| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_connector_state`, `rollback_check_privileges`, `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`, `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`, `rollback_check_offset_unreadable`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
 | `rollback_in_progress` | `--cutover` while a rollback watch log exists (Crash-safe cutover) |
 | `postgres.import.*`, `postgres.logrepl.*` (passed through) | the connector's import refusals, and its slot preconditions outside the import (`slot_missing`, `slot_invalidated`, `slot_plugin`, `publication_missing`), with the connector's fix texts (#341 S13) |
 | `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
