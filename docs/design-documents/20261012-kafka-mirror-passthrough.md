@@ -5,8 +5,9 @@
 `conduit-connector-kafka` cannot mirror a topic faithfully today. The source flattens headers into
 strings and drops the partition; the destination writes no headers, no timestamp and lets the client
 pick the partition. This document designs passthrough for the three, as opt-in options on both ends:
-the source emits lossless metadata only when asked, the destination writes it only when asked. It
-also records what a payload-only record format recipe does and does not preserve (it does not yet
+the source emits lossless metadata only when asked, the destination writes it only when asked. A
+single destination `mirror` mode is recommended in place of four separate booleans (pending sign-off,
+Open question 1). It also records what a payload-only record format recipe does and does not preserve (it does not yet
 preserve empty values; see Open questions) and sets aside topic include/exclude as a separate item.
 Spike results against franz-go v1.20.7 on Apache Kafka 4.0.0 and Redpanda v25.1.5 are in _Spike
 results_ and several decisions below depend on them. Offset translation, checkpoints, heartbeats and topic
@@ -74,7 +75,7 @@ the destination; the destination errors name the source option when the metadata
 | `kafka.timestamp` | milliseconds since epoch as decimal; the record timestamp as Kafka stores it |
 | `kafka.timestamp.type` | `create` or `logappend` (from `Record.Attrs.TimestampType()`, which both brokers populate; see Spike results). Informational |
 | `kafka.headers` | JSON array, always present when the option is on (`[]` for a record with no headers), format below |
-| `kafka.key.null`, `kafka.value.null` | `true`, present only when the Kafka key or value is null. Absent means non-null (possibly empty) |
+| `kafka.key.null`, `kafka.value.null` | `true` when the Kafka key or value is null, `false` when it is non-null (possibly empty). Always present when the option is on, so the destination can tell "non-null" from "source did not say" (see _Key and value rules_) |
 
 `kafka.partitions` is read at source `Open` for each configured topic (all topics are static literals
 today) with a metadata request, cached, and refreshed when a record arrives whose partition is >= the
@@ -111,12 +112,32 @@ only it, and edits that a processor makes to `kafka.header.*` are ignored. A pro
 change mirrored headers must rewrite `kafka.headers`. Likewise edits to `kafka.partition` and
 `kafka.timestamp` change what the destination writes; they are not protected.
 
+Non-UTF-8 header values and the legacy `kafka.header.<k>` entries: OpenCDC metadata is `map[string]string`,
+and a protobuf `string` must be valid UTF-8 (read from the protobuf spec; whether the connector SDK's
+gRPC hop rejects, replaces or passes through an invalid string was not tested). The existing
+`kafka.header.<k>` entries carry `string(h.Value)` and so already have this hazard for binary header
+values, and so do destinations that put metadata through JSON (a JSON encoder replaces invalid UTF-8 with
+U+FFFD). `kafka.headers` avoids it by base64-encoding keys and values, which is the reason for the
+encoding. Mirror mode does not read the legacy entries (except under `allowLossyHeaders`). The legacy
+entries stay unchanged by default; whether mirror mode should stop emitting them for headers that are not
+valid UTF-8 is not decided here.
+
 Size: base64 inflates headers by about a third and the metadata is carried with every record in the
 pipeline, which is the other reason the option is off by default.
 
 ### Destination: opt-in preservation
 
-Three booleans, default `false` (no change for anyone who does not set them), and one escape hatch:
+Recommended, pending DeVaris (Open question 1): replace the four booleans (`preserveHeaders`,
+`preserveTimestamp`, `preservePartition`, `preserveValue`) with one option, `mirror` (bool, default
+`false`), that implies all four. Reasons: the four are only useful together for a mirror, the validation
+rules couple them (`preservePartition` needs `acks=all`, `preserveTimestamp` needs no `deliveryTimeout`,
+`preserveValue` needs the format untouched), and a half-enabled mirror silently produces something that is
+not one. Under `mirror` the individual names below are behaviours of the mode, not options. If DeVaris
+prefers the granular booleans, the text below applies per option unchanged. `allowLossyHeaders` and
+`allowUncheckedTopicConfig` stay as separate explicit escape hatches, valid only with `mirror`. Default
+`false` means no change for anyone who does not set it.
+
+Behaviours:
 
 - `preserveHeaders`: write headers from `kafka.headers`, in order, repeats intact, values decoded from
   base64, `v: null` written as a null header value. If `kafka.headers` is present but malformed, fail
@@ -141,9 +162,12 @@ Three booleans, default `false` (no change for anyone who does not set them), an
   so the simpler client-wide option is chosen. A unit test asserts that a record with
   `Partition: 3` and a key lands on partition 3, and that the same record on a default client does not
   (Spike results 1: the default partitioner ignores `Record.Partition`).
-- Validation: `preservePartition` requires `acks=all` (idempotent writes) and `preserveTimestamp`
-  requires `deliveryTimeout` unset or zero (see below). Both fail config validation with an error that
-  names the option.
+- Validation: partition preservation requires `acks=all` (idempotent writes), timestamp preservation
+  requires `deliveryTimeout` unset or zero (see below), and mirror mode rejects a user-set
+  `sdk.record.format` (see _Key and value rules_). Each fails config validation with an error that names
+  the option.
+- `topicConfigRefreshInterval` (duration, default `5m`, minimum `10s`): how often the cached topic
+  configuration is re-read (see _Topic configuration checks_).
 
 Partition count checks, in order:
 
@@ -179,20 +203,105 @@ when it sees `kafka.partitions` smaller than the destination count.
 Interaction with topic rename: the `topic` template is evaluated as today; partition passthrough
 applies to whatever topic results.
 
-#### Timestamp preconditions
+Many-to-one templates: if the template maps several source topics onto one destination topic, partition
+numbers collide. Source topic A partition 2 and source topic B partition 2 both land on destination
+partition 2 and interleave there. Order within each source partition still holds (each is written in
+order to one partition), but the destination partition no longer corresponds to one source partition, and
+nothing orders A's records against B's. The partition-count check (step 2 above) is keyed on the
+destination topic and uses the largest `kafka.partitions` seen for it, so it fails when any one of the
+merged sources has more partitions than the destination. Documented; not prevented, because a merge may be
+intended.
 
-Spike results (below) found three ways `preserveTimestamp` can silently or noisily misbehave. On the
-first record for each destination topic the destination reads the topic's configuration with
-DescribeConfigs and applies these rules. Results are cached for the process lifetime and re-read once
-after any `INVALID_TIMESTAMP` error from the broker.
+#### Key and value rules
+
+Under `mirror` the destination bypasses `sdk.record.format` and the key encoder and writes bytes taken
+directly from the record, so neither can mangle them (this removes both hazards of the template recipe
+below). Rules, each a fail-the-record error with a stable code, never a coercion:
+
+- `Payload.After` that is not `opencdc.RawData` (structured data, for example after a processor
+  parsed it) is rejected, `KAFKA_MIRROR_PAYLOAD_NOT_RAW`. A mirror must not re-serialize.
+- Value: `kafka.value.null=true` writes a null value (tombstone); the record must then have an empty or
+  nil `After`, otherwise `KAFKA_MIRROR_VALUE_CONFLICT`. `kafka.value.null=false` writes `After` verbatim,
+  and an empty `After` is written as an empty non-null value. If `kafka.value.null` is absent and `After`
+  is empty or nil, the record fails with `KAFKA_MIRROR_VALUE_NULLNESS_UNKNOWN`: it is never silently
+  written as empty, because null versus empty can be lost on the way (an unverified risk across the gRPC
+  hop, see What was not verified) and writing the wrong one turns a value into a tombstone or the reverse.
+  If `kafka.value.null` is absent and `After` is non-empty, it is written verbatim.
+- Key: `kafka.key.null=true` writes a null key; the record's key must then be empty or nil
+  (`KAFKA_MIRROR_KEY_CONFLICT`). `false` writes the key bytes verbatim, an empty key as an empty non-null
+  key. Absent with an empty or nil key fails `KAFKA_MIRROR_KEY_NULLNESS_UNKNOWN`. A non-`RawData` key is
+  rejected (`KAFKA_MIRROR_PAYLOAD_NOT_RAW`).
+- A user-set `sdk.record.format` or `sdk.record.format.options` with `mirror` is a config validation
+  error, `KAFKA_MIRROR_FORMAT_SET`, because it would be silently ignored. Whether the destination can
+  distinguish an explicit setting from the SDK default is unverified; if it cannot, the check is "differs
+  from the default `opencdc/json`", which rejects an explicit `opencdc/json` only by omission and is
+  acceptable because that setting is the default and is ignored in this mode anyway.
+
+Honest tension, flagged for review: a literal "empty `After` without `kafka.value.null` fails" rule would
+make a genuine empty value unmirrorable if the source only marked nulls. That is why the source emits
+`kafka.value.null`/`kafka.key.null` as `true` or `false` always, and the destination fails on absence
+rather than on emptiness. This changes the first-round format ("present only when null").
+
+#### Topic configuration checks
+
+On the first record for each destination topic the destination reads the topic's configuration with
+DescribeConfigs (once, cached) and applies the rules below. The cache is refreshed every
+`topicConfigRefreshInterval`, and immediately after a broker `INVALID_TIMESTAMP` or `MESSAGE_TOO_LARGE`
+error, because topic configuration can change after `Open` (an operator lowers `retention.ms`, flips the
+timestamp type, shrinks `max.message.bytes`). A changed configuration applies to records prepared after
+the refresh; records already enqueued, and records produced between two refreshes, are not re-checked,
+so the retention rule (which the broker does not reject but silently honours) has an exposure window of up
+to the interval. That window is stated, not closed. Checks run only when `mirror` is on.
+
+DescribeConfigs not authorized: the destination fails with `KAFKA_TOPIC_CONFIG_UNREADABLE` on the first
+record for the topic (or at the next refresh), naming the topic and the missing ACL (DESCRIBE_CONFIGS on
+the topic). It never warns and continues. The operator can explicitly accept the risk with
+`allowUncheckedTopicConfig: true`, which skips every check in this section for that pipeline, logs a
+warning at start and once per refresh, and increments a counter; retention, timestamp bounds and size are
+then enforced only by the broker (and retention silently). Observed on Kafka 4.0.0 with ACLs
+(Spike results 9): the principal's produce and metadata calls succeeded while `kadm.DescribeTopicConfigs`
+returned a top-level `TOPIC_AUTHORIZATION_FAILED` error and no resources, so this case is detectable
+and is not confused with an empty result. Other transport errors on DescribeConfigs also fail the record.
+Brokers other than Kafka 4.0.0 (Redpanda, older Kafka, managed services) were not tested; if one returns
+success with an empty config list the destination treats that as unreadable too.
+
+##### Timestamp preconditions
+
+Spike results (below) found three ways `preserveTimestamp` can silently or noisily misbehave.
 
 | Condition | Behaviour |
 | --- | --- |
 | `message.timestamp.type=LogAppendTime` | Fail with `KAFKA_TIMESTAMP_TYPE_LOG_APPEND`. The broker would overwrite the preserved value, so preservation cannot be honoured. Suggested fix: use a `CreateTime` topic or turn off `preserveTimestamp` |
 | `message.timestamp.before.max.ms` / `after.max.ms` (Kafka 3.6+) or `message.timestamp.difference.max.ms` (before 4.0) is finite and the record timestamp is outside the window | Fail the record before producing, `KAFKA_TIMESTAMP_OUT_OF_RANGE`, naming the config. Kafka rejects the whole produce batch with `INVALID_TIMESTAMP` if one record is out of range (spike), so catching it client-side keeps valid neighbours out of the failure |
-| `retention.ms` is finite and the record timestamp is older than `now - retention.ms` | Fail the record, `KAFKA_TIMESTAMP_OLDER_THAN_RETENTION`. Kafka's time-based retention is evaluated on record timestamps: in the spike 400 records with a CreateTime 10 days old on a topic with `retention.ms=90000` were deleted within the first 10 s sample while the control topic kept its records for about 90 s. The broker acks the write and then deletes the data, which is a silent loss from the mirror's point of view. Suggested fix: raise `retention.ms` on the destination topic or turn off `preserveTimestamp` |
-| DescribeConfigs fails with an authorization error | Log a warning once and skip the checks; the limitation is documented. Other errors fail the record |
+| `cleanup.policy` contains `delete` (`delete` or `delete,compact`), `retention.ms` is finite and the record timestamp is older than `now - retention.ms` | Fail the record, `KAFKA_TIMESTAMP_OLDER_THAN_RETENTION`. Kafka's time-based retention is evaluated on record timestamps: in the spike 400 records with a CreateTime 10 days old on a topic with `retention.ms=90000` were deleted within the first 10 s sample while the control topic kept its records for about 90 s. The broker acks the write and then deletes the data, which is a silent loss from the mirror's point of view. Suggested fix: raise `retention.ms` on the destination topic or turn off `preserveTimestamp` |
+| `cleanup.policy=compact` only | Time retention does not apply, so the retention row is skipped (read from Kafka documentation; not run in the spike). Old timestamps are not rejected. Compaction behaviour that keys off timestamps (`min.compaction.lag.ms`, `max.compaction.lag.ms`, `delete.retention.ms` for tombstones) can make an old-timestamped record or tombstone eligible for cleaning immediately; the mirror source has the same property, so this is faithful, but it was not observed and a test is planned. Per-key order on a compacted topic follows offset order, not timestamp order, and a mirror writes records in offset order |
+| DescribeConfigs not authorized | Fail, `KAFKA_TOPIC_CONFIG_UNREADABLE`, unless `allowUncheckedTopicConfig` (see _Topic configuration checks_). Never warn and skip. Other DescribeConfigs errors also fail |
+| `max.message.bytes` (topic level) | See below |
 | Redpanda | v25.1.5 does not return `message.timestamp.before.max.ms`/`after.max.ms`/`difference.max.ms` from DescribeConfigs and did not enforce them in the spike, so only the `message.timestamp.type` and `retention.ms` rules apply. Redpanda retention behaviour with old CreateTime was not observed (see What was not verified) |
+
+##### Record size
+
+`max.message.bytes` is a topic-level config read by the same DescribeConfigs call. On Kafka it limits the
+record batch as the broker receives it, after compression (read from Kafka documentation; the spike
+rejected a single oversized record, `MESSAGE_TOO_LARGE`, but did not test a batch of small records over
+the limit). Headers count toward it, and mirror mode adds headers a default pipeline does not write, so a
+record that fit before can now fail. The destination checks in `prepareRecord`:
+
+- Estimated record size (key + value + sum of header key and value lengths + 16 bytes per header + 64
+  bytes of record and batch overhead; a conservative estimate, the exact framing was not measured)
+  against the lower of the topic `max.message.bytes` and the client `batchBytes` (default 1000012,
+  `destination/config.go:57`, passed to `ProducerBatchMaxBytes`). Over: the record fails,
+  `KAFKA_RECORD_TOO_LARGE`, with the sizes and both limits. Because the check is in `prepareRecord`, the
+  batch stops there and later records are not enqueued (see _Ordering_).
+- At the first record for a topic, if the client `batchBytes` is larger than the topic `max.message.bytes`,
+  fail with `KAFKA_BATCH_BYTES_EXCEEDS_TOPIC_MAX`, suggesting `batchBytes` at or below the topic limit.
+  Otherwise the client can assemble a batch that the broker rejects as a whole after enqueue, which is
+  the reorder case in _Ordering_.
+- The broker's own limit on the producer connection (`message.max.bytes` and the client-side
+  `BrokerMaxWriteBytes`) is a second limit not read from the topic; it is the backstop and the reason the
+  broker error still halts the pipeline.
+
+##### Delivery timeout
 
 `preserveTimestamp` also requires `deliveryTimeout` to be unset or zero. franz-go measures
 `RecordDeliveryTimeout` from `Record.Timestamp` (`kgo/sink.go`, `isTimedOut`), so any record whose
@@ -226,7 +335,9 @@ not faithful today and is not claimed to be:
   envelopes instead of payloads. This is the silent-mangling class that invariant 6 forbids, and the
   destination cannot currently detect it.
 
-Until Open question 2 is decided, this design delivers header, partition and timestamp passthrough
+If the recommended `mirror` mode is accepted (Open question 1), it supersedes this recipe for mirroring:
+it writes `Payload.After` bytes directly and fixes both the empty-value and the silent-fallback hazards.
+The recipe findings stay as a record of why. Until Open question 1 is decided, this design delivers header, partition and timestamp passthrough
 and does not deliver faithful empty-value mirroring. Pipelines whose source topics can contain empty
 non-null values must not use the template recipe. The README recipe, when written, states this limit.
 The shipping example uses the template above with `preserveHeaders`, `preserveTimestamp` and
@@ -253,6 +364,15 @@ partition and 5 absent. The SDK acks `batch[:n]` and nacks `batch[n:]` with the 
 written. On redelivery the partition ends up as `s0 s1 s2 s3 s4 s6 s7 s8 s9 s5 s6`: record 5 after
 records 6-9, and 6 twice. Both brokers behaved identically. Idempotence does not prevent this; it
 protects retries of the same batch, not a record the broker rejects.
+
+This reorder is not introduced by this change. The destination's batch path today enqueues every record
+of the batch, collects the results, and returns the index of the first error (`destination/franz.go`
+`Produce`, results collected in completion order, which is the #308 problem), so a broker rejection after
+enqueue already leaves the later records of the batch written and then redelivered, with the same
+duplicate and reorder, for any pipeline, mirror or not. That is read from the connector code; the spike
+reproduced it with franz-go directly, not through the connector. What this change adds is more ways for
+a record to be rejected (size with headers, timestamp bounds), which is why those checks move before
+enqueue.
 
 What the design does about it:
 
@@ -351,12 +471,17 @@ returns that record's index: earlier records are acked, this one and the rest of
 | `kafka.headers` absent with `preserveHeaders` | Record fails, `KAFKA_HEADERS_MISSING`, unless `allowLossyHeaders` is set, in which case headers are rebuilt from `kafka.header.*`, one warning, counter incremented |
 | Header null versus empty value | Both preserved: `v: null` and `v: ""` round trip as null and empty (spike) |
 | Header with empty key or key that is not UTF-8 | Both brokers accept and return these (spike); carried as base64 key bytes, no failure |
-| Header total size exceeds broker `message.max.bytes` / client `batchBytes` | The size check runs in `prepareRecord` (record size including headers against `batchBytes`) and fails that record, stopping the batch there; the broker error is the backstop. Headers count toward record size, so a record that fit before can now fail; documented |
+| Header total size exceeds topic `max.message.bytes` / client `batchBytes` | See _Record size_: checked in `prepareRecord`, fails that record and stops the batch; the broker error is the backstop |
 | `message.timestamp.type=LogAppendTime` on the destination topic | Record fails, `KAFKA_TIMESTAMP_TYPE_LOG_APPEND` (see _Timestamp preconditions_) |
 | Record timestamp outside `message.timestamp.before/after.max.ms` (or `difference.max.ms`) | Record fails client-side, `KAFKA_TIMESTAMP_OUT_OF_RANGE`. If the broker still returns `INVALID_TIMESTAMP` (config changed, or not described), the whole produce batch fails on Kafka, including valid records in it (spike); the destination re-reads the topic config once and reports the config values |
 | Record timestamp older than `now - retention.ms` | Record fails, `KAFKA_TIMESTAMP_OLDER_THAN_RETENTION`. Kafka deletes such records within seconds of the segment closing, regardless of how recently they were written (spike) |
 | `preserveTimestamp` with `deliveryTimeout` > 0 | Config validation fails, `KAFKA_DELIVERY_TIMEOUT_WITH_TIMESTAMP`; otherwise franz-go times out old-timestamp records immediately (spike) |
-| DescribeConfigs not authorized | Warning once, timestamp checks skipped; documented limitation |
+| DescribeConfigs not authorized | Record fails, `KAFKA_TOPIC_CONFIG_UNREADABLE`, unless the operator set `allowUncheckedTopicConfig` (warning at start and per refresh, counter). Never warn and skip by default |
+| Topic config changes after `Open` | Picked up at the next `topicConfigRefreshInterval` refresh or after a broker `INVALID_TIMESTAMP`/`MESSAGE_TOO_LARGE`; exposure window up to the interval, notably for `retention.ms` which the broker never rejects |
+| `cleanup.policy=compact` | Retention check skipped; timestamp-keyed compaction behaviour documented, not observed |
+| Record plus headers over topic `max.message.bytes` or `batchBytes` | Record fails in `prepareRecord`, `KAFKA_RECORD_TOO_LARGE`; `batchBytes` above the topic limit fails the first record, `KAFKA_BATCH_BYTES_EXCEEDS_TOPIC_MAX` |
+| Empty or nil value/key without `kafka.value.null`/`kafka.key.null`, conflicting marker and bytes, non-`RawData` payload, user-set `sdk.record.format` | Record fails (or config validation fails) with the `KAFKA_MIRROR_*` codes in _Key and value rules_; never written as empty or re-serialized |
+| Many source topics onto one destination topic | Partition numbers collide and records interleave on the destination partition; allowed, documented |
 | Broker rejects a record after enqueue (for example `MESSAGE_TOO_LARGE`, auth, network) | Pipeline halts. Per-partition order is not guaranteed after this: later records of the batch may already be in the partition and are redelivered (Spike results 4, _Ordering_). Remedy: re-seed that destination partition |
 | Crash (`kill -9`) mid-batch | Unacked records are re-read from the committed consumer-group offset and produced again: duplicates, no loss. Preserved fields are derived from the record, so a duplicate carries identical partition, timestamp and headers and lands in the same partition |
 | Duplicate delivery with `preservePartition` | A re-produced record is appended again to the same partition (at-least-once). Consumers need idempotence, as with any at-least-once mirror |
@@ -392,7 +517,7 @@ convention.
 - The destination logs once per pipeline, at info, which passthrough options are active, and the
   detected topic configuration it relies on (timestamp type, retention, timestamp bounds).
 - Warnings, once each: lossy header fallback in use, destination has more partitions than the source,
-  DescribeConfigs not authorized.
+  `allowUncheckedTopicConfig` in use (also once per refresh). Fail-fast `KAFKA_TOPIC_CONFIG_UNREADABLE` is an error, not a warning.
 - Counters (via the SDK metrics where available, otherwise log fields): records produced with
   preserved partition, lossy header fallbacks used, failures by code. Metric names to be agreed with
   the connector metrics conventions; not specified here.
@@ -426,8 +551,19 @@ convention.
   a destination with short `retention.ms` and old timestamps.
 - Value fidelity test for the payload-only recipe: values that are null, empty, one byte, invalid
   UTF-8, with template syntax and trailing newlines. It currently fails for the empty value (Spike
-  results) and stays red or skipped with a link to the decision on Open question 2; it is the gate for
+  results) and stays red or skipped with a link to the decision on Open question 1; it is the gate for
   claiming a faithful mirror. A test that a failing template does not write envelopes also belongs here.
+- Topic-config tests: DescribeConfigs not authorized fails with `KAFKA_TOPIC_CONFIG_UNREADABLE` and
+  `allowUncheckedTopicConfig` lets records through with a warning (ACL setup as in Spike results 9);
+  `retention.ms` lowered while running is caught within `topicConfigRefreshInterval`;
+  `cleanup.policy=delete,compact` applies the retention rule and `compact` does not; a record with large
+  headers over `max.message.bytes` fails in `prepareRecord` and the batch stops there; `batchBytes` over
+  the topic limit fails the first record.
+- Key and value rules: null versus empty key and value, conflicting marker and bytes, absent marker with
+  empty bytes, structured payload, and a user-set `sdk.record.format` each give the specified result, and
+  the value-fidelity test above runs against `mirror` mode and must pass.
+- Many-to-one template: two source topics onto one destination topic interleave on shared partitions and
+  per-source-partition order holds among first deliveries.
 - Ordering test: record rejected by the broker in the middle of a same-partition batch; asserts the
   documented behaviour (tail nacked, later records may already be present) so a change in it is noticed.
 - Fault injection and `kill -9`: SIGKILL the connector mid-batch (source and destination), restart,
@@ -493,6 +629,15 @@ compose project and ephemeral host ports. Results are observations on those vers
    null. `{{ .Payload.After }}` and `| toString` were wrong for every input. A template with a missing
    field fell back to the OpenCDC JSON envelope for every input.
 
+9. DescribeConfigs authorization (Kafka only). `apache/kafka:4.0.0` (the JVM image; the native image
+   failed SASL PLAIN login on the broker side with a JAAS `Subject.current()` error, so it could not be used),
+   `StandardAuthorizer`, `allow.everyone.if.no.acl.found=false`, a SASL_PLAINTEXT listener with user
+   `alice`, ACLs granting `alice` WRITE and DESCRIBE on one 2-partition topic and nothing else. Observed:
+   `kadm.DescribeTopicConfigs` returned top-level `TOPIC_AUTHORIZATION_FAILED: Not authorized to access
+   topics` and zero resources; `ListTopics` (metadata) succeeded with 2 partitions; `ProduceSync` to
+   partition 1 succeeded. So the destination can write to a topic it cannot read the config of, which is
+   exactly the case the unreadable-config rule covers. Output: `out/acl-kafka.txt` in the scratch area.
+
 ### What was not verified
 
 - Any behaviour inside a running Conduit pipeline or the connector's own source and destination
@@ -504,21 +649,27 @@ compose project and ephemeral host ports. Results are observations on those vers
 - Multi-broker clusters, replication factors above 1, `min.insync.replicas` interaction, and Kafka
   versions other than 4.0.0 (for example the `difference.max.ms` era before 3.6).
 - Throughput or latency of any option.
+- DescribeConfigs authorization failure on Redpanda, older Kafka and managed services; only Kafka 4.0.0
+  with `StandardAuthorizer` was run.
+- Compacted topics with old timestamps (`cleanup.policy=compact`), tombstone retention behaviour, and a
+  batch of small records over `max.message.bytes` (only a single oversized record was run).
+- Whether the destination can tell an explicit `sdk.record.format` from the SDK default, and what the gRPC
+  hop does to an invalid-UTF-8 metadata string.
 - Whether `ForceMetadataRefresh` taking 5.0 s on Redpanda is the client `MetadataMinAge` or the broker.
 
 ## Open questions
 
-1. Empty and null values and the payload-only format. The template recipe turns an empty non-null
-   value into a tombstone and falls back to the envelope on template errors (Spike results 8). Options:
-   (a) a destination option `preserveValue` that writes `Payload.After` bytes verbatim, null when
-   `kafka.value.null=true` and empty otherwise, bypassing `sdk.record.format` and removing both
-   hazards, connector-only, no SDK change; (b) a payload-only format in `conduit-connector-sdk`;
-   (c) keep the template recipe and document the limit. Recommendation: (a), because it makes the
-   fidelity test pass without depending on template behaviour and without an SDK release. Needs
-   DeVaris sign-off since it adds a fourth destination option.
+1. Destination option shape and the value path (recommended, pending DeVaris). Recommendation: one
+   `mirror: true` option implying header, timestamp, partition and value preservation, with the
+   _Key and value rules_ above (writes `Payload.After` bytes verbatim, bypasses `sdk.record.format`,
+   rejects non-`RawData` payloads, a user-set format and ambiguous null/empty). Alternatives: (a) the four
+   separate booleans plus `preserveValue`, more flexible and easier to misconfigure into a half mirror;
+   (b) a payload-only format in `conduit-connector-sdk`, an SDK release and a wider surface; (c) keep the
+   template recipe and document its empty-value and silent-fallback limits. Needs sign-off because it
+   fixes a public config name and adds a destination mode.
 2. Whether the destination should also refuse to start when `sdk.record.format` is left at the default
-   `opencdc/json` together with any `preserve*` option, since that writes envelopes and not a mirror.
-   Leaning yes.
+   `opencdc/json` together with any preserve behaviour. Moot under `mirror` (the format is ignored and a
+   set one is rejected); still open if the granular booleans are chosen. Leaning yes.
 3. Whether unbounded produce waits (no `deliveryTimeout`, required by `preserveTimestamp`) are acceptable
    for a certified connector, or whether a separate timeout that does not key off `Record.Timestamp`
    must be built in the connector.
