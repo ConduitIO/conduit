@@ -27,7 +27,7 @@ analysis, alternatives and failure modes are in
 - Accept a pipeline-supplied endpoint only on an exact, https `allow-endpoints` match; otherwise use only
   the SDK's endpoint resolution. Refuse cross-host redirects and `169.254.0.0/16` / `fd00:ec2::254`.
 - Standalone and external connectors are out of scope for v0.21. Protection there is cooperative only,
-  because the policy is not delivered to them and standalone plugins inherit the engine environment.
+  because the policy is not delivered to them (see ConduitIO/conduit#3043 for the plugin environment).
 
 ## Consequences
 

@@ -71,15 +71,11 @@ Read from this repo at `81c6306`:
   authorization that no API caller can set. `CONDUIT_SECRET_*` is resolved only for the processor
   egress service and is not visible to connectors.
 - Standalone connector plugins are separate processes started through
-  `conduit-connector-protocol/pconnector/client`. The protocol client sets `cmd.Env` to an empty slice with
-  a comment saying "clean env" (`pconnector/client/client.go:44-45`, protocol v0.9.5), but go-plugin
-  v1.8.0 appends `os.Environ()` to the command environment unless `SkipHostEnv` is set
-  (`go-plugin@v1.8.0/client.go:655`), and conduit never sets it (no occurrence in this repo). A
-  standalone plugin therefore inherits the engine's entire environment, and runs as the same OS user, so
-  it also reaches IMDS and `~/.aws`. The engine cannot stop a standalone plugin from using ambient
-  credentials. Closing that inheritance is handled in a separate hardening change, see the standalone
-  plugin environment design doc: `<link: standalone-plugin-env design doc PR>`. This design does not
-  depend on it and does not assume it has landed.
+  `conduit-connector-protocol/pconnector/client`, and they run as the same OS user as the engine, so they can
+  reach IMDS and `~/.aws` themselves. The engine cannot stop a standalone plugin from using ambient credentials.
+  What environment standalone plugins receive is handled in a separate hardening change, see the standalone
+  plugin environment design doc, ConduitIO/conduit#3043. This design does not depend on it and does not
+  assume it has landed.
 - A pipeline that names a plain `s3` (no prefix) resolves standalone first: `PluginTypeAny` tries
   `standaloneReg.NewDispenser` and falls back to the built-in only on error
   (`pkg/plugin/connector/service.go:185-191`, `newDispenser`). `builtin:s3` selects the built-in
@@ -316,10 +312,8 @@ Consequences for operators and pipeline authors:
 Follow-up for v0.22, needing its own short design: the engine adds `CONDUIT_CONNECTOR_AMBIENT_*`
 variables to the plugin's environment next to the existing `EnvConduitConnectorToken` entries in
 `standalone/registry.go`, and `conduit-connector-sdk`'s `Serve` converts them to the same context value.
-That is an SDK change, not a protocol change, and it stays cooperative. The environment-inheritance
-problem itself is a separate hardening change (`<link: standalone-plugin-env design doc PR>`); setting
-`SkipHostEnv` is a behavior change for every standalone plugin (they would lose `PATH`, proxies, `AWS_*`
-they may rely on) and is decided there, not here.
+That is an SDK change, not a protocol change, and it stays cooperative. What environment standalone
+plugins receive is a separate hardening change (ConduitIO/conduit#3043) and is decided there, not here.
 
 ### 7. What this does and does not change in the SDK and protocol
 
@@ -349,7 +343,7 @@ written with "Conduit pipeline authors" in mind. It does not solve the confused 
 It is still a good optional feature later, once this policy exists.
 
 **C. Ambient credentials only for registry or standalone plugins.** Rejected: the standalone process
-inherits the host environment (see Context), so this does not remove the confused deputy, and it
+runs as the engine's OS user (see Context), so this does not remove the confused deputy, and it
 removes the built-in connector from the one place the engine can enforce policy.
 
 **D. A pipeline-config flag** (for example `aws.allowAmbientCredentials: true`). Rejected immediately:
@@ -465,7 +459,7 @@ mutable global is shared by every pipeline in the process and by tests. Rejected
 - `conduit-connector-s3#1021` (credential chain), `#1022` (endpoint warning), `#994` (custom endpoint),
   `#1027` (draft, on hold until this is signed off), `#1028`.
 - `docs/architecture-decision-records/20261012-operator-policy-for-builtin-ambient-credentials.md` (the decision recorded).
-- Standalone plugin environment design doc: `<link: standalone-plugin-env design doc PR>`.
+- Standalone plugin environment design doc: ConduitIO/conduit#3043.
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the egress ceiling this mirrors).
 - `docs/operations/live-restart-apply.md` (operator-only authorization flag precedent).
 - `docs/catalog/v0.21-certification-gaps.md` (PR #3034), section "s3#1021 credential chain".
