@@ -29,7 +29,8 @@ analysis, alternatives and failure modes are in
   the SDK's endpoint resolution (the check runs on the endpoint the SDK resolved, whatever its source:
   `AWS_ENDPOINT_URL*`, profile `endpoint_url`, `services` section). Refuse cross-host redirects and link-local
   addresses (`169.254.0.0/16`, `fd00:ec2::254`, `fd00:ec2::23`, IPv4-mapped forms), except under `allow-proxy`.
-  Credential-acquisition overrides (`AWS_ENDPOINT_URL_STS`, `_SSO`, IMDS) are out of scope. Exactly one static key set is a config error, never a fall-through to ambient.
+  Credential-acquisition overrides (`AWS_ENDPOINT_URL_STS`, `_SSO`, IMDS) are out of scope.
+  Exactly one static key set is a config error, never a fall-through to ambient.
 - Standalone plugins are out of scope; see #3043.
 
 ## Consequences
