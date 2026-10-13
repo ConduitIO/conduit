@@ -9,7 +9,8 @@ the source emits lossless metadata only when asked, the destination writes it on
 single destination `mirror` mode is recommended in place of four separate booleans (pending sign-off,
 Open question 1). It also records what a payload-only record format recipe does and does not preserve (it does not yet
 preserve empty values; see Open questions) and sets aside topic include/exclude as a separate item.
-Spike results against franz-go v1.20.7 on Apache Kafka 4.0.0 and Redpanda v25.1.5 are in _Spike
+Spike results against franz-go (v1.20.7 for the round-3 spike, see the version note under _Spike
+results_) on Apache Kafka 4.0.0 and Redpanda v25.1.5 are in _Spike
 results_ and several decisions below depend on them. Offset translation, checkpoints, heartbeats and topic
 config sync are out of scope. Tracked in ConduitIO/conduit-connector-kafka#309. Roadmap item:
 v0.21 connector-certification. Risk tier: Tier 1 (changes the record written to Kafka, and
@@ -168,6 +169,11 @@ Behaviours:
   the option.
 - `topicConfigRefreshInterval` (duration, default `5m`, minimum `10s`): how often the cached topic
   configuration is re-read (see _Topic configuration checks_).
+- `topicConfigRefreshMaxFailures` (int, default `3`, minimum `1`): consecutive failed refreshes tolerated
+  before the pipeline halts (see _Topic configuration checks_).
+- `produceTimeout` (duration, default `2m`, minimum `5s`, `0` disables the bound): connector-side bound on
+  a produce call (see _Delivery timeout and bounded waits_). The default is a proposal, not measured.
+- `maxMessageBytesOverride` (int, default `0` = use the topic's `max.message.bytes`): see _Record size_.
 
 Partition count checks, in order:
 
@@ -233,9 +239,17 @@ below). Rules, each a fail-the-record error with a stable code, never a coercion
   rejected (`KAFKA_MIRROR_PAYLOAD_NOT_RAW`).
 - A user-set `sdk.record.format` or `sdk.record.format.options` with `mirror` is a config validation
   error, `KAFKA_MIRROR_FORMAT_SET`, because it would be silently ignored. Whether the destination can
-  distinguish an explicit setting from the SDK default is unverified; if it cannot, the check is "differs
-  from the default `opencdc/json`", which rejects an explicit `opencdc/json` only by omission and is
-  acceptable because that setting is the default and is ignored in this mode anyway.
+  distinguish an explicit setting from the SDK default is unverified. If it cannot, the check is "differs
+  from the default `opencdc/json` with default options". An explicit setting equal to the default is then
+  accepted, which is harmless: the format is ignored in this mode either way.
+- Schema-attached records are rejected as not raw. The SDK destination middleware decodes the key and
+  payload of a record that carries a schema subject and version into `opencdc.StructuredData` by default
+  (`sdk.schema.extract.key.enabled` and `sdk.schema.extract.payload.enabled`, both default `true`; read
+  from `conduit-connector-sdk` `destination_middleware.go`, not run). A decoded payload or key is not
+  `opencdc.RawData`, so the record fails with `KAFKA_MIRROR_PAYLOAD_NOT_RAW`, the same code as any other
+  structured payload. Suggested fix in the error: do not enable `sdk.schema.extract.*` on the mirror
+  source, and set both `sdk.schema.extract.*.enabled` to `false` on the destination. Mirror mode never
+  re-encodes a schema'd record, because that would be silent re-serialization (invariant 6).
 
 Honest tension, flagged for review: a literal "empty `After` without `kafka.value.null` fails" rule would
 make a genuine empty value unmirrorable if the source only marked nulls. That is why the source emits
@@ -253,6 +267,25 @@ the refresh; records already enqueued, and records produced between two refreshe
 so the retention rule (which the broker does not reject but silently honours) has an exposure window of up
 to the interval. That window is stated, not closed. Checks run only when `mirror` is on.
 
+Refresh failure handling. The destination keeps the last successfully read configuration for each topic
+and distinguishes three cases (specified here; the error classification was not spiked):
+
+- Authorization errors (`TOPIC_AUTHORIZATION_FAILED`, `CLUSTER_AUTHORIZATION_FAILED`) fail immediately, at
+  the first read or at any refresh, with `KAFKA_TOPIC_CONFIG_UNREADABLE`. A config that was readable and
+  stops being readable means the ACLs changed, which is an operator action to surface, not to ride out.
+- The first read for a topic has no last good config to fall back on, so any failure there fails the
+  record with `KAFKA_TOPIC_CONFIG_UNREADABLE`.
+- At a refresh (a later read), a transient failure (request timeout, connection error, retriable broker
+  error) keeps the last good config. The destination logs a warning, increments a counter, and retries the
+  read no later than 10 s after the failure instead of waiting a full interval. After
+  `topicConfigRefreshMaxFailures` consecutive failed reads (int, default `3`, minimum `1`) it fails the next
+  record with `KAFKA_TOPIC_CONFIG_UNREADABLE`, naming the last error and the failure count. A successful
+  read resets the count. Unknown topic at refresh is not transient: the topic was deleted, fail
+  immediately with `KAFKA_DESTINATION_TOPIC_MISSING`.
+
+The cost of keeping the last good config is a longer exposure window for the retention rule: up to
+`topicConfigRefreshInterval` plus `topicConfigRefreshMaxFailures` times 10 s. Stated, not closed.
+
 DescribeConfigs not authorized: the destination fails with `KAFKA_TOPIC_CONFIG_UNREADABLE` on the first
 record for the topic (or at the next refresh), naming the topic and the missing ACL (DESCRIBE_CONFIGS on
 the topic). It never warns and continues. The operator can explicitly accept the risk with
@@ -261,7 +294,8 @@ warning at start and once per refresh, and increments a counter; retention, time
 then enforced only by the broker (and retention silently). Observed on Kafka 4.0.0 with ACLs
 (Spike results 9): the principal's produce and metadata calls succeeded while `kadm.DescribeTopicConfigs`
 returned a top-level `TOPIC_AUTHORIZATION_FAILED` error and no resources, so this case is detectable
-and is not confused with an empty result. Other transport errors on DescribeConfigs also fail the record.
+and is not confused with an empty result. Other errors on the first read also fail the record; at a
+refresh they follow the transient rules above.
 Brokers other than Kafka 4.0.0 (Redpanda, older Kafka, managed services) were not tested; if one returns
 success with an empty config list the destination treats that as unreadable too.
 
@@ -290,7 +324,16 @@ record that fit before can now fail. The destination checks in `prepareRecord`:
 - Estimated record size (key + value + sum of header key and value lengths + 16 bytes per header + 64
   bytes of record and batch overhead; a conservative estimate, the exact framing was not measured)
   against the lower of the topic `max.message.bytes` and the client `batchBytes` (default 1000012,
-  `destination/config.go:57`, passed to `ProducerBatchMaxBytes`). Over: the record fails,
+  `destination/config.go:57`, passed to `ProducerBatchMaxBytes`). The estimate is of the uncompressed
+  size. For `batchBytes` that is correct: franz-go applies `ProducerBatchMaxBytes` before compression
+  (read from the franz-go docs for `ProducerBatchMaxBytes`, not run). For the topic limit it is
+  conservative, because the broker applies `max.message.bytes` to the batch after compression (Kafka
+  documentation), so a well-compressing record that the broker would accept can be rejected here. The
+  override is `maxMessageBytesOverride`: when non-zero it replaces the topic's `max.message.bytes` in both
+  this check and the `batchBytes` check below, so an operator who knows their data compresses can raise it
+  and let the broker be the judge. The broker's `MESSAGE_TOO_LARGE` then remains the backstop and halts the
+  pipeline as described in _Ordering_. The `batchBytes` cap itself is client-side and not overridden by
+  this option. Over: the record fails,
   `KAFKA_RECORD_TOO_LARGE`, with the sizes and both limits. Because the check is in `prepareRecord`, the
   batch stops there and later records are not enqueued (see _Ordering_).
 - At the first record for a topic, if the client `batchBytes` is larger than the topic `max.message.bytes`,
@@ -301,15 +344,65 @@ record that fit before can now fail. The destination checks in `prepareRecord`:
   `BrokerMaxWriteBytes`) is a second limit not read from the topic; it is the backstop and the reason the
   broker error still halts the pipeline.
 
-##### Delivery timeout
+##### Delivery timeout and bounded waits
 
-`preserveTimestamp` also requires `deliveryTimeout` to be unset or zero. franz-go measures
+`preserveTimestamp` requires `deliveryTimeout` to be unset or zero. franz-go measures
 `RecordDeliveryTimeout` from `Record.Timestamp` (`kgo/sink.go`, `isTimedOut`), so any record whose
 preserved timestamp is older than the timeout fails immediately with "records have timed out before
-they were able to be produced" (spike), and franz fails every buffered record in that partition with it.
-With the timeout unset a produce to an unreachable broker waits instead of failing; the pipeline stalls
-visibly and loses nothing, which is the better failure for a mirror. Config validation rejects the
-combination with `KAFKA_DELIVERY_TIMEOUT_WITH_TIMESTAMP`.
+they were able to be produced" (spike, re-run on v1.20.7 in Spike results 10), and franz fails every
+buffered record in that partition with it. Config validation rejects the combination with
+`KAFKA_DELIVERY_TIMEOUT_WITH_TIMESTAMP`.
+
+Without any bound, a produce to an unreachable broker waits forever: the pipeline stalls silently, loses
+nothing, and shows no error. Round 3 replaced that with a connector-side bound that does not read
+`Record.Timestamp`, and spiked it (Spike results 10).
+
+`produceTimeout` (see _Destination_ for the option). Mirror mode only; outside it `deliveryTimeout`
+behaves as today. Mechanism:
+
+1. Every produce uses `Client.Produce` with a per-record callback, including the single-record path,
+   which today uses `ProduceSync` (`destination/franz.go`). `ProduceSync` waits on the promises and does
+   not honour its context while waiting.
+2. The call waits for all callbacks or for a timer that starts when the call starts. The timer is never
+   derived from `Record.Timestamp`. Old `CreateTime` values have no effect on it.
+3. On expiry the connector poisons the producer: it calls `Client.Close()`, which fails every unresolved
+   promise with "client closed" at once. It then returns `KAFKA_PRODUCE_TIMEOUT` with the index of the first
+   record whose promise did not resolve successfully. Records before that index are acked, the rest are
+   nacked (the SDK acks `batch[:n]` and nacks `batch[n:]`). This relies on per-index results, i.e. the #308
+   fix.
+4. Every later produce call on the poisoned producer returns the same error without touching the client.
+   The pipeline halts under the error policy. Teardown then closes the client a second time; whether
+   franz-go's `Close` is idempotent was not tested, so the connector guards the second call.
+5. A record is acked only if its own promise resolved with a nil error. A timeout, a close or an abort is
+   never an ack (invariant 1).
+
+Records that were reported as errors may still have been written. In the paused-broker run the five records
+were produced while the broker was paused (presumably accepted into the socket buffers; the mechanism was
+not examined), and after unpause all five appeared in the topic although every promise had resolved with an
+error. In the stopped-broker run (connection refused) none
+appeared. So an error means "not confirmed", and redelivery can produce a duplicate. That is at-least-once,
+not loss, and the duplicate carries identical partition, timestamp and headers. It does extend the
+reorder caveat in _Ordering_ to the timeout path.
+
+A bound that is too small turns a slow broker into a halted pipeline, because expiry closes the client.
+`produceTimeout` should be well above the broker's worst healthy produce latency and the default is not
+derived from a measurement.
+
+Shutdown with in-flight produces and an unreachable broker (invariant 7). Read from the SDK
+(`conduit-connector-sdk` v0.14.1 `destination.go:237-298`): `Stop` waits up to 1 minute for the last
+position, flushes with a 1 minute limit, and `Teardown` then calls the connector's `Close`. Observed in
+the spike: `Client.Close()` returned in under 10 ms with the broker paused and with it stopped, did not
+need a context, and made a `ProduceSync` that had been blocked for 25 s return `client closed`
+immediately. Therefore:
+
+- SIGTERM with the broker unreachable: nothing is acked for records the broker did not confirm (their
+  promises resolve with errors on close), the position does not advance past the last confirmed record,
+  and the restart re-reads from the committed offset. Duplicates possible, no loss.
+- Shutdown time is bounded by the SDK's stop limits plus `Close`, up to about 2 minutes by the SDK
+  comments, and `produceTimeout` tightens it when smaller. Close itself is not the long pole.
+- `kill -9` is unchanged: unacked records are re-read.
+- Not verified: that the Conduit engine calls `Teardown` while a `Write` is still blocked, and the real
+  shutdown time through a running pipeline. The test plan adds a pipeline-level test for it.
 
 If the source topic is `LogAppendTime`, `kafka.timestamp` is the broker append time and is written to
 the destination as CreateTime. That is the closest available behaviour and is documented.
@@ -340,9 +433,11 @@ it writes `Payload.After` bytes directly and fixes both the empty-value and the 
 The recipe findings stay as a record of why. Until Open question 1 is decided, this design delivers header, partition and timestamp passthrough
 and does not deliver faithful empty-value mirroring. Pipelines whose source topics can contain empty
 non-null values must not use the template recipe. The README recipe, when written, states this limit.
-The shipping example uses the template above with `preserveHeaders`, `preserveTimestamp` and
-`preservePartition`, and a test that fails if any value written to the destination differs from the
-source value (see Test plan).
+The shipping example matches the recommended design: source `emitMirrorMetadata: true`, destination
+`mirror: true`, no `sdk.record.format`, and the strict DLQ config from _Error policy_. It comes with a test
+that fails if any value written to the destination differs from the source value (see Test plan). If DeVaris
+decides against `mirror` in Open question 1, the example becomes the template recipe with the granular
+`preserve*` options and states the empty-value limit instead.
 
 ### Topic include/exclude and discovery (separate item)
 
@@ -401,7 +496,8 @@ which is documented.
 The errors this design adds are not per-record data problems; they mean the destination topic or the
 pipeline is configured wrongly (`KAFKA_PARTITION_OUT_OF_RANGE`, `KAFKA_PARTITION_COUNT_MISMATCH`,
 `KAFKA_PARTITION_INVALID`, `KAFKA_HEADERS_INVALID`, `KAFKA_HEADERS_MISSING`, `KAFKA_TIMESTAMP_*`,
-`KAFKA_DESTINATION_TOPIC_MISSING`). They must stop the pipeline, not be routed to a DLQ.
+`KAFKA_DESTINATION_TOPIC_MISSING`, `KAFKA_TOPIC_CONFIG_UNREADABLE`, `KAFKA_PRODUCE_TIMEOUT`). They must
+stop the pipeline, not be routed to a DLQ.
 
 The reason is the SDK's nack granularity. When `Produce` returns index `n`, records `batch[n:]` are all
 nacked with the same error (`destination.go:356`), including records after the bad one that were fine
@@ -475,11 +571,15 @@ returns that record's index: earlier records are acked, this one and the rest of
 | `message.timestamp.type=LogAppendTime` on the destination topic | Record fails, `KAFKA_TIMESTAMP_TYPE_LOG_APPEND` (see _Timestamp preconditions_) |
 | Record timestamp outside `message.timestamp.before/after.max.ms` (or `difference.max.ms`) | Record fails client-side, `KAFKA_TIMESTAMP_OUT_OF_RANGE`. If the broker still returns `INVALID_TIMESTAMP` (config changed, or not described), the whole produce batch fails on Kafka, including valid records in it (spike); the destination re-reads the topic config once and reports the config values |
 | Record timestamp older than `now - retention.ms` | Record fails, `KAFKA_TIMESTAMP_OLDER_THAN_RETENTION`. Kafka deletes such records within seconds of the segment closing, regardless of how recently they were written (spike) |
+| Broker unreachable or paused while records are in flight (mirror mode) | `produceTimeout` expires, the producer is closed, `KAFKA_PRODUCE_TIMEOUT`, unconfirmed records nacked, none acked. Reported-error records may still land (paused-broker spike): duplicates on redelivery, no loss. Pipeline halts |
+| SIGTERM with in-flight produces and an unreachable broker | Unconfirmed records are nacked on close, position not advanced, restart re-reads; shutdown bounded by the SDK stop limits (about 2 minutes) plus `Close` (under 10 ms observed). Engine behaviour not verified |
+| Transient DescribeConfigs failure at refresh | Last good config kept, warning and counter, retry within 10 s; `KAFKA_TOPIC_CONFIG_UNREADABLE` after `topicConfigRefreshMaxFailures` consecutive failures. Authorization errors fail immediately |
+| Schema-attached record (decoded to structured data by the SDK) | Record fails, `KAFKA_MIRROR_PAYLOAD_NOT_RAW`; fix: disable `sdk.schema.extract.*` |
 | `preserveTimestamp` with `deliveryTimeout` > 0 | Config validation fails, `KAFKA_DELIVERY_TIMEOUT_WITH_TIMESTAMP`; otherwise franz-go times out old-timestamp records immediately (spike) |
-| DescribeConfigs not authorized | Record fails, `KAFKA_TOPIC_CONFIG_UNREADABLE`, unless the operator set `allowUncheckedTopicConfig` (warning at start and per refresh, counter). Never warn and skip by default |
+| DescribeConfigs not authorized | Record fails, `KAFKA_TOPIC_CONFIG_UNREADABLE`, unless the operator set `allowUncheckedTopicConfig` (warning at start and per refresh, counter). Never warn and skip by default. Transient errors are handled separately (row above) |
 | Topic config changes after `Open` | Picked up at the next `topicConfigRefreshInterval` refresh or after a broker `INVALID_TIMESTAMP`/`MESSAGE_TOO_LARGE`; exposure window up to the interval, notably for `retention.ms` which the broker never rejects |
 | `cleanup.policy=compact` | Retention check skipped; timestamp-keyed compaction behaviour documented, not observed |
-| Record plus headers over topic `max.message.bytes` or `batchBytes` | Record fails in `prepareRecord`, `KAFKA_RECORD_TOO_LARGE`; `batchBytes` above the topic limit fails the first record, `KAFKA_BATCH_BYTES_EXCEEDS_TOPIC_MAX` |
+| Record plus headers over topic `max.message.bytes` or `batchBytes` | Record fails in `prepareRecord`, `KAFKA_RECORD_TOO_LARGE` (uncompressed estimate; `maxMessageBytesOverride` relaxes the topic part); `batchBytes` above the topic limit fails the first record, `KAFKA_BATCH_BYTES_EXCEEDS_TOPIC_MAX` |
 | Empty or nil value/key without `kafka.value.null`/`kafka.key.null`, conflicting marker and bytes, non-`RawData` payload, user-set `sdk.record.format` | Record fails (or config validation fails) with the `KAFKA_MIRROR_*` codes in _Key and value rules_; never written as empty or re-serialized |
 | Many source topics onto one destination topic | Partition numbers collide and records interleave on the destination partition; allowed, documented |
 | Broker rejects a record after enqueue (for example `MESSAGE_TOO_LARGE`, auth, network) | Pipeline halts. Per-partition order is not guaranteed after this: later records of the batch may already be in the partition and are redelivered (Spike results 4, _Ordering_). Remedy: re-seed that destination partition |
@@ -517,9 +617,12 @@ convention.
 - The destination logs once per pipeline, at info, which passthrough options are active, and the
   detected topic configuration it relies on (timestamp type, retention, timestamp bounds).
 - Warnings, once each: lossy header fallback in use, destination has more partitions than the source,
-  `allowUncheckedTopicConfig` in use (also once per refresh). Fail-fast `KAFKA_TOPIC_CONFIG_UNREADABLE` is an error, not a warning.
+  `allowUncheckedTopicConfig` in use (also once per refresh), a DescribeConfigs refresh that failed
+  transiently (each time, with the consecutive count). Fail-fast `KAFKA_TOPIC_CONFIG_UNREADABLE` is an
+  error, not a warning.
 - Counters (via the SDK metrics where available, otherwise log fields): records produced with
-  preserved partition, lossy header fallbacks used, failures by code. Metric names to be agreed with
+  preserved partition, lossy header fallbacks used, transient config-refresh failures, produce timeouts,
+  failures by code. Metric names to be agreed with
   the connector metrics conventions; not specified here.
 - Per-record failures include topic, partition and the record position so an operator can find the
   offending offset.
@@ -559,6 +662,22 @@ convention.
   `cleanup.policy=delete,compact` applies the retention rule and `compact` does not; a record with large
   headers over `max.message.bytes` fails in `prepareRecord` and the batch stops there; `batchBytes` over
   the topic limit fails the first record.
+- Bounded wait: a producer test with a broker that never answers (a TCP black hole or a paused container)
+  asserts `produceTimeout` returns `KAFKA_PRODUCE_TIMEOUT` within the bound plus a small margin, for the
+  single-record and batch paths, with records whose `Record.Timestamp` is 10 days old; no promise resolves
+  with a nil error after expiry; later calls fail fast. Re-run against a stopped broker (connection refused).
+  Also assert that records reported as errors may appear in the topic after the broker returns, and that
+  the redelivered copies are byte- and field-identical.
+- Shutdown: a pipeline-level test sends SIGTERM with a paused destination broker and in-flight records;
+  asserts exit within the documented bound, no ack past the last confirmed record, and a restart that
+  loses nothing. Same with SIGKILL.
+- Config refresh: DescribeConfigs failing transiently (broker paused for less than the failure budget) keeps
+  the last good config and does not halt; `topicConfigRefreshMaxFailures` consecutive failures halt with
+  `KAFKA_TOPIC_CONFIG_UNREADABLE`; an authorization failure at refresh halts at once.
+- Schema-attached record: a record whose payload was decoded by the SDK schema middleware fails with
+  `KAFKA_MIRROR_PAYLOAD_NOT_RAW`.
+- Record size: a well-compressing record over the topic `max.message.bytes` fails by default and passes with
+  `maxMessageBytesOverride` set (and is accepted or rejected by the broker, whichever the broker does).
 - Key and value rules: null versus empty key and value, conflicting marker and bytes, absent marker with
   empty bytes, structured payload, and a user-set `sdk.record.format` each give the specified result, and
   the value-fidelity test above runs against `mirror` mode and must pass.
@@ -638,6 +757,39 @@ compose project and ephemeral host ports. Results are observations on those vers
    partition 1 succeeded. So the destination can write to a topic it cannot read the config of, which is
    exactly the case the unreadable-config rule covers. Output: `out/acl-kafka.txt` in the scratch area.
 
+10. Bounded produce wait (round 3). Own spike module (`spikes/kafka-timeout`), pinned to franz-go v1.20.7
+    and kadm v1.17.2 (the connector's versions, confirmed from the module graph), Apache Kafka
+    `apache/kafka-native:4.0.0`, one broker, unique compose project, ephemeral port, idempotent producer
+    (`acks=all`), no `RecordDeliveryTimeout`. Each scenario first produced one record to warm the
+    connection, then paused (`docker pause`) or stopped (`docker stop`) the broker container. Outputs are in
+    `out/*.txt` of that module.
+    - `ProduceSync` with a 3 s context deadline: still blocked after 25 s, on both pause and stop. `Close()`
+      then returned at once and the blocked call returned `client closed`.
+    - `Produce` with a 3 s context deadline per record (broker paused after the connection was warm): no
+      promise resolved in 25 s. franz-go's documentation says an idempotent record with a request already
+      sent cannot be failed. With the broker paused before the first produce (no metadata), the context did
+      fail the record (`context deadline exceeded`, seen by the 6 s sample).
+    - `ProduceRequestTimeout(2s)` with `RequestTimeoutOverhead(2s)`: no promise resolved in 40 s. The client
+      keeps retrying.
+    - `Flush(ctx 3s)` and `AbortBufferedRecords(ctx 3s)` with five buffered records: both returned
+      `context deadline exceeded` at 3 s and left the records unresolved; only `Close()` resolved them.
+    - Callbacks plus own 3 s timer, then `Close()` (the design): the wait returned at 3.0 s, `Close()` took
+      under 10 ms, and within the 5 s settle window all 5 promises had resolved with `client closed`, none
+      with nil. Identical with the record `Timestamp` set 10 days in the past (no `RecordDeliveryTimeout`),
+      and identical with the broker stopped (connection refused) instead of paused.
+    - After unpausing, the five records reported as errors were all present in the topic (end offset 1 to
+      6). After a stop (connection refused), none were (end offset stayed 1). The unconfirmed-but-written
+      case is real.
+    - Control, healthy broker: `RecordDeliveryTimeout(30s)` with a 2-day-old `Timestamp` fails at once with
+      "records have timed out before they were able to be produced"; the same record with no timeout is
+      produced. This re-confirms result 6 on v1.20.7.
+
+    Version note: results 1 to 9 were run in `spikes/kafka-passthrough`, whose module resolves
+    `github.com/twmb/franz-go` v1.22.2 today (pulled up by the SDK dependency). The text above this round
+    said v1.20.7. Whether the module resolved to v1.22.2 when those results were captured is not known, and
+    results 1 to 5 and 7 to 9 were not re-run on v1.20.7. Result 6 was (item 10). Treat those results as
+    observed on v1.22.2 or v1.20.7, unconfirmed which.
+
 ### What was not verified
 
 - Any behaviour inside a running Conduit pipeline or the connector's own source and destination
@@ -656,6 +808,14 @@ compose project and ephemeral host ports. Results are observations on those vers
 - Whether the destination can tell an explicit `sdk.record.format` from the SDK default, and what the gRPC
   hop does to an invalid-UTF-8 metadata string.
 - Whether `ForceMetadataRefresh` taking 5.0 s on Redpanda is the client `MetadataMinAge` or the broker.
+- The bounded wait on Redpanda, with TLS or SASL connections, or with several partitions and brokers; and
+  through the connector's own `Produce` (the spike used franz-go directly). In particular, whether the
+  Conduit engine calls `Teardown` while a `Write` is blocked, and total shutdown time in a running pipeline.
+- Classification of DescribeConfigs errors into transient and non-transient (the specified split follows the
+  franz-go/kerr retriable notion and was not exercised), and the 10 s retry interval and default of 3
+  failures, which are proposals.
+- That the SDK schema middleware decodes into `StructuredData` for every schema'd record in a running
+  pipeline (read from source, not run).
 
 ## Open questions
 
@@ -670,9 +830,10 @@ compose project and ephemeral host ports. Results are observations on those vers
 2. Whether the destination should also refuse to start when `sdk.record.format` is left at the default
    `opencdc/json` together with any preserve behaviour. Moot under `mirror` (the format is ignored and a
    set one is rejected); still open if the granular booleans are chosen. Leaning yes.
-3. Whether unbounded produce waits (no `deliveryTimeout`, required by `preserveTimestamp`) are acceptable
-   for a certified connector, or whether a separate timeout that does not key off `Record.Timestamp`
-   must be built in the connector.
+3. Resolved in round 3, pending only the default: unbounded produce waits are not accepted for mirror
+   mode. The connector-side `produceTimeout` (default `2m`, proposal) bounds the wait without reading
+   `Record.Timestamp`, and the spike passed (Spike results 10). The open part is the default value and
+   whether `0` (unbounded) should be allowed at all in a certified mode.
 
 ## Related
 
