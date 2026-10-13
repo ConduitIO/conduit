@@ -66,6 +66,17 @@ jobs:
         # path list in sync with the data-path packages; it is the same list
         # that used to live in the trigger's `paths:` filter.
         #
+        # Record-path trees: pkg/connector, pkg/pipeline, pkg/lifecycle*, plus
+        # the code that runs on every record or decides its fate. That is
+        # pkg/processor (processor wrapping, filter/error/skip semantics),
+        # pkg/plugin/connector and pkg/plugin/processor (builtin, standalone
+        # and gRPC/WASM adapters that carry Read/Write/Ack and run processor
+        # commands), pkg/internal/wasmengine (the WASM runtime under standalone
+        # processors) and pkg/schemaregistry (record encode/decode; invariant 6).
+        # Left out on purpose: pkg/inspector (read-only tap), pkg/foundation/*
+        # (logging, metrics, error and context helpers that do not alter
+        # record flow) and pkg/provisioning.
+        #
         # go.mod and go.sum count as data path: the storage engines (badger,
         # sqlite) are not in this repo, they come in through the
         # conduit-commons/database module, so a dependency bump is the only way
@@ -102,7 +113,7 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/pipeline/|pkg/lifecycle/|pkg/lifecycle-poc/|tests/chaos/)'; then
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/pipeline/|pkg/processor/|pkg/lifecycle/|pkg/lifecycle-poc/|pkg/plugin/connector/|pkg/plugin/processor/|pkg/internal/wasmengine/|pkg/schemaregistry/|tests/chaos/)'; then
             echo "reason=data-path change detected" >> "$GITHUB_OUTPUT"
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
