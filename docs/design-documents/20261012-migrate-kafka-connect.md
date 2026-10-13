@@ -110,15 +110,16 @@ format is detected, not declared; `--format {properties,json,rest-export,strimzi
 | `--worker FILE` | Worker properties (or a Strimzi `KafkaConnect` CR) that supply defaults for converters, client security and config providers. Optional; without it, worker-level defaults are reported as unknown rather than assumed. |
 | `--registry-url URL` | Schema Registry URL, used only to fill the `conduit.yaml` fragment and the report. Never contacted by `migrate`. |
 | `--slot-strategy {fresh,reuse}` | Postgres only, same name and values as #341/#3029. `fresh` (default, and the only value that works in v0.21): Conduit creates its own slot and publication while Debezium keeps running. `reuse` (take over Debezium's own slot) is v0.22 and fails with `postgres.import.slot_reuse_unsupported` until then. |
-| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never`, `cdcMode: logrepl`, `logrepl.autoCleanup: false`, `logrepl.requireExistingSlot: true` (pending DeVaris confirmation) and the cutover-marker prefix in `debezium.message.prefix.exclude.list` into the pipeline (#3029, "Pipelines the CLI writes"). Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector] [--no-start]` and `rollback` are specified in #3029, with the other cutover flags listed under _Resume_ (`--without-import`, `--reset`, `--reset-timeout`, `--journal-dir`, `--debezium-secret`, `--slot-create-timeout`, `--cutover-wait-timeout`, `--start-timeout`, `--rollback-timeout`, `--emit-cutover-marker`, `--pipelines-path`); this document fixes only how `migrate` feeds them. |
+| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never`, `cdcMode: logrepl`, `logrepl.autoCleanup: false`, `logrepl.requireExistingSlot: true` and the cutover-marker prefix in `debezium.message.prefix.exclude.list` into the pipeline (#3029, "Pipelines the CLI writes"). Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector] [--no-start]` and the read-only `--check-rollback [--watch]` are specified in #3029, with the other cutover flags listed under _Resume_ (`--without-import`, `--journal-dir`, `--slot-create-timeout`, `--cutover-wait-timeout`, `--start-timeout`, `--emit-cutover-marker`, `--pipelines-path`); this document fixes only how `migrate` feeds them. |
 | `--accept-gaps` | Write blocking pipelines as `status: running` instead of `stopped`. Recorded in the report. |
 | `--json`, `--quiet`, `--strict` | Per the CLI output conventions. `--strict` exits 2 on any `approximated` entry too. |
 
 Plain `migrate` never applies anything: no `--apply`, no calls to a running Conduit. Handing the output to
 `conduit pipelines validate|dry-run|deploy` is a separate, explicit step, which keeps rollback of the command
-trivial. **`--cutover` and `rollback` do act**, by design (specified in #3029): they create and drop replication
-slots, write and start pipelines, and stop and restart the Debezium connector. They are the only mutating paths,
-they are Postgres-only, and each is gated as described under _Resume_.
+trivial. **`--cutover` does act**, by design (specified in #3029): it creates replication slots, writes and starts
+pipelines, and stops the Debezium connector. It is the only mutating path, it is Postgres-only, and it is gated as
+described under _Resume_. Going back to Debezium is a manual runbook in v0.21, gated by the read-only
+`--check-rollback`; automated reset and rollback are v0.22 (#3044).
 
 Output directory:
 
@@ -351,7 +352,7 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
     changes (#341 S5 item 9).
 
   These checks run against the live config before the stop, again against the config the cutover saves before
-  the stop, and again before `--reset` or `rollback` restarts Debezium.
+  the stop, and `--check-rollback` runs them against the live config before an operator restarts Debezium by hand.
 
   **One code family per stage.** `kc.lint.postgres_slot_drop_on_stop` and `kc.lint.postgres_lsn_flush_mode` are
   the lint-time findings for the same configurations: warnings for plain `migrate` and `kc lint`, errors under
@@ -380,49 +381,46 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
   other import refusal (ADR 20260706, deterministic CLI exit codes), not from a rule of its own; the validation
   class (2) is expected, to be confirmed against how the connector registers the code.
 
-`rollback` (the S12 sequence in #341, driven by #3029) is not a bare restart of Debezium. A restarted Debezium
-resumes at the greater of its committed offset and its slot's confirmed position, so rollback has to account for
-what lies between them. It:
+**Going back to Debezium (scope cut, DeVaris 2026-10-12).** v0.21 has no `rollback` or `--reset` command. Seven
+Tier 1 review rounds kept finding loss paths in automating them, so going back is a manual runbook (#3029, "Runbook:
+manual reset and rollback"), and every step that could lose data is gated by the read-only `--check-rollback`
+(#341 S12). A restarted Debezium resumes at the greater of its committed offset and its slot's confirmed position,
+so the check:
 
-1. refuses to proceed if Debezium's slot is lost, invalidated, or recreated since the stop
-   (`rollback_slot_lost`); waits (`rollback_pending`, nothing changed) if Debezium's slot was ahead of its offset
-   at the stop and Conduit has not yet durably delivered past that point; and checks the saved config, its
-   secrets, the Connect REST API and Connect's config validation, all before it touches Conduit;
-2. stops the Conduit pipeline (setting `status: stopped` first when it is file-provisioned);
-3. restarts Debezium and waits until it is streaming and its confirmed position has passed Conduit's slot, with an
-   attach proof that the slot it streams from is the original one;
-4. only then deletes the pipeline, then drops Conduit's slot and publication;
-5. exits with `rollback_pending` on timeout or a failed attach proof, leaving both slots in place.
+1. reports `unsafe` if Debezium's slot is lost, invalidated, or recreated since the stop, if Debezium's slot was
+   ahead of its offset at the stop and Conduit has not yet durably delivered past that point, if Debezium's live
+   config fails the slot-safety checks or Kafka Connect's validation, or if both Debezium and the pipeline run;
+2. tells the operator when to stop the pipeline, when to restart Debezium, and, with `--watch`, follows the restart
+   to prove the slot Debezium streams from is the original one;
+3. returns `ready_to_drop` only once Debezium's confirmed position has passed Conduit's slot; the operator then
+   deletes the pipeline and drops Conduit's slot last.
 
-All mutating commands hold a per-slot lock, a temporary replication slot that a pooler cannot share
-(`operation_in_progress`, `lock_unavailable`). Loss is none for the pipeline's
-tables; tables Debezium captures outside the pipeline can miss changes Debezium itself skips after an ungraceful
-stop, and rollback warns about them.
+It never drops a slot, never stops or starts anything and never deletes a pipeline. `--cutover` holds a per-slot
+lock, a temporary replication slot that a pooler cannot share (`operation_in_progress`, `lock_unavailable`).
+Loss is none for the pipeline's tables; tables Debezium captures outside the pipeline can miss changes Debezium itself
+skips after an ungraceful stop, and the check warns about them. Automated reset and rollback are v0.22 (#3044).
 
 **Cutover flags and codes.** #3029 is the source for each; this table is the index.
 
 | Flag | Meaning (#3029 section) |
 | --- | --- |
 | `--without-import` | the fallback after `identity_mismatch`: start on Conduit's slot with no skip rule, require the slot to exist (Identity proof) |
-| `--reset`, `--reset-timeout` (30m) | start over while Debezium can still take back; never drops the only slot holding WAL (Crash-safe cutover) |
 | `--journal-dir` | where the crash-safe cutover journal lives; persistent in CI (Crash-safe cutover) |
-| `--debezium-secret <key>=env:<VAR>` | supplies a value Kafka Connect returned as a literal mask (Crash-safe cutover, saved config) |
 | `--slot-create-timeout` (5m) | bounds `CREATE_REPLICATION_SLOT` (Crash-safe cutover) |
 | `--cutover-wait-timeout` (30m) | bounds waiting for Debezium's offset to pass the new slot (`--cutover` starts the pipeline) |
 | `--start-timeout` (10m) | bounds waiting for the durable import-complete signal (same) |
-| `--rollback-timeout` (30m) | bounds rollback's wait for Debezium (Rollback) |
-| `--emit-cutover-marker` | opt-in non-transactional marker message to move an idle Debezium; accepted by `--cutover`, `--reset` and `rollback` (Decisions, Q3) |
-| `--pipelines-path DIR` | write the pipeline as a file in Conduit's `pipelines.path` instead of through the API; updates and deletes then need an engine reload (Pipelines the CLI writes) |
+| `--emit-cutover-marker` | opt-in non-transactional marker message to move an idle Debezium during `--cutover` (Decisions, Q3) |
+| `--pipelines-path DIR` | write the pipeline as a file in Conduit's `pipelines.path` instead of through the API; updates then need an engine reload, and deletes an engine restart (Pipelines the CLI writes) |
+| `--check-rollback [--watch] [--watch-timeout 30m]` | read-only: the safety checks and verdict for going back to Debezium by hand (Going back to Debezium) |
 
 | Code (`migrate.kafka_connect.*`) | When |
 | --- | --- |
 | `slot_drop_on_stop`, `lsn_flush_mode_unsupported`, `slot_advance_on_start_unsupported`, `config_masked`, `pipeline_exists` | before the stop |
 | `identity_mismatch`; `identity_ahead` (warning) | after the stop (Identity proof) |
 | `slot_advanced`, `slot_in_use`, `slot_unowned`, `slot_create_blocked` | slot and journal checks, including re-runs |
-| `reset_unsafe`, `reset_pending` | `--reset` |
 | `start_failed`, `import_pending` | starting the pipeline |
-| `rollback_slot_lost`, `rollback_pending` | `rollback` |
-| `operation_in_progress`, `lock_unavailable` | any mutating command, while another holds the per-slot lock or a reset or rollback is unfinished; or when the lock cannot be taken or is lost (Mutual exclusion) |
+| `operation_in_progress`, `lock_unavailable` | `--cutover`, while another holds the per-slot lock, or when the lock cannot be taken or is lost (Mutual exclusion) |
+| `rollback_check_no_journal`, `rollback_check_stop_incomplete`, `rollback_check_cutover_running`, `rollback_check_slot_lost`, `rollback_check_slot_moved`, `rollback_check_conduit_behind`, `rollback_check_config_unsafe`, `rollback_check_two_writers`, `rollback_check_continuity_unproven`, `rollback_check_not_caught_up` (`waiting`) | `--check-rollback` (Going back to Debezium) |
 | `offset_not_found`, `ambiguous_partition`, `connector_running`, `offsets_unreachable`, `cutover_timeout`, `cutover_marker_unsupported`, `lossy_source_config` (warning) | reading offsets and the cutover wait |
 
 Because Debezium's slot and offsets are never touched by the fresh strategy, this path exists at all, which is why
@@ -831,7 +829,7 @@ a plausible-looking pipeline that behaves differently.
 | **Two consumers on one Postgres slot** | Slot fights or split delivery | v0.21 never reuses the Debezium slot: Conduit and Debezium each have their own, which is also what makes the overlap during cutover safe. `--slot-strategy reuse` (v0.22) will require the KC connector to be stopped and the slot inactive |
 | **Both slots retain WAL while Debezium and Conduit run side by side** | Disk growth on the source database | the cutover waits for Debezium's offset to pass the new slot's consistent point and then stops Debezium; the runbook and `kc.lint` explain the window; mechanics in #341/#3029 |
 | **Import applied against an unsafe state** (offset mid-snapshot, slot invalidated or ahead, unsupported Postgres minor version, publication mismatch) | A wrong skip rule loses records | #341's preflights and coded refusals (`postgres.import.*`); no silent fallback; `migrate` reports preflights as pending rather than claiming the result offline |
-| **Rollback after cutover** | Debezium's slot is lost or invalidated, or Conduit's slot is dropped before Debezium has caught up | `rollback` follows S12 of #341: refuse on a lost, invalidated or recreated Debezium slot, wait until Conduit has durably delivered past Debezium's slot position at the stop when that was ahead of its offset, check secrets and Connect before stopping anything, stop the pipeline, restart Debezium and wait until it streams past Conduit's slot, only then drop Conduit's slot, `rollback_pending` on timeout (#3029); `--reset` has the same slot checks and refuses outright when Debezium's slot was ahead of its offset; (v0.22) rollback after slot reuse is harder because the slot was advanced, and is part of that design |
+| **Rollback after cutover** | Debezium's slot is lost or invalidated, or Conduit's slot is dropped before Debezium has caught up | v0.21 has no automated rollback: the operator follows the runbook in #3029, and the read-only `--check-rollback` (S12 of #341) gates every step: it reports a lost, invalidated or recreated Debezium slot, Conduit behind Debezium's stop position, an unsafe Debezium config and two writers, follows slot continuity across the manual restart, and returns `ready_to_drop` only when dropping Conduit's slot is safe; automated reset and rollback are v0.22 (#3044); (v0.22) rollback after slot reuse is harder because the slot was advanced, and is part of that design |
 | Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | marked dependency on the certification lane's check of the `kafka` source; until it is confirmed, `readFromBeginning: true` is set explicitly and the report says "replays from the beginning", at-least-once preserved |
 | At-least-once vs KC's stronger guarantees (S3 sink, exactly-once source, KIP-618) | Duplicates after crash | connector-level note in the report; never claimed equivalent |
 | Output-format change (OpenCDC, not Debezium envelope; S3 layout) | Consumers break | blocking entries stop the pipeline; Debezium-compatible output mode removes the Postgres-to-Kafka case in v0.21; Debezium MySQL and S3 layout remain blocking |
@@ -851,7 +849,8 @@ a plausible-looking pipeline that behaves differently.
 - Rule data (known keys, mapping versions) is versioned in-tree; the command prints the Debezium and
   Connect versions its rules were written against.
 - Plain `migrate` has no state and applies nothing; rolling back the command means deleting the output
-  directory. `--cutover` does act, and `rollback` (S12, see _Resume_) is its inverse.
+  directory. `--cutover` does act; its inverse in v0.21 is the manual runbook gated by `--check-rollback` (see
+  _Resume_), and automated rollback is v0.22 (#3044).
 - No serialized engine format is introduced or changed by this document. The offset import (#341) and slot
   reuse, which touch positions, are specified separately and are Tier 1.
 
@@ -901,6 +900,12 @@ document has been updated to match; this section is the record.
     #341's preflights (Postgres minor-version gate for the partial-decoding fix, publication and database
     checks). Design: `conduit-connector-postgres#341`; CLI: #3029. Only reusing Debezium's own slot
     (`--slot-strategy reuse`) is v0.22 and fails with `postgres.import.slot_reuse_unsupported` until then.
+12. **Going back to Debezium (decided 2026-10-12, round-7 completion).** Automated `--reset` and `rollback` are cut
+    from v0.21. Going back is a manual runbook (#3029) gated by the read-only `--check-rollback`; automated reset and
+    rollback are v0.22 (#3044), to be built against a real Kafka Connect and Debezium harness.
+13. **`logrepl.requireExistingSlot` (decided 2026-10-12).** Tri-state, as in #341 S13; `migrate` writes `true` on
+    every pipeline it creates. The connector's default refuses slot creation for a non-empty position, a behaviour
+    change with a release note.
 
 ## Open questions
 
