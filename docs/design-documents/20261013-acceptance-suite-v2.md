@@ -83,6 +83,9 @@ have a v1 counterpart; the v1 column is measured: the v1 suite was run against e
 | Source resumes from a change capture position by starting the changes over | 2, 3 | fails | SRC-03 (CDC cycles) |
 | Source resumes from a position it committed in `Teardown` only, and ignores the host's | 1, 2 | passes (v1 tears down before restarting) | SRC-03 (no `Teardown` on a kill) |
 | Source reorders records within a key after a restart | 4 | fails (v1 compares exact order after resume) | SRC-04 |
+| Source resumes from the last snapshot position by restarting the snapshot | 2, 3 | passes (measured; v1 never resumes at that exact position) | SRC-03 (boundary) |
+| Source resumes from the last snapshot position and drops the first change after it | 2, 3 | passes (measured) | SRC-03 (boundary) |
+| Source reorders records within a key in changes only | 4 | fails, by accident (v1's CDC resume test is exact and reordering breaks it); v1 has no ordering check | SRC-04 (keyed changes) |
 | Destination buffers only batches over 500 until `Teardown` | 1, 3 | passes | DST-04 (large batch kill point) |
 | Destination reorders batches over 100 | 4 | passes | DST-06 (batches of 300) |
 | Destination reorders only after a restart | 4 | passes | DST-06 (across a restart) |
@@ -155,7 +158,10 @@ How the two connectors that motivated this are expected to qualify:
   batch. Either the test driver configures the connector so that the bound is tight (for example committing after
   every record, `commitOffsetsSize=1`; the driver is test configuration, and the production default is untouched),
   or it declares `MaxRedelivery` around 1000, runs the scaled data set, and carries the visible flag. Only the
-  first qualifies for Certified without a waiver.
+  first qualifies for Certified without a waiver. A time-flushed commit (a commit every N seconds regardless of
+  count) has no per-record setting to tighten: it needs a `MaxRedelivery` large enough for a flush interval's worth
+  of records, or a driver that forces a commit per record. Such a connector fails closed: a bound that is too small
+  fails SRC-03, and a bound that is large enough carries the flag. It cannot pass falsely.
 - **S3** restarts a snapshot from the beginning by design (`conduit-connector-s3#1041`). It cannot claim a tight
   bound; it fails SRC-03 until the snapshot position resumes, or declares a bound as large as its snapshot, which
   the suite rejects above 1000 and flags below it.
@@ -190,8 +196,8 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 | DST-11 | `throughput_smoke` | destination | Records/s over N seconds (default 3), recorded, not asserted; all acks successful | none |
 | SRC-01 | `pipelined_and_lagging_acks` | source | Acks arrive from another goroutine, lagging reads by 50 records, while reading continues; no deadlock or loss; restart from the last position is clean | 2, 3 |
 | SRC-02 | `mixed_batch_sizes` | source | 1, 100 and 10000 records, snapshot then CDC, delivered once each. A duplicate fails the case, see the policy below | 3 |
-| SRC-03 | `crash_resume_no_gap` | source | Five kills: three while reading the snapshot (50 of 100 records acked by the third), then, after the snapshot is completed and acked, two while capturing changes (changes written after `Open`, a partial ack, a restart from that CDC position, more changes written after the restart). The kill follows the connector's `Ack` return, not a sleep, and `Teardown` does not run. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`); redelivered records are not acked again, so the resume position never moves backwards. The data set scales with the bound | 2, 3 |
-| SRC-04 | `ordering_per_key` | claim `OrdersByKey` | Records sharing a key arrive in write order, also across a restart: half are acked, the source is killed, the rest arrives after resuming | 4 |
+| SRC-03 | `crash_resume_no_gap` | source | Six kills: three while reading the snapshot (50 of 100 records acked by the third); one right after the ack that completes the snapshot, resumed from exactly that position before any change is written (the boundary); then three while capturing changes (changes written after `Open`, a partial ack, a restart from that CDC position, more changes written after each restart). Seven restarts with a position are exercised; a source that misbehaves only from its eighth restart is not caught, and a test states that limit. The kill follows the connector's `Ack` return, not a sleep, and `Teardown` does not run. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`); redelivered records are not acked again, so the resume position never moves backwards. The data set scales with the bound | 2, 3 |
+| SRC-04 | `ordering_per_key` | claim `OrdersByKey` | Records sharing a key arrive in write order in the snapshot, in changes written after `Open`, and across a restart: half of the snapshot is acked, the source is killed, the rest arrives after resuming, followed by keyed changes | 4 |
 | SRC-05 | `schema_evolution` | claim `evolve` | A field added while the source runs reaches the output intact | 6 |
 | SRC-06 | `large_record` | source | A 1 MiB record arrives intact | 3, 6 |
 | SRC-07 | `graceful_stop_with_unacked` | source | `Stop` with delivered-but-unacked records reports the last delivered position (the host waits for that record to arrive before comparing, see below); resume from the last acked position leaves no gap; nothing leaks | 2, 7 |
@@ -233,7 +239,19 @@ produce a torn write, a lost page cache or a dropped TCP connection. Only a proc
 harness (section 5) will kill the process, and the connector's own kill -9 test remains the proof for Tier 1
 connectors. v2 raises the floor; it does not replace chaos testing. For Certified the kill -9 test is
 **attested, not enforced**: maintainers list it in the registry entry after reviewing the connector's test, and
-nothing in this suite or in index-CI runs it.
+nothing in this suite or in index-CI runs it. The attestation is mandatory for every Certified connector.
+
+**The process death hook.** In-process, a killed source keeps its server-side session (a replication slot's
+walsender, a lock) until `Teardown`, which a real kill would have ended by closing the process's sockets. A driver
+may therefore implement `AcceptanceProcessDeathDriver`. The interface is narrow on purpose: the driver names a
+session once (`KilledSessionID`, for example the slot name) and the suite later asks it to release exactly that
+(`ReleaseSession(ctx, id)`), with no source instance, no test handle and no record in reach. It is meant for what
+the OS or server does by itself, like Postgres's `pg_terminate_backend` of the walsender that holds the slot, and
+must never persist, commit or flush for the connector. Any use is recorded in the report
+(`exceptions: ["process_death_hook"]`, `process_death_hook_calls`). A connector that needs the hook has **not**
+passed a real kill, so for it the attested kill -9 test is the only evidence of crash behavior, and the registry
+entry says so. The target design that removes the hook is a subprocess killed with SIGKILL, the section 5
+launcher (`conduit-connector-sdk#403`).
 
 ### 3. Capability declaration
 
@@ -299,8 +317,15 @@ test in the SDK pins the content hash of the newest revision. What that enforces
 adding, removing or renaming a case, or bumping a case's logic version (`v2Case.logic`, which a reviewer bumps for
 any change that can change a verdict), fails the SDK's build until the pin is edited, so the edit is visible in
 review. The test also fails if two revisions pin the same case set, so a new revision must change something. It
-cannot see an edit inside a case that forgot the logic bump, and for an unreleased revision the pin may be edited in
-place; once a revision is released its entry is final and a change needs a new revision. Core IDs are explicit
+cannot see an edit inside a case that forgot the logic bump. It also cannot see an edit to the shared helpers
+(`ackFresh`, `readAndCheck`, `v2Diff`, the crash and abort paths), to the constants that set bounds, floors, timeouts
+and data sizes, or to the Core bodies, because none of them is in the case content hash. Those are covered by a
+second hash, `suite_source_hash`, over the suite's source files, which is in the report and which the test enforces
+once a revision is released (while it is unreleased the hash is only logged, since every review round edits those
+files). A released entry is final: the test requires the newest entry's hashes to match the code when it is
+released, every older entry to be released, and no two entries to pin the same case set. It cannot prevent a
+developer from rewriting a released entry in place; that shows in the diff of the table and is a review obligation,
+so the registry keeps its own table of the hashes it supports and does not trust the repository's. Core IDs are explicit
 (`CORE-01` to `CORE-13`, one per v1 test method, in a table in the code); a v1 test without an ID fails the run
 instead of getting a derived name.
 
@@ -312,6 +337,23 @@ release workflow, which maintainers also control; for others, a job in the regis
 tagged release, runs the suite with the maintainers' credentials for the target system and writes the report
 itself. Until that job exists, `certified` rests on maintainer review of the report, as it does today for every
 other item of the bar. This document does not claim the report authenticates anything.
+
+What the report carries so that a registry-side run can be tied to it: a random `run_id`, the SHA-256 of the test
+executable (`test_binary_sha256`) and of the suite's source files (`suite_source_hash`), and `exceptions`, the list
+of everything that weakens the run (`synthetic`, `write_only`, `process_death_hook`,
+`max_redelivery_above_default`, and `waiver:<name>` for each declared waiver). None of these is a signature. They
+let a registry re-run compare what it built with what the report claims.
+
+**CI must delete the report before it runs.** The report path is written at the start of the run, but a job that
+reads a report it did not just produce can be fed one produced elsewhere or earlier. The workflow removes the
+file, runs the suite, and reads the report only if it exists and has `finished: true` and the `run_id` of this
+job. A missing report is a failed run.
+
+**Waivers have a place.** A connector that needs to go beyond a floor or keep an exception declares it in the
+driver (`Capabilities.Waivers`), so it appears in the report as `waiver:<name>` and in `exceptions`. The waiver
+takes effect only when the registry entry carries a matching approval record (which limit or exception, who
+approved, when, and why), added by a maintainer. A declared waiver without an approval, and an approval without a
+declared waiver, both fail the Certified check. Policy text elsewhere is not the mechanism; these two fields are.
 
 The report is JSON (`CONDUIT_ACCEPTANCE_REPORT=path`), with a `report_schema_version`: suite version, revision,
 case-set and case-content hashes, connector name and version, the claims and exceptions, the limits used
@@ -346,8 +388,10 @@ run and docs).
 **The Certified check.** Defined over the report, not over a boolean. For a connector entry proposing `certified`,
 index-CI requires all of:
 
-1. `revision` and `case_set_hash` equal a pair the registry knows for a supported suite major; the registry holds
-   the table, so a self-reported pair that does not match is rejected;
+1. `(revision, case_content_hash)` equals a pair the registry knows for a supported suite major, and
+   `suite_source_hash` equals the one it holds for that revision; the registry keeps the table, so a self-reported
+   triple that does not match is rejected. The case set hash is derived from the revision and the IDs alone and is
+   not what identifies the cases;
 2. `complete` is true, and `expected_case_ids` equals the registry's list for that revision (a filtered `-run`
    can never satisfy this);
 3. every expected case has an outcome, none is `failed`, and `unexplained_skips` is 0;
@@ -357,7 +401,9 @@ index-CI requires all of:
 5. `certification_floor_met` is true or the entry carries a maintainer waiver naming the limit. The floors are
    `max_batch_size` and `max_record_bytes` at their defaults or above, and `max_redelivery` at the default (10) or
    `ExactResume`: a larger bound is listed under `below_floor` and needs a waiver;
-   `goleak.unreviewable` is false; `finished` is true;
+   `goleak.unreviewable` is false; `finished` is true. `certification_floor_met` is false whenever `Synthetic` or
+   `WriteOnly` is declared, and every entry of `exceptions` has a matching maintainer approval in the entry
+   (`process_death_hook` also needs the attested kill -9 test; waivers need their approval record);
 6. `Idempotence` is `idempotent` or `at_least_once` for any entry with a destination;
 7. `provenance` is `registry-ci`. Until the registry-side re-run exists, this condition cannot be met, and the
    check runs in warning mode: it reports what it would decide and does not gate the tier.
