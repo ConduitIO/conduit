@@ -101,8 +101,8 @@ bump, which is planned in #3004.
     `rollback_check_connector_state`, `rollback_check_privileges`,
     `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`,
     `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`,
-    `rollback_check_offset_unreadable`, and `rollback_check_not_caught_up`
-    (a `waiting` verdict).
+    `rollback_check_offset_unreadable`, `rollback_check_connect_unreachable`,
+    and `rollback_check_not_caught_up` (a `waiting` verdict).
 
   `--slot-strategy reuse` is refused with the connector's
   `postgres.import.slot_reuse_unsupported`, the single code for reuse.
@@ -688,7 +688,12 @@ timeout, and Postgres connections use `connect_timeout=10` and
   across a killed watch, a watch restart, or the time between the watch's
   exit and the final check, a Debezium reconnect is `continuity_unproven`.
   The cost: a killed watch cannot resume across a reconnect. Before the
-  restart, start a fresh watch; after it, go forward. It also prints the Conduit slot and
+  restart, start a fresh watch; after it, go forward. A gap is any break in
+  one watch's Postgres sightings longer than 2 s (Postgres sampling has its
+  own timer, so slow HTTP calls never create one), a killed or restarted
+  watch, the time after the watch exits, or any time Kafka Connect is
+  unreachable, since R11 cannot run then.
+- **Names.** Before `ready_to_drop` the check prints the Conduit slot and
   publication it was computed for, after checking that they equal the
   journal's `.slot.name` and `.publication.name` and differ from Debezium's.
 - `--json` prints exactly one JSON document; progress goes to stderr.
@@ -759,11 +764,13 @@ earlier: Debezium was never stopped, and no pipeline exists yet):
    pipeline exists, and, when the journal is at step 7, the stopped
    sighting. The one-shot result from step 2 is not enough. Do not change
    Debezium's config at any point; on an older worker, re-create the
-   connector from the journal's `debeziumConfig` **unmodified**. On Kafka 3.5+: `PUT /connectors/<connector>/resume`.
-   On an older worker, where the cutover deleted the connector, re-create it
-   from the journal's `debeziumConfig`, unmodified, with `POST /connectors`,
-   sending the body on stdin (`--data-binary @-`) and discarding the
-   response, so the credentials never reach a file or the terminal.
+   connector **unmodified** (below).
+   - On Kafka 3.5+: `PUT /connectors/<connector>/resume`.
+   - On an older worker, where the cutover deleted the connector, re-create
+     it from the journal's `debeziumConfig` with `POST /connectors`, sending
+     the body on stdin (`--data-binary @-`) and discarding the response, so
+     the credentials never reach a file or the terminal. Before the restart,
+     R11 compares the journal's saved config; after it, the live one.
 5. **Wait** until the watch reports `ready_to_delete_pipeline`. On an idle
    database, commit two separate transactions to a table Debezium captures:
    one write is not enough.
@@ -818,7 +825,14 @@ streamed usually fails. So:
    - a pipeline deleted after it ran is written without the import, if its
      slot has not moved;
    - with Conduit's slot missing, or after `slot_advanced`, there is no
-     loss-free way forward: re-snapshot, then drop both slots by hand.
+     loss-free way forward: take the re-snapshot path (#341 S12). Create a
+     **new** pipeline with `snapshotMode: initial` and a **new** slot and
+     publication name, never the journal's `.slot.name`. Once it is
+     streaming, drop the journal's `.slot.name` and `.debezium.slotName`
+     slots (and their publications) by those explicit names. Before each
+     drop, check that the name equals the journal's field, differs from the
+     new pipeline's slot, and is not `active`; `--check-rollback --json`
+     prints all three names.
 4. Both slots retain WAL until the forward pipeline runs. Once it runs and
    you give up on Debezium, drop Debezium's slot by hand; until then, watch
    `max_slot_wal_keep_size`.
