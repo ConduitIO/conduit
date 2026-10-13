@@ -110,7 +110,7 @@ format is detected, not declared; `--format {properties,json,rest-export,strimzi
 | `--worker FILE` | Worker properties (or a Strimzi `KafkaConnect` CR) that supply defaults for converters, client security and config providers. Optional; without it, worker-level defaults are reported as unknown rather than assumed. |
 | `--registry-url URL` | Schema Registry URL, used only to fill the `conduit.yaml` fragment and the report. Never contacted by `migrate`. |
 | `--slot-strategy {fresh,reuse}` | Postgres only, same name and values as #341/#3029. `fresh` (default, and the only value that works in v0.21): Conduit creates its own slot and publication while Debezium keeps running. `reuse` (take over Debezium's own slot) is v0.22 and fails with `kc.resume_unavailable` until then. |
-| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never` into the pipeline. Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector]` and `rollback` are specified in #3029; this document fixes only how `migrate` feeds them. |
+| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only; `--offsets-from rest` by default per KIP-875, or `topic` for `connect-offsets` or the connector's `offsets.storage.topic`, or `file` for a saved REST export) and writes `logrepl.import.debeziumOffset` plus `snapshotMode: never` into the pipeline. Alongside it, `--dry-run [--peek]`, `--cutover [--stop-connector] [--no-start]` and `rollback` are specified in #3029; this document fixes only how `migrate` feeds them. |
 | `--accept-gaps` | Write blocking pipelines as `status: running` instead of `stopped`. Recorded in the report. |
 | `--json`, `--quiet`, `--strict` | Per the CLI output conventions. `--strict` exits 2 on any `approximated` entry too. |
 
@@ -318,11 +318,12 @@ in #3029; this document only fixes how `migrate` feeds them. The sequence:
 - Without `--import-offset`, the pipeline has no import setting and the report says `resume.snapshot:
   "will-run"` in plain words: the connector re-snapshots. This is also what `--slot-strategy fresh` alone does, and it
   is safe to run beside the original connector.
-- `migrate` writes the pipeline `stopped` and starts nothing. With `--cutover`, the flow of #3029 creates the
-  Conduit slot while Debezium runs, waits until Debezium's committed `lsn_commit` passes the slot's start, stops
-  Debezium (`--stop-connector`) and then writes the pipeline. #3029 says the cutover "writes the pipeline" and
-  does not say it starts it, so starting is the operator's step (`conduit pipelines start`, or a deploy) until
-  that doc says otherwise.
+- Plain `migrate` (no `--cutover`) writes the pipeline `stopped` and starts nothing. The `--cutover` path of
+  #3029 creates the Conduit slot while Debezium runs, waits until Debezium's committed `lsn_commit` passes the
+  slot's start, stops Debezium (`--stop-connector`), writes the pipeline and **starts it by default**, then waits
+  for the import-complete signal. `--no-start` opts out and leaves the written pipeline `stopped`. A pipeline with blocking report entries is
+  not started by the cutover unless `--accept-gaps` was passed to `migrate`; the cutover reports why instead.
+  (Decided 2026-10-12; #3029 is being updated to say so.)
 - Preflights belong to #341 and run in the connector and in `--dry-run`/`--cutover`, not offline: the
   Postgres minor-version gate for the partial-decoding fix, the publication check and the database checks.
   The report lists them as `resume.preflights: "pending"` with the connector's own descriptions, and the
