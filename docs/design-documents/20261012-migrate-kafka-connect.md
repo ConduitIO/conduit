@@ -412,7 +412,7 @@ skips after an ungraceful stop, and the check warns about them. Automated reset 
 | `--start-timeout` (10m) | bounds waiting for the durable import-complete signal (same) |
 | `--emit-cutover-marker` | opt-in non-transactional marker message to move an idle Debezium during `--cutover` (Decisions, Q3) |
 | `--pipelines-path DIR` | write the pipeline as a file in Conduit's `pipelines.path` instead of through the API; updates then need an engine reload, and deletes an engine restart (Pipelines the CLI writes) |
-| `--check-rollback [--watch] [--watch-timeout 30m]` | read-only: the safety checks and verdict for going back to Debezium by hand (Going back to Debezium) |
+| `--check-rollback [--watch] [--watch-timeout 30m] [--pg-url] [--connect-url] [--conduit-url] [--json]`, `--check-rollback --abandon --reason <text>` | read-only apart from its watch log: the safety checks and verdict for going back to Debezium by hand, and ending a failed attempt so `--cutover` can go forward (Going back to Debezium) |
 
 | Code (`migrate.kafka_connect.*`) | When |
 | --- | --- |
