@@ -499,14 +499,30 @@ as its own default-output change with migration notes and N+1-readable behavior.
 | Truncate handling | the default-output drop is postgres#344, fixed as its own change (invariant 3) with a representation decision and migration notes; this mode handles truncate independently |
 | Catalog reads over a regular connection | gated; default mode opens no extra connection |
 | `messages` pgoutput option, the message branch in the subscription switch, and `Seq` counting of messages | gated: the option is set only when `debezium.enabled` and the server is 14 or later; in default mode no message is ever sent, so the branch and counting never run |
+| Position field `tx_seq_msgs` and the resume-time comparison with the effective `messages` option | gated and additive: `omitempty`, written only while the option is effective, so every default-mode position is byte-identical to today's; in default mode the stored flag (absent) always equals the effective option (off), so the exact resume path is unchanged. Golden-bytes test on positions with the mode off |
+| `CurrentChange` returning the zero key while a non-transactional message is handled | gated: only reachable when a message is delivered, which needs the option |
+| `CDCIterator.Ack`: a keyless position acks as `(LastLSN, 0)` instead of the zero key | gated on the effective `messages` option. In default mode a keyless ack is a legacy or keyless-handler position and keeps the zero key, because mapping it would compare a change LSN against a commit LSN |
+| `maybeArmDriftHalt` compares keys with `Before` whenever the ack's `CommitLSN != 0` (was: only when both keys are `Known()`) | shared code, changed. Default mode is unaffected: this build writes `tx_commit_lsn` and `tx_seq` together or neither, so `CommitLSN != 0` implies `Known()` for every default-mode ack and the branch taken is the same. Pinned by the drift tests with the mode off, plus the new message-before-marker test |
 | WAL-text decoder replacing pgx values | new package used only by the debezium path; the shared pgx decode code is not modified. If a shared helper must change, it changes with the default-output golden test below |
 | Snapshot iterator changes (typed values, `r` operations, source block, composite keys) | gated: the iterator takes the typed path only when `debezium.enabled`; the default snapshot output is covered by the same golden test |
 | Publication options (`publish_via_partition_root`) | gated: applied only to publications the connector creates in this mode; existing publications and the default creation are unchanged |
 | Source emitting `debezium.*` metadata and descriptor | gated |
 | Drift policy default | gated: `evolve` only in this mode, `halt` stays the default elsewhere |
 
-`pipelines validate` also checks that `debezium.encode` is the **last** processor (`debezium.encode_not_last`): a
-processor after it would see opaque bytes.
+`pipelines validate` also enforces three placement rules for `debezium.encode`. They run at pipeline start as well
+as in `pipelines validate`, so an unvalidated pipeline cannot skip them.
+
+- **Last** (`debezium.encode_not_last`). Nothing may run after it on the path to any destination: a later
+  pipeline-level processor, **or a processor attached to a destination connector**, would see opaque bytes.
+  The normal placement is the last processor on the (single) Kafka destination.
+- **No `condition`** (`debezium.encode_condition_unsupported`). A record that skips the processor reaches the
+  Kafka destination as an ordinary message: typed values, not converter bytes, on a topic consumers read as
+  Avro. Conditional encoding is rejected rather than documented.
+- **Kafka destinations only** (`debezium.encode_destination_unsupported`). The plan is a framed payload plus
+  `kafka.messages.version` metadata that only the Kafka destination understands; any other destination would write
+  the frame as a record. A pipeline-level `debezium.encode` is refused when any destination of the pipeline is
+  not a Kafka destination; the same pipeline is expressed with the processor on the Kafka destination instead.
+  Delivering plan bytes to non-Kafka destinations is not designed in v0.21; refusing is the safe choice.
 
 A default-output golden test runs on the same workload with the mode off and fails on any byte change.
 
@@ -591,34 +607,129 @@ Three loss mechanisms follow if the message is treated like a change with the ne
   (`PostgresStreamingChangeEventSource`, `commitMessage(lsn)`). The record's position is **keyless**: no
   `TxCommitLSN`/`TxSeq`, `LastLSN` = the message LSN `m`. This reuses the existing legacy rule, which is
   exact here: a later transaction with commit LSN `c >= m` is delivered in full (`commit < LSN` is false),
-  and every transaction with `c < m` was delivered before the message.
+  and every transaction with `c < m` was delivered before the message. A non-transactional message is delivered
+  before the Begin of the transaction that commits next even when it carries an xid (PG18 probe), so it never
+  appears inside an open transaction at the stream level.
 - **Ordering key.** Internally a non-transactional message has the key `(m, 0)`: `Seq` 0 is reserved for
   "message at LSN m". It sorts after every transaction with commit LSN below `m` and before every change with
-  commit LSN `>= m`, which is the stream order the probe shows, and it can never equal a change key (changes
-  have `Seq >= 1`). It is never written to a position. The ack side maps a keyless acked position to `(LastLSN, 0)`.
+  commit LSN `>= m`, which is the stream order the probe shows, and it can never equal a change key because
+  changes have `Seq >= 1`. The key lives only in the subscription's `emitted` and `acked` state. It is never
+  written to a position, and `CurrentChange` never returns it: while a non-transactional message is handled the
+  subscription clears its current change (it is outside any transaction, and the next Begin resets it), so
+  `CurrentChange` returns the zero key and `buildPositionAt`, which writes a key only when `Known()`, produces
+  a keyless position. A test asserts the serialized position of a non-transactional message has neither
+  `tx_commit_lsn` nor `tx_seq`. The ack side, `CDCIterator.Ack`, maps a keyless acked position to
+  `(LastLSN, 0)` when the `messages` option is effective. In that mode every other CDC record is keyed, so a
+  keyless ack is a message ack.
+- **LSN equality.** A message's LSN is the END of its WAL record, which is the start of the next record. It can
+  equal a change's LSN, across transactions and within one, and it can equal a commit LSN (the probe's
+  `M(lsn=X) B(final_lsn=X)`). The rules still hold because they never use a message LSN as an identity against a
+  change LSN. A change is identified by `(CommitLSN, Seq >= 1)`, so an equal LSN never aliases keys, and `(m, 0)`
+  differs from every change key by `Seq`, not by LSN. A message is compared only with a commit LSN, where `m <=
+  C` is exact (a message at `m = C` is still ahead of that Begin), or with another message's LSN, and two
+  records have distinct ends.
 - **Subscription switch.** A message branch is added next to the DML branch. It computes the message's key,
-  applies its own `Delivered` check, and on a skip returns without emitting. The check for a
-  non-transactional message `m`: if the checkpoint key is known, delivered iff `m <= Key.CommitLSN`; if the
-  checkpoint is keyless, delivered iff `m <= LSN`. (A non-transactional message precedes every transaction
-  that commits at or after it, and a message at `m` cannot share an LSN with a change.) Both rules skip only
-  what was acked; a spurious redelivery is possible, a loss is not.
-- **`emitted` advances for messages**, including messages the handler drops. The handler returns a non-zero
-  LSN for every message it was handed, as it does for every change (the D4 invariant at the enforcement site).
-- **The D4 skip applies to messages**: a message after a drift marker is skipped the way a change is,
+  applies its own `Delivered` check, and on a skip returns without emitting. The `ResumePoint` gains a
+  `MessageLSN`: a non-transactional message is delivered iff `m <= MessageLSN`. `MessageLSN` is
+  `Key.CommitLSN` when the checkpoint key is known, the checkpoint's `LSN` when the checkpoint is keyless,
+  `Lc` for a position imported from a Debezium offset (see below), and `0` after a `messages` toggle
+  (see _The `messages` option is part of the numbering_). All of them skip only what was acked; a spurious
+  redelivery is possible, a loss is not.
+- **Imported positions keep `Lc` for the message check.** The offset import (postgres#341) builds the change
+  key `(Lc - 1, MaxUint64)` so that every transaction committing at or after `Lc` is delivered. If the message
+  check used `Key.CommitLSN` it would test `m <= Lc - 1` and redeliver the non-transactional message Debezium
+  committed last, which sits at `m <= Lc`. For an imported position the check therefore uses `Lc` itself,
+  inclusive: `m <= Lc` is exact, because the end of a message record cannot equal the end of a commit record.
+  This is resolved on this side, so #341's duplicate prediction (the replay after import) stays correct as
+  written. The resume code needs `Lc` to be readable from the imported position; how #341 stores it (the natural
+  fit is `LastLSN`, which the legacy rule already uses) is #341's to state, and is an open question relayed
+  to that lane. Whether #341's partial-transaction rule applies to transactional messages in the partial
+  transaction is also #341's to state; this document counts them in `Seq` like any change.
+- **`emitted` advances for messages, with one exception.** The handler returns a non-zero LSN for every message
+  it was handed, as it does for every change (the D4 invariant at the enforcement site), so `emitted` advances,
+  including for a message the D4 skip drops. The exception is a message dropped by the **prefix include/exclude
+  filter**: the handler returns `0`, `emitted` and `walWritten` do not move, and `allAcked()` is preserved. A
+  filtered message was never going to be delivered, on this run or any restart, so there is nothing to protect.
+  Advancing `emitted` for it would be harmful, because no record carries its key, it is never acked, and
+  `allAcked()` stays false: a source whose only traffic between real changes is an excluded heartbeat prefix
+  (`pg_logical_emit_message` heartbeats are the common case) would never let the slot advance, and WAL would grow
+  without bound. A filtered transactional message still consumes its `Seq` ordinal. The filter is evaluated
+  before the D4 skip, so a filtered message after a drift marker is simply filtered.
+- **The D4 skip applies to messages**: an included message after a drift marker is skipped the way a change is,
   still advances `emitted`, and is redelivered by the approving restart.
-- **Toggling is a topology change.** Because transactional messages are counted in `Seq` whenever pgoutput
-  sends them, enabling or disabling the `messages` option on an existing position renumbers transactions.
-  Pipelines created by `migrate` have it on from the first record. The mode is not switched on for an existing
-  pipeline (see _Versioning_).
+- **`maybeArmDriftHalt` compares keys for message acks.** It compares with `Before` whenever the ack's
+  `CommitLSN != 0`, not only when both keys are `Known()`. A non-transactional message acked as `(m, 0)` is
+  `Before` the marker's key when it was emitted before the marker. With the old rule the message ack had the zero
+  key and fell through to the LSN comparison `lsn < markerLSN`; a message emitted before the marker can carry
+  `m` greater than the marker's change LSN (the marker is a change inside the next transaction, whose changes
+  were written before the message while it commits after it), so the ack armed the halt before the marker
+  was delivered and stranded the marker and the approval checkpoint it carries. Test: a message emitted before
+  the marker with `m` > the marker's LSN must not arm the halt; the marker's own ack must.
+
+#### The `messages` option is part of the numbering
+
+Transactional messages are counted in `Seq` whenever pgoutput sends them, so turning the `messages` option on or
+off changes how an existing transaction is numbered. A key written under one numbering is wrong under the other,
+and the wrong direction loses rows. Take transaction C = I1, Mtx, I2, I3, checkpointed at I2.
+
+- Option on when written: I2 is `(C, 3)`. Restarted with the option off, I3 is renumbered to `(C, 3)` and
+  `Delivered` skips it: **I3 is lost**.
+- Option off when written: I2 is `(C, 2)`. Restarted with the option on, Mtx is `(C, 2)` and is skipped (the
+  in-flight transactional message is lost), and I2 is `(C, 3)` and is delivered again (a duplicate).
+
+The same happens when the server crosses version 14 under an existing pipeline, because the effective option
+changes with the server. The fix makes the numbering part of the position instead of a rule users must remember.
+
+- **Position field.** `Position` gains `tx_seq_msgs` (bool, `omitempty`): `TxSeq` counted transactional messages.
+  It is written `true` on every position that carries a known change key while the `messages` option is
+  effective (`debezium.enabled` and `server_version_num >= 140000`). Otherwise it is absent, which is also what
+  every position written before this change says, and what every default-mode position says. A keyless position
+  (a non-transactional message) does not depend on `Seq` and does not carry the flag.
+- **Resume.** When the checkpoint key is known, the connector compares the stored flag with the effective option
+  at subscription creation. Equal: the exact resume of today. Different: **resume at commit granularity**, so
+  `Resume.Key = (Key.CommitLSN - 1, MaxUint64)` (the `Predecessor` form of the first change of the checkpoint's
+  transaction), `Resume.LSN` is the position's `LastLSN` as before, and `MessageLSN = 0` so no
+  non-transactional message is treated as delivered. Every transaction that committed before the checkpoint's was
+  acked (acks are FIFO) and is skipped. The checkpoint's own transaction is delivered again from its first
+  change, whatever numbering it had, and every message Postgres re-sends is delivered. The result is duplicates,
+  never loss, and it needs no knowledge of the other numbering. Postgres re-sends the transaction because its
+  commit LSN is above the checkpointed change's LSN, which is where the stream restarts.
+- **What the user sees and does.** One WARN line with the stable code `debezium.resume_commit_granularity`
+  naming the old and new option state and the transaction's commit LSN, and a counter
+  (`conduit_debezium_resume_commit_granularity_total{reason}`). The first records after the restart repeat the
+  acked part of the in-flight transaction, bounded by that transaction's size, and, when the option was turned
+  on, messages from the slot's restart point. Nothing else needs doing: consumers that dedupe on
+  `(source.lsn, key)` are unaffected, and the first ack writes a position in the new numbering, so there is no
+  migration step and the warning does not repeat.
+- **Position compatibility (invariant 2).** The change is additive. It follows the contract already in
+  `position.go`: a new field, `omitempty`, keyed on presence rather than on the version number, so
+  `CurrentPositionVersion` stays 2. An older reader unmarshals the position and ignores the unknown key, and
+  re-serializing it drops the flag. That is safe for every build that cannot send messages, because those builds
+  number without messages, which is the meaning of an absent flag. Tests: round-trip with and without the flag; a
+  position without the flag is byte-identical to today's; a reader built from the previous `Position` struct
+  parses a flagged position and resumes. One case stays unsafe, and the runbook says so: a build that predates
+  this field must not run against a pipeline whose last position carries `tx_seq_msgs: true`. Such a build also
+  rejects the `debezium.*` settings, so it is unreachable by configuration; to roll back deliberately, restart
+  the newer build once with `debezium.enabled=false` (its first ack rewrites the position without the flag), then
+  downgrade.
+- **Pipelines created by `migrate`** have the option on from the first record, so no toggle occurs. The mode is
+  not switched on for an existing pipeline (see _Versioning_), and the mismatch handling above is the net under
+  every way that rule can be broken.
 - **Server gate.** The pgoutput `messages` option exists from PostgreSQL 14 (Debezium checks
   `hasMinimumServerVersion(140000)`). The source sets it only when `server_version_num >= 140000`; below that
   the option is omitted, the subscription starts, and messages cannot be decoded (same as Debezium). Setting it
   on PG 13 or earlier would fail the start.
 
-Tests required with this: a unit test of the key ordering and both `Delivered` rules; chaos cases
-**(a)** a message immediately followed by `COMMIT` (the probe's stream), SIGKILL at every point, and
-**(b)** a kill between the message's ack and the next Begin; and a drift case with a message after the
-marker. All verify invariants 1, 2 and 3 on recovery.
+Tests required with this: a unit test of the key ordering, all `MessageLSN` sources and the `Delivered` rules; a
+position round-trip and golden-bytes test; chaos cases **(a)** a message immediately followed by `COMMIT` (the
+probe's stream), SIGKILL at every point, **(b)** a kill between the message's ack and the next Begin,
+**(c)** toggle off mid-transaction (C = I1, Mtx, I2, I3, checkpoint at I2, restart with the option off: I3 is
+delivered, I1 and I2 repeat, nothing is lost), **(d)** toggle on (checkpoint written with the option off, restart
+with it on: Mtx is delivered, nothing is lost), **(e)** a drift case with a message after the marker, and a
+message before the marker with `m` greater than the marker's LSN, and **(f)** a slot-advance test with
+heartbeat messages whose prefix is excluded: with everything acked the reported flush position advances to the
+server's WAL end, and with an included but unacked message, or a message dropped by D4, it does not. All verify
+invariants 1, 2 and 3 on recovery; (c) and (d) are also run with SIGKILL during the restart.
 
 ### Schema changes
 
@@ -729,7 +840,8 @@ undocumented difference fails the harness. The list is the current expectation; 
 | D15 | `DELETE` under `REPLICA IDENTITY DEFAULT`: Debezium fabricates values for non-key NOT NULL columns in `before` (defaults, 0, empty string) because the schema requires them. Conduit mirrors this in this mode, which is a coercion of absent data into present data (invariant 6 tension). Counted, documented, and `migrate` warns to set `REPLICA IDENTITY FULL` on such tables. Decision for DeVaris (Q11). | equal to Debezium, counter `conduit_debezium_fabricated_before_values_total` |
 | D16 | Incremental snapshots and `signal.*` are not supported. | rejected at config |
 | D17 | Logical decoding messages are emitted like Debezium; the only difference is the halt on a message that cannot be encoded. | equal / halt |
-| D18 | Plan semantics under failure and replay. Messages in a plan that go to different partitions are independent. Within a partition, the messages written before a failure are a prefix of the plan (franz-go fails the rest). The batch produce loop keeps producing later records after an earlier failure, so after replay a consumer can see an older state of a key after a newer one. In the transient window before replay completes a consumer can see a delete without its tombstone, or the create for a new key before the delete for the old. `(source.lsn, key)` dedupe cannot tell a delete event from its tombstone (the tombstone has no value and so no `source`). Debezium has comparable windows on a task restart; the plan makes them explicit. | documented; chaos test asserts the post-replay state only |
+| D18 | Plan semantics under failure and replay. Messages of a plan that go to different partitions are independent. **Local failures are removed before producing.** franz-go fails an oversized record locally (`MessageTooLarge`) and keeps producing later records for the partition, so without a check a delete could be lost while its tombstone is sent. The destination therefore size-checks every message of a plan before producing any message of it, in the same pass over the whole batch, and fails the first offending record with `kafka.message_too_large` (table, key, message index) without producing that plan or any later record. **Broker-side errors cannot be predicted**: for those, the messages written to a partition before a failure are a prefix of the plan only if franz-go fails the rest of that partition's records **(V)**; an integration test injects a broker-side rejection (topic-level `max.message.bytes` below the client limit) in the middle of a plan and in the middle of a batch and asserts the prefix property. If it does not hold, the destination produces plans one partition-ordered message at a time, which is a decision for DeVaris before implementation. The batch loop keeps producing later records after an earlier failure, so after replay a consumer can see an older state of a key after a newer one. In the transient window before replay completes a consumer can see a delete without its tombstone, or the create for a new key before the delete for the old. `(source.lsn, key)` dedupe cannot tell a delete event from its tombstone (the tombstone has no value and so no `source`). Debezium has comparable windows on a task restart; the plan makes them explicit. | documented; chaos test asserts the post-replay state only |
+| D19 | `REPLICA IDENTITY USING INDEX` on an index that does not contain every key column halts at the first Relation message with `debezium.replica_identity_index_not_key`. Debezium keeps running and builds the old key from missing values **(V)**. | rejected at first sight of the relation |
 
 ## Failure modes
 
@@ -746,19 +858,21 @@ undocumented difference fails the harness. The list is the current expectation; 
 | **Schema Registry down or slow** | Registration or fetch is retried with a bound; then the processor errors and the pipeline halts. It never emits unencoded or partially encoded bytes and never skips. Records already acked stay acked; unacked records replay. Schema lookups are cached per (subject, descriptor version), so steady state does not depend on the registry. | chaos: stop SR container mid-run | 1, 3 |
 | **Registry returns a different ID than expected, or 409** | 409: halt with `debezium.schema_incompatible`, report subject, version, and the registry's message. A different ID than a pinned expectation (`schema.use.latest`) is not an error by itself. | harness cutover test | 6 |
 | **Tombstones and message plans across restarts** | Crash after some messages of a plan were produced and before the position persisted: the record was not acked, so on restart the whole plan is produced again. Result: duplicates of the first messages; never a delete without its tombstone, never a create without its delete, after recovery. | chaos: SIGKILL the destination between messages of a plan | 1, 3, 7 |
-| **Plan ordering and `acks`** | Delete and tombstone share a key, so a partition. Order within a partition holds only with `acks=all` and idempotent writes; the destination disables idempotence for other acks, so `kafka.acks_required` rejects the combination at validate time. | integration test reading the partition | 4 |
-| **Primary-key update** | One record, three messages (delete with `__debezium.newkey`, tombstone with the header, create with `__debezium.oldkey`), acked together. Detection mirrors Debezium: the update is a primary-key change only when an old key exists **and** differs from the new key (compared column by column, typed, in key order); `oldKey == null` or equal means a plain update. Under REPLICA IDENTITY DEFAULT an update with an unchanged key sends no old tuple, so the absence of an old key is the normal case and never an error. The single real error case is the one where Debezium itself fails: an old tuple is present but cannot yield a key for the schema (a required key field missing from it); that stops with `debezium.old_key_unavailable`, with the exact condition set by the harness **(V)**. | harness PK-change workload including default-identity non-key updates; chaos mid-plan | 1, 3, 4 |
+| **Plan ordering and `acks`** | Delete and tombstone share a key, so a partition. Order within a partition holds only with `acks=all` and idempotent writes; the destination disables idempotence for other acks. The guarantee is a **runtime** check: the destination fails the first plan-bearing record with `kafka.acks_required` before producing anything. `pipelines validate` reports the same misconfiguration earlier as `debezium.acks_all_required`; it is a convenience, not the enforcement. | integration test reading the partition; unit test that the first plan record fails before any produce | 4 |
+| **Primary-key update** | One record, three messages (delete with `__debezium.newkey`, tombstone with the header, create with `__debezium.oldkey`), acked together. Detection mirrors Debezium: the update is a primary-key change only when an old key exists **and** differs from the new key (compared column by column, typed, in key order); `oldKey == null` or equal means a plain update. Under REPLICA IDENTITY DEFAULT an update with an unchanged key sends no old tuple, so the absence of an old key is the normal case and never an error. The single real error case is the one where Debezium itself fails: an old tuple is present but cannot yield a key for the schema (a required key field missing from it); that stops with `debezium.old_key_unavailable`, with the exact condition set by the harness **(V)**. **`REPLICA IDENTITY USING INDEX` where the identity index is not the key** (a unique index other than the primary key, or one that does not contain every key column) breaks both halves of this rule. The old tuple carries only the index columns, so every update of an index column sends an old tuple that cannot yield the key (`old_key_unavailable` on a routine update), and a primary-key update that leaves the index columns untouched sends no old tuple, so it is read as a plain update and the key change is missed: no delete, no tombstone, the old key stays live in consumers. The second half is silent mangling (invariant 6). Debezium's behavior, from `RelationalChangeRecordEmitter` and `PostgresChangeRecordEmitter.columnValues` (2.7): the old values are an array with nothing at the positions the tuple did not carry, and `keyFromColumnData` runs the key converter over the gaps, so the old key is built from missing or default values and the update is probably emitted as a key change with a wrong old key, or a plain update when no old tuple arrives **(V, the harness decides)**. Conduit does not reproduce that: when the source first sees a relation whose identity index columns do not include every key column, it halts with `debezium.replica_identity_index_not_key`, naming the table, the index and the fix (`REPLICA IDENTITY FULL`, or an identity index that contains the key). This is an intentional difference (D19). | harness PK-change workload including default-identity non-key updates and a `USING INDEX` non-PK identity table (index-column update, PK update leaving the index untouched, delete); chaos mid-plan | 1, 3, 4, 6 |
 | **Failed message inside a plan** | The destination tracks results by message index and returns the index of the first failed record; later records are not acked. Depends on #308 being fixed; the regression test fails on the pre-fix `Produce`. | unit and integration, kafka repo | 1, 3 |
 | **Descriptor absent or inconsistent with the record** | `debezium.descriptor_missing` or `debezium.record_schema_mismatch`, halt. | unit | 6 |
 | **Name adjustment collision or invalid name** | `debezium.name_collision`, `debezium.invalid_name`, halt with the table, column and the setting that fixes it. | harness identifiers case | 6 |
-| **Logical decoding message arrives** | Emitted to `<prefix>.message` per the include/exclude lists. A message that cannot be encoded halts with `debezium.logical_message_unencodable`; never a silent drop. A non-transactional message has no Begin/Commit, so its position and change key come from the Postgres lane's design; kill-mid-message is a chaos case. | harness, chaos | 1, 2, 3 |
+| **Logical decoding message arrives** | Emitted to `<prefix>.message` per the include/exclude lists. A message that cannot be encoded halts with `debezium.logical_message_unencodable`; never a silent drop. A non-transactional message has no Begin/Commit; its position, ordering key, filter behavior and drift handling are specified in _Logical decoding messages: positions and change keys_. Kill-mid-message is a chaos case. | harness, chaos | 1, 2, 3 |
+| **`messages` option toggled, or server crosses 14, under an existing position** | `Seq` numbering changes, so an exact resume would lose a row or a message. The position records which numbering it used (`tx_seq_msgs`); a mismatch resumes the checkpoint's transaction from its first change (`debezium.resume_commit_granularity`): duplicates, never loss. | chaos (c) and (d), unit test of the four flag/option combinations, position golden-bytes test | 2, 3 |
+| **Excluded heartbeat messages** | A message dropped by the prefix filter does not advance `emitted`, so the slot keeps advancing. A message dropped by D4 does advance it and holds the slot, deliberately. | slot-advance test (f) | 1, 3 |
 | **Keyless tables** | Key is null and per-key order does not exist; for tables with REPLICA IDENTITY NOTHING and no `message.key.columns`, updates cannot be emitted. Reported by `migrate` when the table list is known. | harness | 4 |
 | **Primary key change** (`ALTER TABLE ... ADD PRIMARY KEY`) | New key schema; compatibility decided by the registry; halt on 409. | harness DDL case | 6 |
-| **Huge values** | A row over the Kafka `max.request.size`/broker `message.max.bytes` fails the produce, as with Debezium; the pipeline halts and does not skip. The error includes table and key. | integration | 3 |
+| **Huge values** | A message over the producer's record limit is caught before anything of its plan is produced (`kafka.message_too_large`, D18); one over a broker-side limit fails the produce (D18). Either way the pipeline halts and does not skip, as with Debezium. The error includes table and key. | unit (plan with an oversized tombstone-adjacent message produces nothing), integration (broker-side) | 3 |
 | **Catalog skew** | See _Schema changes_. | chaos and harness | 6 |
 | **Topic partition count differs** | Key bytes equal, so same hash; different partition counts move keys. Out of scope; `migrate` reads the topic when it can and warns. | doc | 4 |
 | **Debezium and Conduit run side by side (cutover)** | Separate slots; duplicates in the overlap are byte-identical to the originals except D1. | cutover test | 3 |
-| **Mode misuse** (debezium-mode source wired to a non-Kafka destination without `debezium.encode`) | Records carry typed values and `debezium.*` metadata; a database destination would write them as ordinary rows. Truncate maps to a record that fails loudly in a non-aware destination. `pipelines validate` warns on a debezium source without a following encode. | validate rule `debezium.encode_missing` | 3 |
+| **Mode misuse** (debezium-mode source wired to a non-Kafka destination without `debezium.encode`) | Records carry typed values and `debezium.*` metadata; a database destination would write them as ordinary rows. Truncate maps to a record that fails loudly in a non-aware destination. `pipelines validate` warns on a debezium source without a following encode. A `debezium.encode` with a `condition`, followed by another processor, or in front of a non-Kafka destination is refused (see _Default-output isolation_). | validate rules `debezium.encode_missing`, `debezium.encode_not_last`, `debezium.encode_condition_unsupported`, `debezium.encode_destination_unsupported` | 3 |
 
 ## Test plan
 
@@ -778,7 +892,7 @@ line with the Process maturity table):
    configuration against the latest image and 2.7.x; the rest runs nightly.
 2. **Workload.** A seeded generator, committed with its seeds: snapshot of pre-loaded rows; inserts, updates
    (key-changing and not), deletes; multi-row inserts and `COPY`; multi-statement transactions; truncate
-   (single and multi table); composite, single and absent PKs; the four replica identities; TOASTed values
+   (single and multi table); composite, single and absent PKs; the four replica identities, plus `USING INDEX` on the primary key and on a non-key unique index (index-column update, primary-key update leaving the index untouched, delete); TOASTed values
    above 2 kB of incompressible data with unchanged-column updates; every type in the mapping table with
    edge values (NaN, infinity, BC dates, 0 and 100000 digit numerics, empty arrays, nulls in arrays, empty
    strings, binary with NUL, multi-byte text, `time` typmod -1 and 0 to 6); DDL (add optional column, add
@@ -835,14 +949,21 @@ line with the Process maturity table):
   sequence); SIGKILL during registration; SR outage; kill mid-drift with the mode on; a logical message immediately
   followed by `COMMIT` (the PG18 probe
   stream) with SIGKILL at every point; a kill between a non-transactional message's ack and the next Begin; a
-  message after a drift marker. Verify invariants 1, 2,
+  message after a drift marker, and one before it with `m` above the marker's LSN; the `messages` toggle off
+  mid-transaction (I1, Mtx, I2, I3 checkpointed at I2) and on, each also with SIGKILL during the restart; excluded
+  heartbeat messages with the slot still advancing. Verify invariants 1, 2,
   3 and 7 on recovery.
 - Kafka destination (its own repo): a failing message in the middle of a plan and in the middle of a batch
   must not ack the record or any later record; a regression test for #308 that fails before the fix.
 - Default-output isolation: with the mode off, the Postgres source emits byte-identical records on the same
   workload before and after the implementation PRs.
 - Upgrade (`tests/upgrade`): pipeline in debezium mode at N, upgrade to N+1, resume; output bytes for the same
-  workload unchanged for the same `format.version`; registry subjects compatible; plan frame v1 readable.
+  workload unchanged for the same `format.version`; registry subjects compatible; plan frame v1 readable. A
+  position written without `tx_seq_msgs` (default mode, or any build before the field) resumes exactly with the
+  option off and at commit granularity with it on; a position with the flag is parsed and ignored by a reader built
+  from the previous `Position` struct.
+- Kafka destination: a plan with an oversized message produces none of its messages and none of the later records
+  in the batch; a broker-side rejection mid-plan checks the prefix property (D18).
 - Acceptance: the Postgres source in debezium mode runs the SDK acceptance suite v2 (#3011) through the encode
   step where applicable; the default-mode suite is unchanged and green with the mode off.
 - Benchmarks: a benchi config for default versus debezium mode, committed, reporting medians with variance,
@@ -855,10 +976,16 @@ line with the Process maturity table):
   by `migrate`. Fixing a mismatch with Debezium changes output bytes; such a fix ships under a new format
   version when it changes a schema or key bytes, and the old version stays selectable for two minor releases
   (announce, warn, remove). A fix that changes only values (a decode bug) is a bug fix on the current version.
-- The default output and positions do not change. Debezium mode adds no position fields. Whether it needs any
-  is a question for the Postgres lane (the transaction field and old-key handling are the only places it might).
+- The default output and its positions do not change: a default-mode position is byte-identical to today's. Debezium
+  mode adds exactly one position field, `tx_seq_msgs` (`omitempty`, additive, `CurrentPositionVersion` stays 2),
+  because transactional messages are counted in `Seq` (see _The `messages` option is part of the numbering_). The
+  transaction field and old-key handling add none.
 - Turning the mode on for an existing pipeline is a topology change (new topics, new keys); `migrate` creates
-  new pipelines, it does not flip existing ones. Turning it off returns the default output.
+  new pipelines, it does not flip existing ones. Turning `debezium.enabled` off returns the default output shape,
+  not the previous pipeline's state. If the position carries `tx_seq_msgs`, the next start resumes at commit
+  granularity: the user sees `debezium.resume_commit_granularity` once and one in-flight transaction is delivered
+  again in the default shape, then nothing else is needed. To roll back to a build older than the field, do that
+  restart first.
 - **Rollback of a cutover.** With the fresh-slot strategy Debezium's slot is untouched. Stop Conduit and
   restart the Connect connector: Debezium resumes at its stored offset and re-emits the overlap, as
   byte-identical duplicates of what Conduit published (D1 aside). Consumers that are idempotent on
@@ -886,16 +1013,20 @@ Metrics (Prometheus, labels pipeline, connector, table where noted):
 | `conduit_debezium_fabricated_before_values_total{table}` | D15 fills of non-key NOT NULL `before` columns |
 | `conduit_debezium_logical_messages_total{result="emitted\|filtered"}` | `pg_logical_emit_message` events |
 | `conduit_debezium_catalog_refresh_total{result}` | catalog reads and skew retries |
+| `conduit_debezium_resume_commit_granularity_total{reason="messages_option_changed"}` | resumes that fell back to commit granularity (duplicates expected) |
 | `conduit_kafka_tombstones_total` | tombstones produced |
 
 Errors (stable codes, failing config path, suggested fix): `debezium.config_invalid`, `debezium.name_collision`,
 `debezium.invalid_name`,
 `debezium.logical_message_unencodable`, `debezium.old_key_unavailable`, `debezium.descriptor_missing`,
-`kafka.acks_required`, `kafka.messages_version_unknown`,
+`debezium.replica_identity_index_not_key`, `kafka.acks_required`, `kafka.message_too_large`, `kafka.messages_version_unknown`,
 `debezium.registry_not_confluent`, `debezium.registry_unreachable`, `debezium.schema_incompatible`,
 `debezium.unsupported_type`, `debezium.value_out_of_range`, `debezium.decimal_overflow`,
 `debezium.record_schema_mismatch`, `debezium.catalog_skew`, `debezium.format_version_unknown`,
-`debezium.encode_missing`, `debezium.encode_not_last`, `debezium.acks_all_required` (validate rules).
+`debezium.encode_missing`, `debezium.encode_not_last`, `debezium.encode_condition_unsupported`,
+`debezium.encode_destination_unsupported`, `debezium.acks_all_required` (validate rules, also enforced at pipeline
+start, except `debezium.acks_all_required` whose enforcement is the runtime `kafka.acks_required`). Log code, not an
+error: `debezium.resume_commit_granularity`.
 
 Surfaces: `conduit pipelines inspect --json` reports `output_mode`, `compat`, `format_version`, converters, and
 the list of subjects with their last registration result; `pipelines validate` runs the mode's rules;
@@ -908,7 +1039,7 @@ tombstone lag on compacted topics, rollback to Debezium.
 ## Docs
 
 `conduit.io` docs source and `llms.txt` in the same implementation PRs: the Debezium-compatible output page
-with the full difference list (D1 to D17) and the supported-version table, the `migrate` guide rows, the
+with the full difference list (D1 to D19) and the supported-version table, the `migrate` guide rows, the
 processor reference (generated), the Kafka destination message-plan, header and null-key behavior. The
 `vs Debezium` page cites the harness result, not this document.
 
@@ -916,8 +1047,8 @@ processor reference (generated), the Kafka destination message-plan, header and 
 
 | Lane | Dependency | Direction |
 | --- | --- | --- |
-| Postgres (#3004, postgres#341) | Same handler and positions. Needs, all gated per _Default-output isolation_: keep xid and commit time from `Begin`; composite keys; schema-qualified collection; old key on key-changing updates; pinned session settings; catalog read; `messages 'true'` (server 14 or later), and the message branch, `emitted` advance, D4 skip and `Seq` counting exactly as specified in _Logical decoding messages: positions and change keys_ (Tier 1 on its own review); drift policy `evolve` default in this mode. One record per WAL change must stay true (a multi-table truncate is one record). The default-output truncate fix is postgres#344, separate. Must land before or with the offset import so the cutover test can run. | blocks this lane |
-| Kafka (`conduit-connector-kafka`) | **#308 first**: results tracked by record index, not completion order. Then: message plans, per-message headers and topics, null versus empty key, null values, index mapping from message to record, `kafka.acks_required` validate rule. A separate lane owns #308; the open `conduit-connector-kafka#312` fixes the record-order index for #308 but not message plans, so the plan work still tracks results per message. | blocks this lane |
+| Postgres (#3004, postgres#341) | Same handler and positions. Needs, all gated per _Default-output isolation_: keep xid and commit time from `Begin`; composite keys; schema-qualified collection; old key on key-changing updates; pinned session settings; catalog read; `messages 'true'` (server 14 or later), and the message branch, `emitted` advance (and the filtered-message exception), D4 skip, `Seq` counting, the `tx_seq_msgs` position field and commit-granularity resume, the `CDCIterator.Ack` and `maybeArmDriftHalt` changes, and the imported-position message check, exactly as specified in _Logical decoding messages: positions and change keys_ (Tier 1 on its own review); drift policy `evolve` default in this mode. One record per WAL change must stay true (a multi-table truncate is one record). The default-output truncate fix is postgres#344, separate. Must land before or with the offset import so the cutover test can run. | blocks this lane |
+| Kafka (`conduit-connector-kafka`) | **#308 first**: results tracked by record index, not completion order. Then: message plans, per-message headers and topics, null versus empty key, null values, index mapping from message to record, the up-front size check (`kafka.message_too_large`), and the runtime `kafka.acks_required` check on the first plan record (the pipeline-level `debezium.acks_all_required` rule lives in `pipelines validate`, not in the destination). A separate lane owns #308; the open `conduit-connector-kafka#312` fixes the record-order index for #308 but not message plans, so the plan work still tracks results per message. | blocks this lane |
 | Avro fleet move (#3012) | Source no longer uses `hamba/avro`; the descriptor is built without it. This design assumes #3012 merges first. | soft |
 | SDK | None required now (the `template` workaround was dropped). | none |
 | migrate/kc CLI (#3003, #3026) | Rewrite the Debezium Postgres mapping table rows listed above; emit the engine config fragment, `acks: all`, and the destination/processor settings; `kc diff` preflight; the `result.output_compat` report field. | needs this doc's setting names agreed |
