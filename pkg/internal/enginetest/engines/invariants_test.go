@@ -196,7 +196,20 @@ func TestInvariant2_AcksReachEachSourceInOrder(t *testing.T) {
 					is.Equal(s.Acked(), positions(s.ID(), total))
 				}
 				for _, d := range dsts {
-					is.Equal(len(d.Delivered()), 2*total) // every record reaches every destination
+					delivered := d.Delivered()
+					is.Equal(len(delivered), 2*total) // every record reaches every destination
+					// Ordering guarantee: a destination sees each source's
+					// records in the order that source produced them. Sources
+					// may interleave with each other.
+					for _, s := range srcs {
+						var got []opencdc.Position
+						for _, r := range delivered {
+							if sid, _ := r.Metadata.GetConduitSourceConnectorID(); sid == s.ID() {
+								got = append(got, r.Position)
+							}
+						}
+						is.Equal(got, positions(s.ID(), total))
+					}
 				}
 			})
 		})
@@ -422,5 +435,74 @@ func TestLiveness_DestinationBatchingBehindSingleRecordReads(t *testing.T) {
 		is.NoErr(src.WaitAcked(ctx, 300))
 		is.NoErr(run.Stop(ctx))
 		is.NoErr(run.Wait(ctx))
+	})
+}
+
+// Invariant 7 (stop time), the part the engines do NOT bound: a graceful stop
+// waits for the destination's acks, so a destination that withholds them holds
+// the pipeline open, on both engines (#2990 for arch-v2's SIGTERM hang). What
+// bounds shutdown in production is the runtime's exit timeout followed by a
+// force stop. This test pins the force-stop half: cancelling the pipeline
+// context releases a pipeline wedged on withheld acks, tears every connector
+// down, and acks nothing that was not acked downstream.
+func TestInvariant7_ForceStopReleasesAPipelineWedgedOnAcks(t *testing.T) {
+	eachEngine(t, func(t *testing.T, eng engines.Engine) {
+		is := is.New(t)
+		ctx := testCtx(t)
+
+		ledger := enginetest.NewLedger().Require("dst").DLQ("dlq")
+		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Discard: true, Ledger: ledger})
+		dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst", Discard: true, Ledger: ledger})
+		dst.AckGate.Close()
+
+		run := start(t, ctx, eng, engines.Topology{
+			Sources:      []*enginetest.Source{src},
+			Destinations: []*enginetest.Destination{dst},
+		})
+		is.NoErr(dst.WaitWritten(ctx, 1)) // wedged: written, never acked
+
+		run.Kill()
+		is.True(run.Wait(ctx) != nil) // ended by cancellation, not a clean stop
+		is.True(src.TornDown())
+		is.True(dst.TornDown())
+		is.Equal(src.AckedCount(), 0) // nothing acked upstream without a downstream ack
+		is.Equal(ledger.Violations(), []string(nil))
+	})
+}
+
+// Memory bound, the part that is deterministic to assert: with the destination
+// withholding every ack, how many records does the engine pull from the source?
+//
+// arch-v2 reads one batch and then waits for its acks, so exactly one batch is
+// in flight: Read is called once and cannot be called again until the batch is
+// acked. v1 has no engine-side bound at all: the source node keeps reading
+// while the destination acker queues messages without limit, so the only bound
+// is back-pressure at the plugin boundary (gRPC flow control), tracked in #211.
+// The v1 case is skipped with that link rather than pinned to a number, because
+// the number it reaches is whatever the machine manages before the test stops.
+func TestMemoryBound_RecordsInFlightWithWithheldAcks(t *testing.T) {
+	const batch = 50
+	eachEngine(t, func(t *testing.T, eng engines.Engine) {
+		if eng.Name() == "v1" {
+			t.Skip("v1 does not bound in-flight records in the engine; back-pressure is left to the plugin boundary: #211")
+		}
+		is := is.New(t)
+		ctx := testCtx(t)
+
+		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", BatchSize: batch, Discard: true})
+		dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst", Discard: true})
+		dst.AckGate.Close()
+
+		start(t, ctx, eng, engines.Topology{
+			Sources:      []*enginetest.Source{src},
+			Destinations: []*enginetest.Destination{dst},
+		})
+
+		is.NoErr(dst.WaitDelivered(ctx, batch)) // the first batch is written and durable
+		// The engine is now blocked on that batch's acks; a second Read cannot
+		// have started, so exactly one batch was pulled from the source.
+		is.Equal(src.ReadCalls(), 1)
+		is.Equal(src.Produced(), batch)
+		is.Equal(src.AckedCount(), 0)
 	})
 }
