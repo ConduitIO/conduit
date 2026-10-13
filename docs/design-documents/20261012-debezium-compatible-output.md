@@ -354,7 +354,7 @@ producing anything: (1) `userSize = len(key) + len(value) + sum(len(hdr.key) + l
 (2) the record, alone in a new batch, must fit the batch limit **for its topic**:
 `65 + R <= maxRecordBatchBytesForTopic(topic)`, where `maxRecordBatchBytesForTopic = min(ProducerBatchMaxBytes,
 BrokerMaxWriteBytes - (base + 2 + max(len(topic), 16) + 12))` and `base = 26 + len(client ID) + len(transactional
-ID)` (`sink.go`, `maxRecordBatchBytesForTopic` and `baseProduceRequestLength`). The limit is computed per message
+ID)` (the client ID is franz-go's effective default `"kgo"` when the destination sets none, so `len = 3`) (`sink.go`, `maxRecordBatchBytesForTopic` and `baseProduceRequestLength`). The limit is computed per message
 topic, because the plan's topics differ (table topics, `.message`). 65 is the record-batch overhead (`newRecordBatch`:
 4+8+4+4+1+4+2+4+8+8+8+2+4+4) and `R = varint(L) + L` with `L = 1 + 1 + 1 + varint(len(key)) + len(key) +
 varint(len(value)) + len(value) + varint(len(headers)) + sum(varint(len(hk)) + len(hk) + varint(len(hv)) +
@@ -524,7 +524,7 @@ as its own default-output change with migration notes and N+1-readable behavior.
 | Truncate handling | the default-output drop is postgres#344, fixed as its own change (invariant 3) with a representation decision and migration notes; this mode handles truncate independently |
 | Catalog reads over a regular connection | gated; default mode opens no extra connection |
 | `messages` pgoutput option, the message branch in the subscription switch, and `Seq` counting of messages | gated: the option is set only when `debezium.enabled` and the server is 14 or later; in default mode no message is ever sent, so the branch and counting never run |
-| Position field `tx_seq_m` (the sequence, written **instead of** `tx_seq` while the `messages` option is effective) and the resume-time comparison of the stored numbering with the effective option | additive and `omitempty`. **The comparison runs whatever `debezium.enabled` is set to**: it compares the stored numbering with the effective option, which is off when the mode is disabled. Setting `debezium.enabled=false` on a pipeline whose position carries `tx_seq_m` is therefore the one real on-to-off path, and it resumes at commit granularity; no setting skips the comparison. In default mode the position carries `tx_seq` and the effective option is off: equal, the exact resume of today, and every position is byte-identical to today's. Every reader of the sequence (the resume point, `CDCIterator.Ack`, `samePosition` in the drift code, and the chaos ledger: `tests/chaos/child.go` builds `DeliveryKey` from `TxCommitLSN` and `TxSeq` and must learn `tx_seq_m`, or it hides lost sibling rows and chaos cases (c) and (d) cannot detect loss) takes `tx_seq` or `tx_seq_m`, whichever is set. Golden-bytes test with the mode off |
+| Position field `tx_seq_m` (the sequence, written **instead of** `tx_seq` while the `messages` option is effective) and the resume-time comparison of the stored numbering with the effective option | additive and `omitempty`. **The comparison runs whatever `debezium.enabled` is set to**: it compares the stored numbering with the effective option, which is off when the mode is disabled. Setting `debezium.enabled=false` on a pipeline whose position carries `tx_seq_m` is therefore the one real on-to-off path, and it resumes at commit granularity; no setting skips the comparison. In default mode the position carries `tx_seq` and the effective option is off: equal, the exact resume of today, and every position is byte-identical to today's. Every reader of the sequence (the resume point, `CDCIterator.Ack`, `samePosition` in the drift code, and the chaos ledger: conduit-connector-postgres `test/chaos/child.go` (lines 326 to 330; not Conduit's `tests/chaos`) builds `DeliveryKey` from `TxCommitLSN` and `TxSeq` and must learn `tx_seq_m`, or it hides lost sibling rows and chaos cases (c) and (d) cannot detect loss) takes `tx_seq` or `tx_seq_m`, whichever is set. Golden-bytes test with the mode off |
 | `CurrentChange` returning the zero key while a non-transactional message is handled | gated: only reachable when a message is delivered, which needs the option |
 | `CDCIterator.Ack`: a keyless position acks as `(LastLSN, 0)` instead of the zero key | gated on the effective `messages` option. In default mode a keyless ack is a legacy or keyless-handler position and keeps the zero key, because mapping it would compare a change LSN against a commit LSN |
 | `maybeArmDriftHalt` compares keys with `Before` whenever the marker's key is `Known()` and the ack's `CommitLSN != 0` (was: only when the ack's key was also `Known()`) | shared code, changed; the `markerKey.Known()` guard stays. Default mode is unaffected: this build writes `tx_commit_lsn` and a sequence together or neither, so `CommitLSN != 0` implies `Known()` for every default-mode ack and the branch taken is the same. Pinned by the drift tests with the mode off, plus the new message-before-marker test |
@@ -554,7 +554,10 @@ as its own default-output change with migration notes and N+1-readable behavior.
   implements plans, and a renamed older build does not. Three conditions make the carrier trustworthy: the hook
   reads only the specification's declared `Default`, never the connector's configuration; the parameter carries an
   inclusion validation whose single allowed value equals the default, so a user cannot set it to claim a
-  capability; and the prefix is reserved. This is the v0.21 carrier because it needs no protocol change. The
+  capability; and the prefix is reserved, enforced by the hook, which rejects any user-set `conduit.capability.*`
+  key in connector settings. The hook resolves the destination's plugin the way the dispenser does, including
+  `@latest` and plain plugin names: the standalone registry's `List()` skips `latest` entries
+  (`standalone/registry.go:244`), so a lookup that reads `List()` directly would miss them. This is the v0.21 carrier because it needs no protocol change. The
   planned replacement is a protocol-level capability field on `Specification`, which needs the
   connector-protocol versioning discussion; the parameter is deprecated once it exists. **Pending DeVaris
   confirmation.**
@@ -694,8 +697,8 @@ Three loss mechanisms follow if the message is treated like a change with the ne
   applies its own `Delivered` check, and on a skip returns without emitting. The `ResumePoint` gains a
   `MessageLSN`: a non-transactional message is delivered iff `m <= MessageLSN`. `MessageLSN` is
   `Key.CommitLSN` when the checkpoint key is known, the checkpoint's `LSN` when the checkpoint is keyless,
-  `Lc` for the resume point of the real import only (`resume: "debeziumOffset"`, see below), `0` for the
-  --without-import fallback (see below), and `0` after a `messages` toggle (see _The `messages` option is part of
+  `Lc` for the resume point of the real import only (`logrepl.import.debeziumOffset` set, see below), `0` for the
+  `logrepl.requireExistingSlot` fallback (see below), and `0` after a `messages` toggle (see _The `messages` option is part of
   the numbering_). All of them skip only what was acked; a spurious
   redelivery is possible, a loss is not.
 - **Imported resume points (the real import only) keep `Lc` for the message check.** The offset import (postgres#341) builds the change
@@ -710,10 +713,9 @@ Three loss mechanisms follow if the message is treated like a change with the ne
     `offset.lsn_commit`, re-read at every start while the position is empty (including a restart after a crash
     before the first durable ack). The connector builds the in-memory resume point from it:
     `Key = (Lc - 1, MaxUint64)`, `LSN = Lc`, `MessageLSN = Lc`. Once a position exists the setting is ignored.
-    This applies **only** to `resume: "debeziumOffset"`.
-  - **The --without-import fallback (#341 S13)** has no offset and therefore no `Lc`. (The setting that selects it
-    is `slotOnly` in #341 today and may be renamed `logrepl.requireExistingSlot`; that decision is pending with
-    DeVaris, and this document means whichever name ships.) Its resume point is `Key` zero, `LSN` = the
+    This applies **only** to the real import, that is, while `logrepl.import.debeziumOffset` is set and the
+    position is empty (postgres#341 at `5801b767` has no `resume` field).
+  - **The `logrepl.requireExistingSlot` fallback (#341 S13)** has no offset and therefore no `Lc`. Its resume point is `Key` zero, `LSN` = the
     subscription's start LSN, `MessageLSN = 0`, and no `Partial`. Nothing counts as delivered: every transaction and
     every message Postgres re-sends is delivered.
   - **Messages are on after import.** Migrated Debezium Postgres to Kafka pipelines run this mode by default, so
@@ -966,9 +968,11 @@ undocumented difference fails the harness. The list is the current expectation; 
   there. In the approved range a delete **halts** with `debezium.delete_key_unavailable`, naming the table and the
   LSN; it is never emitted with a null key and never with a key derived from the identity. The remedy is to
   resnapshot the affected tables so consumers' state is repaired from the source rather than from a delete that
-  cannot be keyed. The halt is not approvable by restart. How a running pipeline then passes the delete (the
-  resnapshot flow) belongs to the snapshot design and is not specified here; until then the pipeline stays halted
-  at the delete, which is the safe state. Test: a delete in an approved range halts, with no record emitted and no
+  cannot be keyed. The halt is not approvable by restart. The resnapshot flow for a running pipeline is deferred to the
+  snapshot design, so **in v0.21 the only way out is to recreate the pipeline** (a new slot and a fresh snapshot of
+  the affected tables); until then the pipeline stays halted at the delete, which is the safe state. The runbook
+  says so. Check (e) refuses these tables at start and in `migrate` preflight, so this can only happen through DDL
+  (a change of replica identity or of the key) after the pipeline has started. Test: a delete in an approved range halts, with no record emitted and no
   position advanced past it.
 - **(g) Trigger, narrowed.** The halt applies to identity `i` whose index lacks a record-key column, and to
   identity `d` (default) where the record key is not the primary key, or `n` (nothing), in each case only when the
@@ -1078,7 +1082,7 @@ line with the Process maturity table):
   position written without `tx_seq_m` (default mode, or any build before the field) resumes exactly with the
   option off and at commit granularity with it on; a position with `tx_seq_m` is read as legacy by a reader built
   from the previous `Position` struct (downgrade), and resumes by the legacy rule with no loss.
-- Chaos harness: `tests/chaos/child.go`'s `DeliveryKey` reads `tx_seq_m`; a harness self-test drops a sibling row of
+- Chaos harness (conduit-connector-postgres, `test/chaos/child.go`, lines 326 to 330): `DeliveryKey` reads `tx_seq_m`; a harness self-test drops a sibling row of
   a transaction numbered with `tx_seq_m` and must fail.
 - Pipeline-start hook: each rule refuses a pipeline built through the piecewise API path and through a config
   file, in both engines, and the recovery restart runs it; a pipeline without `debezium.*` is untouched; a DLQ with
@@ -1157,7 +1161,9 @@ the list of subjects with their last registration result; `pipelines validate` r
 
 Runbooks (owed with implementation, `docs/operations/`): schema incompatible at the registry, registry
 unreachable, placeholder counts rising (TOAST; remedy `REPLICA IDENTITY FULL` and its cost), catalog skew,
-tombstone lag on compacted topics, rollback to Debezium.
+tombstone lag on compacted topics, rollback to Debezium, and `debezium.delete_key_unavailable` (symptom: halted at
+a delete after a replica-identity change; diagnosis: the table's identity no longer carries the record key; remedy:
+recreate the pipeline, since no in-place resnapshot exists in v0.21).
 
 ## Docs
 
