@@ -113,7 +113,7 @@ environment. A finer option is a pipeline-connector setting, for example a reser
 `conduit.env-passthrough: "AWS_REGION,AWS_PROFILE"`, applying only to that connector's process. It would
 live in pipeline config (a public contract), so it needs its own versioned schema change, and it lets a
 pipeline author widen what a plugin receives, which weakens the operator's boundary unless it is capped by
-the engine-wide setting. Proposal: ship only the engine-wide form in v0.22, and add the per-connector form
+the engine-wide setting. Proposal: ship only the engine-wide form with the default flip, and add the per-connector form
 only if the first release shows real demand, with the operator setting acting as the upper bound.
 DeVaris to decide whether to include it now.
 
@@ -175,7 +175,7 @@ invariants 1 to 7 are unaffected. The failures are start-up and configuration fa
 | Plugin is a script or wrapper needing `PATH`, `HOME`, interpreter vars | `PATH`/`HOME` pass; interpreter-specific variables (`JAVA_HOME`, `PYTHONPATH`) do not | Named via `allowlist:`; documented |
 | Windows | Missing `SYSTEMROOT`/`windir` breaks Winsock and many runtimes; missing profile/shell variables break others | The Windows group is allowlisted and matched case-insensitively. The repository has no Windows CI runner (no workflow uses one): either add a `windows-latest` unit job for the filter in the code PR, or the Windows behavior is stated as untested in the release notes. Decision pending |
 | Locale / timezone | Wrong collation or time rendering if `LANG`/`LC_*`/`TZ` dropped | All allowlisted |
-| Variable set but empty | Passed through as empty, as today | n/a |
+| Variable set but empty | Passed through as empty | n/a |
 | Plugin env var collides with `CONDUIT_CONNECTOR_*` set by the engine | Engine entries are appended last and win | Test for duplicate keys |
 | Specification load, dispense or `conduit doctor` run with different environments | Discovery or diagnostics succeed while runtime fails, or the reverse | One shared option applied at all three call sites; test asserts all three |
 | Operator typos a name in `allowlist:` | Variable silently not passed | Startup log lists the resolved passthrough names; WARN for names not set in the engine's environment |
