@@ -405,9 +405,9 @@ nothing, and shows no error. Round 3 replaced that with a connector-side bound t
    the check and the `Produce`, so the wait never depends on callbacks alone: it selects on all callbacks
    done, the timer, `ctx.Done()` and a `closed` channel that the connector closes inside the same
    `sync.Once` as `Client.Close()`. When a `Produce` loses the race with `Close()` and never calls back,
-   the `closed` case ends the wait at once instead of leaving it to the timer. No mutex is held across a `Produce` call or
-   across the wait; the flag is the only shared state on that path, and results are written to per-index
-   slots that the waiter reads after it stops waiting.
+   the `closed` case ends the wait at once instead of leaving it to the timer.
+   No mutex is held across a `Produce` call or across the wait; the flag is the only shared state on that
+   path, and results are written to per-index slots that the waiter reads after it stops waiting.
 4. When the waiter stops waiting for any reason other than all callbacks done (timer expiry or `ctx.Done()`),
    it evaluates the slots once and does the same thing on both paths. If every promise has already resolved
    with a nil error, `Write` returns nil: the records are confirmed, nothing is nacked, and the producer is not
