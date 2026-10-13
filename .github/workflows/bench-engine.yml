@@ -1,0 +1,166 @@
+name: bench-engine (indicative)
+
+# A NON-BLOCKING benchmark comment on PRs that touch the pipeline engines.
+#
+# It is not a gate and must never become one by accident:
+#   - it is not in main's required status contexts, and must not be added;
+#   - the job is continue-on-error, so even a broken benchmark leaves the PR
+#     check green;
+#   - the comment says "indicative, not a gate".
+# The regression gate (CLAUDE.md: >10% throughput or latency regression fails
+# the build) is separate work that needs a dedicated, quiet runner. A shared
+# GitHub-hosted runner cannot support it, which is why this job measures its own
+# noise instead of asserting a threshold.
+#
+# What it does: builds the benchmark test binary for the base revision and for
+# the PR head, then runs base, head and base again (an A/A control) alternately
+# on this one runner, five rounds, rotating the order each round so position in
+# the round does not favour any of them. The comparer
+# (.github/scripts/bench_engine_compare.py) reports medians, the delta, and a
+# noise floor taken from the unchanged base code, then the job upserts one PR
+# comment.
+#
+# The base tree is built with the HEAD's pkg/internal/enginetest harness copied
+# over it, so the comparison is "same harness, different engine code" and works
+# even while the base has no harness yet. If the head's harness does not compile
+# against the base's engine code (a PR that changes an engine API the harness
+# calls), the comment says so and shows head numbers only.
+#
+# Cost: two test-binary builds plus about 3 x 5 x 13 s of benchmark time, roughly
+# six minutes on ubuntu-latest. Same-repo PRs only: a fork's token cannot comment.
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/lifecycle/**'
+      - 'pkg/lifecycle-poc/**'
+      - 'pkg/connector/**'
+      - 'pkg/plugin/**'
+      - 'pkg/internal/enginetest/**'
+      - 'go.mod'
+      - '.github/workflows/bench-engine.yml'
+      - '.github/scripts/bench_engine_compare.py'
+      - '.github/scripts/test_bench_engine_compare.py'
+
+concurrency:
+  group: bench-engine-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  ROUNDS: '5'
+  BENCH_TIME: '3x'
+
+jobs:
+  bench:
+    name: bench-engine (indicative, non-blocking)
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Never turn the PR red. See the header.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Self-test the comparer
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_bench_engine_compare
+
+      - name: Build head and base benchmark binaries
+        id: build
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -u
+          mkdir -p "$RUNNER_TEMP/bench"
+          out="$RUNNER_TEMP/bench"
+          go test -c -o "$out/head.test" ./pkg/internal/enginetest/engines
+
+          # Base tree + the head's harness.
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          mkdir -p "$RUNNER_TEMP/base/pkg/internal"
+          rm -rf "$RUNNER_TEMP/base/pkg/internal/enginetest"
+          cp -R pkg/internal/enginetest "$RUNNER_TEMP/base/pkg/internal/enginetest"
+          if (cd "$RUNNER_TEMP/base" && go test -c -o "$out/base.test" ./pkg/internal/enginetest/engines); then
+            echo "base_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run benchmarks, interleaved
+        env:
+          BASE_OK: ${{ steps.build.outputs.base_ok }}
+        run: |
+          set -u
+          out="$RUNNER_TEMP/bench"
+          : > "$out/head.txt"; : > "$out/base-a.txt"; : > "$out/base-b.txt"
+          run() { # run <binary> <output file>
+            "$1" -test.run='^$' -test.bench='^BenchmarkEngine$' \
+              -test.benchtime="$BENCH_TIME" -test.count=1 >> "$2" || true
+          }
+          for round in $(seq 1 "$ROUNDS"); do
+            if [ "$BASE_OK" = "true" ]; then
+              # Rotate the order each round: A H B, H B A, B A H, ...
+              case $((round % 3)) in
+                1) order="a h b" ;;
+                2) order="h b a" ;;
+                0) order="b a h" ;;
+              esac
+            else
+              order="h"
+            fi
+            for who in $order; do
+              case "$who" in
+                a) run "$out/base.test" "$out/base-a.txt" ;;
+                b) run "$out/base.test" "$out/base-b.txt" ;;
+                h) run "$out/head.test" "$out/head.txt" ;;
+              esac
+            done
+          done
+
+      - name: Build comment
+        env:
+          BASE_OK: ${{ steps.build.outputs.base_ok }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          out="$RUNNER_TEMP/bench"
+          status=""
+          if [ "$BASE_OK" != "true" ]; then
+            status="The base revision did not build with this PR's benchmark harness, so there is no comparison. Head numbers only."
+          fi
+          python3 .github/scripts/bench_engine_compare.py \
+            --base-a "$out/base-a.txt" --base-b "$out/base-b.txt" --head "$out/head.txt" \
+            --out "$out/comment.md" --status "$status" \
+            --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" --run-url "$RUN_URL"
+          cat "$out/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post or update the PR comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(`${process.env.RUNNER_TEMP}/bench/comment.md`, 'utf8');
+            const marker = '<!-- bench-engine-comment -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const mine = comments.find((c) => c.user.type === 'Bot' && c.body.includes(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
