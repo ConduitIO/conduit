@@ -234,3 +234,76 @@ func TestDoctor_NoDBDirLeftBehind_EndToEnd(t *testing.T) {
 	_, statErr = os.Stat(dbPath)
 	is.True(os.IsNotExist(statErr)) // still doesn't exist after the run
 }
+
+// standaloneEnvFinding runs only plugins.standalone_env with --json and
+// returns its decoded check entry plus the raw output.
+func standaloneEnvFinding(t *testing.T, args []string) (map[string]any, string) {
+	t.Helper()
+	is := is.New(t)
+	args = append(args, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
+
+	out, _, err := runDoctor(t, args...)
+	is.NoErr(err)
+	is.NoErr(testutils.ValidateEnvelope([]byte(out)))
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal([]byte(out), &got))
+	result, ok := got.Result.(map[string]any)
+	is.True(ok)
+	checks, ok := result["checks"].([]any)
+	is.True(ok)
+	is.Equal(len(checks), 1)
+	first, ok := checks[0].(map[string]any)
+	is.True(ok)
+	is.Equal(first["name"], doctorcheck.NamePluginsStandaloneEnv)
+	return first, out
+}
+
+func installFakePlugin(t *testing.T, dir string) {
+	t.Helper()
+	is := is.New(t)
+	is.NoErr(os.MkdirAll(filepath.Join(dir, "connectors"), 0o755))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "connectors", "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+}
+
+// TestDoctor_StandaloneEnv_JSON asserts the finding carries the stable code and
+// the variable NAMES, and never their values.
+func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-value-do-not-print")
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+
+	finding, out := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "warn")
+	is.Equal(finding["code"], "plugin.standalone_env_passed")
+	is.Equal(finding["configPath"], "connectors.standalone.env-warning")
+	msg, _ := finding["message"].(string)
+	is.True(strings.Contains(msg, "SENTINEL_API_TOKEN"))
+	is.True(strings.Contains(msg, "AWS_SECRET_ACCESS_KEY"))
+	is.True(!strings.Contains(out, "SENTINEL_SECRET_X"))
+	is.True(!strings.Contains(out, "aws-secret-value-do-not-print"))
+}
+
+func TestDoctor_StandaloneEnv_Silenced(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+	args = append(args, "--connectors.standalone.env-warning=false")
+
+	finding, _ := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "pass")
+	_, hasCode := finding["code"]
+	is.True(!hasCode)
+}
+
+func TestDoctor_StandaloneEnv_NoPluginsInstalled(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	args, _ := tempConfigArgs(t)
+
+	finding, _ := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "pass")
+}
