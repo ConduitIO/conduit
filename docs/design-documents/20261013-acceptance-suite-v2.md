@@ -67,8 +67,8 @@ goroutine in its own reference test with a pointer to the issue.
 
 ### What v1 catches and what it lets through
 
-The implementation PR carries a reference connector and a mutant for each bug class below. The v1 column is
-measured: the v1 suite was run against every mutant.
+The implementation PR carries a reference connector and a mutant for every case. The table shows the mutants that
+have a v1 counterpart; the v1 column is measured: the v1 suite was run against each of them.
 
 | Mutant (bug class) | Invariant | v1 | v2 case |
 | --- | --- | --- | --- |
@@ -77,7 +77,10 @@ measured: the v1 suite was run against every mutant.
 | Destination claims idempotent writes, duplicates on replay | 3 | passes (v1 has no notion of the claim) | DST-05 |
 | Destination reverses records within a batch | 4 | passes | DST-06 |
 | Destination drops a new field silently | 6 | passes | DST-07 |
+| Destination acks, buffers, and flushes only in `Teardown` | 1, 3 | fails, because the read-back runs before `Teardown` | DST-04 |
 | Source resumes one record late after a restart | 2, 3 | fails | SRC-03 |
+| Source ignores the position and starts over | 2, 3 | fails (the CDC resume test is exact) | SRC-03 |
+| Source redelivers the last three acked records on resume, `ExactResume` claimed | 3 | fails | SRC-03 |
 | Source `Read` ignores its context | 7 | passes | SRC-08 |
 
 v1 already catches the blunt cases. What it cannot see is everything that needs a failure, a claim, an ack or a
@@ -115,8 +118,18 @@ Each is covered by a v2 case that does the same through the plugin interface and
 | --- | --- |
 | `TestSource_Read_Success` (snapshot then CDC, unique positions) | SRC-02 (also checks position uniqueness) |
 | `TestSource_Read_Timeout` | SRC-08 (idle `Read` honours its deadline and its cancellation) |
-| `TestSource_Open_ResumeAtPositionSnapshot`, `_CDC` | SRC-03, SRC-07 |
+| `TestSource_Open_ResumeAtPositionSnapshot`, `_CDC` | SRC-03 (no gap **and** bounded redelivery), SRC-07 |
 | `TestDestination_Write_Success` | DST-01, DST-03 |
+
+The resume row needs a precise statement, because the first draft of this document got it wrong. v1 is
+stricter than a bare "no gap" check: the CDC test requires that after a restart from the last acked position
+exactly the remaining records arrive, and the snapshot test accepts a restart from scratch only because a
+snapshot may legitimately be taken again. A v2 that only checked "nothing is missing" would pass a source that
+ignores the position and starts over, which v1's CDC test rejects. SRC-03 therefore also bounds redelivery: after
+each restart the source may deliver at most `MaxRedelivery` records that were already acked (default 10, `0` for
+a connector that claims `ExactResume`). A source that restarts from the beginning fails, whatever it claims. The
+snapshot-restart allowance of v1 is not carried over; a connector that really has to re-snapshot declares a
+`MaxRedelivery` large enough for it, and the report shows the number.
 
 Running them again would make v2 unpassable by exactly the connectors that need it (ack-gated sources such as
 Postgres) and by generators and sinks that cannot be seeded or read back.
@@ -138,17 +151,17 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 | DST-01 | `pipelined_writes` | destination | 20 batches sent before any ack is read; every position acked once, no nack; stored data equals sent data exactly | 1, 3 |
 | DST-02 | `slow_acks` | destination | Host acknowledges slowly and the ack stream blocks the plugin; no deadlock, no loss | 1 |
 | DST-03 | `mixed_batch_sizes` | destination | Batches of 1, 100 and 10000 (configurable); all acked, all stored once | 3 |
-| DST-04 | `crash_replay_at_least_once` | destination, read-back | Kill mid-stream; everything acked before the kill is stored; replay of the whole batch leaves nothing missing, duplicates allowed | 1, 3 |
-| DST-05 | `crash_replay_idempotent` | claim `IdempotentWrites` | Same as DST-04, and replay leaves no duplicates | 3 |
+| DST-04 | `crash_replay_at_least_once` | destination, read-back | Kill at three points (inside a write, after the first ack, after half are acked); everything acked before the kill is stored, checked before `Teardown` runs; replay of the whole batch leaves nothing missing, duplicates allowed | 1, 3 |
+| DST-05 | `crash_replay_idempotent` | claim `Idempotence=idempotent` | Same as DST-04, and replay leaves no duplicates. Fails (does not skip) if the driver cannot return duplicates | 3 |
 | DST-06 | `ordering_per_key` | claim `OrdersByKey` | Records sharing a key are stored in write order | 4 |
 | DST-07 | `schema_evolution` | claim `SchemaEvolution` | `evolve`: a record with a new field is stored with the field. `reject`: it is nacked with an error and earlier data is intact. Silent drop or coercion fails | 6 |
 | DST-08 | `large_record` | destination | A record of 1 MiB (up to 3 MiB, below the 4 MiB default gRPC limit) is stored intact | 3, 6 |
 | DST-09 | `graceful_stop_drains_in_flight` | destination | `Stop` while 50 batches are queued returns only after every record is acked and stored; nothing leaks | 7 |
-| DST-10 | `context_cancellation` | destination | Cancelling mid-stream ends `Run` promptly; whatever was acked is stored | 1, 7 |
+| DST-10 | `context_cancellation` | destination | Cancelling mid-stream ends `Run` within 15 seconds; whatever was acked is stored, checked before `Teardown` | 1, 7 |
 | DST-11 | `throughput_smoke` | destination | Records/s over N seconds (default 3), recorded, not asserted; all acks successful | none |
 | SRC-01 | `pipelined_and_lagging_acks` | source | Acks arrive from another goroutine, lagging reads by 50 records, while reading continues; no deadlock or loss; restart from the last position is clean | 2, 3 |
 | SRC-02 | `mixed_batch_sizes` | source | 1, 100 and 10000 records, snapshot then CDC, delivered once each | 3 |
-| SRC-03 | `crash_resume_no_gap` | source | Four kills at different points with partial acks, then a resume from the last acked position; every record is delivered at least once across all runs | 2, 3 |
+| SRC-03 | `crash_resume_no_gap` | source | Four kills with partial acks (100 records, 45 acked before the last restart), each followed by a resume from the last acked position; the kill follows the connector's `Ack` return, not a sleep. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`) | 2, 3 |
 | SRC-04 | `ordering_per_key` | claim `OrdersByKey` | Records sharing a key arrive in write order | 4 |
 | SRC-05 | `schema_evolution` | claim `evolve` | A field added while the source runs reaches the output intact | 6 |
 | SRC-06 | `large_record` | source | A 1 MiB record arrives intact | 3, 6 |
@@ -160,10 +173,24 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 need it; the cases that only need acks (DST-01 apart from the content check, DST-02, DST-03 apart from the
 content check, DST-09 apart from the content check, DST-10, DST-11) run for write-only destinations such as `log`.
 
-What the in-process harness cannot do: kill -9. A cancelled context and a missing `Stop` approximate a crash, but
-`Teardown` still runs afterwards to release resources, so a connector that flushes only in `Teardown` would be
-rescued by the harness. The standalone harness (section 5) kills the process, and the chaos suites in connector
-repos remain the proof for Tier 1 connectors. v2 raises the floor; it does not replace chaos testing.
+Skips have a kind, recorded in the report: `not_applicable` (the connector has no such side), `unclaimed` (a
+capability that was not claimed), `declared` (`Synthetic` or `WriteOnly`), `replaced` (a v1 data-path test that
+v2 replaces) and the two that count as unexplained, `in_case` (a case skipped itself; none do today) and `driver`
+(skipped by the driver's `BeforeTest`, for example a `Skip` regular expression). A claimed capability that the
+suite cannot verify is a failure, never a skip: idempotence with a driver that cannot return duplicates,
+`WriteOnly` together with an idempotence or ordering claim, a schema evolution claim with a driver that
+generates raw payloads.
+
+**What the in-process crash can and cannot detect.** The harness cancels the context, closes the stream, waits for
+`Run` to return, checks what is durable, and only then calls `Teardown` to release resources. That detects the
+common form of ack-before-durable (records buffered in memory and flushed on a timer or in `Teardown`; mutants
+`dest_acks_before_durable` and `dest_flush_in_teardown`). It does not detect a connector that flushes in
+response to context cancellation, because cancellation is how the harness ends the plugin, and it cannot
+produce a torn write, a lost page cache or a dropped TCP connection. Only a process kill does. The standalone
+harness (section 5) will kill the process, and the connector's own kill -9 test remains the proof for Tier 1
+connectors. v2 raises the floor; it does not replace chaos testing. For Certified the kill -9 test is
+**attested, not enforced**: maintainers list it in the registry entry after reviewing the connector's test, and
+nothing in this suite or in index-CI runs it.
 
 ### 3. Capability declaration
 
@@ -173,21 +200,44 @@ Capabilities are declared in the test driver, next to the config that exercises 
 sdk.ConfigurableAcceptanceTestDriverConfig{
     Connector: Connector,
     Capabilities: sdk.AcceptanceCapabilities{
-        Destination: sdk.DestinationCapabilities{IdempotentWrites: true, SchemaEvolution: sdk.SchemaEvolutionReject},
-        Source:      sdk.SourceCapabilities{OrdersByKey: true},
+        Destination: sdk.DestinationCapabilities{Idempotence: sdk.IdempotenceYes, SchemaEvolution: sdk.SchemaEvolutionReject},
+        Source:      sdk.SourceCapabilities{OrdersByKey: true, ExactResume: true},
     },
 }
 ```
 
 The zero value claims nothing, so a connector that declares nothing runs the baseline cases only and the report
-lists what was skipped and why. Other fields: `Source.Synthetic` (a generator cannot be seeded; the cases that
-write expectations skip, the flow cases run), `Destination.WriteOnly` (no read-back), `MaxBatchSize`,
-`MaxRecordBytes`, `ThroughputDuration`. Drivers can optionally implement `ReadAllFromDestination` (needed to
-tell duplicates from loss), `GenerateRecordWithKey` and `GenerateLargeRecord`.
+lists what was skipped and why. Fields:
+
+- `Destination.Idempotence`: `idempotent`, `at_least_once` or unspecified. It is a recorded value, so "not
+  idempotent" is a statement a registry can read and compare, not the absence of one. A first draft proposed
+  "claim it or document why not"; documentation cannot be checked by a machine.
+- `Source.ExactResume` and `Source.MaxRedelivery` (above), `OrdersByKey` on both sides, `SchemaEvolution` on both
+  sides.
+- `Source.Synthetic` (a generator cannot be seeded) and `Destination.WriteOnly` (no read-back). These are not
+  capabilities, they are exceptions that remove checks: Synthetic removes every source case that compares
+  written with read data, WriteOnly removes every durability check.
+- `MaxBatchSize`, `MaxRecordBytes`, `ThroughputDuration`.
+
+Drivers can optionally implement `ReadAllFromDestination` (duplicates are needed to tell duplicates from loss),
+`GenerateRecordWithKey` and `GenerateLargeRecord`. `ReadAllFromDestination` is an explicit opt-in: the default
+driver offers it only when `ReadAllFromSource` is set, and does not satisfy the interface through embedding, so a
+driver that overrides `ReadFromDestination` is never silently read through the source behind its back.
 
 A claim is a promise the suite tests, so claims cannot inflate a result: DST-05 fails an idempotence claim that
-duplicates on replay. Not claiming is also visible: the registry shows "ordering: not claimed", and the
-Certified bar (below) names which claims are mandatory.
+duplicates on replay, SRC-03 fails an `ExactResume` claim that redelivers.
+
+**Dodge routes and how they are closed.** A suite whose cases can be switched off by the author proves little.
+What the registry check (section 4) does about each:
+
+| Route | Closed by |
+| --- | --- |
+| Declare `Synthetic` or `WriteOnly` | Allowed only with per-connector maintainer approval, recorded in the registry entry (`exceptions: ["write_only"]`) and shown next to the tier. A Certified destination needs read-back, or a harness-provided capturing sink: the driver supplies the context logger through `Driver.Context()` and returns what the destination wrote to it from `ReadAllFromDestination`, which is how a log destination can have read-back |
+| Lower `MaxBatchSize` or `MaxRecordBytes` | The suite runs at the declared value, and the report states `certification_floor_met`. Floors are `CertificationMinBatchSize = 10000` and `CertificationMinRecordBytes = 1 MiB`, the defaults; a connector below them cannot be Certified without a maintainer waiver listed in the entry |
+| Say nothing about idempotence | `Idempotence` must be `idempotent` or `at_least_once` for Certified; unspecified fails the check |
+| Claim nothing, pass the baseline | The baseline is the Certified minimum; the claims a connector class must make are the open decision below |
+| Skip cases with `-run`, a driver `Skip` list or a `t.Skip` in `BeforeTest` | The report states completeness against the expected case set and counts unexplained skips (section 4) |
+| Weaken goroutine leak checks | The report lists the ignored functions (`GoleakIgnoreFunctions`) and the number of opaque options; a registry reviewer sees them |
 
 ### 4. Versioning and what the registry records
 
@@ -198,26 +248,60 @@ The suite has a revision, `major.minor.patch`, written into every report (`suite
   `2.0.x` still passes `2.1.x` without changes, because the new cases skip until it claims something.
 - **patch**: harness fixes that do not change what a connector must do.
 
-The report is JSON (`CONDUIT_ACCEPTANCE_REPORT=path`): suite version and revision, SDK version, connector name
-and version, the claims, every case with outcome, duration and skip reason, recorded metrics. The connector's
-release workflow runs the suite against the release candidate and attaches the report as a release asset next to
-the signed artifacts.
+The revision is a constant in code, and a constant can go stale. The report therefore also carries the expected
+case set (`expected_case_ids`, `expected_case_count`) and `case_set_hash`, the SHA-256 of the revision and the
+sorted IDs, and a test in the SDK pins the hash of the released revision: adding, removing or renaming a case
+without bumping the revision fails the SDK's own build. Core IDs are explicit (`CORE-01` to `CORE-13`, one per v1
+test method, in a table in the code); a v1 test without an ID fails the run instead of getting a derived name.
+
+**The report is evidence, not proof.** It is written by the process that ran the tests, so a connector author
+controls it. Everything the registry does with it before a registry-side re-run exists is informational, and the
+index must not present it as verified. What makes a result trustworthy is provenance, and that comes from a
+re-run in CI that maintainers control: for project-maintained connectors that is the connector repo's own
+release workflow, which maintainers also control; for others, a job in the registry repo that checks out the
+tagged release, runs the suite with the maintainers' credentials for the target system and writes the report
+itself. Until that job exists, `certified` rests on maintainer review of the report, as it does today for every
+other item of the bar. This document does not claim the report authenticates anything.
+
+The report is JSON (`CONDUIT_ACCEPTANCE_REPORT=path`), with a `report_schema_version`: suite version, revision,
+case-set hash, connector name and version, the claims and exceptions, the limits used and whether they meet the
+floors, goroutine-leak ignores, every case with outcome, skip kind, skip reason and duration, recorded metrics,
+and the derived `complete`, `unexplained_skips` and `passed`. `sdk_version` is read from the build information of
+the test binary (the linker embeds it in `go test` binaries, no flags needed), is `unknown` when the SDK is the
+main module or the information is stripped, and is informational: compatibility is decided by revision and case
+set hash, never by SDK version.
 
 The registry records, per connector version, a `conformance` entry (the object proposed in
 `20261008-sdk-parity-and-open-plugin-protocol.md`; if that document lands differently, the same fields go under
 a sibling `acceptance` key):
 
 ```json
-{ "suite": "acceptance", "revision": "2.0.0", "mode": "sdk-in-process",
-  "claims": ["destination.idempotent_writes"], "skipped": ["SRC-04"],
-  "reportSha256": "…" }
+{ "suite": "acceptance", "revision": "2.0.0", "caseSetHash": "…", "mode": "sdk-in-process",
+  "claims": ["destination.idempotence=idempotent", "source.exact_resume"],
+  "exceptions": [], "skipped": {"unclaimed": ["SRC-04"]},
+  "provenance": "registry-ci", "reportSha256": "…" }
 ```
 
 `tier` stays what #2963 defined: set by registry maintainers in the index, never by a publisher, never a trust
 input. Passing v2 is a necessary condition for `certified`, not a sufficient one (certified also needs
-integration tests against the real system in CI, a kill -9 chaos test, a committed benchi run and docs). The
-index-CI check for a connector entry proposing `certified` verifies that the referenced report exists, matches
-`reportSha256`, shows `passed: true` for suite major 2, and that no baseline case was skipped.
+integration tests against the real system in CI, a kill -9 chaos test attested by maintainers, a committed benchi
+run and docs).
+
+**The Certified check.** Defined over the report, not over a boolean. For a connector entry proposing `certified`,
+index-CI requires all of:
+
+1. `revision` and `case_set_hash` equal a pair the registry knows for a supported suite major; the registry holds
+   the table, so a self-reported pair that does not match is rejected;
+2. `complete` is true, and `expected_case_ids` equals the registry's list for that revision (a filtered `-run`
+   can never satisfy this);
+3. every expected case has an outcome, none is `failed`, and `unexplained_skips` is 0;
+4. every skip is of kind `not_applicable` (and the connector really lacks that side), `replaced`, or `unclaimed`
+   for a capability outside the mandatory set for the connector class; a `declared` skip requires the matching
+   maintainer-approved exception in the entry; no skip is `in_case` or `driver`;
+5. `certification_floor_met` is true or the entry carries a maintainer waiver naming the limit;
+6. `Idempotence` is `idempotent` or `at_least_once` for any entry with a destination;
+7. `provenance` is `registry-ci`. Until the registry-side re-run exists, this condition cannot be met, and the
+   check runs in warning mode: it reports what it would decide and does not gate the tier.
 
 Deprecation of a major follows the project rule: announce, warn in index-CI, remove after at least two minor
 releases. v1 results stay valid for `verified`.
@@ -240,6 +324,18 @@ are the shared vocabulary, and the report schema is language-neutral.
 Fixture and seeding for non-Go connectors: where the connector has a paired source and destination on the same
 system, the runner uses the round trip as `ConfigurableAcceptanceTestDriver` does. Otherwise the author supplies
 seed and read-back hooks, which is the same split as `Synthetic` and `WriteOnly` in the Go driver.
+
+## Non-goals
+
+Suite v2 deliberately does not cover, and the Certified bar is silent on:
+
+- **Updates, deletes and tombstones.** Only `create` and `snapshot` records are generated. Tracked in
+  `ConduitIO/conduit-connector-sdk#398` (revision 2.1).
+- **Type changes, narrowing and drift.** Only an added field is exercised. Tracked in
+  `ConduitIO/conduit-connector-sdk#399` (revision 2.1).
+- Authentication and TLS failures, network partitions and slow third-party systems (the chaos suites), throughput
+  thresholds (benchi), multi-instance or concurrent use of the same source, and the engine's behavior (pipeline
+  tests).
 
 ## Alternatives
 
@@ -264,15 +360,18 @@ seed and read-back hooks, which is the same split as `Synthetic` and `WriteOnly`
 
 For a data-integrity test suite the failure that matters is a false pass.
 
-- **Suite passes a broken connector.** Mitigation: a mutant test per bug class in the SDK repo (reference
-  connector plus seven mutants run in a subprocess; the suite must fail each on the named case). A new case lands
-  with a mutant that it kills.
+- **Suite passes a broken connector.** Mitigation: a mutant test per case in the SDK repo (a reference connector
+  with 22 fault-injecting variants plus four unverifiable-claim configurations, each run in a subprocess
+  restricted to the case that must fail it). Two cases have no mutant, with reasons: DST-02, because acks are sent
+  by the SDK's destination adapter and a connector cannot block them (the case guards the adapter's ack path),
+  and the Core group, which is v1's own. A new case lands with a mutant that it kills.
 - **Suite fails a correct connector (flake).** Timeouts guard against loss, not slowness (10x the driver
   timeout, at least 10 seconds), and reads end on a quiet period. Cases that need the source to continue from a
   snapshot into change capture ack what they read, like a pipeline; a source may legitimately wait for acks.
   Flake rate is tracked once the suite runs in CI on the reference connector; the target is the CLAUDE.md
   Certified bar.
-- **In-process crash is not a crash.** Stated above. Certified requires the connector's own kill -9 test.
+- **In-process crash is not a crash.** Stated above, with what it does and does not detect. The kill -9 test is
+  attested, not enforced.
 - **Shared-memory artifacts.** The SDK middleware mutates records in place. The harness copies records on both
   sides of the stream; the race detector run on the reference connector covers it.
 - **Claims used to dodge cases.** A connector can claim nothing and pass the baseline. Mitigation: the report
@@ -288,16 +387,17 @@ For a data-integrity test suite the failure that matters is a false pass.
 
 ## Upgrade and rollback
 
-Additive: `AcceptanceTestV2` is a new symbol, `Capabilities` a new optional field on the config struct, and the
-driver gains optional interfaces. Nothing is required of existing drivers. Changes to code v1 shares, all
-behavior preserving for connectors that pass today: a wildcard required parameter (`collections.*.operations`)
+Additive: `AcceptanceTestV2` is a new symbol, `Capabilities`, `ReadAllFromSource` and `GoleakIgnoreFunctions` are
+new optional fields on the config struct, and the driver gains optional interfaces. Nothing is required of
+existing drivers. The default test logger is now info level (a trace-level connector log had grown to 1 GB in one
+run). Changes to code v1 shares, all behavior preserving for connectors that pass today: a wildcard required parameter (`collections.*.operations`)
 is no longer treated as a key the config must contain; `Source.Read` falls back to `ReadN(1)` for sources that
 implement only `ReadN`; the default driver's random generator is shared instead of re-seeded per call. The first
 two only turn a test-setup failure into a run. Rollback is to stop calling `AcceptanceTestV2`; the registry ignores a missing
 report.
 
 The suite ships with the SDK, so a connector tests with the revision its pinned SDK contains. The report records
-both, and the registry check compares the revision, not the SDK version.
+the revision, the case set hash and, informationally, the SDK version; the registry check compares the first two.
 
 ## Observability
 
@@ -310,16 +410,20 @@ both, and the registry check compares the revision, not the SDK version.
 
 ## Open decisions for DeVaris
 
-1. **Mandatory claims for Certified.** Proposal: destinations must either claim `IdempotentWrites` or document
-   why not; sources that read an ordered log (Kafka, Postgres CDC) must claim `OrdersByKey`; every schema-aware
-   connector must declare a `SchemaEvolution` policy. Alternative: leave claims optional and rely on the
-   skipped list. This changes what Certified means and needs your call before the registry check is written.
+1. **Mandatory claims for Certified.** Proposal: destinations must state `Idempotence` (either value); sources
+   that read an ordered log (Kafka, Postgres CDC) must claim `OrdersByKey` and `ExactResume` or declare a
+   `MaxRedelivery`; every schema-aware connector must declare a `SchemaEvolution` policy. Alternative: leave
+   claims optional and rely on the skipped list. This changes what Certified means and needs your call before
+   the registry check is written.
+   Also needed: who approves a `Synthetic` or `WriteOnly` exception, and the waiver process for floors.
 2. **Where capabilities live long term.** Driver now (this document), spec later. Confirm that deferring the
    protocol discussion is right.
 3. **Registry shape.** Share the `conformance` object with the SDK-parity document, or keep a separate
    `acceptance` entry. Depends on which of the two documents lands first.
 4. **Release.** The suite ships in the next SDK minor. Say if connector repos should adopt it before the
    Certified connectors are cut.
+5. **Registry-side re-run.** Who builds the job that re-runs the suite with credentials for the target system, and
+   when. Until it exists the report is informational and the Certified check is in warning mode.
 
 ## Related
 
