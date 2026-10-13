@@ -196,14 +196,15 @@ In this order, cheapest first:
    `go test -race -count=3 -shuffle=on ./tests/chaos/...`. It kills a real child process with SIGKILL and
    checks the position store. The engine tests do not replace it: they use no persister and no process
    boundary.
-4. **Measure with `make bench-engine-ab`**, which compares your working tree with `origin/main` (or
-   `BASE=<ref>`) in interleaved rounds and prints the A/A noise floor next to the delta. Do not compare two
-   sequential `make bench-engine` runs: drift between invocations shows up as a significant delta on
-   identical code. `make bench-engine` alone gives one snapshot. The benchmark runs seven reference shapes
-   (1x1, 2x2, 4x4, source batch 100, ack latency, buffered acks, destination batching) on both engines; one
-   pass is about 15 s, so `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR a CI job posts the same comparison as a comment, with a noise floor
-   measured on unchanged code. Both are indicative: they drive fakes, so they show engine overhead and say nothing about
-   connector throughput. A throughput claim needs a benchi run with committed configs and an environment spec.
+4. **Measure with `make bench-engine-ab`**, which compares your working tree with `origin/main` (or `BASE=<ref>`) in
+   interleaved rounds and prints the A/A noise floor next to the delta. Do not compare two sequential `make
+   bench-engine` runs: drift between invocations shows up as a significant delta on identical code. `make
+   bench-engine` alone gives one snapshot. The benchmark runs seven reference shapes (1x1, 2x2, 4x4, source batch
+   100, ack latency, buffered acks, destination batching) on both engines; one pass is about 15 s, so
+   `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR a CI job posts the same comparison
+   as a comment, with a noise floor measured on unchanged code. Both are indicative: they drive fakes, so they show
+   engine overhead and say nothing about connector throughput. A throughput claim needs a benchi run with committed
+   configs and an environment spec.
 5. **Update the docs.** The matching row in `docs/architecture/guarantees.md`, the flow in
    `docs/architecture/life-of-a-record.md` if the behaviour changed, and `llms.txt` if anything user-facing did.
 
