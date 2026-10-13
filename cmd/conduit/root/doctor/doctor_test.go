@@ -270,7 +270,7 @@ func installFakePlugin(t *testing.T, dir string) {
 // the variable NAMES, and never their values.
 func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
 	is := is.New(t)
-	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_VALUE_X")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-value-do-not-print")
 	args, dir := tempConfigArgs(t)
 	installFakePlugin(t, dir)
@@ -282,13 +282,13 @@ func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
 	msg, _ := finding["message"].(string)
 	is.True(strings.Contains(msg, "SENTINEL_API_TOKEN"))
 	is.True(strings.Contains(msg, "AWS_SECRET_ACCESS_KEY"))
-	is.True(!strings.Contains(out, "SENTINEL_SECRET_X"))
+	is.True(!strings.Contains(out, "SENTINEL_VALUE_X"))
 	is.True(!strings.Contains(out, "aws-secret-value-do-not-print"))
 }
 
 func TestDoctor_StandaloneEnv_Silenced(t *testing.T) {
 	is := is.New(t)
-	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_VALUE_X")
 	args, dir := tempConfigArgs(t)
 	installFakePlugin(t, dir)
 	args = append(args, "--connectors.standalone.env-warning=false")
@@ -301,7 +301,7 @@ func TestDoctor_StandaloneEnv_Silenced(t *testing.T) {
 
 func TestDoctor_StandaloneEnv_NoPluginsInstalled(t *testing.T) {
 	is := is.New(t)
-	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_SECRET_X")
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_VALUE_X")
 	args, _ := tempConfigArgs(t)
 
 	finding, _ := standaloneEnvFinding(t, args)

@@ -2,8 +2,10 @@
 
 Standalone connector plugins run as separate processes. When Conduit starts one, the plugin
 process receives Conduit's own environment variables in addition to the ones Conduit sets for it
-(`CONDUIT_CONNECTOR_*`). This note covers the startup warning that lists those variables and what
-to do about it.
+(`CONDUIT_CONNECTOR_*`). The host environment is appended after Conduit's values, so when a host
+variable has the same name as one Conduit sets (for example `CONDUIT_CONNECTOR_TOKEN`), the host
+value is the one the plugin sees. This note covers the startup warning that lists the host
+variables and what to do about it.
 
 ## Symptom
 
@@ -17,7 +19,9 @@ WRN host environment variables are passed to standalone plugin processes; v0.21 
 ```
 
 `conduit doctor` reports the same condition as a `warn` finding named `plugins.standalone_env`
-with the code `plugin.standalone_env_passed`:
+with the code `plugin.standalone_env_passed`. Doctor counts any non-directory file in
+`connectors.path`, so a stray file there can produce the finding where the engine, which counts
+plugins that loaded, stays quiet. Run it with:
 
 ```bash
 conduit doctor --check plugins.standalone_env --json
@@ -28,14 +32,33 @@ Values are never logged.
 
 ## What is listed
 
-Names of host environment variables that standalone plugins will receive and that match one of:
-`AWS_*`, `AZURE_*`, `GOOGLE_*`, `GCP_*`, `CONDUIT_*` (excluding `CONDUIT_CONNECTOR_*`, which the
-engine sets itself), `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_KEY`, `*_CREDENTIALS`, and names
-ending in `DATABASE_URL`, `DATABASE_URI`, `DB_URL` or `DB_URI`. Matching is case-sensitive, except
-on Windows where it is case-insensitive.
+Names of host environment variables that standalone plugins will receive and that look like
+credentials. Matching is case-insensitive on every OS. A name is listed when it:
+
+- contains `PASSWORD`, `PASSWD`, `TOKEN` or `SECRET` anywhere;
+- starts with `AWS_`, `AZURE_`, `GOOGLE_` or `GCP_`;
+- ends with `_KEY`, `_CREDENTIALS`, `_PASS`, `_PWD`, `_DSN`, `_APIKEY`, `_CONNECTION_STRING`,
+  `_JAAS_CONFIG`, `DATABASE_URL`, `DATABASE_URI`, `DB_URL` or `DB_URI`;
+- contains `REDIS`, `MONGO` or `AMQP` and ends with `_URL` or `_URI`;
+- is exactly `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY` (proxy URLs can embed credentials).
+
+`PWD` and `OLDPWD` are never listed. `CONDUIT_*` names are listed only when they also match one of
+the rules above (for example `CONDUIT_DB_POSTGRES_CONNECTION_STRING` or
+`CONDUIT_CONNECTOR_TOKEN`); `CONDUIT_LOG_LEVEL` is not.
+
+Only names that are plain identifiers (`[A-Za-z_][A-Za-z0-9_]{0,127}`) are printed. Matching
+variables with any other name are counted as "N variable(s) with non-standard names" and not
+printed.
 
 The list is advisory. Other variables are passed too; the patterns only pick out names that look
 like credentials.
+
+## Where names are shown
+
+Full names appear in the engine's startup log and in the local `conduit doctor` output. The MCP
+`doctor` tool, on every transport, reports only a count, because its result is returned to the MCP
+client. Run `conduit doctor` locally for the names. The MCP server process's environment may
+differ from the engine's, so its count is for that process.
 
 ## What to do
 
@@ -54,7 +77,8 @@ like credentials.
    ```
 
    or `--connectors.standalone.env-warning=false`, or the environment variable
-   `CONDUIT_CONNECTORS_STANDALONE_ENV_WARNING=false`.
+   `CONDUIT_CONNECTORS_STANDALONE_ENV_WARNING=false`. Embedders set
+   `Options.SilenceStandalonePluginEnvWarning`.
    This only silences the warning and the doctor finding. It does not change what plugins receive.
 
 ## What changes in v0.21

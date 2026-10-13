@@ -79,6 +79,11 @@ type Options struct {
 	// when empty; callers only need to set this in tests that stub the
 	// worker.
 	Executable string
+	// RedactEnvNames makes plugins.standalone_env report only a count of
+	// sensitive-looking host environment variables, not their names. Set it
+	// for any interface whose output leaves the local terminal (the MCP tool,
+	// on every transport). The local CLI leaves it false.
+	RedactEnvNames bool
 }
 
 // CheckNames returns the stable name of every check DefaultChecks can
@@ -134,7 +139,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		pluginsDirCheck{name: NamePluginsConnectorsDir, path: cfg.Connectors.Path, configKey: configKeyConnectorsPath},
 		pluginsDirCheck{name: NamePluginsProcessorsDir, path: cfg.Processors.Path, configKey: "processors.path"},
 		pluginsBuiltinCheck{cfg: cfg},
-		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning},
+		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, redact: opts.RedactEnvNames},
 		engineReachableCheck{cfg: cfg, requireServer: opts.RequireServer},
 	)
 
