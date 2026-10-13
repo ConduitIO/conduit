@@ -65,7 +65,8 @@ bump, which is planned in #3004.
     `--pipelines-path` and `--emit-cutover-marker`.
   - `--check-rollback [--watch] [--watch-timeout] [--pg-url] [--connect-url]
     [--conduit-url] [--json]`, and `--check-rollback --abandon --reason
-    <text>`, are read-only apart from the watch log. It runs the
+    <text> [--json]`, are read-only apart from the watch log, which only
+    `--watch` writes and `--abandon` archives. It runs the
     safety checks for going back to Debezium and prints a verdict ("Going
     back to Debezium").
 
@@ -100,7 +101,8 @@ bump, which is planned in #3004.
     `rollback_check_connector_state`, `rollback_check_privileges`,
     `rollback_check_pipeline_state`, `rollback_check_conduit_unreachable`,
     `rollback_check_restart_interrupted`, `rollback_check_state_unmapped`,
-    and `rollback_check_not_caught_up` (a `waiting` verdict).
+    `rollback_check_offset_unreadable`, and `rollback_check_not_caught_up`
+    (a `waiting` verdict).
 
   `--slot-strategy reuse` is refused with the connector's
   `postgres.import.slot_reuse_unsupported`, the single code for reuse.
@@ -469,10 +471,11 @@ snapshot (#341 S9):
 
 | Re-run after `--abandon` | Required | Otherwise |
 | --- | --- | --- |
-| pipeline exists with a position | current F_c = the snapshot's F_c; then start it | `slot_advanced` |
-| pipeline exists with an empty position, or was never written | F_c ≤ Lc; then write and start the import pipeline | `slot_advanced` |
-| pipeline deleted, snapshot present | current F_c = the snapshot's F_c; then write the pipeline without the import and start it | `slot_advanced` |
-| pipeline deleted, no snapshot | — | `slot_advanced` |
+| Conduit's slot missing | — | `postgres.logrepl.slot_missing`: re-snapshot |
+| pipeline exists with a position | its topology is intact (the journalled connectors and processors are present) and the current F_c = the snapshot's F_c; then start it | `pipeline_exists` (topology changed) or `slot_advanced` |
+| pipeline exists with an empty position, was never written, or was deleted before it ran (F_c = C ≤ Lc) | F_c ≤ Lc; then write and start the import pipeline | `slot_advanced` |
+| pipeline deleted after it ran (F_c > Lc), snapshot present | current F_c = the snapshot's F_c; then write the pipeline without the import and start it | `slot_advanced` |
+| pipeline deleted after it ran, no snapshot | — | `slot_advanced` |
 
 **Finishing `stopping`.** A re-run of `--cutover` that finds the journal at
 `stopping` finishes the observation first. If Debezium is STOPPED or deleted,
@@ -614,353 +617,192 @@ differ, this section is the source for the offset-import flow.
 
 ### Going back to Debezium: `--check-rollback` and the manual runbook
 
-v0.21 has no command that restarts Debezium or drops Conduit's slot. The
-checks R1–R10, the state mapping, the verdict table, the continuity rules,
-the fix texts and "Going forward after a failed restart" are specified once,
-in #341 S12 and S15 (doc `docs/design-documents/20261012-debezium-offset-import.md`
-in `conduit-connector-postgres`). They are not repeated here, so the two
-documents cannot drift. This section is the CLI surface and the runbook.
+v0.21 has no command that restarts Debezium or drops Conduit's slot. These
+are specified once, in #341 S12 and S15 (doc
+`docs/design-documents/20261012-debezium-offset-import.md` in
+`conduit-connector-postgres`), and not repeated here so the two documents
+cannot drift:
+
+- the checks R1–R10 and the state mapping;
+- the verdict table, and terminal versus transient findings;
+- the continuity rules, the watch, and the fix texts;
+- "Going forward after a failed restart".
+
+This section is the CLI surface and the runbook.
 
 ```sh
 conduit migrate kafka-connect --check-rollback --pipeline <name> \
   --journal-dir <dir> [--pg-url <url>] [--connect-url <url>] \
-  [--conduit-url <url>] [--watch] [--watch-timeout 30m] [--json]
+  [--conduit-url <url>] [--offsets-from rest|topic] [--bootstrap-servers <s>] \
+  [--offsets-topic <t>] [--watch] [--watch-timeout 30m] [--json]
 conduit migrate kafka-connect --check-rollback --pipeline <name> \
-  --journal-dir <dir> --abandon --reason <text>
+  --journal-dir <dir> --abandon --reason <text> [--json]
 ```
 
 **It is read-only.** It never drops or creates a slot (it takes no lock),
 never stops, starts or resumes a connector or pipeline, never deletes a
 pipeline, never writes the cutover journal and never writes to the database.
-Its only writes are its own watch log, `<pipeline>.rollback-watch.json`, and,
-with `--abandon`, renaming that log to
-`<pipeline>.rollback-watch.abandoned.json`. Its Kafka Connect calls are
-`GET`s and `PUT /connector-plugins/{class}/config/validate`, which changes
-nothing; its Conduit calls are `GET`s.
+Only `--watch` writes, and only its own watch log,
+`<pipeline>.rollback-watch.json`; `--abandon` archives that log. A one-shot
+check never writes anything. Its Kafka Connect calls are `GET`s and `PUT
+/connector-plugins/{class}/config/validate`, which changes nothing; its
+Conduit calls are `GET`s. Every HTTP call has a 10 s connect and 30 s request
+timeout, and Postgres connections use `connect_timeout=10` and
+`statement_timeout=10s`.
 
 **In short** (details in #341 S12):
 
 - Verdicts: `ready_to_stop_conduit`, `ready_to_restart_debezium`,
   `ready_to_delete_pipeline`, `ready_to_drop`, `waiting`, `unsafe`. Any
   state not in #341's table is `unsafe` (`rollback_check_state_unmapped`).
+- Terminal findings (`continuity_unproven`, `slot_moved`, `slot_lost`,
+  `two_writers`, `restart_interrupted`, `conduit_behind` after the restart)
+  stick, across watch restarts, until `--abandon`. Inside `--watch`,
+  transient findings (an unreachable API, a `FAILED` or `RESTARTING` task,
+  and the like) are `waiting`.
 - R5 (Conduit's durable progress ≥ F_stop when F_stop > Lc) runs in every
-  state that can reach `ready_to_drop`, after the restart too.
-- `ready_to_drop` requires the pipeline to be absent, so the delete comes
-  first.
-- `--watch` runs through the delete and exits only at `ready_to_drop`,
-  `unsafe` or its timeout; the drop is gated on its final verdict. It is the
-  watch log's only writer (an exclusive `flock`).
-- `--json` names everything the verdict was computed for (Conduit's slot,
-  the publication, Debezium's slot, the connector, the pipeline id). The
-  runbook reads names only from that output and the journal.
+  state that can reach `ready_to_drop`, after the restart too, and
+  `ready_to_drop` requires the pipeline to be absent.
+- **The CLI owns the final verdict.** The watch records its final verdict in
+  its own log. A one-shot check returns `ready_to_drop` only when the
+  recorded verdict is `ready_to_drop`, no terminal finding is recorded, and
+  the current state passes too. It also prints the Conduit slot and
+  publication it was computed for, after checking that they equal the
+  journal's `.slot.name` and `.publication.name` and differ from Debezium's.
+- `--json` prints exactly one JSON document; progress goes to stderr.
+- The Kafka Connect version the check reports is the **Kafka** version.
+  Confluent Platform reports its own version (for example `7.5.0-ccs`); the
+  check maps it (Confluent Platform 7.n is Kafka 3.n, 8.x is Kafka 4.x)
+  before deciding whether the worker has `PUT /stop` (Kafka 3.5+).
 - Its Postgres role needs `pg_read_all_stats` (or `pg_monitor`); the
   password comes from `PGPASSFILE` or `PGPASSWORD`, never from `--pg-url`.
-- After a failed restart, going back is not possible without a Debezium
-  re-snapshot. The way forward is: stop Debezium, `--abandon`, re-run
-  `--cutover` ("Crash-safe cutover", the abandon table).
 
 ### Runbook: manual reset and rollback
 
 Ships as the "Going back to Debezium" part of
 `docs/operations/postgres-debezium-offset-import.md`.
 
-**How to run the blocks.** Write the prelude below once, as
-`rollback-env.sh` in your working directory. Every block starts by sourcing
-it inside a subshell, `( . ./rollback-env.sh; … )`, so `set -euo pipefail`
-applies to the whole block, the first failed command ends it, and a failure
-never ends your login shell. Every gate reads the verdict from `--json`;
-nothing greps human-readable output. Every name and URL comes from the
-journal or from the verdict, never typed by hand.
-
-```sh
-# rollback-env.sh
-set -euo pipefail
-: "${NAME:?export NAME=<pipeline name>}"
-: "${DIR:?export DIR=<the --journal-dir of the cutover>}"
-J="$DIR/$NAME.cutover.json"
-CONNECT=$(jq -er .connect.url "$J")
-CONDUIT=$(jq -er .conduit.url "$J")
-DBZ=$(jq -er .debezium.connector "$J")
-PG=$(jq -er .postgres.url "$J")            # no password in it
-ID=$(jq -r '.pipeline.id // empty' "$J")   # empty before step 9
-export J CONNECT CONDUIT DBZ PG ID
-: "${PGPASSFILE:=$HOME/.pgpass}"; export PGPASSFILE   # or export PGPASSWORD
-check() {
-  conduit migrate kafka-connect --check-rollback --pipeline "$NAME" \
-    --journal-dir "$DIR" "$@"
-}
-# dbz_stop: stop Debezium the way this worker supports, and wait (5 min max).
-# Kafka 3.5+ has PUT .../stop; older workers only have DELETE. The version
-# decides which, so a failed request never falls through to a delete.
-dbz_stop() {
-  local ver; ver=$(curl -fsS "$CONNECT/" | jq -er .version)
-  if [ "$(printf '%s\n3.5\n' "${ver%%-*}" | sort -V | head -1)" = 3.5 ]; then
-    curl -fsS -o /dev/null -X PUT "$CONNECT/connectors/$DBZ/stop"
-    for _ in $(seq 1 150); do
-      curl -fsS "$CONNECT/connectors/$DBZ/status" \
-        | jq -e '.connector.state == "STOPPED"' >/dev/null && return 0
-      sleep 2
-    done
-  else
-    curl -fsS -o /dev/null -X DELETE "$CONNECT/connectors/$DBZ"
-    for _ in $(seq 1 150); do
-      [ "$(curl -sS -o /dev/null -w '%{http_code}' "$CONNECT/connectors/$DBZ/status")" = 404 ] \
-        && return 0
-      sleep 2
-    done
-  fi
-  echo "Debezium did not stop within 5 minutes" >&2; return 1
-}
-# gate <verdict>: run the check and stop unless it returns that verdict.
-# The check's JSON is kept in $V for the commands that follow.
-gate() {
-  V=$(check --json) || true
-  if ! jq -e --arg v "$1" '.verdict == $v' >/dev/null <<<"$V"; then
-    echo "expected verdict $1, got:" >&2; jq . <<<"$V" >&2; exit 1
-  fi
-}
-```
-
-Then, in your shell: `export NAME=orders DIR=/var/lib/conduit-migrate`.
+**Runbook scope.** v0.21 ships `--check-rollback` and the numbered steps
+below, not a script. Step-by-step automation of the procedure is v0.22
+(#3044). Each step that changes state needs a specific verdict from a check
+run just before it. If the check returns anything else, stop and follow the
+check's fix text. Commands are shown one at a time. Every name and URL in
+them comes from the journal or from the check's output; the check prints the
+exact commands with the names filled in, under `nextStep`.
 
 **Security notes.** On a Kafka 3.5+ worker the journal's saved Debezium
 config is redacted. On an older worker it holds Debezium's credentials,
-because the runbook re-creates the connector from it: keep the journal at
-mode 0600, and archive it with the same care. The runbook pipes that config
-straight into `curl` and never writes it elsewhere.
+because step 5 may re-create the connector from it. Keep the journal at mode
+0600, and archive it with the same care. Never run other slot tooling against
+Debezium's or Conduit's slot while going back.
 
-Never run other slot tooling against Debezium's or Conduit's slot while going
-back: no rule can exclude another actor dropping Debezium's slot between the
-last check and Debezium's attach; the watch catches it only afterwards.
+**Reset before the stop** (the check reports the journal at step 6 or
+earlier: Debezium was never stopped, and no pipeline exists yet):
 
-**1. Find where you are.**
+1. Run `conduit migrate kafka-connect --check-rollback --pipeline <name>
+   --journal-dir <dir>`. It must return `ready_to_drop`.
+2. Drop Conduit's slot, by the name the check printed:
+   `SELECT pg_drop_replication_slot('<conduit slot>');`, then
+   `DROP PUBLICATION IF EXISTS <conduit publication>;`.
+3. Archive the journal. `--cutover` can then start again.
 
-- **Symptom:** you want Debezium back, after `--cutover`, a `start_failed`,
-  a `slot_advanced`, or a decision to abandon the migration.
-- **Diagnosis:** `( . ./rollback-env.sh; check --json | jq . )`. Read
-  `verdict`, `names` and the failed checks. For reading only, the slot query
-  it runs is:
+**Rollback or reset after the stop:**
 
-  ```sql
-  SELECT s.slot_name, s.plugin, s.active, s.active_pid, s.wal_status,
-         s.restart_lsn, s.confirmed_flush_lsn,  -- add invalidation_reason on PG 17+
-         a.backend_type, a.backend_start
-  FROM pg_replication_slots s
-  LEFT JOIN pg_stat_activity a ON a.pid = s.active_pid
-  WHERE s.slot_name IN ('<debezium slot>', '<conduit slot>');
-  ```
+1. **Check.** Run the check. If it reports `stop_incomplete`, finish the
+   stop first, and never cancel it with a resume. On Kafka 3.5+ that is
+   `PUT /connectors/<connector>/stop`; on an older worker,
+   `DELETE /connectors/<connector>`. Wait until `/status` shows `STOPPED`
+   (or 404), then check again. If it reports `conduit_behind` while
+   Debezium is stopped, keep the pipeline running and commit one write to a
+   pipeline table; if the pipeline never started or cannot start, run
+   `--cutover --without-import` first.
+2. **Stop Conduit's pipeline** only after the check returns
+   `ready_to_stop_conduit`. Use `POST /v1/pipelines/<pipeline id>/stop`
+   (`pipeline.not_running` means it was already stopped). For a
+   file-provisioned pipeline, first set `status: stopped` in its file. Then
+   check again until it returns `ready_to_restart_debezium`.
+3. **Start the watch:** `conduit migrate kafka-connect --check-rollback
+   --pipeline <name> --journal-dir <dir> --watch`. Leave it running. It
+   records the stop observation, the pipeline snapshot and every sighting,
+   and runs until `ready_to_drop`, a terminal `unsafe`, or its timeout.
+4. **Restart Debezium** only after `ready_to_restart_debezium` **and** with
+   the watch running. On Kafka 3.5+: `PUT /connectors/<connector>/resume`.
+   On an older worker, where the cutover deleted the connector, re-create it
+   from the journal's `debeziumConfig` with `POST /connectors`, sending the
+   body on stdin (`--data-binary @-`) and discarding the response, so the
+   credentials never reach a file or the terminal.
+5. **Wait** until the watch reports `ready_to_delete_pipeline`. On an idle
+   database, commit two separate transactions to a table Debezium captures:
+   one write is not enough.
+6. **Delete the pipeline** only after a check returns
+   `ready_to_delete_pipeline`, with the watch still running. The API refuses
+   while connectors or processors are attached. So, by the ids
+   `GET /v1/pipelines/<pipeline id>` returns, delete:
+   - each connector's processors (`DELETE /v1/processors/<id>`);
+   - the pipeline's processors;
+   - the connectors (`DELETE /v1/connectors/<id>`);
+   - the pipeline (`DELETE /v1/pipelines/<pipeline id>`).
 
-  The check is the gate; the query is for understanding, not a substitute.
+   Deleting the source connector runs `OnDelete` with `LastActiveConfig`,
+   which is inert with `logrepl.autoCleanup: false`. For a file-provisioned
+   pipeline, remove its file and restart Conduit; the `--dev` watcher never
+   deletes.
+7. **Drop Conduit's slot, as the last step**, only after the watch has
+   ended at `ready_to_drop` **and** a fresh one-shot check run now returns
+   `ready_to_drop`.
+   - The slot and publication it prints must equal the journal's
+     `.slot.name` and `.publication.name`, and must not be Debezium's.
+   - Then, with those names:
+     `SELECT pg_drop_replication_slot('<conduit slot>');` and
+     `DROP PUBLICATION IF EXISTS <conduit publication>;`.
+   - Archive the journal and the watch log; that also clears `--cutover`'s
+     `rollback_in_progress`.
 
-**2. Reset before the stop** (journal at step 6 or earlier; Debezium never
-stopped; no pipeline exists before step 9):
+**Going forward after a failed restart** (a terminal `unsafe` after step 4:
+`slot_moved`, `continuity_unproven`, `conduit_behind` with Debezium running,
+or `restart_interrupted`). That attempt cannot be resumed. `--abandon` ends
+it. A new attempt would have to pass R4 again, which a Debezium that has
+streamed usually fails. So:
 
-```sh
-(
-. ./rollback-env.sh
-gate ready_to_drop
-SLOT=$(jq -er .names.conduitSlot <<<"$V")
-PUB=$(jq -er .names.publication <<<"$V")
-psql "$PG" -v ON_ERROR_STOP=1 -v slot="$SLOT" -v pub="$PUB" <<'SQL'
-SELECT pg_drop_replication_slot(:'slot');
-DROP PUBLICATION IF EXISTS :"pub";
-SQL
-mv "$J" "$J.abandoned"
-)
-```
+1. Stop Debezium (`PUT /connectors/<connector>/stop`, or `DELETE` on an older
+   worker) and wait until it is exactly `STOPPED`, or 404.
+2. Run `conduit migrate kafka-connect --check-rollback --pipeline <name>
+   --journal-dir <dir> --abandon --reason "<why>"`. It refuses unless
+   Debezium is exactly `STOPPED` or 404 (`UNASSIGNED` is refused). It
+   archives the watch log with its recorded verdict and findings, and prints
+   how much WAL each slot retains.
+3. Re-run `--cutover` with the original flags. It follows the abandon table
+   in "Crash-safe cutover":
+   - a pipeline with a position restarts, if its topology is intact and its
+     slot has not moved;
+   - a pipeline that never ran, including one deleted before it ran, is
+     written as an import;
+   - a pipeline deleted after it ran is written without the import, if its
+     slot has not moved;
+   - with Conduit's slot missing, or after `slot_advanced`, there is no
+     loss-free way forward: re-snapshot, then drop both slots by hand.
+4. Both slots retain WAL until the forward pipeline runs. Once it runs and
+   you give up on Debezium, drop Debezium's slot by hand; until then, watch
+   `max_slot_wal_keep_size`.
 
-Then `--cutover` can start again.
+**Special cases.**
 
-**3. Journal at `stopping`.**
-
-- **`stop_incomplete`** (Kafka Connect still shows the connector running):
-  finish the stop; never cancel it with a resume (round 7: a resume after a
-  pending stop restarts the tasks and can flush past any target taken
-  earlier).
-
-  ```sh
-  ( . ./rollback-env.sh; dbz_stop; gate ready_to_restart_debezium )
-  ```
-
-- **Debezium stopped** (the stop landed and the CLI was killed before it
-  journalled `stopped`): the `gate ready_to_restart_debezium` above, or a
-  plain check, records F_stop, R_stop and the stopped sighting in the watch
-  log. Continue with section 4, step 3. From then on, a running Debezium is
-  treated as restarted, not as a pending stop.
-
-**4. Rollback or reset after the stop** (journal at step 8 or later, or
-step 7 with a logged stopped sighting).
-
-1. Check. On `conduit_behind` while Debezium is stopped, keep the pipeline
-   running and commit one write to a pipeline table; if it never started or
-   cannot start, run `conduit migrate kafka-connect --cutover
-   --without-import ...` first, then check again.
-2. Stop Conduit's pipeline through the API, by id, and wait until it is
-   stopped by the user. For a file-provisioned pipeline, first set `status:
-   stopped` in its file.
-
-   ```sh
-   (
-   . ./rollback-env.sh
-   gate ready_to_stop_conduit
-   body=$(curl -sS -X POST -w '\n%{http_code}' "$CONDUIT/v1/pipelines/$ID/stop")
-   code=${body##*$'\n'}
-   if [ "$code" != 200 ] && ! grep -q 'pipeline.not_running' <<<"${body%$'\n'*}"; then
-     echo "stop failed ($code): ${body%$'\n'*}" >&2; exit 1
-   fi
-   for _ in $(seq 1 150); do
-     st=$(curl -fsS "$CONDUIT/v1/pipelines/$ID" \
-       | jq -r '.state.status + "/" + (.state.stoppedReason // "")')
-     [ "$st" = STATUS_STOPPED/STOPPED_REASON_USER ] && break
-     sleep 2
-   done
-   [ "$st" = STATUS_STOPPED/STOPPED_REASON_USER ] || { echo "pipeline: $st" >&2; exit 1; }
-   gate ready_to_restart_debezium
-   )
-   ```
-
-   `pipeline.not_running` counts as success: the pipeline was already
-   stopped. The loop gives up after 5 minutes.
-3. In one terminal, start the watch **before** Debezium. It runs until
-   `ready_to_drop`, through the delete in step 6, and writes its final
-   verdict to a file:
-
-   ```sh
-   ( . ./rollback-env.sh; check --watch --json > "$DIR/$NAME.watch-result.json" || true )
-   ```
-
-4. In another terminal, start Debezium:
-
-   ```sh
-   (
-   . ./rollback-env.sh
-   if [ "$(curl -sS -o /dev/null -w '%{http_code}' "$CONNECT/connectors/$DBZ")" = 404 ]; then
-     # older worker: the cutover deleted the connector; re-create it
-     jq -ec '{name: .debeziumConfig.name, config: .debeziumConfig.config}' "$J" \
-       | curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
-           --data-binary @- "$CONNECT/connectors"
-   else
-     curl -fsS -o /dev/null -X PUT "$CONNECT/connectors/$DBZ/resume"
-   fi
-   )
-   ```
-
-   `-o /dev/null` keeps the response, which echoes the config, off the
-   terminal.
-5. Wait for `ready_to_delete_pipeline` (the watch prints it, and a one-shot
-   gate confirms it). On `waiting` with an idle database, commit two separate
-   transactions to a table Debezium captures (one write is not enough), for
-   example:
-
-   ```sql
-   BEGIN; UPDATE <captured table> SET <column> = <column> WHERE <key> = <value>; COMMIT;
-   BEGIN; UPDATE <captured table> SET <column> = <column> WHERE <key> = <value>; COMMIT;
-   ```
-
-6. Delete the pipeline while the watch keeps running. The API refuses while
-   connectors or processors are attached, so delete connector-level
-   processors, pipeline-level processors and connectors first, with ids
-   re-read from the API. Deleting the source connector runs `OnDelete` with
-   `LastActiveConfig`, which is inert with `logrepl.autoCleanup: false`.
-
-   ```sh
-   (
-   . ./rollback-env.sh
-   gate ready_to_delete_pipeline
-   P=$(curl -fsS "$CONDUIT/v1/pipelines/$ID")
-   for c in $(jq -r '.connectorIds[]' <<<"$P"); do
-     for pr in $(curl -fsS "$CONDUIT/v1/connectors/$c" | jq -r '.processorIds[]'); do
-       curl -fsS -o /dev/null -X DELETE "$CONDUIT/v1/processors/$pr"
-     done
-   done
-   for pr in $(jq -r '.processorIds[]' <<<"$P"); do
-     curl -fsS -o /dev/null -X DELETE "$CONDUIT/v1/processors/$pr"
-   done
-   for c in $(jq -r '.connectorIds[]' <<<"$P"); do
-     curl -fsS -o /dev/null -X DELETE "$CONDUIT/v1/connectors/$c"
-   done
-   curl -fsS -o /dev/null -X DELETE "$CONDUIT/v1/pipelines/$ID"
-   )
-   ```
-
-   For a file-provisioned pipeline: remove its file and restart Conduit (the
-   `--dev` watcher never deletes); the watch keeps observing meanwhile.
-7. When the watch has exited, gate on **its** final verdict, then drop
-   Conduit's slot last, by the name the verdict was computed for:
-
-   ```sh
-   (
-   . ./rollback-env.sh
-   R="$DIR/$NAME.watch-result.json"
-   jq -e '.verdict == "ready_to_drop"' "$R" >/dev/null \
-     || { echo "the watch did not end at ready_to_drop:" >&2; jq . "$R" >&2; exit 1; }
-   SLOT=$(jq -er .names.conduitSlot "$R")
-   PUB=$(jq -er .names.publication "$R")
-   psql "$PG" -v ON_ERROR_STOP=1 -v slot="$SLOT" -v pub="$PUB" <<'SQL'
-   SELECT pg_drop_replication_slot(:'slot');
-   DROP PUBLICATION IF EXISTS :"pub";
-   SQL
-   mv "$J" "$J.rolled-back"
-   mv "$DIR/$NAME.rollback-watch.json" "$DIR/$NAME.rollback-watch.json.done"
-   )
-   ```
-
-   Archiving the watch log also clears `--cutover`'s `rollback_in_progress`.
-
-**5. Going forward after a failed restart.** After the restart, going back
-to Debezium is not possible in v0.21 without a Debezium re-snapshot. This
-applies to any of `slot_moved`, `continuity_unproven`, `conduit_behind`
-with Debezium running, and `restart_interrupted`. Go forward onto Conduit's
-slot, which still holds everything since F_c:
-
-```sh
-( . ./rollback-env.sh; dbz_stop; check --abandon --reason "failed restart: <verdict>" )
-conduit migrate kafka-connect --cutover ...   # the same flags as the original cutover
-```
-
-`--abandon` prints how much WAL each slot retains. **Both slots retain WAL
-until the forward pipeline runs:** Debezium's from its `restart_lsn`,
-Conduit's from its own. The `--cutover` re-run follows the abandon table in
-"Crash-safe cutover":
-
-- an existing pipeline is restarted;
-- a never-run one is written as an import;
-- a deleted one is written without the import, when Conduit's slot has not
-  moved since the R7 snapshot.
-
-If the re-run refuses with `slot_advanced`, there is no loss-free way
-forward from the slots. Conduit's output up to K and Debezium's output in
-Kafka are what is retained. Re-snapshot, then drop both slots by hand. Once
-the forward pipeline runs and you no longer want Debezium, drop Debezium's
-slot by hand; until then watch `max_slot_wal_keep_size`.
-
-**6. Special cases.**
-
-- **`slot_moved` before the restart** (Debezium still stopped): go forward
-  as in section 5, without the stop; `--cutover --without-import` also works
-  while the pipeline's position is empty.
 - **Degraded pipeline** (Conduit's slot missing, the pipeline failing with
-  `postgres.logrepl.slot_missing`). The check uses Kc from the R7 snapshot
-  instead of F_c, before and after the restart, and fails closed without a
-  snapshot. Follow section 4; in step 7 the slot drop is skipped (the verdict
-  says so).
+  `postgres.logrepl.slot_missing`). The check uses Kc from the pipeline
+  snapshot instead of F_c, and fails closed without one. Follow the same
+  steps; step 7 skips the slot drop, and the verdict says so.
 - **Failover to a standby.** The check reports a timeline change. Slots exist
   on the new primary only if they were synchronised (PG 17
   `sync_replication_slots`, or a platform equivalent); run the check against
   the new primary. `slot_lost` for Debezium's slot means Debezium cannot take
-  over without a re-snapshot: keep Conduit running if its slot survived. If
-  both slots are gone, both sides need a snapshot.
+  over without a re-snapshot: keep Conduit running if its slot survived.
 - **Debezium's slot invalidated** (`slot_lost`): Conduit's pipeline is the
-  only complete consumer; keep it. Returning to Debezium needs a Debezium
-  re-snapshot.
-- **Connector `PAUSED`, `FAILED`, `RESTARTING` or `UNASSIGNED`**
-  (`connector_state`): wait out `UNASSIGNED`; stop or deliberately resume a
-  `PAUSED` connector; fix a `FAILED` task and let it restart. The watch judges
-  the new walsender against its log.
-- **Pipeline `RECOVERING`, `DEGRADED` or stopped by the system**
-  (`pipeline_state`): stop it through the API (section 4, step 2) until it is
-  stopped by the user.
-- **Two writers** (`two_writers`): stop one of them now, then check again.
+  only complete consumer; keep it.
+- **Connector `PAUSED`, `FAILED`, `RESTARTING` or `UNASSIGNED`**, or the
+  pipeline `RECOVERING`, `DEGRADED` or stopped by the system: follow the fix
+  text. Inside the watch these are `waiting`, not terminal.
+- **Two writers** (`two_writers`): stop one of them now. The finding is
+  terminal; go forward.
 
 ### Pre-merge gate for the implementation PRs (final review)
 
@@ -969,7 +811,7 @@ PR it belongs to, before that PR merges. The list is the same as in #341
 ("Pre-merge gate for the implementation PRs").
 
 The final review's list, items 1–10, followed by the items the author lane
-had that it does not cover (11–13):
+had that it does not cover (11–14):
 
 1. Aurora, RDS, Cloud SQL and Azure accept `CREATE_REPLICATION_SLOT …
    TEMPORARY PHYSICAL` on a replication connection with the `-c tcp_*`
@@ -1001,6 +843,10 @@ had that it does not cover (11–13):
 13. Workers older than Kafka 3.5: after the stop-equivalent `DELETE`,
     `/status` returns 404 only once the task has stopped and committed its
     final offset (#341 S9, S12).
+14. The pgjdbc version Debezium ships, per Debezium version, and whether its
+    `automaticFlush` flushes received LSNs to the slot on its own (Debezium
+    3.1 and earlier with a newer pgjdbc), which makes F_stop > Lc and fails
+    every rollback closed (#341 S12).
 
 ### Other review fixes on the CLI side
 
