@@ -48,12 +48,15 @@ bench-engine:
 	go test -run '^$$' -bench '^BenchmarkEngine$$' -benchtime=$(BENCH_ENGINE_TIME) -count=$(BENCH_ENGINE_COUNT) ./pkg/internal/enginetest/engines | tee $(BENCH_ENGINE_OUT)
 
 # bench-engine-ab compares the working tree against BASE (default origin/main)
-# with interleaved runs and an A/A control. Use it rather than two sequential
+# with interleaved runs and an A/A control: each round runs three binaries (the
+# base, the working tree, and a second copy of the base as the control) in an
+# order that rotates every round, so ROUNDS should be a multiple of 3 (default 6)
+# for every binary to run in every position equally often. Use it rather than two sequential
 # bench-engine runs: drift between invocations shows up as a significant delta on
-# identical code. make bench-engine-ab [BASE=origin/main] [ROUNDS=5]
+# identical code. make bench-engine-ab [BASE=origin/main] [ROUNDS=6]
 .PHONY: bench-engine-ab
 bench-engine-ab:
-	./scripts/bench-engine-ab.sh $(or $(BASE),origin/main) $(or $(ROUNDS),5)
+	./scripts/bench-engine-ab.sh $(or $(BASE),origin/main) $(or $(ROUNDS),6)
 
 # bench-engine-compare prints the deltas and noise between two bench-engine
 # outputs: make bench-engine-compare OLD=base.txt NEW=head.txt. Only meaningful

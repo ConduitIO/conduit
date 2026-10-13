@@ -10,7 +10,9 @@
 #
 # Usage: scripts/bench-engine-ab.sh [BASE_REF] [ROUNDS]
 #   BASE_REF  git ref to compare against (default: origin/main)
-#   ROUNDS    interleaved rounds (default: 5)
+#   ROUNDS    interleaved rounds (default: 6). The run order rotates every round
+#             (base, head, A/A; head, A/A, base; A/A, base, head), so use a
+#             multiple of 3 or the positions are not balanced.
 #
 # The base is built with the working tree's pkg/internal/enginetest harness
 # copied over it, so it also works when BASE_REF has no harness yet. Output goes
@@ -19,7 +21,10 @@
 set -euo pipefail
 
 BASE_REF="${1:-origin/main}"
-ROUNDS="${2:-5}"
+ROUNDS="${2:-6}"
+if [ $((ROUNDS % 3)) -ne 0 ]; then
+  echo "warning: ROUNDS=$ROUNDS is not a multiple of 3; the rotating run order is not balanced" >&2
+fi
 BENCH_TIME="${BENCH_ENGINE_TIME:-3x}"
 BENCHSTAT_VERSION="${BENCHSTAT_VERSION:-v0.0.0-20261009192801-be2c69fb417e}"
 PKG=./pkg/internal/enginetest/engines
@@ -41,7 +46,13 @@ cp -R pkg/internal/enginetest "$base_dir/pkg/internal/enginetest"
 (cd "$base_dir" && go test -c -o "$out/base.test" "$PKG")
 
 : >"$out/base-a.txt"; : >"$out/base-b.txt"; : >"$out/head.txt"
-run() { "$1" -test.run='^$' -test.bench='^BenchmarkEngine$' -test.benchtime="$BENCH_TIME" -test.count=1 >>"$2" || true; }
+# A crashing or failing benchmark binary must not become a silently thin sample.
+run() {
+  if ! "$1" -test.run='^$' -test.bench='^BenchmarkEngine$' -test.benchtime="$BENCH_TIME" -test.count=1 >>"$2"; then
+    echo "error: benchmark binary $1 failed (output so far in $2); aborting" >&2
+    exit 1
+  fi
+}
 
 for round in $(seq 1 "$ROUNDS"); do
   echo ">> round $round/$ROUNDS"
