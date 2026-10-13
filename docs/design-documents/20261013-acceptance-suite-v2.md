@@ -266,10 +266,11 @@ other item of the bar. This document does not claim the report authenticates any
 The report is JSON (`CONDUIT_ACCEPTANCE_REPORT=path`), with a `report_schema_version`: suite version, revision,
 case-set hash, connector name and version, the claims and exceptions, the limits used and whether they meet the
 floors, goroutine-leak ignores, every case with outcome, skip kind, skip reason and duration, recorded metrics,
-and the derived `complete`, `unexplained_skips` and `passed`. `sdk_version` is read from the build information of
-the test binary (the linker embeds it in `go test` binaries, no flags needed), is `unknown` when the SDK is the
-main module or the information is stripped, and is informational: compatibility is decided by revision and case
-set hash, never by SDK version.
+and the derived `complete`, `unexplained_skips` and `passed`. `sdk_version` is informational. Binaries built by `go test` carry no dependency list in their build information,
+so the suite reads the version from the module path of its own source file (`.../conduit-connector-sdk@v0.15.0/`,
+which the toolchain embeds, also with `-trimpath`); a replace directive or workspace gives `local checkout`, and
+anything else `unknown`. It needs no linker flags and the driver does not pass it. Compatibility is decided by
+revision and case set hash, never by SDK version.
 
 The registry records, per connector version, a `conformance` entry (the object proposed in
 `20261008-sdk-parity-and-open-plugin-protocol.md`; if that document lands differently, the same fields go under
