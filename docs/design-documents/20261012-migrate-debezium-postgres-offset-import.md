@@ -267,7 +267,8 @@ re-check.
 starts the pipeline on Conduit's slot with no skip rule.
 
 - **Preconditions,** each refused with the code shown and nothing changed:
-  Debezium is STOPPED or deleted (`connector_running`); Conduit's slot exists
+  Debezium is exactly `STOPPED`, or 404 with `debezium.stopMethod: delete`
+  (otherwise `connector_running`, #341 D11); Conduit's slot exists
   (`postgres.logrepl.slot_missing`), is not lost or invalidated
   (`postgres.logrepl.slot_invalidated`), and uses `pgoutput`
   (`postgres.logrepl.slot_plugin`); F_c ≤ final Lc (`slot_advanced`); the
@@ -480,7 +481,8 @@ The re-run reads the R7 snapshot from the newest archive (#341 S9):
 | pipeline deleted after it ran, no snapshot | — | `slot_advanced` |
 
 **Finishing `stopping`.** A re-run of `--cutover` that finds the journal at
-`stopping` finishes the observation first. If Debezium is STOPPED or deleted,
+`stopping` finishes the observation first. If Debezium is exactly `STOPPED`,
+or 404 after the delete the journal records (`debezium.stopMethod: delete`),
 it reads O, F_stop and R_stop and journals `stopped`; a missing Debezium slot
 is `identity_mismatch`. If Debezium is RUNNING, the stop did not take effect
 or is still pending (Kafka Connect's stop is asynchronous), and the re-run
@@ -625,7 +627,8 @@ are specified once, in #341 S12 and S15 (doc
 `conduit-connector-postgres`), and not repeated here so the two documents
 cannot drift:
 
-- the checks R1–R11 and the state mapping;
+- the checks R1–R11 (R11, Debezium's config against the journal, runs
+  before the restart too) and the state mapping;
 - the verdict table, and terminal versus transient findings;
 - the continuity rules, the watch, and the fix texts;
 - "Going forward after a failed restart".
@@ -679,7 +682,13 @@ timeout, and Postgres connections use `connect_timeout=10` and
 - **The CLI owns the final verdict.** The watch records its final verdict in
   its own log. A one-shot check returns `ready_to_drop` only when the
   recorded verdict is `ready_to_drop`, no terminal finding is recorded, and
-  the current state passes too. It also prints the Conduit slot and
+  the current state passes too, with Debezium's walsender showing the same
+  identity tuple as the watch's last entry.
+- **Observation gaps accept only the same walsender** (DeVaris decision):
+  across a killed watch, a watch restart, or the time between the watch's
+  exit and the final check, a Debezium reconnect is `continuity_unproven`.
+  The cost: a killed watch cannot resume across a reconnect. Before the
+  restart, start a fresh watch; after it, go forward. It also prints the Conduit slot and
   publication it was computed for, after checking that they equal the
   journal's `.slot.name` and `.publication.name` and differ from Debezium's.
 - `--json` prints exactly one JSON document; progress goes to stderr.
@@ -744,14 +753,17 @@ earlier: Debezium was never stopped, and no pipeline exists yet):
    records the stop observation, the pipeline snapshot and every sighting,
    and runs until `ready_to_drop`, a terminal `unsafe`, or its timeout.
 4. **Restart Debezium** only when the **running watch itself** reports
-   `ready_to_restart_debezium`, with the stopped sighting and the R7
-   snapshot recorded in its log (its progress output says so). The one-shot
-   result from step 2 is not enough: the watch must have seen the stopped
-   state itself. On Kafka 3.5+: `PUT /connectors/<connector>/resume`.
+   `ready_to_restart_debezium` with what it needs recorded in its log (its
+   progress output says so): the R7 baseline (Conduit's slot position, which
+   is recorded even when no pipeline exists), the pipeline snapshot when a
+   pipeline exists, and, when the journal is at step 7, the stopped
+   sighting. The one-shot result from step 2 is not enough. Do not change
+   Debezium's config at any point; on an older worker, re-create the
+   connector from the journal's `debeziumConfig` **unmodified**. On Kafka 3.5+: `PUT /connectors/<connector>/resume`.
    On an older worker, where the cutover deleted the connector, re-create it
-   from the journal's `debeziumConfig` with `POST /connectors`, sending the
-   body on stdin (`--data-binary @-`) and discarding the response, so the
-   credentials never reach a file or the terminal.
+   from the journal's `debeziumConfig`, unmodified, with `POST /connectors`,
+   sending the body on stdin (`--data-binary @-`) and discarding the
+   response, so the credentials never reach a file or the terminal.
 5. **Wait** until the watch reports `ready_to_delete_pipeline`. On an idle
    database, commit two separate transactions to a table Debezium captures:
    one write is not enough.
@@ -770,8 +782,9 @@ earlier: Debezium was never stopped, and no pipeline exists yet):
    deletes. That restart restarts the whole engine, so **every** pipeline on
    it restarts; plan it like any other engine restart.
 7. **Drop Conduit's slot, as the last step**, only after the watch has
-   ended at `ready_to_drop` **and** a fresh one-shot check run now returns
-   `ready_to_drop`.
+   ended at `ready_to_drop` **and** a fresh one-shot check, run straight
+   away, returns `ready_to_drop`. If Debezium reconnected in between, the
+   check says `continuity_unproven`; go forward.
    - The slot and publication it prints must equal the journal's
      `.slot.name` and `.publication.name`, and must not be Debezium's.
    - Then, with those names:
