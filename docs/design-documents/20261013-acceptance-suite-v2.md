@@ -58,7 +58,7 @@ Properties of the harness that matter for what follows:
 
 ### Who runs it today
 
-Of the five connectors this release certifies or touches first (file, generator, log, postgres, S3), only
+Of the five connectors the suite was run against for this work (file, generator, log, Postgres, S3), only
 `conduit-connector-file` calls `sdk.AcceptanceTest`. The other four have no acceptance test at all. The Postgres
 connector has a large chaos suite of its own, which is the right depth for that connector, but nothing ties it to
 the contract other connectors are held to. SDK `main` itself is red on the suite since `twmb/go-cache` v1.4.0
