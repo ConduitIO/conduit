@@ -273,6 +273,11 @@ be placed in the `connectors` directory relative to the Conduit binary so
 Conduit can find them. Alternatively, the path to the standalone connectors can
 be adjusted using the CLI flag `-connectors.path`.
 
+Standalone connectors run as separate processes and receive Conduit's
+environment variables. Conduit logs one warning at startup that lists the names
+of credential-like variables being passed; see
+[standalone plugin environment](docs/operations/standalone-plugin-environment.md).
+
 Conduit ships with a number of built-in connectors:
 
 - [File connector](https://github.com/ConduitIO/conduit-connector-file) provides

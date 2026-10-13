@@ -16,12 +16,16 @@ package mcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/doctor/doctorcheck"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/check"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -86,4 +90,38 @@ func TestDoctor_UnknownCheckName_RejectedWithSuggestion(t *testing.T) {
 	is.True(env.Error != nil)
 	is.True(env.Error.Code != "")
 	is.True(env.Error.Suggestion != "")
+}
+
+// TestDoctor_StandaloneEnv_NamesNotReturned asserts the MCP result (which
+// reaches the client and the model provider behind it) carries a count for
+// plugins.standalone_env but never the variable names or values.
+func TestDoctor_StandaloneEnv_NamesNotReturned(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_VALUE_X")
+	t.Setenv("SENTINEL_ONLY_NAME_PASSWORD", "other-value")
+
+	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
+	cfg.Connectors.Path = t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+
+	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg}))
+	res, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+		Name:      ToolDoctor,
+		Arguments: map[string]any{"checks": []string{doctorcheck.NamePluginsStandaloneEnv}},
+	})
+	is.NoErr(err)
+
+	env := decodeStructuredContent[Result[DoctorResult]](t, res)
+	is.Equal(len(env.Result.Checks), 1)
+	got := env.Result.Checks[0]
+	is.Equal(string(got.Status), "warn")
+	is.Equal(got.Code, "plugin.standalone_env_passed")
+	is.True(strings.Contains(got.Message, "withheld"))
+
+	// Everything the client can see: structured content and text content.
+	raw, err := json.Marshal(res)
+	is.NoErr(err)
+	for _, secret := range []string{"SENTINEL_API_TOKEN", "SENTINEL_ONLY_NAME_PASSWORD", "SENTINEL_VALUE_X", "other-value"} {
+		is.True(!strings.Contains(string(raw), secret))
+	}
 }
