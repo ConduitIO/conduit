@@ -1,0 +1,26 @@
+version: "2.2"
+pipelines:
+  - id: kafka-to-s3-archive
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:kafka"
+        settings:
+          servers: "localhost:9092"
+          topics: "messages"
+          groupID: "s3-archive-group"
+      - id: destination
+        type: destination
+        plugin: "builtin:s3"
+        settings:
+          aws.accessKeyId: "TODO"
+          aws.secretAccessKey: "TODO"
+          aws.region: "us-east-1"
+          aws.bucket: "archive-bucket"
+          format: "json"
+    processors:
+      - id: rename-ts-field
+        plugin: "field.rename"
+        settings:
+          mapping: "ts:timestamp"

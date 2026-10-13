@@ -114,12 +114,45 @@ two requests. In the live run every semantic miss is the same failure: the model
 source and destination and leaves out the processor the request asked for. Pooled over the three
 passes, requests that need no processor score 45/45 and requests that need at least one score
 8/39. The `convert`, `mask`, `set`, `split` and `unwrap-kafkaconnect` processors never appeared.
+These figures were scored before the `hasCapability` fix and are partly a scorer artifact; see
+[Scores before and after the scorer fix are not comparable](#scores-before-and-after-the-scorer-fix-are-not-comparable).
 
 Generate OK sits well above semantic match because the intent judge accepts most of those
 pipelines: for `mask`, `set`, `split`, `convert` and `unwrap-kafkaconnect` it passed 3/3 while the
 corpus failed 3/3. The judge also refuses `file-to-file-base64-decode` (0/3) by demanding a
 `base64-encode` processor for a request to decode. Both are judge findings, separate from model
 quality.
+
+Both judge findings are fixed (#2935, #2936). The fix also found that a processor written as
+`builtin:<name>` didn't count toward a required capability, in either the judge or the corpus
+scorer. The live numbers above predate the fix. The eight transcripts whose generation path the fix
+changes were re-captured (one pass each), so every committed transcript replays exactly as it was
+captured. On that corpus the judge agrees with the corpus verdict on 28/28 requests (21/28
+before), and corpus semantic match is 25/28 (18/28 before).
+
+**Those are IN-SAMPLE replay numbers.** The rules were written and checked against these same 28
+prompts, and the replayed completions are frozen. They show the code now handles this corpus, not
+how it will do on new requests or what the model will do. The first out-of-sample number comes from
+the weekly live job. The one out-of-sample measure in the tree is the held-out paraphrase set
+(`TestExtractCapabilities_HeldOut`): 25 wordings not derived from the corpus, which the rules
+recognised 9/25 before the held-out extension and 25/25 after. Seven of the 25 were reported
+misses the rules were then extended for, and nine of the other eighteen were found missing and
+fixed in the same pass, so that 25/25 is no longer a clean out-of-sample figure either. A negative
+set of 16 near-miss wordings (for example "hash partitioning", "drop duplicate records", "change
+the topic name") confirms the extension adds no false demands.
+
+In `kafka-connect-unwrap-to-postgres`, `postgres-to-s3-mask-pii` and `kafka-to-s3-split-batches`,
+the model left the processor out on the first attempt and added it after the judge's feedback.
+
+### Scores before and after the scorer fix are not comparable
+
+`hasCapability` compared a processor's plugin string verbatim, so `builtin:field.set`, the form the
+grounding prompt tells the model to write, did not count as `field.set`. The scorer (`ScoreRun`)
+shares that function, so the fix changes published scores: on the same transcripts, the scorer fix
+alone moves the corpus from 18/28 to 22/28. Numbers measured before it (the v0.20.0 live and
+capture runs above: 64-68% semantic match, and "the model leaves out a requested processor in 8 of
+39 requests") partly measure that scorer artifact, not only the model, and must not be compared with
+numbers measured after it. Republished live numbers follow from the weekly job.
 
 ## How a request is scored
 

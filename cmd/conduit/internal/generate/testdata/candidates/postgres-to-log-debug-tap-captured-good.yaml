@@ -1,0 +1,23 @@
+```yaml
+version: "2.2"
+pipelines:
+  - id: postgres-cdc-debug
+    status: running
+    connectors:
+      - id: source
+        type: source
+        plugin: "builtin:postgres"
+        settings:
+          url: "postgres://user:TODO@localhost:5432/mydb?sslmode=disable"
+          tables: "*"
+          cdcMode: auto
+          logrepl.slotName: conduitslot
+          logrepl.publicationName: conduitpub
+          logrepl.autoCleanup: "true"
+      - id: destination
+        type: destination
+        plugin: "builtin:log"
+        settings:
+          level: info
+          message: "postgres change event"
+```

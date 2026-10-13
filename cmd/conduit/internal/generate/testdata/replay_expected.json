@@ -6,8 +6,8 @@
       "summary": {
         "total": 28,
         "validatePass": 27,
-        "semanticMatch": 18,
-        "generateOK": 21,
+        "semanticMatch": 25,
+        "generateOK": 25,
         "tombstoned": 0,
         "byCategory": [
           {
@@ -15,8 +15,8 @@
             "value": "file",
             "total": 4,
             "validatePass": 4,
-            "semanticMatch": 3,
-            "generateOK": 3
+            "semanticMatch": 4,
+            "generateOK": 4
           },
           {
             "dimension": "source",
@@ -31,7 +31,7 @@
             "value": "kafka",
             "total": 8,
             "validatePass": 8,
-            "semanticMatch": 4,
+            "semanticMatch": 7,
             "generateOK": 7
           },
           {
@@ -39,8 +39,8 @@
             "value": "postgres",
             "total": 9,
             "validatePass": 8,
-            "semanticMatch": 4,
-            "generateOK": 5
+            "semanticMatch": 7,
+            "generateOK": 7
           },
           {
             "dimension": "source",
@@ -48,23 +48,23 @@
             "total": 4,
             "validatePass": 4,
             "semanticMatch": 4,
-            "generateOK": 3
+            "generateOK": 4
           },
           {
             "dimension": "destination",
             "value": "file",
             "total": 3,
             "validatePass": 3,
-            "semanticMatch": 2,
-            "generateOK": 2
+            "semanticMatch": 3,
+            "generateOK": 3
           },
           {
             "dimension": "destination",
             "value": "kafka",
             "total": 9,
             "validatePass": 9,
-            "semanticMatch": 6,
-            "generateOK": 7
+            "semanticMatch": 8,
+            "generateOK": 8
           },
           {
             "dimension": "destination",
@@ -72,14 +72,14 @@
             "total": 4,
             "validatePass": 4,
             "semanticMatch": 4,
-            "generateOK": 2
+            "generateOK": 4
           },
           {
             "dimension": "destination",
             "value": "postgres",
             "total": 5,
             "validatePass": 5,
-            "semanticMatch": 3,
+            "semanticMatch": 5,
             "generateOK": 5
           },
           {
@@ -87,7 +87,7 @@
             "value": "s3",
             "total": 7,
             "validatePass": 6,
-            "semanticMatch": 3,
+            "semanticMatch": 5,
             "generateOK": 5
           },
           {
@@ -95,8 +95,8 @@
             "value": "base64-decode",
             "total": 1,
             "validatePass": 1,
-            "semanticMatch": 0,
-            "generateOK": 0
+            "semanticMatch": 1,
+            "generateOK": 1
           },
           {
             "dimension": "capability",
@@ -111,23 +111,23 @@
             "value": "filter",
             "total": 3,
             "validatePass": 3,
-            "semanticMatch": 0,
-            "generateOK": 1
+            "semanticMatch": 2,
+            "generateOK": 2
           },
           {
             "dimension": "capability",
             "value": "json-encode",
             "total": 3,
             "validatePass": 2,
-            "semanticMatch": 0,
-            "generateOK": 0
+            "semanticMatch": 1,
+            "generateOK": 1
           },
           {
             "dimension": "capability",
             "value": "mask",
             "total": 1,
             "validatePass": 1,
-            "semanticMatch": 0,
+            "semanticMatch": 1,
             "generateOK": 1
           },
           {
@@ -136,7 +136,7 @@
             "total": 15,
             "validatePass": 15,
             "semanticMatch": 15,
-            "generateOK": 13
+            "generateOK": 15
           },
           {
             "dimension": "capability",
@@ -151,7 +151,7 @@
             "value": "set",
             "total": 1,
             "validatePass": 1,
-            "semanticMatch": 0,
+            "semanticMatch": 1,
             "generateOK": 1
           },
           {
@@ -159,7 +159,7 @@
             "value": "split",
             "total": 1,
             "validatePass": 1,
-            "semanticMatch": 0,
+            "semanticMatch": 1,
             "generateOK": 1
           },
           {
@@ -175,7 +175,7 @@
             "value": "unwrap-kafkaconnect",
             "total": 1,
             "validatePass": 1,
-            "semanticMatch": 0,
+            "semanticMatch": 1,
             "generateOK": 1
           }
         ]
@@ -215,8 +215,7 @@
           "validatePass": false,
           "semanticMatch": false,
           "semanticIssues": [
-            "expected destination category \"s3\", found \"(none)\"",
-            "missing required capability \"json-encode\" (no matching processor present)"
+            "expected destination category \"s3\", found \"(none)\""
           ],
           "validateFindings": [
             "processor.plugin_not_found @ /pipelines/processors/1/plugin"
@@ -301,13 +300,12 @@
           "id": "postgres-to-log-debug-tap",
           "sourceCategory": "postgres",
           "destinationCategory": "log",
-          "attempts": 3,
-          "tokensUsed": 19023,
-          "generateOK": false,
-          "generateCode": "generate.semantic_mismatch",
+          "attempts": 1,
+          "tokensUsed": 5650,
+          "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 1,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -357,12 +355,12 @@
           "capabilities": [
             "unwrap-debezium"
           ],
-          "attempts": 3,
-          "tokensUsed": 19189,
+          "attempts": 2,
+          "tokensUsed": 12457,
           "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -373,15 +371,12 @@
           "capabilities": [
             "unwrap-kafkaconnect"
           ],
-          "attempts": 1,
-          "tokensUsed": 6019,
+          "attempts": 3,
+          "tokensUsed": 18824,
           "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"unwrap-kafkaconnect\" (no matching processor present)"
-          ],
-          "turnsRecorded": 1,
+          "semanticMatch": true,
+          "turnsRecorded": 3,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -392,15 +387,12 @@
           "capabilities": [
             "mask"
           ],
-          "attempts": 1,
-          "tokensUsed": 6645,
+          "attempts": 2,
+          "tokensUsed": 12612,
           "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"mask\" (no matching processor present)"
-          ],
-          "turnsRecorded": 1,
+          "semanticMatch": true,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -493,17 +485,12 @@
             "filter",
             "json-encode"
           ],
-          "attempts": 3,
-          "tokensUsed": 19420,
-          "generateOK": false,
-          "generateCode": "generate.semantic_mismatch",
+          "attempts": 2,
+          "tokensUsed": 12995,
+          "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"filter\" (no matching processor present)",
-            "missing required capability \"json-encode\" (no matching processor present)"
-          ],
-          "turnsRecorded": 3,
+          "semanticMatch": true,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -514,16 +501,12 @@
           "capabilities": [
             "base64-decode"
           ],
-          "attempts": 3,
-          "tokensUsed": 18405,
-          "generateOK": false,
-          "generateCode": "generate.semantic_mismatch",
+          "attempts": 2,
+          "tokensUsed": 11915,
+          "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"base64-decode\" (no matching processor present)"
-          ],
-          "turnsRecorded": 3,
+          "semanticMatch": true,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -534,15 +517,12 @@
           "capabilities": [
             "split"
           ],
-          "attempts": 1,
-          "tokensUsed": 6040,
+          "attempts": 2,
+          "tokensUsed": 12241,
           "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"split\" (no matching processor present)"
-          ],
-          "turnsRecorded": 1,
+          "semanticMatch": true,
+          "turnsRecorded": 2,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -586,10 +566,7 @@
           "tokensUsed": 6677,
           "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"filter\" (no matching processor present)"
-          ],
+          "semanticMatch": true,
           "turnsRecorded": 1,
           "promptsMatchCapture": true,
           "matchesCapture": true
@@ -598,13 +575,12 @@
           "id": "s3-to-log-audit",
           "sourceCategory": "s3",
           "destinationCategory": "log",
-          "attempts": 3,
-          "tokensUsed": 20688,
-          "generateOK": false,
-          "generateCode": "generate.semantic_mismatch",
+          "attempts": 1,
+          "tokensUsed": 5713,
+          "generateOK": true,
           "validatePass": true,
           "semanticMatch": true,
-          "turnsRecorded": 3,
+          "turnsRecorded": 1,
           "promptsMatchCapture": true,
           "matchesCapture": true
         },
@@ -619,10 +595,7 @@
           "tokensUsed": 7218,
           "generateOK": true,
           "validatePass": true,
-          "semanticMatch": false,
-          "semanticIssues": [
-            "missing required capability \"set\" (no matching processor present)"
-          ],
+          "semanticMatch": true,
           "turnsRecorded": 1,
           "promptsMatchCapture": true,
           "matchesCapture": true
