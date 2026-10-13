@@ -83,6 +83,21 @@ func waitAckedOrViolation(t *testing.T, ctx context.Context, src *enginetest.Sou
 	}
 }
 
+// waitRunOrViolation waits for the run to end and returns its error, or fails
+// the test at once on a ledger violation.
+func waitRunOrViolation(t *testing.T, ctx context.Context, run engines.Run, l *enginetest.Ledger) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- run.Wait(ctx) }()
+	select {
+	case <-l.Failed():
+		t.Fatalf("invariant 1 violated: %v", l.Violations())
+		return nil
+	case err := <-done:
+		return err
+	}
+}
+
 func positions(src string, n int) []opencdc.Position {
 	out := make([]opencdc.Position, n)
 	for i := range out {
@@ -156,7 +171,7 @@ func TestInvariant1_FailedWriteIsNeverAcked(t *testing.T) {
 			Destinations: []*enginetest.Destination{dst},
 		})
 
-		err := run.Wait(ctx)
+		err := waitRunOrViolation(t, ctx, run, ledger)
 		is.True(err != nil)
 		is.True(cerrors.Is(err, errWrite))
 
@@ -294,9 +309,10 @@ func TestInvariant3_NackWithoutDLQHaltsAndIsNotAcked(t *testing.T) {
 		ctx := testCtx(t)
 
 		errBad := cerrors.New("bad record")
-		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 10})
+		ledger := enginetest.NewLedger().Require("dst").DLQ("dlq")
+		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 10, Ledger: ledger})
 		dst := enginetest.NewDestination(enginetest.DestinationConfig{
-			ID: "dst",
+			ID: "dst", Ledger: ledger,
 			Verdict: func(r opencdc.Record) error {
 				if string(r.Position) == string(enginetest.Position("src", 4)) {
 					return errBad
@@ -310,7 +326,7 @@ func TestInvariant3_NackWithoutDLQHaltsAndIsNotAcked(t *testing.T) {
 			Destinations: []*enginetest.Destination{dst},
 		})
 
-		is.True(run.Wait(ctx) != nil)
+		is.True(waitRunOrViolation(t, ctx, run, ledger) != nil)
 		for _, p := range src.Acked() {
 			is.True(string(p) != string(enginetest.Position("src", 4)))
 		}
@@ -336,7 +352,7 @@ func TestInvariant3_DestinationCrashFailsTheRunWithoutLoss(t *testing.T) {
 		is.NoErr(src.WaitAcked(ctx, 5))
 		dst.Crash(nil)
 
-		err := run.Wait(ctx)
+		err := waitRunOrViolation(t, ctx, run, ledger)
 		is.True(err != nil)
 		is.Equal(ledger.Violations(), []string(nil))
 		delivered := map[string]bool{}
@@ -528,35 +544,62 @@ func TestMemoryBound_RecordsInFlightWithWithheldAcks(t *testing.T) {
 	})
 }
 
-// Invariant 1 with SDK-style batching in the path: the destination holds records
-// until a batch of 5 is pending, flushes inside Write, and the Ledger still
-// counts a record durable only when its ack is handed to the engine. The flush
-// delay is an hour so the timer never fires: the batch filling is the only flush.
+// Invariant 1 with SDK-style batching in the path, in two shapes. Either way the
+// Ledger counts a record durable only when its ack is handed to the engine, and
+// the source must never be acked ahead of that.
+//
+//   - full-batch: reads of 5 fill the destination's batch of 5, so the batch
+//     flushes inside Write; the delay is an hour so it never fires.
+//   - partial-batch: reads of 3 against a batch of 5 leave the destination
+//     holding a partial batch. v1 keeps writing until it fills; arch-v2 cannot
+//     (it waits for each write's ack, #2979/#2990), so it is skipped there. The
+//     flush that releases the first batch is the 20 ms delay.
 func TestInvariant1_WithSDKBatching_AckOnlyAfterDestinationAck(t *testing.T) {
-	eachEngine(t, func(t *testing.T, eng engines.Engine) {
-		is := is.New(t)
-		ctx := testCtx(t)
+	cases := []struct {
+		name      string
+		readBatch int
+		batching  enginetest.Batching
+		skipV2    string
+	}{
+		{"full-batch", 5, enginetest.Batching{Size: 5, Delay: time.Hour}, ""},
+		{
+			"partial-batch", 3,
+			enginetest.Batching{Size: 5, Delay: 20 * time.Millisecond},
+			"arch-v2 stalls behind a destination holding a partial batch: #2979, #2990",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eachEngine(t, func(t *testing.T, eng engines.Engine) {
+				if eng.Name() == "v2" && tc.skipV2 != "" {
+					t.Skip(tc.skipV2)
+				}
+				is := is.New(t)
+				ctx := testCtx(t)
 
-		ledger := enginetest.NewLedger().Require("dst").DLQ("dlq")
-		src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 20, BatchSize: 5, Ledger: ledger})
-		dst := enginetest.NewDestination(enginetest.DestinationConfig{
-			ID: "dst", Ledger: ledger,
-			Batching: enginetest.Batching{Size: 5, Delay: time.Hour},
+				ledger := enginetest.NewLedger().Require("dst").DLQ("dlq")
+				src := enginetest.NewSource(enginetest.SourceConfig{
+					ID: "src", Total: 30, BatchSize: tc.readBatch, Ledger: ledger,
+				})
+				dst := enginetest.NewDestination(enginetest.DestinationConfig{
+					ID: "dst", Ledger: ledger, Batching: tc.batching,
+				})
+				dst.AckGate.Close()
+
+				run := start(t, ctx, eng, engines.Topology{
+					Sources:      []*enginetest.Source{src},
+					Destinations: []*enginetest.Destination{dst},
+				})
+				is.NoErr(dst.WaitDelivered(ctx, 5)) // a batch was flushed; its acks are held
+				dst.AckGate.Open()
+				waitAckedOrViolation(t, ctx, src, ledger, 30)
+				is.NoErr(run.Stop(ctx))
+				is.NoErr(run.Wait(ctx))
+
+				is.Equal(ledger.Violations(), []string(nil))
+			})
 		})
-		dst.AckGate.Close()
-
-		run := start(t, ctx, eng, engines.Topology{
-			Sources:      []*enginetest.Source{src},
-			Destinations: []*enginetest.Destination{dst},
-		})
-		is.NoErr(dst.WaitDelivered(ctx, 5))
-		dst.AckGate.Open()
-		waitAckedOrViolation(t, ctx, src, ledger, 20)
-		is.NoErr(run.Stop(ctx))
-		is.NoErr(run.Wait(ctx))
-
-		is.Equal(ledger.Violations(), []string(nil))
-	})
+	}
 }
 
 // Invariant 7, the half the engines leave open: a graceful stop while the

@@ -201,3 +201,23 @@ func TestLedger_WithoutRequireFailsLoudly(t *testing.T) {
 	is.NoErr(s.Ack(context.Background(), []opencdc.Position{recs[0].Position}))
 	is.Equal(len(l.Violations()), 1)
 }
+
+func TestLedger_FailedClosesOnAckBeforeDurable(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	l := enginetest.NewLedger().Require("d")
+	s := enginetest.NewSource(enginetest.SourceConfig{ID: "s", Ledger: l})
+	recs, _ := s.Read(ctx)
+
+	select {
+	case <-l.Failed():
+		t.Fatal("Failed closed before any violation")
+	default:
+	}
+	is.NoErr(s.Ack(ctx, []opencdc.Position{recs[0].Position}))
+	select {
+	case <-l.Failed():
+	default:
+		t.Fatal("Failed did not close on an ack before the record was durable")
+	}
+}

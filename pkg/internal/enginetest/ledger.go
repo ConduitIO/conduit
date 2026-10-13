@@ -151,7 +151,7 @@ func (l *Ledger) checkAck(sourceID string, positions []opencdc.Position) {
 			if _, ok := l.durable[l.dlq][string(pos)]; l.dlq != "" && ok {
 				continue
 			}
-			l.violations = append(l.violations, fmt.Sprintf(
+			l.addViolationLocked(fmt.Sprintf(
 				"source %s acked position %q before it was durable in destination %s", sourceID, pos, dest,
 			))
 		}
