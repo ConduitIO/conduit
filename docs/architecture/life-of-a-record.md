@@ -1,8 +1,8 @@
 # Life of a record
 
 > Draft. Describes the two pipeline engines as they are on `main` today. It is not a design for the
-> single engine; that is [#2971](https://github.com/ConduitIO/conduit/pull/2971) and will replace the
-> v2 half of this page when it lands.
+> single engine; that is proposed in [#2971](https://github.com/ConduitIO/conduit/pull/2971), is not
+> decided, and would replace the v2 half of this page if it lands.
 
 A record travels from a source connector's plugin to every destination connector's plugin. Two
 engines move it, and they differ in how much they move at once and when they let go of it.
@@ -121,13 +121,14 @@ flowchart LR
 
 One pass of `Worker.Do`:
 
-1. `SourceTask.Do` calls `Source.Read` and gets a batch (the plugin's `sdk.batch.size`, default 1).
+1. `SourceTask.Do` calls `Source.Read` and gets a batch: the plugin's `sdk.batch.size`, which defaults to 0
+   and so reads batches of one (effectively 1).
 2. Source processor tasks run on the batch. A processor may filter records or split one into several.
 3. The pass enters the shared sink under `sharedMu`, which is what serializes N sources onto one set of
    destinations. Pipeline processors run, then the batch fans out to each destination branch.
 4. `DestinationTask.Do` calls `Destination.Write` with the whole batch and then `Destination.Ack` until
    every position has an ack. **The pass does not return until then.** This is the stop-and-wait that the
-   single-engine design replaces, and why a destination that holds acks until it has a full batch stalls
+   single-engine proposal (#2971) aims to replace, and why a destination that holds acks until it has a full batch stalls
    v2 ([#2990](https://github.com/ConduitIO/conduit/issues/2990)).
 5. Votes go to `multiAckNacker`, which tracks ack/nack per original source position, not per batch
    (ADR [`20260731-archv2-fanout-ack-model`](../architecture-decision-records/20260731-archv2-fanout-ack-model.md)).

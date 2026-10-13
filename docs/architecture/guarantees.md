@@ -17,8 +17,13 @@ How to read the status column:
 Two kinds of test back these claims. The **engine tests** run on both engines with fake connectors, in
 process, in seconds ([`pkg/internal/enginetest/engines`](../../pkg/internal/enginetest/engines/invariants_test.go)).
 The **chaos tests** SIGKILL a real child process against a real position store
-([`tests/chaos`](../../tests/chaos)). Neither runs against a real connector plugin or a real network; the
-guarantee is about the engine and the position store, not about what a particular connector does.
+([`tests/chaos`](../../tests/chaos)). They exercise the **connector layer** (`connector.Source`, the
+persister, the position store), not the engines: the child's read/ack loop (`runReadAckLoop` in
+`tests/chaos/child.go`) calls `Source.Read` and `Source.Ack` directly and bypasses both the v1 node graph and
+the v2 funnel. No SIGKILL test drives v1's node graph, and none drives the v2 worker; the property-4 test
+that does use a `funnel.Worker` is in-process and does not crash anything. Rows below that cite chaos tests
+are marked "Connector layer (engine-independent)" for that reason. Neither kind of test runs against a real
+connector plugin or a real network.
 
 ## At-least-once delivery
 
@@ -38,13 +43,15 @@ Invariants 1, 2 and 3. Exactly-once is not promised.
 | v1 and v2 make the same DLQ decisions for the same ack/nack sequence | v1, v2 | Enforced | [`TestDLQParity_Scripted`](../../pkg/lifecycle/dlqparity/dlq_parity_test.go), `TestDLQParity_RandomizedBatching` |
 | Unanimity across destinations: acked only when all ack, first nack wins, per position | v2 | Enforced | [`multi_ack_nacker_test.go`](../../pkg/lifecycle-poc/funnel/multi_ack_nacker_test.go) |
 | A record split by a processor is acked only when every piece is terminal | v2 | Enforced | [`run_ledger_test.go`](../../pkg/lifecycle-poc/funnel/run_ledger_test.go), `TestFullPipeline_Property_MixedProcessorOutputAndDestinationFailure` |
-| The plugin is told of an ack only after the position is durably persisted | v1, v2 | Enforced | [`TestSource_Ack_DeferredUntilDurablyFlushed`](../../pkg/connector/source_test.go), `TestSource_OnPersistFlushed_OutOfOrderCompletionStillDeliversInOrder`, `TestSIGKILL_Property2_PruningUpstream`, `TestSIGKILL_Property2_DurableUpstream` |
-| After SIGKILL at any point, restart does not skip a record | v1, v2 | Enforced | `TestSIGKILL_DurableUpstream_NoGap`, `TestSIGKILL_PruningUpstream_NoGap`, `TestSIGKILL_RecoveryLoop_CrashDuringBackoff`, `TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun` in [`tests/chaos`](../../tests/chaos) |
+| The plugin is told of an ack only after the position is durably persisted | Connector layer (engine-independent) | Enforced | [`TestSource_Ack_DeferredUntilDurablyFlushed`](../../pkg/connector/source_test.go), `TestSource_OnPersistFlushed_OutOfOrderCompletionStillDeliversInOrder`, `TestSIGKILL_Property2_PruningUpstream`, `TestSIGKILL_Property2_DurableUpstream` |
+| After SIGKILL at any point, restart does not skip a record | Connector layer (engine-independent) | Enforced | `TestSIGKILL_DurableUpstream_NoGap`, `TestSIGKILL_PruningUpstream_NoGap`, `TestSIGKILL_RecoveryLoop_CrashDuringBackoff`, `TestSIGKILL_RecoveryLoop_CrashDuringRecoveredRun` in [`tests/chaos`](../../tests/chaos) |
 | The replay window after a crash is bounded | v1, v2 | Not yet enforced | The persister flushes at 1 s or 10,000 positions (`pkg/connector/persister.go`); no test asserts the bound on duplicates |
 
 The engine tests above do not exercise the persister or a real process boundary. The persist-before-ack
-and no-gap rows are carried by `pkg/connector` and `tests/chaos`; a change to either needs those, not just the
-engine tests.
+and no-gap rows are carried by `pkg/connector` and `tests/chaos`, which test the connector layer both engines
+sit on. What is not tested is a crash with an engine in the loop: nothing kills a process mid-batch while a
+v1 node graph or a v2 worker holds records, so "the engine hands the connector layer a safe position at every
+instant" rests on the engine tests plus review.
 
 ## Ordering
 
@@ -57,7 +64,7 @@ Invariant 4. Ordering is per source (the unit the position store tracks), not gl
 | --- | --- | --- | --- |
 | A destination receives each source's records in source order | v1, v2 | Enforced | `TestInvariant2_AcksReachEachSourceInOrder` (five destination ack shapes, two sources, two destinations) |
 | Acks reach the source, in order, with no gaps or duplicates | v1, v2 | Enforced | same test; [`TestSourceAckerNode_AckOrder`](../../pkg/lifecycle/stream/source_acker_test.go), [`TestWorker_Ack_DeliversPositionsFIFOToV1Plugin`](../../pkg/lifecycle-poc/funnel/worker_ack_order_test.go) |
-| Acks reach the plugin in `Source.Ack` call order, across persister flushes | v1, v2 | Enforced | `TestPerPartitionOrdering_AckFIFO` in [`tests/chaos`](../../tests/chaos/ordering_test.go) |
+| Acks reach the plugin in `Source.Ack` call order, across persister flushes | Connector layer (engine-independent) | Enforced | `TestPerPartitionOrdering_AckFIFO` in [`tests/chaos`](../../tests/chaos/ordering_test.go) |
 | Out-of-order destination completion still releases source acks in order | v2 | Enforced | `TestMultiAckNacker_OutOfOrderCompletion_ReleasesInSourceOrder` |
 | A processor with `workers > 1` preserves record order | v1 | Enforced | [`TestParallelNode_Coordinator`](../../pkg/lifecycle/stream/parallel_test.go) (the coordinator collects results in dispatch order) |
 | A processor with `workers > 1` preserves record order | v2 | Not applicable | v2 ignores `workers`; the setting has no effect |
@@ -74,7 +81,7 @@ This is a promise v1 does not make and v2 makes by construction.
 | Claim | Engine | Status | Enforced by |
 | --- | --- | --- | --- |
 | With a destination that withholds acks, at most one batch is in flight | v2 | Enforced | `TestMemoryBound_RecordsInFlightWithWithheldAcks` |
-| The engine bounds records in flight | v1 | **Does not hold** | With every ack withheld the source node read 200,000 records and the probe stopped there; nothing in the engine had pushed back. Back-pressure is left to the plugin boundary (channels for built-ins, gRPC flow control for standalone connectors), [#211](https://github.com/ConduitIO/conduit/issues/211). The test is skipped with that link. |
+| The engine bounds records in flight | v1 | **Does not hold** | With every ack withheld the source node kept reading until the probe stopped it, at both batch size 1 and 100; nothing in the engine pushed back. (The probe was a throwaway; the committed test pins only the v2 bound.) Back-pressure is left to the plugin boundary (channels for built-ins, gRPC flow control for standalone connectors), [#211](https://github.com/ConduitIO/conduit/issues/211). The test is skipped with that link. |
 | Memory per record does not grow over a long run | v1, v2 | Not yet enforced | No soak test is live; the 24 h soak is targeted for Phase 2 in the process-maturity table |
 | Allocations per record on the data path | v1, v2 | Partly enforced | `BenchmarkStreamOld` and `BenchmarkStreamNew` report them; nothing fails on a regression. `make bench-engine` and the per-PR comment are indicative only |
 
@@ -84,8 +91,12 @@ single-engine design ([#2971](https://github.com/ConduitIO/conduit/pull/2971)) r
 
 ## Stop time
 
-> SIGTERM drains in-flight records, persists the final position and exits. A pipeline that cannot drain
-> is force-stopped, and the process exits within the exit timeout.
+> SIGTERM drains in-flight records, persists the final position and exits. If a pipeline cannot drain,
+> the process gives up after the exit timeout and the records are replayed from the last persisted position.
+
+What happens at the timeout differs. v2 escalates to a force stop on the last of its six 5 s waits, then
+gives up at 30 s. v1 has no force step in the runtime shutdown path (`registerCleanup` in
+`pkg/conduit/runtime.go` calls `StopAll` and waits up to 30 s); it simply stops waiting.
 
 Invariant 7. "Drains" and "exits within a bound" are two promises; the second is the weaker one today.
 
@@ -96,8 +107,8 @@ Invariant 7. "Drains" and "exits within a bound" are two promises; the second is
 | The final position is flushed before teardown completes | v1, v2 | Enforced | [`TestServiceLifecycle_StopAndWait_DrainsAndPersists`](../../pkg/lifecycle/stop_and_wait_test.go) (both engines), `TestSIGTERM_GracefulTeardown_DrainsDeferredAck`, `TestArchV2_LiveApplyDrain_UnderLoad_NoGap` |
 | A force stop releases a pipeline wedged on withheld acks and acks nothing it should not | v1, v2 | Enforced | `TestInvariant7_ForceStopReleasesAPipelineWedgedOnAcks` |
 | A graceful stop with a destination that withholds acks completes | v1, v2 | **Does not hold** | The engines wait for the acks, with no bound: v1's `Stop` returns but the run never ends, v2's `Stop` blocks. [#2990](https://github.com/ConduitIO/conduit/issues/2990) tracks the v2 SIGTERM hang. A bounded `Stop` on v2 is tested at the worker level (`TestArchV2_LiveApplyDrain_StuckDestination_O2Bound`), which returns a deadline error rather than completing the stop |
-| The process exits within the exit timeout (30 s) of SIGTERM | v1, v2 | Not yet enforced | `pkg/conduit/runtime.go` waits 30 s; v2 also escalates to a force stop at the last of six 5 s intervals. No test starts a wedged pipeline and asserts the exit time |
-| `kill -9` at any instant is recoverable without loss | v1, v2 | Enforced | The SIGKILL tests under [At-least-once](#at-least-once-delivery) |
+| The process exits within the exit timeout (30 s) of SIGTERM | v1, v2 | Not yet enforced | `pkg/conduit/runtime.go` waits 30 s (v2 force-stops at 25 s, v1 does not). No test starts a wedged pipeline and asserts the exit time |
+| `kill -9` at any instant is recoverable without loss | Connector layer (engine-independent) | Enforced | The SIGKILL tests under [At-least-once](#at-least-once-delivery), which test the connector layer only; no SIGKILL test drives either engine |
 
 ## Bad-record behaviour
 

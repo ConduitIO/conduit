@@ -98,6 +98,9 @@ wrappers, the position persister) and the plugin boundary in `pkg/plugin`. Read
 [Guarantees](docs/architecture/guarantees.md) first. The second page says which promises a test enforces
 and which do not; a change that touches a promise updates its row in the same PR.
 
+> The tier guidance, the design-doc template and the proof steps below are **proposals**, distilled from
+> `CLAUDE.md` and the existing design docs. They are not yet agreed project policy.
+
 ### Pick the tier
 
 Every PR declares one in its description.
@@ -160,21 +163,28 @@ In this order, cheapest first:
    sources and destinations you control: record count and batch size, read, write and ack latency, acks in
    chunks or through a buffered pump, SDK-style destination batching, nacks, errors, stalls and crashes.
    `pkg/internal/enginetest/engines` runs the same pipeline on v1 and v2. Nothing waits on a sleep: tests
-   block on signals (`WaitAcked`, `WaitDelivered`) and gates, and a `Ledger` fails the test at the exact
-   `Ack` call that happened before the record was durable.
+   block on signals (`WaitAcked`, `WaitDelivered`) and gates. A `Ledger` shared by the source and
+   destinations records a **violation** at any source `Ack` that arrives before the destination handed the
+   engine its ack for that record; it does not fail the test by itself, so assert that `ledger.Violations()`
+   is empty at the end (or wait with `Ledger.Failed()` to stop at the first one). It requires you to name the
+   destinations with `Require(...)`; with none named it reports a violation rather than pass vacuously.
 
    ```go
-   src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 10})
-   dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst"})
-   dst.AckGate.Close() // the destination withholds its acks
+   ledger := enginetest.NewLedger().Require("dst")
+   src := enginetest.NewSource(enginetest.SourceConfig{ID: "src", Total: 10, Ledger: ledger})
+   dst := enginetest.NewDestination(enginetest.DestinationConfig{ID: "dst", Ledger: ledger})
+   dst.AckGate.Close() // the destination holds its acks back
 
    run, _ := eng.Start(ctx, engines.Topology{
        Sources:      []*enginetest.Source{src},
        Destinations: []*enginetest.Destination{dst},
    })
    _ = dst.WaitDelivered(ctx, 1)
-   // src.AckedCount() is 0 here: the source cannot have been acked yet.
    dst.AckGate.Open()
+   _ = src.WaitAcked(ctx, 10)
+   _ = run.Stop(ctx)
+   _ = run.Wait(ctx)
+   // ledger.Violations() must be empty: no source ack preceded its destination ack.
    ```
 
    Copy the closest case from `pkg/internal/enginetest/engines/invariants_test.go`. A bug fix ships with
@@ -186,11 +196,12 @@ In this order, cheapest first:
    `go test -race -count=3 -shuffle=on ./tests/chaos/...`. It kills a real child process with SIGKILL and
    checks the position store. The engine tests do not replace it: they use no persister and no process
    boundary.
-4. **Measure with `make bench-engine`** before and after, and compare:
-   `make bench-engine BENCH_ENGINE_OUT=base.txt`, change, `make bench-engine BENCH_ENGINE_OUT=head.txt`,
-   then `make bench-engine-compare OLD=base.txt NEW=head.txt`. It runs seven reference shapes (1x1, 2x2, 4x4,
-   source batch 100, ack latency, buffered acks, destination batching) on both engines in about a minute and
-   a half. On an engine PR a CI job posts the same comparison as a comment, with a noise floor measured on
+4. **Measure with `make bench-engine-ab`**, which compares your working tree with `origin/main` (or
+   `BASE=<ref>`) in interleaved rounds and prints the A/A noise floor next to the delta. Do not compare two
+   sequential `make bench-engine` runs: drift between invocations shows up as a significant delta on
+   identical code. `make bench-engine` alone gives one snapshot. The benchmark runs seven reference shapes
+   (1x1, 2x2, 4x4, source batch 100, ack latency, buffered acks, destination batching) on both engines; one
+   pass is about 15 s, so `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR a CI job posts the same comparison as a comment, with a noise floor measured on
    unchanged code. Both are indicative: they drive fakes, so they show engine overhead and say nothing about
    connector throughput. A throughput claim needs a benchi run with committed configs and an environment spec.
 5. **Update the docs.** The matching row in `docs/architecture/guarantees.md`, the flow in
