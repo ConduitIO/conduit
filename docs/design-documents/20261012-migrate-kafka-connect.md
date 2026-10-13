@@ -17,7 +17,8 @@ This is roadmap item "v0.21: migrate-design" (ROADMAP.md, v0.21: `migrate kafka-
 `kc diff`). It is a design document only; no code lands with it. Risk tier of this PR: Tier 3 (docs). The
 implementation PRs it describes are Tier 2 (CLI), except the pieces that touch a Debezium replication slot,
 position import or Kafka consumer-group offsets, which are Tier 1 (see _Failure modes_).
-Reusing the Debezium slot is v0.22; v0.21 ships the fresh-slot strategy only (see _Decisions_).
+Reusing Debezium's own slot is v0.22; v0.21 resumes through a fresh Conduit slot and the Debezium offset import
+(see _Resume_ and _Decisions_).
 
 ## Context
 
@@ -73,7 +74,8 @@ trustworthy about what it did not translate.
 ### Constraints
 
 - Offline and read-only by default. `migrate` and `kc *` write files and read inputs; they never connect to a
-  database, never create a slot, never write to Kafka or the Connect worker.
+  database, never create a slot, never write to Kafka or the Connect worker. The one network read is
+  `--import-offset` (and `--from-rest`), which only reads the Connect REST API or the `connect-offsets` topic.
 - Data integrity invariants (CLAUDE.md) apply to the _output_: a generated pipeline must not weaken ack
   correctness, at-least-once, ordering or schema handling relative to what the report claims. Where a KC
   feature gives a stronger guarantee than Conduit's (for example S3 sink exactly-once via deterministic file
@@ -107,7 +109,8 @@ format is detected, not declared; `--format {properties,json,rest-export,strimzi
 | `--dry-run` | Produce the report only, write no files. This is the "zero-risk front door". |
 | `--worker FILE` | Worker properties (or a Strimzi `KafkaConnect` CR) that supply defaults for converters, client security and config providers. Optional; without it, worker-level defaults are reported as unknown rather than assumed. |
 | `--registry-url URL` | Schema Registry URL, used only to fill the `conduit.yaml` fragment and the report. Never contacted by `migrate`. |
-| `--slot-mode new` | Postgres only. The pipeline uses its own slot and publication names. This is the only value in v0.21 and the default. `adopt` (reuse the Debezium slot, no re-snapshot) is v0.22 and is rejected with `kc.resume_unavailable` until then. |
+| `--slot-mode {new,reuse}` | Postgres only. `new` (default, the only value that works in v0.21): Conduit creates its own slot and publication while Debezium keeps running; this is the fresh-slot strategy of the offset-import design. `reuse` (take over Debezium's own slot) is v0.22 and fails with `kc.resume_unavailable` until then. |
+| `--import-offset` | Debezium Postgres only. Reads the connector's committed offset (read-only: Connect REST per KIP-875, the `connect-offsets` topic, or a saved REST export) and writes it to the pipeline's `logrepl.import.debeziumOffset` setting. Together with `--dry-run [--peek]`, `--cutover [--stop-connector]` and `rollback`, this is the surface specified in #3029; this document fixes only how `migrate` feeds it. |
 | `--accept-gaps` | Write blocking pipelines as `status: running` instead of `stopped`. Recorded in the report. |
 | `--json`, `--quiet`, `--strict` | Per the CLI output conventions. `--strict` exits 2 on any `approximated` entry too. |
 
@@ -218,7 +221,9 @@ published as a JSON Schema alongside the golden test, per the CLI contract schem
     }],
     "transforms": [ {"alias": "route", "class": "org.apache.kafka.connect.transforms.RegexRouter",
                      "status": "translated", "processor": "field.set"} ],
-    "resume": {"strategy": "new-slot", "snapshot": "will-run", "notes": ["..."]},
+    "resume": {"strategy": "fresh-slot", "snapshot": "skipped",
+               "import": {"setting": "logrepl.import.debeziumOffset", "source": "connect-offsets", "topic": "connect-offsets", "key": "[\"orders-cdc\",{\"server\":\"orders\"}]"},
+               "preflights": "pending", "notes": ["..."]},
     "unreadKeys": []
   },
   "error": null
@@ -283,7 +288,7 @@ so the command stays honest if a certification slips.
 | `schema.include.list` | folded into `tables` | approximated when combined with a table list, otherwise `unsupported`. |
 | `slot.name`, `publication.name` | `logrepl.slotName`, `logrepl.publicationName` | approximated: the pipeline receives generated names (`conduit_<pipeline>`) with reason "separate slot so KC and Conduit can run side by side and rollback stays possible". Non-blocking. Reusing the Debezium names is v0.22. |
 | `plugin.name` | none | `pgoutput`: translated (no-op); `decoderbufs`, `wal2json`: unsupported (blocking), Conduit reads `pgoutput`. |
-| `snapshot.mode` | `snapshotMode` (`initial`, `never`) | `initial`: translated; `never`: translated, but with a fresh slot there is no history to resume from, so the entry is approximated and blocking (`kc.resume_unavailable`) with fix "use `initial`, or wait for slot reuse (v0.22)"; `always`, `initial_only`, `when_needed`, `no_data`, `exported`, `custom`: unsupported (blocking). |
+| `snapshot.mode` | `snapshotMode` (`initial`, `never`) | `initial`: translated; `never`: translated; with `--import-offset` the pipeline resumes from the imported offset, without it a fresh slot has no history, so the entry is approximated and blocking (`kc.resume_unavailable`) with fix "re-run with `--import-offset`"; `always`, `initial_only`, `when_needed`, `no_data`, `exported`, `custom`: unsupported (blocking). |
 | `topic.prefix` (and legacy `database.server.name`) | `kafka` destination `topic` template | translated for Postgres to a Kafka destination (Debezium-compatible output mode). Template reproduces `<prefix>.<schema>.<table>` where the schema comes from the table list. For any other combination (Debezium MySQL to Kafka) approximated and **blocking**, output format differs (OpenCDC). For a non-Kafka destination, approximated with a warning. |
 | `topic.naming.strategy`, `topic.delimiter` | | unsupported for non-default values. |
 | `skipped.operations` | `filter` processor with a `condition` on `.Operation` | translated. |
@@ -293,26 +298,47 @@ so the command stays honest if a certification slips.
 | `signal.*`, `incremental.snapshot.*`, `snapshot.select.statement.overrides`, `snapshot.locking.mode` | | unsupported. |
 | `max.batch.size`, `max.queue.size`, `poll.interval.ms` | `sdk.batch.size` / none | approximated (non-blocking). |
 
-_Resume._ v0.21 ships one strategy, and the report states it in `result.resume`:
+_Resume._ For Debezium Postgres, v0.21 migrates with **no re-snapshot** by importing Debezium's committed
+offset into a fresh Conduit slot. The design is in `conduit-connector-postgres#341` (Tier 1) and the CLI side
+in #3029; this document only fixes how `migrate` feeds them. The sequence:
 
-1. `new-slot` (the only v0.21 strategy): new slot and publication, `snapshotMode` as translated. A
-   `snapshot.mode=initial` connector re-snapshots, and the report says so in plain words
-   (`resume.snapshot: "will-run"`). Safe to run next to the original connector; rollback is "stop Conduit".
-2. `adopt` (v0.22): reuse the Debezium slot and publication, with the position seeded from the connector's
-   offset record in `offset.storage.topic` (`connect-offsets`) so there is no re-snapshot. The offset import
-   (format, versioning, validation against the slot's `confirmed_flush_lsn`) is designed in its own
-   document and is Tier 1. The contract this document fixes for it: `migrate` will emit
-   `result.resume.import = {source: "connect-offsets", topic, key}`, the YAML carries no offset data, and the
-   import is a separate command run against the Kafka cluster with the KC connector stopped.
-3. `--slot-mode adopt` requested in v0.21: refused. `migrate` exits 2 with `kc.resume_unavailable` and the fix
-   "use `--slot-mode new` (re-snapshot)". It never emits a pipeline that would silently re-snapshot or skip.
+1. Conduit creates its own slot and publication (`conduit_<pipeline>`) while Debezium is still running.
+2. The cutover waits until Debezium's committed offset has passed the new slot's consistent point.
+3. Debezium is stopped (`--cutover --stop-connector`, or by the operator).
+4. The pipeline starts with an empty position and `logrepl.import.debeziumOffset` set; the connector applies
+   the setting only when the position is empty, and skips exactly what Debezium already delivered.
+
+`migrate` emits this as follows:
+
+- With `--slot-mode new --import-offset`, the pipeline file contains `logrepl.import.debeziumOffset` with the
+  raw offset read from the REST API (KIP-875), the `connect-offsets` topic or a saved export. This is the only
+  place `migrate` talks to anything but its input files, it is read-only, and it never contacts the database.
+  The report records `resume.strategy: "fresh-slot"`, `resume.snapshot: "skipped"` and the import locator
+  (`resume.import`: source, topic, key). The offset is not a secret.
+- Without `--import-offset`, the pipeline has no import setting and the report says `resume.snapshot:
+  "will-run"` in plain words: the connector re-snapshots. This is also what `--slot-mode new` alone does, and it
+  is safe to run beside the original connector.
+- Pipelines written with `--import-offset` are `stopped`; the cutover flow of #3029 creates the slot, waits,
+  stops Debezium and starts the pipeline in that order. `migrate` does not start anything.
+- Preflights belong to #341 and run in the connector and in `--dry-run`/`--cutover`, not offline: the
+  Postgres minor-version gate for the partial-decoding fix, the publication check and the database checks.
+  The report lists them as `resume.preflights: "pending"` with the connector's own descriptions, and the
+  no-re-snapshot claim is explicitly conditional on them passing. A failed preflight is a `postgres.import.*`
+  refusal, never a silent re-snapshot; re-snapshotting needs `--allow-resnapshot`.
+- `snapshot.mode` interacts as in the mapping table above. Snapshot-in-progress and incremental-snapshot
+  offsets are refused by the connector, so a Debezium connector that is mid-snapshot cannot be cut over yet.
+- `--slot-mode reuse` (taking over Debezium's own slot, which also avoids the second slot) is v0.22. In v0.21
+  `migrate` exits 2 with `kc.resume_unavailable` and the fix "use `--slot-mode new --import-offset`".
+
+Rollback with the fresh-slot strategy is a restart of the Debezium connector (its slot and offsets were never
+touched), which is why this is the v0.21 default; `rollback` in #3029 owns the mechanics.
 
 **Debezium MySQL.** Source keys map to labs `mysql`: `database.hostname|port|user|password` to `dsn`,
 `table.include.list` to `tables`, `snapshot.mode=initial` to `snapshot.enabled=true`, `schema_only`/`never` to
 `snapshot.enabled=false`. Known gaps, all reported unsupported and blocking: `schema.history.internal.*`
 (Conduit's connector has no durable schema history, noted in the Debezium roadmap design doc), `database.server.id`
 and GTID settings (not exposed), `include.schema.changes`, all envelope-shaping keys, and offset import
-(MySQL binlog coordinates are out of scope of the offset-import lane as scoped; MySQL migrations re-snapshot
+(MySQL binlog coordinates are out of scope of the offset import, which is Postgres only; MySQL migrations re-snapshot
 in v0.21). If the MySQL certification does not land in v0.21, `migrate` still reports this connector but
 sets `kc.target_not_certified` and the pipeline `stopped`. For the v0.21 beta, MySQL migration is
 re-snapshot-only, and the report says so plainly on every MySQL connector: `resume.snapshot: "will-run"`, with
@@ -578,7 +604,8 @@ form and are public contracts from first release.
 | `kc.errors_all_without_dlq` | migrate, lint | tolerance all without DLQ | add DLQ topic |
 | `kc.secret_plaintext` | migrate, lint | literal secret in the input | use a config provider reference |
 | `kc.secret_stored_expanded` | migrate | #2988 caveat applies to this pipeline | see #2988 |
-| `kc.resume_unavailable` | migrate | slot reuse requested (v0.22), or `snapshot.mode=never` with a fresh slot | `--slot-mode new`, or wait for v0.22 |
+| `kc.resume_unavailable` | migrate | `--slot-mode reuse` requested (v0.22), or `snapshot.mode=never` without `--import-offset` | `--slot-mode new` with `--import-offset`, or wait for v0.22 |
+| `migrate.kafka_connect.*`, `postgres.import.*` | migrate | offset-import errors defined in #3029 and the connector design (#341), passed through unchanged; a failed import never falls back to a re-snapshot without `--allow-resnapshot` | per code |
 | `kc.input_version_unverified` | migrate, lint, diff | input API version other than the verified default (Strimzi `v1beta2`) | warning |
 | `kc.target_not_certified` | migrate | emitted target is not Certified in the registry index | warning |
 | `kc.lint.*` | lint | rule findings as tabled | per rule |
@@ -634,8 +661,9 @@ a plausible-looking pipeline that behaves differently.
    case. This turns the report from a claim into a tested property. Harness runs against real Debezium for
    CDC envelope differences with Debezium-compatible output mode on for Postgres; the expected differences for MySQL and
    non-Kafka destinations stay in the report.
-5. **Resume cases** (Tier 1): `kill -9` Conduit mid-snapshot on a fresh slot, restart, verify no gap and no
-   loss; (v0.22, with the offset-import lane: the same after adopting a slot); sink group-offset adoption
+5. **Resume cases** (Tier 1, using #341's real-Debezium harness): the migrate-to-cutover path end to end, with
+   zero loss and duplicates equal to the `--peek` prediction, plus `kill -9` of Conduit before and after the
+   first ack; (v0.22: the same after reusing the slot); sink group-offset adoption
    with a still-running KC consumer to confirm rebalance behavior and that no record is skipped.
 6. **CLI contract tests**: envelope schema golden for all three commands, exit codes, `--json` output has no
    stray stdout, `NO_COLOR`.
@@ -679,8 +707,10 @@ a plausible-looking pipeline that behaves differently.
 | Key falls through translation | Silent behavior change | completeness invariant: unknown keys are `kc.key_unknown`, blocking; property test over corpus and fuzz |
 | Secret leaks into output, logs or diffs | Credential exposure | redacting value type, canary property test, `kc diff` compares secrets by hash only and never prints it |
 | Generated pipeline subtly differs from KC (typed field becomes string, topic layout changes) | Downstream breakage or corrupted data | emit-if-exact for SMTs; blocking approximations stop the pipeline; migration harness requires every observed difference to be in the report |
-| **Two consumers on one Postgres slot** | Slot fights or split delivery | v0.21 never reuses the Debezium slot (`--slot-mode new` only); in v0.22 adopt requires offset import, which checks that the KC connector is stopped (REST state) and the slot is inactive; runbook |
-| **Rollback after adopt** (v0.22, not reachable in v0.21): Conduit advances the slot's confirmed flush, then Debezium is restarted from its older stored offset | Debezium resumes from the slot's later position and the interval is lost to it | state this in the report and runbook: after adopt, rollback means a new slot and a re-snapshot, not "restart KC". This is why `new` is the default and why adopt is Tier 1 with its own design |
+| **Two consumers on one Postgres slot** | Slot fights or split delivery | v0.21 never reuses the Debezium slot: Conduit and Debezium each have their own, which is also what makes the overlap during cutover safe. `--slot-mode reuse` (v0.22) will require the KC connector to be stopped and the slot inactive |
+| **Both slots retain WAL while Debezium and Conduit run side by side** | Disk growth on the source database | the cutover waits for Debezium's offset to pass the new slot's consistent point and then stops Debezium; the runbook and `kc.lint` explain the window; mechanics in #341/#3029 |
+| **Import applied against an unsafe state** (offset mid-snapshot, slot invalidated or ahead, unsupported Postgres minor version, publication mismatch) | A wrong skip rule loses records | #341's preflights and coded refusals (`postgres.import.*`); no silent fallback; `migrate` reports preflights as pending rather than claiming the result offline |
+| **Rollback after cutover** | With the fresh slot, Debezium is restarted and continues from its own offset and slot | `rollback` per #3029; (v0.22) rollback after slot reuse is harder because the slot was advanced, and is part of that design |
 | Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | marked dependency on the certification lane's check of the `kafka` source; until it is confirmed, `readFromBeginning: true` is set explicitly and the report says "replays from the beginning", at-least-once preserved |
 | At-least-once vs KC's stronger guarantees (S3 sink, exactly-once source, KIP-618) | Duplicates after crash | connector-level note in the report; never claimed equivalent |
 | Output-format change (OpenCDC, not Debezium envelope; S3 layout) | Consumers break | blocking entries stop the pipeline; Debezium-compatible output mode removes the Postgres-to-Kafka case in v0.21; Debezium MySQL and S3 layout remain blocking |
@@ -701,8 +731,8 @@ a plausible-looking pipeline that behaves differently.
   Connect versions its rules were written against.
 - `migrate` has no state and applies nothing; rolling back the command means deleting the output directory.
   Rolling back a cutover is covered in Failure modes and the runbook.
-- No serialized engine format is introduced or changed by this document. Offset import and slot adoption,
-  which touch positions, are specified separately and are Tier 1.
+- No serialized engine format is introduced or changed by this document. The offset import (#341) and slot
+  reuse, which touch positions, are specified separately and are Tier 1.
 
 ## Observability
 
@@ -711,7 +741,8 @@ a plausible-looking pipeline that behaves differently.
 - Generated pipelines carry provenance in `description` (connector name, class, tool version, report hash)
   so `pipelines describe` and the UI show where a pipeline came from.
 - Operations runbook entries (symptom, diagnosis, remediation) for cutover failures, in
-  `docs/operations/kafka-connect-cutover.md`, written with the implementation: lag on the adopted slot,
+  `docs/operations/kafka-connect-cutover.md`, written with the implementation: lag and retained WAL on the two slots during
+  cutover,
   `pipelines inspect` for a pipeline held `stopped` by a blocking entry, DLQ growth after `errors.tolerance=all`
   translation, and subject drift visible in Schema Registry.
 - Migration progress as a product metric is a number of migrations completed by design partners, tracked
@@ -723,7 +754,8 @@ Approved by DeVaris on 2026-10-12, in answer to the open questions in the first 
 document has been updated to match; this section is the record.
 
 1. **Scope.** The v0.21 roadmap includes MySQL CDC beta, JDBC sink and source, Elasticsearch and OpenSearch,
-   Postgres offset import, and a Debezium-compatible output mode for Postgres (newly pulled in). ROADMAP.md
+   Postgres offset import (via the fresh-slot strategy), and a Debezium-compatible output mode for Postgres (newly
+   pulled in). ROADMAP.md
    (#2945) is amended separately; this PR does not edit it.
 2. **JDBC source.** Translate to the existing Postgres or MySQL connectors where the Kafka Connect config maps
    (snapshot plus change capture); otherwise `approximated` and blocking.
@@ -741,8 +773,13 @@ document has been updated to match; this section is the record.
 9. **Kafka source resume from existing consumer-group offsets.** Still open; the certification lane is checking.
    Kept as a marked dependency (see _JDBC sink_ and _Failure modes_).
 10. **Strimzi.** Default to `v1beta2`.
-11. **Offset import.** v0.21 ships the fresh-slot strategy only (`--slot-mode new`). Reusing the Debezium slot
-    is v0.22.
+11. **Offset import (corrected 2026-10-12).** Offset import is usable from `migrate` in v0.21. The fresh-slot
+    strategy (`--slot-mode new`) is the v0.21 import path: Conduit creates its own slot while Debezium runs,
+    waits until Debezium's committed offset passes the new slot's consistent point, Debezium is stopped, and the
+    pipeline resumes from the imported offset (`logrepl.import.debeziumOffset`) with no re-snapshot, subject to
+    #341's preflights (Postgres minor-version gate for the partial-decoding fix, publication and database
+    checks). Design: `conduit-connector-postgres#341`; CLI: #3029. Only reusing Debezium's own slot
+    (`--slot-mode reuse`) is v0.22 and fails with `kc.resume_unavailable` until then.
 
 ## Open questions
 
@@ -760,4 +797,4 @@ document has been updated to match; this section is the record.
   `20260722-debezium-compete-roadmap.md`, `20260823-protobuf-schema-support.md`,
   `20260823-avro-codec-archived-decoder-advisories.md`
 - Issue #2988 (secrets stored expanded)
-- Separate lane: Debezium offset import design (Tier 1)
+- `conduit-connector-postgres#341` (Debezium offset import design, Tier 1) and #3029 (CLI side)
