@@ -26,9 +26,8 @@ analysis, alternatives and failure modes are in
   `conduit-commons/hostpolicy` package. Absent policy means deny. No `conduit-connector-sdk` or
   `conduit-connector-protocol` change.
 - Accept a pipeline-supplied endpoint only on an exact, https `allow-endpoints` match; otherwise use only
-  the SDK's endpoint resolution (`AWS_ENDPOINT_URL*` is checked the same way). Refuse cross-host redirects and `169.254.0.0/16` / `fd00:ec2::254`.
-- Standalone plugins are out of scope for this decision; plugin environment handling is covered by
-  ConduitIO/conduit#3043.
+  the SDK's endpoint resolution (the check runs on the endpoint the SDK resolved, whatever its source: `AWS_ENDPOINT_URL*`, profile `endpoint_url`, `services` section). Refuse cross-host redirects and link-local addresses (`169.254.0.0/16`, `fd00:ec2::254`, `fd00:ec2::23`, IPv4-mapped forms), except under `allow-proxy`. Exactly one static key set is a config error, never a fall-through to ambient.
+- Standalone plugins are out of scope; see #3043.
 
 ## Consequences
 
