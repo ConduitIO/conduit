@@ -251,6 +251,11 @@ peer review at the first co-maintainer; at that point admin-merge goes back to
 exceptional-only. Community (non-maintainer) PRs still require the normal review — the
 admin-merge path is for maintainer-authored work that has cleared the bar above.
 
+**Release branches.** PRs to `release/vX.Y.x` follow the same rules: same required checks (strict), same review tier
+as the original change, same `--admin` conditions. A backport is a `git cherry-pick -x` of a commit already on `main`
+(fix on `main` first, unless release-only), labelled with the original PR; see `docs/releases.md`, "Release branches".
+The release quiet window is measured on the release branch, not on `main`.
+
 ## Working style (how DeVaris operates)
 
 - Direct, critical feedback. If a design is weak, say so and propose the alternative — don't

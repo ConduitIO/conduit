@@ -188,6 +188,114 @@ tools the nightlies before it used:
 Bump a tool in its own PR, never in the run-up to a release tag, and let at least one nightly go green on it before
 tagging. The nightly is the only end-to-end test of the release pipeline.
 
+## Release branches
+
+Each release line has a long-lived branch, `release/vX.Y.x` (the first is `release/v0.20.x`). Stable tags for that line
+(`v0.20.1`, `v0.20.2`, ...) are cut from the branch, and `main` is free to move on to the next minor (v0.21 engine
+work) without freezing merges. Nightlies still come from `main` (see "Nightly builds on release branches" below).
+
+### Branching
+
+- Cut the branch from `main` at a commit that is already on `main`, by pushing the SHA, not by creating the branch
+  from a local checkout: `git push origin <sha>:refs/heads/release/vX.Y.x`. Record the SHA in the release issue.
+- Protect it like `main`: the same required status contexts with strict mode, the same review rule, the same
+  `enforce_admins` setting (so the admin-merge path in CLAUDE.md applies), no force pushes, no deletion.
+- Add the branch to [`.github/release-branches.txt`](/.github/release-branches.txt). That one file drives the
+  scheduled checks below. Remove it from the file when the line is retired.
+- The branch must contain the CI workflows. `pull_request` runs for PRs targeting `release/**` and `push` runs on
+  `release/**` are enabled in every required workflow.
+
+### What goes on a release branch
+
+Every fix lands on `main` first, then is cherry-picked. The exception is a fix that only makes sense on the release
+line (for example a revert of something that never reached `main`, or a pinned-dependency bump for a CVE that `main`
+already fixed differently). Say so in the PR.
+
+1. Merge the fix to `main` as usual (with its regression test).
+2. Cherry-pick it onto a branch off the release branch, recording the original commit:
+
+   ```sh
+   git fetch origin
+   git switch -c backport/<short-name> origin/release/v0.20.x
+   git cherry-pick -x <main-commit-sha>
+   ```
+
+   `-x` appends `(cherry picked from commit <sha>)` to the message. Keep it; the release notes and audits rely on it.
+3. Open a PR to `release/v0.20.x`. Title it as the original (`fix: ...`), put the original PR number in the body, and
+   label it with the original PR (`backport: #NNNN`). The PR template risk tier is the original's tier; Tier 1 still
+   needs human sign-off in a separate session.
+4. The same rules as `main` apply: every required check green, no bypass of failing or pending checks, `--admin`
+   merge only under the CLAUDE.md "Merging" conditions. Squash-merge so one backport is one commit.
+
+If a cherry-pick conflicts, resolve it on the backport branch and say in the PR what differed from the original.
+A conflict in data-path code is a signal to re-run the chaos suite deliberately, not just trust the green check.
+
+Only fixes go on the release branch: no features, refactors or dependency churn beyond a security fix. Dependabot
+only targets `main`; take dependency fixes the same way as any other fix (merge on `main`, cherry-pick).
+
+### Forward-porting
+
+The rule is the mirror image: nothing may exist on a release branch that is not on `main`, except release-only
+changes. Before tagging, list what the branch carries that `main` does not:
+
+```sh
+git fetch origin
+git log --oneline --no-merges origin/main..origin/release/v0.20.x
+```
+
+Every commit there is either a `cherry picked from commit` backport (already on `main`) or a release-only change that
+the release issue explains. A release-only fix that also applies to `main` is forward-ported with a PR to `main`
+(`git cherry-pick -x` in the other direction).
+
+### Scheduled checks and the quiet window
+
+GitHub only runs `schedule` triggers on the default branch, so chaos, govulncheck and the flake hunt would never run
+against a release branch on their own.
+[`scheduled-release-branches.yml`](/.github/workflows/scheduled-release-branches.yml) runs nightly (06:30 UTC), reads
+the branch list from `.github/release-branches.txt`, dispatches `chaos.yml`, `govulncheck.yml` and `flake-hunt.yml`
+(`workflow_dispatch`) against each listed branch, waits for them, and fails if any of them fails. The branch's own copy
+of each workflow runs, so chaos keeps its always-report/fail-closed semantics (a dispatched run always executes the
+suite). The workflows are not modified for this, so their required check names are unchanged. To run it by hand:
+`gh workflow run scheduled-release-branches.yml -f ref=release/v0.20.x`.
+
+**The quiet window is measured on the release branch.** Before tagging, the two most recent consecutive nightly runs
+of the dispatcher must be green for the branch, with no commit landing on the branch between the first of those runs
+and the tag. A green nightly on `main` says nothing about the release branch. Check it with:
+
+```sh
+for w in chaos.yml govulncheck.yml flake-hunt.yml; do
+  gh run list --workflow "$w" --branch release/v0.20.x --event workflow_dispatch --limit 3 \
+    --json conclusion,createdAt,headSha --jq '.[] | [.createdAt, .conclusion, .headSha[0:8]] | @tsv'
+done
+```
+
+Merging a backport restarts the clock: the window needs two green nightlies on the SHA that will be tagged.
+
+### Tagging from the release branch
+
+1. Confirm the quiet window and the forward-port check above.
+2. Tag the branch head: `git tag -a vX.Y.Z -m "vX.Y.Z" <sha> && git push origin vX.Y.Z`. The tag must point at a
+   commit on `release/vX.Y.x`.
+3. `release.yml` is unchanged by any of this. It triggers on the `v*` tag push, and the tag, not the branch, is what
+   it builds and signs, so the cosign identity stays
+   `.../.github/workflows/release.yml@refs/tags/vX.Y.Z` (see "Verifying a release"). Do not rename or move that
+   workflow.
+4. Do not merge anything to the branch between the quiet-window check and the tag push.
+
+### Nightly builds on release branches
+
+`trigger-nightly.yml` checks out the default branch, takes the highest non-nightly tag, bumps the minor and tags
+`vX.(Y+1).0-nightly.YYYYMMDD`. Once `v0.20.x` exists, nightlies are therefore the **v0.21** train from `main`, and the
+release branch gets no nightly build. That is intentional for now: `latest-nightly` and the keep-5 cleanup both assume
+one nightly stream, and this change does not alter it.
+
+Recommendation, not implemented: if we want the release pipeline itself (GoReleaser, signing, image build) exercised
+from the release branch before a tag, make `trigger-nightly.yml` also tag the release branch head as
+`vX.Y.(Z+1)-nightly.YYYYMMDD`. Doing that needs decisions first: whether `latest-nightly` keeps pointing at `main`
+(release-branch nightlies would have to skip that tag in `release.yml`), and how the "keep latest 5" cleanup splits
+between the two streams. Until then, the dispatcher's green runs are the quiet-window signal, and the first tag is the
+first end-to-end run of `release.yml` from the branch.
+
 ## How to release
 
 In order to create a new Conduit release, you'll need to create a new issue using the [Conduit release template](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=release&projects=&template=4-conduit-release.md&title=%5BRelease%5D+Conduit+vX.Y.Z).
