@@ -165,15 +165,15 @@ because it changes the key type of every `BIGINT UNSIGNED AUTO_INCREMENT` table 
 almost never occur. Halt-on-overflow keeps the common case unchanged and the rare case loud; the opt-in is
 there for tables that need the full range.
 
-**Route out-of-range values to a DLQ instead of halting.** The connector has no DLQ of its own; the engine
-DLQ handles errors returned from `Read`, so a returned error already follows the pipeline's configured
-`on-error` policy. No separate mechanism is needed.
+**Route out-of-range values to a DLQ instead of halting.** The engine DLQ applies to destination write
+failures, not to source read errors, and a source cannot skip a record without breaking its ack and position
+contract. Rejected; halting is the available policy.
 
 ## Failure modes
 
 | Failure | Behavior |
 | --- | --- |
-| `BIGINT UNSIGNED` value above 2^63-1 under `long` | Source returns `MYSQL_UNSIGNED_OVERFLOW`, no record emitted, position not advanced. Pipeline follows its `on-error` policy |
+| `BIGINT UNSIGNED` value above 2^63-1 under `long` | Source returns `MYSQL_UNSIGNED_OVERFLOW`, no record emitted, position not advanced. Pipeline stops until the operator changes the setting |
 | Any integer outside its Avro type under `strict` | Same error class; replaces warn-and-return-raw |
 | Nullability lookup fails (permissions on `information_schema`, table dropped) | `Open` fails with a stable error naming the table; no fallback to "assume NOT NULL", which would reintroduce coercion |
 | DDL mid-stream changes nullability or type | Out of scope of this doc (DDL is untested today). A column whose schema-derived type no longer matches the registered schema must halt, not coerce. A test pins current behavior so the gap is visible |
