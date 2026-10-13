@@ -41,6 +41,11 @@ type Registry struct {
 	connUtilsAddr        string
 	maxReceiveRecordSize int
 
+	// envWarning enables the startup warning about host environment variables
+	// that standalone plugin processes inherit. Advisory only; it never changes
+	// the environment plugins receive.
+	envWarning bool
+
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
@@ -56,9 +61,23 @@ type blueprint struct {
 	// ensure someone can't switch the plugin after we registered it
 }
 
-func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
+// RegistryOption configures a Registry.
+type RegistryOption func(*Registry)
+
+// WithEnvWarning enables or disables the one-time startup warning that lists
+// the names of sensitive host environment variables standalone plugins inherit.
+// The warning is off unless enabled here (the engine enables it by default
+// through connectors.standalone.env-warning).
+func WithEnvWarning(enabled bool) RegistryOption {
+	return func(r *Registry) { r.envWarning = enabled }
+}
+
+func NewRegistry(logger log.CtxLogger, pluginDir string, opts ...RegistryOption) *Registry {
 	r := &Registry{
 		logger: logger.WithComponentFromType(Registry{}),
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	if pluginDir != "" {
@@ -83,10 +102,15 @@ func (r *Registry) Init(ctx context.Context, connUtilsAddr string, maxReceiveRec
 	r.plugins = plugins
 	r.m.Unlock()
 
+	count := len(r.List())
 	r.logger.Info(ctx).
 		Str(log.PluginPathField, r.pluginDir).
-		Int("count", len(r.List())).
+		Int("count", count).
 		Msg("standalone connector plugins initialized")
+
+	if r.envWarning && count > 0 {
+		warnSensitiveEnv(ctx, r.logger, os.Environ())
+	}
 }
 
 func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]blueprint {
