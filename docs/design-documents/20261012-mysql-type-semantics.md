@@ -95,7 +95,7 @@ Three levels are used in this document, and each claim is one of them.
   `sdk.SourceWithMiddleware` plus the SDK destination decoder. This covers NULL, DECIMAL, unsigned
   `BIGINT`, DECIMAL text exactness, row-image behavior, `information_schema` nullability and permissions,
   and snapshot resume with decimal and large-integer primary keys.
-- **Spiked.** Run with the pinned libraries (connector SDK v0.14.2, conduit-commons v0.7.0, hamba/avro
+- **Spiked.** Run with the pinned libraries (connector SDK v0.14.2, `conduit-commons` v0.7.0, hamba/avro
   v2.31.0, in-memory SDK schema service, and the built-in Conduit schema registry
   `conduit-schema-registry` v0.2.6 in process): union and decimal round trips, custom schema properties,
   canonical versus full schema text, processor re-extraction (commons v0.7.0, the version the engine pins),
@@ -160,7 +160,7 @@ naming the columns and the precision loss.
 `legacy` keeps today's schema shapes so downstream destinations and consumers built on them keep working:
 bare primitive fields, `NULL` as the zero value, `DECIMAL` as `double`. It exists for migration only.
 
-Recommended lifecycle (recommended, pending DeVaris; not yet a decision):
+Lifecycle (decided by DeVaris, 2026-10-12):
 
 - Existing positioned pipelines keep `legacy` for two minors, N and N+1. `legacy` is removed in N+2.
 - Every start in `legacy` logs one warning per affected column (`table.column` and which loss applies:
@@ -203,18 +203,32 @@ Each remedy is valid in its row:
 | `legacy`, phase `cdc` | `MYSQL_UNSIGNED_OVERFLOW` | `types.mode=strict`, `types.bigintUnsigned`, `types.acceptChangeFrom=legacy` (row 6) |
 | `legacy`, phase `snapshot` | `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` | No in-place switch exists. Create a new connector instance with `types.mode=strict` and `types.bigintUnsigned` (re-snapshot; downstream sees duplicates, at-least-once holds), or exclude the table, or fix the offending rows |
 
-The connector cannot tell whether a record it emitted has been persisted as a position, so it keys on the
-conservative definition: the phase of the position carried by the last record it emitted, or of the position
-read at `Open` when it has emitted none. Consequences, each pinned by a test:
+The connector cannot observe a position being persisted, only the `Ack` the engine delivers for it, so the
+phase the error reports is **sticky**: it is the phase of the position read at `Open`, raised only by an
+`Ack` the connector has received. Emitting a record never changes it. Concretely, a run that starts in
+`none` or `snapshot` stays `snapshot` until `Ack` arrives for a record whose position is a `cdc_position`,
+and only then becomes `cdc`. Consequences, each pinned by a test:
 
 - A `legacy` source whose snapshot iterator is active and has emitted a record is in `snapshot`, and the
   message adds "if no record of this connector has been acked, row 2 applies".
-- **Snapshot finished, no CDC ack yet.** The last emitted position is still a `snapshot_position`, so an
-  overflow hit on the first CDC record (or any CDC record before one is acked) is `snapshot` phase, not
-  `cdc`: `legacy` gets `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT`, and `strict` gets the "create a new
-  connector instance" remedy. Naming the `cdc` remedy here would send the operator into row 6 or rows 10-11,
-  which the restart then refuses (rows 4 and 9), so the pipeline would be stranded.
+- **Snapshot finished, no CDC ack yet.** The last persisted position is still a `snapshot_position`, so an
+  overflow hit on any CDC record before the first CDC `Ack` (the first, the second, or the hundredth) is
+  `snapshot` phase, not `cdc`: `legacy` gets `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT`, and `strict` gets the
+  "create a new connector instance" remedy. Naming the `cdc` remedy here would send the operator into row 6
+  or rows 10-11, which the restart then refuses (rows 4 and 9), so the pipeline would be stranded.
 - A `strict` source in the same state is likewise `snapshot` for the `strict` row of the table.
+- The sticky rule errs in one direction only. If a CDC record was persisted but its `Ack` had not reached
+  the connector when the overflow hit, the message names the stricter `snapshot` remedy although a restart
+  would read a `cdc` position. The message therefore adds: "if a change event was acked since the last
+  start, restart once; the next error names the `cdc` remedy". The opposite error (naming a remedy that the
+  restart refuses) cannot happen, because a position is persisted no earlier than its `Ack`. Unverified: the
+  engine's ordering between delivering the source `Ack` and persisting the position (read from the SDK
+  contract, not run); if persistence can lag the `Ack`, promotion moves to the first `Ack` after one that is
+  confirmed persisted, which costs one more CDC record of conservatism.
+
+Rejected: promote to `cdc` when the first CDC record is emitted and document the extra restart. It is
+simpler, but it sends the operator to a remedy the next `Open` refuses, and the only way out is the
+re-snapshot the message did not mention. A wrong remedy is worse than a restart hint.
 
 Why the snapshot phase gets a distinct error and no in-place switch, rather than allowing a switch at a key
 boundary: the `legacy` snapshot position stores the last key in the v1 form (`float64` or base64 after JSON;
@@ -244,8 +258,8 @@ Every position the connector writes in `strict` mode carries a `types` object:
 
 The stamp is the whole resolved type configuration, not only the mode, because `decimal` and
 `bigintUnsigned` change the Avro type of existing columns (and of keys) exactly as `mode` does. The stamp has
-a name made of the three values, `<mode>/<decimal>/<bigintUnsigned>` (for example `strict/string/long`). `legacy` has the name
-`legacy`.
+a name made of the three values, `<mode>/<decimal>/<bigintUnsigned>` (for example `strict/string/long`).
+`legacy` has the name `legacy`.
 
 - `legacy` writes the v1 envelope, unchanged. An unstamped position is a legacy position. This keeps
   rollback from N to N-1 possible for every pipeline that has not opted in, and it means nothing is ever
@@ -266,7 +280,8 @@ connector resolves the effective configuration and checks it against the positio
 
 - **Stamp**: `legacy` (position has no `types`) or a strict stamp name.
 - **Phase**: `none` (no position), `snapshot` (a `snapshot_position` is present, including a snapshot that
-  has finished but whose first CDC record has not been acked), `cdc` (a `cdc_position` is present).
+  has finished but whose first CDC record has not been acked), `cdc` (a `cdc_position` is present). The
+  phase is sticky within a run: see the overflow table below.
 - **Explicit config**: settings the operator actually set. Unset settings are filled from the stamp when
   there is one, so a default that changes between releases never causes a mismatch by itself.
 
@@ -290,7 +305,8 @@ Notes on the table:
 - **"No position" is not a signal.** A pipeline that has never acked a record has no position whether it is
   new or an old one that was idle, or crashed before its first ack after delivering records downstream with
   legacy shapes. The connector cannot tell these apart, so row 1 never picks `strict` for it: it runs `legacy` with a
-  warning in N and is refused in N+1, so the operator decides while the old shape is still available. The alternatives considered were probing the schema
+  warning in N and is refused in N+1, so the operator decides while the old shape is still available. The
+  alternatives considered were probing the schema
   registry for earlier versions of `<table>_payload` (rejected: `schema.Get` does not apply the schema
   context prefix that `schema.Create` does, `connector-sdk@v0.14.1/schema/schema.go:45-77`, so the probe
   would depend on an unexported naming rule,) and a connector-side
@@ -365,7 +381,9 @@ real.
     from the MySQL documentation, not run.
   - A variable may not exist (5.7 has no `binlog_row_value_options`; MariaDB differs). The check uses
     `SHOW GLOBAL VARIABLES LIKE '<name>'`, which returns zero rows for an unknown name without an error
-    (observed on 8.0.39), and treats an absent variable as unset. Re-run on 8.4.11 in round 3 with the same results (defaults `ROW`, `FULL`, empty; `PARTIAL_JSON` and `MINIMAL` accepted and read back; absent name returns zero rows). 5.7 and MariaDB are unverified. `MINIMAL` and `NOBLOB` are both refused: observed, `MINIMAL` omits
+    (observed on 8.0.39), and treats an absent variable as unset. Re-run on 8.4.11 in round 3 with the same
+    results (defaults `ROW`, `FULL`, empty; `PARTIAL_JSON` and `MINIMAL` accepted and read back; absent name
+    returns zero rows). 5.7 and MariaDB are unverified. `MINIMAL` and `NOBLOB` are both refused: observed, `MINIMAL` omits
   the primary key from the after image and every unchanged column, and `NOBLOB` omits unchanged `BLOB` and
   `TEXT` columns. A user with only `SELECT` and the two replication privileges can read the global variables
   (observed on 8.0.39). The check applies to `legacy` as well as `strict`, because the corruption exists in both
@@ -382,6 +400,20 @@ real.
   to open an upstream change to expose `SkippedColumns` on `canal.RowsEvent`, after which any skipped
   column halts. A decision for sign-off.
 
+- **Read replicas and read-only sources.** The design adds no writes to the source and no privilege beyond
+  `SELECT`, the two replication privileges and what the connector already requires for snapshots: `LOCK
+  TABLES` and `RELOAD` (README, MySQL User Privileges). The Open checks are `SHOW GLOBAL VARIABLES` reads and
+  the nullability lookup is a `SELECT` on `information_schema`, so both work on a `read_only` server. The
+  snapshot position handoff runs `FLUSH TABLES <tables> WITH READ LOCK` and reads the binlog position
+  (`combined_iterator.go` and `cdc_iterator.go` at `22f8da3`). That needs `RELOAD`, which managed services
+  often withhold from the replication user, and it takes a global read lock that pauses the replica's apply
+  thread for its duration. The design requires a source whose own binlog contains the changes to capture: a
+  primary, or a replica with binary logging and `log_replica_updates` (`log_slave_updates`) enabled. The
+  variable checks read that server's values, which are the ones that govern what it logs. Unverified: none of
+  this was run against a replica; whether `FLUSH TABLES ... WITH READ LOCK` is permitted on the managed
+  replica offerings is not checked, and the connector's existing behavior there is not changed by this
+  design.
+
 Keys: key columns are `NOT NULL` for primary keys and stay bare `T` in the key schema. A configured
 `sortingColumn` that is nullable also stays bare `T`; a NULL in a key column halts with
 `MYSQL_NULL_IN_NOT_NULL`.
@@ -389,7 +421,7 @@ Keys: key columns are `NOT NULL` for primary keys and stay bare `T` in the key s
 ### Avro shapes and what consumers see
 
 Spiked with the real SDK middleware (`SourceWithEncoding` encode, `DestinationWithSchemaExtraction`
-decode), connector SDK v0.14.2, conduit-commons v0.7.0, hamba/avro v2.31.0. Round 1 ran this on SDK v0.14.1
+decode), connector SDK v0.14.2, `conduit-commons` v0.7.0, hamba/avro v2.31.0. Round 1 ran this on SDK v0.14.1
 and commons v0.6.0. Round 2 re-ran the same test file with only those two versions bumped, and the output is
 identical line for line: the schemas, the input types, the decoded types, the encoder errors for `uint64`,
 `string` into `long` and nil in a bare field, and the property and registry round trips. No decode shape
@@ -497,7 +529,7 @@ parameter of `WHERE key > ?` (`fetch_worker.go:208-222`). Observed on the unmodi
 
 Cause: the key value round-trips through JSON as a `float64` or a base64 string, so the resume predicate is
 wrong for decimals and for integers above 2^53. This is an invariant 2 and 3 defect independent of this
-design. It is present in `legacy` today and is filed as ConduitIO/conduit-connector-mysql#204 ("Snapshot
+design. It is present in `legacy` today and is filed as `ConduitIO/conduit-connector-mysql`#204 ("Snapshot
 resume loses rows for DECIMAL, large BIGINT and BIGINT UNSIGNED keys"), a separate sev-0 candidate. Within
 this design `strict` does not inherit it:
 
@@ -514,7 +546,7 @@ this design `strict` does not inherit it:
     `database/sql` has no typed decimal bind, so the cast carries the type.
   - The same rule applies to `snapshot_end` (`k <= ?`).
 - A fix for `legacy` positions is not part of this document; it needs its own design because `legacy`
-  positions are v1 and must stay readable by N-1. Tracked as ConduitIO/conduit-connector-mysql#204.
+  positions are v1 and must stay readable by N-1. Tracked as `ConduitIO/conduit-connector-mysql`#204.
 - Tests required before sign-off of the implementation are in the Test plan.
 
 #### Strict-path resume spike
@@ -754,7 +786,7 @@ rollout. Versions can go backwards (re-registering an older text returns its old
 3. **Release N+1:** a pipeline with no position and no `types.mode` is refused (`MYSQL_TYPES_MODE_REQUIRED`).
    Existing `legacy` positions still run, with the same warnings. **Release N+2:** `legacy` is removed; row 3
    becomes a refusal: `cdc` phase points to row 6, `snapshot` phase gets `MYSQL_LEGACY_SNAPSHOT_REMOVED` and a
-   re-snapshot on a new connector instance. Recommended, pending DeVaris (see What `legacy` is).
+   re-snapshot on a new connector instance. Decided (see What `legacy` is).
 4. **Rollback:** from N to N-1 is refused by the position gate once N has written a v2 position, so only for
    `strict` pipelines. To roll back, the operator recreates the connector (re-snapshot) or keeps running N
    (and may go back to `legacy` with the token, which writes v1 positions again). The envelope bump is the
@@ -836,7 +868,9 @@ Written before the implementation (review the tests first):
   table registers one schema version across repeated CDC events; `legacy` still registers the canonical
   text.
 - Stamp: a table-driven test over every row of the Transition table (12 rows, with row 1 in its N and N+1
-  forms, row 2 in its N+2 form for `legacy`, and row 3 in its N+2 forms: `cdc` refused pointing to row 6, `snapshot` refused with `MYSQL_LEGACY_SNAPSHOT_REMOVED`), asserting the outcome and the error code. Position round trip: v1 positions parse
+  forms, row 2 in its N+2 form for `legacy`, and row 3 in its N+2 forms: `cdc` refused pointing to row 6,
+  `snapshot` refused with `MYSQL_LEGACY_SNAPSHOT_REMOVED`), asserting the outcome and the error code.
+  Position round trip: v1 positions parse
   as `legacy`; v2 positions carry all three fields; a build with an unknown extra setting reads the stamp.
 - Unstamped never-emitted pipeline (new): a pipeline that has run and acked nothing (empty tables with
   `snapshot.enabled=false`, and a crash before the first ack) restarted on N with no `types.mode`: starts in
@@ -850,6 +884,11 @@ Written before the implementation (review the tests first):
   the `cdc` remedy is not offered, and that the restart with the `cdc` remedy applied is refused by rows 4
   and 9 (this is the stranded-pipeline regression). Then ack one CDC record, hit the overflow again, and
   assert the code and remedy move to the `cdc` forms.
+- Overflow on the second CDC record before ack (new): snapshot finished, first CDC record emitted and not
+  acked, second CDC record overflows. Assert the `snapshot`-phase code and remedy, the restart hint, and that
+  the `cdc` remedy is not offered. Variant: the first CDC record is acked, then the second overflows; assert
+  the `cdc` forms. Variant: kill -9 after the first CDC record is emitted but before its `Ack`, restart, and
+  assert the phase read at `Open` matches what the sticky rule reported.
 - Snapshot-phase legacy pipeline (new): from a v1 position with a `snapshot_position`, N+1 logs the warning
   from the callout; N+2 refuses with `MYSQL_LEGACY_SNAPSHOT_REMOVED`; the same position after one acked CDC
   record is refused in N+2 with the row 6 instruction, and row 6 then succeeds.
@@ -879,11 +918,11 @@ Written before the implementation (review the tests first):
 1. Default for `types.decimal`: `string` (proposed) or `decimal` for Debezium parity.
 2. Is halting on `BIGINT UNSIGNED` overflow acceptable as the default, or should `types.bigintUnsigned`
    default to `decimal`/`string` and accept the key-type change?
-3. Staging (recommended, pending DeVaris): positioned pipelines keep `legacy` for N and N+1 with per-column
+3. Staging (decided by DeVaris, 2026-10-12): positioned pipelines keep `legacy` for N and N+1 with per-column
    warnings and a committed removal in N+2; a no-position pipeline with no `types.mode` warns in N and is
-   refused in N+1. The alternative is flipping the default to `strict` for no-position pipelines at some
-   release, which guesses wrong for an idle old pipeline. Or flip everything at once, given that `legacy` is a
-   known corruption path.
+   refused in N+1; a `legacy` snapshot-phase pipeline is refused at N+2 with
+   `MYSQL_LEGACY_SNAPSHOT_REMOVED`. Rejected: flipping the default to `strict` for no-position pipelines
+   (guesses wrong for an idle old pipeline) and flipping everything at once.
 4. Row image: refuse non-`FULL` at `Open` in both modes (proposed; it stops pipelines that run today on a
    server with `MINIMAL`, which are emitting zero values and a zero primary key), or refuse only in `strict`
    and warn in `legacy`.
@@ -899,8 +938,8 @@ Written before the implementation (review the tests first):
 
 ## Related
 
-- ConduitIO/conduit-connector-mysql#191 (NULL and DECIMAL), #86 (unsigned BIGINT), #158, #187, #188
-- ConduitIO/conduit-connector-mysql#204 (snapshot resume loses rows for DECIMAL, large BIGINT and
+- `ConduitIO/conduit-connector-mysql`#191 (NULL and DECIMAL), #86 (unsigned BIGINT), #158, #187, #188
+- `ConduitIO/conduit-connector-mysql`#204 (snapshot resume loses rows for DECIMAL, large BIGINT and
   BIGINT UNSIGNED keys; see Keys and snapshot positions and What `legacy` is)
 - `docs/catalog/v0.21-certification-gaps.md` (PR #3034), section 1
 - `docs/design-documents/20260724-snapshot-cdc-position-handoff.md` in the MySQL connector repo (position
