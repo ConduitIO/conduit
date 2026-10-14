@@ -82,6 +82,10 @@ type Config struct {
 	// registered at all, not which transport a registered apply tool uses.
 	newDeployService func(ctx context.Context, cfg conduit.Config) (deploy.PlanApplier, func() error, error)
 	newAPIClient     func(ctx context.Context, address string) (inspectClient, error)
+
+	// environ supplies the environment doctor's plugins.standalone_env check
+	// classifies; nil means os.Environ. Tests-only, like the seams above.
+	environ func() []string
 }
 
 // server holds the state every tool handler closes over. It is deliberately
