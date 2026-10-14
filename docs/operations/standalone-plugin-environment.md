@@ -13,8 +13,8 @@ At startup, when `connectors.path` contains at least one standalone connector, C
 warning:
 
 ```text
-WRN host environment variables are passed to standalone plugin processes; v0.21 will restrict the
-    plugin environment to an allowlist (...) code=plugin.standalone_env_passed
+WRN host environment variables are passed to standalone plugin processes; a future release will
+    restrict the plugin environment to an allowlist (...) code=plugin.standalone_env_passed
     env_names=["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","DATABASE_URL"] docs=docs/operations/standalone-plugin-environment.md
 ```
 
@@ -97,10 +97,11 @@ differ from the engine's, so its count is for that process.
    `Options.SilenceStandalonePluginEnvWarning`.
    This only silences the warning and the doctor finding. It does not change what plugins receive.
 
-## What changes in v0.21
+## What changes in a future release
 
-v0.20.2 only warns; the environment plugins receive is unchanged. v0.21 will restrict the plugin
-environment to an allowlist (tracked in #3043). Plugins that read variables from the host
+This release only warns; the environment plugins receive is unchanged. A future release will
+restrict the plugin environment to an allowlist (tracked in #3043). It is the minor release after the
+first release that carries this warning, and its release notes will say so. Plugins that read variables from the host
 environment will then need those variables listed explicitly. Use the names in this warning as the
 starting point for that list.
 

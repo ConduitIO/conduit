@@ -244,7 +244,7 @@ func TestWarnSensitiveEnv_NamesNotValues(t *testing.T) {
 	}
 	is.True(!strings.Contains(out, `"HOME"`)) // benign names are not echoed
 	is.True(strings.Contains(out, CodeEnvPassedToPlugins.Reason()))
-	is.True(strings.Contains(out, "v0.21"))
+	is.True(strings.Contains(out, "a future release will restrict"))
 	is.True(strings.Contains(out, EnvWarningDocsPath))
 	assertNoSentinels(t, out, sentinels)
 }
