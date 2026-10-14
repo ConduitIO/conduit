@@ -24,17 +24,58 @@ import (
 // TestUserData checks the rendered script parses, schedules the hard cap
 // before anything else, and fits EC2's 16 KB user-data limit.
 func TestUserData(t *testing.T) {
-	var ud strings.Builder
-	err := template.Must(template.New("ud").Parse(userDataTmpl)).Execute(&ud, map[string]any{
+	for _, proto := range []bool{false, true} {
+		s := renderUserData(t, proto)
+		checkUserData(t, s)
+		// Every session counts its sinks with the base image, so it is pulled.
+		if !strings.Contains(s, "docker pull -q alpine:3") {
+			t.Fatal("user data does not pull the harness base image")
+		}
+		// The prototype session is only in the script when it is asked for,
+		// and the script itself guards it on PROTO_SHA.
+		if got := strings.Contains(s, "PROTO_SHA="+strings.Repeat("e", 40)); got != proto {
+			t.Fatalf("proto=%v: PROTO_SHA set in env file = %v", proto, got)
+		}
+		if !strings.Contains(s, `-arm "proto-alta=v2:$BINS/conduit-proto@1x1-srcbatch100"`) {
+			t.Fatal("Alternative A session has no prototype source-batch arm")
+		}
+	}
+}
+
+func TestValidateProto(t *testing.T) {
+	sha := strings.Repeat("e", 40)
+	for _, ok := range [][2]string{{"", ""}, {"2978", sha}} {
+		if err := validateProto(ok[0], ok[1]); err != nil {
+			t.Errorf("validateProto(%q, %q): %v", ok[0], ok[1], err)
+		}
+	}
+	for _, bad := range [][2]string{{"2978", ""}, {"", sha}, {"x", sha}, {"2978", "abc"}, {"2978", sha + "; rm -rf /"}} {
+		if validateProto(bad[0], bad[1]) == nil {
+			t.Errorf("validateProto(%q, %q): want an error", bad[0], bad[1])
+		}
+	}
+}
+
+func renderUserData(t *testing.T, proto bool) string {
+	t.Helper()
+	data := map[string]any{
 		"MaxMinutes": 360, "Bucket": "b", "Prefix": "runs/x", "Region": "us-west-1",
 		"MainSHA": strings.Repeat("a", 40), "FanoutSHA": strings.Repeat("b", 40), "FanoutPR": "2946",
-		"HarnessSHA": strings.Repeat("c", 40), "HarnessPR": "2956",
+		"HarnessSHA": strings.Repeat("c", 40), "HarnessPR": "2956", "ProtoSHA": "", "ProtoPR": "",
 		"GoVersion": "1.25.14", "GoSHA256": strings.Repeat("d", 64), "Rounds": 5,
-	})
-	if err != nil {
+	}
+	if proto {
+		data["ProtoSHA"], data["ProtoPR"] = strings.Repeat("e", 40), "2978"
+	}
+	var ud strings.Builder
+	if err := template.Must(template.New("ud").Parse(userDataTmpl)).Execute(&ud, data); err != nil {
 		t.Fatal(err)
 	}
-	s := ud.String()
+	return ud.String()
+}
+
+func checkUserData(t *testing.T, s string) {
+	t.Helper()
 	if len(encodeBase64(s)) > 16*1024 {
 		t.Fatalf("user data is %d bytes base64, over the 16 KB limit", len(encodeBase64(s)))
 	}

@@ -17,6 +17,8 @@ FANOUT_SHA={{.FanoutSHA}}
 FANOUT_PR={{.FanoutPR}}
 HARNESS_SHA={{.HarnessSHA}}
 HARNESS_PR={{.HarnessPR}}
+PROTO_SHA={{.ProtoSHA}}
+PROTO_PR={{.ProtoPR}}
 GO_VERSION={{.GoVersion}}
 GO_SHA256={{.GoSHA256}}
 ROUNDS={{.Rounds}}
@@ -65,9 +67,10 @@ status "docker $(docker version --format '{{"{{"}}.Server.Version{{"}}"}}') and 
 
 git clone -q https://github.com/ConduitIO/conduit.git "$W/conduit" || fail "git clone"
 cd "$W/conduit" || fail "cd clone"
-git fetch -q origin "+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" \
-  "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}" || fail "fetch PR refs"
-for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA"; do
+PR_REFS=("+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}")
+[ -n "$PROTO_SHA" ] && PR_REFS+=("+refs/pull/${PROTO_PR}/head:refs/remotes/pr/${PROTO_PR}")
+git fetch -q origin "${PR_REFS[@]}" || fail "fetch PR refs"
+for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA" ${PROTO_SHA:+"$PROTO_SHA"}; do
   git cat-file -e "${sha}^{commit}" || fail "commit $sha not found"
 done
 git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
@@ -106,6 +109,22 @@ docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 
 
 cd "$W/src-harness" || fail "cd harness"
 go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
+# The harness runs -arm binaries in, and counts every session's sinks with,
+# this base image (its -base-image default), so every session needs it.
+docker pull -q alpine:3 || fail "docker pull alpine:3"
+
+# Prototype arms (#2978), only when the launcher was given -proto-sha. The
+# binaries are built the way the laptop matrix builds them (matrix/build.sh,
+# bench-only ack-latency hook applied, inert unless its knob is set): base
+# from the prototype's merge base with main, so v1, v2 and proto differ only
+# by the prototype's change.
+BINS=$W/bins
+if [ -n "$PROTO_SHA" ]; then
+  PROTO_BASE=$(git merge-base "$MAIN_SHA" "$PROTO_SHA") || fail "merge base of main and proto"
+  bash benchi/archv2-gate/matrix/build.sh "$BINS" "$PROTO_BASE" "$PROTO_SHA" > "$OUT/proto-build.log" 2>&1 ||
+    fail "build proto binaries (see proto-build.log)"
+  cp "$BINS/BUILDS.txt" "$OUT/BUILDS.txt"
+fi
 status "images and harness built"
 
 {
@@ -116,6 +135,7 @@ status "images and harness built"
   done
   echo "## commits"
   echo "main: $MAIN_SHA"; echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"; echo "harness pr${HARNESS_PR}: $HARNESS_SHA"
+  [ -n "$PROTO_SHA" ] && echo "proto pr${PROTO_PR}: $PROTO_SHA (base $PROTO_BASE)"
   echo "## binaries (sha256)"
   for img in main pr${FANOUT_PR}; do
     echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
@@ -179,6 +199,14 @@ No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
 the PR's fan-out change against main, both on arch-v2.
 NOTE
 session 07-2x2-fanout conduit-bench:fanout 2x2 ab
+# Alternative A at equal settings: arch-v2 and the prototype, each on the
+# default 1x1 and on the source batch at 100, beside v1. The laptop run had a
+# v2-alta arm but no proto-alta, so it compared a config change, not engines.
+if [ -n "$PROTO_SHA" ]; then
+  session 08-1x1-alta-proto conduit-bench:main 1x1 matrix \
+    -arm "v1=v1:$BINS/conduit-base" -arm "v2=v2:$BINS/conduit-base" -arm "proto=v2:$BINS/conduit-proto" \
+    -arm "v2-alta=v2:$BINS/conduit-base@1x1-srcbatch100" -arm "proto-alta=v2:$BINS/conduit-proto@1x1-srcbatch100"
+fi
 
 finish
 SCRIPT

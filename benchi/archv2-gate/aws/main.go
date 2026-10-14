@@ -19,7 +19,8 @@
 // of Conduit's go.mod.
 //
 //	go run . launch  -manifest m.json -account <id> -main-sha <sha> \
-//	                 -fanout-pr 2946 -fanout-sha <sha> -harness-pr 2956 -harness-sha <sha>
+//	                 -fanout-pr 2946 -fanout-sha <sha> -harness-pr 2956 -harness-sha <sha> \
+//	                 [-proto-pr 2978 -proto-sha <sha>]
 //	go run . status  -manifest m.json
 //	go run . cleanup -manifest m.json [-delete-bucket]
 //
@@ -109,6 +110,8 @@ type manifest struct {
 	FanoutSHA           string    `json:"fanout_sha"`
 	HarnessPR           string    `json:"harness_pr"`
 	HarnessSHA          string    `json:"harness_sha"`
+	ProtoPR             string    `json:"proto_pr,omitempty"`
+	ProtoSHA            string    `json:"proto_sha,omitempty"`
 	Rounds              int       `json:"rounds"`
 	MaxMinutes          int       `json:"max_minutes"`
 	Deleted             []string  `json:"deleted,omitempty"`
@@ -181,6 +184,19 @@ func main() {
 	}
 }
 
+// validateProto checks the optional prototype flags: both empty, or a PR
+// number and a full commit SHA. The SHA reaches user data, so it must not be
+// free text.
+func validateProto(pr, sha string) error {
+	if pr == "" && sha == "" {
+		return nil
+	}
+	if !digitRe.MatchString(pr) || !shaRe.MatchString(sha) {
+		return fmt.Errorf("-proto-pr and -proto-sha go together: a PR number and a full 40-character lowercase SHA, got %q and %q", pr, sha)
+	}
+	return nil
+}
+
 func launch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("launch", flag.ExitOnError)
 	manifestPath := fs.String("manifest", "", "path of the manifest JSON to write (required)")
@@ -198,6 +214,8 @@ func launch(ctx context.Context, args []string) error {
 	fanoutSHA := fs.String("fanout-sha", "", "head commit of -fanout-pr (required)")
 	harnessPR := fs.String("harness-pr", "", "PR number carrying the harness (required)")
 	harnessSHA := fs.String("harness-sha", "", "commit of the harness to build (required)")
+	protoPR := fs.String("proto-pr", "", "PR number of the staged-batch prototype; with -proto-sha adds the Alternative A session with prototype arms")
+	protoSHA := fs.String("proto-sha", "", "head commit of -proto-pr")
 	goVersion := fs.String("go-version", "1.25.14", "Go toolchain for the harness build (the images build in Docker)")
 	_ = fs.Parse(args)
 
@@ -213,6 +231,9 @@ func launch(ctx context.Context, args []string) error {
 		if !digitRe.MatchString(v) {
 			return fmt.Errorf("-%s must be a PR number, got %q", name, v)
 		}
+	}
+	if err := validateProto(*protoPR, *protoSHA); err != nil {
+		return err
 	}
 	if _, err := os.Stat(*manifestPath); err == nil {
 		return fmt.Errorf("manifest %s already exists; run cleanup on it or pick another path", *manifestPath)
@@ -242,6 +263,8 @@ func launch(ctx context.Context, args []string) error {
 		FanoutSHA:  *fanoutSHA,
 		HarnessPR:  *harnessPR,
 		HarnessSHA: *harnessSHA,
+		ProtoPR:    *protoPR,
+		ProtoSHA:   *protoSHA,
 		Rounds:     *rounds,
 		MaxMinutes: *maxMinutes,
 		path:       *manifestPath,
@@ -433,6 +456,7 @@ func runInstance(ctx context.Context, c clients, m *manifest, tags map[string]st
 		"MaxMinutes": o.MaxMinutes, "Bucket": m.Bucket, "Prefix": m.Prefix, "Region": m.Region,
 		"MainSHA": m.MainSHA, "FanoutSHA": m.FanoutSHA, "FanoutPR": m.FanoutPR,
 		"HarnessSHA": m.HarnessSHA, "HarnessPR": m.HarnessPR,
+		"ProtoSHA": m.ProtoSHA, "ProtoPR": m.ProtoPR,
 		"GoVersion": o.GoVersion, "GoSHA256": goSHA, "Rounds": o.Rounds,
 	}); err != nil {
 		return fmt.Errorf("render user data: %w", err)

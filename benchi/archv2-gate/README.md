@@ -138,6 +138,14 @@ at a hard cap, has no ingress, and gets no credentials in user data. A cloud VM
 is virtualized and shares hardware, so its results are an early read, not gate
 evidence, unless the gate's environment rules are met.
 
+With `-proto-pr` and `-proto-sha` the instance also builds the staged-batch
+prototype and its merge base with `matrix/build.sh` and runs session
+`08-1x1-alta-proto`: v1, v2 and the prototype, plus v2 and the prototype on the
+source batch at 100 (`v2-alta`, `proto-alta`). That is Alternative A at equal
+settings for both engines. The session has five arms, so it adds about 80
+minutes at the default 60 s window; the default `-max-minutes 360` still covers
+all eight sessions.
+
 ## Reading the summary
 
 - **A/A floor** is the largest per-round |delta| between the two replicates of
