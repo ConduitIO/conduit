@@ -21,12 +21,16 @@ mkdir -p "$OUT"
 tmp=$(mktemp -d)
 trap 'git -C "$ROOT" worktree prune; rm -rf "$tmp"' EXIT
 
+# sha256sum on Linux (Amazon Linux has no shasum), shasum on macOS.
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
 build() { # build <name> <ref>
   git -C "$ROOT" worktree add -q --detach "$tmp/$1" "$2"
   git -C "$tmp/$1" apply "$PATCH"
   GOOS=linux GOARCH=$GOARCH CGO_ENABLED=0 go -C "$tmp/$1" build -o "$OUT/conduit-$1" ./cmd/conduit
   git -C "$ROOT" worktree remove --force "$tmp/$1"
-  echo "conduit-$1 $(git -C "$ROOT" rev-parse "$2") $(shasum -a 256 "$OUT/conduit-$1" | cut -d' ' -f1)" >> "$OUT/BUILDS.txt"
+  echo "conduit-$1 $(git -C "$ROOT" rev-parse "$2") $(sha256 "$OUT/conduit-$1")" >> "$OUT/BUILDS.txt"
 }
 : > "$OUT/BUILDS.txt"
 build base "$BASE"
