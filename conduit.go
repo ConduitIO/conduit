@@ -105,6 +105,13 @@ type Options struct {
 	// embedder that only needs in-process orchestration is not forced to bind
 	// a socket.
 	API APIOptions
+
+	// SilenceStandalonePluginEnvWarning turns off the one-time startup warning
+	// that lists the names of sensitive host environment variables standalone
+	// connector plugins inherit. The zero value keeps the warning on. It does
+	// not change the environment plugins receive. Equivalent to
+	// connectors.standalone.env-warning=false in the CLI.
+	SilenceStandalonePluginEnvWarning bool
 }
 
 // DBOptions configures Options.DB.
@@ -359,6 +366,8 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	} else {
 		cfg.Pipelines.Path = opts.PipelinesDir
 	}
+
+	cfg.Connectors.Standalone.EnvWarning = !opts.SilenceStandalonePluginEnvWarning
 
 	cfg.API.Enabled = opts.API.Enabled
 	if opts.API.Enabled {
