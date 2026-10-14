@@ -19,6 +19,9 @@ HARNESS_SHA={{.HarnessSHA}}
 HARNESS_PR={{.HarnessPR}}
 PROTO_SHA={{.ProtoSHA}}
 PROTO_PR={{.ProtoPR}}
+PLAN={{.Plan}}
+WARMUP={{.Warmup}}
+WINDOW={{.Window}}
 GO_VERSION={{.GoVersion}}
 GO_SHA256={{.GoSHA256}}
 ROUNDS={{.Rounds}}
@@ -62,21 +65,25 @@ systemctl enable --now docker || fail "start docker"
 curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" || fail "download go"
 echo "${GO_SHA256}  /tmp/go.tgz" | sha256sum -c - || fail "go tarball checksum mismatch"
 tar -C /usr/local -xzf /tmp/go.tgz || fail "untar go"
-export PATH=/usr/local/go/bin:$PATH GOPATH=/root/go GOCACHE=/root/.cache/go-build
+export PATH=/usr/local/go/bin:$PATH GOPATH=/root/go GOCACHE=/root/.cache/go-build GOTOOLCHAIN=local
 status "docker $(docker version --format '{{"{{"}}.Server.Version{{"}}"}}') and $(go version) installed"
 
 git clone -q https://github.com/ConduitIO/conduit.git "$W/conduit" || fail "git clone"
 cd "$W/conduit" || fail "cd clone"
-PR_REFS=("+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}")
+PR_REFS=("+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}")
+[ -n "$FANOUT_SHA" ] && PR_REFS+=("+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}")
 [ -n "$PROTO_SHA" ] && PR_REFS+=("+refs/pull/${PROTO_PR}/head:refs/remotes/pr/${PROTO_PR}")
 git fetch -q origin "${PR_REFS[@]}" || fail "fetch PR refs"
-for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA" ${PROTO_SHA:+"$PROTO_SHA"}; do
+for sha in "$MAIN_SHA" "$HARNESS_SHA" ${FANOUT_SHA:+"$FANOUT_SHA"} ${PROTO_SHA:+"$PROTO_SHA"}; do
   git cat-file -e "${sha}^{commit}" || fail "commit $sha not found"
 done
-git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
-git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
 git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
 
+# The early plan runs on Docker images of main and the fan-out PR. The matrix
+# plan runs every arm from a mounted binary (built below) and needs neither.
+if [ "$PLAN" = early ]; then
+git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
+git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
 status "building images"
 docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
   -t conduit-bench:main "$W/src-main" || fail "docker build main"
@@ -106,6 +113,7 @@ RUN chmod 0755 /app/conduit
 WRAPDF
 docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
   -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
+fi
 
 cd "$W/src-harness" || fail "cd harness"
 go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
@@ -115,12 +123,14 @@ docker pull -q alpine:3 || fail "docker pull alpine:3"
 
 # Prototype arms (#2978), only when the launcher was given -proto-sha. The
 # binaries are built the way the laptop matrix builds them (matrix/build.sh,
-# bench-only ack-latency hook applied, inert unless its knob is set): base
-# from the prototype's merge base with main, so v1, v2 and proto differ only
-# by the prototype's change.
+# bench-only ack-latency hook applied, inert unless its knob is set). The
+# early plan builds the base from the prototype's merge base with main, so the
+# engines differ only by the prototype's change; the matrix plan builds v1 and
+# v2 from main itself, the engines the prototype has to beat today.
 BINS=$W/bins
 if [ -n "$PROTO_SHA" ]; then
-  PROTO_BASE=$(git merge-base "$MAIN_SHA" "$PROTO_SHA") || fail "merge base of main and proto"
+  PROTO_BASE=$MAIN_SHA
+  [ "$PLAN" = early ] && { PROTO_BASE=$(git merge-base "$MAIN_SHA" "$PROTO_SHA") || fail "merge base of main and proto"; }
   bash benchi/archv2-gate/matrix/build.sh "$BINS" "$PROTO_BASE" "$PROTO_SHA" > "$OUT/proto-build.log" 2>&1 ||
     fail "build proto binaries (see proto-build.log)"
   cp "$BINS/BUILDS.txt" "$OUT/BUILDS.txt"
@@ -137,10 +147,13 @@ status "images and harness built"
   echo "main: $MAIN_SHA"; echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"; echo "harness pr${HARNESS_PR}: $HARNESS_SHA"
   [ -n "$PROTO_SHA" ] && echo "proto pr${PROTO_PR}: $PROTO_SHA (base $PROTO_BASE)"
   echo "## binaries (sha256)"
-  for img in main pr${FANOUT_PR}; do
-    echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
-  done
-  docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
+  if [ "$PLAN" = early ]; then
+    for img in main pr${FANOUT_PR}; do
+      echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
+    done
+    docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
+  fi
+  [ -s "$BINS/BUILDS.txt" ] && cat "$BINS/BUILDS.txt"
   echo "## images"; docker images --no-trunc
   echo "## uname"; uname -a
   echo "## os"; cat /etc/os-release
@@ -181,6 +194,21 @@ session() { # name image shape session [extra harness args...]
   upload
   sync; echo 3 > /proc/sys/vm/drop_caches
 }
+
+if [ "$PLAN" = matrix ]; then
+  # The engine matrix (matrix/run.sh): 13 interleaved sessions, every arm
+  # twice per round. Uploaded every 10 minutes, so a run cut short by the
+  # hard cap still leaves every finished session in S3.
+  ( while sleep 600; do upload; done ) &
+  UPLOADER=$!
+  status "matrix start (rounds $ROUNDS, warmup $WARMUP, window $WINDOW)"
+  GATE="$W/archv2-gate" ROUNDS=$ROUNDS WARMUP=$WARMUP WINDOW=$WINDOW \
+    bash benchi/archv2-gate/matrix/run.sh "$BINS" "$OUT/results/matrix" > "$OUT/results/matrix.log" 2>&1
+  status "matrix exit $?"
+  kill $UPLOADER 2>/dev/null
+  "$W/archv2-gate" -rerender "$OUT/results/matrix" >> "$OUT/results/matrix.log" 2>&1
+  finish
+fi
 
 session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1
 session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2

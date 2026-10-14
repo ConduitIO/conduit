@@ -28,9 +28,11 @@ ARMS=(-arm "v1=v1:$BINS/conduit-base" -arm "v2=v2:$BINS/conduit-base" -arm "prot
 # diagnostics, then destination batching.
 for n in 1 2 4; do run "s${n}x${n}-unbuffered"  "${n}x${n}"  "${ARMS[@]}"; done
 for n in 1 2 4; do run "s${n}x${n}-buffered"    "${n}x${n}"  "${ARMS[@]}" -env "$BUF"; done
-# Alternative A in isolation: arch-v2 with the source batch at 100, beside the
-# default-config arms of the same session.
-run "alt-a-1x1" 1x1 "${ARMS[@]}" -arm "v2-alta=v2:$BINS/conduit-base@1x1-srcbatch100"
+# Alternative A: arch-v2 and the prototype, each with the source batch at 100,
+# beside the default-config arms of the same session. (The 2026-10-14 laptop
+# run predates the proto-alta arm.)
+run "alt-a-1x1" 1x1 "${ARMS[@]}" -arm "v2-alta=v2:$BINS/conduit-base@1x1-srcbatch100" \
+  -arm "proto-alta=v2:$BINS/conduit-proto@1x1-srcbatch100"
 for n in 1 2 4; do run "s${n}x${n}-destbatch-unbuffered" "${n}x${n}-destbatch" "${ARMS[@]}"; done
 for n in 1 2 4; do run "s${n}x${n}-destbatch-buffered"   "${n}x${n}-destbatch" "${ARMS[@]}" -env "$BUF"; done
 echo "=== done $(date -u +%FT%TZ)"

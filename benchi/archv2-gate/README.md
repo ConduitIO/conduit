@@ -146,6 +146,19 @@ settings for both engines. The session has five arms, so it adds about 80
 minutes at the default 60 s window; the default `-max-minutes 360` still covers
 all eight sessions.
 
+`-plan matrix` runs the engine matrix (`matrix/run.sh`) instead: v1 and v2
+built from `-main-sha`, the prototype from `-proto-sha`, both with the bench
+patch, every arm from a mounted binary, 20 s warmup and a 60 s window. It takes
+no fan-out PR. Finished sessions are uploaded every 10 minutes, and
+`-rerender` builds `matrix.md` at the end. About 410 runs at roughly 85 s each
+is 10 hours, so set `-max-minutes` to at least 900. Every resource carries a
+`conduit-bench` tag (`-bench-tag`), so teardown can be checked by listing it:
+
+```bash
+aws resourcegroupstaggingapi get-resources --region us-west-1 \
+  --tag-filters Key=conduit-bench,Values=archv2-gate-20261014
+```
+
 ## Reading the summary
 
 - **A/A floor** is the largest per-round |delta| between the two replicates of

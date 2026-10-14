@@ -19,13 +19,14 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 )
 
 // TestUserData checks the rendered script parses, schedules the hard cap
 // before anything else, and fits EC2's 16 KB user-data limit.
 func TestUserData(t *testing.T) {
 	for _, proto := range []bool{false, true} {
-		s := renderUserData(t, proto)
+		s := renderUserData(t, proto, "early")
 		checkUserData(t, s)
 		// Every session counts its sinks with the base image, so it is pulled.
 		if !strings.Contains(s, "docker pull -q alpine:3") {
@@ -56,16 +57,37 @@ func TestValidateProto(t *testing.T) {
 	}
 }
 
-func renderUserData(t *testing.T, proto bool) string {
+// TestUserDataMatrixPlan checks the matrix plan: no fan-out PR, run.sh with
+// the gate's window, and a re-render at the end.
+func TestUserDataMatrixPlan(t *testing.T) {
+	s := renderUserData(t, true, "matrix")
+	checkUserData(t, s)
+	for _, want := range []string{
+		"PLAN=matrix\n", "FANOUT_SHA=\n", "WINDOW=1m0s\n",
+		"bash benchi/archv2-gate/matrix/run.sh",
+		`-rerender "$OUT/results/matrix"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("matrix user data lacks %q", want)
+		}
+	}
+}
+
+func renderUserData(t *testing.T, proto bool, plan string) string {
 	t.Helper()
 	data := map[string]any{
 		"MaxMinutes": 360, "Bucket": "b", "Prefix": "runs/x", "Region": "us-west-1",
 		"MainSHA": strings.Repeat("a", 40), "FanoutSHA": strings.Repeat("b", 40), "FanoutPR": "2946",
 		"HarnessSHA": strings.Repeat("c", 40), "HarnessPR": "2956", "ProtoSHA": "", "ProtoPR": "",
+		"Plan": "early", "Warmup": "20s", "Window": "1m0s",
 		"GoVersion": "1.25.14", "GoSHA256": strings.Repeat("d", 64), "Rounds": 5,
 	}
 	if proto {
 		data["ProtoSHA"], data["ProtoPR"] = strings.Repeat("e", 40), "2978"
+	}
+	data["Plan"] = plan
+	if plan == "matrix" {
+		data["FanoutSHA"], data["FanoutPR"] = "", ""
 	}
 	var ud strings.Builder
 	if err := template.Must(template.New("ud").Parse(userDataTmpl)).Execute(&ud, data); err != nil {
@@ -105,4 +127,41 @@ func between(s, start, end string) string {
 	_, after, _ := strings.Cut(s, start)
 	before, _, _ := strings.Cut(after, end)
 	return before
+}
+
+func TestValidateLaunch(t *testing.T) {
+	sha := func(c string) string { return strings.Repeat(c, 40) }
+	matrix := launchFlags{
+		plan: "matrix", mainSHA: sha("a"), harnessSHA: sha("c"), harnessPR: "3067",
+		protoSHA: sha("e"), protoPR: "2978", window: 60 * time.Second, benchTag: "archv2-gate-20261014",
+	}
+	if err := validateLaunch(matrix); err != nil {
+		t.Fatalf("matrix flags: %v", err)
+	}
+	early := launchFlags{
+		plan: "early", mainSHA: sha("a"), harnessSHA: sha("c"), harnessPR: "2956",
+		fanoutSHA: sha("b"), fanoutPR: "2946", window: 60 * time.Second, benchTag: "x",
+	}
+	if err := validateLaunch(early); err != nil {
+		t.Fatalf("early flags: %v", err)
+	}
+	for name, mod := range map[string]func(*launchFlags){
+		"matrix without proto": func(f *launchFlags) { f.protoSHA, f.protoPR = "", "" },
+		"matrix with fan-out":  func(f *launchFlags) { f.fanoutSHA, f.fanoutPR = sha("b"), "2946" },
+		"short window":         func(f *launchFlags) { f.window = 25 * time.Second },
+		"unknown plan":         func(f *launchFlags) { f.plan = "all" },
+		"tag with spaces":      func(f *launchFlags) { f.benchTag = "a b" },
+		"short main sha":       func(f *launchFlags) { f.mainSHA = "abc" },
+		"harness pr not digit": func(f *launchFlags) { f.harnessPR = "x" },
+	} {
+		f := matrix
+		mod(&f)
+		if validateLaunch(f) == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+	early.fanoutSHA = ""
+	if validateLaunch(early) == nil {
+		t.Error("early without fan-out: want an error")
+	}
 }
