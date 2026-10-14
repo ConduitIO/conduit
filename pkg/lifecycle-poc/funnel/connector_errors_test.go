@@ -16,7 +16,6 @@ package funnel
 
 import (
 	"context"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -79,13 +78,61 @@ func recvErr(t *testing.T, ch <-chan error) error {
 	}
 }
 
-// assertUnread fails if anything is still reading ch.
+// assertUnread fails if a reader is parked on ch. ch is unbuffered, so the
+// non-blocking send succeeds only if a receiver is waiting on it right now.
+// Call it only after the watch's done is closed: every reader has returned
+// by then, so correct code never takes the send, and there is nothing to
+// wait for.
 func assertUnread(t *testing.T, ch chan error) {
 	t.Helper()
 	select {
 	case ch <- cerrors.New("late"):
-		t.Fatal("a reader is still receiving after stop")
-	case <-time.After(20 * time.Millisecond):
+		t.Fatal("a reader is still receiving after its watch ended")
+	default:
+	}
+}
+
+// isClosed reports whether done is closed, without blocking.
+func isClosed(done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
+}
+
+// waitClosed waits for done. The deadline only bounds a failing run; a
+// passing run does not depend on it.
+func waitClosed(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("readers did not return")
+	}
+}
+
+// stopWithin calls stop and fails if it does not return. The deadline only
+// bounds a failing run, such as a stop that no longer releases its readers.
+func stopWithin(t *testing.T, stop func()) {
+	t.Helper()
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		stop()
+	}()
+	waitClosed(t, returned)
+}
+
+// send delivers err to a reader of ch. ch is unbuffered, so it returns once
+// a reader has received err. The deadline only bounds a failing run.
+func send(t *testing.T, ch chan error, err error) {
+	t.Helper()
+	select {
+	case ch <- err:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reader received the error")
 	}
 }
 
@@ -158,32 +205,61 @@ func TestWatchConnectorErrors_FailOnce(t *testing.T) {
 	is.Equal(calls.Load(), int64(1))
 }
 
-// TestWatchConnectorErrors_StopReleasesReaders: after stop returns, nothing
-// reads the channels and the reader goroutines are gone, so a connector's
-// later error stays with the connector (Teardown returns it) and nothing
-// grows per failed flush.
+// TestWatchConnectorErrors_OneReaderPerConnector: a watch starts exactly one
+// reader per connector. One error on each of w1's two channels must be
+// received (fewer readers would leave a send blocked), and those two
+// receipts must end the watch on their own, without stop or ctx (a third
+// reader would keep done open).
+func TestWatchConnectorErrors_OneReaderPerConnector(t *testing.T) {
+	is := is.New(t)
+	w1, _, src1, _, dst := errorsTopology(t)
+	fail, calls, _ := failRecorder()
+
+	stop, done := w1.watchConnectorErrors(context.Background(), fail)
+	send(t, src1, cerrors.New("from the source"))
+	send(t, dst, cerrors.New("from the destination"))
+	waitClosed(t, done)
+	stop()
+	is.Equal(calls.Load(), int64(1)) // fail is still called once per watch
+}
+
+// TestWatchConnectorErrors_StopReleasesReaders: after stop returns, every
+// reader has returned and nothing reads the channels, so a connector's later
+// error stays with the connector (Teardown returns it) and nothing grows per
+// failed flush.
+//
+// The test asserts on each watch's done, not on runtime.NumGoroutine. The
+// global goroutine count also moves when goroutines that other tests, the
+// mock controller or the runtime own start and exit, which made the earlier
+// version of this test flaky under load (#3035).
 func TestWatchConnectorErrors_StopReleasesReaders(t *testing.T) {
 	is := is.New(t)
 	w1, _, src1, _, dst := errorsTopology(t)
 	fail, calls, _ := failRecorder()
 
-	before := runtime.NumGoroutine()
-	stops := make([]func(), 0, 100)
+	type watch struct {
+		stop func()
+		done <-chan struct{}
+	}
+	watches := make([]watch, 0, 100)
 	for range 100 {
-		stops = append(stops, w1.WatchConnectorErrors(context.Background(), fail))
+		stop, done := w1.watchConnectorErrors(context.Background(), fail)
+		watches = append(watches, watch{stop: stop, done: done})
 	}
-	is.True(runtime.NumGoroutine() >= before+200) // one reader per connector per watch
-	for _, stop := range stops {
-		stop()
+	for _, w := range watches {
+		is.True(!isClosed(w.done)) // nothing has released the readers yet
 	}
-	waitGoroutines(t, before)
+	for _, w := range watches {
+		stopWithin(t, w.stop)
+		is.True(isClosed(w.done)) // stop returned, so every reader has returned
+	}
 
 	assertUnread(t, src1)
 	assertUnread(t, dst)
 	is.Equal(calls.Load(), int64(0))
 }
 
-// TestWatchConnectorErrors_ContextDone: the readers exit when the run's
+// TestWatchConnectorErrors_ContextDone: the readers return when the run's
 // context ends (the tomb was killed for another reason) without stop.
 func TestWatchConnectorErrors_ContextDone(t *testing.T) {
 	is := is.New(t)
@@ -191,23 +267,27 @@ func TestWatchConnectorErrors_ContextDone(t *testing.T) {
 	fail, calls, _ := failRecorder()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	before := runtime.NumGoroutine()
-	stop := w1.WatchConnectorErrors(ctx, fail)
+	stop, done := w1.watchConnectorErrors(ctx, fail)
+	is.True(!isClosed(done))
 	cancel()
-	waitGoroutines(t, before)
+	waitClosed(t, done) // released by ctx alone: stop has not been called
 	assertUnread(t, src1)
 	stop() // still safe after the readers are gone
 	stop() // and idempotent
 	is.Equal(calls.Load(), int64(0))
 }
 
-func waitGoroutines(t *testing.T, limit int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for runtime.NumGoroutine() > limit {
-		if time.Now().After(deadline) {
-			t.Fatalf("readers did not exit: %d goroutines, want at most %d", runtime.NumGoroutine(), limit)
-		}
-		time.Sleep(time.Millisecond)
-	}
+// TestWatchConnectorErrors_NoConnectors: a worker with no Errors() channel to
+// read starts no reader; done is closed at once and stop does not block.
+func TestWatchConnectorErrors_NoConnectors(t *testing.T) {
+	is := is.New(t)
+	s := NewMockSource(gomock.NewController(t))
+	s.EXPECT().Errors().Return(nil).AnyTimes()
+	w := &Worker{FirstTask: &TaskNode{Task: NewSourceTask("src", s, log.Test(t), NoOpConnectorMetrics{})}}
+	fail, calls, _ := failRecorder()
+
+	stop, done := w.watchConnectorErrors(context.Background(), fail)
+	is.True(isClosed(done))
+	stop()
+	is.Equal(calls.Load(), int64(0))
 }
