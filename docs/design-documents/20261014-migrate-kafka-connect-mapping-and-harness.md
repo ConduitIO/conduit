@@ -153,6 +153,12 @@ cannot be evaluated offline: the entry is `unsupported`, blocking, `kc.key_unsup
 value in the Kafka Connect config, or resolve it and re-run". For keys whose status does not depend on the value
 (a password) the reference passes through, as in the base document.
 
+**Upstream drift.** The committed snapshots (`rules/upstream/<class>.keys.yaml`) are checked two ways. A unit test
+requires every snapshot key to match exactly one rule (snapshot keys are a subset of the known keys, so a snapshot
+key can never be `kc.key_unknown`). A scheduled job (lane-plan PR 20) fetches the live upstream documentation
+pages named in each snapshot header, extracts the key tables, diffs them against the snapshot and fails the nightly
+when they differ, with the added, removed and changed-default keys in the failure message.
+
 Consequences, all enforced by tests:
 
 - The known-key set of a class is the key list of its file. `kc.key_unknown` (migrate) and
@@ -203,8 +209,27 @@ implemented, so rows whose correctness depends on behavior gate on a capability,
 `debezium-offset-import` (the settings `logrepl.import.debeziumOffset` and `logrepl.requireExistingSlot` are not
 in `builtin:postgres` v0.14.2); the Elasticsearch per-item nack rows require `bulk-item-nack` (#3007; the failing
 item is acked today, `ConduitIO/conduit-connector-elasticsearch#153`). If a gate fails the entry is `unsupported`,
-blocking, code `kc.target_capability_missing`, with the lane issue in `fix`. For standalone connectors (`mysql`,
-`elasticsearch`) the emitted `plugin:` reference pins the version from `certification.yaml`, so a pipeline
+blocking, code `kc.target_capability_missing`, with the lane issue in `fix`. A capability is a behavior contract with
+a proving test, not a name. Each is defined by what is observable and by
+the test that proves it, and its `certification.yaml` entry references the test ID:
+
+| Capability | Observable contract | Proving test |
+| --- | --- | --- |
+| `bulk-item-nack` | A failed bulk item is nacked and never acked, and the items after it in the batch are retried (redelivered, not dropped). Reproduces `conduit-connector-elasticsearch#153` | A destination test with a mocked bulk response in which item 0 and a middle item fail; it fails on the `n+1` code and passes after the fix |
+| `debezium-offset-import` | A pipeline started with an imported Debezium offset resumes with no gap and no loss (at-least-once; duplicates only inside the documented window) | The #3004 resume test with `kill -9` of Conduit before and after the first ack, against a real Debezium |
+
+```yaml
+- plugin: builtin:postgres
+  version: ">=0.15.0"
+  capabilities:
+    debezium-offset-import: {test: "conduit-connector-postgres:TestResume_DebeziumImport_Kill9", required_check: "tests/chaos (race, x3)"}
+```
+
+The runner fails the build when a listed capability has no `test`, when that test does not exist in the connector's
+repository at the pinned version, or when its CI job is not in the required set of the branch (checked against the
+branch-protection contexts of that repository in the nightly; offline the runner checks only that the field is
+present and well formed). A capability cannot be claimed by editing a name into the file. For standalone connectors
+(`mysql`, `elasticsearch`) the emitted `plugin:` reference pins the version from `certification.yaml`, so a pipeline
 cannot start on a connector older than the one its rows were gated on. This is how rows that depend on an unmerged
 lane stay honest, and why none of the lanes needs a flag-day with this one.
 
@@ -225,10 +250,17 @@ in the snapshot that has a default, the test runs the rule engine on the input `
 If the result is not plain `translated` (T and not blocking), the class's `defaults:` section must contain an
 entry for that key that emits a note carrying the default's status and `blocking`, or names a connector-level
 note that already covers it (`coveredBy: kc.output_shape_differs`, used where a whole family is already blocked
-and per-key notes would be noise). A key without such an entry fails the build. Defaults that depend on other keys
-are `when:` clauses, tested with those keys set. The reverse check also runs: a `defaults:` entry whose default
+and per-key notes would be noise). A key without such an entry fails the build. A default that depends on other keys
+is a `when:` clause (`when: {mode: incrementing}`); the test runs one case per combination of the clause's listed
+values, each with those keys set and every other key absent, and once more with the clause keys at their own
+upstream defaults. The reverse check also runs: a `defaults:` entry whose default
 evaluates to plain `translated` is stale and fails. Moving to a new upstream version means regenerating the
-snapshot; new defaults then surface as test failures. The list below is the expected initial output, not the
+snapshot; new defaults then surface as test failures. A second mechanical test covers the opposite direction,
+required Conduit settings that have no upstream default: for every parameter marked required in a pinned plugin
+specification, `migrate` run on a minimal valid input must either emit the setting or emit it as a variable with
+the blocking note `kc.setting_required` (for example `aws.accessKeyId` on `builtin:s3` v0.9.4, or `version` on the
+Elasticsearch destination); a required parameter that is neither fails the build. The list below is the expected
+initial output, not the
 mechanism:
 
 | Family | Absent key (upstream default) | Note | Blocking |
@@ -242,6 +274,7 @@ mechanism:
 | JDBC sink | `replace.null.with.default` (`true`) | differs only if value schemas define defaults | no |
 | JDBC source | table selection absent (every table, discovered continuously) | resolved once at start | yes |
 | S3 | `s3.ssea.name` (empty: bucket default applies) | Conduit sends AES256, overriding an SSE-KMS bucket default (`conduit-connector-s3#1047`) | yes |
+| S3 | `s3.credentials.provider.class` (`DefaultCredentialsProvider`, the default chain), with no static keys | `builtin:s3` v0.9.4 requires static keys: `kc.setting_required` for `aws.accessKeyId` and `aws.secretAccessKey` until capability `default-credential-chain` (#3009) | yes |
 | S3 | `s3.path.style.access.enabled` (`true`) | emitted explicitly when `store.url` is set | not a note |
 | Elasticsearch | `write.method` (`insert`) | Conduit merges (update with `doc_as_upsert`), Kafka Connect replaces the document | yes |
 | Elasticsearch | `schema.ignore` (`false`) | mappings from the Connect schema vs dynamic mapping | yes |
@@ -948,8 +981,8 @@ Rows specific to this document. The base document's table stands.
 | --- | --- | --- |
 | A rule says `translated` for a setting the connector no longer has or does not implement | Silent drop with a green stamp | Rule data resolves every emitted setting against the pinned plugin spec; `requires` gates rows that depend on an unmerged lane; the corpus golden shows the setting in the pipeline and `pipelines validate --resolve-plugins` runs on it |
 | A connector lane renames a setting | `migrate` build breaks | Intended; the resolution test names the rule and the lane |
-| Upstream adds a key (Debezium 3.8, Confluent 10.10) | A real config reports `kc.key_unknown`, blocking | Safe direction. The scheduled upstream-docs diff opens a data PR; the key list header records the version |
-| Absent-key default differs and no rule emits a note | The one silent difference the completeness invariant cannot see | Each family's rule file has a `defaults:` section reviewed against the upstream default list; key coverage (rule 3) includes it; the compose tier would observe the difference |
+| Upstream adds a key (Debezium 3.8, Confluent 10.10) | A real config reports `kc.key_unknown`, blocking | Safe direction. The upstream-drift job (PR 20) fails the nightly when the live docs differ from the committed snapshots, and the update is a data PR; the snapshot header records the version |
+| Absent-key default differs and no rule emits a note | The one silent difference the completeness invariant cannot see | The mechanical defaults test over the pinned upstream key lists (_Absent keys are evaluated mechanically_) fails the build for any default whose row is not `T` and has no note; the compose tier would also observe the difference |
 | Corpus case contains a real secret or hostname | Credential or customer leak in a public repo | `scrub-v1` test, PR template checkbox, review of `input/` in the diff |
 | `certification.yaml` claims more than the registry says | Release-bar check passes falsely | Nightly comparison with the live index; the check is the failure, not a warning |
 | Explained-difference file used to paper over a real bug | Harness green, behavior wrong | Every `reported` entry must point at a report entry of at least that severity; a stale entry fails; entries are reviewed in the lane's PR |
@@ -1008,6 +1041,7 @@ changelog), its tier, and an adversarial self-review. Tiers: 2 = CLI/features, 1
 | 17 | `feat(cli): --import-offset and --dry-run --peek` | **1** | 5; #3004 connector release | Specified in #3029. Failure-mode analysis and DeVaris sign-off in a separate session |
 | 18 | `feat(cli): --cutover, --check-rollback` | **1** | 17 | Same; owned by the Postgres lane |
 | 19 | `docs: Migrating from Kafka Connect concept page, per-connector guides, error-code reference` | 3 | 4 to 13 | States plainly that only Postgres resumes from imported offsets in v0.21. Each PR above adds its own section; this one assembles the page and `llms.txt` |
+| 20 | `ci(kcmigrate): upstream-drift job and snapshot-subset-of-rules test` | 2 | 2 | Owned by this lane. Starts once the first rule file and snapshot exist (PR 5); lands before the release branch so the snapshots are checked at the release bar |
 
 Sequence rule: no PR from 4 to 9 merges without its corpus cases (offline tier) and its `emits` entry in
 `certification.yaml`. Nothing here blocks the connector lanes, because rule files only read plugin specs; the
@@ -1036,6 +1070,7 @@ Recommendations are in bold. These need DeVaris before the PR leaves draft.
    `T` only when `t` is skipped. Also a factual fix to the base document: `kc.lint.client_override_policy` said
    `None` is the default override policy, and the Apache Kafka 4.2 default is `All` (corrected in place). **Approve
    these corrections** and let this document take precedence over the base connector subsections where they differ.
+   If D3 is rejected, the in-place edit to the base document's Kafka override-policy default is reverted with it.
 4. **D4. MirrorMaker dedicated-mode input.** Most MM2 deployments run `connect-mirror-maker.sh` with an
    `mm2.properties` (`clusters`, `A->B.*`), not the connector form. **Out of v1**: detect it and fail with
    `migrate.input_unrecognized` and a fix naming the connector form; the migration guide says plainly that most MM2
