@@ -50,7 +50,8 @@ information in free-text `description`, which neither the CLI nor the web UI can
     later commit with no Go or `go.mod` change;
   - the release was produced by the repository's own publish workflow, so every artifact carries a keyless cosign
     signature from that workflow's identity and the release carries SLSA provenance;
-  - the source tree at the release tag has a `LICENSE` file, and `license` records it;
+  - the source tree at the release tag has a license file (`LICENSE`, `LICENSE.md` or `LICENCE.md`), and
+    `license` records it;
   - the plugin's spec name does not collide with another listed connector's spec name, since pipelines refer to
     plugins by spec name.
 - Go: `License string` and `Tier Tier` (a string type with constants) on `index.Connector` and `index.Processor`, both
@@ -99,7 +100,21 @@ served index so the two cannot drift apart again.
 4. **Tier used as a trust signal.** No code path in `pkg/registry` reads it. If the UI or CLI shows it, it must sit
    next to, not replace, the verified-signature status.
 5. **Wrong license recorded.** Informational only, but misleading. Entries are added by human-reviewed PRs to the
-   registry repository; the reviewer checks the repository's `LICENSE` file.
+   registry repository; the reviewer checks the repository's license file.
+6. **Freshness key relabels a tier.** Tier and license are part of the content subtree that
+   `HashContentSubtree` covers, so a freshness-only re-sign that changes only a tier or a license is refused with
+   `registry.index_integrity`, like any other content change
+   (`TestVerify_FreshnessOnlyResignChangingTierOrLicenseRejected`). A build from before this change hashes its own
+   structs, which drop the two keys, so it would accept such a re-sign; it never reads tier or license, so nothing
+   it does changes.
+7. **Misleading error after an upgrade or downgrade.** For the same reason, once an entry carries tier or license,
+   a build from before this change and a build with it compute different content hashes for the same index
+   (`TestHashContentSubtree_TierAndLicenseDriftAcrossVersions`). A client upgraded or downgraded across this change
+   holds a `lastVerifiedContentHash` that the other version does not reproduce, so a freshness-only index then fails
+   with `registry.index_integrity` ("may be tampered or corrupted") although nothing was tampered with. It does not
+   happen today: the published index is always root-signed, and `index-sign.yml` offers no freshness role. If a
+   freshness-signed liveness path is added later, it must tolerate this, or the content hash must move to the raw
+   payload bytes. The fix for a user who hits it is the next root-signed index.
 
 ## Upgrade / rollback
 
