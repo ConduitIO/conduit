@@ -517,6 +517,15 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 		}
 	}()
 
+	// Invariant 3: refuse a record written by v0.21 or later before anything
+	// is built or opened (see lifecyclev1.CheckSettingRefs).
+	if err := lifecyclev1.CheckSettingRefs(ctx, pl, s.connectors, s.processors); err != nil {
+		if ce, ok := conduiterr.Get(err); ok && ce.Code == pipeline.CodeSettingsReferencesUnsupported {
+			s.refuseSettingRefs(ctx, pl, err)
+		}
+		return err
+	}
+
 	// #2979: refuse before anything is built or opened, so a refused start reads
 	// nothing from the source and acks nothing (invariants 1 and 3).
 	if err := s.checkDestinationBatching(ctx, pl); err != nil {

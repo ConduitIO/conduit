@@ -357,6 +357,16 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 		}
 	}()
 
+	// Invariant 3: refuse before anything is built or opened. A record written
+	// by v0.21 or later would otherwise start with its reference-backed
+	// settings absent. See CheckSettingRefs.
+	if err := CheckSettingRefs(ctx, pl, s.connectors, s.processors); err != nil {
+		if ce, ok := conduiterr.Get(err); ok && ce.Code == pipeline.CodeSettingsReferencesUnsupported {
+			s.refuseSettingRefs(ctx, pl, err)
+		}
+		return err
+	}
+
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
 
