@@ -42,6 +42,8 @@ type standaloneEnvCheck struct {
 	connectorsDir string
 	enabled       bool
 	redact        bool
+	// environ returns the environment to classify; nil means os.Environ.
+	environ func() []string
 }
 
 func (c standaloneEnvCheck) Name() string { return NamePluginsStandaloneEnv }
@@ -81,7 +83,11 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 		}
 	}
 
-	found := standalone.ClassifyHostEnv()
+	environ := os.Environ
+	if c.environ != nil {
+		environ = c.environ
+	}
+	found := standalone.ClassifyEnv(environ())
 	if found.Total() == 0 {
 		return check.CheckResult{
 			Status:     check.StatusPass,
