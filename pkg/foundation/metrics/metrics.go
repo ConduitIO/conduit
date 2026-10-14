@@ -516,9 +516,9 @@ func estimateJSONSize(v any) int {
 // stringJSONLen returns the exact number of bytes s occupies when encoded as a
 // JSON string, including the surrounding quotes and escaping. It mirrors the
 // encoder used by opencdc (goccy/go-json, HTML escaping on): ", \\, \n, \r and
-// \t cost 2 bytes; <, > and & and every other control character (< 0x20, which
-// includes backspace and form-feed — goccy does not use the \b/\f shortcuts)
-// are escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
+// \t, \b and \f cost 2 bytes (goccy/go-json v0.11 uses the \b and \f shortcuts;
+// v0.10 wrote them as \u0008 and \u000c); <, > and & and every other control
+// character (< 0x20) are escaped as \u00XX (6 bytes); all other bytes (including UTF-8 continuation
 // bytes) cost 1. Computed without allocating. The only residual inexactness is
 // U+2028/U+2029, which goccy escapes to  /  (6 bytes) while this counts
 // their 3 UTF-8 bytes — a bounded, vanishingly rare difference.
@@ -526,7 +526,7 @@ func stringJSONLen(s string) int {
 	n := 2 // surrounding quotes
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
-		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t':
+		case c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' || c == '\b' || c == '\f':
 			n += 2
 		case c == '<' || c == '>' || c == '&' || c < 0x20:
 			n += 6
@@ -539,9 +539,10 @@ func stringJSONLen(s string) int {
 
 // floatLen returns the length of f formatted as the opencdc JSON encoder
 // (goccy/go-json) would format it, using a stack buffer to avoid allocating. The
-// 'f' format is used for |f| in [1e-6, 1e21) and 'e' otherwise. Unlike
-// encoding/json, goccy does not trim a leading zero from the exponent (it emits
-// 1e-07, not 1e-7), so strconv's raw 'e' output matches it directly.
+// 'f' format is used for |f| in [1e-6, 1e21) and 'e' otherwise. Like
+// encoding/json, goccy/go-json v0.11 trims a leading zero from a negative
+// exponent (1e-7, not 1e-07; v0.10 kept the zero), so one byte is subtracted
+// for those. Positive exponents keep their sign and digits (1e+21).
 func floatLen(f float64) int {
 	abs := math.Abs(f)
 	format := byte('f')
@@ -549,7 +550,13 @@ func floatLen(f float64) int {
 		format = 'e'
 	}
 	var buf [40]byte
-	return len(strconv.AppendFloat(buf[:0], f, format, -1, 64))
+	b := strconv.AppendFloat(buf[:0], f, format, -1, 64)
+	n := len(b)
+	// "e-0X" -> "e-X": strconv pads exponents to two digits, the encoder does not.
+	if format == 'e' && n >= 4 && b[n-4] == 'e' && b[n-3] == '-' && b[n-2] == '0' {
+		n--
+	}
+	return n
 }
 
 // intLen returns the number of characters in the decimal representation of i,

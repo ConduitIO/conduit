@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"text/template"
@@ -351,20 +352,25 @@ func isDestinationShapedError(err error) bool {
 	if !cerrors.As(err, &errno) {
 		return false
 	}
-	//nolint:exhaustive // An allowlist by design: every errno not named here
-	// is deliberately NOT destination-shaped (see this function's doc).
-	switch errno {
-	case syscall.EACCES, // no permission on a path component
-		syscall.EPERM,        // operation not permitted (e.g. immutable flag)
-		syscall.ENOTDIR,      // a path component is not a directory
-		syscall.EISDIR,       // the destination file path is a directory
-		syscall.ENOENT,       // a parent directory does not exist
-		syscall.ELOOP,        // symlink loop in the path
-		syscall.ENAMETOOLONG: // the path is too long for this filesystem
-		return true
-	default:
-		return false
-	}
+	// An allowlist by design: every errno not named here is deliberately NOT
+	// destination-shaped (see this function's doc). A lookup rather than a
+	// switch on purpose: exhaustive would demand every syscall.Errno be listed,
+	// and the //nolint:exhaustive this used to carry was reported unused by
+	// nolintlint whenever golangci-lint re-analyzed this package against a
+	// partially restored cache (exhaustive then reports nothing). That made the
+	// directive pass or fail on cache state rather than on the code.
+	return slices.Contains(destinationShapedErrnos, errno)
+}
+
+// destinationShapedErrnos is the allowlist behind isDestinationShapedError.
+var destinationShapedErrnos = []syscall.Errno{
+	syscall.EACCES,       // no permission on a path component
+	syscall.EPERM,        // operation not permitted (e.g. immutable flag)
+	syscall.ENOTDIR,      // a path component is not a directory
+	syscall.EISDIR,       // the destination file path is a directory
+	syscall.ENOENT,       // a parent directory does not exist
+	syscall.ELOOP,        // symlink loop in the path
+	syscall.ENAMETOOLONG, // the path is too long for this filesystem
 }
 
 // destinationError builds the coded error for a failed create-or-open of the

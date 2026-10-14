@@ -553,7 +553,11 @@ func createServices(r *Runtime) error {
 			r.Config.ConnectorPlugins,
 			connSchemaService,
 		),
-		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
+		conn_standalone.NewRegistry(
+			r.logger,
+			r.Config.Connectors.Path,
+			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
+		),
 		tokenService,
 	)
 
