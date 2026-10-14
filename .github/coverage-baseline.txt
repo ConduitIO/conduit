@@ -1,0 +1,85 @@
+# Engine coverage baseline - read by .github/scripts/coverage_ratchet.py, run by
+# .github/workflows/coverage.yml.
+#
+# CLAUDE.md sets an 80% floor on engine packages as "a signal, not a goal". Many
+# engine packages are below it today, so the gate is a RATCHET (the govulncheck
+# pattern, see govulncheck-allowlist.txt): a package may not fall more than
+# `tolerance` points below its entry, and a new engine package must reach `floor`.
+# Report-only would be green and therefore silent; a hard 80% would fail every PR
+# for debt unrelated to its diff.
+#
+# Numbers are unit-test coverage per package from `go test ./pkg/...` (no
+# integration tag, no -coverpkg): what the package's own tests exercise.
+#
+# TO RAISE AN ENTRY: when the job summary lists "Raise these baselines", set the
+# entry to the new value (round down). That is the only way this debt shrinks.
+# TO LOWER ONE: don't. If a change legitimately removes covered code, say why in
+# the PR description and lower it in the same PR.
+# A package under 80% is the work list: add tests for error paths first.
+
+floor 80.0
+# Slack for run-to-run variance (timing-dependent branches, OS-specific files).
+tolerance 1.0
+
+# Packages under these prefixes are "engine" (record flow, plugin runtime,
+# lifecycle, provisioning, schema handling, the runtime wiring).
+engine pkg/connector
+engine pkg/pipeline
+engine pkg/lifecycle
+engine pkg/orchestrator
+engine pkg/processor
+engine pkg/provisioning
+engine pkg/plugin
+engine pkg/schemaregistry
+engine pkg/conduit
+engine pkg/inspector
+
+# Not engine: test doubles, fixtures and test helpers.
+ignore (^|/)(mock|noop|testdata|test|testenv|exampleutil|testplugin|schemaregistrytest|difftest|procutils|dlqparity|pipelines[^/]*)(/|$)
+
+# package  baseline-percent
+pkg/conduit 70.7
+pkg/conduit/check 94.6
+pkg/conduit/dev 86.0
+pkg/conduit/exitcode 93.7
+pkg/connector 79.4
+pkg/inspector 97.3
+pkg/lifecycle 89.3
+pkg/lifecycle/stream 83.5
+pkg/orchestrator 80.6
+pkg/pipeline 57.8
+pkg/plugin 97.0
+pkg/plugin/connector 5.6
+pkg/plugin/connector/builtin 86.8
+pkg/plugin/connector/connutils 50.0
+pkg/plugin/connector/external 63.8
+pkg/plugin/connector/standalone 71.0
+pkg/plugin/processor 37.5
+pkg/plugin/processor/builtin 57.1
+pkg/plugin/processor/builtin/impl 92.4
+pkg/plugin/processor/builtin/impl/avro 80.2
+pkg/plugin/processor/builtin/impl/avro/internal 74.2
+pkg/plugin/processor/builtin/impl/base64 85.9
+pkg/plugin/processor/builtin/impl/cohere 64.6
+pkg/plugin/processor/builtin/impl/custom 84.9
+pkg/plugin/processor/builtin/impl/field 88.6
+pkg/plugin/processor/builtin/impl/json 83.5
+pkg/plugin/processor/builtin/impl/ollama 72.8
+pkg/plugin/processor/builtin/impl/openai 65.3
+pkg/plugin/processor/builtin/impl/unwrap 79.9
+pkg/plugin/processor/builtin/impl/webhook 85.2
+pkg/plugin/processor/builtin/internal 0.0
+pkg/plugin/processor/builtin/internal/diff 80.5
+pkg/plugin/processor/builtin/internal/diff/lcs 95.5
+pkg/plugin/processor/egress 87.1
+pkg/plugin/processor/standalone 81.1
+pkg/processor 86.1
+pkg/provisioning 87.6
+pkg/provisioning/config 97.7
+pkg/provisioning/config/yaml 96.3
+pkg/provisioning/config/yaml/internal 100.0
+pkg/provisioning/config/yaml/v1 0.0
+pkg/provisioning/config/yaml/v2 50.0
+pkg/schemaregistry 82.7
+pkg/schemaregistry/fromschema 66.6
+pkg/schemaregistry/toschema 0.0
