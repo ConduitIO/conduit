@@ -37,8 +37,9 @@ What the code does today (`conduit-connector-kafka`, read 2026-10-12):
   is the whole OpenCDC record, including its metadata, not the original bytes. Any metadata the source
   adds therefore changes the bytes such a destination writes (and the bytes an S3 JSON destination
   writes). This is why new source metadata is opt-in.
-- The destination batch path has an ack bug (#308, completion-order index); this design assumes it is
-  fixed first and does not touch it.
+- The destination batch path had an ack bug (#308, completion-order index). That prerequisite is
+  satisfied: `conduit-connector-kafka#312` fixed it (merged 2026-10-13, released in v0.12.6 and v0.13.0),
+  and this design builds on the per-index results it introduced without touching that code.
 
 MirrorMaker 2 (the reference for "faithful") keeps topic name (via a replication policy), key, value,
 headers, partition (by default the same partition number) and timestamp, and additionally syncs
@@ -113,15 +114,43 @@ only it, and edits that a processor makes to `kafka.header.*` are ignored. A pro
 change mirrored headers must rewrite `kafka.headers`. Likewise edits to `kafka.partition` and
 `kafka.timestamp` change what the destination writes; they are not protected.
 
-Non-UTF-8 header values and the legacy `kafka.header.<k>` entries: OpenCDC metadata is `map[string]string`,
-and a protobuf `string` must be valid UTF-8 (read from the protobuf spec; whether the connector SDK's
-gRPC hop rejects, replaces or passes through an invalid string was not tested). The existing
-`kafka.header.<k>` entries carry `string(h.Value)` and so already have this hazard for binary header
-values, and so do destinations that put metadata through JSON (a JSON encoder replaces invalid UTF-8 with
-U+FFFD). `kafka.headers` avoids it by base64-encoding keys and values, which is the reason for the
-encoding. Mirror mode does not read the legacy entries (except under `allowLossyHeaders`). The legacy
-entries stay unchanged by default; whether mirror mode should stop emitting them for headers that are not
-valid UTF-8 is not decided here.
+#### Non-UTF-8 header values and the legacy `kafka.header.<k>` entries
+
+The problem, verified: OpenCDC metadata is `map[string]string`, and a protobuf `string` field must be
+valid UTF-8. `proto.Marshal` of the `opencdc.v1.Record` built by `Record.ToProto` (`conduit-commons` v0.8.0)
+from a record whose metadata holds `kafka.header.bin = "\xff\xfe\x00"` fails with
+`string field contains invalid UTF-8`; the same record with a plain value marshals, and an invalid-UTF-8
+metadata key (`kafka.header.\xff\xfe\x00`) fails the same way (run 2026-10-14). So a
+record that carries one binary header in a legacy entry cannot be marshalled at all, and every path that
+marshals the record as that message (the gRPC hop of a standalone connector among them) fails for the
+whole record, not for the one entry. Destinations that put metadata through JSON have a second, silent
+form of the hazard: a JSON encoder replaces invalid UTF-8 with U+FFFD. `kafka.headers` avoids both by
+base64-encoding keys and values, which is the reason for that encoding. Mirror mode does not read the
+legacy entries (except under `allowLossyHeaders`).
+
+Options for the legacy entry of a header value that is not valid UTF-8:
+
+| Option | Result | Verdict |
+| --- | --- | --- |
+| (a) Keep emitting `string(h.Value)` | The record fails to marshal on every protobuf path; binary headers break the pipeline | Rejected: it is the bug |
+| (b) Escape or replace the value (U+FFFD, `\x` escapes, base64 in the legacy key) | The record marshals, but a consumer of `kafka.header.<k>` receives bytes that differ from what Kafka holds, with nothing marking the change | Rejected: silent mangling, which invariant 6 forbids |
+| (c) Drop the record or fail it | No mangling, but a valid Kafka record becomes unmirrorable because of a view nobody in mirror mode reads | Rejected for mirror mode |
+| (d) When `emitMirrorMetadata` is on, omit the legacy entry for that header, keep the raw bytes in `kafka.headers`, count the omission | The record marshals; the lossless copy is intact; the absence of the human-readable view is counted, not silent | Chosen |
+
+Decided by DeVaris 2026-10-14 (Decisions, item 5): option (d). With `emitMirrorMetadata: true`, the
+source omits `kafka.header.<k>` for every header whose value is not valid UTF-8 (`utf8.Valid`), and for
+every header whose key is not, because the metadata key has the same constraint (verified above); it writes
+the header unchanged into `kafka.headers`, increments
+`kafka_source_legacy_header_omitted_total` once per omitted entry, and logs a WARN once per header key
+per pipeline naming the key (never the value). The value is never escaped or replaced. A header key that
+repeats is judged on the value that would have won (the last one), so the legacy view never shows an
+earlier value in place of an omitted later one. With `emitMirrorMetadata: false` the source emits what it
+emits today, including the hazard; that pre-existing behaviour is outside this decision and is a separate
+connector issue.
+
+Upgrade note: a pipeline that turns on `emitMirrorMetadata` loses `kafka.header.<k>` entries only for
+headers that could not cross a protobuf hop anyway. Processors that read those entries must read
+`kafka.headers` instead.
 
 Size: base64 inflates headers by about a third and the metadata is carried with every record in the
 pipeline, which is the other reason the option is off by default.
@@ -146,8 +175,9 @@ with `mirror`. Default `false` means no change for anyone who does not set it.
 | `topicConfigRefreshMaxFailures` | int | `3` | min `1` | Consecutive failed refreshes tolerated before the pipeline halts |
 | `maxMessageBytesOverride` | int | `0` (use the topic's `max.message.bytes`) | `>= 0` | Replaces the topic limit in the size check |
 
-The defaults for `produceTimeout`, `topicConfigRefreshInterval` and `topicConfigRefreshMaxFailures` are
-proposals, not measured.
+The `produceTimeout` default and range are decided (Decided by DeVaris 2026-10-14, Decisions, item 3) as
+starting defaults; none of the three numbers was measured. The defaults for `topicConfigRefreshInterval`
+and `topicConfigRefreshMaxFailures` are proposals, not measured.
 
 Behaviours under `mirror`:
 
@@ -436,7 +466,8 @@ appeared. So an error means "not confirmed", and redelivery can produce a duplic
 not loss, and the duplicate carries identical partition, timestamp and headers. It does extend the
 reorder caveat in _Ordering_ to the timeout path.
 
-Range of `produceTimeout`, decided (Decisions, item 3): default `2m`, minimum `30s`, maximum `1h`.
+Range of `produceTimeout`, Decided by DeVaris 2026-10-14 (Decisions, item 3): default `2m`, minimum `30s`,
+maximum `1h`, `0` rejected. These are starting defaults and have not been measured.
 
 - `0` and any unbounded setting are rejected, and there is no `allowUnboundedProduce` escape hatch. The reason
   is invariant 7: a stuck `Write` has no other bound (see _Shutdown_), so an unbounded option would let a
@@ -461,22 +492,37 @@ above the broker's worst healthy produce latency.
 ###### Shutdown
 
 Read from the engine (`conduit` `pkg/lifecycle/stream/destination.go`, `pkg/connector/destination.go`,
-`pkg/lifecycle/service.go`, `pkg/conduit/runtime.go`) and from `conduit-connector-sdk` v0.14.2
-`destination.go`. All of it is read, not run:
+`pkg/lifecycle/service.go`, `pkg/conduit/runtime.go`) and from `conduit-connector-sdk` v0.15.0
+`destination.go` (the version Conduit `main` requires; it includes `conduit-connector-sdk#401`). All of it
+is read, not run:
 
 - The engine's `Destination.Write` does not call the connector's `Write`. It only hands the record to the
   gRPC stream: `stream.Send` (`pkg/connector/destination.go`, `Write` at line 239, the `Send` at line 251). The
   connector's own `Write(ctx)` runs inside the SDK `Run` loop (`destinationPluginAdapter.Run`,
-  `destination.go:187`, the write call at line 201) with the stream context.
+  `destination.go:188`, the write call at line 202) with the stream context.
 - The destination node's cleanup runs only after its message loop has returned
   (`pkg/lifecycle/stream/destination.go`, deferred func): `Destination.Stop`, then `openMsgTracker.Wait()`
   (all open messages acked or nacked), then `Destination.Teardown`, where the connector's `Close` runs. The
   real stall points are `Destination.Stop`, in which the SDK waits up to `stopTimeout` (1 m,
-  `source.go:39`, used at `destination.go:253`) for the last position to be written and then up to 1 m to
-  flush, and `openMsgTracker.Wait()`. Both run before `Teardown`, so `Teardown` cannot unblock a stuck
-  `Write`.
+  `source.go:38`, used at `destination.go:254`) for the last position to be written and then up to 1 m to
+  flush (`destination.go:269`), and `openMsgTracker.Wait()`. Both run before `Teardown`.
+- SDK v0.15.0 Teardown semantics (`conduit-connector-sdk#401`, `destination.go:283-335`). `Teardown` can
+  arrive without a prior `Stop` (an error-triggered stop) while the connector's `Write` is still running.
+  The SDK then waits for that `Write` for at most `min(ctx, destinationTeardownTimeout)`, 1 m
+  (`source.go:45`), and refuses new ones: records received after `Teardown` started are never written and
+  are left unanswered, neither acked nor nacked, so they are redelivered after a restart and never reach a
+  DLQ. If the `Write` is still running when the wait expires, the SDK calls the connector's `Teardown`
+  anyway, concurrently with that `Write`, returns an error saying so, and does not ack the abandoned
+  `Write`'s records whatever it later returns (`writeStrategySingle.Write`, `destination.go:450-500`).
+  For mirror mode this means: with the default `produceTimeout` (2 m) longer than the 1 m wait, the
+  connector's `Teardown` can run while a `Write` is in flight. `Teardown` closes the client through the
+  same `sync.Once` as the timer (point 5 above), which ends the in-flight `Write` through the `closed`
+  channel. That `Write`'s records are not acked by the SDK, so they are redelivered: duplicates possible, no
+  loss (invariants 1 and 3). The concurrent `Teardown` is why the poison flag and the `closed` channel
+  must be safe under `-race` (see Test plan).
 - The things that end a stuck connector `Write` are `produceTimeout` expiring, the stream context being
-  cancelled (the connector's wait selects on `ctx.Done()`), or the broker coming back. The legacy lifecycle
+  cancelled (the connector's wait selects on `ctx.Done()`), the connector's `Teardown` closing the client
+  after the SDK's 1 m wait (above), or the broker coming back. The legacy lifecycle
   never cancels that context on SIGTERM: `StopAll` is graceful only (`pkg/lifecycle/service.go:661`), and the
   forced stop after a timeout is an open TODO (`service.go:689`). The stream context is cancelled by
   `Teardown` (`stopStream`, `pkg/connector/destination.go`), which runs after the stall.
@@ -578,6 +624,33 @@ What the design does about it:
   `acks`. Idempotence was confirmed active in the spike (a producer ID was allocated on both brokers).
 - Records from different source partitions may interleave arbitrarily; that is also true of MM2.
 
+Sign-off, stated plainly. Decided by DeVaris 2026-10-14 (Decisions, item 6): invariant 4 holds per
+source partition only until the first broker or network error after enqueue on that destination
+partition. After such an error, the partition may hold later records before an earlier one, and
+duplicates. This is accepted, on three conditions, all part of this change:
+
+1. A loud metric. Every produce error reported by the broker or client after enqueue increments
+   `kafka_destination_post_enqueue_errors_total`, labelled with the destination topic and partition. Any
+   increase means that partition may now be out of order, and an alert on any increase is the
+   detection. A gauge that stays set until re-seed was considered and dropped: the pipeline halts and
+   restarts, the connector keeps no state across a restart, and a gauge that silently resets to 0 on
+   restart would hide the condition it reports. The counter's increase survives in the metrics store.
+2. A WARN. The connector logs at WARN, once per error, naming the topic, partition, the first nacked
+   record's position and the error, with the text "per-partition order is no longer guaranteed for this
+   destination partition; re-seed it". The pipeline also halts (_Error policy_), so the error shows as a
+   pipeline failure as well.
+3. A documented remedy. Re-seed the affected destination partition. Kafka cannot truncate the tail of a
+   partition (`kafka-delete-records` only advances the log start offset), and a single partition cannot be
+   re-created, so re-seeding means: stop the pipeline, delete and re-create the destination topic with the
+   same partition count (or point the pipeline at a new topic), reset the source consumer group to the
+   earliest offset the source topic still retains, and restart. If the source has already expired records
+   that the destination held, a full re-seed is not possible; the runbook then says so, and the choice is
+   between keeping the out-of-order partition (consumers must tolerate it) and re-seeding what is left. The
+   runbook entry under `docs/operations/` gives the exact commands for both brokers.
+
+Where the metric cannot be exported, see _Observability_: the export path is an open prerequisite, and
+until it exists the WARN is the only signal, which is not enough for Certified.
+
 Records are not re-keyed. Key bytes are written as received, so consumers that re-hash see the same
 key. Because partition is preserved explicitly, a destination with a different partition count still
 preserves the source mapping for the partitions that exist; it does not preserve key-hash locality,
@@ -630,7 +703,8 @@ fallback path is dead code, and the wrapper must forward two extra franz interfa
 **Make the destination preserve everything unconditionally.** Simplest config. Lost: it changes bytes
 written by existing pipelines (headers appear, timestamps change, partitioning changes) and breaks
 the backward-compatibility constraint; also partition preservation is unsafe by default with
-auto-created topics. Rejected in favour of opt-in flags.
+auto-created topics. Rejected in favour of the two opt-in options, `emitMirrorMetadata` on the source and
+`mirror` on the destination.
 
 **Fall back to key-hash partitioning when the source partition does not exist at the destination.**
 Never fails, so more convenient. Lost: it silently changes the user's declared placement and can
@@ -659,6 +733,8 @@ returns that record's index: earlier records are acked, this one and the rest of
 | `kafka.headers` absent in `mirror` mode | Record fails, `KAFKA_HEADERS_MISSING`, unless `allowLossyHeaders` is set, in which case headers are rebuilt from `kafka.header.*`, one warning, counter incremented |
 | Header null versus empty value | Both preserved: `v: null` and `v: ""` round trip as null and empty (spike) |
 | Header with empty key or key that is not UTF-8 | Both brokers accept and return these (spike); carried as base64 key bytes, no failure |
+| Header value (or key) not valid UTF-8, `emitMirrorMetadata` on | Legacy `kafka.header.<k>` entry omitted, raw bytes kept in `kafka.headers`, `kafka_source_legacy_header_omitted_total` incremented, WARN once per key. Never escaped. Without the omission the record fails `proto.Marshal` (verified) |
+| Same, `emitMirrorMetadata` off | Unchanged from today: the legacy entry carries invalid UTF-8 and the record cannot cross a protobuf hop. Pre-existing, outside this design, separate issue |
 | Header total size exceeds topic `max.message.bytes` / client `batchBytes` | See _Record size_: checked in `prepareRecord`, fails that record and stops the batch; the broker error is the backstop |
 | `message.timestamp.type=LogAppendTime` on the destination topic | Record fails, `KAFKA_TIMESTAMP_TYPE_LOG_APPEND` (see _Timestamp preconditions_) |
 | Record timestamp outside `message.timestamp.before/after.max.ms` (or `difference.max.ms`) | Record fails client-side, `KAFKA_TIMESTAMP_OUT_OF_RANGE`. If the broker still returns `INVALID_TIMESTAMP` (config changed, or not described), the whole produce batch fails on Kafka, including valid records in it (spike); the destination re-reads the topic config once and reports the config values |
@@ -677,10 +753,10 @@ returns that record's index: earlier records are acked, this one and the rest of
 | Record plus headers over topic `max.message.bytes` or `batchBytes` | Record fails in `prepareRecord`, `KAFKA_RECORD_TOO_LARGE` (uncompressed estimate; `maxMessageBytesOverride` relaxes the topic part); `batchBytes` above the topic limit fails the first record, `KAFKA_BATCH_BYTES_EXCEEDS_TOPIC_MAX` |
 | Empty or nil value/key without `kafka.value.null`/`kafka.key.null`, conflicting marker and bytes, non-`RawData` payload, user-set `sdk.record.format` | Record fails (or config validation fails) with the `KAFKA_MIRROR_*` codes in _Key and value rules_; never written as empty or re-serialized |
 | Many source topics onto one destination topic | Partition numbers collide and records interleave on the destination partition; allowed, documented |
-| Broker rejects a record after enqueue (for example `MESSAGE_TOO_LARGE`, auth, network) | Pipeline halts. Per-partition order is not guaranteed after this: later records of the batch may already be in the partition and are redelivered (Spike results 4, _Ordering_). Remedy: re-seed that destination partition |
+| Broker rejects a record after enqueue (for example `MESSAGE_TOO_LARGE`, auth, network) | Pipeline halts. Per-partition order is not guaranteed after this: later records of the batch may already be in the partition and are redelivered (Spike results 4, _Ordering_). `kafka_destination_post_enqueue_errors_total` increments for the partition, WARN logged. Remedy: re-seed that destination partition (accepted, Decisions, item 6) |
 | Crash (`kill -9`) mid-batch | Unacked records are re-read from the committed consumer-group offset and produced again: duplicates, no loss. Preserved fields are derived from the record, so a duplicate carries identical partition, timestamp and headers and lands in the same partition |
 | Duplicate delivery in `mirror` mode | A re-produced record is appended again to the same partition (at-least-once). Consumers need idempotence, as with any at-least-once mirror |
-| Batch produce returns results out of order | Depends on the #308 fix; this change must not merge before it |
+| Batch produce returns results out of order | Fixed by `conduit-connector-kafka#312` (#308), released in v0.12.6 and v0.13.0; prerequisite satisfied |
 | Source `emitMirrorMetadata` off or older source version | `mirror` fails loudly with the codes above; nothing is written without the preserved field |
 | Empty non-null value mirrored through the template recipe | Becomes a tombstone (spike). Superseded by `mirror` mode; see the recipe section |
 | Template recipe fails to execute | `Record.Bytes()` falls back to the OpenCDC envelope silently (spike). Not possible in `mirror` mode, which bypasses the format |
@@ -715,10 +791,26 @@ convention.
   `allowUncheckedTopicConfig` in use (also once per refresh), a DescribeConfigs refresh that failed
   transiently (each time, with the consecutive count). Fail-fast `KAFKA_TOPIC_CONFIG_UNREADABLE` is an
   error, not a warning.
-- Counters (via the SDK metrics where available, otherwise log fields): records produced with
-  preserved partition, lossy header fallbacks used, transient config-refresh failures, produce timeouts,
-  failures by code. Metric names to be agreed with
-  the connector metrics conventions; not specified here.
+- Metrics. Names follow the engine's Prometheus style (`snake_case`, `_total` for counters), prefixed
+  with the connector name. Every metric carries the pipeline ID as a label.
+
+  | Metric | Type | Labels | Meaning |
+  | --- | --- | --- | --- |
+  | `kafka_destination_mirror_records_total` | counter | `topic` | Records produced in `mirror` mode with preserved partition, timestamp and headers |
+  | `kafka_destination_lossy_header_fallback_total` | counter | `topic` | Records written with headers rebuilt under `allowLossyHeaders` |
+  | `kafka_destination_topic_config_refresh_failures_total` | counter | `topic`, `class` (`transient`, `fatal`) | Failed DescribeConfigs reads |
+  | `kafka_destination_unchecked_topic_config` | gauge | `topic` | 1 while `allowUncheckedTopicConfig` skips the checks |
+  | `kafka_destination_produce_timeouts_total` | counter | `topic` | `produceTimeout` expiries (`KAFKA_PRODUCE_TIMEOUT`) |
+  | `kafka_destination_post_enqueue_errors_total` | counter | `topic`, `partition` | Produce errors reported after enqueue; each one voids the ordering guarantee for that partition |
+  | `kafka_destination_record_failures_total` | counter | `code` | Records failed, by stable error code |
+  | `kafka_source_legacy_header_omitted_total` | counter | `topic` | Legacy `kafka.header.<k>` entries omitted because the header is not valid UTF-8 |
+
+  Export path, an open prerequisite: `conduit-connector-sdk` v0.15.0 has no metrics API for connectors
+  (no counter or gauge constructors in the module, checked 2026-10-14), and the engine's registry is in
+  `conduit` `pkg/foundation/metrics`, which a standalone connector cannot reach. Until a connector metrics
+  path exists, these values are emitted only as structured log fields with the same names. That is not
+  enough for `kafka_destination_post_enqueue_errors_total`, which is meant to be alerted on, so the export path blocks
+  Certified status for `mirror` mode. It is a cross-repo item to file against the SDK.
 - Per-record failures include topic, partition and the record position so an operator can find the
   offending offset.
 - Runbook entries under `docs/operations/` for each halt-class code: symptom, diagnosis, remediation
@@ -735,6 +827,16 @@ convention.
 - Property-based (rapid): encode headers to `kafka.headers` and back is the identity for arbitrary
   byte keys and values, including null versus empty and non-UTF-8 keys, and repeats; header order is
   preserved. Same for null versus empty key and value through `kafka.key.null`/`kafka.value.null`.
+- Non-UTF-8 header values: with `emitMirrorMetadata: true`, a record with headers `bin = \xff\xfe\x00`,
+  `ok = plain`, and a repeated key whose last value is not valid UTF-8 has no `kafka.header.bin` and no
+  legacy entry for the repeated key, has `kafka.header.ok`, carries all three headers byte for byte in
+  `kafka.headers`, marshals with `proto.Marshal`, and increments `kafka_source_legacy_header_omitted_total`
+  by two. No metadata value contains U+FFFD or an escape. With `emitMirrorMetadata: false` output is
+  byte-identical to the previous release (the golden test below). End to end: the record crosses a
+  standalone connector's gRPC hop and is mirrored with identical header bytes.
+- Ordering observability: the broker-rejection test below also asserts that
+  `kafka_destination_post_enqueue_errors_total` increments for that partition only and the WARN names
+  the partition.
 - Fuzz (native Go fuzzing) on the `kafka.headers` decoder, a parser of externally supplied data.
   Seeds: valid arrays; `null` and `""` values; URL-alphabet base64; missing padding; whitespace and
   newlines inside base64; trailing bytes after the array; duplicate and unknown fields; wrong types;
@@ -776,6 +878,10 @@ convention.
     client is closed, and nack starts from the first unresolved record.
   - A `Close()` that wins the race against a `Produce` which then never calls back ends the wait through the
     `closed` channel, not the timer (assert the return time is far below `produceTimeout`).
+- SDK v0.15.0 Teardown race: `Teardown` arriving without `Stop` while a `Write` is blocked on a paused
+  broker; the SDK's 1 m wait expires (shortened in the test), the connector's `Teardown` closes the
+  client, the `Write` returns through the `closed` channel, none of its records is acked, and nothing
+  races under `-race`.
 - Shutdown: a pipeline-level test sends SIGTERM with a paused destination broker and in-flight records;
   asserts that the runtime stops waiting at `exitTimeout` (30 s), no ack past the last confirmed record, and a
   restart that loses nothing. Same with SIGKILL. It also records whether the `Write` context is cancelled on
@@ -943,7 +1049,9 @@ compose project and ephemeral host ports. Results are observations on those vers
 
 ## Decisions
 
-Recorded as decided by DeVaris (round 4); no sign-off is pending on this document.
+Items 1, 2 and 4 were recorded as decided in round 4. Items 3, 5 and 6 were decided by DeVaris on
+2026-10-14. No decision is pending on this document; the metrics export path (_Observability_) is an open
+prerequisite, not a decision.
 
 1. Destination option shape and the value path. One `mirror: true` option replaces the four booleans
    (`preserveHeaders`, `preserveTimestamp`, `preservePartition`, `preserveValue`). It implies header, timestamp,
@@ -954,14 +1062,24 @@ Recorded as decided by DeVaris (round 4); no sign-off is pending on this documen
    wider surface; (c) keep the template recipe and document its empty-value and silent-fallback limits.
 2. Default `sdk.record.format` with preserve behaviour: moot. Under `mirror` the format is ignored and a set
    one is rejected (`KAFKA_MIRROR_FORMAT_SET`).
-3. Produce wait bound. Unbounded produce waits are not accepted in mirror mode. `produceTimeout` defaults to
-   `2m`, must be finite, with a minimum of `30s` and a maximum of `1h`; `0` is rejected and there is no escape
-   hatch (no `allowUnboundedProduce`). Both limits are hard config errors
-   (`KAFKA_PRODUCE_TIMEOUT_OUT_OF_RANGE`). Justification is under _Delivery timeout and bounded waits_. The
-   numbers `30s`, `2m` and `1h` are judgement, not measurements.
+3. Produce wait bound. Decided by DeVaris 2026-10-14. Unbounded produce waits are not accepted in mirror
+   mode. `produceTimeout` defaults to `2m`, must be finite, with a minimum of `30s` and a maximum of `1h`;
+   `0` is rejected and there is no escape hatch (no `allowUnboundedProduce`). Both limits are hard config
+   errors (`KAFKA_PRODUCE_TIMEOUT_OUT_OF_RANGE`). Justification is under _Delivery timeout and bounded
+   waits_. The three numbers are starting defaults; none was measured.
 4. Non-retriable, non-auth DescribeConfigs errors fail fast (see _Topic configuration checks_).
+5. Non-UTF-8 header values. Decided by DeVaris 2026-10-14. With mirror metadata on, the source omits the
+   legacy `kafka.header.<k>` entry for a header that is not valid UTF-8, keeps the raw bytes in
+   `kafka.headers`, and counts each omission in `kafka_source_legacy_header_omitted_total`. The value is
+   never escaped or replaced (invariant 6). The design applies the same rule to a header key that is not
+   valid UTF-8, since the metadata key fails `proto.Marshal` the same way. See _Non-UTF-8 header values_.
+6. Ordering after a post-enqueue error. Decided by DeVaris 2026-10-14. Invariant 4 holds per partition
+   only until the first broker error after enqueue; this is accepted. It requires the loud metric
+   (`kafka_destination_post_enqueue_errors_total`, alerted on any increase), a WARN, and the
+   documented re-seed remedy. See _Ordering_.
 
 ## Related
 
-- `ConduitIO/conduit-connector-kafka#309` (tracking issue), #308 (batch ack bug, prerequisite)
+- `ConduitIO/conduit-connector-kafka#309` (tracking issue), #308 (batch ack bug, prerequisite, fixed by
+  #312, released in v0.12.6 and v0.13.0)
 - `docs/catalog/v0.21-certification-gaps.md` (MirrorMaker 2 parity table, decision 9)
