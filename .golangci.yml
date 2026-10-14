@@ -188,6 +188,13 @@ linters:
       exclude-godoc-examples: true
     gocyclo:
       min-complexity: 20
+    govet:
+      # shadow would have caught #2925 (an `err :=` in a loop hid the outer
+      # err, so a failed store write was committed and reported as success).
+      # It is scoped to pkg/connector by the exclusion rule below; see that
+      # rule for why it is not repo-wide.
+      enable:
+        - shadow
     goheader:
       values:
         regexp:
@@ -219,6 +226,19 @@ linters:
       - linters:
           - staticcheck
         text: "QF1008:" # could remove embedded field from selector
+      - linters:
+          - govet
+        text: "^shadow:"
+        # govet's shadow check (#2930) runs on pkg/connector only, where it
+        # found the #2925 bug and where all 3 findings were fixed when it was
+        # turned on. Repo-wide it reports 141 findings; the 21 in
+        # pkg/lifecycle and pkg/lifecycle-poc were reviewed and none is a
+        # bug: they are `if err := ...; err != nil` blocks, deliberate fresh
+        # contexts in cleanup goroutines, and one goroutine in
+        # pkg/lifecycle/stream/destination_acker.go where the shadow is what
+        # keeps it from racing on the outer err. Extend this path when a
+        # package's findings have been fixed.
+        path-except: ^pkg/connector/
       - linters:
           - dogsled
           - gosec

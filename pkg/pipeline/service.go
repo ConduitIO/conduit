@@ -364,6 +364,12 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 }
 
 // UpdateStatus updates the status of a pipeline by the ID.
+//
+// The in-memory instance is updated first and is not rolled back if the store
+// write fails: the process keeps reporting the status it intends, and the
+// store keeps the last status that landed. A failed store write is counted in
+// conduit_pipeline_status_persist_failures_total and returned with code
+// CodeStatusPersistFailed.
 func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
 	pipeline, err := s.Get(ctx, id)
 	if err != nil {
@@ -377,7 +383,10 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, er
 
 	err = s.store.Set(ctx, pipeline.ID, pipeline)
 	if err != nil {
-		return cerrors.Errorf("pipeline not updated: %w", err)
+		measure.PipelineStatusPersistFailures.WithValues(pipeline.Config.Name).Inc()
+		cerr := conduiterr.Wrap(CodeStatusPersistFailed, fmt.Sprintf("pipeline not updated: %v", err), err)
+		cerr.Suggestion = "check the database (/healthz, free disk); the stored status lags the live one until a later write lands"
+		return cerr
 	}
 	return nil
 }

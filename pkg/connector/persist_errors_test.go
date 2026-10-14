@@ -60,10 +60,10 @@ func newTestDestinationWithPersister(ctx context.Context, t *testing.T, ctrl *go
 	return dest, destinationMock
 }
 
-// newSharedBatchPersister returns a persister that only flushes on an
-// explicit Flush, over a store that fails writes for "other-conn".
-func newSharedBatchPersister(wantErr error) *Persister {
-	db := &faultyStoreDB{DB: &inmemory.DB{}, failID: "other-conn", setErr: wantErr}
+// newFailingWritePersister returns a persister that only flushes on an
+// explicit Flush, over a store that fails every write of connector failID.
+func newFailingWritePersister(failID string, wantErr error) *Persister {
+	db := &faultyStoreDB{DB: &inmemory.DB{}, failID: failID, setErr: wantErr}
 	db.setArmed.Store(true)
 	persister := NewPersister(log.Nop(), db, DefaultPersisterDelayThreshold, 100)
 	persister.clock = newFakeClock()
@@ -76,7 +76,7 @@ func TestPersister_BatchErrorCarriesStableCode(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	wantErr := cerrors.New("injected store failure")
-	persister := newSharedBatchPersister(wantErr)
+	persister := newFailingWritePersister("other-conn", wantErr)
 
 	cb, errFn := collectCallback(t)
 	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, cb))
@@ -90,19 +90,18 @@ func TestPersister_BatchErrorCarriesStableCode(t *testing.T) {
 	is.True(cerrors.Is(err, wantErr))
 }
 
-// TestDestination_SharedBatchFailure_NobodyReadingErrs_DoesNotWedgePersister:
-// a destination's Open lifecycle-event persist shares a batch with a failing
-// connector, so its callback now gets an error. Nobody reads Errors()
-// (arch-v2 always, v1 once its node loop has ended). The callback must not
-// block forever: Teardown releases it, WaitPendingWrites returns, and
-// Teardown reports the failure.
-func TestDestination_SharedBatchFailure_NobodyReadingErrs_DoesNotWedgePersister(t *testing.T) {
+// TestDestination_PersistFailure_NobodyReadingErrs_DoesNotWedgePersister: a
+// destination's Open lifecycle-event persist fails, so its callback gets an
+// error. Nobody reads Errors() (arch-v2 always, v1 once its node loop has
+// ended). The callback must not block forever: Teardown releases it,
+// WaitPendingWrites returns, and Teardown reports the failure.
+func TestDestination_PersistFailure_NobodyReadingErrs_DoesNotWedgePersister(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
 	wantErr := cerrors.New("injected store failure")
-	persister := newSharedBatchPersister(wantErr)
+	persister := newFailingWritePersister("test-destination-id", wantErr)
 	dest, destMock := newTestDestinationWithPersister(ctx, t, ctrl, persister)
 	_ = expectDestinationOpen(dest, destMock)
 	destMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).
@@ -141,7 +140,7 @@ func TestDestination_Teardown_ReturnsPersistErrorReportedWhileStopping(t *testin
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
-	persister := newSharedBatchPersister(cerrors.New("unused"))
+	persister := newFailingWritePersister("other-conn", cerrors.New("unused"))
 	dest, destMock := newTestDestinationWithPersister(ctx, t, ctrl, persister)
 	_ = expectDestinationOpen(dest, destMock)
 	destMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).
@@ -167,7 +166,7 @@ func TestConnector_OpenFailsAfterLifecyclePersist_DoesNotWedgePersister(t *testi
 		is := is.New(t)
 		ctx := context.Background()
 		ctrl := gomock.NewController(t)
-		persister := newSharedBatchPersister(cerrors.New("injected store failure"))
+		persister := newFailingWritePersister("test-connector-id", cerrors.New("injected store failure"))
 		src, srcMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
 		srcMock.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(pconnector.SourceConfigureResponse{}, nil)
 		srcMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).
@@ -185,7 +184,7 @@ func TestConnector_OpenFailsAfterLifecyclePersist_DoesNotWedgePersister(t *testi
 		is := is.New(t)
 		ctx := context.Background()
 		ctrl := gomock.NewController(t)
-		persister := newSharedBatchPersister(cerrors.New("injected store failure"))
+		persister := newFailingWritePersister("test-destination-id", cerrors.New("injected store failure"))
 		dest, destMock := newTestDestinationWithPersister(ctx, t, ctrl, persister)
 		destMock.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(pconnector.DestinationConfigureResponse{}, nil)
 		destMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).

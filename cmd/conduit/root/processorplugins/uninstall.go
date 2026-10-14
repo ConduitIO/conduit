@@ -22,8 +22,10 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal/exitcodedoc"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -79,6 +81,15 @@ type UninstallCommand struct {
 
 func (c *UninstallCommand) Usage() string { return "uninstall <name>[@version]" }
 
+// uninstallExitCodes is the "Exit codes" block of uninstall's --help, with
+// each exit code computed from the real mapping (#2907).
+var uninstallExitCodes = exitcodedoc.Render(
+	exitcodedoc.Entry{Code: conduiterr.CodeInvalidArgument, When: "bad <name>[@version] argument"},
+	exitcodedoc.Entry{Code: registry.CodeProcessorNotInstalled, When: "no such processor installed"},
+	exitcodedoc.Entry{Code: registry.CodeAmbiguousUninstall, When: "several versions installed and no @version given"},
+	exitcodedoc.Entry{Code: registry.CodeProcessorInUse, When: "a pipeline uses the processor and --force was not given"},
+)
+
 func (c *UninstallCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Remove an installed standalone WASM processor",
@@ -91,11 +102,7 @@ config under --pipelines.path for a standalone:<name> reference. By default this
 list of the affected pipelines; --force proceeds anyway and the result carries a warning naming
 them.
 
-Exit codes (via the ConduitError's registered category):
-  0  success
-  1  Runtime    — internal bug
-  2  Validation — not installed, ambiguous uninstall (multiple versions, no @version given)
-  3  Environment — processor is in use by a pipeline and --force was not given`,
+` + uninstallExitCodes,
 		Example: "conduit processor-plugins uninstall ai.embed\n" +
 			"conduit processor-plugins uninstall ai.embed@0.1.0\n" +
 			"conduit processor-plugins uninstall ai.embed --force\n" +

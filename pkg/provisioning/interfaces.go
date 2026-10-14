@@ -93,4 +93,10 @@ type LifecycleService interface {
 	// the caller falls back to a restart. See the live in-place hot-reload
 	// design doc.
 	ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error
+	// TryLockForMutation atomically checks that the pipeline has no run and,
+	// if so, refuses every Start of it until unlock is called (#2961). It
+	// reports false, holding nothing, when the pipeline has a run. ApplyPlanLive
+	// holds it across the import, and releases it before its own Start. See
+	// lifecycle.Service.TryLockForMutation.
+	TryLockForMutation(pipelineID string) (unlock func(), ok bool)
 }

@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
   pull_request:
 
 jobs:
@@ -30,6 +30,16 @@ jobs:
         # both are now hermetic and this can gate merges.
         run: make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"
 
+      - name: Storage downgrade gate (tests/upgrade/storecompat/downgrade)
+        # tests/upgrade/storecompat (run by the Test step) proves a database
+        # written by the previous release's badger/sqlite opens on the current
+        # ones. This proves the reverse: a database written by the current
+        # libraries opens with the previous release's (v0.20.0: badger v4.9.1,
+        # sqlite v1.38.0). It is a separate module because one module cannot
+        # select both versions, so `./...` above does not include it.
+        working-directory: tests/upgrade/storecompat/downgrade
+        run: go test -v -race -count=1 ./...
+
       - name: Error-code guard (execution plan §1.1)
         # The codes_contract_test.go / registry-invariants tests already run
         # as part of `go test ./...` above, so this step is redundant with the
@@ -42,6 +52,20 @@ jobs:
         # test job. Without it, a codeless error would otherwise surface only
         # in production, on the wire, to a user or agent.
         run: go test ./pkg/http/api/status/... -run 'Codes|Registry' -v -race
+
+      - name: Live-runtime WASM processor tests (no -race, compiler engine)
+        # Every other test command here runs with -race, and the standalone
+        # package's TestMain builds its shared runtime WITH wazero's
+        # close-on-context-done (the install-time configuration). The live
+        # record-path runtime is built WITHOUT it, and its kill fallback closes a
+        # module that is mid host call, which wazero's own code races on under
+        # -race, so those tests are `//go:build !race` and would otherwise never
+        # run (#2981, review of #2996). CONDUIT_TEST_WASM_ENGINE=compiler also
+        # runs them on wazero's optimizing compiler, the production default on
+        # amd64/arm64, where the rest of the suite uses the interpreter.
+        env:
+          CONDUIT_TEST_WASM_ENGINE: compiler
+        run: go test -count=1 -v -run 'LiveRuntime' ./pkg/plugin/processor/standalone/
 
       - name: generate_capture build+lint gate (M2, round-4 review of #2814)
         # cmd/conduit/internal/generate/transcript_capture_test.go

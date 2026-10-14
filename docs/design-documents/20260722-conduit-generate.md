@@ -232,6 +232,12 @@ favoritism the roadmap forbids for brokers. Resolution is deterministic, in this
      the kind of hidden-favoritism decision this design avoids — it would also make a real support
      question ("why did it use provider X") return a wrong answer every time behavior changed.
 
+> **Amended 2026-10-07 (#2908):** as implemented, the order is `--provider` >
+> `CONDUIT_GENERATE_PROVIDER` > `generate.provider` > auto-detect.
+> `CONDUIT_GENERATE_PROVIDER` is the variable Conduit's config loader derives for
+> `generate.provider`, and every other `conduit.yaml` key is overridden by its `CONDUIT_*`
+> variable; the file beating its own variable would have been the only exception.
+
 **Model selection.** Each provider adapter has a documented recommended default model, overridable
 by `--model`/`generate.model`. Exact model IDs are a code-level constant, not pinned in this doc —
 naming a specific model here would date the document the moment providers rev their lineup; the
