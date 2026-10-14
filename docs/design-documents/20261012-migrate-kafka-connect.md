@@ -265,6 +265,11 @@ cannot reach the worker; 1 for internal errors.
 
 ### Connector mapping
 
+> **Amendment (2026-10-14).** The per-key mapping tables for the v0.21 connector set, the report schema and
+> exit-code matrix, the harness corpus format, MCP tool parity, the KIP-1188 lint rule and the lane plan are in
+> `20261014-migrate-kafka-connect-mapping-and-harness.md`. Where its tables differ from the connector subsections
+> below, that document takes precedence; the differences are listed in its _Decisions needed_ section.
+
 "Certification" below is the registry quality tier from the catalog track (Certified = acceptance suite plus
 integration test against the real system in CI, kill -9 chaos test, committed benchi configuration with a
 recorded run, documented delivery semantics). **The v0.21 theme is that every connector `migrate` emits is
@@ -929,4 +934,6 @@ document has been updated to match; this section is the record.
   `20260722-debezium-compete-roadmap.md`, `20260823-protobuf-schema-support.md`,
   `20260823-avro-codec-archived-decoder-advisories.md`
 - Issue #2988 (secrets stored expanded)
+- `docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md` (mapping tables, report contract,
+  corpus, MCP)
 - `conduit-connector-postgres#341` (Debezium offset import design, Tier 1) and #3029 (CLI side)
