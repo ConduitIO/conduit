@@ -36,6 +36,7 @@ const (
 	NamePluginsBuiltin          = "plugins.builtin"
 	NameEngineReachable         = "engine.reachable"
 	NamePluginsStandaloneCompat = "plugins.standalone_compat"
+	NamePluginsStandaloneEnv    = "plugins.standalone_env"
 )
 
 // Categories doctor's own checks use for human-output grouping (see
@@ -56,6 +57,7 @@ const (
 	configKeyConfigPath     = "config.path"
 	configKeyAPIGRPCAddress = "api.grpc.address"
 	configKeyConnectorsPath = "connectors.path"
+	configKeyStandaloneEnv  = "connectors.standalone.env-warning"
 )
 
 // Options configures DefaultChecks.
@@ -77,6 +79,14 @@ type Options struct {
 	// when empty; callers only need to set this in tests that stub the
 	// worker.
 	Executable string
+	// RedactEnvNames makes plugins.standalone_env report only a count of
+	// sensitive-looking host environment variables, not their names. Set it
+	// for any interface whose output leaves the local terminal (the MCP tool,
+	// on every transport). The local CLI leaves it false.
+	RedactEnvNames bool
+	// Environ supplies the environment plugins.standalone_env classifies.
+	// Nil means os.Environ; tests set it to a fixed fake environment.
+	Environ func() []string
 }
 
 // CheckNames returns the stable name of every check DefaultChecks can
@@ -97,6 +107,7 @@ func CheckNames() []string {
 		NamePluginsBuiltin,
 		NameEngineReachable,
 		NamePluginsStandaloneCompat,
+		NamePluginsStandaloneEnv,
 	}
 }
 
@@ -131,6 +142,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		pluginsDirCheck{name: NamePluginsConnectorsDir, path: cfg.Connectors.Path, configKey: configKeyConnectorsPath},
 		pluginsDirCheck{name: NamePluginsProcessorsDir, path: cfg.Processors.Path, configKey: "processors.path"},
 		pluginsBuiltinCheck{cfg: cfg},
+		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, redact: opts.RedactEnvNames, environ: opts.Environ},
 		engineReachableCheck{cfg: cfg, requireServer: opts.RequireServer},
 	)
 

@@ -94,6 +94,13 @@ func renderLLMSTxt(d generatedData) string {
 	fmt.Fprintf(&b, "- Write (require --allow-mutations): %s\n", joinToolNames(d.writeTools()))
 	fmt.Fprintf(&b, "(%d tools; full schemas in llms-full.txt)\n\n", len(d.MCPTools))
 
+	b.WriteString("## Deployment\n")
+	b.WriteString("- [docker-compose quickstart](https://github.com/ConduitIO/conduit/tree/main/deploy/docker-compose): " +
+		"`docker compose up -d --wait` starts a pinned, signed image with a running pipeline; state on a named volume.\n")
+	b.WriteString("- [systemd, ECS and Nomad examples](https://github.com/ConduitIO/conduit/tree/main/deploy): " +
+		"examples, not supported products. Set the stop timeout above 30 s so SIGTERM can drain; probes are " +
+		"`/healthz` (liveness) and `/readyz` (readiness); the API is unauthenticated.\n\n")
+
 	b.WriteString("## Full detail\n")
 	b.WriteString("- [llms-full.txt](llms-full.txt)\n")
 

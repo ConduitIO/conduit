@@ -21,6 +21,9 @@
 
 ### Conduit ###
 
+# Output of `make bench-engine`
+/bench-engine*.txt
+
 # Internal strategy notes — never ship public (see CLAUDE.md)
 /STRATEGY.md
 
