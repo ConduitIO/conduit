@@ -1,0 +1,88 @@
+{
+  "shape": "4x4",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "8s",
+  "window": "25s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 25637.85,
+      "sd_pct": 24.69830434169052,
+      "min": 11595.3,
+      "max": 28847.9,
+      "aa_floor_pct": 36.19385121638503,
+      "aa_typical_pct": 19.368728574799103
+    },
+    {
+      "label": "v2",
+      "n": 10,
+      "median_rec_s": 36757.85,
+      "sd_pct": 40.88060382281506,
+      "min": 13934.1,
+      "max": 41730.4,
+      "aa_floor_pct": 66.56067463726728,
+      "aa_typical_pct": 20.604606803271587
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 53131.5,
+      "sd_pct": 29.931348427312095,
+      "min": 22056.6,
+      "max": 56933.2,
+      "aa_floor_pct": 29.788945641558872,
+      "aa_typical_pct": 6.565314088757882
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "v2",
+      "X": "v1",
+      "median_delta_pct": 43.37337179209646,
+      "round_deltas_pct": [
+        40.801407803792856,
+        21.730098548275304,
+        54.69985651199284,
+        86.79084923407686,
+        -35.720836473590076
+      ],
+      "floor_pct": 66.56067463726728,
+      "resolved": false,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 107.23851649026732,
+      "round_deltas_pct": [
+        103.1089000426104,
+        79.78277869815466,
+        86.14370698481177,
+        279.31134103735553,
+        1.4762233380853096
+      ],
+      "floor_pct": 36.19385121638503,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v2",
+      "median_delta_pct": 44.54463468347578,
+      "round_deltas_pct": [
+        44.2520378245388,
+        47.68966824327101,
+        20.32571405157141,
+        103.06741073917476,
+        57.86798982907189
+      ],
+      "floor_pct": 66.56067463726728,
+      "resolved": false,
+      "suggestive": true
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "shape": "4x4-destbatch",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "8s",
+  "window": "25s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 14014.6,
+      "sd_pct": 3.967990803090028,
+      "min": 12713.5,
+      "max": 14480.4,
+      "aa_floor_pct": 10.443229637786612,
+      "aa_typical_pct": 5.97152012375348
+    },
+    {
+      "label": "v2",
+      "n": 10,
+      "median_rec_s": 85.45,
+      "sd_pct": 0.6464396428160023,
+      "min": 84.3,
+      "max": 86.1,
+      "aa_floor_pct": 1.8979833926453245,
+      "aa_typical_pct": 0.8196721311475277
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 41489.5,
+      "sd_pct": 5.609826511533588,
+      "min": 39219.6,
+      "max": 46201.4,
+      "aa_floor_pct": 11.39197991669548,
+      "aa_typical_pct": 4.447521137390496
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "v2",
+      "X": "v1",
+      "median_delta_pct": -99.39027870934596,
+      "round_deltas_pct": [
+        -99.37465131797248,
+        -99.39244236744601,
+        -99.39626783754116,
+        -99.39055503024032,
+        -99.36385008989075
+      ],
+      "floor_pct": 10.443229637786612,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 196.0448389536626,
+      "round_deltas_pct": [
+        221.66805835615344,
+        205.97093546791191,
+        205.32559045359582,
+        186.10907923141426,
+        200.37376610464705
+      ],
+      "floor_pct": 11.39197991669548,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v2",
+      "median_delta_pct": 48454.12521942657,
+      "round_deltas_pct": [
+        51338.19241982508,
+        50260.80843585238,
+        50473.02052785924,
+        46845.843091334886,
+        47117.45005875442
+      ],
+      "floor_pct": 11.39197991669548,
+      "resolved": true,
+      "suggestive": false
+    }
+  ]
+}

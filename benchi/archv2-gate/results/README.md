@@ -1,5 +1,13 @@
 # archv2-gate results
 
+## 2026-10-14, laptop, engine matrix
+
+`20261014-laptop-matrix/`: v1, arch-v2 and the staged-batch prototype (#2978) in 13 interleaved matrix
+sessions, each arm with its own A/A floor. Indicative laptop numbers on a loaded, non-quiesced machine with
+25 s windows; **not gate results and not a performance claim**. Its `README.md` is the read, `matrix.md`
+the generated table. Since the matrix session exists, a v1-vs-v2 number should come from one (each engine
+carries its own floor) rather than from an `ab` session as the 2026-10-08 note below says.
+
 ## 2026-10-08, laptop, A/A only
 
 Four A/A sessions run once to check that the harness works and to see the

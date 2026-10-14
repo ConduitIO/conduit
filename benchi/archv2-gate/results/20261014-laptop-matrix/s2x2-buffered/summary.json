@@ -1,0 +1,88 @@
+{
+  "shape": "2x2",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "8s",
+  "window": "25s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 42059.95,
+      "sd_pct": 16.691770391750108,
+      "min": 29070.9,
+      "max": 49791.5,
+      "aa_floor_pct": 34.534190547936255,
+      "aa_typical_pct": 11.860585627899393
+    },
+    {
+      "label": "v2",
+      "n": 10,
+      "median_rec_s": 30264.35,
+      "sd_pct": 25.512016706752398,
+      "min": 21119.5,
+      "max": 39740,
+      "aa_floor_pct": 69.35942566805974,
+      "aa_typical_pct": 16.918674817232336
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 50159.9,
+      "sd_pct": 21.655816645932372,
+      "min": 36438.6,
+      "max": 64354.7,
+      "aa_floor_pct": 25.043948378095564,
+      "aa_typical_pct": 4.753821251730419
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "v2",
+      "X": "v1",
+      "median_delta_pct": -28.044731389362088,
+      "round_deltas_pct": [
+        -15.783906093456611,
+        -28.13161944204338,
+        -9.311567009176935,
+        -37.011962241791004,
+        -35.499522988428176
+      ],
+      "floor_pct": 69.35942566805974,
+      "resolved": false,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 19.258106583578925,
+      "round_deltas_pct": [
+        -16.26948201942523,
+        38.34348908118582,
+        41.26584702646911,
+        19.772459270297368,
+        31.846102260069408
+      ],
+      "floor_pct": 34.534190547936255,
+      "resolved": false,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v2",
+      "median_delta_pct": 65.73922783737302,
+      "round_deltas_pct": [
+        -0.5765832912025957,
+        92.49562604186116,
+        55.7705237235316,
+        90.15112001117683,
+        104.41104991582515
+      ],
+      "floor_pct": 69.35942566805974,
+      "resolved": false,
+      "suggestive": false
+    }
+  ]
+}
