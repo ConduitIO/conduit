@@ -391,8 +391,8 @@ func renderMatrixIndex(name string, cells []cell) string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString("A comparison is *resolved* only if its median delta exceeds the larger of the two arms' A/A floors\n" +
-		"and every per-round delta has the same sign. *Suggestive* means not resolved, but every per-round delta\n" +
+	b.WriteString("A comparison is _resolved_ only if its median delta exceeds the larger of the two arms' A/A floors\n" +
+		"and every per-round delta has the same sign. _Suggestive_ means not resolved, but every per-round delta\n" +
 		"has that sign and the median delta exceeds twice the larger typical A/A difference: a reason to rerun\n" +
 		"on quiet hardware, not a result. Anything else is a tie as far as that session can tell.\n")
 	return b.String()

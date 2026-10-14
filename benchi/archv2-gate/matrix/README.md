@@ -24,7 +24,7 @@ decided on quiesced hardware (see "What this does not show").
 the engine-side `connector.Destination` receives acks on a pump goroutine and
 hands them to the engine through a 64k-slot channel, which is the shape of a
 destination behind gRPC. The latency itself is 1 microsecond, below the hook's
-100 microsecond sleep floor, so no ack is delayed: what changes is *how* the
+100 microsecond sleep floor, so no ack is delayed: what changes is _how_ the
 engine receives acks (one more goroutine and a channel hop), not how late. The
 hook is compiled into every binary and does nothing unless the variable is set.
 It models a gRPC destination; it is not one. A real gRPC connector run would be
@@ -57,7 +57,7 @@ refusal was added for.
 
 `results/<date>-<machine>-matrix/<session>/summary.md` has, per session, each
 arm's median, sd, min, max and A/A floor, and every pairwise comparison with
-its per-round deltas. A comparison is *resolved* only if the median delta
+its per-round deltas. A comparison is _resolved_ only if the median delta
 exceeds the larger floor of the two arms and all per-round deltas have the same
 sign. A cell that is not resolved is a tie as far as this session can tell.
 `archv2-gate -rerender results/<...>` re-reads every session with the current

@@ -146,11 +146,11 @@ evidence, unless the gate's environment rules are met.
   sets it, and that is the point: it shows how much a busy machine can move a
   number.
 - **A comparison** (matrix) is the median-to-median delta over all runs of the
-  two arms, plus the per-round deltas of the replicate means. It is *resolved*
+  two arms, plus the per-round deltas of the replicate means. It is _resolved_
   only if the median delta is larger than the larger of the two arms' floors
   and every per-round delta has the same sign. Otherwise the session cannot
   tell the arms apart, and under the gate that is not a pass.
-- A comparison that is not resolved is called *suggestive* if every per-round
+- A comparison that is not resolved is called _suggestive_ if every per-round
   delta has the median delta's sign and the median delta exceeds twice the
   larger arm's **typical** A/A difference (the median per-round |difference|,
   next to the max). One disturbed run sets the max floor and can hide a

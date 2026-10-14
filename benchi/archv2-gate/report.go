@@ -425,9 +425,9 @@ func renderMatrixSummary(b *strings.Builder, cfg config, results []runResult) st
 		b.WriteString("\n")
 	}
 	b.WriteString("Each arm ran twice per round (replicates -a and -b). Its A/A floor is the largest per-round\n" +
-		"difference between them; \"typical\" is the median per-round difference. A comparison is *resolved* only\n" +
+		"difference between them; \"typical\" is the median per-round difference. A comparison is _resolved_ only\n" +
 		"if the median delta exceeds the larger floor and every per-round delta has the same sign. It is\n" +
-		"*suggestive* if not resolved, but every per-round delta has the same sign and the median delta exceeds\n" +
+		"_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds\n" +
 		"twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is\n" +
 		"a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.\n")
 	return b.String()
