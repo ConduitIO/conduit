@@ -210,17 +210,23 @@ the design backs it with checks, because a convention is not a trust boundary:
 - `fromproto` conversions (`pkg/http/api/fromproto`) have no `SettingRefs` to fill, and a test
   walks every API entry point (`CreateConnector`, `UpdateConnector`, processor equivalents,
   `PlanPipeline`, `ApplyPipeline`) asserting a stored entity never has `SettingRefs` set by a request.
-- **The compiler enforces who can set `SettingRefs`, not a runtime caller check.** The field's type
-  is an opaque `parsed.Refs` defined in `pkg/provisioning/internal/parsed`, with unexported fields
-  and a single constructor in that package. Go's `internal` rule means only code under
-  `pkg/provisioning/` can import it; in practice that is the YAML parser
-  (`pkg/provisioning/config/yaml`). Everything else, including `fromproto`, the API handlers,
-  `Plan`, `ApplyPlan`, `ApplyPlanLive` and `pkg/conduit/dev`, can pass a `parsed.Refs` along or
-  copy it but cannot build a non-zero one, and the zero value means "no references". A request
-  converted by `fromproto` therefore carries no references by construction. `Plan`, `ApplyPlan` and
-  `ApplyPlanLive` need no check. The residual is code inside `pkg/provisioning/` itself, which is
-  the layer that is allowed to; review of that package is the control. Tests still assert the
-  behavior end to end.
+- **Two boundaries, enforced differently.**
+  - *Parse to apply hand-off: the compiler.* In `config.Pipeline`, `SettingRefs` is an opaque
+    `parsed.Refs` defined in `pkg/provisioning/internal/parsed`, with unexported fields and a
+    single constructor in that package. Go's `internal` rule means only code under
+    `pkg/provisioning/` can import it; in practice that is the YAML parser
+    (`pkg/provisioning/config/yaml`). `Plan`, `ApplyPlan`, `ApplyPlanLive`, `pkg/conduit/dev`,
+    `fromproto` and the API handlers can pass a `parsed.Refs` along or copy it but cannot build a
+    non-zero one, and the zero value means "no references". These functions need no runtime check.
+  - *Store level: convention, an end-to-end test, and review.* The stored fields
+    (`connector.Config`, `processor.Config`, `pipeline.DLQ`) live outside `pkg/provisioning` and
+    must be a plain `map[string]string` (also what JSON needs). Once provisioning converts
+    `parsed.Refs` to that map, any code can hand a map to `connector.Service.Create/Update`. So the
+    guarantee at the store is: the orchestrator and `fromproto` never populate the field. That is
+    held by convention, by an end-to-end test that no API path can store a non-empty `SettingRefs`
+    (create, update, `PlanPipeline`, `ApplyPipeline`, processor and DLQ equivalents), by a test
+    that `fromproto` output has the zero value, and by review of `pkg/provisioning/`, the layer
+    that is allowed to write it.
 - `ApplyPipeline` onto a pipeline that was provisioned from a file overwrites its references with
   the literal values in the request (the request carries literals only, D3). Behavior chosen:
   **allowed, as today**, and the reconcile at the next start restores the references from the
@@ -364,10 +370,24 @@ Exceptions to the warn-only default, in v0.21:
      to the empty string to accept a delete event that will probably fail. The error message says
      this and names what may be orphaned (for a Postgres source, the replication slot).
   4. Non-strict behavior is unchanged from v0.20.
-  5. Provisioning deletes are not one database transaction: `Service.Delete` runs the delete
-     actions and, on a later failure, its rollback actions re-create what was removed. A delete
-     event may already have been delivered when that happens, so a retry redelivers it. Delete
-     events are idempotent today, and this design relies on it.
+  5. The preflight runs in **both** places that delete a connector, before `executeActions`:
+     `provisioning.Service.Delete` (a pipeline whose file disappeared) and `importPipeline`
+     (`pkg/provisioning/import.go`, which also serves `provisionPipeline` and `Import`), the latter
+     covering a connector removed from a pipeline that is kept.
+     - `Service.Delete` (`pkg/provisioning/service.go`) calls `executeActions` and never rolls
+       back, so a mid-way failure can partially delete a pipeline. It is a retry model: the next
+       start's `deleteOldPipelines` continues. The preflight over every connector of the
+       pipeline, before the first action, is what keeps a strict-mode failure from leaving it
+       half-deleted for this reason.
+     - `importPipeline` rolls back on failure, and `provisionPipeline` also runs inside a DB
+       transaction. The rollback of a delete action re-runs `createConnectorAction.Do`
+       (`pkg/provisioning/import_actions.go`), so a connector deleted earlier in the same import is
+       re-created with a **fresh** `LastActiveConfig` (never started). If the delete event was
+       already delivered, it is not redelivered by the rollback; the re-created connector sees a
+       "created" event when it next starts, not a repeated delete.
+     - A retry after a `Service.Delete` failure can redeliver a delete event. This design assumes
+       delete events are idempotent as a plugin-contract expectation. That is an assumption, not a
+       verified property, and should be checked for the built-in connectors in the implementation.
   6. A "pending delete" record that survives the connector was rejected: it adds new persisted
      state and a crash-recovery surface (Invariant 5) for a corner case.
 
@@ -589,7 +609,7 @@ rejects the config. For an optional credential it falls back silently: the S3 co
 default AWS credential chain, a Kafka connector runs without SASL. That is a change in which
 identity the pipeline uses, not a clean failure.
 
-Two options, D9:
+Two options, D9 (option (a) is **approved**):
 
 - **(a) A v0.20.x patch.** v0.20.2 refuses to start a connector, processor or DLQ whose stored
   record has a non-empty `SettingRefs` it does not understand: the pipeline fails loudly as
@@ -600,9 +620,18 @@ Two options, D9:
 - **(b) Document it.** State that the self-heal holds only when the reconcile succeeds and the
   pipelines directory is mounted, and tell operators to downgrade only after confirming both.
 
-Recommendation: **(a), in v0.20.2** (being cut now), plus the (b) documentation for older v0.20
-releases. Pending DeVaris. Without (a), the downgrade guidance is "do not downgrade across this
-change unless you have verified the reconcile".
+Approved by DeVaris: **ship the v0.20.2 guard**, plus the (b) documentation for v0.20.0 and
+v0.20.1. For those older releases the guidance is "do not downgrade across this change unless you
+have verified the reconcile".
+
+**Compatibility contract.** The guard works only if the stored key stays what it is:
+
+- The stored JSON key is exactly `SettingRefs`, with no struct tag. Go decodes JSON keys
+  case-insensitively, which the guard relies on.
+- The v0.20.2 guard checks `connector.Config.SettingRefs` and `LastActiveConfig.SettingRefs`,
+  `processor.Config.SettingRefs`, and the pipeline `DLQ.SettingRefs`.
+- The key is frozen. Renaming or retagging it in any later release would silently disable the guard
+  on every downgrade path. A v0.21 test pins the encoded key name for all four locations.
 
 Pipelines that were running before the downgrade are auto-resumed after provisioning
 (`provisioning.Service.Init` precedes `lifecycleService.Init`), so on the success path they start
@@ -704,10 +733,13 @@ migration including `LastActiveConfig`; (4) doctor, linter, docs and runbook.
   file-provisioned pipeline behaves as section 3 states.
 - **All-references connector** across migrate, restart and delete: `OnDelete` fires; no spurious
   update event; `LastActiveConfig` "never started" is judged on both maps.
+- **Key pin.** The encoded JSON key is exactly `SettingRefs` for connector `Config`,
+  `LastActiveConfig`, processor `Config` and pipeline `DLQ`.
 - **Strict delete preflight.** An unset variable in a connector's `LastActiveConfig` makes the delete
   action fail with the coded error before `store.Delete`; the record and its `State` survive;
   a multi-connector pipeline deletes none of its connectors; after the variable is set the retry in
-  `deleteOldPipelines` succeeds.
+  `deleteOldPipelines` succeeds. Covered for `Service.Delete` and for `importPipeline` (a connector
+  removed from a kept pipeline).
 - **No in-place mutation** of shared `Settings`/`SettingRefs` maps (race detector).
 - **Grammar equivalence (fuzz).** `Resolve(template)` equals `os.ExpandEnv(template)` when every
   variable is set, for all inputs; "is a reference" is exactly "`os.Expand` called the mapper". Seed
@@ -741,7 +773,7 @@ migration including `LastActiveConfig`; (4) doctor, linter, docs and runbook.
 Each with a recommendation. DeVaris decides.
 
 Approved by DeVaris: D1, D3, D4, D6, D7, D8, as recommended. D2 and D5 are refined below after
-review. D9 is new.
+review. D9 is new and approved.
 
 - **D1 (approved). Scope: reference storage only, or also encryption (B).** Recommend reference storage only.
   It closes #2988 as filed, adds no key to lose, and sets up v0.22. State the literal-secret
@@ -771,7 +803,7 @@ review. D9 is new.
 - **D8 (approved). Exposing "this key is a reference" in the API.** Recommend no (keeps `"***"` the only
   output). Revisit with the sensitivity marker.
 
-- **D9 (new, pending DeVaris). Downgrade safety.** Recommend a v0.20.2 patch that refuses to run a
+- **D9 (approved: ship the v0.20.2 guard). Downgrade safety.** A v0.20.2 patch that refuses to run a
   record with a `SettingRefs` it does not understand (degraded with a coded cause), plus
   documentation for v0.20.0 and v0.20.1. Without it the downgrade is not fail-closed: a failed
   reconcile or an unmounted pipelines path starts pipelines with reference-backed keys absent, and
