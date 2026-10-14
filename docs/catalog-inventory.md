@@ -427,6 +427,34 @@ Verdicts: **REUSE** = promote and certify an existing asset; **EXTEND** = existi
 | Python connector SDK GA (v0.21) | REUSE | `conduit-connector-sdk-python` | Release per its README's GA definition |
 | Java SDK (v0.25–v0.26) | BUILD (informed by POC) | `java-sdk-poc` | Protocol v2 and the gRPC processor runtime |
 
+## Changes since 2026-10-08
+
+Everything above is as of 2026-10-08 and is not rewritten. These are the changes since then, checked on
+2026-10-14:
+
+- **Licenses:** most repositories now have a `LICENSE` file. Five labs connectors still do not on their default
+  branch: `chaos`, `sftp`, `spanner` and `weaviate` have an open pull request that adds one, and `google-drive` has
+  none. The Java prototypes still have none.
+- **Labs CI:** test workflows now also run weekly on `main` and on demand. Pull requests adding that schedule are
+  still open for `chaos`, `enhanced-generator`, `grpc-server`, `redshift`, `s3-iceberg`, `sftp`, `spanner` and
+  `weaviate`.
+- **Signed releases:** 24 labs connectors have a `publish.yml` that signs each artifact with cosign and attaches SLSA
+  provenance. Each cut one signed release on 2026-10-08 or 2026-10-09. Their register step runs in dry-run mode, so
+  none of them opened a registry pull request.
+- **Archived:** `conduitio-labs/conduit-processor-textgen` (empty stub) and `conduitio-labs/conduit-connector-redpanda`
+  (retired in favour of `kafka`).
+- **Moved:** `conduit-connector-mysql` and `conduit-connector-elasticsearch` are now in `ConduitIO`.
+- **Private:** `http-server`, `hyperion-x55`, `k8s-events`, `rsync` and `socket` in `conduitio-labs` are private now,
+  so they cannot be listed in the public registry.
+- **Registry:** `s3` was added on 2026-10-08, which makes seven connectors. Nine labs connectors are proposed as
+  `community` tier in
+  [`ConduitIO/conduit-connector-registry#47`](https://github.com/ConduitIO/conduit-connector-registry/pull/47):
+  `activemq-artemis`, `kinesis`, `materialize`, `mongo`, `neo4j`, `pulsar`, `rabbitmq`, `redis` and `sqs`. That
+  pull request has the per-connector table: builds, acceptance in CI, release signing, and why each other connector
+  is not listed. Of the 61 public Go and Java labs connectors (counting the two moved to `ConduitIO`), 9 meet the
+  community bar, 48 are blocked and 4 are Java prototypes. Of the 48 blocked, 7 already pass acceptance in CI but
+  miss another part of the bar, and 14 have an acceptance test that skips or never runs in CI.
+
 ## Related
 
 - [Debezium roadmap design doc](design-documents/20260722-debezium-compete-roadmap.md): the Kafka Connect wrapper
