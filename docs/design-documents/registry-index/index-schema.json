@@ -173,7 +173,7 @@
     "tier": {
       "type": "string",
       "enum": ["certified", "verified", "adapter", "community"],
-      "description": "Registry support classification for a connector or processor name, set by registry maintainers (never by a publisher's release workflow). Optional (added additively under schemaVersion 1). Display and filtering metadata only; not used in any trust, resolution or install decision. certified: maintained by the Conduit project and meets the certification bar. verified: acceptance suite in CI plus signed artifacts and provenance. adapter: bridge to another plugin ecosystem. community: published as-is with no support commitment."
+      "description": "Registry support classification for a connector or processor name, set by registry maintainers (never by a publisher's release workflow). Optional (added additively under schemaVersion 1). Display and filtering metadata only; not used in any trust, resolution or install decision. certified: maintained by the Conduit project and meets the certification bar. verified: acceptance suite v2 in CI plus signed artifacts and provenance. adapter: bridge to another plugin ecosystem. community: published as-is with no support commitment; listed once the SDK acceptance suite passes in CI."
     },
 
     "publisher": {

@@ -98,17 +98,18 @@ type Tier string
 
 const (
 	// TierCertified is maintained by the Conduit project and meets the
-	// certification bar: acceptance and integration tests against the real
-	// system in CI, a kill -9 chaos test, a committed benchi run, and docs.
+	// certification bar: acceptance suite v2 and integration tests against the
+	// real system in CI, a kill -9 chaos test, a committed benchi run, and docs.
 	TierCertified Tier = "certified"
-	// TierVerified passes the SDK acceptance suite in CI and is released with
+	// TierVerified passes acceptance suite v2 in CI and is released with
 	// signed artifacts and provenance, without the full certification bar.
 	TierVerified Tier = "verified"
 	// TierAdapter is a bridge to another plugin ecosystem (for example the
 	// Kafka Connect wrapper) rather than a native connector.
 	TierAdapter Tier = "adapter"
 	// TierCommunity is published as-is by its maintainers with no support
-	// commitment from the Conduit project.
+	// commitment from the Conduit project. It is listed once the SDK
+	// acceptance suite passes in CI on the released code.
 	TierCommunity Tier = "community"
 )
 
