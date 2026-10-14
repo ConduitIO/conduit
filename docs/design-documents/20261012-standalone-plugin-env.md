@@ -154,12 +154,23 @@ operator setting as the upper bound.
 
 Hard gate, Decided by DeVaris 2026-10-14: the default flips to `allowlist` in v0.21 only if v0.20.2, with
 the `plugin.standalone_env_passed` warning, has shipped first. "Shipped" means the v0.20.2 tag and release
-exist before the v0.21 release is cut. If the gate is not met, v0.21 ships the key with `inherit` as the
-default (with its WARN) and the flip moves to the first minor after a v0.20.x patch with the warning has
-shipped. Status on 2026-10-14: not met. The warning is merged on `main` (#3045); the backport to
-`release/v0.20.x` (#3046) is open, and no v0.20.1 or v0.20.2 tag exists.
+exist before the v0.21 release is cut.
 
-Once the gate is met: `allowlist` is the default in v0.21, with a loud `inherit` escape hatch. Operators who need the
+The rule behind the gate, so the flip cannot stall: `allowlist` becomes the default in the minor release
+after the first release that carries the warning.
+
+- If v0.20.2 ships with the warning before the v0.21 cut, v0.20.2 is that first release, and v0.21 flips the
+  default.
+- If it does not, v0.21 is the first release that carries the warning: it ships the key with `inherit` as
+  the default, the `plugin.standalone_env_passed` warning and the `inherit` WARN. v0.22 flips the default,
+  whatever happens to v0.20.x afterwards. A later v0.20.x patch does not move the flip again.
+
+Status on 2026-10-14: not met yet. The warning is merged on `main` (#3045); the backport to
+`release/v0.20.x` (#3046) is open, and no v0.20.1 or v0.20.2 tag exists. Because the release that flips is
+not fixed yet, the shipped warning text says "a future release will restrict", not "v0.21 will restrict"
+(see the warning bullet below).
+
+Once the default flips: `allowlist` is the default, with a loud `inherit` escape hatch. Operators who need the
 full environment set `inherit`, and the engine logs a WARN at every start in that mode. The failure is loud
 (a plugin fails to authenticate or connect at first use, with its own error) and nothing is persisted, so
 rollback is a config change plus restart.
@@ -171,9 +182,10 @@ rollback is a config change plus restart.
   environment variable and a start failure as a flag. Checked on `main` 2026-10-14: the warning message
   (`pkg/plugin/connector/standalone/envwarn.go`), the doctor finding and its suggestion
   (`cmd/conduit/root/doctor/doctorcheck/standalone_env.go`) and `docs/operations/standalone-plugin-environment.md`
-  say only that v0.21 will restrict the environment to an allowlist and suggest trusted plugins, a minimal
-  environment and `env-warning: false`. None suggests setting `allowlist`; no fix is needed. The backport
-  (#3046) has the same text.
+  suggest trusted plugins, a minimal environment and `env-warning: false`, and none suggests setting
+  `allowlist`. They do say "v0.21 will restrict the plugin environment", which the rule above can make wrong.
+  #3065 changes that to "a future release will restrict" on `main`; it must merge before the v0.20.2
+  backport is cut, and the backport (#3046) takes the same text.
 - v0.21 release notes announce the change and name the `inherit` workaround, with the one-line fix per
   failure in _Failure modes_.
 - v0.21: default `allowlist`; `inherit` stays as the escape hatch. Windows keeps `inherit` as the default if
@@ -227,7 +239,7 @@ invariants 1 to 7 are unaffected. The failures are start-up and configuration fa
 ## Upgrade and rollback
 
 - v0.20.2 adds the warning only. v0.21 adds the key and, if the gate in _Rollout_ is met, defaults to
-  `allowlist`; release notes lead with it, with the one-line fix for each failure above.
+  `allowlist` (otherwise v0.22 does); release notes lead with it, with the one-line fix for each failure above.
 - Rollback on v0.21 is a config change plus restart (`inherit`). No pipeline config, connector state or
   position format changes, so there is no migration and no upgrade/downgrade state test beyond starting an
   N-1 config on N+1.
@@ -255,8 +267,9 @@ Release-note text for v0.21 (draft):
 > the flag and will not start. v0.20.x ignores the YAML key and the environment variable, so after a
 > downgrade plugins again receive the full environment.
 
-If the gate is not met, the first sentence becomes "Conduit adds `connectors.standalone.env-passthrough`;
-the default stays `inherit` in this release", and the downgrade paragraph stays as written.
+If the gate is not met, the v0.21 note's first sentence becomes "Conduit adds
+`connectors.standalone.env-passthrough`; the default stays `inherit` in this release and becomes `allowlist`
+in v0.22", and the text above moves to the v0.22 notes. The downgrade paragraph stays in both.
 
 ## Observability
 
@@ -316,6 +329,9 @@ are out of scope there; this document narrows what an allowlisted plugin receive
 
 - Hard gate for the default flip. Decided by DeVaris 2026-10-14: the default becomes `allowlist` in v0.21
   only if v0.20.2 with the warning has shipped first. See _Rollout_.
+- Fallback (round-2 review, 2026-10-14): the default becomes `allowlist` in the minor release after the first
+  release that carries the warning: v0.21 if that is v0.20.2, v0.22 if it is v0.21. Pending DeVaris
+  confirmation, since it refines the decided gate.
 
 ## Related
 
