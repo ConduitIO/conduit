@@ -137,16 +137,18 @@ Options for the legacy entry of a header value that is not valid UTF-8:
 | (c) Drop the record or fail it | No mangling, but a valid Kafka record becomes unmirrorable because of a view nobody in mirror mode reads | Rejected for mirror mode |
 | (d) When `emitMirrorMetadata` is on, omit the legacy entry for that header, keep the raw bytes in `kafka.headers`, count the omission | The record marshals; the lossless copy is intact; the absence of the human-readable view is counted, not silent | Chosen |
 
-Decided by DeVaris 2026-10-14 (Decisions, item 5): option (d). With `emitMirrorMetadata: true`, the
-source omits `kafka.header.<k>` for every header whose value is not valid UTF-8 (`utf8.Valid`), and for
-every header whose key is not, because the metadata key has the same constraint (verified above); it writes
-the header unchanged into `kafka.headers`, increments
-`kafka_source_legacy_header_omitted_total` once per omitted entry, and logs a WARN once per header key
-per pipeline naming the key (never the value). The value is never escaped or replaced. A header key that
-repeats is judged on the value that would have won (the last one), so the legacy view never shows an
-earlier value in place of an omitted later one. With `emitMirrorMetadata: false` the source emits what it
-emits today, including the hazard; that pre-existing behaviour is outside this decision and is a separate
-connector issue.
+Decided by DeVaris 2026-10-14 (Decisions, item 5): option (d). With `emitMirrorMetadata: true`, the source
+omits `kafka.header.<k>` for every header whose value is not valid UTF-8 (`utf8.Valid`), and for every header
+whose key is not, because the metadata key has the same constraint (verified above); it writes the header
+unchanged into `kafka.headers`, increments `kafka_source_legacy_header_omitted_total` once per omitted entry,
+and logs a WARN once per header key per pipeline naming the key (never the value). The key goes into the log
+as base64 of its bytes, in a field `header_key_b64`, never as a raw string: a key that is not valid UTF-8
+would otherwise be mangled by the JSON log encoder, which replaces invalid bytes with U+FFFD, and the operator
+could not find the header. The value is never escaped or replaced. A header key that repeats is judged on the
+value that would have won (the last one), so the legacy view never shows an earlier value in place of an
+omitted later one. With `emitMirrorMetadata: false` the source emits what it emits today, including the
+hazard; that pre-existing behaviour is outside this decision and is tracked in
+`ConduitIO/conduit-connector-kafka#319`.
 
 Upgrade note: a pipeline that turns on `emitMirrorMetadata` loses `kafka.header.<k>` entries only for
 headers that could not cross a protobuf hop anyway. Processors that read those entries must read
@@ -648,8 +650,7 @@ duplicates. This is accepted, on three conditions, all part of this change:
    between keeping the out-of-order partition (consumers must tolerate it) and re-seeding what is left. The
    runbook entry under `docs/operations/` gives the exact commands for both brokers.
 
-Where the metric cannot be exported, see _Observability_: the export path is an open prerequisite, and
-until it exists the WARN is the only signal, which is not enough for Certified.
+How the metric is exported depends on how the connector runs; see _Observability_.
 
 Records are not re-keyed. Key bytes are written as received, so consumers that re-hash see the same
 key. Because partition is preserved explicitly, a destination with a different partition count still
@@ -734,7 +735,7 @@ returns that record's index: earlier records are acked, this one and the rest of
 | Header null versus empty value | Both preserved: `v: null` and `v: ""` round trip as null and empty (spike) |
 | Header with empty key or key that is not UTF-8 | Both brokers accept and return these (spike); carried as base64 key bytes, no failure |
 | Header value (or key) not valid UTF-8, `emitMirrorMetadata` on | Legacy `kafka.header.<k>` entry omitted, raw bytes kept in `kafka.headers`, `kafka_source_legacy_header_omitted_total` incremented, WARN once per key. Never escaped. Without the omission the record fails `proto.Marshal` (verified) |
-| Same, `emitMirrorMetadata` off | Unchanged from today: the legacy entry carries invalid UTF-8 and the record cannot cross a protobuf hop. Pre-existing, outside this design, separate issue |
+| Same, `emitMirrorMetadata` off | Unchanged from today: the legacy entry carries invalid UTF-8 and the record cannot cross a protobuf hop. Pre-existing, outside this design, `conduit-connector-kafka#319` |
 | Header total size exceeds topic `max.message.bytes` / client `batchBytes` | See _Record size_: checked in `prepareRecord`, fails that record and stops the batch; the broker error is the backstop |
 | `message.timestamp.type=LogAppendTime` on the destination topic | Record fails, `KAFKA_TIMESTAMP_TYPE_LOG_APPEND` (see _Timestamp preconditions_) |
 | Record timestamp outside `message.timestamp.before/after.max.ms` (or `difference.max.ms`) | Record fails client-side, `KAFKA_TIMESTAMP_OUT_OF_RANGE`. If the broker still returns `INVALID_TIMESTAMP` (config changed, or not described), the whole produce batch fails on Kafka, including valid records in it (spike); the destination re-reads the topic config once and reports the config values |
@@ -805,12 +806,28 @@ convention.
   | `kafka_destination_record_failures_total` | counter | `code` | Records failed, by stable error code |
   | `kafka_source_legacy_header_omitted_total` | counter | `topic` | Legacy `kafka.header.<k>` entries omitted because the header is not valid UTF-8 |
 
-  Export path, an open prerequisite: `conduit-connector-sdk` v0.15.0 has no metrics API for connectors
-  (no counter or gauge constructors in the module, checked 2026-10-14), and the engine's registry is in
-  `conduit` `pkg/foundation/metrics`, which a standalone connector cannot reach. Until a connector metrics
-  path exists, these values are emitted only as structured log fields with the same names. That is not
-  enough for `kafka_destination_post_enqueue_errors_total`, which is meant to be alerted on, so the export path blocks
-  Certified status for `mirror` mode. It is a cross-repo item to file against the SDK.
+  Export path. `conduit-connector-sdk` v0.15.0 has no metrics API for connectors (no counter or gauge
+  constructors in the module, checked 2026-10-14). What that means depends on how the connector runs:
+
+  - Built-in (`builtin:kafka` under `conduit run`), the interim path. The connector runs in the engine
+    process, and `conduit run` serves the process-global Prometheus registry: without an embedder-supplied
+    registerer the runtime uses `promclient.DefaultRegisterer` and `promclient.DefaultGatherer`
+    (`pkg/conduit/runtime.go`, around line 432). The built-in connector registers the metrics above with
+    `promclient.DefaultRegisterer` (through `promauto` or `MustRegister` at package init), and they appear on
+    the engine's `/metrics` endpoint with no SDK change. This is the path for v0.21.
+  - Standalone (the registry or a downloaded `kafka` plugin) is a separate process, which a registration
+    in the engine's registry cannot reach. Embedded Conduit (a caller-supplied `metricsRegisterer`, the
+    embed path) gets isolated per-runtime metrics and does not serve the process-global registry either.
+    For both, the metrics exist only as structured log fields with the same names until the SDK has a
+    connector metrics API. That API is an SDK item for v0.21 or later; it does not block v0.21 (below).
+
+  Certified status for `mirror` mode is not a v0.21 blocker. The merged
+  `docs/design-documents/20261012-migrate-kafka-connect.md` (_MirrorMaker-style Kafka to Kafka_) has v0.21
+  `migrate` emit a plain `builtin:kafka` to `builtin:kafka` pipeline for `MirrorSourceConnector` and report
+  partition preservation as unsupported and blocking. So v0.21 `migrate` never emits `mirror: true`, and the
+  v0.21 certification bar for the migrate targets does not include mirror mode. Mirror mode can ship in v0.21
+  as an opt-in feature; certifying it, and having `migrate` emit it, is later work, and on the standalone and
+  embed paths it waits for the SDK metrics API.
 - Per-record failures include topic, partition and the record position so an operator can find the
   offending offset.
 - Runbook entries under `docs/operations/` for each halt-class code: symptom, diagnosis, remediation
@@ -831,7 +848,8 @@ convention.
   `ok = plain`, and a repeated key whose last value is not valid UTF-8 has no `kafka.header.bin` and no
   legacy entry for the repeated key, has `kafka.header.ok`, carries all three headers byte for byte in
   `kafka.headers`, marshals with `proto.Marshal`, and increments `kafka_source_legacy_header_omitted_total`
-  by two. No metadata value contains U+FFFD or an escape. With `emitMirrorMetadata: false` output is
+  by two. No metadata value contains U+FFFD or an escape. The WARN carries the key as `header_key_b64`, which
+  decodes to the original key bytes. With `emitMirrorMetadata: false` output is
   byte-identical to the previous release (the golden test below). End to end: the record crosses a
   standalone connector's gRPC hop and is mirrored with identical header bytes.
 - Ordering observability: the broker-rejection test below also asserts that
@@ -1050,8 +1068,8 @@ compose project and ephemeral host ports. Results are observations on those vers
 ## Decisions
 
 Items 1, 2 and 4 were recorded as decided in round 4. Items 3, 5 and 6 were decided by DeVaris on
-2026-10-14. No decision is pending on this document; the metrics export path (_Observability_) is an open
-prerequisite, not a decision.
+2026-10-14. No decision is pending on this document. The metrics export path for standalone and embedded
+runs (_Observability_) is a follow-up SDK item, not a decision and not a v0.21 blocker.
 
 1. Destination option shape and the value path. One `mirror: true` option replaces the four booleans
    (`preserveHeaders`, `preserveTimestamp`, `preservePartition`, `preserveValue`). It implies header, timestamp,
