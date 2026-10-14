@@ -60,7 +60,7 @@ func (s *server) doctor(ctx context.Context, _ *sdkmcp.CallToolRequest, in Docto
 	// RedactEnvNames on every transport: this result is returned to the MCP
 	// client (and the model provider behind it; over --http, to any bearer-token
 	// holder), so environment variable names stay out of it.
-	opts := doctorcheck.Options{Deep: in.Deep, RequireServer: in.RequireServer, Executable: exe, RedactEnvNames: true}
+	opts := doctorcheck.Options{Deep: in.Deep, RequireServer: in.RequireServer, Executable: exe, RedactEnvNames: true, Environ: s.cfg.environ}
 
 	checks := doctorcheck.DefaultChecks(s.cfg.StoreConfig, log.Nop(), opts)
 	checks = filterChecks(checks, in.Checks)
