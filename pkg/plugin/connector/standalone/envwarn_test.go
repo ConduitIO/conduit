@@ -17,7 +17,6 @@ package standalone
 import (
 	"bytes"
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +35,51 @@ func resetEnvWarnOnce(t *testing.T) {
 
 func bufLogger(buf *bytes.Buffer) log.CtxLogger {
 	return log.New(zerolog.New(buf))
+}
+
+// TestClassifyEnv_CommonCredentialNames pins the names the warning must flag
+// and the ones it must leave alone. Every entry uses a fake value.
+func TestClassifyEnv_CommonCredentialNames(t *testing.T) {
+	flagged := []string{
+		// database and broker URLs
+		"POSTGRES_URL", "POSTGRES_PRISMA_URL", "POSTGRESQL_URL", "PG_URL", "PGURI", "PGURL", "MYSQL_URL",
+		"CLICKHOUSE_URL", "ELASTICSEARCH_URL", "OPENSEARCH_URI", "KAFKA_URL", "RABBITMQ_URL", "NATS_URL",
+		"MARIADB_URL", "APP_PG_URI",
+		// passphrases, auth, credential, API keys
+		"SSH_PASSPHRASE", "GPG_PASSPHRASE", "SERVICE_AUTH", "REGISTRY_AUTH", "APIKEY", "API_KEYS", "APIKEYS",
+		"SERVICE_CREDENTIAL", "SERVICE_CREDENTIALS", "OPENAI_APIKEY", "STRIPE_API_KEY",
+		// webhook URLs
+		"SLACK_WEBHOOK_URL", "WEBHOOK_URL", "DISCORD_WEBHOOK_URI",
+		// proxies
+		"FTP_PROXY", "SOCKS_PROXY", "ftp_proxy", "RSYNC_PROXY", "PROXY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+		// pre-existing coverage, unchanged
+		"PGPASSWORD", "REDIS_URL", "MONGODB_URI", "AMQP_URL",
+	}
+	notFlagged := []string{
+		"PATH", "HOME", "LANG", "TZ", "USER", "SHELL", "TERM", "EDITOR", "GOPATH",
+		"PWD", "OLDPWD", "TOKENIZERS_PARALLELISM", "NO_PROXY", "no_proxy",
+		// libpq settings and locations, not secrets
+		"PGHOST", "PGUSER", "PGPORT", "PGDATABASE", "PGSSLMODE", "PGPASSFILE", "PGSSLCERT",
+		// store names without a URL, and URLs that are not store URLs
+		"POSTGRES_HOST", "POSTGRES_USER", "MYSQL_DATABASE", "KAFKA_BROKERS", "SERVICE_URL", "REPO_URL", "HOMEPAGE_URL",
+		"PGP_URL", "DONATS_URL", "ELASTIC_VERSION",
+		// near misses for the new suffixes
+		"AUTHOR", "GIT_AUTHOR_NAME", "OAUTH", "SSH_AUTH_SOCK", "CREDENTIAL_HELPER", "KEYBOARD", "API_KEYBOARD",
+		"WEBHOOK_PORT", "PROXY_PORT", "PASSIVE",
+	}
+	for _, name := range flagged {
+		t.Run("flagged/"+name, func(t *testing.T) {
+			is := is.New(t)
+			is.Equal(classifyEnv([]string{name + "=VALUE-MUST-NOT-APPEAR"}).Names, []string{name})
+		})
+	}
+	for _, name := range notFlagged {
+		t.Run("not-flagged/"+name, func(t *testing.T) {
+			is := is.New(t)
+			got := classifyEnv([]string{name + "=VALUE-MUST-NOT-APPEAR"})
+			is.Equal(got.Total(), 0)
+		})
+	}
 }
 
 func TestClassifyEnv(t *testing.T) {
@@ -131,35 +175,58 @@ func TestClassifyEnv(t *testing.T) {
 	}
 }
 
+// fakeEnviron is the fixed environment the warning tests classify. Each value
+// is a sentinel that must not appear in any output. The first flagged name in
+// sorted order ("AAA_FIRST_TOKEN") and the last ("zzz_last_password", lower case
+// sorts after upper case) are both present, so a log line that leaks either
+// of them fails the test regardless of the machine's real environment.
+func fakeEnviron() (environ []string, sentinels []string) {
+	kv := [][2]string{
+		{"AAA_FIRST_TOKEN", "VALUE-MUST-NOT-APPEAR-1"},
+		{"AWS_SECRET_ACCESS_KEY", "VALUE-MUST-NOT-APPEAR-2"},
+		{"SENTINEL_API_TOKEN", "VALUE-MUST-NOT-APPEAR-3"},
+		{"SENTINEL_SECRET_X", "VALUE-MUST-NOT-APPEAR-4"},
+		{"POSTGRES_URL", "VALUE-MUST-NOT-APPEAR-5"},
+		{"zzz_last_password", "VALUE-MUST-NOT-APPEAR-6"},
+		{"PATH", "VALUE-MUST-NOT-APPEAR-7"},
+		{"HOME", "VALUE-MUST-NOT-APPEAR-8"},
+	}
+	for _, e := range kv {
+		environ = append(environ, e[0]+"="+e[1])
+		sentinels = append(sentinels, e[1])
+	}
+	return environ, sentinels
+}
+
+func assertNoSentinels(t *testing.T, out string, sentinels []string) {
+	t.Helper()
+	for _, s := range sentinels {
+		if strings.Contains(out, s) {
+			t.Fatalf("a sentinel value appeared in the output")
+		}
+	}
+}
+
 // TestWarnSensitiveEnv_NamesNotValues is the sentinel test: variable names are
-// logged, values never are.
+// logged, values never are. It uses a fixed fake environment.
 func TestWarnSensitiveEnv_NamesNotValues(t *testing.T) {
 	is := is.New(t)
 	resetEnvWarnOnce(t)
 
-	const (
-		sentinelValue = "SENTINEL_VALUE_X"
-		awsValue      = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-	)
-	t.Setenv("SENTINEL_API_TOKEN", sentinelValue)
-	t.Setenv("AWS_SECRET_ACCESS_KEY", awsValue)
-	// SENTINEL_SECRET_X is also a matching name now (SECRET anywhere in the name).
-	t.Setenv("SENTINEL_SECRET_X", "value-of-sentinel-secret-x")
-
+	environ, sentinels := fakeEnviron()
 	var buf bytes.Buffer
-	warnSensitiveEnv(context.Background(), bufLogger(&buf), os.Environ())
+	warnSensitiveEnv(context.Background(), bufLogger(&buf), environ)
 
 	out := buf.String()
 	is.True(strings.Contains(out, `"level":"warn"`))
-	is.True(strings.Contains(out, "SENTINEL_API_TOKEN"))
-	is.True(strings.Contains(out, "AWS_SECRET_ACCESS_KEY"))
-	is.True(strings.Contains(out, `"SENTINEL_SECRET_X"`)) // as a name
-	is.True(!strings.Contains(out, "value-of-sentinel-secret-x"))
+	for _, name := range []string{"AAA_FIRST_TOKEN", "AWS_SECRET_ACCESS_KEY", "SENTINEL_API_TOKEN", "SENTINEL_SECRET_X", "POSTGRES_URL", "zzz_last_password"} {
+		is.True(strings.Contains(out, `"`+name+`"`)) // as a name
+	}
+	is.True(!strings.Contains(out, `"HOME"`)) // benign names are not echoed
 	is.True(strings.Contains(out, CodeEnvPassedToPlugins.Reason()))
 	is.True(strings.Contains(out, "v0.21"))
 	is.True(strings.Contains(out, EnvWarningDocsPath))
-	is.True(!strings.Contains(out, sentinelValue))
-	is.True(!strings.Contains(out, awsValue))
+	assertNoSentinels(t, out, sentinels)
 }
 
 func TestWarnSensitiveEnv_OncePerProcess(t *testing.T) {
@@ -185,27 +252,30 @@ func TestWarnSensitiveEnv_NothingSensitiveNoLog(t *testing.T) {
 }
 
 // TestRegistryInit_EnvWarning drives the real Init path with an installed
-// plugin: enabled warns once (even across repeated Init calls), disabled is silent.
+// plugin and a fixed fake environment: enabled warns once (even across repeated
+// Init calls), disabled is silent.
 func TestRegistryInit_EnvWarning(t *testing.T) {
-	t.Setenv("SENTINEL_API_TOKEN", "SENTINEL_VALUE_X")
+	environ, sentinels := fakeEnviron()
+	fake := WithEnviron(func() []string { return environ })
 
 	t.Run("enabled", func(t *testing.T) {
 		is := is.New(t)
 		resetEnvWarnOnce(t)
 		var buf bytes.Buffer
-		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(true))
+		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(true), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		is.Equal(strings.Count(buf.String(), CodeEnvPassedToPlugins.Reason()), 1)
-		is.True(strings.Contains(buf.String(), "SENTINEL_API_TOKEN"))
-		is.True(!strings.Contains(buf.String(), "SENTINEL_VALUE_X"))
+		is.True(strings.Contains(buf.String(), `"AAA_FIRST_TOKEN"`))
+		is.True(strings.Contains(buf.String(), `"zzz_last_password"`))
+		assertNoSentinels(t, buf.String(), sentinels)
 	})
 
 	t.Run("silenced", func(t *testing.T) {
 		is := is.New(t)
 		resetEnvWarnOnce(t)
 		var buf bytes.Buffer
-		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(false))
+		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(false), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		is.True(!strings.Contains(buf.String(), CodeEnvPassedToPlugins.Reason()))
 		is.True(strings.Contains(buf.String(), "standalone connector plugins initialized"))
@@ -215,7 +285,7 @@ func TestRegistryInit_EnvWarning(t *testing.T) {
 		is := is.New(t)
 		resetEnvWarnOnce(t)
 		var buf bytes.Buffer
-		r := NewRegistry(bufLogger(&buf), t.TempDir(), WithEnvWarning(true))
+		r := NewRegistry(bufLogger(&buf), t.TempDir(), WithEnvWarning(true), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		is.True(!strings.Contains(buf.String(), CodeEnvPassedToPlugins.Reason()))
 	})
