@@ -84,6 +84,9 @@ type Options struct {
 	// for any interface whose output leaves the local terminal (the MCP tool,
 	// on every transport). The local CLI leaves it false.
 	RedactEnvNames bool
+	// Environ supplies the environment plugins.standalone_env classifies.
+	// Nil means os.Environ; tests set it to a fixed fake environment.
+	Environ func() []string
 }
 
 // CheckNames returns the stable name of every check DefaultChecks can
@@ -139,7 +142,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		pluginsDirCheck{name: NamePluginsConnectorsDir, path: cfg.Connectors.Path, configKey: configKeyConnectorsPath},
 		pluginsDirCheck{name: NamePluginsProcessorsDir, path: cfg.Processors.Path, configKey: "processors.path"},
 		pluginsBuiltinCheck{cfg: cfg},
-		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, redact: opts.RedactEnvNames},
+		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, redact: opts.RedactEnvNames, environ: opts.Environ},
 		engineReachableCheck{cfg: cfg, requireServer: opts.RequireServer},
 	)
 
