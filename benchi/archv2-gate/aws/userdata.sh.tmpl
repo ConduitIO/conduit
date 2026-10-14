@@ -150,10 +150,11 @@ sync; echo 3 > /proc/sys/vm/drop_caches
 status "quiet 60s before sessions"
 sleep 60
 
-session() { # name image shape session
+session() { # name image shape session [extra harness args...]
   local name=$1 image=$2 shape=$3 sess=$4
+  shift 4
   status "session $name start (image $image, shape $shape, session $sess, rounds $ROUNDS)"
-  "$W/archv2-gate" -image "$image" -shape "$shape" -session "$sess" -rounds "$ROUNDS" \
+  "$W/archv2-gate" -image "$image" -shape "$shape" -session "$sess" -rounds "$ROUNDS" "$@" \
     -out "$OUT/results/$name" > "$OUT/results/$name.stdout" 2> "$OUT/results/$name.stderr"
   local rc=$?
   status "session $name exit $rc"
@@ -165,8 +166,10 @@ session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1
 session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2
 session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
 session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2
-session 05-1x1-ab-main conduit-bench:main 1x1 ab
-session 06-2x2-ab-main conduit-bench:main 2x2 ab
+# v1 against arch-v2 as a matrix session: each arm runs twice per round, so
+# each carries its own A/A floor (the "ab" session gave v2 none).
+session 05-1x1-ab-main conduit-bench:main 1x1 matrix -arm v1=v1 -arm v2=v2
+session 06-2x2-ab-main conduit-bench:main 2x2 matrix -arm v1=v1 -arm v2=v2
 cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
 Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
 session the arm labels mean:
