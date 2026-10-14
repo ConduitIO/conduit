@@ -57,3 +57,42 @@ var (
 	// simply replays on the pipeline's next start (invariant 3).
 	CodePartialGracefulStopEscalated = conduiterr.Register("lifecycle_v2.partial_graceful_stop_escalated", codes.Aborted)
 )
+
+// CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the
+// live-apply preflight (PreflightPipelineConfig), when a pipeline would run on
+// the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a
+// destination connector, or the dead-letter-queue connector, sets
+// sdk.batch.size above 1 (#2979).
+//
+// The v2 destination task writes a batch and then waits for every ack of it
+// before the next read. With sdk.batch.size > 1 the SDK destination only
+// enqueues on Write and acks when its batch flushes: when it reaches
+// sdk.batch.size, or sdk.batch.delay after its first record. When a destination
+// batch is larger than the records per write, acks are withheld, and with the
+// default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops
+// delivering while still reporting Running. With a delay it delivers, but one
+// flush per write (one measurement: 83 rec/s against 56.7k rec/s on the
+// default engine, with one-record reads and a 10ms delay). The classic engine
+// reads acks on their own goroutine and is not affected.
+//
+// The guard is conservative: any sdk.batch.size above 1 is refused, even where
+// a particular write size would happen to align with the batch. Size 0 or 1, or
+// sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the
+// size). Refusing turns a silent liveness failure into an actionable error. It
+// fires before any connector is opened, so nothing is read and nothing is
+// acked (invariants 1 and 3). Values that do not parse as an integer are left
+// to the plugin's own config validation. The SDK trims keys and values before
+// reading them, so the guard does too.
+//
+// The error names every offending connector; ConfigPath and Fix address the
+// first one, as a JSON pointer into the pipeline config document
+// (/connectors/<index>/settings/sdk.batch.size or
+// /dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and
+// sdk.batch.delay) from the destination, or run without
+// --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See
+// docs/operations/archv2-destination-batching.md.
+//
+// A pipeline created through the API has no config document, so for it the
+// error carries no ConfigPath and no Fix; the message still names the
+// connector id and name and the setting.
+var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)

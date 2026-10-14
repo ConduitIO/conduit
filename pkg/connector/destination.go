@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 type Destination struct {
@@ -109,7 +110,8 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 
 	// TODO add proper support for lifecycle events to DLQs (see https://github.com/ConduitIO/conduit/issues/1016#issuecomment-1535119773)
 	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
-		lifecycleEventTriggered, err := d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
+		var lifecycleEventTriggered bool
+		lifecycleEventTriggered, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
 		if err != nil {
 			return err
 		}
@@ -118,7 +120,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 			// when a lifecycle event is successfully triggered we consider the config active
 			d.Instance.LastActiveConfig = d.Instance.Config
 			// persist connector in the next batch to store last active config
-			err := d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
+			err = d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
 				if err != nil {
 					d.reportPersistError(err)
 				}
@@ -270,7 +272,10 @@ func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
 	for i, ack := range resp.Acks {
 		acks[i] = DestinationAck{Position: ack.Position}
 		if ack.Error != "" {
-			acks[i].Error = cerrors.New(ack.Error)
+			// The ack error crossed the plugin protocol as a string. An
+			// SDK schema-middleware decode that hit the Avro element limit
+			// is tagged schema.avro.limit_exceeded here.
+			acks[i].Error = schemaregistry.ClassifyDecodeError(cerrors.New(ack.Error))
 		}
 	}
 	return acks, nil

@@ -29,6 +29,43 @@ build: check-go-version
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+# bench-engine runs the in-process engine benchmarks (fake connectors, no Docker)
+# on both pipeline engines. Output is plain `go test -bench` text, which is what
+# benchstat reads: save one run per revision and compare with bench-engine-compare.
+# It measures engine overhead, not connector throughput; throughput claims need
+# benchi (see docs/architecture/guarantees.md and CONTRIBUTING.md). One run is a
+# snapshot; to compare revisions use bench-engine-ab.
+BENCH_ENGINE_COUNT ?= 6
+BENCH_ENGINE_TIME ?= 3x
+BENCH_ENGINE_OUT ?= bench-engine.txt
+# benchstat is not a repo dependency: it is fetched on demand with `go run`. The
+# pin is a pseudo-version (benchstat has no tagged releases), and its go.mod
+# requires Go 1.26 or newer, so an older toolchain will fail to build it.
+BENCHSTAT_VERSION ?= v0.0.0-20261009192801-be2c69fb417e
+
+.PHONY: bench-engine
+bench-engine:
+	go test -run '^$$' -bench '^BenchmarkEngine$$' -benchtime=$(BENCH_ENGINE_TIME) -count=$(BENCH_ENGINE_COUNT) ./pkg/internal/enginetest/engines | tee $(BENCH_ENGINE_OUT)
+
+# bench-engine-ab compares the working tree against BASE (default origin/main)
+# with interleaved runs and an A/A control: each round runs three binaries (the
+# base, the working tree, and a second copy of the base as the control) in an
+# order that rotates every round, so ROUNDS should be a multiple of 3 (default 6)
+# for every binary to run in every position equally often. Use it rather than two sequential
+# bench-engine runs: drift between invocations shows up as a significant delta on
+# identical code. make bench-engine-ab [BASE=origin/main] [ROUNDS=6]
+.PHONY: bench-engine-ab
+bench-engine-ab:
+	./scripts/bench-engine-ab.sh $(or $(BASE),origin/main) $(or $(ROUNDS),6)
+
+# bench-engine-compare prints the deltas and noise between two bench-engine
+# outputs: make bench-engine-compare OLD=base.txt NEW=head.txt. Only meaningful
+# if the two files came from the same interleaved session (see bench-engine-ab).
+.PHONY: bench-engine-compare
+bench-engine-compare:
+	@test -n "$(OLD)" -a -n "$(NEW)" || { echo "usage: make bench-engine-compare OLD=base.txt NEW=head.txt"; exit 2; }
+	go run golang.org/x/perf/cmd/benchstat@$(BENCHSTAT_VERSION) $(OLD) $(NEW)
+
 .PHONY: escape-analysis
 escape-analysis:
 	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt

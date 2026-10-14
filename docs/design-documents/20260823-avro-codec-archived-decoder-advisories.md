@@ -95,8 +95,9 @@ against `github.com/hamba/avro/v2`, reachable through this package's own code pa
 gate this doc's "Observability" section anticipated actually fires.
 
 **Behavioral compatibility, proven rather than assumed:** the full existing `schema`/`schema/avro`
-test suite passes unchanged except the one known divergence (`[]any(nil)` → `[]any{}` for empty
-arrays, already flagged as a bug by this repo's own pre-existing `TODO`). Wire compatibility was
+test suite passes unchanged except one divergence in commons' own unit test (`[]any(nil)` →
+`[]any{}` for empty arrays, already flagged as a bug by this repo's own pre-existing `TODO`; see
+the correction under rollout step 3: it does not reach Conduit users). Wire compatibility was
 additionally verified with a standalone cross-codec harness — 14 schema/value shapes spanning
 primitives, arrays, maps, unions, nested records, and both logical types this package uses
 (`bytes.decimal`, `long.time-micros`) — encoding with `hamba/avro` and decoding with the fork, and
@@ -236,10 +237,8 @@ Verified, not assumed:
     Notably, `conduit-commons`'s own existing test already carries the comment
     `wantValue: []any(nil), // TODO: smells like a bug, should be []any{}` on this exact case —
     the fork's behavior matches what `conduit-commons`' own maintainers flagged as the _correct_
-    behavior. This is a real, if narrow, compatibility difference to account for in the migration
-    PR (update the test expectation; audit whether any consumer branches on nil-vs-empty for a
-    decoded empty array — the built-in Avro processor and connector SDK are the places to check),
-    not a "purely mechanical, zero-risk" swap.
+    behavior. This was a difference against the hamba version commons' own `go.mod` pinned at the
+    time (v2.28.0). It is not a difference for Conduit: see the correction under rollout step 3.
   - **Forward-compatible with the #278 mitigation, with one gap confirmed still open.** The fork's
     `Config` struct is a superset of hamba's — it adds `MaxMapAllocSize` (the exact knob
     GO-2026-5048's advisory says is the fix, opt-in, defaulting to unbounded) alongside the
@@ -352,8 +351,8 @@ the migration PR, and chaos/upgrade tests updated or justified as unaffected (se
    existing `schema`/`schema/avro` suite plus a standalone 14-case cross-codec wire-compatibility
    harness (see "Implementation status") found no divergence beyond the one already known.
 2. `conduit`: bump the `conduit-commons` dependency; verify the built-in Avro processor's
-   acceptance tests and any Avro-specific integration tests pass unchanged. **Not yet done** —
-   separate follow-up PR against `ConduitIO/conduit` once this PR merges.
+   acceptance tests and any Avro-specific integration tests pass unchanged. **In review** — see
+   rollout step 3.
 3. Any other direct `hamba/avro/v2` consumer surfaced by a repo-wide `go mod why` sweep across
    `ConduitIO/*` (the issue's own investigation found `conduit-connector-pgvector` reaching it
    transitively through the SDK's schema support — that path updates automatically once
@@ -474,8 +473,39 @@ surface the "new advisory, no fix" case automatically.
    ceiling is opt-in and `MaxInputSize` defaults to `0` (unlimited), so the default posture was
    unchanged until #279 landed the codec swap and the 1M allocation defaults. An adversarial review
    of a separate remediation plan initially recorded #278 as sufficient; it was not.
-3. **Not started.** Bump `conduit`'s `conduit-commons` dependency; run the built-in Avro processor's
-   acceptance tests and any Avro-touching integration/chaos suites. **Unblocked** — step 2 is merged.
+3. **In review (targets v0.20.1).** `conduit-commons` v0.7.0 tagged 2026-10-08 at main `ea740f01`;
+   Conduit bumped to it in the `build/commons-v0.7.0` PR. That PR also adds the engine setting
+   `schema.avro.max-elements` (default 1,000,000; 0 = no limit), applied process-wide at startup
+   through commons' `SetDefaultMaxSliceAllocSize`/`SetDefaultMaxMapAllocSize`, so it governs every
+   in-process Avro decode: `avro.decode` and the SDK schema middleware of built-in connectors and
+   processors. Standalone plugins decode with their own SDK and are not governed by it. A payload
+   over the limit fails with the stable code `schema.avro.limit_exceeded`; it is never truncated.
+   The limit bounds decoding only. A source's schema middleware still encodes a record over the
+   limit (pinned by `TestAvroLimit_EncodeIsNotCapped`), so a pipeline's own destination, or an
+   `avro.decode` processor, can reject what its source produced. The connector-sdk destination
+   middleware returns `(0, err)` for the whole `Write` call, so one over-limit record fails every
+   record in that batch: all of them are nacked with the error and go to the DLQ, or halt the
+   pipeline, together.
+   Where the pipeline ends up when there is no DLQ: the classic engine is Degraded on the
+   `avro.decode` and processor paths and Recovering for destination-side failures; architecture v2
+   is Recovering. Recovering with the default DLQ and infinite retries re-reads the same record
+   forever; that loop is not Avro-specific and is tracked in #2997. Runbook:
+   `docs/operations/avro-limit-exceeded.md`.
+   A cross-codec check re-run for that PR found byte-identical encodings and identical decoded
+   values in both directions. The three advisories stay reachable in Conduit through the built-in
+   `conduit-connector-postgres` v0.14.2, which imports `hamba/avro/v2` directly; they clear with
+   step 4.
+   Correction on empty arrays: the `[]any(nil)` → `[]any{}` divergence above is not user-visible in
+   Conduit. Conduit v0.20.0 resolves `hamba/avro/v2` to v2.31.0 (its `go.mod`), whose decoder
+   already returns an empty non-nil `[]any{}` (and `map[string]any{}`) for an empty Avro array
+   (map). Decoding an empty array and an empty map through the real `avro.decode` processor on the
+   v0.20.0 tag and on this branch gives the same values; the regression test
+   `TestDecodeProcessor_EmptyArrayAndMapAreNonNil` pins that. Only commons' own unit test, which
+   ran against its older v2.28.0 pin, saw `[]any(nil)`.
+   Two corrections found while doing this step: v0.7.0 is not purely additive (`Builder.AddField`
+   and `Builder.Build` now use the fork's types, and `Parse`/`SerdeForType` gained `...Option`,
+   which breaks function-typed variables); and the fork's `go.mod` lists its lint tools, which
+   broke `go mod tidy` in Conduit until `evolviconf` v0.1.1 (no `tools.go`) was required.
 4. **Not started.** Repo-wide `go mod why -m github.com/hamba/avro/v2` sweep across `ConduitIO/*`
    to confirm no other direct consumer was missed. Blocked on step 3.
 5. No feature flag — this is a dependency substitution behind an unchanged API, not a new

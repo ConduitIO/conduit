@@ -19,11 +19,19 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/registry/trust"
 )
+
+// inspectSpecification is the WASM loader validateProcessorWASM calls. It is a
+// variable only so a test can make it fail the way a stalled guest does without
+// running real WASM: killing a running wazero module trips the race detector
+// inside wazero itself, so the real stall is covered one layer down (the
+// standalone package's tests) and this layer tests only the error mapping.
+var inspectSpecification = proc_standalone.InspectSpecification
 
 // develGuestVersion is the version a standalone WASM processor reports from Go
 // build info when it was built with a plain `GOOS=wasip1 GOARCH=wasm go build`
@@ -172,8 +180,27 @@ func wasmProcessorTarget() installTarget {
 //
 // All refusals use CodeInvalidProcessorArtifact (FailedPrecondition): the
 // fetched artifact, as published, does not meet the precondition for install.
+// The one exception is a check that ran out of time, which is reported as
+// CodeProcessorValidationTimeout: it says nothing about the artifact. A
+// cancelled context is passed through as context.Canceled for the same reason.
 func validateProcessorWASM(ctx context.Context, wasmPath, name, version string) error {
-	spec, err := proc_standalone.InspectSpecification(ctx, log.Nop(), wasmPath)
+	spec, err := inspectSpecification(ctx, log.Nop(), wasmPath)
+	if err != nil && cerrors.Is(err, context.DeadlineExceeded) {
+		// The check ran out of time (the artifact's Specification() did not
+		// answer, or the caller's deadline passed). That is not evidence the
+		// artifact is bad, so it gets its own retryable code (#2981).
+		e := conduiterr.Wrap(CodeProcessorValidationTimeout, fmt.Sprintf(
+			"processor artifact for %q@%s: install-time WASM validation timed out before the module answered", name, version), err)
+		e.Suggestion = "retry the install; if it times out again the module may be stuck in Specification(), so check that the published artifact is a working standalone processor"
+		return e
+	}
+	if err != nil && cerrors.Is(err, context.Canceled) {
+		// The caller gave up (Ctrl-C, shutdown). That says nothing about the
+		// artifact, so it must not be reported as an invalid one: pass the
+		// cancellation through, wrapped for context, so errors.Is(err,
+		// context.Canceled) and the CLI's "deliberate cancel" handling still work.
+		return fmt.Errorf("processor install of %q@%s cancelled during WASM validation: %w", name, version, err)
+	}
 	if err != nil {
 		e := conduiterr.Wrap(CodeInvalidProcessorArtifact, fmt.Sprintf(
 			"processor artifact for %q@%s failed install-time WASM validation: could not compile the module or read its specification", name, version), err)

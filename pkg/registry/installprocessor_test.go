@@ -20,6 +20,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,6 +35,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/registry"
 	"github.com/conduitio/conduit/pkg/registry/index"
 )
@@ -82,6 +88,19 @@ func readTestProcessorWASM(t *testing.T, sub string) []byte {
 	require.NoError(t, err)
 	require.NotEmpty(t, b)
 	return b
+}
+
+// installCtx bounds an InstallProcessor call made by a test. A real install
+// finishes in seconds; 4 minutes is far beyond any loaded CI run yet well inside
+// the 10-minute package timeout, so a wedged install fails THIS test with a
+// timeout error (registry.processor_validation_timeout) instead of taking the
+// whole suite down with a goroutine dump (#2981). No test depends on the real
+// network: every install here talks to a local httptest server.
+func installCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	t.Cleanup(cancel)
+	return ctx
 }
 
 // tarGzSingle wraps content as a single-root-file tar.gz — the archive shape
@@ -180,7 +199,7 @@ func TestInstallProcessor_FullPipeline(t *testing.T) {
 
 	processorsPath := t.TempDir()
 
-	res, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	res, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "chaos-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -240,11 +259,11 @@ func TestInstallProcessor_Idempotent(t *testing.T) {
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
 	}
 
-	first, err := registry.InstallProcessor(context.Background(), opts)
+	first, err := registry.InstallProcessor(installCtx(t), opts)
 	require.NoError(t, err)
 	assert.False(t, first.AlreadyInstalled)
 
-	second, err := registry.InstallProcessor(context.Background(), opts)
+	second, err := registry.InstallProcessor(installCtx(t), opts)
 	require.NoError(t, err)
 	assert.True(t, second.AlreadyInstalled)
 	assert.Equal(t, first.Digest, second.Digest)
@@ -259,7 +278,7 @@ func TestInstallProcessor_DryRun(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	res, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	res, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "chaos-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -285,7 +304,7 @@ func TestInstallProcessor_SpecNameMismatchRefused(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "not-the-real-name", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -303,7 +322,7 @@ func TestInstallProcessor_CompileFailRefused(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "broken-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -322,7 +341,7 @@ func TestInstallProcessor_SpecifyErrorRefused(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "specify-error-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -345,7 +364,7 @@ func TestInstallProcessor_HostArtifactRefused(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "chaos-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -367,7 +386,7 @@ func TestInstallProcessor_FailClosedByConstruction(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "chaos-processor", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier:         registry.FailClosedVerifier{},
 		ArtifactVerifier:      registry.FailClosedVerifier{},
@@ -385,7 +404,7 @@ func TestInstallProcessor_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	processorsPath := t.TempDir()
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "ai.chunk", ProcessorsPath: processorsPath, IndexURL: indexURL,
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 		RunningConduitVersion: "1.0.0", RunningProtocolVersion: "1.0.0",
@@ -397,9 +416,54 @@ func TestInstallProcessor_NotFound(t *testing.T) {
 // TestInstallProcessor_MissingProcessorsPath refuses with an invalid-argument
 // error when --processors.path is not set (validateProcessor).
 func TestInstallProcessor_MissingProcessorsPath(t *testing.T) {
-	_, err := registry.InstallProcessor(context.Background(), registry.InstallOptions{
+	_, err := registry.InstallProcessor(installCtx(t), registry.InstallOptions{
 		Name: "ai.embed", IndexURL: "https://example.test/index.json",
 		IndexVerifier: passThroughVerifier{}, ArtifactVerifier: passThroughVerifier{},
 	})
 	require.Error(t, err)
+}
+
+// TestValidateProcessorWASM_DeadlineMapsToStableTimeoutCode is the product half
+// of #2981: when the install-time WASM check runs out of time (a stalled guest,
+// or the caller's deadline) the error carries registry.processor_validation_timeout
+// plus a suggestion, not the "artifact is invalid" code, which would blame a
+// publisher for what may be a slow machine. Anything that is neither a deadline
+// nor a cancellation stays CodeInvalidProcessorArtifact (see the cancel test). The hang itself is covered where it lives, in the
+// standalone package (TestWASMProcessor_AbandonedCommand_TeardownReturns).
+func TestValidateProcessorWASM_DeadlineMapsToStableTimeoutCode(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want conduiterr.Code
+	}{
+		{"spec command timed out", fmt.Errorf("%w while waiting for response: %w", standalone.ErrCommandTimeout, context.DeadlineExceeded), registry.CodeProcessorValidationTimeout},
+		{"caller deadline", context.DeadlineExceeded, registry.CodeProcessorValidationTimeout},
+		{"compile failure", cerrors.New("invalid magic number"), registry.CodeInvalidProcessorArtifact},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			validate := registry.ValidateProcessorWASMForTest(t, func(context.Context, log.CtxLogger, string) (sdk.Specification, error) {
+				return sdk.Specification{}, tc.err
+			})
+			err := validate(context.Background(), "unused.wasm", "p", "1.0.0")
+			requireCode(t, err, tc.want)
+			ce, ok := conduiterr.Get(err)
+			require.True(t, ok)
+			assert.NotEmpty(t, ce.Suggestion)
+		})
+	}
+}
+
+// TestValidateProcessorWASM_CancelIsNotAnInvalidArtifact: Ctrl-C during an
+// install is the caller giving up, not evidence of a bad artifact. It must come
+// back as context.Canceled, never as registry.invalid_processor_artifact.
+func TestValidateProcessorWASM_CancelIsNotAnInvalidArtifact(t *testing.T) {
+	validate := registry.ValidateProcessorWASMForTest(t, func(context.Context, log.CtxLogger, string) (sdk.Specification, error) {
+		return sdk.Specification{}, fmt.Errorf("%w while waiting for response: %w", standalone.ErrCommandTimeout, context.Canceled)
+	})
+	err := validate(context.Background(), "unused.wasm", "p", "1.0.0")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	_, isConduitErr := conduiterr.Get(err)
+	assert.False(t, isConduitErr, "a cancellation must not be dressed up as a ConduitError code: %v", err)
 }

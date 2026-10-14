@@ -126,6 +126,7 @@ func (c *DoctorCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)
 	flags.SetDefault("connectors.max-receive-record-size", c.Cfg.Connectors.MaxReceiveRecordSize)
+	flags.SetDefault("connectors.standalone.env-warning", c.Cfg.Connectors.Standalone.EnvWarning)
 	flags.SetDefault("processors.path", c.Cfg.Processors.Path)
 	flags.SetDefault("pipelines.path", c.Cfg.Pipelines.Path)
 	flags.SetDefault("pipelines.exit-on-degraded", c.Cfg.Pipelines.ExitOnDegraded)

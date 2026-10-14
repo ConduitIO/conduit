@@ -144,7 +144,7 @@ rpm -i conduit_<version>_Linux_<arch>.rpm
 
 Requirements:
 
-- [Go](https://golang.org/)
+- [Go](https://go.dev/) 1.26 or newer
 - [Make](https://www.gnu.org/software/make/)
 
 ```shell
@@ -273,6 +273,11 @@ be placed in the `connectors` directory relative to the Conduit binary so
 Conduit can find them. Alternatively, the path to the standalone connectors can
 be adjusted using the CLI flag `-connectors.path`.
 
+Standalone connectors run as separate processes and receive Conduit's
+environment variables. Conduit logs one warning at startup that lists the names
+of credential-like variables being passed; see
+[standalone plugin environment](docs/operations/standalone-plugin-environment.md).
+
 Conduit ships with a number of built-in connectors:
 
 - [File connector](https://github.com/ConduitIO/conduit-connector-file) provides
@@ -396,6 +401,8 @@ try it out.
 You can run a full Conduit engine in-process, inside your own Go application, and
 drive its lifecycle with ordinary function calls — no subprocess, no socket. The
 engine that powers the CLI is the one you embed.
+
+Embedding requires Go 1.26 or newer.
 
 ```sh
 go get github.com/conduitio/conduit

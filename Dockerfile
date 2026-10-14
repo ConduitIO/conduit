@@ -1,5 +1,5 @@
 # Start with a golang base
-FROM golang:1.25.14-bookworm AS base
+FROM golang:1.26.9-bookworm AS base
 
 # Build the full app binary
 WORKDIR /app

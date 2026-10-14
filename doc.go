@@ -105,6 +105,17 @@
 // (https://github.com/ConduitIO/conduit/issues/2669, see
 // pkg/conduit.configureEmbeddedMetrics' doc).
 //
+// # Known limitation: schema.avro.max-elements is process-global
+//
+// The Avro decode limit (schema.avro.max-elements, default 1,000,000) is
+// applied through conduit-commons' SetDefaultMaxSliceAllocSize and
+// SetDefaultMaxMapAllocSize, which are process-wide, so it is not scoped to an
+// Engine. With two Engines in one process the last NewRuntime wins. A schema
+// parsed before the call keeps its old limit in conduit-commons' serde cache
+// for up to 4 hours. And the call overwrites any SetDefault* values the host
+// application set itself. An embedder that needs its own limit should set the
+// same value on every Engine and call nothing else on those commons defaults.
+//
 // # Package boundary / deprecation policy
 //
 // This package's exported API (Options, Engine, Handle, PipelineConfig, New,

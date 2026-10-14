@@ -55,8 +55,8 @@ fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; t
 one-record-in-one-record-out and fails, at the chunk step, with a
 `pipeline.fanout_requires_arch_v2` error (`FailedPrecondition`) naming this flag. Run this pipeline
 with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true` in the config). Architecture v2
-is a **preview** engine: graduation to the default engine is evaluated in v0.21 against a written
-gate. Pipelines that need record fan-out cannot run on the classic engine at all, so until then this
+is a **preview** engine. A single pipeline engine that supports record fan-out is planned; until it
+ships, pipelines that need record fan-out cannot run on the classic engine at all, so until then this
 template depends on the preview engine; review its status before relying on it for production data.
 
 ## Requires network egress for the embedding provider

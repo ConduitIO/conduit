@@ -221,6 +221,89 @@ func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
 	is.True(!ok)  // expected node to close outgoing channel
 }
 
+// TestSourceNode_Stop_AfterSourceError guards #2969: a stop that arrives after
+// the source failed (Run has stopped reading, but is still tearing down) used
+// to block forever in InjectControlMessage while holding the PubNode lock, and
+// the node's own cleanup then blocked on that lock. Shutdown hung until the
+// process was killed (invariant 7). The stop context deliberately has no
+// deadline, that is what the runtime passes on SIGTERM.
+func TestSourceNode_Stop_AfterSourceError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background() // no deadline, never canceled
+	ctrl := gomock.NewController(t)
+
+	const bound = 3 * time.Second
+
+	src := mock.NewSource(ctrl)
+	failRead := make(chan struct{})
+	tearingDown := make(chan struct{})
+	releaseTeardown := make(chan struct{})
+	stopCalled := make(chan struct{})
+	src.EXPECT().ID().Return("source-connector").AnyTimes()
+	src.EXPECT().Open(gomock.Any()).Return(nil)
+	src.EXPECT().Errors().Return(make(chan error))
+	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(context.Context) ([]opencdc.Record, error) {
+		<-failRead
+		return nil, connectorPlugin.ErrStreamNotOpen
+	})
+	src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (opencdc.Position, error) {
+		close(stopCalled)
+		return opencdc.Position("last-position"), nil
+	})
+	src.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(context.Context) error {
+		close(tearingDown)
+		<-releaseTeardown
+		return nil
+	})
+
+	node := &SourceNode{
+		Name:          "source-node",
+		Source:        src,
+		PipelineTimer: noop.Timer{},
+	}
+	out := node.Pub()
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- node.Run(ctx) }()
+
+	// The source fails; Run leaves its loop and starts tearing down, nobody
+	// reads the node's internal message channel from now on.
+	close(failRead)
+	_, _, err := cchan.ChanOut[struct{}](tearingDown).RecvTimeout(ctx, bound)
+	is.NoErr(err) // expected Run to reach teardown
+
+	stopErr := make(chan error, 1)
+	go func() { stopErr <- node.Stop(ctx, nil) }()
+
+	// Wait until Stop has fetched the stop position, then give it time to get
+	// stuck injecting the control message (the bug) before teardown finishes
+	// and cleanup tries to take the lock.
+	_, _, err = cchan.ChanOut[struct{}](stopCalled).RecvTimeout(ctx, bound)
+	is.NoErr(err)
+	time.Sleep(100 * time.Millisecond)
+	close(releaseTeardown)
+
+	select {
+	case err := <-stopErr:
+		// The stop could not be delivered, that has to be reported, not hang.
+		is.True(err != nil)
+	case <-time.After(bound):
+		t.Fatal("Stop did not return: InjectControlMessage is blocked on a node that stopped running")
+	}
+
+	select {
+	case err := <-runErr:
+		// The source error stays the cause of the run ending.
+		is.True(cerrors.Is(err, connectorPlugin.ErrStreamNotOpen))
+	case <-time.After(bound):
+		t.Fatal("Run did not return: cleanup is blocked on the PubNode lock")
+	}
+
+	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, bound)
+	is.NoErr(err) // expected node to close outgoing channel
+	is.True(!ok)  // expected node to close outgoing channel
+}
+
 // TestSourceNode_ForceStop_BeforeRun guards #2539: force-stopping a source node
 // before Run has initialized its connector-context cancel must not panic. Before
 // the fix, ForceStop nil-dereferenced connectorCtxCancel and crashed the process

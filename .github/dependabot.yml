@@ -32,9 +32,10 @@ updates:
     schedule:
       interval: "weekly"
     ignore:
-      # The Go toolchain stays on 1.25.x until the coordinated fleet move in
-      # v0.21 (commons, conduit and every built-in connector together). Patch
-      # bumps inside 1.25 are still proposed. Lift this with that move.
+      # Conduit moved to Go 1.26.x early (GO-2026-6603/6611/6612/6617 have no
+      # 1.25 fix). Minor/major image bumps stay ignored until the coordinated
+      # fleet move in v0.21 (commons, conduit and every built-in connector
+      # together). Patch bumps inside 1.26 are still proposed.
       - dependency-name: "golang"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
