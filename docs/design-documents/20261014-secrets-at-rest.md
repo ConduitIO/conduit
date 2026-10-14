@@ -52,8 +52,8 @@ Roadmap item: v0.21: Secrets at rest (#3018, fixes #2988). Tracking issue #3002.
   within seconds of a pipeline running.
 - `restoreRedactedSettings` (`pkg/orchestrator/redacted.go`) and `redactSettings`
   (`pkg/http/api/toproto/redact.go`) implement the `"***"` contract. Every Settings value in every
-  API response is `"***"`, because no per-parameter sensitivity exists: conduit-commons v0.8.0 and
-  conduit-connector-protocol v0.10.0 have no `sensitive` or secret marker on `config.Parameter`
+  API response is `"***"`, because no per-parameter sensitivity exists: `conduit-commons` v0.8.0 and
+  `conduit-connector-protocol` v0.10.0 have no `sensitive` or secret marker on `config.Parameter`
   (checked by search; the same gap is noted in `pkg/foundation/log/redact.go`, tracked as #2566).
 
 ### Two facts that shape the design
@@ -166,10 +166,11 @@ Not only "secret" ones. Reasons:
 - A reference is the operator's own statement that the value lives outside the file. Treating it as
   not stored is correct for non-secrets too (`${PORT}`, `${BUCKET}`).
 - Ids, names, `plugin`, `type`, `status`, descriptions and the pipeline `id` keep today's behavior:
-  expanded at parse time, stored expanded. Operators must not put secrets there. The config linter (`pkg/provisioning/config/yaml/linter.go`) already sees these nodes
-  and can warn (see _Observability_).
+  expanded at parse time, stored expanded. Operators must not put secrets there. The config linter
+  (`pkg/provisioning/config/yaml/linter.go`) already sees these nodes and can warn (see
+  _Observability_).
 
-When the conduit-commons `sensitive` marker lands (#2566), it can drive redaction precision and the
+When the `conduit-commons` `sensitive` marker lands (#2566), it can drive redaction precision and the
 doctor hint. It does not change storage: storing every reference as a reference stays correct.
 
 ### 3. Where references are parsed
@@ -579,7 +580,7 @@ Each with a recommendation. DeVaris decides.
 
 - #2988 (the issue), #3018 (lane), #3002 (v0.21 tracking), #2926 and #2913 (`"***"` redaction and
   round trip).
-- conduit-connector-s3#1021 (credential chain, reduces the need for static keys).
+- `conduit-connector-s3`#1021 (credential chain, reduces the need for static keys).
 - #2566 (sensitive parameter marker, referenced from `pkg/foundation/log/redact.go`).
 - v0.22 roadmap: external secret stores (Vault, KMS, Kubernetes).
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the `CONDUIT_SECRET_*` resolver).
