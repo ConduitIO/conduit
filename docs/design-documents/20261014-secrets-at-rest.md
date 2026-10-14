@@ -211,14 +211,14 @@ the design backs it with checks, because a convention is not a trust boundary:
   walks every API entry point (`CreateConnector`, `UpdateConnector`, processor equivalents,
   `PlanPipeline`, `ApplyPipeline`) asserting a stored entity never has `SettingRefs` set by a request.
 - **Two boundaries, enforced differently.**
-  - *Parse to apply hand-off: the compiler.* In `config.Pipeline`, `SettingRefs` is an opaque
+  - _Parse to apply hand-off: the compiler._ In `config.Pipeline`, `SettingRefs` is an opaque
     `parsed.Refs` defined in `pkg/provisioning/internal/parsed`, with unexported fields and a
     single constructor in that package. Go's `internal` rule means only code under
     `pkg/provisioning/` can import it; in practice that is the YAML parser
     (`pkg/provisioning/config/yaml`). `Plan`, `ApplyPlan`, `ApplyPlanLive`, `pkg/conduit/dev`,
     `fromproto` and the API handlers can pass a `parsed.Refs` along or copy it but cannot build a
     non-zero one, and the zero value means "no references". These functions need no runtime check.
-  - *Store level: convention, an end-to-end test, and review.* The stored fields
+  - _Store level: convention, an end-to-end test, and review._ The stored fields
     (`connector.Config`, `processor.Config`, `pipeline.DLQ`) live outside `pkg/provisioning` and
     must be a plain `map[string]string` (also what JSON needs). Once provisioning converts
     `parsed.Refs` to that map, any code can hand a map to `connector.Service.Create/Update`. So the
