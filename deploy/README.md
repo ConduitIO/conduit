@@ -18,6 +18,11 @@ you read and adapt. Only the Docker Compose quickstart is exercised in CI.
   Release images are signed with cosign (keyless, GitHub OIDC). To verify before you
   deploy, see [`docs/releases.md`](../docs/releases.md); to pin harder, replace the
   tag with the `@sha256:` digest of the signed index.
+  The pin is bumped for you: when a stable release is published, the `bump-image-pin`
+  workflow verifies the new image and its signature, then opens a PR that updates the
+  pin here and in the README. Nightlies and prereleases are never pinned, and a pin is
+  never moved backwards. It only targets `main`; to bump a release branch that has
+  `deploy/`, run the workflow manually with `base` set to that branch.
 - **Stop timeout above 30 s.** `SIGTERM` drains in-flight records and checkpoints
   before exit, and the runtime gives up after 30 s
   ([guarantees](../docs/architecture/guarantees.md#stop-time)). Every example sets
