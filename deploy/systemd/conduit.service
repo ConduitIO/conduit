@@ -1,0 +1,65 @@
+# Conduit under systemd. EXAMPLE, NOT A SUPPORTED PRODUCT (see ../README.md).
+#
+# Install (as root), with the binary from a release archive:
+#   install -m 0755 conduit /usr/local/bin/conduit
+#   useradd --system --home-dir /var/lib/conduit --shell /usr/sbin/nologin conduit
+#   install -d -o root -g conduit -m 0750 /etc/conduit /etc/conduit/pipelines
+#   install -m 0640 -g conduit conduit.env.example /etc/conduit/conduit.env
+#   install -m 0644 conduit.service /etc/systemd/system/conduit.service
+#   systemctl daemon-reload && systemctl enable --now conduit
+#
+# State (pipeline positions, config) lives in /var/lib/conduit, created and
+# owned by systemd through StateDirectory=. Back that directory up.
+[Unit]
+Description=Conduit data streaming
+Documentation=https://conduit.io/docs
+After=network-online.target
+Wants=network-online.target
+# Conduit retries failed pipelines itself; this only bounds a process crash loop.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=conduit
+Group=conduit
+StateDirectory=conduit
+WorkingDirectory=/var/lib/conduit
+EnvironmentFile=/etc/conduit/conduit.env
+ExecStart=/usr/local/bin/conduit run \
+    --db.type badger \
+    --db.badger.path /var/lib/conduit/conduit.db \
+    --pipelines.path /etc/conduit/pipelines \
+    --connectors.path /var/lib/conduit/connectors \
+    --processors.path /var/lib/conduit/processors \
+    --log.format json
+
+# SIGTERM (the systemd default) drains in-flight records and checkpoints. The
+# runtime gives up draining after 30 s, so allow longer than that before
+# SIGKILL. SIGKILL is recoverable (records replay) but is the fallback.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+Restart=on-failure
+RestartSec=5
+
+# Sandboxing. Loosen deliberately if a standalone connector needs more
+# (for example a writable path or a wider address family).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

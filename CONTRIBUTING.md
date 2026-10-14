@@ -44,6 +44,22 @@ and that all the tests still run successfully.
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
 
+## Test coverage
+
+Engine packages (`pkg/connector`, `pipeline`, `lifecycle`, `orchestrator`, `processor`,
+`provisioning`, `plugin`, `schemaregistry`, `conduit`, `inspector`) are held to a coverage
+ratchet: CI fails if a package drops more than a point below its entry in
+`.github/coverage-baseline.txt`, and a new engine package must reach 80%. Run the same check
+locally:
+
+```shell
+make coverage
+python3 .github/scripts/coverage_ratchet.py cover.out .github/coverage-baseline.txt
+```
+
+When you add tests and a package's coverage rises, raise its baseline entry in the same PR
+(the CI job summary lists which ones). Do not lower an entry to make a PR pass.
+
 ## Adding a vendored pipeline template
 
 `conduit pipelines init --template <name>` scaffolds a runnable pipeline from a small,

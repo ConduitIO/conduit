@@ -1,0 +1,40 @@
+# Conduit quickstart: one container, one pipeline (generator -> file).
+#
+# EXAMPLE, NOT A SUPPORTED PRODUCT. See ../README.md.
+#
+#   docker compose up -d --wait
+#   curl -s localhost:8080/v1/pipelines | head
+#   docker compose exec conduit tail -n 3 /data/records.ndjson
+#   docker compose down        # keeps state; add -v to delete it
+name: conduit-quickstart
+
+services:
+  conduit:
+    # Pinned by version. Override with CONDUIT_IMAGE to test another build.
+    # Verify the signature first: docs/releases.md.
+    image: ${CONDUIT_IMAGE:-ghcr.io/conduitio/conduit:v0.20.0}
+    # Published on loopback only: the API is unauthenticated.
+    ports:
+      - "127.0.0.1:${CONDUIT_HTTP_PORT:-8080}:8080"
+    environment:
+      # Conduit's own state (pipeline positions, config) on the named volume, so
+      # a restart resumes instead of replaying from the start.
+      CONDUIT_DB_TYPE: badger
+      CONDUIT_DB_BADGER_PATH: /data/conduit.db
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - conduit-data:/data
+      - ./pipelines:/app/pipelines:ro
+    # SIGTERM drains and checkpoints; the runtime gives up after 30 s.
+    stop_grace_period: 45s
+    restart: unless-stopped
+    healthcheck:
+      # /readyz: the engine finished starting and can serve (docs/health_check.md).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  conduit-data:
