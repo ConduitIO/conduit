@@ -330,8 +330,8 @@ are out of scope there; this document narrows what an allowlisted plugin receive
 - Hard gate for the default flip. Decided by DeVaris 2026-10-14: the default becomes `allowlist` in v0.21
   only if v0.20.2 with the warning has shipped first. See _Rollout_.
 - Fallback (round-2 review, 2026-10-14): the default becomes `allowlist` in the minor release after the first
-  release that carries the warning: v0.21 if that is v0.20.2, v0.22 if it is v0.21. Pending DeVaris
-  confirmation, since it refines the decided gate.
+  release that carries the warning: v0.21 if that is v0.20.2, v0.22 if it is v0.21. Confirmed by DeVaris
+  2026-10-14.
 
 ## Related
 
