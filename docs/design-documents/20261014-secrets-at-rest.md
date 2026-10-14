@@ -210,9 +210,17 @@ the design backs it with checks, because a convention is not a trust boundary:
 - `fromproto` conversions (`pkg/http/api/fromproto`) have no `SettingRefs` to fill, and a test
   walks every API entry point (`CreateConnector`, `UpdateConnector`, processor equivalents,
   `PlanPipeline`, `ApplyPipeline`) asserting a stored entity never has `SettingRefs` set by a request.
-- `ApplyPlanLive`, `ApplyPlan` and `Plan` accept a `config.Pipeline` from callers other than the
-  parser. They reject a non-empty `SettingRefs` (coded error) unless the caller is the engine's own
-  parse path (`provisioning.Service.Init`, the dev watcher). A test covers this.
+- **The compiler enforces who can set `SettingRefs`, not a runtime caller check.** The field's type
+  is an opaque `parsed.Refs` defined in `pkg/provisioning/internal/parsed`, with unexported fields
+  and a single constructor in that package. Go's `internal` rule means only code under
+  `pkg/provisioning/` can import it; in practice that is the YAML parser
+  (`pkg/provisioning/config/yaml`). Everything else, including `fromproto`, the API handlers,
+  `Plan`, `ApplyPlan`, `ApplyPlanLive` and `pkg/conduit/dev`, can pass a `parsed.Refs` along or
+  copy it but cannot build a non-zero one, and the zero value means "no references". A request
+  converted by `fromproto` therefore carries no references by construction. `Plan`, `ApplyPlan` and
+  `ApplyPlanLive` need no check. The residual is code inside `pkg/provisioning/` itself, which is
+  the layer that is allowed to; review of that package is the control. Tests still assert the
+  behavior end to end.
 - `ApplyPipeline` onto a pipeline that was provisioned from a file overwrites its references with
   the literal values in the request (the request carries literals only, D3). Behavior chosen:
   **allowed, as today**, and the reconcile at the next start restores the references from the
@@ -340,10 +348,32 @@ Exceptions to the warn-only default, in v0.21:
   widens or blanks an egress policy. Fail closed.
 - **Strict mode and deletion.** A resolve failure while delivering `OnDelete` or a delete event
   must not be silent: today's v0.20 path would deliver the event with whatever expanded, but a
-  strict failure would drop it and, for example, never drop the replication slot. Behavior: a
-  failed delete event is retried at the next start and logged with the code; deleting the
-  entity does not wait on it, and the runbook lists the manual cleanup. Open question for review:
-  whether to block deletion instead (D5 context).
+  strict failure would drop it and, for example, never drop the replication slot. "Retry at the next
+  start" is not implementable: `connector.Service.Delete` removes the record from the store and
+  memory first, and only then `instance.Close` calls `OnDelete`, whose error is only logged
+  (`pkg/connector/service.go`, `pkg/connector/instance.go`). By the time `OnDelete` fails nothing
+  is left to retry, and `deleteOldPipelines` (`pkg/provisioning/service.go`) retries only when the
+  delete action returns an error. Behavior, a preflight **before** the store delete:
+  1. In strict mode, before `store.Delete`, resolve the `LastActiveConfig` payload that the
+     delete event will carry. If an unset variable would fail it, the delete action returns the
+     coded `secretref.env_unset` error. The record survives and the existing `deleteOldPipelines`
+     retry works.
+  2. The preflight covers **every** connector of the pipeline before the first delete action, so a
+     pipeline cannot end up half-deleted.
+  3. There is no force flag. The escape hatch is the variable itself: set it to the real value, or
+     to the empty string to accept a delete event that will probably fail. The error message says
+     this and names what may be orphaned (for a Postgres source, the replication slot).
+  4. Non-strict behavior is unchanged from v0.20.
+  5. Provisioning deletes are not one database transaction: `Service.Delete` runs the delete
+     actions and, on a later failure, its rollback actions re-create what was removed. A delete
+     event may already have been delivered when that happens, so a retry redelivers it. Delete
+     events are idempotent today, and this design relies on it.
+  6. A "pending delete" record that survives the connector was rejected: it adds new persisted
+     state and a crash-recovery surface (Invariant 5) for a corner case.
+
+  The underlying ordering problem is not secrets-specific and exists in v0.20: a failing plugin
+  delete call silently orphans resources today. It is filed separately as #3058 and this design
+  does not fix it for the non-strict path.
 
 D4 widens the stakes of the warn-only default. A non-secret setting such as a table, bucket or topic
 that resolves to blank can misroute data silently; the per-start warning and `pipelines status`
@@ -497,7 +527,7 @@ Rejected as a larger change with weaker failure behavior than A.
 | Provider outage (v0.22) | Out of scope; the resolve-failure path above is the place to define it then. | |
 | Downgrade to v0.20.x | Self-heal only when the v0.20 reconcile succeeds; otherwise reference-backed keys are absent at start. See _Downgrade_. | Not fail-closed without a v0.20.x patch (D9). |
 | Unset variable in `sdk.egress.*` | Hard failure at processor open, regardless of strict mode. | Fail closed. |
-| Delete event cannot resolve (strict) | Logged with the code, retried at next start; deletion proceeds. | See section 5. |
+| Delete event cannot resolve (strict) | Preflight before the store delete fails the delete action with `secretref.env_unset`; the record survives and `deleteOldPipelines` retries. All connectors of the pipeline are preflighted first. | See section 5. The wider ordering problem is #3058. |
 | `ApplyPipeline` onto a file-provisioned pipeline | Overwrites references with literals until the next start's reconcile. | Documented (section 3). |
 | Old data left in storage after migration | See _Residue_. | |
 
@@ -669,10 +699,15 @@ migration including `LastActiveConfig`; (4) doctor, linter, docs and runbook.
     after a failed start; after an update; after a live `ApplyPlanLive` update; after
     `UpdateWhileRunning` (`processor.Service`).
 - **Trust model.** No `fromproto`/API path can populate `SettingRefs`; `Plan`, `ApplyPlan` and
-  `ApplyPlanLive` reject a non-empty `SettingRefs` from a non-parser caller; `ApplyPipeline` onto a
+  `ApplyPlanLive` cannot be handed references by a non-parser caller (a compile-level property of the
+  `parsed.Refs` type, plus a test that `fromproto` output has the zero value); `ApplyPipeline` onto a
   file-provisioned pipeline behaves as section 3 states.
 - **All-references connector** across migrate, restart and delete: `OnDelete` fires; no spurious
   update event; `LastActiveConfig` "never started" is judged on both maps.
+- **Strict delete preflight.** An unset variable in a connector's `LastActiveConfig` makes the delete
+  action fail with the coded error before `store.Delete`; the record and its `State` survive;
+  a multi-connector pipeline deletes none of its connectors; after the variable is set the retry in
+  `deleteOldPipelines` succeeds.
 - **No in-place mutation** of shared `Settings`/`SettingRefs` maps (race detector).
 - **Grammar equivalence (fuzz).** `Resolve(template)` equals `os.ExpandEnv(template)` when every
   variable is set, for all inputs; "is a reference" is exactly "`os.Expand` called the mapper". Seed
@@ -714,7 +749,8 @@ review. D9 is new.
 - **D2 (refined). Unset variable.** Recommend warn in v0.21, strict by default in v0.23, with:
   the warning per pipeline start and visible in the degraded cause, `pipelines status` and doctor;
   a hard failure for unset variables in `sdk.egress.*` keys; and a defined strict-mode behavior for
-  delete events (retry at next start, do not block deletion). The case for erroring now is real
+  delete events (preflight before the store delete in strict mode, no force flag, every connector of
+  the pipeline checked first). The case for erroring now is real
   (an empty credential should never reach a plugin, and D4 means non-secret keys such as table or
   topic can resolve to blank and misroute); the cost is breaking configs that rely on
   unset-is-empty.
@@ -747,6 +783,7 @@ review. D9 is new.
   round trip).
 - `conduit-connector-s3`#1021 (credential chain, reduces the need for static keys).
 - #2566 (sensitive parameter marker, referenced from `pkg/foundation/log/redact.go`).
+- #3058 (connector delete runs `OnDelete` after the record is gone; pre-existing, not secrets-specific).
 - v0.22 roadmap: external secret stores (Vault, KMS, Kubernetes).
 - `docs/design-documents/20260726-wasm-host-egress-capability.md` (the `CONDUIT_SECRET_*` resolver).
 - `docs/operations/standalone-plugin-environment.md` (plugins inherit the host environment).
