@@ -45,6 +45,10 @@ type Registry struct {
 	// that standalone plugin processes inherit. Advisory only; it never changes
 	// the environment plugins receive.
 	envWarning bool
+	// environ returns the host environment that the startup warning
+	// classifies. It defaults to os.Environ and is replaced only to supply a
+	// fixed environment in tests.
+	environ func() []string
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -72,9 +76,21 @@ func WithEnvWarning(enabled bool) RegistryOption {
 	return func(r *Registry) { r.envWarning = enabled }
 }
 
+// WithEnviron replaces the source of the host environment the startup warning
+// classifies (default os.Environ; nil also means os.Environ). It does not
+// change the environment plugin processes receive.
+func WithEnviron(environ func() []string) RegistryOption {
+	return func(r *Registry) {
+		if environ != nil {
+			r.environ = environ
+		}
+	}
+}
+
 func NewRegistry(logger log.CtxLogger, pluginDir string, opts ...RegistryOption) *Registry {
 	r := &Registry{
-		logger: logger.WithComponentFromType(Registry{}),
+		logger:  logger.WithComponentFromType(Registry{}),
+		environ: os.Environ,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -109,7 +125,7 @@ func (r *Registry) Init(ctx context.Context, connUtilsAddr string, maxReceiveRec
 		Msg("standalone connector plugins initialized")
 
 	if r.envWarning && count > 0 {
-		warnSensitiveEnv(ctx, r.logger, os.Environ())
+		warnSensitiveEnv(ctx, r.logger, r.environ())
 	}
 }
 
