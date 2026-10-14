@@ -100,3 +100,13 @@ laptop under Docker Desktop drifts too much across a long session. Either:
 
 Whatever is chosen, the gate decision should cite an A/A floor next to the
 result. A number without one is not evidence.
+
+## The harness that follows from this
+
+[`benchi/archv2-gate/`](archv2-gate/README.md) implements the list above for
+the arch-v2 graduation gate
+([ADR 20261006](../docs/architecture-decision-records/20261006-archv2-graduation-gate.md)).
+It counts records at a file sink, runs 60s windows after a discarded warmup,
+alternates single runs, and runs an A/A control in every session. Its README
+covers the method, how to run it, and the hardware the gate needs. No
+v1-vs-v2 result has been produced with it yet.
