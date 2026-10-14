@@ -626,12 +626,25 @@ have verified the reconcile".
 
 **Compatibility contract.** The guard works only if the stored key stays what it is:
 
-- The stored JSON key is exactly `SettingRefs`, with no struct tag. Go decodes JSON keys
-  case-insensitively, which the guard relies on.
-- The v0.20.2 guard checks `connector.Config.SettingRefs` and `LastActiveConfig.SettingRefs`,
-  `processor.Config.SettingRefs`, and the pipeline `DLQ.SettingRefs`.
+- The stored JSON key is exactly `SettingRefs`, with no struct tag. The guard decodes with
+  `goccy/go-json`, not `encoding/json`; both match keys ASCII case-insensitively, which the guard
+  relies on.
+- The v0.20.2 guard (#3062) treats the locations differently:
+  - `connector.Config.SettingRefs`, `processor.Config.SettingRefs` and the pipeline
+    `DLQ.SettingRefs`: a non-empty value is refused at start, with a coded degraded cause.
+  - `LastActiveConfig.SettingRefs`: **preserved and not refused at start.** Refusing there would
+    lock the pipeline out permanently: at start `LastActiveConfig` is used only as the "before" of
+    an update event, and v0.20 clears it only on a successful start.
+  - `LastActiveConfig.SettingRefs` **is refused at connector delete**, before `store.Delete`.
+    Otherwise `OnDelete` would run with the referenced keys missing and orphan resources, for
+    example a Postgres replication slot.
+  - After a heal, the update event is skipped while `LastActiveConfig` still has `SettingRefs`.
 - The key is frozen. Renaming or retagging it in any later release would silently disable the guard
   on every downgrade path. A v0.21 test pins the encoded key name for all four locations.
+- **v0.21 implementation constraint:** v0.21 must not depend on v0.20.x clearing `LastActiveConfig`.
+  After a downgrade and re-upgrade, a v0.21 binary can meet a record whose `LastActiveConfig` still
+  carries `SettingRefs` that a v0.20.2 heal left in place, and must treat it exactly as section 4
+  defines (templates compared, payload resolved).
 
 Pipelines that were running before the downgrade are auto-resumed after provisioning
 (`provisioning.Service.Init` precedes `lifecycleService.Init`), so on the success path they start
