@@ -460,6 +460,8 @@ func TestDeleteConnectorAction_Rollback(t *testing.T) {
 			}
 
 			connSrv := mock.NewConnectorService(ctrl)
+			// the delete went through, so the connector is gone
+			connSrv.EXPECT().Get(ctx, haveCfg.ID).Return(nil, connector.ErrInstanceNotFound)
 			connSrv.EXPECT().Create(ctx, haveCfg.ID, tc.wantConnType, haveCfg.Plugin, pipelineID, wantCfg, connector.ProvisionTypeConfig)
 			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[0].ID)
 			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)

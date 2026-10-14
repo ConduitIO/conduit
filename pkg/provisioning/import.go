@@ -16,8 +16,11 @@ package provisioning
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -37,7 +40,8 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 // importPipeline imports a pipeline config, tagging any newly created pipeline
 // with the given provision type.
 func (s *Service) importPipeline(ctx context.Context, newConfig config.Pipeline, provisionedBy pipeline.ProvisionType) error {
-	oldConfig, err := s.Export(ctx, newConfig.ID)
+	var refs storedRefs
+	oldConfig, err := s.export(ctx, newConfig.ID, &refs)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
 		return cerrors.Errorf("could not export pipeline with ID %v, this could mean the Conduit state is corrupted: %w", err)
 	}
@@ -54,6 +58,7 @@ func (s *Service) importPipeline(ctx context.Context, newConfig config.Pipeline,
 		if ok := s.rollbackActions(ctx, rollbackActions); !ok {
 			s.logger.Warn(ctx).Msg("some actions failed to be rolled back, Conduit state might be corrupted; please report this issue to the Conduit team")
 		}
+		s.restoreStoredRefs(ctx, refs)
 		return err
 	}
 
@@ -342,4 +347,77 @@ func reverseActions(actions []action) {
 	for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
 		actions[i], actions[j] = actions[j], actions[i]
 	}
+}
+
+// storedRefs holds the stored config of the entities of a pipeline that carry
+// SettingRefs (written by Conduit v0.21 or later), as they were before an
+// import. Rollback replays the exported config.*, which has no SettingRefs, so
+// it would leave those entities in memory without their references and the
+// downgrade guard (lifecycle.CheckSettingRefs) would not see them. Empty for
+// every database written by this release.
+type storedRefs struct {
+	dlq        *savedDLQ
+	connectors []savedConnector
+	processors []savedProcessor
+}
+
+type savedDLQ struct {
+	pipelineID string
+	dlq        pipeline.DLQ
+}
+
+type savedConnector struct {
+	id         string
+	plugin     string
+	cfg        connector.Config
+	lastActive connector.Config
+}
+
+type savedProcessor struct {
+	id     string
+	plugin string
+	cfg    processor.Config
+}
+
+// restoreStoredRefs puts the entities in refs back exactly as stored, after
+// the rolled-back actions have run. Invariant 6: SettingRefs is never dropped.
+// Errors are logged: rollback cannot recover from them.
+func (s *Service) restoreStoredRefs(ctx context.Context, refs storedRefs) {
+	fail := func(what string, err error) {
+		s.logger.Err(ctx, err).Msgf("could not restore %s after a failed import; it still carries SettingRefs on disk, which Conduit keeps refusing to start", what)
+	}
+	if refs.dlq != nil {
+		if _, err := s.pipelineService.UpdateDLQ(ctx, refs.dlq.pipelineID, refs.dlq.dlq); err != nil {
+			fail("the pipeline DLQ", err)
+		}
+	}
+	for _, c := range refs.connectors {
+		inst, err := s.connectorService.Update(ctx, c.id, c.plugin, c.cfg)
+		if err != nil {
+			fail("connector "+c.id, err)
+			continue
+		}
+		inst.Lock()
+		inst.LastActiveConfig = c.lastActive
+		inst.Unlock()
+	}
+	for _, p := range refs.processors {
+		if _, err := s.processorService.UpdateWhileRunning(ctx, p.id, p.plugin, p.cfg); err != nil {
+			fail("processor "+p.id, err)
+		}
+	}
+}
+
+// errDeleteSettingRefs is the refusal to delete a pipeline whose connector
+// record carries SettingRefs; the connector service would refuse the delete
+// anyway (see connector.Service.Delete).
+func errDeleteSettingRefs(pipelineID, connectorID string) error {
+	ce := conduiterr.New(
+		pipeline.CodeSettingsReferencesUnsupported,
+		fmt.Sprintf("can't delete pipeline %s: connector %s has settings stored as references written by Conduit v0.21 or later, "+
+			"and this release would run the connector's delete hook without them; "+
+			"this database was written by Conduit v0.21 or later; run v0.21 or later, or re-provision", pipelineID, connectorID),
+	)
+	ce.Suggestion = "this database was written by Conduit v0.21 or later; run v0.21 or later, or re-provision"
+	return ce
 }

@@ -7,6 +7,9 @@ Started anyway, the pipeline would run with those settings absent, and an option
 would fall back silently: the S3 connector would use the default AWS credential chain, a Kafka
 connector would connect without SASL.
 
+The stored JSON key is exactly `SettingRefs`. The store decoder is `goccy/go-json`, which
+matches keys case-insensitively like `encoding/json`, so any casing of the key is recognized.
+
 From v0.20.2, Conduit refuses to start such a pipeline instead. Releases v0.20.0 and v0.20.1 do
 not have this check.
 
@@ -19,6 +22,10 @@ not have this check.
 - Starting the pipeline returns the same coded error. No connector plugin is started and
   nothing is read from the source.
 - The Conduit log has a warning with the same `code`.
+- Deleting such a connector, or the pipeline that holds it, is refused with the same code
+  (`provisioning` logs it and retries on the next boot). Deleting it would run the connector's
+  delete hook without the missing settings. For Postgres, that hook needs `url`, fails, and leaves
+  the replication slot and publication behind, so WAL grows. Run v0.21 or later to delete it.
 
 ## Diagnosis
 

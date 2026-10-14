@@ -580,6 +580,12 @@ func (a deleteConnectorAction) Do(ctx context.Context) error {
 }
 
 func (a deleteConnectorAction) Rollback(ctx context.Context) error {
+	// connector.Service.Delete refuses a record carrying SettingRefs and leaves
+	// it in place; re-creating it from config would overwrite it without its
+	// references (Invariant 6).
+	if c, err := a.connectorService.Get(ctx, a.cfg.ID); err == nil && (c.Config.HasSettingRefs() || c.LastActiveConfig.HasSettingRefs()) {
+		return nil
+	}
 	return createConnectorAction(a).Do(ctx)
 }
 

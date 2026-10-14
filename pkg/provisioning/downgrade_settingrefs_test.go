@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,6 +39,7 @@ import (
 	"github.com/conduitio/conduit-commons/database/badger"
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/database/sqlite"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
@@ -52,6 +54,7 @@ import (
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -121,15 +124,63 @@ var dgBackends = []dgBackend{
 }
 
 // dgCountingPlugins counts connector plugin dispensers requested. A pipeline
-// that is refused must request none: no plugin is started.
+// that is refused must request none: no plugin is started. It also records the
+// configs a destination plugin receives in its OnUpdated and OnDeleted
+// lifecycle events.
 type dgCountingPlugins struct {
 	*conn_plugin.PluginService
 	dispensers atomic.Int32
+
+	mu      sync.Mutex
+	deleted []map[string]string
+	updated [][2]map[string]string
 }
 
 func (c *dgCountingPlugins) NewDispenser(l log.CtxLogger, name, connID string) (conn_plugin.Dispenser, error) {
 	c.dispensers.Add(1)
-	return c.PluginService.NewDispenser(l, name, connID)
+	d, err := c.PluginService.NewDispenser(l, name, connID)
+	if err != nil {
+		return nil, err
+	}
+	return dgDispenser{Dispenser: d, rec: c}, nil
+}
+
+func (c *dgCountingPlugins) lifecycleEvents() (deleted int, updated [][2]map[string]string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.deleted), append([][2]map[string]string(nil), c.updated...)
+}
+
+type dgDispenser struct {
+	conn_plugin.Dispenser
+	rec *dgCountingPlugins
+}
+
+func (d dgDispenser) DispenseDestination() (conn_plugin.DestinationPlugin, error) {
+	p, err := d.Dispenser.DispenseDestination()
+	if err != nil {
+		return nil, err
+	}
+	return dgDestination{DestinationPlugin: p, rec: d.rec}, nil
+}
+
+type dgDestination struct {
+	conn_plugin.DestinationPlugin
+	rec *dgCountingPlugins
+}
+
+func (p dgDestination) LifecycleOnDeleted(ctx context.Context, r pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error) {
+	p.rec.mu.Lock()
+	p.rec.deleted = append(p.rec.deleted, r.Config)
+	p.rec.mu.Unlock()
+	return p.DestinationPlugin.LifecycleOnDeleted(ctx, r)
+}
+
+func (p dgDestination) LifecycleOnUpdated(ctx context.Context, r pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error) {
+	p.rec.mu.Lock()
+	p.rec.updated = append(p.rec.updated, [2]map[string]string{r.ConfigBefore, r.ConfigAfter})
+	p.rec.mu.Unlock()
+	return p.DestinationPlugin.LifecycleOnUpdated(ctx, r)
 }
 
 type dgBoot struct {
@@ -206,73 +257,128 @@ func dgPipelineFileFor(src, dst string) string {
 	return r.Replace(dgPipelineFile)
 }
 
-// dgSeed provisions the pipeline on db, then marks it SystemStopped (it was
-// running when the v0.21 binary stopped) and rewrites the entity's record the
-// way v0.21 does: key moved from Settings to SettingRefs, under refsKey.
+// dgSeed builds the database a downgrade starts from. It runs the pipeline for
+// real on db (a source and a destination copying a file, so both connectors
+// have a position and a LastActiveConfig), stops it, marks it SystemStopped as
+// a shutdown does, and then rewrites the records the way v0.21 stores them: the
+// setting moved from Settings to SettingRefs, under refsKey, in Config and in
+// LastActiveConfig.
+//
+// entity selects what v0.21 rewrote: "connector" (the source and the
+// destination), "connector-processor", "pipeline-processor", "dlq", or
+// "last-active-config" (only the destination's LastActiveConfig).
 func dgSeed(t *testing.T, db database.DB, dir, entity, refsKey string) {
 	t.Helper()
 	ctx := context.Background()
-	// status: stopped, so seeding starts nothing.
-	seedDir := t.TempDir()
-	body, err := os.ReadFile(filepath.Join(dir, "p.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(seedDir, "p.yml"), []byte(strings.Replace(string(body), "status: running", "status: stopped", 1)), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	b := dgStart(t, db, seedDir)
+
+	b := dgStart(t, db, dir)
 	if err := b.prov.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	dgWaitDelivered(t, db, dir)
+	if err := b.lc.StopAndWait(ctx, "dg1"); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.pipelines.UpdateStatus(ctx, "dg1", pipeline.StatusSystemStopped, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	var key, settingsPath, moved string
+	rewrite := func(key string, fn func(rec map[string]any)) {
+		raw, err := db.Get(ctx, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rec map[string]any
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			t.Fatal(err)
+		}
+		fn(rec)
+		out, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Set(ctx, key, out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// move takes setting out of rec[field].Settings and stores its template in
+	// rec[field][refsKey].
+	move := func(rec map[string]any, field, setting string) {
+		cfg, _ := rec[field].(map[string]any)
+		settings, _ := cfg["Settings"].(map[string]any)
+		if _, ok := settings[setting]; !ok {
+			t.Fatalf("%s.Settings has no %q: %v", field, setting, settings)
+		}
+		delete(settings, setting)
+		cfg[refsKey] = map[string]any{setting: dgTemplate}
+	}
+
 	switch entity {
 	case "connector":
-		key, settingsPath, moved = "connector:instance:dg1:dst", "Config", "path"
-	case "connector-processor":
-		key, settingsPath, moved = "processor:instance:dg1:dst:cproc", "Config", "fields"
-	case "pipeline-processor":
-		key, settingsPath, moved = "processor:instance:dg1:pproc", "Config", "fields"
-	case "dlq":
-		key, settingsPath, moved = "pipeline:instance:dg1", "DLQ", "message"
+		for _, key := range []string{"connector:instance:dg1:src", "connector:instance:dg1:dst"} {
+			rewrite(key, func(rec map[string]any) {
+				move(rec, "Config", "path")
+				move(rec, "LastActiveConfig", "path")
+			})
+		}
 	case "last-active-config":
-		key, settingsPath, moved = "connector:instance:dg1:dst", "LastActiveConfig", ""
+		rewrite("connector:instance:dg1:dst", func(rec map[string]any) { move(rec, "LastActiveConfig", "path") })
+	case "connector-processor":
+		rewrite("processor:instance:dg1:dst:cproc", func(rec map[string]any) { move(rec, "Config", "fields") })
+	case "pipeline-processor":
+		rewrite("processor:instance:dg1:pproc", func(rec map[string]any) { move(rec, "Config", "fields") })
+	case "dlq":
+		rewrite("pipeline:instance:dg1", func(rec map[string]any) { move(rec, "DLQ", "message") })
 	default:
 		t.Fatalf("unknown entity %q", entity)
 	}
-	raw, err := db.Get(ctx, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rec map[string]any
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _ := rec[settingsPath].(map[string]any)
-	if cfg == nil {
-		cfg = map[string]any{}
-		rec[settingsPath] = cfg
-	}
-	if moved != "" {
-		settings, _ := cfg["Settings"].(map[string]any)
-		if _, ok := settings[moved]; !ok {
-			t.Fatalf("%s: setting %q not found in %v", key, moved, settings)
+}
+
+// dgWaitDelivered waits until the seed pipeline has delivered a record and
+// the source's position is stored.
+func dgWaitDelivered(t *testing.T, db database.DB, dir string) {
+	t.Helper()
+	ctx := context.Background()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		src, err := db.Get(ctx, "connector:instance:dg1:src")
+		dst, derr := os.ReadFile(filepath.Join(dir, "dst.txt"))
+		if err == nil && derr == nil && len(dst) > 0 && strings.Contains(string(src), `"Position":"`) {
+			break
 		}
-		delete(settings, moved)
-	} else {
-		moved = "path"
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the seed pipeline to deliver a record and store a position")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	cfg[refsKey] = map[string]any{moved: dgTemplate}
-	out, err := json.Marshal(rec)
+}
+
+// dgRefCount counts the SettingRefs objects in the record stored under key,
+// whatever the key's casing.
+func dgRefCount(t *testing.T, db database.DB, key string) int {
+	t.Helper()
+	raw, err := db.Get(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Set(ctx, key, out); err != nil {
-		t.Fatal(err)
+	return strings.Count(strings.ToLower(string(raw)), `"settingrefs":{"`)
+}
+
+// dgRewriteAll re-saves every stored connector through connector.Store, as a
+// position or last-active-config flush does (Invariant 6: it must keep
+// SettingRefs).
+func dgRewriteAll(t *testing.T, b *dgBoot) {
+	t.Helper()
+	ctx := context.Background()
+	st := connector.NewStore(b.db, log.Nop())
+	for _, id := range []string{"dg1:src", "dg1:dst"} {
+		c, err := b.conns.Get(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.Set(ctx, id, c); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -372,6 +478,17 @@ func TestDowngradeGuard_SettingRefsRefusesPipeline(t *testing.T) {
 					// Stored bytes are untouched, so upgrading again works.
 					is.Equal(dgSnapshot(t, db), before)
 					is.True(dgHasRefs(t, db, ent.recordKey))
+
+					// A flush of the connectors (what the position persister does)
+					// must not drop the references either. This fails if
+					// connector.Store.PrepareSet forgets SettingRefs.
+					dgRewriteAll(t, b)
+					is.True(dgHasRefs(t, db, ent.recordKey))
+					if ent.name == "connector" {
+						for _, k := range []string{"connector:instance:dg1:src", "connector:instance:dg1:dst"} {
+							is.Equal(dgRefCount(t, db, k), 2) // Config and LastActiveConfig
+						}
+					}
 					// A user Start is refused the same way.
 					err = b.lc.Start(ctx, "dg1")
 					ce, ok = conduiterr.Get(err)
@@ -456,7 +573,7 @@ func TestDowngradeGuard_SuccessfulReconcileHeals(t *testing.T) {
 			is.NoErr(b.prov.Init(ctx)) // reconcile, and start (status: running)
 			is.True(b.plugins.dispensers.Load() > 0)
 			for _, k := range []string{"connector:instance:dg1:dst", "processor:instance:dg1:dst:cproc", "processor:instance:dg1:pproc", "pipeline:instance:dg1"} {
-				is.True(!dgHasRefs(t, db, k)) // healed: literals are back
+				is.True(!dgConfigRefs(t, db, k)) // healed: literals are back in Config
 			}
 		})
 	}
@@ -480,4 +597,237 @@ func TestDowngradeGuard_NoSettingRefsUnchanged(t *testing.T) {
 			is.True(pl.GetStatus() != pipeline.StatusDegraded)
 		})
 	}
+}
+
+// writeBroken writes a pipelines dir whose file fails only at a late action:
+// an extra pipeline processor with an unknown plugin. The update actions for
+// the connectors, processors and DLQ run first and succeed, the create fails,
+// and importPipeline rolls back (B1: the rollback replays config.*, which has
+// no SettingRefs).
+func dgWriteLateFailure(t *testing.T, good string) string {
+	t.Helper()
+	bad := t.TempDir()
+	body, err := os.ReadFile(filepath.Join(good, "p.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := strings.Replace(string(body), "    processors:\n      - id: pproc\n",
+		"    processors:\n      - id: zzbad\n        plugin: builtin:does.not.exist\n      - id: pproc\n", 1)
+	if broken == string(body) {
+		t.Fatal("could not inject the failing processor")
+	}
+	if err := os.WriteFile(filepath.Join(bad, "p.yml"), []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return bad
+}
+
+// B1: a reconcile whose update actions succeed and whose later action fails is
+// rolled back from config.*. The in-memory entities must keep their
+// SettingRefs, so the guard still refuses and the pipeline never runs with the
+// keys absent.
+func TestDowngradeGuard_RollbackKeepsSettingRefs(t *testing.T) {
+	for _, be := range dgBackends {
+		for _, ent := range []string{"connector", "connector-processor", "pipeline-processor", "dlq"} {
+			t.Run(be.name+"/"+ent, func(t *testing.T) {
+				is := is.New(t)
+				ctx := context.Background()
+				db := be.open(t)
+				good := dgWrite(t)
+				dgSeed(t, db, good, ent, "SettingRefs")
+				before := dgSnapshot(t, db)
+
+				b := dgStart(t, db, dgWriteLateFailure(t, good))
+				perr := b.prov.Init(ctx)
+				is.True(perr != nil)
+				is.True(strings.Contains(perr.Error(), "does.not.exist") || strings.Contains(perr.Error(), "zzbad")) // it failed late, not in validation
+
+				// The entity in memory still carries its references.
+				switch ent {
+				case "connector":
+					for _, id := range []string{"dg1:src", "dg1:dst"} {
+						c, err := b.conns.Get(ctx, id)
+						is.NoErr(err)
+						is.Equal(c.Config.SettingRefs, map[string]string{"path": dgTemplate})
+						is.Equal(c.LastActiveConfig.SettingRefs, map[string]string{"path": dgTemplate})
+					}
+				case "connector-processor":
+					p, err := b.procs.Get(ctx, "dg1:dst:cproc")
+					is.NoErr(err)
+					is.Equal(p.Config.SettingRefs, map[string]string{"fields": dgTemplate})
+				case "pipeline-processor":
+					p, err := b.procs.Get(ctx, "dg1:pproc")
+					is.NoErr(err)
+					is.Equal(p.Config.SettingRefs, map[string]string{"fields": dgTemplate})
+				case "dlq":
+					pl, err := b.pipelines.Get(ctx, "dg1")
+					is.NoErr(err)
+					is.Equal(pl.DLQ.SettingRefs, map[string]string{"message": dgTemplate})
+				}
+
+				err := b.lc.Init(ctx) // auto-resume
+				ce, ok := conduiterr.Get(err)
+				is.True(ok)
+				is.Equal(ce.Code, pipeline.CodeSettingsReferencesUnsupported)
+				pl, err := b.pipelines.Get(ctx, "dg1")
+				is.NoErr(err)
+				is.Equal(pl.GetStatus(), pipeline.StatusDegraded)
+				is.Equal(b.plugins.dispensers.Load(), int32(0))
+
+				// Stored bytes are those the downgrade started from, and survive a flush.
+				is.Equal(dgSnapshot(t, db), before)
+				dgRewriteAll(t, b)
+				is.True(dgRefCount(t, db, "connector:instance:dg1:dst")+dgRefCount(t, db, "processor:instance:dg1:pproc")+
+					dgRefCount(t, db, "processor:instance:dg1:dst:cproc")+dgRefCount(t, db, "pipeline:instance:dg1") > 0)
+			})
+		}
+	}
+}
+
+// B2: removing the connector from the pipelines (an empty or renamed dir, or a
+// config without it) must not run the destination's delete hook with the
+// reference-backed keys missing: the connector, its record and the plugin are
+// left alone, and the error is coded.
+func TestDowngradeGuard_DeleteRefusedWithSettingRefs(t *testing.T) {
+	for _, be := range dgBackends {
+		for _, entity := range []string{"connector", "last-active-config"} {
+			t.Run(be.name+"/"+entity+"/empty pipelines dir", func(t *testing.T) {
+				is := is.New(t)
+				ctx := context.Background()
+				db := be.open(t)
+				dgSeed(t, db, dgWrite(t), entity, "SettingRefs")
+				before := dgSnapshot(t, db)
+
+				b := dgStart(t, db, t.TempDir()) // mounted, but the file is gone
+				err := b.prov.Init(ctx)          // deleteOldPipelines
+				is.NoErr(err)                    // it logs the refusal and retries next boot
+
+				deleted, _ := b.plugins.lifecycleEvents()
+				is.Equal(deleted, 0)                            // OnDelete never ran
+				is.Equal(b.plugins.dispensers.Load(), int32(0)) // no plugin was even dispensed
+				is.Equal(dgSnapshot(t, db), before)             // record kept
+				_, err = b.conns.Get(ctx, "dg1:dst")
+				is.NoErr(err)
+				_, err = b.pipelines.Get(ctx, "dg1")
+				is.NoErr(err)
+
+				// The same refusal, directly and through provisioning's Delete.
+				err = b.conns.Delete(ctx, "dg1:dst", b.plugins)
+				ce, ok := conduiterr.Get(err)
+				is.True(ok)
+				is.Equal(ce.Code, pipeline.CodeSettingsReferencesUnsupported)
+				err = b.prov.Delete(ctx, "dg1")
+				ce, ok = conduiterr.Get(err)
+				is.True(ok)
+				is.Equal(ce.Code, pipeline.CodeSettingsReferencesUnsupported)
+				is.Equal(dgSnapshot(t, db), before) // the processors were not deleted first
+			})
+		}
+	}
+}
+
+// The reconcile delete action (what dev hot-reload and a config that drops the
+// connector run) is refused the same way and leaves the connector in place.
+func TestDowngradeGuard_ImportDroppingConnectorRefused(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	good := dgWrite(t)
+	dgSeed(t, db, good, "connector", "SettingRefs")
+	before := dgConnectorRecords(dgSnapshot(t, db))
+
+	b := dgStart(t, db, good)
+	cfg, err := b.prov.Export(ctx, "dg1")
+	is.NoErr(err)
+	var kept []config.Connector
+	for _, c := range cfg.Connectors {
+		if c.Type == "source" {
+			kept = append(kept, c)
+		}
+	}
+	cfg.Connectors = kept // drop the destination
+	cfg.Status = config.StatusStopped
+	err = b.prov.Import(ctx, cfg)
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, pipeline.CodeSettingsReferencesUnsupported)
+
+	deleted, _ := b.plugins.lifecycleEvents()
+	is.Equal(deleted, 0)
+	c, err := b.conns.Get(ctx, "dg1:dst") // still there, not replaced by the rollback
+	is.NoErr(err)
+	is.Equal(c.Config.SettingRefs, map[string]string{"path": dgTemplate})
+	// The processors were deleted and re-created by the rollback (new
+	// timestamps, no references to lose); the connector records are the bytes
+	// the downgrade started from.
+	is.Equal(dgConnectorRecords(dgSnapshot(t, db)), before)
+}
+
+// S1: after a heal (the reconcile replaced Config) the destination's
+// LastActiveConfig still has SettingRefs and a partial Settings. Starting must
+// not send that as the "before" of an OnUpdated event.
+func TestDowngradeGuard_NoPartialOnUpdatedAfterHeal(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	good := dgWrite(t)
+	dgSeed(t, db, good, "connector", "SettingRefs")
+
+	b := dgStart(t, db, good)
+	is.NoErr(b.prov.Init(ctx)) // heals Config and starts the pipeline
+
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		c, err := b.conns.Get(ctx, "dg1:dst")
+		is.NoErr(err)
+		c.RLock()
+		adopted := !c.LastActiveConfig.HasSettingRefs()
+		c.RUnlock()
+		if adopted {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the healed config never became the last active config")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_, updated := b.plugins.lifecycleEvents()
+	is.Equal(len(updated), 0) // no OnUpdated with an empty "before"
+}
+
+// dgConnectorRecords reduces the connector records to what a restore must
+// reproduce (Config, LastActiveConfig, State, plugin); UpdatedAt legitimately
+// moves.
+func dgConnectorRecords(snap map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range snap {
+		if !strings.HasPrefix(k, "connector:") {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(v), &rec); err != nil {
+			panic(err)
+		}
+		keep, _ := json.Marshal([]any{rec["Plugin"], rec["Config"], rec["LastActiveConfig"], rec["State"]})
+		out[k] = string(keep)
+	}
+	return out
+}
+
+// dgConfigRefs reports whether the Config (not LastActiveConfig) of the
+// record under key has SettingRefs.
+func dgConfigRefs(t *testing.T, db database.DB, key string) bool {
+	t.Helper()
+	raw, err := db.Get(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct {
+		Config, DLQ struct{ SettingRefs map[string]string }
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	return len(rec.Config.SettingRefs)+len(rec.DLQ.SettingRefs) > 0
 }
