@@ -60,7 +60,9 @@ arm's median, sd, min, max and A/A floor, and every pairwise comparison with
 its per-round deltas. A comparison is *resolved* only if the median delta
 exceeds the larger floor of the two arms and all per-round deltas have the same
 sign. A cell that is not resolved is a tie as far as this session can tell.
-`results/<...>/README.md` collects the sessions into one table.
+`archv2-gate -rerender results/<...>` re-reads every session with the current
+rules and writes `matrix.md` (and `matrix.json`), which collects the sessions
+into one table; `results/<...>/README.md` is the written read of it.
 
 ## What this does not show
 

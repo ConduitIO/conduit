@@ -95,7 +95,7 @@ var runtimeEnv = []string{"GOMAXPROCS", "GOGC", "GODEBUG"}
 
 func validateEnv(kv string) error {
 	k, _, ok := strings.Cut(kv, "=")
-	if !ok || !(strings.HasPrefix(k, benchEnvPrefix) || slices.Contains(runtimeEnv, k)) {
+	if !ok || (!strings.HasPrefix(k, benchEnvPrefix) && !slices.Contains(runtimeEnv, k)) {
 		return cerrors.Errorf("-env %q: want %s<NAME>=<value> or one of %s", kv, benchEnvPrefix, strings.Join(runtimeEnv, ", "))
 	}
 	return nil
@@ -248,15 +248,8 @@ func renderMatrix(arms []armReport, results []runResult) (string, []comparison) 
 		for j := i + 1; j < len(arms); j++ {
 			c := compareArms(results, arms[i], arms[j])
 			cmps = append(cmps, c)
-			verdict := "not resolved"
-			switch {
-			case c.Resolved:
-				verdict = "resolved"
-			case c.Suggestive:
-				verdict = "suggestive"
-			}
 			fmt.Fprintf(&b, "| %s vs %s | %+.1f%% | %s | ±%.1f%% | %s |\n",
-				c.Y, c.X, c.MedianDeltaPct, fmtPcts(c.RoundDeltas), c.FloorPct, verdict)
+				c.Y, c.X, c.MedianDeltaPct, fmtPcts(c.RoundDeltas), c.FloorPct, verdict(c))
 		}
 	}
 	b.WriteString("\n")

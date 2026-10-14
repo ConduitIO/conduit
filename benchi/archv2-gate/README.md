@@ -157,9 +157,20 @@ evidence, unless the gate's environment rules are met.
   consistent effect on a busy machine; "suggestive" marks that case. It is a
   reason to rerun on quiet hardware, never a result.
 - `summary.json` carries the same numbers for aggregation.
-- `archv2-gate -rerender <session dir>` rebuilds `summary.md` from a matrix
-  session's `runs.csv` and `env.json` with the current reading rules. The runs
-  are not touched.
+- `archv2-gate -rerender <session dir>` rebuilds `summary.md` and
+  `summary.json` from a matrix session's `runs.csv` and `env.json` with the
+  current reading rules. The runs are not touched.
+- `archv2-gate -rerender <matrix dir>` does that for every session under a
+  directory laid out by `matrix/run.sh`, and writes `matrix.md` and
+  `matrix.json` there: every session's arms and comparisons in one table, in
+  run order. It is safe to run while the matrix is still going:
+  - a session counts as complete only if `env.json` records a finish and
+    `runs.csv` holds every planned run, and only complete sessions get a
+    `summary.md` (which `run.sh` reads as "done");
+  - an incomplete session is listed, marked incomplete, with what it has;
+  - a session that cannot be read is listed as failed, with the reason;
+  - a short or unterminated last row of `runs.csv` is a write in progress and
+    is dropped and counted. A malformed row anywhere else is an error.
 - Rates from different sessions are not comparable with each other: they ran
   at different times on a machine in a different state. Only compare arms
   within one session.

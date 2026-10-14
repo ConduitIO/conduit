@@ -108,7 +108,8 @@ func TestCompareArms(t *testing.T) {
 	var res []runResult
 	for r, d := range []float64{0, 1, -1, 0.5, -0.5} {
 		round := r + 1
-		res = append(res,
+		res = append(
+			res,
 			rr(round, "x-a", 100+d), rr(round, "x-b", 100-d),
 			rr(round, "y-a", 150+d), rr(round, "y-b", 150-d),
 		)
@@ -125,7 +126,8 @@ func TestCompareArms(t *testing.T) {
 	// A difference inside the larger floor is not resolved, however clean.
 	var noisy []runResult
 	for round, ab := range [][2]float64{{80, 120}, {120, 80}, {85, 115}} {
-		noisy = append(noisy,
+		noisy = append(
+			noisy,
 			rr(round+1, "x-a", ab[0]), rr(round+1, "x-b", ab[1]),
 			rr(round+1, "y-a", 105), rr(round+1, "y-b", 105),
 		)
@@ -172,7 +174,8 @@ func TestCompareArmsSuggestiveWhenOneRunSetsTheFloor(t *testing.T) {
 	var res []runResult
 	for round, xs := range [][2]float64{{100, 101}, {100, 99}, {100, 25}, {100, 101}, {100, 99}} {
 		r := round + 1
-		res = append(res,
+		res = append(
+			res,
 			rr(r, "x-a", xs[0]), rr(r, "x-b", xs[1]),
 			rr(r, "y-a", 130), rr(r, "y-b", 130),
 		)

@@ -105,7 +105,8 @@ func plan(s session, rounds int) []runSpec {
 			}
 			out = append(out, a, b)
 		case sessionAB:
-			out = append(out,
+			out = append(
+				out,
 				runSpec{Round: r, Arm: armV1A, Engine: engineV1},
 				runSpec{Round: r, Arm: armV2, Engine: engineV2},
 				runSpec{Round: r, Arm: armV1B, Engine: engineV1},
@@ -190,6 +191,7 @@ func main() {
 }
 
 func run() error {
+	// -rerender <session or matrix dir> re-reads finished runs; see rerender.go.
 	if len(os.Args) == 3 && os.Args[1] == "-rerender" {
 		return rerender(os.Args[2])
 	}
@@ -255,6 +257,11 @@ func run() error {
 
 	summary := renderSummary(cfg, results)
 	fmt.Print(summary)
+	if cfg.Session == sessionMatrix {
+		if err := writeMatrixJSON(cfg, results); err != nil {
+			return err
+		}
+	}
 	return os.WriteFile(filepath.Join(cfg.OutDir, "summary.md"), []byte(summary), 0o600)
 }
 

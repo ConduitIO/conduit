@@ -188,7 +188,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return cerrors.Errorf("encode %s: %w", path, err)
 	}
-	return os.WriteFile(path, append(raw, '\n'), 0o600)
+	return os.WriteFile(path, append(raw, '\n'), 0o600) //nolint:gosec // path is under the operator's own -out or -rerender directory
 }
 
 func writeRunsCSV(path string, results []runResult) error {
@@ -372,6 +372,36 @@ type compJSON struct {
 	Suggestive     bool      `json:"suggestive"`
 }
 
+// buildMatrixJSON assembles summary.json from a session's arm reports and
+// comparisons.
+func buildMatrixJSON(cfg config, arms []armReport, cmps []comparison) matrixJSON {
+	mj := matrixJSON{Shape: cfg.Shape, BenchEnv: cfg.Env, Rounds: cfg.Rounds, Warmup: cfg.Warmup.String(), Window: cfg.Window.String(), Skipped: cfg.skipped}
+	for _, a := range arms {
+		mj.Arms = append(mj.Arms, armJSON{a.Label, a.Stats.N, a.Stats.Median, a.Stats.SDPct, a.Stats.Min, a.Stats.Max, a.FloorPct, a.TypicalAAPct})
+	}
+	for _, c := range cmps {
+		mj.Comparisons = append(mj.Comparisons, compJSON{c.Y, c.X, c.MedianDeltaPct, c.RoundDeltas, c.FloorPct, c.Resolved, c.Suggestive})
+	}
+	return mj
+}
+
+// writeMatrixJSON writes a matrix session's summary.json into cfg.OutDir. It
+// is separate from rendering, so a summary can be rendered (for an incomplete
+// session, say) without writing anything.
+func writeMatrixJSON(cfg config, results []runResult) error {
+	var arms []armReport
+	for _, a := range cfg.Arms {
+		arms = append(arms, reportArm(results, a.Label))
+	}
+	var cmps []comparison
+	for i := range arms {
+		for j := i + 1; j < len(arms); j++ {
+			cmps = append(cmps, compareArms(results, arms[i], arms[j]))
+		}
+	}
+	return writeJSON(filepath.Join(cfg.OutDir, "summary.json"), buildMatrixJSON(cfg, arms, cmps))
+}
+
 func renderMatrixSummary(b *strings.Builder, cfg config, results []runResult) string {
 	if len(cfg.Env) > 0 {
 		fmt.Fprintf(b, "Bench knobs: `%s`\n\n", strings.Join(cfg.Env, " "))
@@ -380,17 +410,8 @@ func renderMatrixSummary(b *strings.Builder, cfg config, results []runResult) st
 	for _, a := range cfg.Arms {
 		arms = append(arms, reportArm(results, a.Label))
 	}
-	table, cmps := renderMatrix(arms, results)
+	table, _ := renderMatrix(arms, results)
 	b.WriteString(table)
-
-	mj := matrixJSON{Shape: cfg.Shape, BenchEnv: cfg.Env, Rounds: cfg.Rounds, Warmup: cfg.Warmup.String(), Window: cfg.Window.String(), Skipped: cfg.skipped}
-	for _, a := range arms {
-		mj.Arms = append(mj.Arms, armJSON{a.Label, a.Stats.N, a.Stats.Median, a.Stats.SDPct, a.Stats.Min, a.Stats.Max, a.FloorPct, a.TypicalAAPct})
-	}
-	for _, c := range cmps {
-		mj.Comparisons = append(mj.Comparisons, compJSON{c.Y, c.X, c.MedianDeltaPct, c.RoundDeltas, c.FloorPct, c.Resolved, c.Suggestive})
-	}
-	_ = writeJSON(filepath.Join(cfg.OutDir, "summary.json"), mj)
 
 	if len(cfg.skipped) > 0 {
 		b.WriteString("Arms that produced no output in the probe and were not run:\n\n")
