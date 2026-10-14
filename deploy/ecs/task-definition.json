@@ -1,0 +1,52 @@
+{
+  "family": "conduit",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": { "cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX" },
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/conduitTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/conduitTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "conduit",
+      "image": "ghcr.io/conduitio/conduit:v0.20.0",
+      "essential": true,
+      "entryPoint": ["/bin/sh", "-c"],
+      "command": [
+        "mkdir -p /app/pipelines && printf '%s' \"$PIPELINE_YAML\" > /app/pipelines/pipeline.yaml && exec /app/conduit run"
+      ],
+      "portMappings": [{ "containerPort": 8080, "protocol": "tcp" }],
+      "environment": [
+        { "name": "CONDUIT_DB_TYPE", "value": "postgres" },
+        { "name": "CONDUIT_LOG_FORMAT", "value": "json" },
+        {
+          "name": "PIPELINE_YAML",
+          "value": "version: \"2.2\"\npipelines:\n  - id: example\n    status: running\n    name: example\n    connectors:\n      - id: gen\n        type: source\n        plugin: builtin:generator\n        settings:\n          format.type: structured\n          format.options.id: int\n          operations: create\n          rate: \"1\"\n      - id: log\n        type: destination\n        plugin: builtin:log\n"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "CONDUIT_DB_POSTGRES_CONNECTION_STRING",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:conduit/db-connection-string"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/readyz || exit 1"],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "stopTimeout": 45,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/conduit",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "conduit"
+        }
+      }
+    }
+  ]
+}

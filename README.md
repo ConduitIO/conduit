@@ -163,6 +163,27 @@ Conduit version, you should run the following command:
 docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
 
+### Docker Compose quickstart
+
+[`deploy/docker-compose`](deploy/docker-compose) runs a pinned, signed release image
+with a pipeline already running (a generator writing to a file), Conduit's state on
+a named volume, a readiness health check and a graceful stop period:
+
+```sh
+git clone https://github.com/ConduitIO/conduit.git
+cd conduit/deploy/docker-compose
+docker compose up -d --wait
+docker compose exec conduit tail -n 3 /data/records.ndjson
+docker compose down            # add -v to delete the state volume
+```
+
+The API and UI are on <http://localhost:8080>, published on loopback only because the
+API is unauthenticated. Swap `pipelines/quickstart.yaml` for your own pipeline to go
+further. CI runs this stack end to end (`deploy-quickstart`).
+
+[`deploy/`](deploy) also has systemd, ECS and Nomad examples. They are examples, not
+supported products.
+
 ## Preflight checks
 
 Before running Conduit for the first time (or after changing configuration), run
