@@ -80,6 +80,10 @@ type DoctorCommand struct {
 	flags DoctorFlags
 	Cfg   conduit.Config
 
+	// Environ supplies the environment plugins.standalone_env classifies.
+	// Nil means os.Environ; tests set it to a fixed fake environment.
+	Environ func() []string
+
 	// out is the stream Render should write glyphs/color for — set from the
 	// *cobra.Command ExecuteWithResult receives via context, since
 	// CommandWithResult.Render has no writer parameter of its own but still
@@ -197,6 +201,7 @@ func (c *DoctorCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 		Deep:          c.flags.Deep,
 		RequireServer: c.flags.RequireServer,
 		Executable:    exe,
+		Environ:       c.Environ,
 	}
 
 	checks := doctorcheck.DefaultChecks(c.Cfg, log.Nop(), opts)
