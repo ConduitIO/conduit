@@ -38,18 +38,25 @@ Roadmap item: v0.21: Secrets at rest (#3018, fixes #2988). Tracking issue #3002.
 - Provisioning creates entities from that output through `pkg/provisioning/import_actions.go`
   (`createConnectorAction`, `updateConnectorAction`, and the processor and DLQ equivalents), which
   call `connector.Service`, `processor.Service` and `pipeline.Service`.
-- The stores (`pkg/connector/store.go`, `pkg/processor/store.go`, `pkg/pipeline/store.go`) JSON-encode
-  the whole `Instance` under `connector:instance:<id>` and so on, into `conduit-commons/database`
-  (badger, SQLite, Postgres, in-memory).
+- The stores write into `conduit-commons/database` (badger, SQLite, Postgres, in-memory), under
+  `connector:instance:<id>` and so on. They do not all encode the same way:
+  - `pkg/processor/store.go` and `pkg/pipeline/store.go` JSON-encode the whole `Instance`.
+  - `pkg/connector/store.go` does **not**. `PrepareSet` copies the instance into a new
+    `Instance` field by field, and copies `Config` as `Config{Name, Settings}` only. A new `Config`
+    field is silently dropped by it, which would leave neither the value nor the template. The
+    persister reaches this path on every flush (`pkg/connector/persister.go`, `p.store.PrepareSet`),
+    so it is also the path that decides what survives a position flush.
 - Where secrets sit in a stored record:
   - `connector.Instance.Config.Settings`
   - `connector.Instance.LastActiveConfig.Settings`, a second full copy, written when a connector
     starts (`pkg/connector/source.go`, `destination.go`)
   - `processor.Instance.Config.Settings`
   - `pipeline.Instance.DLQ.Settings`
-- `connector.Persister` (`pkg/connector/persister.go`) rewrites the whole connector `Instance`, config
-  included, on every position flush. Anything that ever lands in `Instance.Config` is persisted again
-  within seconds of a pipeline running.
+- `connector.Persister` (`pkg/connector/persister.go`) rewrites the connector record, config included,
+  through `PrepareSet` on every position flush. Anything that ever lands in `Instance.Config` is
+  persisted again within seconds of a pipeline running. `PrepareSet` copies `Config` and
+  `LastActiveConfig` but keeps the same `Settings` map pointers, so an in-place mutation of a
+  `Settings` map by any holder is encoded at the next flush.
 - `restoreRedactedSettings` (`pkg/orchestrator/redacted.go`) and `redactSettings`
   (`pkg/http/api/toproto/redact.go`) implement the `"***"` contract. Every Settings value in every
   API response is `"***"`, because no per-parameter sensitivity exists: `conduit-commons` v0.8.0 and
@@ -99,7 +106,7 @@ for whoever builds it (see _Interactions_).
 | Reads the live database without host access (Postgres role with `SELECT` on the Conduit table, shared DB host) | Online read of persisted state | Same as above. |
 | Reads the API | Network access to an unauthenticated API | Unchanged: already `"***"` (#2926). New: the API cannot be used to resolve references (fact 2). |
 | Has the engine's environment or process memory (same OS user, `/proc/<pid>/environ`, a debugger, a standalone plugin, which inherits the host environment: `docs/operations/standalone-plugin-environment.md`) | Reads the secret regardless of storage | **Out of scope.** No at-rest design helps. Plugin environment restriction is tracked separately for v0.21. |
-| Has write access to the pipeline config files | Can reference any env var in a setting | Out of scope. They already can today; the file is the operator's trust boundary. |
+| Has write access to the pipeline config files | Can reference any env var in a setting | Out of scope. They already can today; the file is the operator's trust boundary. This holds only if the operator read what is in the directory: registry templates written into the pipelines directory are parsed with the engine's environment too. |
 
 **What this does not protect.**
 
@@ -108,6 +115,11 @@ for whoever builds it (see _Interactions_).
   `ApplyPipeline`. They are stored as given. DB-level protection (disk encryption, Postgres TDE,
   restricted roles) is the control for these, and the runbook says so.
 - Secrets written as a literal in the YAML file. The file already holds them.
+- **Mixed templates store their literal part in the clear.** A template is stored verbatim, so
+  `postgres://app:hunter2@${HOST}/db`, or a literal that happens to contain a `$` reference,
+  persists `hunter2` under `SettingRefs`. Only the referenced part is kept out of the database.
+  The runbook says to put the whole secret behind the variable (`${DB_URL}`). Optional: a linter
+  warning for credential-looking keys whose value mixes a literal with a reference.
 - Connector state: positions and offsets are not credentials, and are not touched.
 - Secrets in logs and plugin errors. Log redaction (`pkg/foundation/log/redact.go`) covers settings;
   a plugin that echoes its config into an error is outside this design.
@@ -145,6 +157,13 @@ Stored JSON gains `"SettingRefs":{"aws.secretAccessKey":"${AWS_SECRET}"}` and lo
 the golden store tests (`pkg/connector`, `pkg/processor`, `pkg/pipeline` `testdata`) unchanged for
 them. Nothing changes in key prefixes (`connector:instance:`, `processor:instance:`,
 `pipeline:instance:`), so no store migration function is needed in the `migratePre041` style.
+
+The field is added to three distinct structs: `connector.Config`, `processor.Config`
+(`pkg/processor/instance.go`) and `pipeline.DLQ` (`pkg/pipeline/instance.go`, which is its own
+struct and not a `Config`). **`connector.Store.PrepareSet` must copy it explicitly**, in both
+`Config` and `LastActiveConfig` (`pkg/connector/store.go`); the other two stores encode their
+instance whole and need no store change. `omitempty` means the golden tests cannot catch a
+dropped field, so a dedicated test is required (see _Tests_).
 
 `LastActiveConfig` is a `Config` and carries `SettingRefs` the same way. It must never hold a
 resolved value (see _Migration_ for the existing plaintext in it).
@@ -185,6 +204,21 @@ representation per mode; a caller cannot hold both a template and its value for 
 `path []string` in `envDecoderHook` already identifies where a scalar sits, so the hook can tell a
 settings value from a structural field.
 
+**Who may populate `SettingRefs`.** Only the parser in `KeepSettingRefs` mode. That is a rule, and
+the design backs it with checks, because a convention is not a trust boundary:
+
+- `fromproto` conversions (`pkg/http/api/fromproto`) have no `SettingRefs` to fill, and a test
+  walks every API entry point (`CreateConnector`, `UpdateConnector`, processor equivalents,
+  `PlanPipeline`, `ApplyPipeline`) asserting a stored entity never has `SettingRefs` set by a request.
+- `ApplyPlanLive`, `ApplyPlan` and `Plan` accept a `config.Pipeline` from callers other than the
+  parser. They reject a non-empty `SettingRefs` (coded error) unless the caller is the engine's own
+  parse path (`provisioning.Service.Init`, the dev watcher). A test covers this.
+- `ApplyPipeline` onto a pipeline that was provisioned from a file overwrites its references with
+  the literal values in the request (the request carries literals only, D3). Behavior chosen:
+  **allowed, as today**, and the reconcile at the next start restores the references from the
+  file. Between the two the DB holds the literals the caller sent. The runbook says so. Refusing it
+  would change a documented v0.20 behavior for a case that already exposes the secret to the caller.
+
 `config.Connector`, `config.Processor` and `config.DLQ` (`pkg/provisioning/config/parser.go`) gain
 `SettingRefs`. `Enrich` and `Validate` neither read nor need values. The
 plan diff (`pkg/provisioning/plan.go`) compares `SettingRefs` as templates; `Change.ConfigPaths`
@@ -204,15 +238,26 @@ func Resolve(settings, refs map[string]string) (map[string]string, error)
 No interface, no registry. One implementation (environment). v0.22 adds providers behind this
 function with its own design doc.
 
-Call sites (each of today's readers of `Config.Settings` that hands it to a plugin or policy):
+Call sites. Resolution happens as late as possible, inside the function that builds the plugin
+request, so the Instance never holds a resolved map:
 
 | Site | File |
 | --- | --- |
 | source configure | `pkg/connector/source.go` (`configure`) |
-| destination configure | `pkg/connector/destination.go` |
-| lifecycle events (`Config` / `LastActiveConfig`) | `pkg/connector/source.go`, `destination.go` (`triggerLifecycleEvent`) |
+| destination configure | `pkg/connector/destination.go` (`configure`) |
+| lifecycle event payloads | `pkg/connector/source.go`, `destination.go` (`triggerLifecycleEvent`) |
 | processor open and egress policy | `pkg/processor/runnable_processor.go` (`Open`), `pkg/processor/service.go` (`PolicyFromSettings`) |
-| DLQ destination build | `pkg/lifecycle/service.go`, `pkg/lifecycle/dlq.go`, `pkg/lifecycle-poc/service.go`, `batching_guard.go` |
+| live processor reconfigure | `provisioning` `applyInPlace` -> `lifecycle.ReconfigureProcessor`, and `processor.Service.UpdateWhileRunning` |
+
+**The DLQ is not a resolve site.** `buildDLQHandlerNode` (`pkg/lifecycle/service.go`, and
+`pkg/lifecycle-poc/service.go`) builds a destination `connector.Instance` through
+`connectors.Create` with `pl.DLQ.Settings`. If it resolved first, the resolved values would be
+assigned into an Instance. That is safe today only because `ProvisionTypeDLQ` skips the store,
+which is an accident of the provision type. Instead it passes `{Settings, SettingRefs}` through
+`Create`, and `Destination.configure` resolves like any other destination. `batching_guard.go`
+reads `DLQ.Settings` for `sdk.batch.*` keys, which a reference may also supply; it must treat a
+key present in `SettingRefs` as present-but-unresolved and resolve for the check (a transient
+local, never stored).
 
 **Invariant R1.** A resolved map is a local variable of a plugin call. It is never assigned to
 `Instance.Config`, `Instance.LastActiveConfig`, any `Instance` field, a logger field or an error
@@ -225,6 +270,28 @@ enforces R1 end to end: see _Tests_, canary scan. Each site carries
 The persister is the reason this must be enforced by a scan and not by review: it re-serializes
 `Instance.Config` on every position flush, so a single assignment bug would write the secret within
 seconds of the pipeline running.
+
+No holder may mutate a `Settings` or `SettingRefs` map in place: the maps are shared pointers and
+are encoded by `PrepareSet` at flush time. Updates replace the map. A test (race detector on) pins
+this for the connector and processor services.
+
+**"Started" and "equal" are defined over Settings plus SettingRefs.** Three places read
+`Settings` today in a way that a references-only connector would break:
+
+- `LastActiveConfig.Settings == nil` means "never started" (`source.go` `OnDelete`, `destination.go`
+  `OnDelete`). An all-reference connector has an **empty** `Settings` and a populated `SettingRefs`.
+  New definition: never started iff both are nil. Otherwise `OnDelete` would skip the delete event
+  (for example a replication-slot drop) for exactly the connectors this change affects.
+- `isEqual` (`source.go`, and the destination equivalent) ends in a nil comparison, so a nil
+  versus empty `Settings` already counts as a change. It becomes a comparison of
+  `(Settings, SettingRefs)` pairs, nil-ness preserved per map, comparing **templates**.
+- `triggerLifecycleEvent` uses the same maps for the compare and for the payload. It splits them:
+  compare on templates, resolve for the payload. The payload of an update event therefore carries
+  **current-environment** values for both `ConfigBefore` and `ConfigAfter` of a reference-backed
+  key; the plugin cannot see the previous value of a rotated secret. The release notes and the
+  runbook state this.
+
+A test is required for an all-references connector across migrate, restart and delete.
 
 Resolution is at the point of use, so the value is read from the environment at connector open, not
 at provisioning. Consequences, stated rather than hidden:
@@ -254,14 +321,33 @@ at provisioning. Consequences, stated rather than hidden:
 Rollout, to respect the deprecation policy (announce, warn, remove across at least two minor
 versions):
 
-- v0.21: an unset variable logs a warning with the code once per variable per start and resolves to
-  `""`, exactly as today. `--secrets.strict-env` (and its config/env equivalents) turns it into the
-  error: the pipeline fails to start as degraded with the coded cause
+- v0.21: an unset variable resolves to `""`, exactly as today, with a warning carrying the code. The
+  warning is emitted **per pipeline start** (not once per process), so a pipeline restarted later
+  warns again. It is also surfaced in the degraded cause when the pipeline fails for another
+  reason, in `pipelines status` (a `warnings` entry with the code and the variable name), and in
+  `conduit doctor`. `--secrets.strict-env` (and its config/env equivalents) turns the warning into
+  the error: the pipeline fails to start as degraded with the coded cause
   (`docs/design-documents/20260706-degraded-pipeline-error-cause.md`) and no plugin sees a
   partial config.
 - v0.22: the warning is repeated in the release notes and `conduit doctor` reports unset
   variables as a failure.
 - v0.23: strict is the default; `--secrets.strict-env=false` is the escape hatch.
+
+Exceptions to the warn-only default, in v0.21:
+
+- **`sdk.egress.*` keys hard-fail on an unset variable regardless of the flag.** They are read on
+  every processor open (`pkg/processor/service.go`, `PolicyFromSettings`), and an empty value there
+  widens or blanks an egress policy. Fail closed.
+- **Strict mode and deletion.** A resolve failure while delivering `OnDelete` or a delete event
+  must not be silent: today's v0.20 path would deliver the event with whatever expanded, but a
+  strict failure would drop it and, for example, never drop the replication slot. Behavior: a
+  failed delete event is retried at the next start and logged with the code; deleting the
+  entity does not wait on it, and the runbook lists the manual cleanup. Open question for review:
+  whether to block deletion instead (D5 context).
+
+D4 widens the stakes of the warn-only default. A non-secret setting such as a table, bucket or topic
+that resolves to blank can misroute data silently; the per-start warning and `pipelines status`
+entry are there for that reason, and strict mode is recommended for production in the runbook.
 
 This is open decision D2. It is the one place where the secure default and the compatibility
 policy pull apart.
@@ -279,7 +365,8 @@ policy pull apart.
   `SettingRefs` is only ever non-empty on entities created by the file parser, which are
   `ProvisionTypeConfig`. `orchestrator.ConnectorOrchestrator.Update` rejects any non-API entity
   with `CodeImmutableProvisionedByConfig` before it calls `restoreRedactedSettingsForPlugin`
-  (`pkg/orchestrator/connectors.go`), and the processor path does the same (`pkg/orchestrator/processors.go`). So the keep-stored-value
+  (`pkg/orchestrator/connectors.go`), and the processor path does the same
+  (`pkg/orchestrator/processors.go`). So the keep-stored-value
   logic never sees a reference-bearing entity. A test pins that ordering, so a future change that
   allows API edits of provisioned entities has to confront references explicitly.
 - `RefuseRedactedSettings` is unaffected: documents from the API have no `SettingRefs`.
@@ -330,7 +417,7 @@ config providers, which the Kafka Connect migration already maps) and adds provi
 before the grammar can grow.
 
 Pros: no secret in the DB for the targeted case; no key to lose, rotate or back up; small (one
-field, one function, a handful of call sites); makes downgrade self-healing (see _Upgrade and rollback_);
+field, one function, a handful of call sites); downgrade self-heals when the v0.20 reconcile succeeds (see _Downgrade_);
 nothing new to operate.
 
 Cons: does not protect literals (API, CLI deploy); changes the "env change is a config change"
@@ -408,7 +495,10 @@ Rejected as a larger change with weaker failure behavior than A.
 | A code path assigns resolved settings into `Instance.Config` | Would be persisted by the persister within seconds. Prevented by the type in R1 and caught by the canary scan on every store backend. | The riskiest implementation bug; the scan is a merge gate for the implementation PR. |
 | Key loss | Not applicable: no Conduit-held key. Loss of the environment value is the unset case above. | A property of A. |
 | Provider outage (v0.22) | Out of scope; the resolve-failure path above is the place to define it then. | |
-| Downgrade to v0.20.x | See _Upgrade and rollback_. | |
+| Downgrade to v0.20.x | Self-heal only when the v0.20 reconcile succeeds; otherwise reference-backed keys are absent at start. See _Downgrade_. | Not fail-closed without a v0.20.x patch (D9). |
+| Unset variable in `sdk.egress.*` | Hard failure at processor open, regardless of strict mode. | Fail closed. |
+| Delete event cannot resolve (strict) | Logged with the code, retried at next start; deletion proceeds. | See section 5. |
+| `ApplyPipeline` onto a file-provisioned pipeline | Overwrites references with literals until the next start's reconcile. | Documented (section 3). |
 | Old data left in storage after migration | See _Residue_. | |
 
 ## Upgrade and rollback
@@ -450,20 +540,57 @@ event fired. See _Tests_.
 ### Downgrade
 
 A v0.20.x binary decodes the v0.21 record, ignores the unknown `SettingRefs` field and sees a
-connector whose reference-backed settings are absent. For file-provisioned entities this
-self-heals: on its next start the old binary parses the same file, expands the variable, diffs
-against the stored config (setting missing), and writes the literal back. **The downgrade
-re-introduces plaintext at rest** for those entities. Stated in the release notes and the runbook.
+connector whose reference-backed settings are **absent**.
+
+**Self-heal holds only when the v0.20 reconcile succeeds.** On its next start the old binary parses
+the same file, expands the variable, diffs against the stored config (setting missing), and writes
+the literal back. That downgrade then re-introduces plaintext at rest for those entities, stated
+in the release notes and the runbook. But the path is not fail-closed (verified against v0.20.0):
+
+- `provisioning.Service.Init` continues past a pipeline that fails to provision
+  (`pkg/provisioning/service.go`, the error is collected and the loop moves on).
+- `ExitOnDegraded` defaults to false (`pkg/conduit/runtime.go`), so a failed provisioning does not
+  stop the engine.
+- `lifecycleService.Init` auto-resumes pipelines that were running (`pkg/lifecycle/service.go`).
+
+So if the v0.20 reconcile fails for a pipeline, or `pipelines.path` is not mounted on the downgraded
+host, the pipeline starts with its reference-backed keys **absent**. For a required key the plugin
+rejects the config. For an optional credential it falls back silently: the S3 connector uses the
+default AWS credential chain, a Kafka connector runs without SASL. That is a change in which
+identity the pipeline uses, not a clean failure.
+
+Two options, D9:
+
+- **(a) A v0.20.x patch.** v0.20.2 refuses to start a connector, processor or DLQ whose stored
+  record has a non-empty `SettingRefs` it does not understand: the pipeline fails loudly as
+  degraded with a coded cause that names the downgrade, instead of running with missing keys. The
+  patch decodes the field as an opaque map and checks it is empty. It does not need to resolve it.
+  Only helps for downgrades to a release that carries the patch; v0.20.0 and v0.20.1 remain
+  exposed, which is stated in the release notes.
+- **(b) Document it.** State that the self-heal holds only when the reconcile succeeds and the
+  pipelines directory is mounted, and tell operators to downgrade only after confirming both.
+
+Recommendation: **(a), in v0.20.2** (being cut now), plus the (b) documentation for older v0.20
+releases. Pending DeVaris. Without (a), the downgrade guidance is "do not downgrade across this
+change unless you have verified the reconcile".
+
 Pipelines that were running before the downgrade are auto-resumed after provisioning
-(`provisioning.Service.Init` precedes `lifecycleService.Init`), so they start with a complete
-config. A downgrade test is required: N+1 provision, N start, assert the pipeline runs, assert the
-settings are literals again.
+(`provisioning.Service.Init` precedes `lifecycleService.Init`), so on the success path they start
+with a complete config. Entities whose file is gone are deleted by the old binary's own
+`deleteOldPipelines`, as today.
 
-Entities whose file is gone are deleted by the old binary's own `deleteOldPipelines`, as today.
+There is no format marker in the database, so a binary that predates the field cannot refuse on its
+own; (a) is the only way to give one that behavior.
 
-There is no format marker in the database, so a binary that predates the field cannot refuse. That
-is acceptable here because the failure is "setting missing then repaired from the file", not wrong
-data.
+**Required downgrade tests.** N+1 provision, N start:
+
+1. Success path: the pipeline runs and the settings are literals again.
+2. Failed reconcile: make the v0.20 provisioning of that pipeline fail (invalid file for that
+   pipeline). Assert the outcome; with (a), the pipeline is degraded with the coded cause and does
+   not run; without it, record that it ran with the keys absent.
+3. Missing path: start v0.20 with `pipelines.path` unset or empty. Same assertions.
+4. An optional-credential connector (S3-style, or a stub with a default-chain fallback) in cases 2
+   and 3, to prove which identity it would have used.
 
 ### N+1 readability
 
@@ -498,6 +625,8 @@ Whether Conduit should offer a scrub command is D6 (recommendation: no).
   start, entities still holding literals that a file reference could replace. Variable **names**
   only, never values, matching `plugin.standalone_env_passed`. A warning per unset variable (once
   per variable per start).
+- **Per-start warnings and status:** the `secretref.env_unset` warning is per pipeline start and is
+  mirrored in `pipelines status` and the degraded cause (section 5).
 - **Metrics:** none new in v0.21. Counters are cheap, but nothing in an at-rest property is worth
   paging on; the degraded-pipeline cause carries the failure.
 - **`conduit doctor`:** a `secrets.env` check (with `--json`, like `plugins.standalone_env`) that
@@ -516,14 +645,35 @@ Whether Conduit should offer a scrub command is D6 (recommendation: no).
 ## Tests (for the implementation PRs)
 
 Tier 1 bar. The implementation is split so each PR is reviewable: (1) `pkg/secretref`, the parser
-option, the `SettingRefs` field, store golden updates; (2) the call sites; (3) the reconcile
+option, the `SettingRefs` field, `PrepareSet` and store round-trip tests; (2) the call sites; (3) the reconcile
 migration including `LastActiveConfig`; (4) doctor, linter, docs and runbook.
 
-- **Canary scan (merge gate).** On every backend (in-memory, badger, SQLite, Postgres): set a
-  random canary in the environment, provision from a file referencing it, run the pipeline with
-  records flowing until several position flushes have happened and a restart has occurred, then
-  scan the raw database bytes (files, or all rows) for the canary. Zero hits. Also after a failed
-  start and after an update.
+- **Store round trip (blocker-class).** `connector.Store.PrepareSet` -> `Get` round-trips
+  `Config.SettingRefs` and `LastActiveConfig.SettingRefs`, and so do the processor and pipeline
+  stores. A second test captures what the **persister** snapshot writes (`Persister` ->
+  `PrepareSet`) and asserts both fields survive. Golden tests cannot catch a drop because of
+  `omitempty`.
+- **Canary scan (merge gate).** Use an **alphanumeric** canary (`json` escapes `<`, `>` and `&`, so
+  a canary with them would pass the scan while leaking). Provision from a file referencing it, run
+  the pipeline with records flowing until several position flushes and a restart have happened,
+  then scan the raw bytes. Zero hits, with a **positive control** per backend: plant the canary as
+  a literal setting through the API and assert the scan finds it, so a scan that cannot see the
+  bytes fails loudly.
+  - badger: Snappy-compressed by default, so scan the decoded key/value contents, and also scan
+    the `.mem`, WAL and `vlog` files; the control proves which of these actually contain it.
+  - SQLite: the database file and the `-wal` file.
+  - Postgres: a row scan of the table plus a `pg_dump`; WAL and dead tuples are residue and not
+    part of the gate (see _Residue_).
+  - In-memory: a walk of the store.
+  - Matrix: connector, processor, **DLQ** and `sdk.egress.*` keys each set with a reference;
+    after a failed start; after an update; after a live `ApplyPlanLive` update; after
+    `UpdateWhileRunning` (`processor.Service`).
+- **Trust model.** No `fromproto`/API path can populate `SettingRefs`; `Plan`, `ApplyPlan` and
+  `ApplyPlanLive` reject a non-empty `SettingRefs` from a non-parser caller; `ApplyPipeline` onto a
+  file-provisioned pipeline behaves as section 3 states.
+- **All-references connector** across migrate, restart and delete: `OnDelete` fires; no spurious
+  update event; `LastActiveConfig` "never started" is judged on both maps.
+- **No in-place mutation** of shared `Settings`/`SettingRefs` maps (race detector).
 - **Grammar equivalence (fuzz).** `Resolve(template)` equals `os.ExpandEnv(template)` when every
   variable is set, for all inputs; "is a reference" is exactly "`os.Expand` called the mapper". Seed
   corpus runs in the normal `test` job, per CLAUDE.md fuzzing standard; add a `Fuzz*` target.
@@ -555,26 +705,41 @@ migration including `LastActiveConfig`; (4) doctor, linter, docs and runbook.
 
 Each with a recommendation. DeVaris decides.
 
-- **D1. Scope: reference storage only, or also encryption (B).** Recommend reference storage only.
+Approved by DeVaris: D1, D3, D4, D6, D7, D8, as recommended. D2 and D5 are refined below after
+review. D9 is new.
+
+- **D1 (approved). Scope: reference storage only, or also encryption (B).** Recommend reference storage only.
   It closes #2988 as filed, adds no key to lose, and sets up v0.22. State the literal-secret
   residual in the release notes.
-- **D2. Unset variable: error now, or warn then error.** Recommend warn in v0.21 with
-  `--secrets.strict-env`, error by default in v0.23, per the deprecation policy. The case for
-  erroring now is real (an empty credential should never reach a plugin); the cost is breaking
-  configs that rely on unset-is-empty.
-- **D3. `pipelines deploy|apply` and `ApplyPipeline`.** Recommend leaving client-side expansion
+- **D2 (refined). Unset variable.** Recommend warn in v0.21, strict by default in v0.23, with:
+  the warning per pipeline start and visible in the degraded cause, `pipelines status` and doctor;
+  a hard failure for unset variables in `sdk.egress.*` keys; and a defined strict-mode behavior for
+  delete events (retry at next start, do not block deletion). The case for erroring now is real
+  (an empty credential should never reach a plugin, and D4 means non-secret keys such as table or
+  topic can resolve to blank and misroute); the cost is breaking configs that rely on
+  unset-is-empty.
+- **D3 (approved). `pipelines deploy|apply` and `ApplyPipeline`.** Recommend leaving client-side expansion
   (literals stored) in v0.21 and filing a follow-up. A proto field for references needs an operator
   opt-in so an unauthenticated caller cannot read the engine's environment.
-- **D4. All settings references, or only "secret-looking" ones.** Recommend all settings
+- **D4 (approved). All settings references, or only "secret-looking" ones.** Recommend all settings
   references (no sensitivity metadata exists).
-- **D5. `LastActiveConfig` rewrite rule.** Recommend rewriting migrated keys to the same
-  reference, accepting that env-only changes no longer fire lifecycle updates.
-- **D6. Scrubbing tooling.** Recommend no tooling; document rotate-and-compact, and be explicit
+- **D5 (refined). `LastActiveConfig` rewrite and lifecycle semantics.** Recommend: migrated keys
+  are rewritten to the same reference; "never started" and "equal" are defined over Settings plus
+  SettingRefs; compare uses templates and the event payload is resolved, so `ConfigBefore` in an
+  update event carries current-environment values. Accepted consequence: an env-only change no longer
+  fires a lifecycle update.
+- **D6 (approved). Scrubbing tooling.** Recommend no tooling; document rotate-and-compact, and be explicit
   that pre-upgrade backups cannot be fixed.
-- **D7. `secretref` as a package name and its placement** (`pkg/secretref` versus under
+- **D7 (approved). `secretref` as a package name and its placement** (`pkg/secretref` versus under
   `pkg/foundation`). Recommend `pkg/secretref`; low stakes.
-- **D8. Exposing "this key is a reference" in the API.** Recommend no (keeps `"***"` the only
+- **D8 (approved). Exposing "this key is a reference" in the API.** Recommend no (keeps `"***"` the only
   output). Revisit with the sensitivity marker.
+
+- **D9 (new, pending DeVaris). Downgrade safety.** Recommend a v0.20.2 patch that refuses to run a
+  record with a `SettingRefs` it does not understand (degraded with a coded cause), plus
+  documentation for v0.20.0 and v0.20.1. Without it the downgrade is not fail-closed: a failed
+  reconcile or an unmounted pipelines path starts pipelines with reference-backed keys absent, and
+  optional credentials fall back silently (S3 default chain, Kafka without SASL).
 
 ## Related
 
