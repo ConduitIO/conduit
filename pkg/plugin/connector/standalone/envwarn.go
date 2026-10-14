@@ -242,7 +242,7 @@ func warnSensitiveEnv(ctx context.Context, logger log.CtxLogger, environ []strin
 		}
 		ev.Str("docs", EnvWarningDocsPath).
 			Msg("host environment variables are passed to standalone plugin processes; " +
-				"v0.21 will restrict the plugin environment to an allowlist " +
+				"a future release will restrict the plugin environment to an allowlist " +
 				"(set connectors.standalone.env-warning=false to silence this after reviewing the list)")
 	})
 }
