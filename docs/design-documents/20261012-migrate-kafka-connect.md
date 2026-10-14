@@ -265,6 +265,11 @@ cannot reach the worker; 1 for internal errors.
 
 ### Connector mapping
 
+> **Amendment (2026-10-14).** The per-key mapping tables for the v0.21 connector set, the report schema and
+> exit-code matrix, the harness corpus format, MCP tool parity, the KIP-1188 lint rule and the lane plan are in
+> `20261014-migrate-kafka-connect-mapping-and-harness.md`. Where its tables differ from the connector subsections
+> below, that document takes precedence; the differences are listed in its _Decisions needed_ section.
+
 "Certification" below is the registry quality tier from the catalog track (Certified = acceptance suite plus
 integration test against the real system in CI, kill -9 chaos test, committed benchi configuration with a
 recorded run, documented delivery semantics). **The v0.21 theme is that every connector `migrate` emits is
@@ -643,7 +648,7 @@ runs the same check itself before stopping Debezium; `--strict` escalates warnin
 | `kc.lint.errors_all_debezium_output` | warning | `errors.tolerance=all` on a Debezium Postgres connector whose migration outputs Debezium format: the migrated pipeline halts on the first failed record instead of skipping it |
 | `kc.lint.dlq_replication` | warning | DLQ topic configured without `errors.deadletterqueue.topic.replication.factor` (defaults to 3 and fails on small clusters) or without `errors.deadletterqueue.context.headers.enable`, so failed records arrive with no error context |
 | `kc.lint.tasks_max_exceeds_source_limit` | warning | `tasks.max` greater than 1 on Debezium connectors (they run one task; extra tasks are ignored or rejected) |
-| `kc.lint.client_override_policy` | warning | `producer.override.*`, `consumer.override.*`, `admin.override.*` in a connector when the worker's `connector.client.config.override.policy` is `None` (the default, overrides are rejected at validation) or absent from the provided worker file (unknown); and the converse, `All` policy on a shared worker where any connector can retune clients |
+| `kc.lint.client_override_policy` | warning | `producer.override.*`, `consumer.override.*`, `admin.override.*` in a connector when the worker's `connector.client.config.override.policy` is `None` (overrides are rejected at validation; the Apache Kafka 4.2 default is `All`) or absent from the provided worker file (unknown); and the converse, `All` policy on a shared worker where any connector can retune clients |
 | `kc.lint.kip1188_override_risk` | warning (placeholder) | reserved for KIP-1188 override-related behavior; placeholder by decision: the rule body is not specified until the KIP text is verified from a primary source |
 | `kc.lint.postgres_slot_drop_on_stop` | warning; error when linting for cutover | Debezium Postgres `slot.drop.on.stop=true`: a restart re-snapshots or loses position, and `--cutover` refuses it before stopping Debezium |
 | `kc.lint.postgres_lsn_flush_mode` | warning; error when linting for cutover | Debezium Postgres `lsn.flush.mode=manual` or `connector_and_driver`, or `flush.lsn.source=false`: the confirmed position cannot be relied on for cutover or rollback |
@@ -929,4 +934,6 @@ document has been updated to match; this section is the record.
   `20260722-debezium-compete-roadmap.md`, `20260823-protobuf-schema-support.md`,
   `20260823-avro-codec-archived-decoder-advisories.md`
 - Issue #2988 (secrets stored expanded)
+- `docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md` (mapping tables, report contract,
+  corpus, MCP)
 - `conduit-connector-postgres#341` (Debezium offset import design, Tier 1) and #3029 (CLI side)
