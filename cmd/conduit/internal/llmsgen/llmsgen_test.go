@@ -108,6 +108,13 @@ var nondeterministicTokenPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bbuildinfo\b`),                  // debug.BuildInfo-derived string
 }
 
+// documentedLiteralExamples are fixed example values that a built-in
+// connector's own documentation prints (the Postgres destination's NUMERIC
+// coercion table, v0.14.4). They are the same on every run, so they are
+// removed before matching. Anything else that looks like a timestamp, such
+// as a generation time, still fails.
+var documentedLiteralExamples = []string{"2026-10-12 00:00:00"}
+
 // TestNoNondeterministicTokens is AC-7: neither committed file may contain
 // a timestamp, absolute path, hostname, Go version, or BuildInfo-derived
 // string.
@@ -119,8 +126,13 @@ func TestNoNondeterministicTokens(t *testing.T) {
 		content, err := os.ReadFile(filepath.Join(root, name))
 		is.NoErr(err)
 
+		text := string(content)
+		for _, ex := range documentedLiteralExamples {
+			text = strings.ReplaceAll(text, ex, "")
+		}
+
 		for _, pattern := range nondeterministicTokenPatterns {
-			if m := pattern.FindString(string(content)); m != "" {
+			if m := pattern.FindString(text); m != "" {
 				t.Errorf("%s contains a nondeterministic token %q (matched %s)", name, m, pattern)
 			}
 		}
