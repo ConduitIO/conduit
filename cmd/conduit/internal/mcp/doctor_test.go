@@ -137,3 +137,33 @@ func TestDoctor_StandaloneEnv_NamesNotReturned(t *testing.T) {
 		}
 	}
 }
+
+// TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment pins the
+// production default for the MCP tool: with no injected environment it
+// classifies the process environment. The result withholds names, so the
+// assertion is that the finding is a warning (an empty environment passes) and
+// that neither the sentinel name nor its fake value is returned.
+func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
+	is := is.New(t)
+	const name, value = "SENTINEL_DEFAULT_SEAM_TOKEN", "FAKE-VALUE-MUST-NOT-APPEAR-DEFAULT"
+	t.Setenv(name, value)
+
+	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
+	cfg.Connectors.Path = t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+
+	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg}))
+	res, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+		Name:      ToolDoctor,
+		Arguments: map[string]any{"checks": []string{doctorcheck.NamePluginsStandaloneEnv}},
+	})
+	is.NoErr(err)
+	env := decodeStructuredContent[Result[DoctorResult]](t, res)
+	is.Equal(len(env.Result.Checks), 1)
+	is.Equal(string(env.Result.Checks[0].Status), "warn")
+
+	raw, err := json.Marshal(res)
+	is.NoErr(err)
+	is.True(!strings.Contains(string(raw), name))
+	is.True(!strings.Contains(string(raw), value))
+}

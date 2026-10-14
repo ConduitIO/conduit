@@ -53,7 +53,9 @@ func buildDoctorCmdEnv(t *testing.T, environ func() []string) *cobra.Command {
 // *cobra.Command (for ResultExitCode), and any hard-failure error.
 func runDoctor(t *testing.T, args ...string) (output string, leaf *cobra.Command, err error) {
 	t.Helper()
-	return runDoctorEnv(t, nil, args...)
+	// An empty fake environment: tests that do not care about
+	// plugins.standalone_env must not depend on the machine's environment.
+	return runDoctorEnv(t, func() []string { return []string{} }, args...)
 }
 
 // runDoctorEnv is runDoctor with a fixed fake environment (see buildDoctorCmdEnv).
@@ -336,4 +338,21 @@ func TestDoctor_StandaloneEnv_NoPluginsInstalled(t *testing.T) {
 
 	finding, _ := standaloneEnvFinding(t, args)
 	is.Equal(finding["status"], "pass")
+}
+
+// TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment pins the
+// production default: with no injected environment, doctor classifies the
+// process environment. The sentinel and its fake value come from t.Setenv.
+func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
+	is := is.New(t)
+	const name, value = "SENTINEL_DEFAULT_SEAM_TOKEN", "FAKE-VALUE-MUST-NOT-APPEAR-DEFAULT"
+	t.Setenv(name, value)
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+	args = append(args, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
+
+	out, _, err := runDoctorEnv(t, nil, args...)
+	is.NoErr(err)
+	is.True(strings.Contains(out, name))
+	is.True(!strings.Contains(out, value))
 }

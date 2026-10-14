@@ -17,7 +17,6 @@ package standalone
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -100,8 +99,15 @@ var (
 	// cloud provider prefixes.
 	sensitivePrefixes = []string{"AWS_", "AZURE_", "GOOGLE_", "GCP_"}
 	sensitiveSuffixes = []string{
-		"_KEY", "_CREDENTIAL", "_CREDENTIALS", "_AUTH", "_PASS", "_PWD", "_DSN",
+		"_KEY", "_CREDENTIAL", "_CREDENTIALS", "_CREDS", "_AUTH", "_PASS", "_PW", "_PWD", "_DSN", "_PAT",
 		"APIKEY", "APIKEYS", "API_KEYS", // bare APIKEY and API_KEYS as well as FOO_APIKEY
+		"PRIVATEKEY",            // SSH_PRIVATEKEY; FOO_PRIVATE_KEY is covered by _KEY
+		"_JWT", "AUTHORIZATION", // CI_JOB_JWT, HTTP_AUTHORIZATION
+		// Confluent SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO and the
+		// CONNECT_*_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO forms carry user:password.
+		"BASIC_AUTH_USER_INFO",
+		// JDBC, connection and broker URLs commonly embed credentials.
+		"JDBC_URL", "CONNECTION_URL", "BROKER_URL", "BROKER_URI",
 		"_CONNECTION_STRING", "_JAAS_CONFIG",
 		// DATABASE_URL, DATABASE_URI, DB_URL, DB_URI and prefixed variants.
 		"DATABASE_URL", "DATABASE_URI", "DB_URL", "DB_URI",
@@ -128,13 +134,23 @@ var (
 		// PGDATABASE, PGSSLMODE, PGSSLCERT, PGPASSFILE) name a location or a
 		// setting, not a secret, and are not reported; PGPASSWORD and
 		// PGSSLPASSWORD match PASSWORD.
-		"PROXY": {}, "PGURI": {}, "PGURL": {},
+		"PROXY": {}, "PGURI": {}, "PGURL": {}, "PGDSN": {}, "JWT": {},
+		// Package index URLs can embed a token (https://user:token@host/simple).
+		"PIP_INDEX_URL": {}, "PIP_EXTRA_INDEX_URL": {}, "UV_INDEX_URL": {}, "UV_EXTRA_INDEX_URL": {},
+		// Docker registry credentials as inline JSON.
+		"DOCKER_AUTH_CONFIG": {},
+	}
+	// switchWords, as the first word of NAME_AUTH or NAME_PROXY, mark a boolean
+	// switch (SKIP_AUTH, USE_PROXY) rather than a credential.
+	switchWords = map[string]struct{}{
+		"NO": {}, "SKIP": {}, "DISABLE": {}, "ENABLE": {}, "USE": {},
+		"REQUIRE": {}, "TRUST": {}, "BEHIND": {},
 	}
 	// excludedNames contain a sensitive-looking substring or suffix but carry
 	// no credential: common shell variables, a tuning flag whose name
-	// contains TOKEN, and the proxy bypass list.
+	// contains TOKEN, (NO_PROXY, a host list, is covered by switchWords).
 	excludedNames = map[string]struct{}{
-		"PWD": {}, "OLDPWD": {}, "TOKENIZERS_PARALLELISM": {}, "NO_PROXY": {},
+		"PWD": {}, "OLDPWD": {}, "TOKENIZERS_PARALLELISM": {},
 	}
 )
 
@@ -152,6 +168,13 @@ func isSensitiveEnvName(name string) bool {
 	name = strings.ToUpper(name)
 	if _, ok := excludedNames[name]; ok {
 		return false
+	}
+	for _, suf := range []string{"_AUTH", "_PROXY"} {
+		if w, ok := strings.CutSuffix(name, suf); ok {
+			if _, sw := switchWords[w]; sw {
+				return false
+			}
+		}
 	}
 	if _, ok := exactNames[name]; ok {
 		return true
@@ -188,14 +211,8 @@ func isSensitiveEnvName(name string) bool {
 	return false
 }
 
-// ClassifyHostEnv classifies the current process environment. It is shared by
-// the startup warning and by `conduit doctor`.
-func ClassifyHostEnv() SensitiveEnv {
-	return ClassifyEnv(os.Environ())
-}
-
 // ClassifyEnv classifies environ (KEY=VALUE entries, as returned by
-// os.Environ). It exists so callers and tests can supply a fixed environment
+// os.Environ). It is shared by the startup warning and by `conduit doctor`, and exists so callers and tests can supply a fixed environment
 // instead of reading the process's own.
 func ClassifyEnv(environ []string) SensitiveEnv {
 	return classifyEnv(environ)

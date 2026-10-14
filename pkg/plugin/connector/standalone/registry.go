@@ -77,10 +77,14 @@ func WithEnvWarning(enabled bool) RegistryOption {
 }
 
 // WithEnviron replaces the source of the host environment the startup warning
-// classifies (default os.Environ). It does not change the environment plugin
-// processes receive.
+// classifies (default os.Environ; nil also means os.Environ). It does not
+// change the environment plugin processes receive.
 func WithEnviron(environ func() []string) RegistryOption {
-	return func(r *Registry) { r.environ = environ }
+	return func(r *Registry) {
+		if environ != nil {
+			r.environ = environ
+		}
+	}
 }
 
 func NewRegistry(logger log.CtxLogger, pluginDir string, opts ...RegistryOption) *Registry {

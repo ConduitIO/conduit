@@ -52,6 +52,11 @@ func TestClassifyEnv_CommonCredentialNames(t *testing.T) {
 		"SLACK_WEBHOOK_URL", "WEBHOOK_URL", "DISCORD_WEBHOOK_URI",
 		// proxies
 		"FTP_PROXY", "SOCKS_PROXY", "ftp_proxy", "RSYNC_PROXY", "PROXY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+		// credential-bearing names from common stacks
+		"SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO", "CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO",
+		"SERVICE_CREDS", "JDBC_URL", "CONNECT_JDBC_URL", "CONNECTION_URL", "BROKER_URL", "CELERY_BROKER_URL",
+		"GH_PAT", "GITHUB_PAT", "SMTP_PW", "DOCKER_AUTH_CONFIG", "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL",
+		"UV_INDEX_URL", "JWT", "CI_JOB_JWT", "HTTP_AUTHORIZATION", "AUTHORIZATION", "SSH_PRIVATEKEY", "PGDSN", "PG_DSN",
 		// pre-existing coverage, unchanged
 		"PGPASSWORD", "REDIS_URL", "MONGODB_URI", "AMQP_URL",
 	}
@@ -65,12 +70,27 @@ func TestClassifyEnv_CommonCredentialNames(t *testing.T) {
 		"PGP_URL", "DONATS_URL", "ELASTIC_VERSION",
 		// near misses for the new suffixes
 		"AUTHOR", "GIT_AUTHOR_NAME", "OAUTH", "SSH_AUTH_SOCK", "CREDENTIAL_HELPER", "KEYBOARD", "API_KEYBOARD",
-		"WEBHOOK_PORT", "PROXY_PORT", "PASSIVE",
+		"WEBHOOK_PORT", "PROXY_PORT", "PASSIVE", "PAT", "COMPAT", "SCRIPT_PATH", "PW", "PWDX", "JWT_ISSUER",
+		// boolean switches, not credentials
+		"NO_AUTH", "SKIP_AUTH", "DISABLE_AUTH", "ENABLE_AUTH", "REQUIRE_AUTH", "USE_PROXY", "ENABLE_PROXY",
+		"DISABLE_PROXY", "TRUST_PROXY", "BEHIND_PROXY", "use_proxy",
+	}
+	// knownGaps are credential-bearing names the warning does not flag today.
+	// Pinned so that closing one is a deliberate change: move it to flagged.
+	knownGaps := []string{
+		"SESSION_COOKIE", "COOKIE", "NPM_CONFIG_REGISTRY", "AUTH_HEADER", "BEARER", "FOO_SESSION", "PGSSLKEY",
+		"KUBECONFIG", "DOCKER_CONFIG", "NETRC",
 	}
 	for _, name := range flagged {
 		t.Run("flagged/"+name, func(t *testing.T) {
 			is := is.New(t)
 			is.Equal(classifyEnv([]string{name + "=VALUE-MUST-NOT-APPEAR"}).Names, []string{name})
+		})
+	}
+	for _, name := range knownGaps {
+		t.Run("known-gap/"+name, func(t *testing.T) {
+			is := is.New(t)
+			is.Equal(classifyEnv([]string{name + "=VALUE-MUST-NOT-APPEAR"}).Total(), 0)
 		})
 	}
 	for _, name := range notFlagged {
@@ -289,6 +309,34 @@ func TestRegistryInit_EnvWarning(t *testing.T) {
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		is.True(!strings.Contains(buf.String(), CodeEnvPassedToPlugins.Reason()))
 	})
+}
+
+// TestRegistryInit_DefaultEnvironIsProcessEnvironment pins the production
+// default: with no injected seam (and with WithEnviron(nil)) the warning reads
+// the process environment. The sentinel name and its fake value are set with
+// t.Setenv; only the name may appear.
+func TestRegistryInit_DefaultEnvironIsProcessEnvironment(t *testing.T) {
+	const name, value = "SENTINEL_DEFAULT_SEAM_TOKEN", "FAKE-VALUE-MUST-NOT-APPEAR-DEFAULT"
+	t.Setenv(name, value)
+
+	for _, tc := range []struct {
+		name string
+		opts []RegistryOption
+	}{
+		{"no seam", nil},
+		{"nil seam", []RegistryOption{WithEnviron(nil)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			resetEnvWarnOnce(t)
+			var buf bytes.Buffer
+			opts := append([]RegistryOption{WithEnvWarning(true)}, tc.opts...)
+			r := NewRegistry(bufLogger(&buf), testPluginDir, opts...)
+			r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
+			is.True(strings.Contains(buf.String(), `"`+name+`"`))
+			is.True(!strings.Contains(buf.String(), value))
+		})
+	}
 }
 
 func TestWarnSensitiveEnv_NonStandardNamesCountedOnly(t *testing.T) {

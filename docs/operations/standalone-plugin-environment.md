@@ -37,15 +37,22 @@ credentials. Matching is case-insensitive on every OS. A name is listed when it:
 
 - contains `PASSWORD`, `PASSWD`, `PASSPHRASE`, `TOKEN` or `SECRET` anywhere;
 - starts with `AWS_`, `AZURE_`, `GOOGLE_` or `GCP_`;
-- ends with `_KEY`, `_CREDENTIAL`, `_CREDENTIALS`, `_AUTH`, `_PASS`, `_PWD`, `_DSN`, `APIKEY`,
-  `API_KEYS`, `_CONNECTION_STRING`, `_JAAS_CONFIG`, `DATABASE_URL`, `DATABASE_URI`, `DB_URL`,
-  `DB_URI`, `WEBHOOK_URL` or `WEBHOOK_URI`;
+- ends with `_KEY`, `_CREDENTIAL`, `_CREDENTIALS`, `_CREDS`, `_AUTH`, `_PASS`, `_PW`, `_PWD`, `_DSN`,
+  `_PAT`, `APIKEY`, `APIKEYS`, `API_KEYS`, `PRIVATEKEY`, `_JWT`, `AUTHORIZATION`, `BASIC_AUTH_USER_INFO`
+  (the Confluent schema registry credential), `_CONNECTION_STRING`, `_JAAS_CONFIG`, `DATABASE_URL`,
+  `DATABASE_URI`, `DB_URL`, `DB_URI`, `JDBC_URL`, `CONNECTION_URL`, `BROKER_URL`, `BROKER_URI`,
+  `WEBHOOK_URL` or `WEBHOOK_URI`;
 - ends with `_URL` or `_URI` and names a database or broker: it contains `REDIS`, `MONGO`,
   `AMQP`, `RABBITMQ`, `KAFKA`, `POSTGRES`, `MYSQL`, `MARIADB`, `MSSQL`, `COCKROACH`, `CLICKHOUSE`,
   `ELASTIC`, `OPENSEARCH`, `CASSANDRA` or `MEMCACHE`, or has `PG` or `NATS` as a whole
   `_`-separated word (`PG_URL`, `NATS_URL`);
-- is exactly `PGURI`, `PGURL` or `PROXY`, or ends with `_PROXY` (`HTTP_PROXY`, `HTTPS_PROXY`,
-  `ALL_PROXY`, `FTP_PROXY`, `SOCKS_PROXY`; proxy URLs can embed credentials).
+- is exactly `PGURI`, `PGURL`, `PGDSN`, `JWT`, `PROXY`, `DOCKER_AUTH_CONFIG`, `PIP_INDEX_URL`,
+  `PIP_EXTRA_INDEX_URL`, `UV_INDEX_URL` or `UV_EXTRA_INDEX_URL`, or ends with `_PROXY`
+  (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `FTP_PROXY`, `SOCKS_PROXY`; proxy URLs can embed
+  credentials).
+
+Boolean switches are not listed: a name of the form `<WORD>_AUTH` or `<WORD>_PROXY` where `<WORD>` is
+`NO`, `SKIP`, `DISABLE`, `ENABLE`, `USE`, `REQUIRE`, `TRUST` or `BEHIND` (`SKIP_AUTH`, `USE_PROXY`).
 
 The other libpq variables (`PGHOST`, `PGUSER`, `PGPORT`, `PGDATABASE`, `PGSSLMODE`, `PGPASSFILE`,
 `PGSSLCERT`) name a location or a setting rather than a secret and are not listed. `PGPASSWORD`
