@@ -143,6 +143,16 @@ consumed by `kc diff`), `lint` (optional rule ids that read this key), `secret` 
 another key). A file also has a `defaults:` section listing upstream defaults that Conduit does not share, each
 with the connector-level note it produces (see _Mapping tables_).
 
+**Matching.** A key matches at most one rule. Precedence is exact string, then the longest `prefix`, then `regex`;
+two rules of the same kind that match one key are a build error, and a test generates a probe key per rule and
+fails if any key matches more than one rule. **Values.** A rule with `values` must end with an `otherwise` branch,
+and `otherwise` is `unsupported`, blocking, `kc.key_unsupported`, so a value the table does not list (a new
+upstream enum member, a legacy name, a typo) is never silently accepted. **References as values.** A
+config-provider reference (`${file:...}`, `${env:...}`) as the value of a key whose status depends on its value
+cannot be evaluated offline: the entry is `unsupported`, blocking, `kc.key_unsupported`, fix "set the literal
+value in the Kafka Connect config, or resolve it and re-run". For keys whose status does not depend on the value
+(a password) the reference passes through, as in the base document.
+
 Consequences, all enforced by tests:
 
 - The known-key set of a class is the key list of its file. `kc.key_unknown` (migrate) and
@@ -184,11 +194,19 @@ published docs are included and marked "(src)". Conduit-side settings were read 
 a setting that the pinned connector does not have yet (marked **[#NNNN]**), the row's status is the status it has
 once that lane merges; until then the rule's `requires` gate (below) downgrades it to `unsupported`, blocking.
 
-**`requires` gate.** A rule may name a capability of its target (`requires: {plugin: builtin:postgres, param:
-debezium.enabled}`). `migrate` evaluates it against the plugin specification it was built with, so a row never
-claims `translated` for a setting the binary cannot validate. If the gate fails the entry is `unsupported`,
-blocking, code `kc.target_capability_missing`, with the lane issue in `fix`. This is how rows that depend on an
-unmerged lane stay honest, and why none of the lanes needs a flag-day with this one.
+**`requires` gate.** A rule may name what its target must provide, in three kinds: `param` (a setting exists in the
+plugin specification `migrate` was built with), `capability` (a named behavior listed for that plugin in
+`certification.yaml`, such as `debezium-offset-import` or `bulk-item-nack`), and `version` (the plugin version in
+`certification.yaml` is at least the stated one). A param existing is not evidence that the behavior is
+implemented, so rows whose correctness depends on behavior gate on a capability, which the connector lane adds to
+`certification.yaml` in the PR that ships the behavior. Examples: `snapshot.mode` `never`/`no_data` requires
+`debezium-offset-import` (the settings `logrepl.import.debeziumOffset` and `logrepl.requireExistingSlot` are not
+in `builtin:postgres` v0.14.2); the Elasticsearch per-item nack rows require `bulk-item-nack` (#3007; the failing
+item is acked today, `ConduitIO/conduit-connector-elasticsearch#153`). If a gate fails the entry is `unsupported`,
+blocking, code `kc.target_capability_missing`, with the lane issue in `fix`. For standalone connectors (`mysql`,
+`elasticsearch`) the emitted `plugin:` reference pins the version from `certification.yaml`, so a pipeline
+cannot start on a connector older than the one its rows were gated on. This is how rows that depend on an unmerged
+lane stay honest, and why none of the lanes needs a flag-day with this one.
 
 **Connector-level notes.** Some differences come from keys that are _absent_ from the input, because Kafka
 Connect applies a default that Conduit does not. They have no input key to hang an entry on, so rules may emit a
@@ -198,6 +216,39 @@ default differs from Conduit's behavior), `kc.output_shape_differs` (records or 
 from the original connector's), `kc.delivery_semantics_differ` (a stronger Kafka Connect guarantee is not
 reproduced), `kc.setting_required` (a Conduit setting with no Kafka Connect counterpart that must be supplied,
 emitted as a variable). Each note names the rule that emitted it and is listed in the corpus expectations.
+
+**Absent keys are evaluated mechanically.** A row's status for a value applies equally when the key is absent and
+that value is the upstream default. This is a test over data, not a reviewed section. Each class has
+`pkg/kcmigrate/rules/upstream/<class>.keys.yaml`, a committed snapshot of the pinned upstream key list (`key`,
+`default`, `source`, upstream version); it is the list the tables in this document were built from. For every key
+in the snapshot that has a default, the test runs the rule engine on the input `key=<default>` and nothing else.
+If the result is not plain `translated` (T and not blocking), the class's `defaults:` section must contain an
+entry for that key that emits a note carrying the default's status and `blocking`, or names a connector-level
+note that already covers it (`coveredBy: kc.output_shape_differs`, used where a whole family is already blocked
+and per-key notes would be noise). A key without such an entry fails the build. Defaults that depend on other keys
+are `when:` clauses, tested with those keys set. The reverse check also runs: a `defaults:` entry whose default
+evaluates to plain `translated` is stale and fails. Moving to a new upstream version means regenerating the
+snapshot; new defaults then surface as test failures. The list below is the expected initial output, not the
+mechanism:
+
+| Family | Absent key (upstream default) | Note | Blocking |
+| --- | --- | --- | --- |
+| Postgres | `plugin.name` (`decoderbufs`) | decoder differences not emulated | no |
+| Postgres | `table.include.list` (all tables) | `tables: "*"` schema coverage is connector-defined | no |
+| Postgres | `skipped.operations` (`t`) | none: truncates skipped, equal to Conduit | not a note |
+| MySQL | `database.ssl.mode` (`preferred`) | the emitted DSN would be plaintext: a TLS downgrade. Fix: decide `tls` explicitly | yes |
+| MySQL | `include.schema.changes` (`true`), type-handling keys | `coveredBy: kc.output_shape_differs` | yes |
+| JDBC sink | `delete.enabled` (`false`) | Conduit deletes rows | yes |
+| JDBC sink | `replace.null.with.default` (`true`) | differs only if value schemas define defaults | no |
+| JDBC source | table selection absent (every table, discovered continuously) | resolved once at start | yes |
+| S3 | `s3.ssea.name` (empty: bucket default applies) | Conduit sends AES256, overriding an SSE-KMS bucket default (`conduit-connector-s3#1047`) | yes |
+| S3 | `s3.path.style.access.enabled` (`true`) | emitted explicitly when `store.url` is set | not a note |
+| Elasticsearch | `write.method` (`insert`) | Conduit merges (update with `doc_as_upsert`), Kafka Connect replaces the document | yes |
+| Elasticsearch | `schema.ignore` (`false`) | mappings from the Connect schema vs dynamic mapping | yes |
+| Elasticsearch | `key.ignore` (`false`) | `T` only for String or JSON-primitive key converters | when not |
+| MirrorMaker | `topics` (`.*`) | every topic mirrored by default; Conduit needs a list | yes |
+| MirrorMaker | `sync.topic.configs.enabled`, `sync.topic.acls.enabled`, `emit.checkpoints.enabled` (all `true`) | topic configs, ACLs and checkpoints are not synced | yes |
+| MirrorMaker | `refresh.topics.enabled` (`true`) | new topics are not discovered | no |
 
 **Type-handling pattern.** Keys that change how a value is represented (`numeric.mapping`, `db.timezone`,
 `timestamp.granularity`, `date.calendar.system`, `time.precision.mode` on non-Debezium output, and the like) are
@@ -227,7 +278,7 @@ Connector config keys common to all classes, and worker properties (`--worker`).
 | `exactly.once.support` | U! when `required`; T otherwise | none | Conduit is at-least-once. `requested` is a no-op |
 | `transaction.boundary`, `transaction.boundary.interval.ms` | U | none | Meaningful only with exactly-once |
 | `offsets.storage.topic` | T | input to `--offsets-from topic` | Used by the Postgres import only. Other classes: U with note "offset not imported; re-snapshot" |
-| `producer.override.acks`, `.compression.type`, `.client.id`, `.security.protocol`, `.sasl.*` | T | destination `acks`, `compression`, `clientID`, TLS and SASL settings | Security keys follow _Worker and Kafka client settings_ |
+| `producer.override.acks`, `.compression.type`, `.client.id`, `.security.protocol`, `.sasl.*` | T | destination `acks`, `compression`, `clientID`, TLS and SASL settings | `acks` map: Kafka `all` and `-1` to `all`, `1` to `one`, `0` to `none`. Security keys follow _Worker and Kafka client settings_ |
 | `consumer.override.auto.offset.reset` | T | source `readFromBeginning` (`earliest` true, `latest` false) | |
 | `consumer.override.group.id`, `.client.id`, `.security.protocol`, `.sasl.*` | T | source `groupID`, `clientID`, TLS and SASL | |
 | any other `producer.override.*`, `consumer.override.*`, `admin.override.*` | U | none | Tuning (`linger.ms`, `batch.size`, `max.request.size`, `fetch.*`, `max.poll.records`). Non-blocking; `kc.lint.client_override_policy` and `kc.lint.kip1188_override_risk` apply |
@@ -260,7 +311,7 @@ not from this table: a value outside it is `unsupported`, blocking, whatever the
 | `database.tcpKeepAlive` | T | none | No-op: the Go dialer keeps connections alive |
 | `database.initial.statements` | U! | none | Session statements (`SET TIME ZONE`, `SET ROLE`) can change what is read |
 | `database.query.timeout.ms` | U | none | |
-| `plugin.name` | `pgoutput` T; `decoderbufs` A; others U! | none | Conduit decodes with `pgoutput` only (#3033 non-goal: decoderbufs semantics). `decoderbufs` is Debezium's default; the entry is non-blocking and states that decoder-specific differences are not emulated. Other plugins: the import refuses them (`postgres.import.plugin_unsupported`) |
+| `plugin.name` | `pgoutput` T; `decoderbufs` A; others U! | none | Conduit decodes with `pgoutput` only (#3033 non-goal: decoderbufs semantics). `decoderbufs`, Debezium's default and the value when the key is absent, is non-blocking and states that decoder-specific differences are not emulated. `--import-offset` accepts both `pgoutput` and `decoderbufs` offsets (#341 S4, the offset format is the same); other plugins are refused (`postgres.import.plugin_unsupported`) |
 | `slot.name`, `publication.name` | A | `logrepl.slotName`, `logrepl.publicationName` | Generated names `conduit_<pipeline>`; reason "separate slot so rollback stays possible" |
 | `slot.drop.on.stop` | `false` T; `true` U | `logrepl.autoCleanup: false` | `true`: warning in `migrate`, refusal at `--cutover` (`migrate.kafka_connect.slot_drop_on_stop`) |
 | `slot.failover` | U! when `true` | none | A failover slot survives a primary switch; Conduit's slot does not. Fix: keep on Debezium until the connector creates failover slots |
@@ -282,7 +333,7 @@ not from this table: a value outside it is `unsupported`, blocking, whatever the
 | `column.include.list`, `column.exclude.list` | T | `debezium.column.include.list`, `.exclude.list` | Applied in the source so the schema descriptor matches |
 | `message.key.columns` | T | `debezium.message.key.columns` | |
 | `message.prefix.include.list`, `.exclude.list` | T | `debezium.message.prefix.*` | `--import-offset` appends the cutover marker to the exclude list |
-| `skipped.operations` | T | `debezium.skipped.operations` | |
+| `skipped.operations` | T when `t` is in the list; otherwise U! | `debezium.skipped.operations` | Conduit's Postgres source never emits truncates (connector.yaml, postgres#344). A value that omits `t` means Debezium emitted truncate events that Conduit would drop. Default `t`: T. Relax when #3032 emits them |
 | `skip.messages.without.change` | U! | none | Debezium suppresses events with no change in captured columns; Conduit would emit them |
 | `tombstones.on.delete` | T | `debezium.encode` `tombstones.on.delete` | |
 | `provide.transaction.metadata` | `false` T; `true` U! | `debezium.provide.transaction.metadata` | The `<prefix>.transaction` topic is not produced (#3033 D12) |
@@ -290,7 +341,7 @@ not from this table: a value outside it is `unsupported`, blocking, whatever the
 | `unavailable.value.placeholder`, `include.unknown.datatypes`, `schema.name.adjustment.mode`, `field.name.adjustment.mode`, `extended.headers.enabled` | T | `debezium.<same name>` | `extended.headers.enabled` unset: `migrate` sets it from the plugin version (#3033 settings table) |
 | `column.mask.with.<n>.chars`, `column.mask.hash.*`, `column.truncate.to.<n>.chars`, `column.propagate.source.type`, `datatype.propagate.source.type`, `converters`, `converters.<name>.*` | U! | none | Fix: mask or truncate in a processor before the destination, or keep the connector on Kafka Connect |
 | `schema.refresh.mode` | U | none | |
-| `snapshot.mode` | `initial` T; `never` T with `--import-offset`, else A! (`kc.resume_unavailable`); `initial_only`, `always`, `when_needed`, `no_data`, `configuration_based`, `custom`, legacy `exported`, `schema_only`, `schema_only_recovery` U! | `snapshotMode` (`initial`, `never`) | |
+| `snapshot.mode` | `initial` T; `never` and `no_data` (the same behavior; `never` is the older name) T with `--import-offset`, else A! (`kc.resume_unavailable`); `initial_only`, `always`, `when_needed`, `configuration_based`, `custom`, legacy `exported`, `schema_only`, `schema_only_recovery` and any unlisted value U! | `snapshotMode` (`initial`, `never`) | `never`/`no_data` require capability `debezium-offset-import` |
 | `snapshot.mode.configuration.based.*`, `snapshot.mode.custom.name` | U when `snapshot.mode` is neither `configuration_based` nor `custom`; U! otherwise | none | |
 | `snapshot.locking.mode` | `none` T; others U! | none | `snapshot.locking.mode.custom.name`: same |
 | `snapshot.query.mode` | `select_all` T; `custom` U! | none | `snapshot.query.mode.custom.name`: same |
@@ -324,7 +375,7 @@ destination. The connector emits OpenCDC records; the Debezium-compatible output
 | `database.hostname`, `.port`, `.user`, `.password` | T | source `dsn` | Password is a secret |
 | `database.protocol`, `database.jdbc.driver` | U | none | JDBC only |
 | `connect.timeout.ms` | A | `dsn` `timeout` | |
-| `database.ssl.mode` | `disabled` T; others A! | `dsn` `tls` | Blocking until the binlog stream honors TLS (#3034 finding, #3005) |
+| `database.ssl.mode` | `disabled` T; others A!; absent (`preferred`) A! | `dsn` `tls` | Blocking until the binlog stream honors TLS (#3034 finding, #3005). A DSN is never emitted without an explicit `tls` decision |
 | `database.ssl.keystore*`, `database.ssl.truststore*` | U! | none | Fix: export PEM |
 | `database.include.list` | T for one literal database; U! otherwise | folded into `tables` | The connector reads one database |
 | `database.exclude.list`, `table.exclude.list` | U! | none | |
@@ -332,7 +383,7 @@ destination. The connector emits OpenCDC records; the Debezium-compatible output
 | `table.ignore.builtin` | U | none | |
 | `column.exclude.list` | T | `field.exclude` processors | Emit-if-exact |
 | `column.include.list` | U! | none | |
-| `snapshot.mode` | `initial` T; `initial_only` A; `always` A!; `never`, `schema_only`, `schema_only_recovery`, `no_data`, `when_needed`, `configuration_based`, `custom` U! | `snapshot.enabled`, `cdc.disableLogs` | `initial_only` maps to `snapshot.enabled: true`, `cdc.disableLogs: true`; the pipeline stays running and idle afterwards. `never`, `schema_only` and `no_data` would start at the current binlog position, so events between Debezium's last position and the pipeline's first start are not delivered (invariant 3). They are blocking with code `kc.resume_unavailable`, and `snapshot.enabled: false` is not emitted. `always` re-snapshots on every restart (#158) |
+| `snapshot.mode` | `initial` T; `always` A!; `never`, `schema_only`, `no_data`, `recovery` (current name), `schema_only_recovery` (legacy), `when_needed`, `configuration_based`, `custom`, `initial_only` and any unlisted value U! | `snapshot.enabled` | `initial_only` is U!, `kc.key_unsupported`: Debezium stops after the snapshot, and no Conduit setting stops a MySQL source after its snapshot (`cdc.disableLogs` only silences the canal driver's logging, `source.go`). `never`, `schema_only` and `no_data` would start at the current binlog position, so events between Debezium's last position and the pipeline's first start are not delivered (invariant 3); blocking with code `kc.resume_unavailable`, and `snapshot.enabled: false` is not emitted. `always` re-snapshots on every restart (#158) |
 | `snapshot.fetch.size` | T | `snapshot.fetchSize` | |
 | `snapshot.locking.mode` | `minimal` A; others U! | none | The connector takes a brief global read lock |
 | `snapshot.tables.order.by.row.count`, `snapshot.max.threads*`, `legacy.snapshot.max.threads`, `min.row.count.to.stream.results`, `snapshot.delay.ms`, `streaming.delay.ms`, `snapshot.lock.timeout.ms`, `snapshot.query.mode`, `snapshot.mode.*` | U | none | `snapshot.query.mode=custom`, `snapshot.mode.custom.name`: U! |
@@ -341,7 +392,7 @@ destination. The connector emits OpenCDC records; the Debezium-compatible output
 | `gtid.source.includes`, `gtid.source.excludes`, `gtid.ignore.on.recovery` | U! | none | Positions are binlog file and offset |
 | `binlog.buffer.size`, `binlog.net.read.timeout`, `binlog.net.write.timeout`, `connect.keep.alive*`, `enable.time.adjuster`, `use.nongraceful.disconnect`, `read.only` | U | none | |
 | `signal.*`, `incremental.snapshot.*`, `notification.*` | U! | none | |
-| `include.schema.changes` | `false` T; `true` U! | none | Schema-change events on the `<prefix>` topic |
+| `include.schema.changes` | `false` T; `true` or absent U! | none | Schema-change events on the `<prefix>` topic; also covered by `kc.output_shape_differs` |
 | `include.schema.comments`, `include.query`, `source.struct.version`, `message.key.columns`, `skip.messages.without.change`, `tombstones.on.delete` (Kafka destination), `provide.transaction.metadata=true` | U! | none | Envelope-shaping |
 | `decimal.handling.mode`, `time.precision.mode`, `bigint.unsigned.handling.mode`, `binary.handling.mode`, `schema.name.adjustment.mode`, `inconsistent.schema.handling.mode`, `event.deserialization.failure.handling.mode`, `event.converting.failure.handling.mode`, `event.processing.failure.handling.mode`, `ddl.parser.type`, `converters`, `converters.<name>.*`, `column.mask.*`, `column.truncate.*`, `column.propagate.source.type` | U! | none | Type-handling pattern, applied even at the default: the connector's DECIMAL, NULL and unsigned handling is not Debezium's (#3040) |
 | `topic.prefix`; legacy `database.server.name` | A! | `kafka` destination `topic` template `<prefix>.<db>.<table>` | Topic names are reproduced; the format is not (note above) |
@@ -362,9 +413,9 @@ The connectors have no polling mode. `builtin:postgres` v0.14.2 has `cdcMode` `a
 replication) and the MySQL connector reads the binlog, so the mapping is snapshot plus change capture, as the
 base document decides. Issue #3006 words this "snapshot plus polling"; the wording is stale (D2).
 
-All modes carry two blocking notes until D1 resolves: `kc.output_shape_differs` (OpenCDC records instead of flat
-rows, with no recipe yet that reproduces the original topic's value format) and `kc.default_differs` for
-`poll`-driven semantics (change capture also delivers updates and deletes that polling missed).
+All modes carry the blocking note `kc.output_shape_differs` until D1 resolves (OpenCDC records instead of flat
+rows, with no recipe yet that reproduces the original topic's value format). What change capture adds over polling
+(updates and deletes) is stated in the `mode` entry's reason, not as a second note.
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |
@@ -402,7 +453,7 @@ base document (Decision 9). Other databases: `kc.connector_class_unsupported`.
 | `connection.attempts`, `connection.backoff.ms`, `max.retries`, `retry.backoff.ms` | A | pipeline recovery | Non-blocking. Neither destination retries inside `Write` |
 | `dialect.name` | consistent with the URL T; else U! | none | |
 | `insert.mode` | `insert` A; `upsert` A when `pk.mode=record_key`, else A!; `update` U! | none | Conduit `postgres` destination: `INSERT` without a key, `ON CONFLICT` upsert with one. `mysql`: always `ON DUPLICATE KEY UPDATE`. `insert` on a replayed record fails in Kafka Connect and succeeds in Conduit |
-| `pk.mode` | `record_key` T (`postgres`), A (`mysql`: the table's keys are used); `none` T; `kafka`, `record_value` U! | none | |
+| `pk.mode` | `record_key` T (`postgres`), A (`mysql`: the table's keys are used); `none` A!; `kafka`, `record_value` U! | none | `none` is not translated: the `postgres` destination upserts whenever a record key is present, so rows that Kafka Connect appended are overwritten |
 | `pk.fields` | A | none | Names come from the record key. Reason: verify they equal the table's key columns |
 | `delete.enabled` | `true` with `pk.mode=record_key` T; `true` otherwise U!; `false` U! | none | Conduit applies delete records; absent or `false` Kafka Connect ignored them. Both destinations delete unconditionally. Fix: add a `filter` processor on delete operations, or accept |
 | `table.name.format` | `${topic}` T; other `postgres` formats with `${topic}` T; other `mysql` formats U! | `table` template | `mysql` takes `opencdc.collection` only |
@@ -447,7 +498,7 @@ Parity lane: #3009 (a parity matrix is its deliverable; this table follows it).
 | `s3.part.size`, `s3.part.retries`, `s3.retry.backoff.ms`, `retry.backoff.ms`, `s3.elastic.buffer.*`, `shutdown.timeout.ms` (src), `max.write.duration.ms` (src), `s3.send.digest` (src), `s3.http.send.expect.continue`, `s3.wan.mode`, `max.files.scan.limit` (src), `s3.compression.level` | U | none | Each write is one `PutObject` |
 | `s3.compression.type` | `none` T; `gzip` U! | none | |
 | `s3.proxy.url`, `s3.proxy.user`, `s3.proxy.password` | U! | none | Traffic path |
-| `s3.ssea.name` | `AES256` T; else U! | none | Conduit hardcodes `AES256` |
+| `s3.ssea.name` | `AES256` T; empty or absent U!; else U! | none | Conduit hardcodes `AES256` (`destination/writer/s3.go:125`). Empty means the bucket default applies, so an SSE-KMS bucket default is silently replaced by SSE-S3 (`conduit-connector-s3#1047`). Fix: keep this connector on Kafka Connect, or accept |
 | `s3.sse.customer.key`, `s3.sse.kms.key.id`, `s3.acl.canned`, `s3.object.tagging`, `s3.object.tagging.key.value.pairs`, `s3.object.behavior.on.tagging.error` | U! | none | |
 | `store.kafka.keys`, `keys.format.class`, `store.kafka.headers`, `headers.format.class` | U! when the `store.*` key is `true`; U otherwise | none | |
 | `behavior.on.null.values` | A | none | Conduit stores the delete record; Kafka Connect `fail`, `ignore` or `write`. Reason names the value |
@@ -482,13 +533,13 @@ group; the target selector is owned by #3007. Until the destination's spec lists
 | `batch.size` | A | `sdk.batch.size` | `bulkSize` is a no-op (#155) |
 | `linger.ms` | A | `sdk.batch.delay` | |
 | `max.in.flight.requests`, `max.buffered.records`, `flush.timeout.ms`, `flush.synchronously`, `bulk.size.bytes`, `max.retries`, `retry.backoff.ms` | U | none | Retries are a no-op today; a transient error stops the pipeline (nothing is dropped) |
-| `key.ignore` | `false` T; `true` A! | none | Kafka Connect generates ids; Conduit uses the record key when set |
+| `key.ignore` | `false` T only when `key.converter` is `StringConverter` or a `JsonConverter` with primitive keys; `false` with any other key converter A!; `true` A! | none | Kafka Connect generates ids; Conduit uses the record key bytes as the document id. An Avro or struct key yields a different id than Kafka Connect's. Absent means `false`: same status |
 | `key.ignore.id.strategy`, `use.autogenerated.ids`, `topic.key.ignore` | U! | none | |
-| `schema.ignore` | `true` T; `false` A! | none | `false` creates mappings from the Connect schema; Conduit relies on dynamic mapping |
+| `schema.ignore` | `true` T; `false` or absent A! | none | `false` creates mappings from the Connect schema; Conduit relies on dynamic mapping |
 | `topic.schema.ignore`, `compact.map.entries` | U! | none | |
-| `write.method` / `index.write.method` | `upsert` T; `insert` A! | none | `insert` replaces the document, Conduit merges: removed fields persist |
+| `write.method` / `index.write.method` | `upsert` T; `insert` or absent A! | none | `insert` replaces the document; Conduit always sends an update with `doc_as_upsert` (a merge), so removed fields persist |
 | `behavior.on.null.values` | A! | none | Null values arrive as empty payloads, not deletes; unsafe until #3007 defines the behavior |
-| `behavior.on.malformed.documents` | `fail` T; `warn`, `ignore` A | `dead-letter-queue` | Needs the per-item nack semantics from #3007 (a failed bulk item is never acked). Never skipped silently |
+| `behavior.on.malformed.documents` | `fail` T; `warn`, `ignore` A | `dead-letter-queue` | Requires capability `bulk-item-nack` (#3007): a failed bulk item is never acked. Never skipped silently |
 | `drop.invalid.message` | `false` T; `true` A | `dead-letter-queue` | Same |
 | `behavior.on.version.conflict`, `external.version.header` | U! | none | |
 | `data.stream.*`, `routing.type*`, `data.streams.existing.index.template.name`, `existing.resource.type`, `topic.to.existing.resource.mapping`, `external.resource.usage`, `topic.to.external.resource.mapping`, `max.external.resource.mappings` | U! | none | Data streams and external resources |
@@ -518,12 +569,12 @@ equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connect
 | `source.cluster.<client key>`, `target.cluster.<client key>` (`security.protocol`, `sasl.*`, `ssl.*`) | per _Worker and Kafka client settings_ | source / destination TLS and SASL | JKS: U! |
 | `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list") |
 | `topics.exclude`, `topic.filter.class` (non-default) | U! | none | |
-| `refresh.topics.enabled`, `refresh.topics.interval.seconds` | U | none | New topics are not discovered |
+| `refresh.topics.enabled`, `refresh.topics.interval.seconds` | U | none | New topics are not discovered. Absent means `true`: same status |
 | `enabled` | `false` T; `true` T | pipeline `status` | `false` writes the pipeline `stopped` |
-| `sync.topic.configs.enabled`, `sync.topic.configs.interval.seconds`, `config.properties.exclude`, `config.property.filter.class`, `sync.topic.acls.enabled`, `sync.topic.acls.interval.seconds` | U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time |
+| `sync.topic.configs.enabled`, `sync.topic.configs.interval.seconds`, `config.properties.exclude`, `config.property.filter.class`, `sync.topic.acls.enabled`, `sync.topic.acls.interval.seconds` | U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time. Absent means `true`: same status |
 | `replication.factor` | U | none | |
 | `emit.offset-syncs.enabled`, `offset-syncs.topic.location`, `offset-syncs.topic.replication.factor`, `offset.lag.max`, `heartbeats.replication.enabled`, `consumer.poll.timeout.ms` | U | none | |
-| `groups`, `groups.exclude`, `group.filter.class`, `emit.checkpoints.enabled`, `emit.checkpoints.interval.seconds`, `sync.group.offsets.enabled`, `sync.group.offsets.interval.seconds`, `refresh.groups.*`, `checkpoints.topic.replication.factor` | U! | none | Consumer-group offset translation. The report says plainly that a migration relying on consumer failover between clusters must not move |
+| `groups`, `groups.exclude`, `group.filter.class`, `emit.checkpoints.enabled`, `emit.checkpoints.interval.seconds`, `sync.group.offsets.enabled`, `sync.group.offsets.interval.seconds`, `refresh.groups.*`, `checkpoints.topic.replication.factor` | U! | none | Consumer-group offset translation; `emit.checkpoints.enabled` absent means `true`: same status. The report says plainly that a migration relying on consumer failover between clusters must not move |
 | `emit.heartbeats.*`, `heartbeats.topic.replication.factor` | U | none | Heartbeat connector only |
 
 #### Legacy and alias handling
@@ -560,6 +611,7 @@ same applies to `kc lint` and `kc diff` results (`lintVersion`, `diffVersion`, b
 | `summary.keys` | Number of entries. Equals the number of input keys, counting every occurrence in every input file |
 | `summary.translated`, `.approximated`, `.unsupported` | Partition of `keys` by `status` |
 | `summary.blocking` | Entries and notes with `blocking: true`. `ok` is `blocking == 0` and `error == null` |
+| `connectors[]` with `role: "worker"` | Home of worker-property entries (one element per worker file; `name` is the file label, no `pipeline`). Counted in `summary` like any connector |
 | `connectors[].entries[]` | One per input key occurrence, in input order (file order, then line). The earlier of two duplicate keys has code `kc.key_duplicate` |
 | `connectors[].notes[]` | Differences with no input key (absent-key defaults, output shape, delivery semantics, required settings). Not part of the completeness multiset |
 | `connectors[].transforms[]` | An index view of the SMT chain. Each SMT sub-key still has its own entry in `entries` |
@@ -570,10 +622,11 @@ same applies to `kc lint` and `kc diff` results (`lintVersion`, `diffVersion`, b
 | `resume`, `output_compat` | As in the base document and #3033 |
 
 **Determinism.** The report is a function of the inputs and the binary: connectors in input order, entries in
-origin order, no timestamps, hostnames or absolute paths (inputs are named as given on the command line, made
-relative). `generator` records the Conduit version, the `rulesVersion` of each rule file and the upstream
-versions they were written against. The pipeline `description` carries `sha256` of the canonical report JSON; the
-report does not carry a hash of the pipeline files, which would be circular.
+origin order, no timestamps, hostnames or absolute paths. `origin.file` is relative to the nearest common parent
+directory of all inputs, with forward slashes; stdin is `<stdin>`; a test runs each case from two working
+directories and requires identical reports. `generator` records the Conduit version, the `rulesVersion` of each rule
+file and the upstream versions they were written against. The pipeline `description` carries `sha256` of the
+canonical report JSON; the report does not carry a hash of the pipeline files, which would be circular.
 
 **Exit codes.** Findings are domain results, not errors, so they reduce to the worst bucket of the
 `pkg/conduit/exitcode` classifier (environment 3 over validation 2 over runtime 1), by synthesizing one
@@ -589,6 +642,11 @@ report does not carry a hash of the pipeline files, which would be circular.
 
 `kc diff` has no default `--fail-on`: a diff is a report, and only an incompatible schema fails it unless the
 caller opts in (`--fail-on identity|behavior|any`). `--dry-run` has the same exit codes as a real run.
+
+`--accept-gaps` (migrate only): blocking entries and notes no longer fail the run. The report lists them in
+`result.acceptedGaps`, pipelines are written `running`, `ok` is true and the exit code is 0. `--strict` still exits
+2 on any accepted gap and on any `approximated` entry. Tightening a rule (a key moving to a weaker status) can
+change a user's exit code; it happens only in minor releases and is listed in the changelog.
 
 **Human output.** The shared located-finding rendering, one block per entry that is not plain `translated`
 (`--verbose` adds the translated ones), grouped by connector, then the summary line and one imperative line:
@@ -746,7 +804,9 @@ run: {tier: offline}                                    # offline | compose | de
 **Rules the runners enforce.**
 
 1. **Golden.** `migrate` over `input/` produces `expected/` byte for byte; `-update` regenerates, and the diff is
-   reviewed like code.
+   reviewed like code. Two values are normalised before comparison, to `<VERSION>` and `<REPORT_SHA256>`: the
+   Conduit version in `generator`, and the report `sha256` in each pipeline `description`. Nothing else is: the
+   `rulesVersion` and upstream versions in `generator` stay, so a rules change is a visible golden diff.
 2. **Unaccounted key.** The multiset of input keys equals the multiset of `report.json` entry keys (the base
    document's completeness property), checked on every case, so a bad hand-edited golden cannot hide a missing
    key. Any `kc.key_unknown` in a v0.21-family case fails the case unless the case is tagged
@@ -964,23 +1024,30 @@ Recommendations are in bold. These need DeVaris before the PR leaves draft.
    v0.21** (this document does), and downgrade per converter combination only when a documented processor recipe
    passes a harness case. The alternative ships a pipeline that changes every consumer's input shape by default.
 2. **D2. #3006 wording.** The lane says "snapshot plus polling" and a "polling path certified". The Postgres connector
-   has `cdcMode` `auto|logrepl` and no polling mode, and the MySQL connector reads the binlog. **Reword #3006 to
-   "snapshot plus change capture"** and keep the base document's mapping.
+   has `cdcMode` `auto|logrepl` and no polling mode, and the MySQL connector reads the binlog. It also speaks of the
+   "labs SQL connectors"; `conduitio-labs` has no postgres, mysql or JDBC connector (the targets are `builtin:postgres`
+   and `ConduitIO/conduit-connector-mysql`). **Reword #3006 to "snapshot plus change capture"**, drop its polling
+   crash-and-resume item, correct the labs reference, and keep the base document's mapping.
 3. **D3. Corrections to the base document's rows.** `decoderbufs` is `approximated`, not `translated` (#3033
    non-goal); MySQL `never`/`schema_only`/`no_data` are blocking (start-position gap, invariant 3) instead of
-   `snapshot.enabled=false`; Elasticsearch `batch.size`/`max.retries` do not map onto the no-op `bulkSize`/`retries`; MySQL
-   schema history is non-blocking instead of blocking. **Approve these corrections** and let this document take
-   precedence over the base connector subsections where they differ.
+   `snapshot.enabled=false`; MySQL `initial_only` is unsupported (no Conduit setting stops after the snapshot;
+   `cdc.disableLogs` only silences logging); Elasticsearch `batch.size`/`max.retries` do not map onto the no-op
+   `bulkSize`/`retries`; MySQL schema history is non-blocking instead of blocking; Postgres `skipped.operations` is
+   `T` only when `t` is skipped. Also a factual fix to the base document: `kc.lint.client_override_policy` said
+   `None` is the default override policy, and the Apache Kafka 4.2 default is `All` (corrected in place). **Approve
+   these corrections** and let this document take precedence over the base connector subsections where they differ.
 4. **D4. MirrorMaker dedicated-mode input.** Most MM2 deployments run `connect-mirror-maker.sh` with an
    `mm2.properties` (`clusters`, `A->B.*`), not the connector form. **Out of v1**: detect it and fail with
-   `migrate.input_unrecognized` and a fix naming the connector form. Adding it later is a parser change.
+   `migrate.input_unrecognized` and a fix naming the connector form; the migration guide says plainly that most MM2
+   deployments use `mm2.properties`. Adding it later is a parser change.
 5. **D5. MCP scope.** Three offline read tools; no network flags, no registry check, no `--accept-gaps`. **Approve**,
    and revisit the registry check only with an operator-set startup flag.
-6. **D6. Notes outside the completeness multiset.** Needed for absent-key defaults. **Approve**, with the rule that
-   every family's rule file lists its upstream defaults.
+6. **D6. Notes outside the completeness multiset.** Needed for absent-key defaults. **Approve only in its
+   mechanical form**: a test over the pinned upstream key lists that fails when a default's row is not `T` and no
+   note covers it (_Absent keys are evaluated mechanically_), not a reviewed list.
 7. **D7. Where the corpus lives.** `tests/migrate/corpus/`, one corpus, two runners, replacing the
-   `pkg/kcmigrate/testdata` location in the base document. **Approve** so #3010 and the connector lanes build to one
-   layout.
+   `pkg/kcmigrate/testdata` location in the base document, with the golden normalisation of rule 1 (version and
+   report hash only). **Approve** so #3010 and the connector lanes build to one layout.
 
 ## Related
 
