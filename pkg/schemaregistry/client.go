@@ -15,10 +15,15 @@
 package schemaregistry
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"slices"
+	"sort"
 
-	"github.com/conduitio/conduit-commons/rabin"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -26,29 +31,88 @@ import (
 )
 
 // Client is a schema registry client that caches schemas. It is safe for
-// concurrent use. The client caches schemas by ID, their subject/fingerprint and
-// subject/version. Fingerprints are calculated using the Rabin algorithm.
+// concurrent use. The client caches schemas by ID, their subject/digest and
+// subject/version. The digest is a SHA-256 over the subject, schema type,
+// references and exact schema text. Load errors are not cached: a transient
+// registry failure must not stick for the life of the process.
 type Client struct {
 	logger log.CtxLogger
 	client sr.Client
 
-	idCache                 *cache.Cache[int, sr.Schema]
-	subjectFingerprintCache *cache.Cache[subjectFingerprint, sr.SubjectSchema]
-	subjectVersionCache     *cache.Cache[subjectVersion, sr.SubjectSchema]
+	idCache             *cache.Cache[int, sr.Schema]
+	subjectDigestCache  *cache.Cache[subjectDigest, sr.SubjectSchema]
+	subjectVersionCache *cache.Cache[subjectVersion, sr.SubjectSchema]
 }
 
 type (
-	subjectVersion     string
-	subjectFingerprint string
+	subjectVersion string
+	subjectDigest  string
 )
 
 func newSubjectVersion(subject string, version int) subjectVersion {
 	return subjectVersion(fmt.Sprintf("%s:%d", subject, version))
 }
 
-func newSubjectFingerprint(subject string, text string) subjectFingerprint {
-	fingerprint := rabin.Bytes([]byte(text))
-	return subjectFingerprint(fmt.Sprintf("%s:%d", subject, fingerprint))
+// newSubjectDigest identifies a subject+schema pair by SHA-256 over the
+// subject, the schema type, the canonicalised references, the exact schema
+// text, and the schema metadata and rule set. It does not use a Rabin fingerprint: that is a linear 64-bit CRC, so an
+// attacker who controls the schema text can forge a byte-different schema with
+// the same fingerprint (same technique as GHSA-94xc-rjcp-83cr), which made
+// CreateSchema return a different, pre-existing schema's ID and body for a
+// genuinely new schema, silently, without ever contacting the registry. The
+// fingerprint also ignored type and references, so the same text registered as
+// a different type hit the same entry. Every variable-length field is
+// length-prefixed so distinct inputs cannot produce the same hashed bytes, and
+// references are sorted because their order is not meaningful.
+func newSubjectDigest(subject string, s sr.Schema) subjectDigest {
+	var b bytes.Buffer
+	putInt := func(i int) {
+		var v [8]byte
+		binary.BigEndian.PutUint64(v[:], uint64(int64(i)))
+		b.Write(v[:])
+	}
+	putStr := func(s string) {
+		putInt(len(s))
+		b.WriteString(s)
+	}
+
+	putStr("conduit/schemaregistry/client-cache/v1")
+	putStr(subject)
+	putInt(int(s.Type))
+
+	refs := slices.Clone(s.References)
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Name != refs[j].Name {
+			return refs[i].Name < refs[j].Name
+		}
+		if refs[i].Subject != refs[j].Subject {
+			return refs[i].Subject < refs[j].Subject
+		}
+		return refs[i].Version < refs[j].Version
+	})
+	putInt(len(refs))
+	for _, r := range refs {
+		putStr(r.Name)
+		putStr(r.Subject)
+		putInt(r.Version)
+	}
+	putStr(s.Schema)
+	putStr(string(canonicalJSON(s.SchemaMetadata)))
+	putStr(string(canonicalJSON(s.SchemaRuleSet)))
+
+	return subjectDigest(fmt.Sprintf("%x", sha256.Sum256(b.Bytes())))
+}
+
+// canonicalJSON returns a deterministic encoding of an optional struct: the
+// standard library sorts map keys, and nil and an empty struct both encode as
+// nothing, so leaving metadata or rules unset keeps a schema's identity. It
+// matches the encoding used by conduit-schema-registry's digest.
+func canonicalJSON(v any) []byte {
+	raw, err := json.Marshal(v)
+	if err != nil || string(raw) == "null" || string(raw) == "{}" {
+		return nil
+	}
+	return raw
 }
 
 var _ RegistryWithCheck = (*Client)(nil)
@@ -70,9 +134,9 @@ func NewClient(logger log.CtxLogger, opts ...sr.ClientOpt) (*Client, error) {
 		logger: logger.WithComponent("schemaregistry.Client"),
 		client: *client,
 
-		idCache:                 cache.New[int, sr.Schema](),
-		subjectFingerprintCache: cache.New[subjectFingerprint, sr.SubjectSchema](),
-		subjectVersionCache:     cache.New[subjectVersion, sr.SubjectSchema](),
+		idCache:             cache.New[int, sr.Schema](cache.MaxErrorAge(0)),
+		subjectDigestCache:  cache.New[subjectDigest, sr.SubjectSchema](cache.MaxErrorAge(0)),
+		subjectVersionCache: cache.New[subjectVersion, sr.SubjectSchema](cache.MaxErrorAge(0)),
 	}, nil
 }
 
@@ -83,8 +147,8 @@ func NewClient(logger log.CtxLogger, opts ...sr.ClientOpt) (*Client, error) {
 func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Schema) (sr.SubjectSchema, error) {
 	logEvent := c.logger.Trace(ctx).Str("operation", "CreateSchema").Str("subject", subject)
 
-	sfp := newSubjectFingerprint(subject, schema.Schema)
-	ss, err, _ := c.subjectFingerprintCache.Get(sfp, func() (sr.SubjectSchema, error) {
+	sd := newSubjectDigest(subject, schema)
+	ss, err, _ := c.subjectDigestCache.Get(sd, func() (sr.SubjectSchema, error) {
 		logEvent.Msg("schema cache miss")
 		logEvent = nil // disable output for hit
 
@@ -160,7 +224,7 @@ func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, ver
 			return ss, cerrors.Errorf("failed to get schema with subject %q and version %q: %w", subject, version, err)
 		}
 		c.idCache.Set(ss.ID, ss.Schema)
-		c.subjectFingerprintCache.Set(newSubjectFingerprint(ss.Subject, ss.Schema.Schema), ss)
+		c.subjectDigestCache.Set(newSubjectDigest(ss.Subject, ss.Schema), ss)
 		return ss, nil
 	})
 	if err != nil {
