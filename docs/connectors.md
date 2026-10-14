@@ -29,3 +29,9 @@
 ### The List
 
 A full list of connectors is hosted here: <https://conduitdata.io/docs/using/connectors/list/>.
+
+### Maintainer inventory
+
+[`catalog-inventory.md`](catalog-inventory.md) records the state of every connector and processor repository
+(SDK version, tests, CI, registry, maintenance) and maps planned catalog work to what already exists. A CSV copy
+is in [`data/catalog-inventory.csv`](data/catalog-inventory.csv).

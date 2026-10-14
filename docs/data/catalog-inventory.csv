@@ -1,0 +1,79 @@
+org,repo,connector,builtin,source,destination,change_capture,language,connector_sdk,sdk_status,go_version,acceptance_test,integration_harness,ci_latest_test_run,ci_latest_test_date,ci_runs_on_default_branch,tags,latest_tag,in_registry,registry_versions,license,archived,last_human_commit,open_issues_and_prs,maintenance,notes
+ConduitIO,conduit-connector-ephemeris,ephemeris,no,yes,no,,Go,v0.2.0,stale,1.18,no,no,,,no,0,,no,,none-detected,no,2022-07-28,0,dormant,2022 prototype; SDK v0.2.0
+ConduitIO,conduit-connector-file,file,yes,yes,yes,,Go,v0.14.1,current,1.24.2,yes,no,success,2026-07-23,yes,17,v0.10.8,yes,v0.10.5 v0.10.6 v0.10.7 v0.10.8,Apache-2.0,no,2026-07-23,5,active,
+ConduitIO,conduit-connector-generator,generator,yes,yes,no,,Go,v0.14.1,current,1.24.2,no,no,success,2026-07-23,yes,18,v0.10.6,yes,v0.10.5 v0.10.6,Apache-2.0,no,2026-07-23,8,active,
+ConduitIO,conduit-connector-kafka,kafka,yes,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-07-23,yes,25,v0.12.5,yes,v0.12.4 v0.12.5,Apache-2.0,no,2026-07-23,17,active,
+ConduitIO,conduit-connector-log,log,yes,no,yes,,Go,v0.14.1,current,1.24.2,no,no,success,2026-07-23,yes,13,v0.7.5,yes,v0.7.4 v0.7.5,none-detected,no,2026-07-23,4,active,
+ConduitIO,conduit-connector-pgvector,pgvector,no,no,yes,,Go,v0.14.1,current,1.25.0,yes,yes,success,2026-09-11,yes,1,v0.1.0,yes,v0.1.0,Apache-2.0,no,2026-08-24,7,active,rag-e2e in ConduitIO/conduit CI exercises it
+ConduitIO,conduit-connector-postgres,postgres,yes,yes,yes,log (logical replication),Go,v0.14.1,current,1.24.2,no,yes,success,2026-10-08,yes,27,v0.14.3,yes,v0.14.1 v0.14.2 v0.14.3,Apache-2.0,no,2026-08-31,35,active,connector-local SIGKILL chaos harness runs nightly + on PRs
+ConduitIO,conduit-connector-qdrant,qdrant,no,no,yes,,,,n/a,,no,no,,,no,0,,no,,Apache-2.0,no,2026-07-26,0,placeholder,"placeholder: README + LICENSE only, no code"
+ConduitIO,conduit-connector-s3,s3,yes,yes,yes,polling bucket,Go,v0.14.1,current,1.24.2,no,yes,success,2026-10-08,yes,15,v0.9.4,no,,Apache-2.0,no,2026-10-08,12,active,
+conduitio-labs,conduit-connector-activemq-artemis,activemq-artemis,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-01-06,no,4,v0.1.1,no,,none-detected,no,2025-06-24,4,deps-only,
+conduitio-labs,conduit-connector-activemq-classic,activemq-classic,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-01-06,no,0,,no,,none-detected,no,2025-04-22,4,deps-only,
+conduitio-labs,conduit-connector-airtable,airtable,no,yes,no,,Go,v0.2.1-0.20220823112121-47067cda967a,stale,1.18,no,no,,,no,0,,no,,Apache-2.0,no,2022-09-26,4,dormant,2022 prototype; pre-release SDK pseudo-version
+conduitio-labs,conduit-connector-algolia,algolia,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-02-23,no,1,v0.3.0,no,,none-detected,no,2025-03-06,6,deps-only,
+conduitio-labs,conduit-connector-azure-event-hub,azure-event-hub,no,yes,yes,,Go,v0.12.0,one minor behind,1.23.2,no,yes,,,no,0,,no,,none-detected,no,2025-03-12,6,deps-only,
+conduitio-labs,conduit-connector-azure-storage,azure-storage,no,yes,no,polling container,Go,v0.12.0,one minor behind,1.24.2,yes,yes,failure,2026-01-14,no,3,v0.4.1,no,,Apache-2.0,no,2025-04-15,10,deps-only,
+conduitio-labs,conduit-connector-benthos,benthos,no,yes,yes,,Go,v0.2.1-0.20220908065345-c14f70ebbd64,stale,1.18,no,no,,,no,0,,no,,Apache-2.0,no,2022-09-16,2,dormant,"2022 prototype embedding Benthos v4.6.0; acks to Benthos before Conduit acks, random UUID positions"
+conduitio-labs,conduit-connector-bigquery,bigquery,no,yes,no,polling incrementing column,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-03-16,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-06,10,deps-only,
+conduitio-labs,conduit-connector-box,box,no,no,yes,,Go,v0.14.1,current,1.24.2,no,yes,success,2026-01-06,no,2,v0.1.1,no,,none-detected,no,2025-06-09,8,deps-only,
+conduitio-labs,conduit-connector-cassandra,cassandra,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,no,yes,success,2026-01-05,no,2,v0.1.1,no,,Apache-2.0,no,2025-03-12,5,deps-only,
+conduitio-labs,conduit-connector-chaos,chaos,no,yes,yes,,Go,v0.14.1,current,1.24.2,no,no,success,2026-01-06,no,3,v0.2.0,no,,none-detected,no,2025-02-12,4,deps-only,test utility connector (injects failures)
+conduitio-labs,conduit-connector-clickhouse,clickhouse,no,yes,yes,polling ordering column (inserts only),Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-08-25,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-11,9,deps-only,
+conduitio-labs,conduit-connector-cosmos-nosql,cosmos-nosql,no,yes,no,polling (inserts only),Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-03-20,no,0,,no,,Apache-2.0,no,2025-03-12,8,deps-only,
+conduitio-labs,conduit-connector-databricks,databricks,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-01-06,no,2,v0.1.1,no,,none-detected,no,2025-03-06,12,deps-only,
+conduitio-labs,conduit-connector-db2,db2,no,yes,yes,trigger + tracking table,Go,v0.12.0,one minor behind,1.23.2,yes,yes,success,2025-11-21,no,0,,no,,Apache-2.0,no,2025-03-06,11,deps-only,
+conduitio-labs,conduit-connector-discord,discord,no,yes,no,,Go,v0.6.0,stale,1.20,no,yes,,,no,0,,no,,Apache-2.0,no,2025-03-11,0,stale,
+conduitio-labs,conduit-connector-dropbox,dropbox,no,yes,yes,API polling,Go,v0.14.1,current,1.24.2,no,no,success,2026-01-06,no,2,v0.1.1,no,,none-detected,no,2025-06-03,5,deps-only,
+conduitio-labs,conduit-connector-dynamodb,dynamodb,no,yes,yes,log (DynamoDB Streams),Go,v0.14.1,current,1.24.2,no,yes,success,2026-05-29,no,11,v0.4.3,no,,Apache-2.0,no,2025-07-23,11,deps-only,
+conduitio-labs,conduit-connector-elasticsearch,elasticsearch,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,failure,2026-05-12,no,2,v0.4.0,no,,Apache-2.0,no,2025-03-06,11,deps-only,Elasticsearch 5-8; OpenSearch not documented
+conduitio-labs,conduit-connector-enhanced-generator,enhanced-generator,no,yes,no,,Go,v0.14.1,current,1.24.2,no,no,failure,2026-01-06,no,6,v0.9.7,no,,Apache-2.0,no,2025-02-27,4,deps-only,overlaps builtin generator
+conduitio-labs,conduit-connector-file-java-poc,file-java-poc,no,no,yes,,Java,,n/a,,no,no,,,no,0,,no,,none-detected,no,2023-05-12,0,dormant,Java SDK example destination (2023)
+conduitio-labs,conduit-connector-firebolt,firebolt,no,yes,yes,,Go,v0.7.2,stale,1.24.2,yes,no,success,2026-10-08,no,0,,no,,Apache-2.0,no,2025-03-12,8,stale,
+conduitio-labs,conduit-connector-gcp-pubsub,gcp-pubsub,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-03-31,no,0,,no,,Apache-2.0,no,2025-03-12,11,deps-only,
+conduitio-labs,conduit-connector-generator-java,generator-java,no,yes,no,,Java,,n/a,,no,no,,,no,0,,no,,none-detected,no,2023-05-12,0,dormant,Java SDK example source (2023)
+conduitio-labs,conduit-connector-google-cloudstorage,google-cloudstorage,no,yes,no,polling bucket,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-01-05,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-06,4,deps-only,
+conduitio-labs,conduit-connector-google-drive,google-drive,no,no,yes,,Go,v0.14.1,current,1.24.2,no,yes,success,2026-03-16,no,1,v0.1.0,no,,none-detected,no,2025-05-08,7,deps-only,
+conduitio-labs,conduit-connector-google-sheets,google-sheets,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-07-29,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-13,14,deps-only,
+conduitio-labs,conduit-connector-grpc-client,grpc-client,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-08-03,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-11,8,deps-only,
+conduitio-labs,conduit-connector-grpc-server,grpc-server,no,yes,no,,Go,v0.12.0,one minor behind,1.24.2,no,no,failure,2026-04-01,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-11,8,deps-only,
+conduitio-labs,conduit-connector-http,http,no,yes,yes,,Go,v0.14.1,current,1.24.2,no,no,success,2026-01-06,no,4,v0.4.0,no,,Apache-2.0,no,2025-06-03,4,deps-only,
+conduitio-labs,conduit-connector-http-server,http-server,no,yes,no,,Go,v0.8.0,stale,1.21,no,no,,,no,0,,no,,Apache-2.0,no,2025-03-11,1,stale,webhook-style HTTP source
+conduitio-labs,conduit-connector-hubspot,hubspot,no,yes,yes,API polling,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-03-31,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-11,8,deps-only,
+conduitio-labs,conduit-connector-hyperion-x55,hyperion-x55,no,yes,no,,Go,v0.7.1,stale,1.20,no,no,,,no,0,,no,,none-detected,no,2025-03-11,0,stale,
+conduitio-labs,conduit-connector-influxdb,influxdb,no,yes,yes,,Go,v0.14.1,current,1.24.2,no,yes,success,2026-01-05,no,1,v0.1.0,no,,none-detected,no,2025-05-28,4,deps-only,
+conduitio-labs,conduit-connector-java-sdk-poc,java-sdk-poc,no,no,no,,Java,,n/a,,no,no,,,no,1,v0.1.0,no,,none-detected,no,2024-06-10,0,dormant,Java SDK proof of concept (Quarkus) + example MySQL connector; not a connector
+conduitio-labs,conduit-connector-k8s-events,k8s-events,no,yes,no,,Go,v0.7.1,stale,1.20,no,no,,,no,0,,no,,none-detected,no,2025-03-11,0,stale,
+conduitio-labs,conduit-connector-kinesis,kinesis,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-09-28,no,2,v0.2.0,no,,none-detected,no,2025-04-22,7,deps-only,
+conduitio-labs,conduit-connector-marketo,marketo,no,yes,no,API polling,Go,v0.12.0,one minor behind,1.23.2,yes,no,,,no,1,v0.3.0,no,,Apache-2.0,no,2025-01-08,12,deps-only,
+conduitio-labs,conduit-connector-materialize,materialize,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-03-31,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-12,7,deps-only,
+conduitio-labs,conduit-connector-mongo,mongo,no,yes,yes,log (change streams),Go,v0.14.1,current,1.24.2,yes,yes,success,2026-08-05,yes,7,v0.3.0,no,,Apache-2.0,no,2026-08-05,10,active,streaming-benchmarks has mongo-kafka-cdc/snapshot benchi configs
+conduitio-labs,conduit-connector-mysql,mysql,no,yes,yes,log (binlog),Go,v0.14.1,current,1.24.2,no,yes,success,2026-09-07,yes,7,v0.3.0,no,,none-detected,no,2026-08-05,21,active,streaming-benchmarks has mysql-kafka-cdc/snapshot benchi configs
+conduitio-labs,conduit-connector-nats-jetstream,nats-jetstream,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,failure,2026-02-24,no,2,v0.3.1,no,,Apache-2.0,no,2025-03-11,11,deps-only,
+conduitio-labs,conduit-connector-nats-pubsub,nats-pubsub,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-05-07,no,2,v0.4.0,no,,Apache-2.0,no,2025-03-06,7,deps-only,
+conduitio-labs,conduit-connector-neo4j,neo4j,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-01-06,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-06,5,deps-only,
+conduitio-labs,conduit-connector-notion,notion,no,yes,no,,Go,v0.7.2,stale,1.24.2,no,no,success,2026-01-06,no,4,v0.4.0,no,,none-detected,no,2025-03-12,17,stale,
+conduitio-labs,conduit-connector-openai-vectorstore,openai-vectorstore,no,no,yes,,Go,v0.14.1,current,1.24.2,no,no,success,2026-01-06,no,1,v0.1.0,no,,none-detected,no,2025-04-22,5,deps-only,
+conduitio-labs,conduit-connector-oracle,oracle,no,yes,yes,trigger + tracking table,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-02-23,no,1,v0.0.0,no,,Apache-2.0,no,2025-03-06,9,deps-only,
+conduitio-labs,conduit-connector-pinecone,pinecone,no,no,yes,,Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-02-23,no,2,v0.2.0,no,,none-detected,no,2025-01-14,6,deps-only,
+conduitio-labs,conduit-connector-pulsar,pulsar,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-02-23,no,1,v0.1.0,no,,Apache-2.0,no,2025-04-22,6,deps-only,
+conduitio-labs,conduit-connector-rabbitmq,rabbitmq,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-01-05,no,4,v0.4.0,no,,none-detected,no,2025-05-19,4,deps-only,
+conduitio-labs,conduit-connector-redis,redis,no,yes,yes,polling key/stream,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-09-07,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-12,7,deps-only,
+conduitio-labs,conduit-connector-redpanda,redpanda,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,failure,2026-07-06,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-06,8,deps-only,Kafka-API; overlaps kafka connector
+conduitio-labs,conduit-connector-redshift,redshift,no,yes,yes,polling ordering column,Go,v0.11.0,stale,1.23.2,yes,no,,,no,0,,no,,Apache-2.0,no,2024-12-04,11,stale,
+conduitio-labs,conduit-connector-rsync,rsync,no,yes,yes,,Go,v0.14.1,current,1.24.2,no,yes,success,2026-01-05,no,0,,no,,none-detected,no,2025-06-26,4,deps-only,wraps the rsync binary
+conduitio-labs,conduit-connector-s3-iceberg,s3-iceberg,no,no,yes,,Java,,n/a,,no,yes,failure,2025-11-24,no,0,,no,,none-detected,no,2024-07-03,9,dormant,Java (JDK 17) destination; Iceberg REST/Hadoop/JDBC catalogs
+conduitio-labs,conduit-connector-salesforce,salesforce,no,yes,yes,Pub/Sub API (platform events),Go,v0.14.1,current,1.24.2,no,no,success,2026-07-16,no,6,v0.5.4,no,,Apache-2.0,no,2025-07-03,23,deps-only,
+conduitio-labs,conduit-connector-sap-hana,sap-hana,no,yes,yes,trigger + tracking table,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-10-08,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-13,11,deps-only,
+conduitio-labs,conduit-connector-sftp,sftp,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-05-22,no,1,v0.1.0,no,,none-detected,no,2025-03-13,7,deps-only,
+conduitio-labs,conduit-connector-snowflake,snowflake,no,yes,yes,Snowflake stream + tracking table,Go,v0.14.1,current,1.24.2,yes,no,success,2026-10-07,no,4,v0.4.0,no,,Apache-2.0,no,2025-02-28,16,deps-only,destination documented as early-stage
+conduitio-labs,conduit-connector-socket,socket,no,no,no,,,,n/a,,no,no,,,no,0,,no,,none-detected,no,2024-01-29,1,dormant,"README only, no code"
+conduitio-labs,conduit-connector-spanner,spanner,no,yes,no,log (change streams),Go,v0.12.0,one minor behind,1.24.2,no,yes,success,2026-07-13,no,0,,no,,none-detected,no,2025-04-03,19,deps-only,
+conduitio-labs,conduit-connector-sql-server,sql-server,no,yes,yes,trigger + tracking table,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-10-08,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-12,7,deps-only,
+conduitio-labs,conduit-connector-sqs,sqs,no,yes,yes,,Go,v0.14.1,current,1.24.2,yes,yes,success,2026-09-28,no,3,v0.3.0,no,,MIT,no,2025-04-22,9,deps-only,
+conduitio-labs,conduit-connector-stripe,stripe,no,yes,no,API polling (events),Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-01-06,no,1,v0.3.0,no,,Apache-2.0,no,2025-03-06,5,deps-only,
+conduitio-labs,conduit-connector-vitess,vitess,no,yes,yes,log (VStream),Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-01-06,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-06,12,deps-only,
+conduitio-labs,conduit-connector-weather,weather,no,yes,no,,Go,v0.12.0,one minor behind,1.24.2,no,no,success,2026-01-06,no,1,v0.1.0,no,,Apache-2.0,no,2025-03-12,5,deps-only,
+conduitio-labs,conduit-connector-weaviate,weaviate,no,no,yes,,Go,v0.13.3,one minor behind,1.24.2,no,yes,failure,2026-01-06,no,2,v0.1.1,no,,none-detected,no,2025-03-17,8,deps-only,
+conduitio-labs,conduit-connector-zendesk,zendesk,no,yes,yes,API polling,Go,v0.12.0,one minor behind,1.24.2,yes,no,success,2026-01-05,no,1,v0.3.0,no,,Apache-2.0,no,2024-07-03,10,deps-only,
+conduitio-labs,conduit-connector-zeromq,zeromq,no,yes,yes,,Go,v0.12.0,one minor behind,1.24.2,yes,yes,success,2026-01-05,no,0,,no,,none-detected,no,2025-03-06,5,deps-only,
