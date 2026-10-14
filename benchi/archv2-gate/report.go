@@ -16,10 +16,14 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -56,6 +60,36 @@ type environment struct {
 	DockerMemBytes string    `json:"docker_mem_bytes"`
 	ImageID        string    `json:"image_id"`
 	SourceRevision string    `json:"source_revision"`
+
+	// Matrix sessions only.
+	BaseImage   string       `json:"base_image,omitempty"`
+	BenchEnv    []string     `json:"bench_env,omitempty"`
+	Arms        []string     `json:"arms,omitempty"`
+	ArmBinaries []armBinary  `json:"arm_binaries,omitempty"`
+	SkippedArms []skippedArm `json:"skipped_arms,omitempty"`
+}
+
+// armBinary pins which binary an arm ran: the path is local to the machine
+// that built it, the SHA-256 is what identifies the build.
+type armBinary struct {
+	Label  string `json:"label"`
+	Engine string `json:"engine"`
+	Shape  string `json:"shape,omitempty"`
+	Path   string `json:"path,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
+}
+
+func sha256File(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return unknown
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return unknown
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func captureEnvironment(ctx context.Context, cfg config, d docker) environment {
@@ -73,6 +107,15 @@ func captureEnvironment(ctx context.Context, cfg config, d docker) environment {
 		HostArch:      runtime.GOARCH,
 		HostCPUs:      runtime.NumCPU(),
 		HostLoadStart: hostLoad(ctx),
+		BaseImage:     cfg.BaseImage,
+		BenchEnv:      cfg.Env,
+	}
+	for _, a := range cfg.Arms {
+		ab := armBinary{Label: a.Label, Engine: string(a.Engine), Shape: a.Shape}
+		if a.Binary != "" {
+			ab.Path, ab.SHA256 = a.Binary, sha256File(a.Binary)
+		}
+		env.ArmBinaries = append(env.ArmBinaries, ab)
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -193,6 +236,10 @@ func renderSummary(cfg config, results []runResult) string {
 	fmt.Fprintf(&b, "%d rounds, %s warmup discarded, %s window, records counted at the sink.\n"+
 		"Environment in env.json, every run in runs.csv.\n\n", cfg.Rounds, cfg.Warmup, cfg.Window)
 
+	if cfg.Session == sessionMatrix {
+		return renderMatrixSummary(&b, cfg, results)
+	}
+
 	byArm := map[string][]float64{}
 	var arms []string
 	for _, r := range results {
@@ -291,4 +338,76 @@ func fmtPcts(xs []float64) string {
 		s[i] = fmt.Sprintf("%+.1f%%", x)
 	}
 	return strings.Join(s, ", ")
+}
+
+// matrixJSON is summary.json: the numbers in summary.md, for aggregation.
+type matrixJSON struct {
+	Shape       string       `json:"shape"`
+	BenchEnv    []string     `json:"bench_env,omitempty"`
+	Rounds      int          `json:"rounds"`
+	Warmup      string       `json:"warmup"`
+	Window      string       `json:"window"`
+	Arms        []armJSON    `json:"arms"`
+	Comparisons []compJSON   `json:"comparisons"`
+	Skipped     []skippedArm `json:"skipped_arms,omitempty"`
+}
+
+type armJSON struct {
+	Label    string  `json:"label"`
+	N        int     `json:"n"`
+	Median   float64 `json:"median_rec_s"`
+	SDPct    float64 `json:"sd_pct"`
+	Min      float64 `json:"min"`
+	Max      float64 `json:"max"`
+	FloorPct float64 `json:"aa_floor_pct"`
+	Typical  float64 `json:"aa_typical_pct"`
+}
+
+type compJSON struct {
+	Y, X           string
+	MedianDeltaPct float64   `json:"median_delta_pct"`
+	RoundDeltas    []float64 `json:"round_deltas_pct"`
+	FloorPct       float64   `json:"floor_pct"`
+	Resolved       bool      `json:"resolved"`
+	Suggestive     bool      `json:"suggestive"`
+}
+
+func renderMatrixSummary(b *strings.Builder, cfg config, results []runResult) string {
+	if len(cfg.Env) > 0 {
+		fmt.Fprintf(b, "Bench knobs: `%s`\n\n", strings.Join(cfg.Env, " "))
+	}
+	var arms []armReport
+	for _, a := range cfg.Arms {
+		arms = append(arms, reportArm(results, a.Label))
+	}
+	table, cmps := renderMatrix(arms, results)
+	b.WriteString(table)
+
+	mj := matrixJSON{Shape: cfg.Shape, BenchEnv: cfg.Env, Rounds: cfg.Rounds, Warmup: cfg.Warmup.String(), Window: cfg.Window.String(), Skipped: cfg.skipped}
+	for _, a := range arms {
+		mj.Arms = append(mj.Arms, armJSON{a.Label, a.Stats.N, a.Stats.Median, a.Stats.SDPct, a.Stats.Min, a.Stats.Max, a.FloorPct, a.TypicalAAPct})
+	}
+	for _, c := range cmps {
+		mj.Comparisons = append(mj.Comparisons, compJSON{c.Y, c.X, c.MedianDeltaPct, c.RoundDeltas, c.FloorPct, c.Resolved, c.Suggestive})
+	}
+	_ = writeJSON(filepath.Join(cfg.OutDir, "summary.json"), mj)
+
+	if len(cfg.skipped) > 0 {
+		b.WriteString("Arms that produced no output in the probe and were not run:\n\n")
+		for _, s := range cfg.skipped {
+			reason := strings.Join(strings.Fields(s.Reason), " ")
+			if len(reason) > 500 {
+				reason = reason[:500] + "..."
+			}
+			fmt.Fprintf(b, "- %s: %s\n", s.Label, reason)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Each arm ran twice per round (replicates -a and -b). Its A/A floor is the largest per-round\n" +
+		"difference between them; \"typical\" is the median per-round difference. A comparison is *resolved* only\n" +
+		"if the median delta exceeds the larger floor and every per-round delta has the same sign. It is\n" +
+		"*suggestive* if not resolved, but every per-round delta has the same sign and the median delta exceeds\n" +
+		"twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is\n" +
+		"a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.\n")
+	return b.String()
 }

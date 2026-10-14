@@ -72,6 +72,11 @@ type runSpec struct {
 	Round  int
 	Arm    string
 	Engine engine
+	// Binary, when set, is a Conduit binary mounted into the base image in
+	// place of the image's own. Only matrix sessions set it.
+	Binary string
+	// Shape is the arm's own shape, if it has one (matrix sessions).
+	Shape string
 }
 
 // plan returns the run order for a session.
@@ -105,6 +110,8 @@ func plan(s session, rounds int) []runSpec {
 				runSpec{Round: r, Arm: armV2, Engine: engineV2},
 				runSpec{Round: r, Arm: armV1B, Engine: engineV1},
 			)
+		case sessionMatrix:
+			// Matrix sessions are planned by planMatrix, which needs the arms.
 		}
 	}
 	return out
@@ -124,17 +131,55 @@ func sinkPaths(pipelineYAML []byte) []string {
 
 type config struct {
 	Image     string
+	BaseImage string
 	Shape     string
 	Session   session
 	Rounds    int
 	Warmup    time.Duration
 	Window    time.Duration
 	CPUs      string
+	Arms      []armSpec
+	Env       []string
 	ShapesDir string
 	OutDir    string
 
+	ProbeTimeout time.Duration
+	skipped      []skippedArm
+
 	pipelineFile string
 	sinks        []string
+	shapes       map[string]shapeInfo
+}
+
+// shapeInfo is a loaded shape: its pipeline file and the sinks it writes.
+type shapeInfo struct {
+	pipelineFile string
+	sinks        []string
+}
+
+func loadShape(shapesDir, name string) (shapeInfo, error) {
+	dir, err := filepath.Abs(filepath.Join(shapesDir, name))
+	if err != nil {
+		return shapeInfo{}, cerrors.Errorf("resolve shape dir: %w", err)
+	}
+	si := shapeInfo{pipelineFile: filepath.Join(dir, "pipeline.yml")}
+	raw, err := os.ReadFile(si.pipelineFile)
+	if err != nil {
+		return shapeInfo{}, cerrors.Errorf("read shape %q: %w", name, err)
+	}
+	si.sinks = sinkPaths(raw)
+	if len(si.sinks) == 0 {
+		return shapeInfo{}, cerrors.Errorf("shape %q has no destination writing under /sink", name)
+	}
+	return si, nil
+}
+
+// forSpec returns cfg with the pipeline file and sinks of spec's shape.
+func (c config) forSpec(spec runSpec) config {
+	if spec.Shape != "" {
+		c.pipelineFile, c.sinks = c.shapes[spec.Shape].pipelineFile, c.shapes[spec.Shape].sinks
+	}
+	return c
 }
 
 func main() {
@@ -145,6 +190,9 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) == 3 && os.Args[1] == "-rerender" {
+		return rerender(os.Args[2])
+	}
 	cfg, err := parseFlags()
 	if err != nil {
 		return err
@@ -153,8 +201,8 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	d := docker{image: cfg.Image}
-	if err := d.preflight(ctx); err != nil {
+	d := docker{image: cfg.Image, baseImage: cfg.BaseImage}
+	if err := d.preflight(ctx, cfg); err != nil {
 		return err
 	}
 	defer d.cleanup()
@@ -167,7 +215,23 @@ func run() error {
 		return err
 	}
 
-	specs := plan(cfg.Session, cfg.Rounds)
+	var specs []runSpec
+	if cfg.Session == sessionMatrix {
+		var skipped []skippedArm
+		cfg.Arms, skipped = d.probeArms(ctx, cfg)
+		cfg.skipped = skipped
+		env.SkippedArms = skipped
+		if len(cfg.Arms) == 0 {
+			return cerrors.Errorf("no arm produced output in the probe; see the log above")
+		}
+		env.Arms = armLabels(cfg.Arms)
+		if err := writeJSON(filepath.Join(cfg.OutDir, "env.json"), env); err != nil {
+			return err
+		}
+		specs = planMatrix(cfg.Arms, cfg.Rounds)
+	} else {
+		specs = plan(cfg.Session, cfg.Rounds)
+	}
 	var results []runResult
 	for i, spec := range specs {
 		fmt.Fprintf(os.Stderr, "[%d/%d] round %d arm %s (%s) ...\n", i+1, len(specs), spec.Round, spec.Arm, spec.Engine)
@@ -198,21 +262,54 @@ func parseFlags() (config, error) {
 	var cfg config
 	var sess string
 	flag.StringVar(&cfg.Image, "image", "conduit-bench:archv2-gate", "Conduit image to run; build it from the working tree (see README.md)")
+	flag.StringVar(&cfg.BaseImage, "base-image", "alpine:3", "image that runs -arm binaries and counts the sinks; needs busybox (stat, tail, head, wc)")
 	flag.StringVar(&cfg.Shape, "shape", "1x1", "pipeline shape: a directory under -shapes-dir holding pipeline.yml (1x1, 2x2, 2x2-batched)")
-	flag.StringVar(&sess, "session", string(sessionAAv1), "aa-v1, aa-v2 (A/A control of one engine) or ab (v1-v2-v1 per round)")
+	flag.StringVar(&sess, "session", string(sessionAAv1), "aa-v1, aa-v2 (A/A control of one engine), ab (v1-v2-v1 per round) or matrix (every -arm twice per round)")
+	flag.Func("arm", "matrix session arm: label=engine[:/abs/path/to/linux/conduit]; repeat for each arm", func(v string) error {
+		a, err := parseArm(v)
+		if err != nil {
+			return err
+		}
+		for _, o := range cfg.Arms {
+			if o.Label == a.Label {
+				return cerrors.Errorf("-arm label %q given twice", a.Label)
+			}
+		}
+		cfg.Arms = append(cfg.Arms, a)
+		return nil
+	})
+	flag.Func("env", "environment variable for the Conduit container: CONDUIT_BENCH_<NAME>=<value>, GOMAXPROCS, GOGC or GODEBUG only; repeatable", func(v string) error {
+		if err := validateEnv(v); err != nil {
+			return err
+		}
+		cfg.Env = append(cfg.Env, v)
+		return nil
+	})
 	flag.IntVar(&cfg.Rounds, "rounds", 5, "rounds per session")
 	flag.DurationVar(&cfg.Warmup, "warmup", 20*time.Second, "time discarded after the sinks start growing")
 	flag.DurationVar(&cfg.Window, "window", 60*time.Second, "measurement window per run")
 	flag.StringVar(&cfg.CPUs, "cpus", "", "optional docker --cpus limit for the Conduit container")
 	flag.StringVar(&cfg.ShapesDir, "shapes-dir", "benchi/archv2-gate/shapes", "directory holding the shapes")
+	flag.DurationVar(&cfg.ProbeTimeout, "probe-timeout", 45*time.Second, "matrix: how long the pre-session probe waits for an arm's sinks before skipping the arm")
 	flag.StringVar(&cfg.OutDir, "out", "", "output directory (default benchi/archv2-gate/results/<UTC time>-<shape>-<session>)")
 	flag.Parse()
 
 	cfg.Session = session(sess)
 	switch cfg.Session {
 	case sessionAAv1, sessionAAv2, sessionAB:
+		if len(cfg.Arms) > 0 {
+			return cfg, cerrors.Errorf("-arm only applies to -session matrix")
+		}
+	case sessionMatrix:
+		if len(cfg.Arms) == 0 {
+			return cfg, cerrors.Errorf("-session matrix needs at least one -arm (one arm is an A/A control)")
+		}
 	default:
-		return cfg, cerrors.Errorf("unknown -session %q (want aa-v1, aa-v2 or ab)", sess)
+		return cfg, cerrors.Errorf("unknown -session %q (want aa-v1, aa-v2, ab or matrix)", sess)
+	}
+	if cfg.Session == sessionAB {
+		fmt.Fprintln(os.Stderr, "warning: -session ab gives v1 an A/A pair but v2 none, so v2's own noise is never measured; "+
+			"prefer -session matrix -arm v1=v1 -arm v2=v2")
 	}
 	if cfg.Rounds < 2 {
 		return cfg, cerrors.Errorf("-rounds must be at least 2, got %d: one round has no spread to report", cfg.Rounds)
@@ -221,18 +318,19 @@ func parseFlags() (config, error) {
 		fmt.Fprintf(os.Stderr, "warning: -window %s is below the 60s the gate requires; at 30s the A/A floor was about ±13%% (benchi/METHODOLOGY.md)\n", cfg.Window)
 	}
 
-	shapeDir, err := filepath.Abs(filepath.Join(cfg.ShapesDir, cfg.Shape))
+	def, err := loadShape(cfg.ShapesDir, cfg.Shape)
 	if err != nil {
-		return cfg, cerrors.Errorf("resolve shape dir: %w", err)
+		return cfg, err
 	}
-	cfg.pipelineFile = filepath.Join(shapeDir, "pipeline.yml")
-	raw, err := os.ReadFile(cfg.pipelineFile)
-	if err != nil {
-		return cfg, cerrors.Errorf("read shape %q: %w", cfg.Shape, err)
-	}
-	cfg.sinks = sinkPaths(raw)
-	if len(cfg.sinks) == 0 {
-		return cfg, cerrors.Errorf("shape %q has no destination writing under /sink", cfg.Shape)
+	cfg.pipelineFile, cfg.sinks = def.pipelineFile, def.sinks
+	cfg.shapes = map[string]shapeInfo{}
+	for _, a := range cfg.Arms {
+		if a.Shape == "" {
+			continue
+		}
+		if cfg.shapes[a.Shape], err = loadShape(cfg.ShapesDir, a.Shape); err != nil {
+			return cfg, err
+		}
 	}
 
 	if cfg.OutDir == "" {
@@ -240,6 +338,14 @@ func parseFlags() (config, error) {
 			fmt.Sprintf("%s-%s-%s", time.Now().UTC().Format("20060102T150405Z"), cfg.Shape, cfg.Session))
 	}
 	return cfg, nil
+}
+
+func armLabels(arms []armSpec) []string {
+	out := make([]string, len(arms))
+	for i, a := range arms {
+		out[i] = a.Label
+	}
+	return out
 }
 
 func sum(xs []int64) int64 {

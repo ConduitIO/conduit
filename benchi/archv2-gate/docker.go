@@ -18,7 +18,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,16 +29,33 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
+// containerName and volumeName carry the harness's PID so two sessions on one
+// Docker daemon, or a session and someone else's container, never remove each
+// other's.
+var (
+	containerName = fmt.Sprintf("archv2-gate-conduit-%d", os.Getpid())
+	volumeName    = fmt.Sprintf("archv2-gate-sink-%d", os.Getpid())
+)
+
 const (
-	containerName = "archv2-gate-conduit"
-	volumeName    = "archv2-gate-sink"
 	// sinkReadyTimeout bounds how long a run waits for every sink file to
 	// exist and hold at least one record before giving up.
 	sinkReadyTimeout = 90 * time.Second
 )
 
 type docker struct {
+	// image holds the Conduit binary for arms that do not bring their own.
 	image string
+	// baseImage runs arms that bring a binary, and counts the sinks.
+	baseImage string
+}
+
+// imageFor returns the image that runs spec.
+func (d docker) imageFor(spec runSpec) string {
+	if spec.Binary != "" {
+		return d.baseImage
+	}
+	return d.image
 }
 
 func (d docker) cmd(ctx context.Context, args ...string) (string, error) {
@@ -48,11 +68,17 @@ func (d docker) cmd(ctx context.Context, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
-// preflight checks the image exists and starts from a clean container and
-// sink volume.
-func (d docker) preflight(ctx context.Context) error {
-	if _, err := d.cmd(ctx, "image", "inspect", d.image); err != nil {
-		return cerrors.Errorf("image %q not found; build it first (see README.md): %w", d.image, err)
+// preflight checks the images the session needs exist and starts from a clean
+// container and sink volume.
+func (d docker) preflight(ctx context.Context, cfg config) error {
+	need := map[string]bool{d.baseImage: true}
+	if cfg.Session != sessionMatrix || slices.ContainsFunc(cfg.Arms, func(a armSpec) bool { return a.Binary == "" }) {
+		need[d.image] = true
+	}
+	for img := range need {
+		if _, err := d.cmd(ctx, "image", "inspect", img); err != nil {
+			return cerrors.Errorf("image %q not found; build or pull it first (see README.md): %w", img, err)
+		}
 	}
 	d.cleanup()
 	if _, err := d.cmd(ctx, "volume", "create", volumeName); err != nil {
@@ -87,22 +113,11 @@ type runResult struct {
 
 // measure performs one single run. See the package doc for the method.
 func (d docker) measure(ctx context.Context, cfg config, spec runSpec) (runResult, error) {
+	cfg = cfg.forSpec(spec)
 	res := runResult{runSpec: spec, Started: time.Now().UTC(), HostLoad: hostLoad(ctx)}
 
 	_, _ = d.cmd(ctx, "rm", "-f", containerName)
-	args := []string{
-		"run", "-d", "--name", containerName,
-		"-v", volumeName + ":/sink",
-		"-v", cfg.pipelineFile + ":/app/pipelines/pipeline.yml:ro",
-	}
-	if cfg.CPUs != "" {
-		args = append(args, "--cpus", cfg.CPUs)
-	}
-	args = append(args, d.image, "/app/conduit", "run", "--log.level", "error")
-	if spec.Engine == engineV2 {
-		args = append(args, "--preview.pipeline-arch-v2")
-	}
-	if _, err := d.cmd(ctx, args...); err != nil {
+	if _, err := d.start(ctx, cfg, spec); err != nil {
 		return res, err
 	}
 	defer func() {
@@ -135,6 +150,9 @@ func (d docker) measure(ctx context.Context, cfg config, spec runSpec) (runResul
 		return res, cerrors.Errorf("conduit stopped during the window, run is invalid: %w", err)
 	}
 	res.WindowSec = t1.Sub(t0).Seconds()
+	if err := d.attestEngine(ctx, spec); err != nil {
+		return res, err
+	}
 
 	// Stop writing before counting so the count does not compete with the
 	// pipeline for the machine; the byte range is already fixed.
@@ -158,8 +176,74 @@ func (d docker) measure(ctx context.Context, cfg config, spec runSpec) (runResul
 	return res, nil
 }
 
+// start launches the Conduit container for spec and returns once docker has
+// started it. It does not wait for the pipeline.
+func (d docker) start(ctx context.Context, cfg config, spec runSpec) (string, error) {
+	cfg = cfg.forSpec(spec)
+	args := []string{
+		"run", "-d", "--name", containerName,
+		"-v", volumeName + ":/sink",
+		"-v", cfg.pipelineFile + ":/app/pipelines/pipeline.yml:ro",
+		"-w", "/app",
+	}
+	if spec.Binary != "" {
+		args = append(args, "-v", spec.Binary+":/app/conduit:ro")
+	}
+	for _, e := range cfg.Env {
+		args = append(args, "-e", e)
+	}
+	if cfg.CPUs != "" {
+		args = append(args, "--cpus", cfg.CPUs)
+	}
+	args = append(args, d.imageFor(spec), "/app/conduit", "run", "--log.level", "info")
+	if spec.Engine == engineV2 {
+		args = append(args, "--preview.pipeline-arch-v2")
+	}
+	return d.cmd(ctx, args...)
+}
+
+// skippedArm is an arm the probe could not get output from.
+type skippedArm struct {
+	Label  string `json:"label"`
+	Reason string `json:"reason"`
+}
+
+// probeArms starts every arm once and keeps those whose sinks fill within
+// cfg.ProbeTimeout. An arm that is refused at start (for example arch-v2 with a
+// destination that batches, pipeline.archv2_destination_batching_unsupported)
+// would otherwise cost a full sink timeout in every round and abort the
+// session. It is dropped, and the reason is recorded in env.json and the
+// summary, so a refusal is a reported result and not a missing row.
+func (d docker) probeArms(ctx context.Context, cfg config) ([]armSpec, []skippedArm) {
+	var ok []armSpec
+	var skipped []skippedArm
+	for _, a := range cfg.Arms {
+		spec := runSpec{Arm: a.Label, Engine: a.Engine, Binary: a.Binary, Shape: a.Shape}
+		cfg := cfg.forSpec(spec)
+		fmt.Fprintf(os.Stderr, "probe %s (%s) ...\n", a.Label, a.Engine)
+		_, _ = d.cmd(ctx, "rm", "-f", containerName)
+		_, err := d.start(ctx, cfg, spec)
+		if err == nil {
+			err = d.waitForSinksWithin(ctx, cfg.sinks, cfg.ProbeTimeout)
+		}
+		_, _ = d.cmd(ctx, "rm", "-f", containerName)
+		_, _ = d.cmd(ctx, "run", "--rm", "-v", volumeName+":/sink", d.baseImage, "sh", "-c", "rm -f /sink/*")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "      skipped: %v\n", err)
+			skipped = append(skipped, skippedArm{Label: a.Label, Reason: err.Error()})
+			continue
+		}
+		ok = append(ok, a)
+	}
+	return ok, skipped
+}
+
 func (d docker) waitForSinks(ctx context.Context, sinks []string) error {
-	deadline := time.Now().Add(sinkReadyTimeout)
+	return d.waitForSinksWithin(ctx, sinks, sinkReadyTimeout)
+}
+
+func (d docker) waitForSinksWithin(ctx context.Context, sinks []string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	for {
 		if err := d.assertRunning(ctx); err != nil {
 			return err
@@ -169,13 +253,65 @@ func (d docker) waitForSinks(ctx context.Context, sinks []string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			logs, _ := d.cmd(ctx, "logs", "--tail", "30", containerName)
-			return cerrors.Errorf("sinks %v not written within %s; last conduit logs:\n%s", sinks, sinkReadyTimeout, logs)
+			return cerrors.Errorf("sinks %v not written within %s; conduit errors:\n%s", sinks, timeout, d.errorLines(ctx))
 		}
 		if err := sleep(ctx, 500*time.Millisecond); err != nil {
 			return err
 		}
 	}
+}
+
+// engineLogLine is what Conduit logs at info level when it runs pipelines on
+// arch-v2. The classic engine logs nothing like it.
+const engineLogLine = "using lifecycle service v2"
+
+// attestEngine checks the container's own log for which engine ran. Without
+// it, a mistyped flag or a binary that ignores it would silently turn an A/B
+// comparison into an A/A one, and the A/A floor would not show it.
+func (d docker) attestEngine(ctx context.Context, spec runSpec) error {
+	logs, err := d.cmd(ctx, "logs", containerName)
+	if err != nil {
+		return cerrors.Errorf("read logs to attest the engine: %w", err)
+	}
+	return checkEngineLog(spec, logs)
+}
+
+// checkEngineLog is attestEngine's decision, separated so it can be tested
+// without Docker.
+func checkEngineLog(spec runSpec, logs string) error {
+	ranV2 := strings.Contains(logs, engineLogLine)
+	switch {
+	case spec.Engine == engineV2 && !ranV2:
+		return cerrors.Errorf("arm %s asked for arch-v2 but the log lacks %q; run is invalid", spec.Arm, engineLogLine)
+	case spec.Engine == engineV1 && ranV2:
+		return cerrors.Errorf("arm %s asked for the classic engine but the log says %q; run is invalid", spec.Arm, engineLogLine)
+	}
+	return nil
+}
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// errorLines returns the last few error-level lines of the container's log,
+// without colour codes and cut to a readable length. It is what explains an
+// arm that never produced output, such as a pipeline refused at start.
+func (d docker) errorLines(ctx context.Context) string {
+	logs, _ := d.cmd(ctx, "logs", containerName)
+	var errs []string
+	for _, l := range strings.Split(ansiRe.ReplaceAllString(logs, ""), "\n") {
+		if strings.Contains(l, " ERR ") {
+			if len(l) > 600 {
+				l = l[:600] + "..."
+			}
+			errs = append(errs, l)
+		}
+	}
+	if len(errs) > 3 {
+		errs = errs[len(errs)-3:]
+	}
+	if len(errs) == 0 {
+		return "(no error-level log lines)"
+	}
+	return strings.Join(errs, "\n")
 }
 
 func (d docker) assertRunning(ctx context.Context) error {
@@ -217,7 +353,7 @@ func (d docker) countRecords(ctx context.Context, sinks []string, s0, s1 []int64
 		fmt.Fprintf(&script, "tail -c +%d %s | head -c %d | wc -l; ", s0[i]+1, p, s1[i]-s0[i])
 	}
 	script.WriteString("rm -f /sink/*")
-	out, err := d.cmd(ctx, "run", "--rm", "-v", volumeName+":/sink", "--entrypoint", "sh", d.image, "-c", script.String())
+	out, err := d.cmd(ctx, "run", "--rm", "-v", volumeName+":/sink", "--entrypoint", "sh", d.baseImage, "-c", script.String())
 	if err != nil {
 		return nil, err
 	}
