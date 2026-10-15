@@ -156,7 +156,7 @@ them off the `Struct` path. The exactness rule is recorded under _Alternatives_.
 | `int8`, `int16`, `int32`, `uint8`, `uint16`, `uint32` | always in range; unchanged |
 | `int`, `uint` | checked (64 bits on 64-bit platforms, including `wasip1/wasm`; always in range on `386`) |
 | `int64`, `uint64` | checked |
-| `json.Number` | **validated against the JSON number grammar first** (RFC 8259: `-?(0\|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`). A literal outside it is an error (`ErrInvalidNumber`, path and type only), and it never falls back to `Float64()`. Today `strconv.ParseFloat` accepts hex floats, a leading `+`, and `Inf`/`Infinity`/`NaN`, so `json.Number("0x20000000000001p0")` silently becomes 9007199254740992, and so do `"+9007199254740993"` and `"Infinity"` (which becomes +Inf). After validation, the literal is classified with string arithmetic, without `big.Rat`. Strip the sign, leading zeros and the decimal point to get the significant digits `d` and the effective decimal exponent `e`, then drop trailing zeros from `d` (raising `e`). **Zero mantissa:** if `d` is empty (`0`, `-0`, `0.000`, `0e99999999999999999999`) the value is the integer 0 and passes. This case is handled before any `ParseInt("")`. **Exponent overflow:** the written exponent is parsed with a saturating parser, not `strconv.Atoi`. A huge positive exponent with a nonzero mantissa is out of range. A huge negative exponent makes the value a non-integer. `len(d)+e` is computed only after `e` is clamped to ±10^6, so it cannot overflow. If `e < 0` the value is not an integer. Otherwise it is an integer with `len(d)+e` digits: more than 16 digits is out of range and is rejected at once, and 16 or fewer are compared exactly through `strconv.ParseInt`. So the range rule applies to integers in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), and a huge literal such as `1e999999` costs one scan of the string, not a `big.Rat` expansion. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
+| `json.Number` | **validated against the JSON number grammar first** (RFC 8259: `-?(0\|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`). A literal outside it is an error (`ErrInvalidNumber`, path and type only), and it never falls back to `Float64()`. Today `strconv.ParseFloat` accepts hex floats, a leading `+`, and `Inf`/`Infinity`/`NaN`, so `json.Number("0x20000000000001p0")` silently becomes 9007199254740992, and so do `"+9007199254740993"` and `"Infinity"` (which becomes +Inf). After validation, the literal is classified with string arithmetic, without `big.Rat`. Strip the sign, leading zeros and the decimal point to get the significant digits `d` and the effective decimal exponent `e`, then drop trailing zeros from `d` (raising `e`). **Zero mantissa:** if `d` is empty (`0`, `-0`, `0.000`, `0e99999999999999999999`) the value is the integer 0 and passes. This case is handled before any `ParseInt("")`. **Exponent overflow:** the written exponent is parsed with a saturating parser, not `strconv.Atoi`, and saturates at ±2^61. The shift from the decimal point and from stripped zeros is bounded by the literal's length, which is below 2^61 for any literal that fits in memory. So `e` and `len(d)+e`, computed in `int64`, cannot overflow and keep their sign and their relation to 16, and no input size can cause a false rejection. Only two facts are used, the sign of `e` and whether `len(d)+e > 16`, and saturation preserves both: a huge positive exponent with a nonzero mantissa is out of range, and a huge negative one makes the value a non-integer. If `e < 0` the value is not an integer. Otherwise it is an integer with `len(d)+e` digits: more than 16 digits is out of range and is rejected at once, and 16 or fewer are compared exactly through `strconv.ParseInt`. So the range rule applies to integers in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), and a huge literal such as `1e999999` costs one scan of the string, not a `big.Rat` expansion. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
 | `float32`, `float64` | unchanged; they are already doubles |
 | `*big.Int`, `time.Time`, other types | unchanged: `structpb` already rejects them with `invalid type` |
 
@@ -246,13 +246,20 @@ The record is **nacked**, so the pipeline's DLQ policy decides what happens next
   threshold is above 0. A plain error goes to pipeline recovery, which by default retries forever
   (`pkg/conduit/config.go:393`, `InfiniteRetriesErrRecovery`). The result would be an endless restart
   loop that re-reads the same record and never shows Degraded. That loses nothing, but it is not loud.
-  **Fix:** Conduit wraps the coded refusal in `cerrors.FatalError` at its boundary. That covers the nack
-  reason given to the DLQ handler, the arch-v1 node's returned error, the arch-v2 `Do` error, and the
-  host-side `ErrorRecord`. The refusal is deterministic, so a restart cannot cure it, which is the same
-  reasoning as the existing fatal DLQ-write failure (`funnel/dlq.go:99`). The record is not acked, so
-  after a manual restart it is read again and halts again until the operator acts (invariants 1 and 3).
+  **Fix:** Conduit makes the coded refusal fatal, but only at the sites that return an error to the
+  pipeline: the threshold-0 branch of both DLQ handlers returns `cerrors.FatalError(reason)` when the
+  reason matches the refusal sentinels, and so do the arch-v1 node's fallback return and the arch-v2
+  `Do` return. The nack reason itself, the host-side `ErrorRecord` and the text stored in the DLQ
+  record's `conduit.dlq.nack.error` stay **unwrapped**. `fatalError.Error()` adds a "fatal error"
+  prefix, and the DLQ metadata must show the coded message, not that prefix. The refusal is
+  deterministic, so a restart cannot cure it, which is the same reasoning as the existing fatal
+  DLQ-write failure (`funnel/dlq.go:99`). The record is not acked, so after a manual restart it is
+  read again and halts again until the operator acts (invariants 1 and 3).
   In arch-v1 the node's error and the acker's DLQ error can race. Both are wrapped as fatal and both
-  carry the code, so either one wins with the same outcome.
+  carry the code, so either one wins with the same outcome. In fan-out pipelines, sibling source ackers
+  report a plain `another message failed to be acked/nacked` (`source_acker.go`). That error can reach
+  the pipeline first, as non-fatal. This already happens with threshold > 0. The code PR either makes
+  that error fatal when its cause is fatal, or records it as a known gap with an issue.
 - **Configured, tolerant DLQ**: the record is written to the DLQ, its position is acked once that write
   succeeds, and the pipeline continues. That is the operator's declared policy (invariant 6: "follow the
   configured policy"). The DLQ record's `conduit.dlq.nack.error` metadata carries the code and the path.
