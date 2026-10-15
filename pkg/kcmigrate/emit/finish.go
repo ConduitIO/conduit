@@ -30,11 +30,70 @@ import (
 // It returns connector-level notes for what it could not write.
 type Finisher func(p *Plan, a rules.Action) ([]kcmigrate.Note, error)
 
-// FinishMM2Topic names the MirrorMaker topic-naming finisher.
-const FinishMM2Topic = "mm2-topic"
+// Finisher names.
+const (
+	// FinishMM2Topic names the MirrorMaker topic-naming finisher.
+	FinishMM2Topic = "mm2-topic"
+	// FinishDefault writes a setting no key set, for an upstream default
+	// that Conduit's default differs from. Arguments: side, name, value.
+	FinishDefault = "default-setting"
+	// FinishMM2Offsets names the finisher of MirrorMaker's
+	// kc.offsets_not_migrated note, which says where the pipeline starts.
+	FinishMM2Offsets = "mm2-offsets"
+)
 
 var finishers = map[string]Finisher{
-	FinishMM2Topic: mm2Topic,
+	FinishMM2Topic:   mm2Topic,
+	FinishDefault:    defaultSetting,
+	FinishMM2Offsets: mm2Offsets,
+}
+
+// mm2Offsets returns the blocking kc.offsets_not_migrated note. MirrorMaker
+// resumes every partition from the offsets Kafka Connect stored, which
+// migrate does not carry over, so the note states the start position the
+// pipeline was actually written with. Run it after every finisher that may
+// write readFromBeginning.
+func mm2Offsets(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
+	const head = "MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning unless auto.offset.reset says otherwise. migrate does not carry the stored offsets over. "
+	var start string
+	src := p.connector(SideSource)
+	switch v, ok := src.Settings["readFromBeginning"]; {
+	case ok && v == "true":
+		start = "The pipeline reads every partition from the beginning (readFromBeginning: true), so the records MirrorMaker already copied are copied again."
+	case ok && v == "false":
+		start = "The pipeline starts every partition at the end (readFromBeginning: false, from auto.offset.reset=latest), so the records written before it starts are skipped."
+	default:
+		start = "readFromBeginning is not written (a blocked auto.offset.reset owns it), so the Kafka source's default applies: it starts every partition at the end, and the records written before it starts are skipped."
+	}
+	return []kcmigrate.Note{{
+		Code: kcmigrate.CodeOffsetsNotMigrated.Reason(), Blocking: true, Rule: FinishMM2Offsets,
+		Reason: head + start,
+		Fix:    "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
+	}}, nil
+}
+
+// defaultSetting writes value to setting name of side unless a key or the
+// worker set it: the upstream connector's own default, where Conduit's
+// differs (MirrorMaker reads a partition with no stored offset from the
+// beginning; the Kafka source starts at the end).
+func defaultSetting(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
+	side, name, value := a.Args["side"], a.Args["name"], a.Args["value"]
+	if name == "" || value == "" {
+		return nil, cerrors.Errorf(FinishDefault + " needs a name and a value")
+	}
+	idx, err := p.sides(side)
+	if err != nil {
+		return nil, cerrors.Errorf(FinishDefault+": %w", err)
+	}
+	for _, i := range idx {
+		if _, ok := p.connectors[i].Settings[name]; ok {
+			return nil, nil
+		}
+	}
+	if _, _, err := p.Set(side, name, value, "(default "+side+" "+name+")"); err != nil {
+		return nil, cerrors.Errorf(FinishDefault+": %w", err)
+	}
+	return nil, nil
 }
 
 // SetConfig gives the plan the connector's config, the last value of each

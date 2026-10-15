@@ -158,7 +158,11 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	for i := range runs {
 		rc := &rep.Connectors[first+i]
 		if runs[i].plan != nil {
-			rc.PipelineStatus = pipelineStatus(*rc, runs[i].state, req.AcceptGaps, workerBlocks)
+			state := runs[i].state
+			if runs[i].plan.Stopped() {
+				state = stateStopped // a key ran no tasks (enabled=false), accepted or not
+			}
+			rc.PipelineStatus = pipelineStatus(*rc, state, req.AcceptGaps, workerBlocks)
 		}
 	}
 	rep.Summarize()
@@ -317,11 +321,14 @@ func plaintextNote() kcmigrate.Note {
 	}
 }
 
+// stateStopped is Kafka Connect's state of a stopped connector.
+const stateStopped = "STOPPED"
+
 // pipelineStatus is stopped when the connector, or the worker every
 // pipeline inherits from, has a blocking entry or note that was not
 // accepted, or when Kafka Connect had the connector paused or stopped.
 func pipelineStatus(rc kcmigrate.ReportConnector, state string, accept, workerBlocks bool) kcmigrate.PipelineStatus {
-	if state == "PAUSED" || state == "STOPPED" {
+	if state == "PAUSED" || state == stateStopped {
 		return kcmigrate.PipelineStopped
 	}
 	if accept {
