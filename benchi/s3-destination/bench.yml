@@ -1,0 +1,60 @@
+# benchi baseline for the S3 destination (builtin:s3), v0.21 S3 sink parity
+# (#3009). Committed as a config only: it has NOT been run, and no number may be
+# quoted from it until a run following ../METHODOLOGY.md (60s, alternated single
+# runs, an A/A control, ground truth counted in the bucket) is committed next to
+# it. See README.md.
+#
+# Generator -> builtin:s3 (format json, partitioner none) -> MinIO, so the
+# measurement includes the destination's encoding and one PutObject per batch.
+
+infrastructure:
+  minio:
+    compose: ./infra/compose-minio.yml
+
+tools:
+  conduit:
+    compose: ./tools/compose-conduit.yml
+
+metrics:
+  conduit:
+    collector: conduit
+    tools:
+      - conduit
+    settings:
+      url: http://localhost:8080/metrics
+      pipelines:
+        - "s3-destination"
+  docker:
+    collector: docker
+    settings:
+      containers:
+        - "benchi-conduit"
+        - "benchi-minio"
+
+tests:
+  - name: s3-destination
+    duration: 60s
+
+    steps:
+      pre-infrastructure:
+      post-infrastructure:
+        - name: "Create bucket"
+          container: "benchi-minio"
+          run: |
+            mc alias set local http://localhost:9000 benchiminio benchiminiosecret
+            mc mb --ignore-existing local/benchi
+      pre-tool:
+      post-tool:
+      pre-test:
+      during:
+      post-test:
+        # Ground truth (METHODOLOGY.md): object count and bytes in the bucket,
+        # read from the store, not from Conduit's metrics. Records per object
+        # are sdk.batch.size (pipeline.yml), except possibly the last.
+        - name: "Count objects"
+          container: "benchi-minio"
+          run: |
+            mc alias set local http://localhost:9000 benchiminio benchiminiosecret
+            mc ls --recursive --summarize local/benchi/bench | tail -2
+      pre-cleanup:
+      post-cleanup:
