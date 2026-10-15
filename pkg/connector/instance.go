@@ -79,7 +79,22 @@ type Instance struct {
 type Config struct {
 	Name     string
 	Settings map[string]string
+	// SettingRefs is written by Conduit v0.21 and later, which stores ${VAR}
+	// templates here and removes the matching keys from Settings. This release
+	// does not understand them: the field is decoded only so that it survives a
+	// re-write of the record (Invariant 6: nothing is silently dropped) and so
+	// the lifecycle can refuse to run the pipeline instead of starting it with
+	// those settings absent (Invariant 3: no silent change of what a pipeline
+	// delivers to). The JSON key name and the map[string]string type are a
+	// compatibility contract with v0.21 (design 20261014-secrets-at-rest.md);
+	// the key is matched case-insensitively by the decoder. Never resolve or
+	// log the values.
+	SettingRefs map[string]string `json:",omitempty"`
 }
+
+// HasSettingRefs reports whether the config carries SettingRefs written by a
+// newer Conduit.
+func (c Config) HasSettingRefs() bool { return len(c.SettingRefs) > 0 }
 
 type Connector interface {
 	OnDelete(ctx context.Context) error

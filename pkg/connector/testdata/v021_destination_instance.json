@@ -1,0 +1,36 @@
+{
+  "ID": "v021-destination",
+  "Type": 2,
+  "Config": {
+    "Name": "golden-destination-connector",
+    "Settings": {
+      "path": "/data/out"
+    },
+    "SettingRefs": {
+      "aws.secretAccessKey": "${AWS_SECRET}",
+      "sasl.password": "$KAFKA_PASSWORD"
+    }
+  },
+  "PipelineID": "golden-pipeline",
+  "Plugin": "builtin:file",
+  "ProcessorIDs": [
+    "proc-3"
+  ],
+  "State": {
+    "Positions": {
+      "golden-source": "Z29sZGVuLXBvc2l0aW9uLTQy"
+    }
+  },
+  "ProvisionedBy": 1,
+  "CreatedAt": "2026-06-15T09:30:00Z",
+  "UpdatedAt": "2026-06-15T09:31:00Z",
+  "LastActiveConfig": {
+    "Name": "golden-destination-connector",
+    "Settings": {
+      "path": "/data/out"
+    },
+    "SettingRefs": {
+      "aws.secretAccessKey": "${AWS_SECRET}"
+    }
+  }
+}

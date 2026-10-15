@@ -60,6 +60,15 @@ var (
 	// change is a short store write, never a node operation. Unavailable: retry
 	// the start shortly.
 	CodePipelineConfigChanging = conduiterr.Register("pipeline.config_changing", codes.Unavailable)
+	// CodeSettingsReferencesUnsupported is raised when a pipeline is refused
+	// because a connector, processor or DLQ record in the database carries
+	// SettingRefs, which only Conduit v0.21 and later write and understand.
+	// This release would start the pipeline with those settings absent, and an
+	// optional credential would silently fall back (the S3 default chain, Kafka
+	// without SASL). The pipeline is marked Degraded and never started; the
+	// stored record is left untouched. FailedPrecondition: run v0.21 or later,
+	// or re-provision the pipeline from its file.
+	CodeSettingsReferencesUnsupported = conduiterr.Register("pipeline.settings_references_unsupported", codes.FailedPrecondition)
 	// CodeStatusPersistFailed is raised when a pipeline's status could not be
 	// written to the pipeline store. The in-memory status, which the API, the
 	// CLI and the lifecycle read, has already moved; the store still holds

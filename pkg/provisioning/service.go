@@ -159,9 +159,16 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if pl.ProvisionedBy != pipeline.ProvisionTypeConfig {
 		return ErrNotProvisionedByConfig
 	}
-	oldConfig, err := s.Export(ctx, id)
+	var refs storedRefs
+	oldConfig, err := s.export(ctx, id, &refs)
 	if err != nil {
 		return cerrors.Errorf("failed to export pipeline: %w", err)
+	}
+	// Invariant 3: connector.Service.Delete refuses a record with SettingRefs.
+	// Refuse the whole pipeline up front, so the actions before it (processors)
+	// do not run and leave it half deleted.
+	if len(refs.connectors) > 0 {
+		return errDeleteSettingRefs(id, refs.connectors[0].id)
 	}
 	actions := s.newActionsBuilder().Build(oldConfig, config.Pipeline{})
 	_, err = s.executeActions(ctx, actions)

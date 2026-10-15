@@ -111,9 +111,18 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 	// TODO add proper support for lifecycle events to DLQs (see https://github.com/ConduitIO/conduit/issues/1016#issuecomment-1535119773)
 	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
 		var lifecycleEventTriggered bool
-		lifecycleEventTriggered, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
-		if err != nil {
-			return err
+		if d.Instance.LastActiveConfig.HasSettingRefs() {
+			// The previous config was written by Conduit v0.21 or later and its
+			// reference-backed keys are absent from Settings, so an "updated"
+			// event would hand the plugin a partial "before". Skip it and let
+			// the current config become the last active one.
+			d.Instance.logger.Warn(ctx).Msg("skipping the lifecycle \"updated\" event: the last active config was written by a newer Conduit and is incomplete")
+			lifecycleEventTriggered = true
+		} else {
+			lifecycleEventTriggered, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
+			if err != nil {
+				return err
+			}
 		}
 
 		if lifecycleEventTriggered {

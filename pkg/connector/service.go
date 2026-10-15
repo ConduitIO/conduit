@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/pipeline"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -203,6 +204,19 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 		return err
 	}
 
+	// Invariant 3: Close below runs OnDelete with LastActiveConfig.Settings.
+	// For a record written by v0.21 or later, the reference-backed keys are
+	// absent from Settings, so the plugin would tear down against an
+	// incomplete config (Postgres: no url, so the replication slot and
+	// publication are orphaned). Refuse before anything is removed. Callers
+	// that retry (provisioning.deleteOldPipelines) try again on the next boot.
+	instance.RLock()
+	hasRefs := instance.Config.HasSettingRefs() || instance.LastActiveConfig.HasSettingRefs()
+	instance.RUnlock()
+	if hasRefs {
+		return errDeleteSettingRefs(id)
+	}
+
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
@@ -346,4 +360,17 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	}
 
 	return cerrors.Join(errs...)
+}
+
+// errDeleteSettingRefs is the refusal to delete a connector whose record
+// carries SettingRefs written by Conduit v0.21 or later.
+func errDeleteSettingRefs(id string) error {
+	ce := conduiterr.New(
+		pipeline.CodeSettingsReferencesUnsupported,
+		fmt.Sprintf("can't delete connector %s: its stored settings use references written by Conduit v0.21 or later, "+
+			"and this release would run the connector's delete hook without them; "+
+			"run v0.21 or later, or re-provision the pipeline from its file", id),
+	)
+	ce.Suggestion = "this database was written by Conduit v0.21 or later; run v0.21 or later, or re-provision"
+	return ce
 }

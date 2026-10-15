@@ -154,6 +154,9 @@ func (s *Store) PrepareSet(id string, instance *Instance) (func(context.Context)
 		Config: Config{
 			Name:     instance.Config.Name,
 			Settings: instance.Config.Settings,
+			// Invariant 6: a re-write (state, position, last active config)
+			// must not drop SettingRefs written by a newer Conduit.
+			SettingRefs: instance.Config.SettingRefs,
 		},
 		PipelineID:       instance.PipelineID,
 		Plugin:           instance.Plugin,

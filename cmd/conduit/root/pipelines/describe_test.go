@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 
@@ -186,4 +187,30 @@ func TestDescribeCommandExecuteWithClient(t *testing.T) {
 		"  Plugin: dlq-plugin\n"+
 		"Created At: 1970-01-01T00:00:00Z\n"+
 		"Updated At: 1970-01-01T00:00:00Z\n")
+}
+
+// TestDescribeResult_JSON_SurfacesDegradedCode checks that the coded cause the
+// v0.20.2 downgrade guard stores on a refused pipeline
+// (pipeline.settings_references_unsupported) reaches `pipelines describe
+// --json` unchanged, in pipeline.state.error.
+func TestDescribeResult_JSON_SurfacesDegradedCode(t *testing.T) {
+	is := is.New(t)
+	const cause = "pipeline.settings_references_unsupported: can't start pipeline \"p\" (p1): this database was written by Conduit v0.21 or later"
+
+	b, err := cecdysis.MarshalJSON(&DescribeResult{
+		Pipeline: &apiv1.Pipeline{
+			Id:    "p1",
+			State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_DEGRADED, Error: cause},
+		},
+	})
+	is.NoErr(err)
+
+	var out struct {
+		Pipeline struct {
+			State struct{ Status, Error string } `json:"state"`
+		} `json:"pipeline"`
+	}
+	is.NoErr(json.Unmarshal(b, &out))
+	is.Equal(out.Pipeline.State.Status, "STATUS_DEGRADED")
+	is.Equal(out.Pipeline.State.Error, cause)
 }

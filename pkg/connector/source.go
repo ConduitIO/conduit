@@ -253,9 +253,16 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		return err
 	}
 
-	lifecycleEventTriggered, err := s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
-	if err != nil {
-		return err
+	var lifecycleEventTriggered bool
+	if s.Instance.LastActiveConfig.HasSettingRefs() {
+		// See Destination.Open: skip the event, adopt the current config.
+		s.Instance.logger.Warn(ctx).Msg("skipping the lifecycle \"updated\" event: the last active config was written by a newer Conduit and is incomplete")
+		lifecycleEventTriggered = true
+	} else {
+		lifecycleEventTriggered, err = s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
+		if err != nil {
+			return err
+		}
 	}
 
 	if lifecycleEventTriggered {
