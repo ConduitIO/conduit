@@ -253,14 +253,11 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	if cl.Rules == nil {
 		return run, nil
 	}
-	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Emits, envs)
+	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Scope, cl.Rules.Emits, envs)
 	if err != nil {
 		return run, err
 	}
-	if err := emit.Apply(plan, cl.Decisions); err != nil {
-		return run, err
-	}
-	applied, err := emit.ApplyDefaults(plan, workerDs)
+	applied, err := emit.ApplyAll(plan, cl.Decisions, workerDs)
 	if err != nil {
 		return run, err
 	}

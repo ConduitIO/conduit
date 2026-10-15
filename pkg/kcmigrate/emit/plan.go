@@ -51,8 +51,10 @@ type Plan struct {
 	File       string
 	connectors []connectorDef
 	dlq        *dlqDef
-	owner      map[string]owner  // config path -> key and layer that set it
-	superseded map[string]string // key -> the higher-layer key that replaced its value
+	scope      string            // rules.ScopeSource or rules.ScopeSink: which client Kafka Connect runs
+	owner      map[string]owner  // config path -> origin, key and layer that set it
+	superseded map[keyRef]string // origin and key -> the higher-layer key that replaced its value
+	origin     string            // origin of the action being applied
 	layer      int               // layer of the action being applied
 	config     map[string]string // the connector's values, for finishers
 	secrets    []Secret
@@ -142,10 +144,18 @@ func (n *EnvNames) claim(name, owner string) string {
 }
 
 // NewPlan starts a pipeline for connector name with the plugins the class's
-// rule file emits: one source and one destination. envs is the run's
-// variable registry.
-func NewPlan(name string, emits []rules.Emit, envs *EnvNames) (*Plan, error) {
-	p := &Plan{ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", owner: map[string]owner{}, superseded: map[string]string{}, envs: envs}
+// rule file emits: one source and one destination. scope is the class's
+// Kafka Connect connector type, rules.ScopeSource or rules.ScopeSink; it
+// decides which pipeline connector Kafka Connect's own Kafka client becomes.
+// envs is the run's variable registry.
+func NewPlan(name, scope string, emits []rules.Emit, envs *EnvNames) (*Plan, error) {
+	if scope != rules.ScopeSource && scope != rules.ScopeSink {
+		return nil, cerrors.Errorf("scope %q is not a connector type", scope)
+	}
+	p := &Plan{
+		ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", scope: scope,
+		owner: map[string]owner{}, superseded: map[keyRef]string{}, origin: OriginConnector, envs: envs,
+	}
 	for _, side := range []string{SideSource, SideDestination} {
 		var plugin string
 		for _, e := range emits {
@@ -190,13 +200,17 @@ func (e *ConflictError) Error() string {
 	return fmt.Sprintf("setting %s is already set by %s", e.Setting, e.Owner)
 }
 
-// Kafka-facing sides. A Kafka Connect connector talks to Kafka through a
-// producer (sources) or a consumer (sinks); MirrorMaker has both. Shared
-// rules name these instead of source or destination.
+// Kafka-facing sides: Kafka Connect's own client of a connector, a producer
+// for a source connector and a consumer for a sink. In the pipeline it is
+// the builtin:kafka destination of a source, or the builtin:kafka source of
+// a sink. Shared and worker rules name these instead of source or
+// destination. A pipeline may have a second Kafka connector (MirrorMaker's
+// source is its own consumer of another cluster); no shared or worker key
+// reaches that one, as no worker key reaches MirrorMaker's consumer.
 const (
-	SideKafka    = "kafka"    // every builtin:kafka connector of the pipeline
-	SideProducer = "producer" // the destination, when it is builtin:kafka
-	SideConsumer = "consumer" // the source, when it is builtin:kafka
+	SideKafka    = "kafka"    // Kafka Connect's client, producer or consumer
+	SideProducer = "producer" // Kafka Connect's client, if it is a producer
+	SideConsumer = "consumer" // Kafka Connect's client, if it is a consumer
 )
 
 const kafkaPlugin = "builtin:kafka"
@@ -205,30 +219,39 @@ const kafkaPlugin = "builtin:kafka"
 // named side, for example a producer setting on a sink's pipeline.
 var ErrNoSide = cerrors.New("the pipeline has no connector on this side")
 
+// connectSide is the pipeline side Kafka Connect's own client becomes: the
+// destination of a source connector, the source of a sink.
+func (p *Plan) connectSide() string {
+	if p.scope == rules.ScopeSink {
+		return SideSource
+	}
+	return SideDestination
+}
+
 // sides resolves a side name to connector indexes.
 func (p *Plan) sides(side string) ([]int, error) {
+	var want string
+	switch side {
+	case SideSource, SideDestination:
+		want = side
+	case SideKafka:
+		want = p.connectSide()
+	case SideProducer:
+		if p.scope == rules.ScopeSource {
+			want = SideDestination
+		}
+	case SideConsumer:
+		if p.scope == rules.ScopeSink {
+			want = SideSource
+		}
+	default:
+		return nil, cerrors.Errorf("unknown side %q", side)
+	}
+	kafkaOnly := side != SideSource && side != SideDestination
 	var out []int
 	for i, c := range p.connectors {
-		kafka := c.Plugin == kafkaPlugin
-		switch side {
-		case SideSource, SideDestination:
-			if c.Type == side {
-				out = append(out, i)
-			}
-		case SideKafka:
-			if kafka {
-				out = append(out, i)
-			}
-		case SideProducer:
-			if kafka && c.Type == SideDestination {
-				out = append(out, i)
-			}
-		case SideConsumer:
-			if kafka && c.Type == SideSource {
-				out = append(out, i)
-			}
-		default:
-			return nil, cerrors.Errorf("unknown side %q", side)
+		if want != "" && c.Type == want && (!kafkaOnly || c.Plugin == kafkaPlugin) {
+			out = append(out, i)
 		}
 	}
 	if len(out) == 0 {
@@ -237,9 +260,20 @@ func (p *Plan) sides(side string) ([]int, error) {
 	return out, nil
 }
 
+// Origins of a key: the worker file or the connector config. A worker key
+// and a connector key of the same name (producer.sasl.mechanism, say) are
+// different keys.
+const (
+	OriginWorker    = "worker"
+	OriginConnector = "connector"
+)
+
+// keyRef names a key with its origin.
+type keyRef struct{ origin, key string }
+
 // owner records which key wrote a setting, and at which layer.
 type owner struct {
-	key   string
+	keyRef
 	layer int
 }
 
@@ -247,9 +281,10 @@ type owner struct {
 // connector config, lowest first (Worker.baseProducerConfigs and
 // baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-874 and 911-942):
 // worker keys, then the worker's producer./consumer.-prefixed keys, then the
-// connector's own keys. A rule's emit action can add an offset of 0-9 within
-// its base (layer: N), for connectors that merge their own prefixes, such as
-// MirrorMaker's source.cluster. < consumer. < source.consumer..
+// connector's own keys, then its producer.override./consumer.override. keys.
+// A rule's emit action picks its place within its file's base with a named
+// layer (see layerOffsets); LayerFallback is below every other layer and is
+// used as a whole or not at all (ApplyAll).
 const (
 	LayerFallback  = 5
 	LayerWorker    = 10
@@ -276,8 +311,12 @@ func (p *Plan) Set(side, setting, value, key string) (path, overriddenBy string,
 	for _, i := range idx {
 		path := fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", i, escapePointer(setting))
 		o, ok := p.owner[path]
+		me := keyRef{origin: p.origin, key: key}
 		switch {
-		case !ok || o.key == key || o.layer < p.layer:
+		// The same key may write a setting again at its own layer (a kind
+		// that writes one setting on two connectors); a key of the same
+		// name from another origin is another key, decided by layer.
+		case !ok || o.layer < p.layer || (o.layer == p.layer && o.keyRef == me):
 			write = append(write, i)
 			paths = append(paths, path)
 		case o.layer > p.layer:
@@ -289,26 +328,51 @@ func (p *Plan) Set(side, setting, value, key string) (path, overriddenBy string,
 	if len(write) == 0 {
 		return fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", idx[0], escapePointer(setting)), overriddenBy, nil
 	}
+	me := keyRef{origin: p.origin, key: key}
 	for j, i := range write {
-		if o, ok := p.owner[paths[j]]; ok && o.key != key {
-			p.superseded[o.key] = key
+		if o, ok := p.owner[paths[j]]; ok && o.keyRef != me {
+			p.superseded[o.keyRef] = key
 		}
 		c := &p.connectors[i]
 		if c.Settings == nil {
 			c.Settings = map[string]string{}
 		}
 		c.Settings[setting] = value
-		p.owner[paths[j]] = owner{key: key, layer: p.layer}
+		p.owner[paths[j]] = owner{keyRef: me, layer: p.layer}
 	}
 	return paths[0], "", nil
 }
 
-// Superseded maps each key whose value a higher layer replaced to the key
-// that replaced it.
-func (p *Plan) Superseded() map[string]string { return p.superseded }
+// supersededBy returns the key that replaced the value key of origin wrote,
+// if a higher layer replaced it.
+func (p *Plan) supersededBy(origin, key string) (string, bool) {
+	by, ok := p.superseded[keyRef{origin: origin, key: key}]
+	return by, ok
+}
 
-// Secrets returns the environment variables the pipeline references.
-func (p *Plan) Secrets() []Secret { return p.secrets }
+// Secrets returns the environment variables the pipeline references. A
+// variable whose setting a higher layer replaced is left out: the operator
+// would be asked to fill a variable nothing reads.
+func (p *Plan) Secrets() []Secret {
+	var out []Secret
+	for _, s := range p.secrets {
+		if p.references("${" + s.Env + "}") {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func (p *Plan) references(ref string) bool {
+	for _, c := range p.connectors {
+		for _, v := range c.Settings {
+			if strings.Contains(v, ref) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // YAML renders the pipeline file.
 func (p *Plan) YAML(status, description string) ([]byte, error) {

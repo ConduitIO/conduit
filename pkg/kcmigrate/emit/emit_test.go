@@ -67,10 +67,12 @@ func TestIsSecretKey(t *testing.T) {
 
 func TestPlan(t *testing.T) {
 	is := is.New(t)
-	_, err := NewPlan("p", []rules.Emit{{Plugin: "builtin:a", Role: "source"}}, NewEnvNames())
+	_, err := NewPlan("p", rules.ScopeSource, []rules.Emit{{Plugin: "builtin:a", Role: "source"}}, NewEnvNames())
 	is.True(err != nil) // no destination
+	_, err = NewPlan("p", rules.ScopeShared, []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}}, NewEnvNames())
+	is.True(err != nil) // not a connector type
 
-	p, err := NewPlan("my connector/1", []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}}, NewEnvNames())
+	p, err := NewPlan("my connector/1", rules.ScopeSource, []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}}, NewEnvNames())
 	is.NoErr(err)
 	is.Equal(p.File, "pipelines/my_connector_1.yaml")
 	p.layer = LayerConnector
@@ -108,18 +110,28 @@ func asConflict(err error, target **ConflictError) bool {
 // is recorded; the same layer is a conflict.
 func TestPlan_Layers(t *testing.T) {
 	is := is.New(t)
-	p, err := NewPlan("p", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+	p, err := NewPlan("p", rules.ScopeSource, []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
 	is.NoErr(err)
 
-	p.layer = LayerWorker
+	p.origin, p.layer = OriginWorker, LayerWorker
 	_, by, err := p.Set(SideSource, "servers", "w:9092", "bootstrap.servers")
 	is.NoErr(err)
 	is.Equal(by, "")
-	p.layer = LayerConnector
+	p.origin, p.layer = OriginConnector, LayerConnector
 	_, by, err = p.Set(SideSource, "servers", "c:9092", "source.cluster.bootstrap.servers")
 	is.NoErr(err)
 	is.Equal(by, "")
-	is.Equal(p.Superseded()["bootstrap.servers"], "source.cluster.bootstrap.servers")
+	by, ok := p.supersededBy(OriginWorker, "bootstrap.servers")
+	is.True(ok)
+	is.Equal(by, "source.cluster.bootstrap.servers")
+
+	// The same name from another origin is another key: a worker key never
+	// replaces a connector key at a higher layer.
+	p.origin, p.layer = OriginWorker, LayerWorker+1
+	_, by, err = p.Set(SideSource, "servers", "w:9092", "source.cluster.bootstrap.servers")
+	is.NoErr(err)
+	is.Equal(by, "source.cluster.bootstrap.servers")
+	p.origin = OriginConnector
 
 	p.layer = LayerConnector + 2
 	_, _, err = p.Set(SideSource, "saslMechanism", "SCRAM-SHA-512", "source.consumer.sasl.mechanism")
@@ -153,7 +165,7 @@ func TestFinish_MM2Topic(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			p, err := NewPlan("mm", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+			p, err := NewPlan("mm", rules.ScopeSource, []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
 			is.NoErr(err)
 			p.config = tt.cfg
 			notes, err := Finish(p, []rules.Action{{Kind: FinishMM2Topic}})
@@ -163,11 +175,32 @@ func TestFinish_MM2Topic(t *testing.T) {
 		})
 	}
 	is := is.New(t)
-	p, _ := NewPlan("mm", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+	p, _ := NewPlan("mm", rules.ScopeSource, []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
 	p.config = map[string]string{"source.cluster.alias": "a{{b"}
 	notes, err := Finish(p, []rules.Action{{Kind: FinishMM2Topic}})
 	is.NoErr(err)
 	is.True(len(notes) == 1 && notes[0].Blocking)
+	is.Equal(notes[0].Code, kcmigrate.CodeTopicNameUnsupported.Reason())
 	_, err = Finish(p, []rules.Action{{Kind: "nope"}})
 	is.True(err != nil)
+}
+
+// Layers are named, so a rule file cannot place a connector key above the
+// connector's producer.override./consumer.override. keys.
+func TestLayerNames(t *testing.T) {
+	is := is.New(t)
+	for l, want := range map[string]int{"": 0, "client": 1, "cluster-client": 2, "override": 5, "fallback": 0} {
+		got, err := layerOffset(rules.Action{Kind: KindSetting, Args: map[string]string{"layer": l}})
+		is.NoErr(err)
+		is.Equal(got, want)
+	}
+	for _, l := range []string{"1", "5", "9", "Override", "worker"} {
+		_, err := layerOffset(rules.Action{Kind: KindSetting, Args: map[string]string{"layer": l}})
+		is.True(err != nil)
+		err = CheckActions([]rules.ActionRef{{File: "f.yaml", Key: "k", Action: rules.Action{Kind: KindSetting, Args: map[string]string{"side": SideSource, "name": "n", "layer": l}}}})
+		is.True(err != nil)
+	}
+	for _, off := range layerOffsets {
+		is.True(off <= layerOffsets["override"]) // nothing outranks override
+	}
 }

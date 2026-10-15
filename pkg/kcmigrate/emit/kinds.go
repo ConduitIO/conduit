@@ -15,6 +15,7 @@
 package emit
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -60,44 +61,103 @@ func Kinds() []string {
 	return out
 }
 
-// Apply applies the connector's decisions to p at LayerConnector, in order.
-// Entries are refined in place; an entry whose value a higher layer replaced
-// says so and has no target.
-func Apply(p *Plan, ds []rules.Decision) error {
-	for i := range ds {
-		if err := apply(p, &ds[i], LayerConnector); err != nil {
-			return err
+// ApplyAll applies a connector's decisions and the worker's to p, layer by
+// layer as Kafka Connect merges them, and returns the worker entries as
+// applied to p, index-aligned with worker.
+//
+// The connector's entries are refined in place. worker is not modified,
+// since one worker setting lands in many pipelines; the returned copies let
+// the caller record a downgrade (a worker value that cannot be emitted) on
+// the worker's own entry. Dropping the refined copy would let a pipeline run
+// without the setting it needed.
+//
+// Order: the connector's keys, then the worker's (each setting inherited
+// only where no higher layer set it), then the fallback cluster. Entries a
+// higher layer replaced are marked only after every layer is applied, so a
+// value replaced by a later layer says so too.
+func ApplyAll(p *Plan, connector, worker []rules.Decision) ([]kcmigrate.Entry, error) {
+	var fallback []int
+	for i := range connector {
+		if isFallback(connector[i].Emit) {
+			fallback = append(fallback, i)
+			continue
+		}
+		if err := apply(p, &connector[i], OriginConnector, LayerConnector); err != nil {
+			return nil, err
 		}
 	}
-	for i := range ds {
-		if by, ok := p.superseded[ds[i].KV.Key]; ok && ds[i].Entry.Target != nil {
-			markOverridden(&ds[i], by)
+	ws := make([]rules.Decision, len(worker))
+	for i := range worker {
+		ws[i] = worker[i]
+		if err := apply(p, &ws[i], OriginWorker, LayerWorker); err != nil {
+			return nil, err
+		}
+	}
+	if err := applyFallback(p, connector, fallback); err != nil {
+		return nil, err
+	}
+	for i := range connector {
+		if by, ok := p.supersededBy(OriginConnector, connector[i].KV.Key); ok && connector[i].Entry.Target != nil {
+			markOverridden(&connector[i], by)
+		}
+	}
+	out := make([]kcmigrate.Entry, len(ws))
+	for i := range ws {
+		if by, ok := p.supersededBy(OriginWorker, ws[i].KV.Key); ok && ws[i].Entry.Target != nil {
+			markOverridden(&ws[i], by)
+		}
+		out[i] = ws[i].Entry
+	}
+	return out, nil
+}
+
+func isFallback(a *rules.Action) bool {
+	return a != nil && a.Args["layer"] == layerFallback
+}
+
+// applyFallback applies the fallback decisions (MirrorMaker's
+// target.cluster.*), per side, as a whole or not at all. They describe one
+// cluster: if a higher layer already names the side's brokers (the worker's
+// bootstrap.servers, a producer.override.bootstrap.servers), the records go
+// to that cluster, and taking the fallback's credentials for it would mix
+// two clusters' settings.
+func applyFallback(p *Plan, ds []rules.Decision, idx []int) error {
+	used := map[string]string{} // side -> "" if the fallback is used, else the key naming the brokers
+	for _, i := range idx {
+		side := ds[i].Emit.Args["side"]
+		if _, ok := used[side]; !ok {
+			used[side] = p.brokersOwner(side)
+		}
+	}
+	for _, i := range idx {
+		d := &ds[i]
+		if by := used[d.Emit.Args["side"]]; by != "" {
+			d.Entry.Target = nil
+			d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " Not used: " + by + " names the brokers Kafka Connect writes to, and this key's cluster applies only when nothing else does.")
+			continue
+		}
+		if err := apply(p, d, OriginConnector, LayerFallback); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// ApplyDefaults applies worker decisions to p at LayerWorker, after Apply:
-// a worker setting is inherited only where no higher layer set it, as Kafka
-// Connect merges the worker's keys under the connector's. ds is not
-// modified, since one worker setting lands in many pipelines; the entries as
-// applied to p are returned, index-aligned with ds, so the caller can record
-// a downgrade (a worker value that cannot be emitted) on the worker's own
-// entry. Dropping the refined copy would let a pipeline run without the
-// setting it needed.
-func ApplyDefaults(p *Plan, ds []rules.Decision) ([]kcmigrate.Entry, error) {
-	out := make([]kcmigrate.Entry, len(ds))
-	for i := range ds {
-		d := ds[i]
-		if err := apply(p, &d, LayerWorker); err != nil {
-			return nil, err
-		}
-		out[i] = d.Entry
+// brokersOwner returns the key that set servers on side, or "".
+func (p *Plan) brokersOwner(side string) string {
+	idx, err := p.sides(side)
+	if err != nil {
+		return ""
 	}
-	return out, nil
+	for _, i := range idx {
+		if o, ok := p.owner[fmt.Sprintf("/pipelines/0/connectors/%d/settings/servers", i)]; ok {
+			return o.key
+		}
+	}
+	return ""
 }
 
-func apply(p *Plan, d *rules.Decision, base int) error {
+func apply(p *Plan, d *rules.Decision, origin string, base int) error {
 	if d.Emit == nil {
 		return nil
 	}
@@ -109,28 +169,46 @@ func apply(p *Plan, d *rules.Decision, base int) error {
 	if err != nil {
 		return cerrors.Errorf("key %s: %w", d.KV.Key, err)
 	}
+	p.origin = origin
 	p.layer = base + offset
-	if d.Emit.Args["layer"] == layerFallback {
+	if isFallback(d.Emit) {
 		p.layer = LayerFallback
 	}
 	return k(p, d)
 }
 
-// layerFallback marks an action whose setting is used only when no worker
-// or connector layer sets it (MirrorMaker's target.cluster.bootstrap.servers:
-// Kafka Connect's producer writes to the worker's cluster).
+// layerFallback marks an action whose cluster is used only when no worker
+// or connector layer names the side's brokers (MirrorMaker's
+// target.cluster.*: Kafka Connect's producer writes to the worker's
+// cluster).
 const layerFallback = "fallback"
 
-// layerOffset reads the optional layer argument: a digit 0-9, or fallback.
+// layerOffsets are the named layers within a rule file's base, lowest
+// first. Kafka Connect merges a connector's client config as: the
+// connector's own keys, then its client-prefixed keys, then the
+// cluster-specific client keys, then producer.override./consumer.override.
+// (MirrorMaker's source.cluster. < consumer. < source.consumer.; the
+// worker's top-level keys < its producer./consumer. keys). override is
+// above every other connector layer, so no class rule can outrank it.
+var layerOffsets = map[string]int{
+	"":               0,
+	"client":         1,
+	"cluster-client": 2,
+	"override":       5,
+}
+
+// layerOffset reads the optional layer argument: a name of layerOffsets, or
+// fallback.
 func layerOffset(a rules.Action) (int, error) {
-	l, ok := a.Args["layer"]
-	if !ok || l == layerFallback {
+	l := a.Args["layer"]
+	if l == layerFallback {
 		return 0, nil
 	}
-	if len(l) != 1 || l[0] < '0' || l[0] > '9' {
-		return 0, cerrors.Errorf("layer must be a digit 0-9, not %q", l)
+	off, ok := layerOffsets[l]
+	if !ok {
+		return 0, cerrors.Errorf("layer must be client, cluster-client, override or fallback, not %q", l)
 	}
-	return int(l[0] - '0'), nil
+	return off, nil
 }
 
 func markOverridden(d *rules.Decision, by string) {
@@ -292,11 +370,14 @@ func saslJAAS(p *Plan, d *rules.Decision) error {
 		return nil
 	}
 	side := d.Emit.Args["side"]
-	if err := set(p, d, side, "saslUsername", login.username, ""); err != nil || d.Entry.Code != "" {
+	// A username and password are one login: a higher layer that set the
+	// username set the password too, and the entry is overridden as a
+	// whole, without a variable.
+	if err := set(p, d, side, "saslUsername", login.username, ""); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
 		return err
 	}
 	ref, env := p.secretRef(d)
-	if err := set(p, d, side, "saslPassword", ref, env); err != nil {
+	if err := set(p, d, side, "saslPassword", ref, env); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
 		return err
 	}
 	d.Entry.Secret = true

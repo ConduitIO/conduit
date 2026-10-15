@@ -323,32 +323,31 @@ keys:
     diff: identity
 
   # Client overrides. A connector's producer.override./consumer.override. keys
-  # are the top layer of its client config (layer 5 above the connector's
-  # own keys, so they also win over a connector's cluster settings such as
-  # MirrorMaker's target.cluster.*) (Worker.baseProducerConfigs and
+  # are the top layer of its client config (layer override, above every
+  # other layer of the connector's own keys) (Worker.baseProducerConfigs and
   # baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-874 and 911-942).
   - key: producer.override.bootstrap.servers
     status: translated
     reason: The connector's producer writes to these brokers instead of the worker's.
-    emit: {kind: setting, side: producer, name: servers, layer: "5"}
+    emit: {kind: setting, side: producer, name: servers, layer: override}
     diff: identity
   - key: consumer.override.bootstrap.servers
     status: translated
     reason: The connector's consumer reads from these brokers instead of the worker's.
-    emit: {kind: setting, side: consumer, name: servers, layer: "5"}
+    emit: {kind: setting, side: consumer, name: servers, layer: override}
     diff: identity
   - key: producer.override.acks
     diff: behavior
     values:
       - match: [all, "-1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: all, layer: "5"}
+        emit: {kind: setting, side: producer, name: acks, value: all, layer: override}
       - match: ["1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: one, layer: "5"}
+        emit: {kind: setting, side: producer, name: acks, value: one, layer: override}
       - match: ["0"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: none, layer: "5"}
+        emit: {kind: setting, side: producer, name: acks, value: none, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -360,7 +359,7 @@ keys:
     values:
       - match: [none, gzip, snappy, lz4, zstd]
         status: translated
-        emit: {kind: setting, side: producer, name: compression, layer: "5"}
+        emit: {kind: setting, side: producer, name: compression, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -369,17 +368,17 @@ keys:
         fix: Use one of the supported codecs.
   - key: producer.override.client.id
     status: translated
-    emit: {kind: setting, side: producer, name: clientID, layer: "5"}
+    emit: {kind: setting, side: producer, name: clientID, layer: override}
     diff: tuning
   - key: consumer.override.auto.offset.reset
     diff: behavior
     values:
       - match: [earliest]
         status: translated
-        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "true", layer: "5"}
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "true", layer: override}
       - match: [latest]
         status: translated
-        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "false", layer: "5"}
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "false", layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -388,11 +387,11 @@ keys:
         fix: Set auto.offset.reset to earliest or latest.
   - key: consumer.override.group.id
     status: translated
-    emit: {kind: setting, side: consumer, name: groupID, layer: "5"}
+    emit: {kind: setting, side: consumer, name: groupID, layer: override}
     diff: identity
   - key: consumer.override.client.id
     status: translated
-    emit: {kind: setting, side: consumer, name: clientID, layer: "5"}
+    emit: {kind: setting, side: consumer, name: clientID, layer: override}
     diff: tuning
   - key: producer.override.security.protocol
     diff: identity
@@ -400,7 +399,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: producer, layer: "5"}
+        emit: {kind: tls-from-protocol, side: producer, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -413,7 +412,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: consumer, layer: "5"}
+        emit: {kind: tls-from-protocol, side: consumer, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -425,7 +424,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: producer, name: saslMechanism, layer: "5"}
+        emit: {kind: setting, side: producer, name: saslMechanism, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -437,7 +436,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: consumer, name: saslMechanism, layer: "5"}
+        emit: {kind: setting, side: consumer, name: saslMechanism, layer: override}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -446,12 +445,12 @@ keys:
         fix: Use a supported mechanism, or keep this connector on Kafka Connect.
   - key: producer.override.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: producer, layer: "5"}
+    emit: {kind: sasl-jaas, side: producer, layer: override}
     secret: true
     diff: secret
   - key: consumer.override.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: consumer, layer: "5"}
+    emit: {kind: sasl-jaas, side: consumer, layer: override}
     secret: true
     diff: secret
   - key: {prefix: producer.override.ssl.}

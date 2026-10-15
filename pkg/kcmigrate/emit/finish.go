@@ -55,7 +55,7 @@ func Finish(p *Plan, actions []rules.Action) ([]kcmigrate.Note, error) {
 		if !ok {
 			return nil, cerrors.Errorf("unknown finish kind %q", a.Kind)
 		}
-		p.layer = LayerConnector
+		p.origin, p.layer = OriginConnector, LayerConnector
 		n, err := f(p, a)
 		if err != nil {
 			return nil, err
@@ -102,7 +102,7 @@ func mm2Topic(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 		prefix := valueOr(p.config, "source.cluster.alias", mm2DefaultAlias) + valueOr(p.config, "replication.policy.separator", mm2DefaultSep)
 		if strings.ContainsAny(prefix, "{}") {
 			return []kcmigrate.Note{{
-				Code: kcmigrate.CodeSettingRequired.Reason(), Blocking: true, Rule: FinishMM2Topic,
+				Code: kcmigrate.CodeTopicNameUnsupported.Reason(), Blocking: true, Rule: FinishMM2Topic,
 				Reason: "The source cluster alias or the replication separator contains '{' or '}', which cannot be written into a topic template.",
 				Fix:    "Set the destination topic on the pipeline by hand.",
 			}}, nil
@@ -115,6 +115,17 @@ func mm2Topic(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 		return nil, cerrors.Errorf(FinishMM2Topic+": %w", err)
 	}
 	return nil, nil
+}
+
+// requiredFix suggests --worker only where the worker file can hold the
+// value: the brokers of Kafka Connect's own client. Nothing in a worker
+// file names a sink's topics or a MirrorMaker source cluster.
+func requiredFix(p *Plan, side, name, env string) string {
+	fix := fmt.Sprintf("Set %s in the environment (see secrets.env.template)", env)
+	if name == "servers" && side == p.connectSide() {
+		return fix + ", or pass the worker file with --worker if it holds bootstrap.servers."
+	}
+	return fix + "."
 }
 
 func valueOr(cfg map[string]string, key, def string) string {
@@ -146,7 +157,7 @@ func RequireSettings(p *Plan, required Required) []kcmigrate.Note {
 				continue
 			}
 			env := p.envs.claim(strings.Trim(envUnsafe.ReplaceAllString("KC_"+strings.ToUpper(p.ID+"_"+side+"_"+name), "_"), "_"), p.ID+"\x00required "+side+" "+name)
-			p.layer = LayerConnector
+			p.origin, p.layer = OriginConnector, LayerConnector
 			if _, _, err := p.Set(side, name, "${"+env+"}", "(required "+side+" "+name+")"); err != nil {
 				continue // cannot happen: the setting is unset
 			}
@@ -154,7 +165,7 @@ func RequireSettings(p *Plan, required Required) []kcmigrate.Note {
 			notes = append(notes, kcmigrate.Note{
 				Code: kcmigrate.CodeSettingRequired.Reason(), Blocking: true, Rule: "required/" + side + "/" + name,
 				Reason: fmt.Sprintf("The %s %s requires %s, and no key of the Kafka Connect config sets it; the pipeline references ${%s} instead.", c.Plugin, side, name, env),
-				Fix:    fmt.Sprintf("Set %s in the environment (see secrets.env.template), or pass the worker file with --worker if it holds the value.", env),
+				Fix:    requiredFix(p, side, name, env),
 			})
 		}
 	}
