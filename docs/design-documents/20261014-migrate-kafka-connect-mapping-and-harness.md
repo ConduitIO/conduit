@@ -631,7 +631,10 @@ timestamps are not preserved"). `MirrorCheckpointConnector` produces no pipeline
 equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connector_class_unsupported`.
 `MirrorHeartbeatConnector` produces no pipeline either, non-blocking: it writes heartbeat records for
 monitoring and copies no data. Both are `pipeline: none` rule files (`mirror-checkpoint.yaml`,
-`mirror-heartbeat.yaml`). A literal secret in either still carries `kc.secret_plaintext`. A dedicated-mode
+`mirror-heartbeat.yaml`). The heartbeat file adds a non-blocking class note (`kc.output_shape_differs`) that
+heartbeats stop: the heartbeats topic gets no new records, which breaks dashboards and MirrorClient lookups, and
+the migrated source pipeline does not copy heartbeats topics. A literal secret in either still carries
+`kc.secret_plaintext`. A dedicated-mode
 `mm2.properties` file (`clusters`, `A->B.*`) is not an input format in v1 (D4).
 
 | Upstream key | Status | Conduit | Notes |

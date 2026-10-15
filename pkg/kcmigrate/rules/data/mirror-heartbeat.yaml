@@ -14,3 +14,7 @@ every:
   code: kc.connector_class_unsupported
   reason: MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.
   fix: None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.
+notes:
+  - code: kc.output_shape_differs
+    reason: Heartbeats stop once this connector is retired. The heartbeats topic gets no new records, so dashboards and MirrorClient lookups that read it (replication hops, upstream clusters) stop working. With heartbeats.replication.enabled, the migrated MirrorSourceConnector pipeline does not copy heartbeats topics either, since it reads only its listed topics.
+    fix: Keep this connector on Kafka Connect while anything reads the heartbeats topic, or move those dashboards to Conduit's pipeline metrics before retiring it.

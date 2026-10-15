@@ -37,4 +37,5 @@
 
 | | Connector | Code | Difference | Fix |
 | --- | --- | --- | --- | --- |
+| note | mm2-hbc | `kc.output_shape_differs` | Heartbeats stop once this connector is retired. The heartbeats topic gets no new records, so dashboards and MirrorClient lookups that read it (replication hops, upstream clusters) stop working. With heartbeats.replication.enabled, the migrated MirrorSourceConnector pipeline does not copy heartbeats topics either, since it reads only its listed topics. | Keep this connector on Kafka Connect while anything reads the heartbeats topic, or move those dashboards to Conduit's pipeline metrics before retiring it. |
 | note | mm2-hbc | `kc.secret_plaintext` | The input holds at least one secret as a literal value. No pipeline is written for this connector, but the input file itself contains the secret. | Replace the literal in the Kafka Connect config with a config-provider reference. |

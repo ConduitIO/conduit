@@ -321,6 +321,13 @@ func TestMirror_HeartbeatNoPipeline(t *testing.T) {
 	is.Equal(rc.Pipeline, "")
 	is.Equal(rc.PipelineStatus, kcmigrate.PipelineStatus(""))
 	is.True(res.OK)
+	// Retiring it stops the heartbeats; the note says so, without blocking.
+	var stops bool
+	for _, n := range rc.Notes {
+		stops = stops || (n.Code == kcmigrate.CodeOutputShapeDiffers.Reason() && !n.Blocking && strings.Contains(n.Reason, "Heartbeats stop"))
+	}
+	is.True(stops)
+	is.True(strings.Contains(file(res, "REPORT.md"), "Heartbeats stop"))
 	for _, f := range res.Files {
 		is.True(!strings.HasPrefix(f.Path, "pipelines/"))
 	}
