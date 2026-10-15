@@ -1,0 +1,173 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "v0.21.0-test",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "(worker)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "com.example.ExampleSource",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "example",
+          "version": "1.0"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 3,
+    "keys": 9,
+    "translated": 5,
+    "approximated": 0,
+    "unsupported": 4,
+    "blocking": 4
+  },
+  "connectors": [
+    {
+      "name": "connect-distributed.properties",
+      "class": "",
+      "role": "worker",
+      "entries": [
+        {
+          "key": "group.id",
+          "status": "translated",
+          "origin": {
+            "file": "connect-distributed.properties",
+            "line": 1,
+            "column": 1
+          },
+          "reason": "Conduit has no worker cluster.",
+          "blocking": false
+        },
+        {
+          "key": "bootstrap.servers",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-distributed.properties",
+            "line": 2,
+            "column": 1
+          },
+          "code": "kc.key_unknown",
+          "reason": "No rule in the worker rules (written against kafka 4.2) knows bootstrap.servers.",
+          "fix": "Check the key for a typo. If it is a key of a newer upstream version, keep this connector on Kafka Connect until migrate's rules cover it.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    },
+    {
+      "name": "clean",
+      "class": "com.example.ExampleSource",
+      "role": "source",
+      "entries": [
+        {
+          "key": "name",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 1,
+            "column": 1
+          },
+          "blocking": false
+        },
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 2,
+            "column": 1
+          },
+          "blocking": false
+        },
+        {
+          "key": "example.host",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 3,
+            "column": 1
+          },
+          "blocking": false
+        },
+        {
+          "key": "example.mode",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 4,
+            "column": 1
+          },
+          "code": "kc.key_duplicate",
+          "reason": "Overridden by the occurrence at connectors/clean.properties:5:1; the last value wins, as in Kafka Connect.",
+          "blocking": false
+        },
+        {
+          "key": "example.mode",
+          "status": "unsupported",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 5,
+            "column": 1
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This mode has no Conduit equivalent.",
+          "fix": "Use fast or slow.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    },
+    {
+      "name": "blocking",
+      "class": "com.example.Unknown",
+      "role": "unknown",
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "connectors/blocking.json",
+            "pointer": "/config/connector.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class com.example.Unknown has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "secret.password",
+          "status": "unsupported",
+          "origin": {
+            "file": "connectors/blocking.json",
+            "pointer": "/config/secret.password"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class com.example.Unknown has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

@@ -214,7 +214,11 @@ func classUnsupported(class string) Outcome {
 func unknownKey(key string, f *File) Outcome {
 	where := "these rules"
 	if f != nil {
-		where = fmt.Sprintf("the %s rules (written against %s %s)", f.info().Class, f.Upstream.Name, f.Upstream.Version)
+		name := f.Class
+		if name == "" {
+			name = f.Scope
+		}
+		where = fmt.Sprintf("the %s rules (written against %s %s)", name, f.Upstream.Name, f.Upstream.Version)
 	}
 	return Outcome{
 		Status: kcmigrate.StatusUnsupported, Blocking: true, Code: kcmigrate.CodeKeyUnknown.Reason(),
