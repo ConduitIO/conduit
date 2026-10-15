@@ -250,6 +250,17 @@ func TestRerenderMatrix(t *testing.T) {
 	is.Equal(string(md), string(md2))
 }
 
+func TestSkippedArmReasonIsFenced(t *testing.T) {
+	is := is.New(t)
+	cfg := config{
+		Shape: "1x1", Session: sessionMatrix, Rounds: 2, Arms: []armSpec{{Label: "x"}},
+		skipped: []skippedArm{{Label: "v2", Reason: "ERR can't start pipeline on conduit " + strings.Repeat("x ", 100) + "```"}},
+	}
+	out := renderSummary(cfg, nil)
+	is.True(strings.Contains(out, "- v2:\n\n  ```text\n  ERR can't start pipeline on conduit ")) // reason in a fenced block
+	is.Equal(strings.Count(out, "```"), 2)                                                       // a fence in the reason cannot close the block
+}
+
 func TestRerenderSessionIncompleteWritesNothing(t *testing.T) {
 	is := is.New(t)
 	dir := filepath.Join(t.TempDir(), "s")

@@ -414,15 +414,19 @@ func renderMatrixSummary(b *strings.Builder, cfg config, results []runResult) st
 	b.WriteString(table)
 
 	if len(cfg.skipped) > 0 {
-		b.WriteString("Arms that produced no output in the probe and were not run:\n\n")
+		b.WriteString("Arms that produced no output in the probe and were not run, with Conduit's error lines:\n\n")
 		for _, s := range cfg.skipped {
 			reason := strings.Join(strings.Fields(s.Reason), " ")
 			if len(reason) > 500 {
 				reason = reason[:500] + "..."
 			}
-			fmt.Fprintf(b, "- %s: %s\n", s.Label, reason)
+			// A fenced block: the reason is log text, longer than a line and
+			// quoting names verbatim, so it stays out of the prose lint rules
+			// and renders as what it is. A backtick run in it cannot close
+			// the fence.
+			reason = strings.ReplaceAll(reason, "`", "'")
+			fmt.Fprintf(b, "- %s:\n\n  ```text\n  %s\n  ```\n\n", s.Label, reason)
 		}
-		b.WriteString("\n")
 	}
 	b.WriteString("Each arm ran twice per round (replicates -a and -b). Its A/A floor is the largest per-round\n" +
 		"difference between them; \"typical\" is the median per-round difference. A comparison is _resolved_ only\n" +
