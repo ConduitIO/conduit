@@ -85,7 +85,11 @@ func TestSharedRules(t *testing.T) {
 		{"topic creation", "topic.creation.default.partitions", "3", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"tolerance none", "errors.tolerance", "none", kcmigrate.StatusTranslated, "", false, "window-nack-threshold: 0"},
 		{"tolerance all", "errors.tolerance", "all", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
-		{"dlq topic", "errors.deadletterqueue.topic.name", "dlq", kcmigrate.StatusUnsupported, "kc.key_unsupported", false, ""},
+		{"dlq topic", "errors.deadletterqueue.topic.name", "dlq", kcmigrate.StatusTranslated, "", false, ""},
+		{"empty topics", "topics", "", kcmigrate.StatusTranslated, "", false, ""},
+		{"empty topics regex", "topics.regex", "", kcmigrate.StatusTranslated, "", false, ""},
+		{"default boundary", "transaction.boundary", "poll", kcmigrate.StatusTranslated, "", false, ""},
+		{"other boundary", "transaction.boundary", "connector", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"no transforms", "transforms", "", kcmigrate.StatusTranslated, "", false, ""},
 		{"transforms", "transforms", "route", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"transform setting", "transforms.route.type", "org.apache.kafka.connect.transforms.RegexRouter", kcmigrate.StatusUnsupported, "kc.smt_unsupported", true, ""},
@@ -144,7 +148,13 @@ func TestSharedRules_WorkerInheritance(t *testing.T) {
 	is.True(strings.Contains(p, `tls.enabled: "true"`))
 	is.Equal(res.Report.Summary.Blocking, 0)
 	is.True(res.OK)
-	is.Equal(len(res.Report.Connectors[1].Notes), 0) // the worker's converters count
+	var codes []string
+	for _, n := range res.Report.Connectors[1].Notes {
+		codes = append(codes, n.Code+" "+n.Rule)
+	}
+	// The worker's converters count, so no kc.converter_unknown; the absent
+	// errors.retry.timeout and header.converter defaults are noted.
+	is.Equal(codes, []string{"kc.default_differs shared/defaults/errors.retry.timeout", "kc.default_differs shared/defaults/header.converter"})
 	checkPipeline(t, p)
 }
 

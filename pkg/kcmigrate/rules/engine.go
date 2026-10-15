@@ -374,3 +374,34 @@ func branchEmit(r *Rule, b ValueBranch) *Action {
 	}
 	return r.Emit
 }
+
+// DefaultNotes returns the connector-level notes for the upstream defaults
+// that apply to c: every default of the class file and of the shared file
+// whose key c does not set (nor the worker, for a default marked worker).
+// An unknown class has no notes: all its keys already block.
+func (e *Engine) DefaultNotes(c kcmigrate.Connector, workerKeys map[string]bool) []kcmigrate.Note {
+	f, ok := e.classes[c.Class]
+	if !ok {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, kv := range c.Config {
+		set[kv.Key] = true
+	}
+	var notes []kcmigrate.Note
+	for _, file := range []*File{f, e.shared} {
+		if file == nil {
+			continue
+		}
+		for _, d := range file.Defaults {
+			if d.Note == nil || set[d.Key] || (d.Worker && workerKeys[d.Key]) {
+				continue
+			}
+			notes = append(notes, kcmigrate.Note{
+				Code: d.Note.Code, Reason: d.Note.Reason, Fix: d.Note.Fix, Blocking: d.Note.Blocking,
+				Rule: strings.TrimSuffix(file.name, ".yaml") + "/defaults/" + d.Key,
+			})
+		}
+	}
+	return notes
+}

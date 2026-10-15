@@ -264,6 +264,11 @@ func TestLoad_Rejects(t *testing.T) {
 		{"values and outcome", head + "  - key: a\n    status: translated\n    diff: identity\n    values:\n      - otherwise: true\n        status: unsupported\n        blocking: true\n        code: kc.key_unsupported\n        reason: r\n        fix: f\n", "outcome per value"},
 		{"dangling alias", head + "  - key: a\n    aliasOf: b\n    diff: identity\n", "aliasOf"},
 		{"alias with outcome", head + "  - key: b\n    status: translated\n    emit: {kind: none}\n    diff: identity\n  - key: a\n    aliasOf: b\n    status: translated\n    diff: identity\n", "outcome from the aliased key"},
+		{"default without note", head + "  - key: a\n    status: translated\n    emit: {kind: none}\n    diff: identity\ndefaults:\n  - key: a\n    default: x\n", "exactly one of note, coveredBy"},
+		{"default with both", head + "defaults:\n  - key: a\n    coveredBy: kc.default_differs\n    note: {code: kc.default_differs, reason: r}\n", "exactly one of note, coveredBy"},
+		{"dangling coveredBy", head + "defaults:\n  - key: a\n    coveredBy: kc.default_differs\n", "not the code of a note"},
+		{"unregistered note code", head + "defaults:\n  - key: a\n    note: {code: kc.made_up, reason: r}\n", "registered kc.* code"},
+		{"blocking note without fix", head + "defaults:\n  - key: a\n    note: {code: kc.default_differs, reason: r, blocking: true}\n", "a fix when blocking"},
 		{"overlapping regexes", head + "  - key: {regex: '^a\\.'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n  - key: {regex: '^a\\.b'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n", "more than one regex"},
 	}
 	for _, tt := range tests {

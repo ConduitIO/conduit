@@ -72,6 +72,9 @@ var (
 	// connector nor the worker file sets key.converter or value.converter,
 	// so the wire format is unknown. Blocking.
 	CodeConverterUnknown = conduiterr.Register("kc.converter_unknown", codes.InvalidArgument)
+	// CodeDefaultDiffers: a connector-level note for an absent key whose
+	// Kafka Connect default differs from Conduit's behavior.
+	CodeDefaultDiffers = conduiterr.Register("kc.default_differs", codes.InvalidArgument)
 	// CodeSecretPlaintext: a connector-level note that the input holds a
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.

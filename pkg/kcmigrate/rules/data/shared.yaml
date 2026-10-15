@@ -202,25 +202,42 @@ keys:
     reason: Conduit retries through pipeline recovery, with its own backoff, not per operation.
     diff: tuning
   - key: {prefix: errors.deadletterqueue.}
-    status: unsupported
-    code: kc.key_unsupported
-    reason: Kafka Connect uses the dead-letter queue only with errors.tolerance=all, which this version does not translate.
-    fix: None needed while errors.tolerance is none.
+    status: translated
+    reason: Kafka Connect uses the dead-letter queue only with errors.tolerance=all, which this version reports as blocking; with errors.tolerance=none these keys have no effect.
+    emit: {kind: none}
     diff: behavior
 
   # Topics.
   - key: topics
-    status: translated
-    reason: Kafka Connect trims the list and splits it on commas with surrounding whitespace; written the same way.
-    emit: {kind: list-setting, side: consumer, name: topics}
     diff: identity
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default; topics.regex selects the topics, or the connector reads none.
+        emit: {kind: none}
+      - pattern: '(?s).'
+        status: translated
+        reason: Kafka Connect trims the list and splits it on commas with surrounding whitespace; written the same way.
+        emit: {kind: list-setting, side: consumer, name: topics}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a topic list.
+        fix: List the topics, separated by commas.
   - key: topics.regex
-    status: unsupported
-    blocking: true
-    code: kc.key_unsupported
-    reason: The Kafka source takes a list of topics, not a pattern.
-    fix: List the topics in topics.
     diff: identity
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source takes a list of topics, not a pattern.
+        fix: List the topics in topics.
   - key: {prefix: topic.creation.}
     status: unsupported
     blocking: true
@@ -249,11 +266,18 @@ keys:
         reason: Kafka Connect accepts only requested and required.
         fix: Set exactly.once.support to requested or required.
   - key: transaction.boundary
-    status: unsupported
-    code: kc.key_unsupported
-    reason: Meaningful only with exactly-once delivery.
-    fix: None needed.
     diff: behavior
+    values:
+      - match: [poll]
+        status: translated
+        reason: The upstream default; it has an effect only with exactly-once delivery, which Conduit does not offer.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A non-default transaction boundary only matters with exactly-once delivery, which Conduit does not offer; the connector's records were committed in other units.
+        fix: Remove the setting, or keep this connector on Kafka Connect.
   - key: transaction.boundary.interval.ms
     status: unsupported
     code: kc.key_unsupported
@@ -432,3 +456,19 @@ keys:
     fix: None needed.
     lint: [kc.lint.client_override_policy, kc.lint.kip1188_override_risk]
     diff: tuning
+
+defaults:
+  - key: errors.retry.timeout
+    default: "0"
+    note:
+      code: kc.default_differs
+      reason: Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.
+  - key: errors.retry.delay.max.ms
+    default: "60000"
+    coveredBy: kc.default_differs
+  - key: header.converter
+    default: org.apache.kafka.connect.storage.SimpleHeaderConverter
+    worker: true
+    note:
+      code: kc.default_differs
+      reason: Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.
