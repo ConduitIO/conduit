@@ -39,7 +39,14 @@ Without `CONDUIT_BIN` (the normal `test` job) the tests check the corpus
 itself: every manifest parses strictly, every input parses, every key a
 manifest names is in its input, scrub-v1 passes, every cited repository is in
 `ATTRIBUTION.md` with the declared license, and every declared plugin has a
-certification entry. Everything that runs the command is reported pending.
+certification entry. `TestMigrate_InProcess` also runs the command, inside
+the test binary through the same `cmd/conduit/root/migrate` code, for every
+case whose rule data exists: the report contract and completeness, the case's
+expectations, leak checks, the goldens and determinism. It needs no binary,
+so a rule change that breaks a golden fails the PR that makes it
+(`go test ./tests/migrate/ -run TestMigrate_InProcess -update` rewrites the
+goldens the same way). The binary-only checks (`pipelines validate`, the
+second working directory, MCP parity) stay pending.
 
 With `CONDUIT_BIN`, `TestMigrate_CLI` runs each case through
 `conduit migrate kafka-connect --json --out <tmp>` with a fixed environment
