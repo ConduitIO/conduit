@@ -20,14 +20,82 @@ In short:
   unsigned corruption: it halts on overflow too.
 - Nothing infers a mode from "there is no position". A mode is either stamped in the position or set
   explicitly; a new pipeline that sets none gets a warning in N and is refused in N+1.
-- Strict snapshot positions carry the key as exact text and resume with typed binds (integers) or an explicit
-  `CAST(? AS DECIMAL(p,s))`. Spiked on MySQL 8.0.39 and 8.4.11, including one form that looks right and is not.
+- Snapshot keys are already exact in every mode (mysql#206, merged after revision 4); `strict` keeps that
+  format. The bind rule from the resume spike still applies: typed integer binds, never `CAST(? AS UNSIGNED)`
+  over a prepared string.
 
 - The `binlog_row_image` Open check (with `binlog_format` and `binlog_row_value_options`) refuses a non-`FULL`
-  server in `strict`. In `legacy` it warns in N and refuses from N+1.
+  server in `strict`. In `legacy` it warns in N and refuses from N+1. A row image that skipped columns
+  already halts at runtime in every mode (mysql#211).
 
 This is a payload contract change and Tier 1. All open questions are decided (see Decisions recorded), and the
 implementation PRs still need DeVaris's sign-off.
+
+## Status and recommendations (revision 5, 2026-10-15)
+
+Revision 5 reconciles the design with `ConduitIO/conduit-connector-mysql` `main` at `4676f45` and asks for
+sign-off on the implementation plan. Decisions 1 to 5 and 8 are unchanged. Line references elsewhere in this
+document are still to `22f8da3` unless they say otherwise; they were not all re-pointed.
+
+### What merged since revision 4, and what it changes here
+
+| Change on `main` | Effect on this design |
+| --- | --- |
+| mysql#206: snapshot keys are tagged and type-exact, each records its column type, snapshot envelopes are version 2 | Closes mysql#204 for every mode (decision 7). `strict` needs no key format of its own. The strict stamp moves to envelope **version 3**; `legacy` keeps writing today's envelopes (snapshot v2, CDC v1). One bind rule remains for the implementation (Keys and snapshot positions, revision 5 note) |
+| mysql#211: go-mysql points at a ConduitIO fork exposing `canal.RowsEvent.SkippedColumns`; any skipped column halts with `mysql.cdc.row_image_skipped_columns` in every mode | The session-level row-image residual risk is closed (decision 6); the upstream issue is filed (go-mysql-org/go-mysql#1205, PR #1206). `mysql.types.null_in_not_null` stays as a cheap assertion for a nil in a `NOT NULL` column from any other cause |
+| mysql#214, #219: hamba/avro replaced by `iskorotkov/avro` v2.34.0; SDK v0.16.0, `conduit-commons` v0.8.0 | Re-spiked on these versions (in-memory SDK schema service, `commons` `Schema.Marshal`/`Unmarshal`): output identical to rounds 1 and 2. Canonical `String()` drops defaults and properties, `json.Marshal` keeps both; the registry returns the bytes unchanged and `mysql.type` survives parsing; nil and plain `T` go into `["null", T]` and come back as nil and plain `T`; Avro `int` decodes to Go `int`; decimal to `*big.Rat`; nil in a bare field and `uint64` in a `long` are encoder errors. `schema.Get` still does not apply the schema context prefix (SDK v0.16.0 `schema/schema.go`) |
+| mysql#215: error codes are `mysql.<area>.<reason>` | Every code in this document is renamed (table below). Codes are public API, so the names here are the ones to implement |
+| mysql#196, #203: the unsafe snapshot is gone, and a `sortingColumn` must be `NOT NULL` and unique | "A nullable `sortingColumn` stays bare `T`" (NULL section) can no longer happen; key columns are always `NOT NULL` |
+| mysql#226 (open, Tier 1): `BIGINT UNSIGNED` above 2^63-1 halts in both paths with `mysql.types.unsigned_overflow` | Ships the bug-fix half of decision 2 now, without `types.*` settings. Its remedy is "exclude the table or fix the rows" until `types.bigintUnsigned` exists; the per-phase remedy table under What `legacy` is applies from PR C below |
+
+Code names (revision 4 -> revision 5):
+
+| Revision 4 | Revision 5 |
+| --- | --- |
+| `MYSQL_UNSIGNED_OVERFLOW` | `mysql.types.unsigned_overflow` |
+| `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` | `mysql.types.unsigned_overflow_legacy_snapshot` |
+| `MYSQL_NULL_IN_NOT_NULL` | `mysql.types.null_in_not_null` |
+| `MYSQL_TYPES_SWITCH_IN_SNAPSHOT` | `mysql.types.switch_in_snapshot` |
+| `MYSQL_TYPES_STAMP_MISMATCH` | `mysql.types.stamp_mismatch` |
+| `MYSQL_TYPES_MODE_REQUIRED` | `mysql.config.types_mode_required` |
+| `MYSQL_LEGACY_SNAPSHOT_REMOVED` | `mysql.config.legacy_snapshot_removed` |
+| `MYSQL_BINLOG_ROW_IMAGE`, `MYSQL_BINLOG_FORMAT`, `MYSQL_BINLOG_ROW_VALUE_OPTIONS` | `mysql.config.binlog_row_image`, `mysql.config.binlog_format`, `mysql.config.binlog_row_value_options` |
+| `MYSQL_NULLABILITY_UNAVAILABLE` | `mysql.schema.nullability_unavailable` |
+
+### Recommendations for sign-off
+
+1. **Sign off the semantics as decided.** Nothing found since revision 4 argues for changing decisions 1 to 5.
+   The reconciliations above are mechanical except the envelope number.
+2. **Cut the Avro `decimal` logical type from N; ship it in N+1 if anyone asks.** N ships `types.decimal` in
+   {`string`, `double`} and `types.bigintUnsigned` in {`long`, `string`}. The `decimal` value of both settings
+   is the only option whose Go value (`*big.Rat`) several in-tree consumers reject or mangle (consumer
+   inventory), it doubles the decimal test matrix, and the v0.21 migration story does not need it: a Debezium
+   connector with `decimal.handling.mode=precise` maps to `string` with a documented difference, which the
+   migrate report should say (cross-lane, migrate/kc). The stamp still lists all three fields, so adding the
+   value later is a new value, not a format change. `string` for unsigned stays in N because without it a
+   `strict` pipeline that hits an overflow has no in-place remedy.
+3. **Implement in two more PRs after #226, never more than two Tier 1 PRs in review at once.**
+   - **PR B (Tier 2, small):** Open-time reads of `binlog_format`, `binlog_row_image` and
+     `binlog_row_value_options` with the `legacy` warnings, the per-column `legacy` warnings (`NULL` as zero,
+     `DECIMAL` as `double`), and the Open log line with the resolved type configuration. No emitted value
+     changes.
+   - **PR C (Tier 1):** `strict` end to end: the settings, the v3 stamp, the transition table, the
+     nullability lookup, `NULL` unions, `DECIMAL` as string, unsigned as string, `json.Marshal` registration in
+     `strict`, the `strict` Open refusals and runtime asserts, the overflow remedy table, and the test plan
+     (minus the decimal logical type), including the upgrade test (unstamped v1/v2 positions -> N `legacy` ->
+     row 6 -> v3) and kill -9 at the switch. One PR, because the stamp, the transitions and the shapes are one
+     contract: reviewed apart, the stamp would be approved with no semantics behind it.
+4. **Define N as the connector release that ships PR C**, cut on the Conduit v0.21 train; N+1 and N+2 are
+   the next two monthly connector minors. The removal date is written into the warning when N is cut, as
+   decided.
+5. **Decision needed: is the MySQL source Certified in v0.21 only if `strict` ships?** Recommended: yes. Today
+   the only mode is `legacy`, which emits `NULL` as `0` and rounds `DECIMAL`; a Certified listing on top of
+   that contradicts invariant 6 even with the gaps documented. With PR C merged the registry entry can say
+   "Certified in `strict`; `legacy` deprecated, removed in N+2". If PR C misses the v0.21 cut, the source stays
+   beta and uncertified, and its migration-harness entry stays `pending`.
+
+Still unverified, carried forward: MariaDB, MySQL 5.7, managed-service parameter groups, a
+Confluent-compatible external registry, and an end-to-end engine run with the new schemas.
 
 ## Context
 
@@ -173,19 +241,19 @@ Lifecycle (decided by DeVaris, 2026-10-12):
   text and the N release notes, and not moved without a new ADR.
 - In N, a new pipeline (no position) with no explicit `types.mode` runs as `legacy` and logs the same
   warnings plus "set `types.mode=strict`". In N+1 that pipeline is refused at `Open` with
-  `MYSQL_TYPES_MODE_REQUIRED` and a one-line instruction ("set `types.mode=strict`"). From N+1, `types.mode`
+  `mysql.config.types_mode_required` and a one-line instruction ("set `types.mode=strict`"). From N+1, `types.mode`
   has no default for a no-position pipeline. This is stricter than flipping the default to `strict`, and it is
   the only form that does not guess for an idle old pipeline (see the Transition table notes).
 - In N+2, `types.mode=legacy` is a configuration error. A `legacy`-stamped position in the `cdc` phase is
   refused with a message that points to the switch procedure (row 6, which stays available in N+2). A
   `legacy`-stamped position still in the `snapshot` phase has no switch (row 4) and is refused with
-  `MYSQL_LEGACY_SNAPSHOT_REMOVED`, whose one explicit path is: create a new connector instance with
+  `mysql.config.legacy_snapshot_removed`, whose one explicit path is: create a new connector instance with
   `types.mode=strict` (re-snapshot; downstream sees duplicates, at-least-once holds). Operators are told
   before N+2 so they can avoid the re-snapshot: see the release-note callout (snapshot-phase pipelines)
   under Upgrade and rollback.
 
 `legacy` does not keep the unsigned corruption. The two `BIGINT UNSIGNED` branches in `formatValue`
-(snapshot `[]uint8` fold, CDC raw `uint64`) halt with `MYSQL_UNSIGNED_OVERFLOW` in both modes; the BIT fold is
+(snapshot `[]uint8` fold, CDC raw `uint64`) halt with `mysql.types.unsigned_overflow` in both modes; the BIT fold is
 removed from the `long` branch (BIT columns map to `fixed`, so the branch has no legitimate use). A
 `legacy` pipeline that today emits wrong values for `BIGINT UNSIGNED` above 2^63-1 will stop after the
 upgrade; that is the point and is stated in the release notes. This change ships as a bug fix in N and is
@@ -202,10 +270,10 @@ Each remedy is valid in its row:
 
 | State when the value is hit | Error | Remedy in the message |
 | --- | --- | --- |
-| `strict`, any phase | `MYSQL_UNSIGNED_OVERFLOW` | Set `types.bigintUnsigned` to `decimal` or `string`. In `cdc` phase that is a stamp change and needs the token (rows 10-11); the message names it. In `snapshot` phase it is refused (row 9), and the message says to create a new connector instance |
-| `legacy`, phase `none` | `MYSQL_UNSIGNED_OVERFLOW` | Set `types.mode=strict` and `types.bigintUnsigned` (row 2) |
-| `legacy`, phase `cdc` | `MYSQL_UNSIGNED_OVERFLOW` | `types.mode=strict`, `types.bigintUnsigned`, `types.acceptChangeFrom=legacy` (row 6) |
-| `legacy`, phase `snapshot` | `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` | No in-place switch exists. Create a new connector instance with `types.mode=strict` and `types.bigintUnsigned` (re-snapshot; downstream sees duplicates, at-least-once holds), or exclude the table, or fix the offending rows |
+| `strict`, any phase | `mysql.types.unsigned_overflow` | Set `types.bigintUnsigned` to `decimal` or `string`. In `cdc` phase that is a stamp change and needs the token (rows 10-11); the message names it. In `snapshot` phase it is refused (row 9), and the message says to create a new connector instance |
+| `legacy`, phase `none` | `mysql.types.unsigned_overflow` | Set `types.mode=strict` and `types.bigintUnsigned` (row 2) |
+| `legacy`, phase `cdc` | `mysql.types.unsigned_overflow` | `types.mode=strict`, `types.bigintUnsigned`, `types.acceptChangeFrom=legacy` (row 6) |
+| `legacy`, phase `snapshot` | `mysql.types.unsigned_overflow_legacy_snapshot` | No in-place switch exists. Create a new connector instance with `types.mode=strict` and `types.bigintUnsigned` (re-snapshot; downstream sees duplicates, at-least-once holds), or exclude the table, or fix the offending rows |
 
 The connector cannot observe a position being persisted, only the `Ack` the engine delivers for it, so the
 phase the error reports is **sticky**: it is the phase of the position read at `Open`, raised only by an
@@ -217,7 +285,7 @@ and only then becomes `cdc`. Consequences, each pinned by a test:
   message adds "if no record of this connector has been acked, row 2 applies".
 - **Snapshot finished, no CDC ack yet.** The last persisted position is still a `snapshot_position`, so an
   overflow hit on any CDC record before the first CDC `Ack` (the first, the second, or the hundredth) is
-  `snapshot` phase, not `cdc`: `legacy` gets `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT`, and `strict` gets the
+  `snapshot` phase, not `cdc`: `legacy` gets `mysql.types.unsigned_overflow_legacy_snapshot`, and `strict` gets the
   "create a new connector instance" remedy. Naming the `cdc` remedy here would send the operator into row 6
   or rows 10-11, which the restart then refuses (rows 4 and 9), so the pipeline would be stranded.
 - A `strict` source in the same state is likewise `snapshot` for the `strict` row of the table.
@@ -235,7 +303,9 @@ simpler, but it sends the operator to a remedy the next `Open` refuses, and the 
 re-snapshot the message did not mention. A wrong remedy is worse than a restart hint.
 
 Why the snapshot phase gets a distinct error and no in-place switch, rather than allowing a switch at a key
-boundary: the `legacy` snapshot position stores the last key in the v1 form (`float64` or base64 after JSON;
+boundary (revision 5: the first reason below no longer holds since mysql#206 made snapshot keys type-exact;
+the second, two schemas inside one table scan, still does, and the decision stands): the `legacy` snapshot
+position stores the last key in the v1 form (`float64` or base64 after JSON;
 see Keys and snapshot positions), which already resumes incorrectly for the key types where this overflow is
 likeliest (`BIGINT UNSIGNED`, large `BIGINT`, `DECIMAL`; mysql#204). A boundary switch would have to
 reinterpret that stored key, which means shipping a repair for the defective v1 form inside the switch
@@ -257,7 +327,7 @@ it warns in N and refuses from N+1.
 Every position the connector writes in `strict` mode carries a `types` object:
 
 ```json
-{"version": 2, "types": {"mode": "strict", "decimal": "string", "bigint_unsigned": "long"},
+{"version": 3, "types": {"mode": "strict", "decimal": "string", "bigint_unsigned": "long"},
  "cdc_position": {...}}
 ```
 
@@ -266,13 +336,14 @@ The stamp is the whole resolved type configuration, not only the mode, because `
 a name made of the three values, `<mode>/<decimal>/<bigintUnsigned>` (for example `strict/string/long`).
 `legacy` has the name `legacy`.
 
-- `legacy` writes the v1 envelope, unchanged. An unstamped position is a legacy position. This keeps
-  rollback from N to N-1 possible for every pipeline that has not opted in, and it means nothing is ever
-  stamped `legacy`.
-- `strict` writes envelope version 2 on every snapshot and CDC position. `ParseSDKPosition` raises its
-  supported maximum to 2 (`common/position.go:38,113`); N-1 refuses a v2 position with
+- `legacy` writes the envelopes `main` writes today, unchanged: version 2 for snapshot positions (since
+  mysql#206, which made snapshot keys type-exact) and version 1 for CDC positions. An unstamped position is
+  a legacy position. This keeps rollback from N to N-1 possible for every pipeline that has not opted in, and
+  it means nothing is ever stamped `legacy`.
+- `strict` writes envelope version 3 on every snapshot and CDC position. `ParseSDKPosition` raises
+  `CurrentPositionVersion` to 3 (`common/position.go` at `4676f45`); N-1 refuses a v3 position with
   `ErrPositionVersionUnsupported`. That is the one-way door, and only pipelines that opted into `strict`
-  cross it.
+  cross it. (Revisions before 5 said version 2; #206 took that number for type-exact snapshot keys.)
 - Because the stamp rides on every position, the switch point between two configurations is exactly one
   record: the first one emitted under the new configuration.
 - The position constructors (`common/position.go:71,169`) take the stamp as an argument; the two call
@@ -292,18 +363,18 @@ connector resolves the effective configuration and checks it against the positio
 
 | # | Stamp | Phase | Explicit config | Result |
 | --- | --- | --- | --- | --- |
-| 1 | none | none | `types.mode` unset | N: `legacy`, with the per-column warnings and "set `types.mode=strict`". N+1 and later: refuse `MYSQL_TYPES_MODE_REQUIRED` (one-line instruction). Any other `types.*` setting without `types.mode` is a configuration error |
+| 1 | none | none | `types.mode` unset | N: `legacy`, with the per-column warnings and "set `types.mode=strict`". N+1 and later: refuse `mysql.config.types_mode_required` (one-line instruction). Any other `types.*` setting without `types.mode` is a configuration error |
 | 2 | none | none | `types.mode` set | Use it. Validate combinations. `strict` stamps its first position. `legacy` is a configuration error from N+2 |
-| 3 | `legacy` | `snapshot` or `cdc` | unset, or `legacy` | N and N+1: `legacy`, positions stay v1. N+2 and later: `cdc` refused with the instruction to use row 6; `snapshot` refused with `MYSQL_LEGACY_SNAPSHOT_REMOVED` (new connector instance with `strict`, re-snapshot) |
-| 4 | `legacy` | `snapshot` | `strict` | Refuse: `MYSQL_TYPES_SWITCH_IN_SNAPSHOT`. No override (reason under What `legacy` is). Message says to create a new connector instance |
-| 5 | `legacy` | `cdc` | `strict`, no token | Refuse: `MYSQL_TYPES_STAMP_MISMATCH`, naming the stamp (`legacy`) and the setting to add |
+| 3 | `legacy` | `snapshot` or `cdc` | unset, or `legacy` | N and N+1: `legacy`, positions keep their current envelopes (snapshot v2, CDC v1). N+2 and later: `cdc` refused with the instruction to use row 6; `snapshot` refused with `mysql.config.legacy_snapshot_removed` (new connector instance with `strict`, re-snapshot) |
+| 4 | `legacy` | `snapshot` | `strict` | Refuse: `mysql.types.switch_in_snapshot`. No override (reason under What `legacy` is). Message says to create a new connector instance |
+| 5 | `legacy` | `cdc` | `strict`, no token | Refuse: `mysql.types.stamp_mismatch`, naming the stamp (`legacy`) and the setting to add |
 | 6 | `legacy` | `cdc` | `strict` and `types.acceptChangeFrom=legacy` | Switch. First record emitted carries the strict stamp |
 | 7 | strict `S` | `snapshot` or `cdc` | unset | Use `S` |
 | 8 | strict `S` | any | explicit values all equal to `S` | Use `S` |
-| 9 | strict `S` | `snapshot` | differs from `S` | Refuse: `MYSQL_TYPES_SWITCH_IN_SNAPSHOT`. No override |
-| 10 | strict `S` | `cdc` | differs, no token | Refuse: `MYSQL_TYPES_STAMP_MISMATCH` |
-| 11 | strict `S` | `cdc` | differs and `acceptChangeFrom` equals the name of `S` | Switch (including back to `legacy` until N+2, logged at error level). First record emitted carries the new stamp, or v1 for `legacy` |
-| 12 | strict `S` | `cdc` | differs and `acceptChangeFrom` names another stamp | Refuse: `MYSQL_TYPES_STAMP_MISMATCH` (stale token) |
+| 9 | strict `S` | `snapshot` | differs from `S` | Refuse: `mysql.types.switch_in_snapshot`. No override |
+| 10 | strict `S` | `cdc` | differs, no token | Refuse: `mysql.types.stamp_mismatch` |
+| 11 | strict `S` | `cdc` | differs and `acceptChangeFrom` equals the name of `S` | Switch (including back to `legacy` until N+2, logged at error level). First record emitted carries the new stamp, or an unstamped envelope for `legacy` |
+| 12 | strict `S` | `cdc` | differs and `acceptChangeFrom` names another stamp | Refuse: `mysql.types.stamp_mismatch` (stale token) |
 
 Notes on the table:
 
@@ -355,7 +426,7 @@ column as expected.
 - **A missing row is an error, not "NOT NULL".** `information_schema.columns` shows only columns the user
   has some privilege on, and it returns zero rows rather than an error for a table the user cannot read
   (observed with a user that has `SELECT` on a different table). So `Open` fails with
-  `MYSQL_NULLABILITY_UNAVAILABLE` when any column canal reports for a captured table has no row in the
+  `mysql.schema.nullability_unavailable` when any column canal reports for a captured table has no row in the
   result, and also when the query fails. There is no fallback to "assume NOT NULL", which would reintroduce
   coercion.
 - **DDL.** Canal swaps its table schema after a DDL event. The nullability map is cached per table and keyed
@@ -373,12 +444,12 @@ real.
 - **Open check.** `Open` reads `@@GLOBAL.binlog_format`, `@@GLOBAL.binlog_row_image` and
   `@@GLOBAL.binlog_row_value_options` and fails with a stable error per variable, each naming the value and
   the fix (the `SET GLOBAL` statement, or the parameter group on managed services):
-  - `binlog_row_image` other than `FULL`: `MYSQL_BINLOG_ROW_IMAGE`. Staged by mode (Decisions recorded, 4):
+  - `binlog_row_image` other than `FULL`: `mysql.config.binlog_row_image`. Staged by mode (Decisions recorded, 4):
     `strict` refuses at `Open`. `legacy` logs the same error text as a warning in N and refuses from N+1.
-  - `binlog_format` other than `ROW`: `MYSQL_BINLOG_FORMAT`. The connector's contract is row events.
+  - `binlog_format` other than `ROW`: `mysql.config.binlog_format`. The connector's contract is row events.
     Unverified: what canal emits under `STATEMENT` or `MIXED`; the check turns whatever it is into a named
     error.
-  - `binlog_row_value_options` non-empty: `MYSQL_BINLOG_ROW_VALUE_OPTIONS`. `PARTIAL_JSON` makes the server
+  - `binlog_row_value_options` non-empty: `mysql.config.binlog_row_value_options`. `PARTIAL_JSON` makes the server
     log `JSON` updates as partial diffs, and a row event then no longer carries the full column value. It
     matters for `JSON` columns only, and the check applies to all tables because it is one variable. Observed
     on 8.0.39: the defaults are `ROW`, `FULL` and empty, and `SET GLOBAL binlog_row_value_options =
@@ -399,16 +470,15 @@ real.
   variable, its value and the fix), and from N+1 it refuses with the same code. The release notes for N say
   so. The decision names `binlog_row_image`; `binlog_format` and `binlog_row_value_options` sit in the same
   check and follow the same staging, so that one check has one rule.
-- **Runtime net.** In `strict`, a nil for a `NOT NULL` column halts with `MYSQL_NULL_IN_NOT_NULL` (table,
+- **Runtime net.** In `strict`, a nil for a `NOT NULL` column halts with `mysql.types.null_in_not_null` (table,
   column, config path `binlog_row_image`, fix text), instead of being passed through. That catches the
   primary key and every other `NOT NULL` column when a writer session overrides the image.
-- **Residual risk, stated.** `binlog_row_image` is also a session variable, so a writer session that sets
-  `MINIMAL` while the global stays `FULL` passes the Open check (observed). For a nullable column that the
-  statement did not touch, the nil is indistinguishable from `NULL` at the connector, and `strict` would
-  emit `NULL` for a value that exists. This cannot be closed in the connector with the current `canal`
-  API. Decided (Decisions recorded, 6): ship with the Open check and the runtime net, document the residual
-  risk, and open the upstream change to expose `SkippedColumns` on `canal.RowsEvent`, after which any skipped
-  column halts. The upstream issue text is drafted in the appendix; DeVaris files it.
+- **Residual risk: closed (revision 5).** `binlog_row_image` is also a session variable, so a writer session
+  that sets `MINIMAL` while the global stays `FULL` passes the Open check (observed). Revision 4 stated that a
+  skipped nullable column was indistinguishable from `NULL`. mysql#211 closed this: the connector now reads
+  `canal.RowsEvent.SkippedColumns` from a ConduitIO fork of go-mysql and halts on any skipped column with
+  `mysql.cdc.row_image_skipped_columns`, in every mode, before any record of the event is built. `strict`
+  therefore never sees a skipped column as nil.
 
 - **Read replicas and read-only sources.** The design adds no writes to the source and no privilege beyond
   `SELECT`, the two replication privileges and what the connector already requires for snapshots: `LOCK
@@ -425,8 +495,8 @@ real.
   design.
 
 Keys: key columns are `NOT NULL` for primary keys and stay bare `T` in the key schema. A configured
-`sortingColumn` that is nullable also stays bare `T`; a NULL in a key column halts with
-`MYSQL_NULL_IN_NOT_NULL`.
+`sortingColumn` must be `NOT NULL` since mysql#203, so it also stays bare `T`; a NULL in a key column halts with
+`mysql.types.null_in_not_null`.
 
 ### Avro shapes and what consumers see
 
@@ -454,7 +524,7 @@ changed. The shapes below hold on both:
   inventory), which is the reason `string` is the default.
 - A `nil` in a bare (non-union) field fails encoding in the SDK
   (`avro: *avro.null is unsupported for Avro long`). With the nullability map built correctly this cannot
-  happen for a nullable column; for a `NOT NULL` column it is the `MYSQL_NULL_IN_NOT_NULL` case above, and
+  happen for a nullable column; for a `NOT NULL` column it is the `mysql.types.null_in_not_null` case above, and
   the connector raises its own stable error before the encoder does.
 - Non-SDK consumers that decode with `hamba/avro` directly get hamba's own union representation
   (`map[string]any{"string": v}`); that is hamba behavior and out of the connector's control.
@@ -505,7 +575,7 @@ it. Decided (Decisions recorded, 1).
 ### BIGINT UNSIGNED
 
 - `long` (default): schema unchanged, so keys and consumers are not disturbed. A value above 2^63-1 stops
-  the source with error `MYSQL_UNSIGNED_OVERFLOW`, carrying the table, column, and the config
+  the source with error `mysql.types.unsigned_overflow`, carrying the table, column, and the config
   path `types.bigintUnsigned`, and the fix "set `types.bigintUnsigned` to `decimal` or `string` for this
   connector". The source does not skip, truncate or wrap the value. In both modes, in both paths. Snapshot
   parses the driver's digit string with `ParseUint`; CDC compares the `uint64`.
@@ -520,6 +590,18 @@ converted integer is in range and halts with the same error class otherwise, rep
 log-and-return-unconverted branches.
 
 ### Keys and snapshot positions
+
+> **Revision 5: superseded in part.** mysql#206 (merged 2026-10-14) fixed the defect below for every mode:
+> snapshot keys are written as tagged, type-exact values (`common/keyvalue.go`), each key records its column
+> type (`key_type`), and snapshot envelopes are version 2. mysql#204 is closed. `strict` therefore needs no key
+> format of its own and keeps #206's. What still applies from this section is the bind rule: a resume must
+> bind integers typed and must never wrap a prepared string in `CAST(? AS UNSIGNED)`. #206 binds the decoded
+> driver value, which is typed for every key up to 2^63-1. A `BIGINT UNSIGNED` key above 2^63-1 arrives from
+> the driver as digit bytes and would be bound as an untyped string (form A below: passes, not to be relied
+> on). Today such a key halts before it is emitted (mysql#226). With `types.bigintUnsigned=string` it becomes
+> reachable, and the implementation must then parse it with `ParseUint` and bind a `uint64`; a byte key on a
+> `bigint` column can only be that case (`key_type` omits `unsigned`, see #206). The text below is kept as the
+> record of the spike.
 
 This section exists because the test-plan item "decimal primary key" found a data-loss defect that the type
 change must not inherit and that interacts with it.
@@ -629,14 +711,14 @@ change. They get their own item if needed.
 
 Decided by DeVaris, 2026-10-12 (formerly open question 3). Positioned pipelines keep `legacy` for N and N+1
 with per-column warnings and a committed removal in N+2. A no-position pipeline with no `types.mode` warns in N
-and is refused in N+1 with `MYSQL_TYPES_MODE_REQUIRED`. A `legacy` snapshot-phase pipeline is refused at N+2
-with `MYSQL_LEGACY_SNAPSHOT_REMOVED`. Rejected: flipping the default to `strict` for no-position pipelines
+and is refused in N+1 with `mysql.config.types_mode_required`. A `legacy` snapshot-phase pipeline is refused at N+2
+with `mysql.config.legacy_snapshot_removed`. Rejected: flipping the default to `strict` for no-position pipelines
 (guesses wrong for an idle old pipeline) and flipping everything at once. The Transition table encodes this.
 
 ### Invariant comment
 
 The enforcement site (`formatValue` and the schema builder) gets `// Invariant 6: a value that cannot be
-represented in the schema type halts with MYSQL_UNSIGNED_OVERFLOW; it is never coerced`, and a package doc
+represented in the schema type halts with mysql.types.unsigned_overflow; it is never coerced`, and a package doc
 paragraph stating the mapping table.
 
 ## Consumers of a mid-stream type change
@@ -764,23 +846,23 @@ the connector already owns.
 
 | Failure | Behavior |
 | --- | --- |
-| `BIGINT UNSIGNED` value above 2^63-1 under `long` | Source returns `MYSQL_UNSIGNED_OVERFLOW`, no record emitted, position not advanced. Pipeline stops until the operator changes the setting. Both modes, both paths. In `legacy` during the snapshot phase (as the Transition table defines it, including a finished snapshot with no CDC ack yet) the code is `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` with a remedy that is valid there (table under What `legacy` is) |
+| `BIGINT UNSIGNED` value above 2^63-1 under `long` | Source returns `mysql.types.unsigned_overflow`, no record emitted, position not advanced. Pipeline stops until the operator changes the setting. Both modes, both paths. In `legacy` during the snapshot phase (as the Transition table defines it, including a finished snapshot with no CDC ack yet) the code is `mysql.types.unsigned_overflow_legacy_snapshot` with a remedy that is valid there (table under What `legacy` is) |
 | Any integer outside its Avro type under `strict` | Same error class; replaces warn-and-return-raw |
-| Nullability lookup fails, or a canal column has no `information_schema` row (permissions, table dropped) | `Open` fails with `MYSQL_NULLABILITY_UNAVAILABLE` naming the table and column; no fallback to "assume NOT NULL" |
-| `binlog_row_image` is not `FULL`, `binlog_format` is not `ROW`, or `binlog_row_value_options` is non-empty at `Open` | `strict`: `Open` fails with `MYSQL_BINLOG_ROW_IMAGE`, `MYSQL_BINLOG_FORMAT` or `MYSQL_BINLOG_ROW_VALUE_OPTIONS`. `legacy`: the same text is logged as a warning in N and `Open` fails from N+1 |
-| New pipeline with no `types.mode` | N: runs `legacy` with warnings. N+1 and later: `Open` fails with `MYSQL_TYPES_MODE_REQUIRED` |
-| Writer session overrides the row image to `MINIMAL` or `NOBLOB` | A nil in a `NOT NULL` column halts with `MYSQL_NULL_IN_NOT_NULL`. A skipped nullable column is emitted as `NULL`: documented residual risk, closable only with an upstream `canal` change |
-| NULL in a key column | Halts with `MYSQL_NULL_IN_NOT_NULL` |
-| N+2 start with a `legacy`-stamped position in the `snapshot` phase | `Open` fails with `MYSQL_LEGACY_SNAPSHOT_REMOVED`; nothing is read. Path: new connector instance with `strict` (re-snapshot). Avoidable before N+2 by the release-note callout |
-| Restart with a configuration that differs from the stamp | `MYSQL_TYPES_STAMP_MISMATCH` or `MYSQL_TYPES_SWITCH_IN_SNAPSHOT` per the Transition table; nothing is read |
+| Nullability lookup fails, or a canal column has no `information_schema` row (permissions, table dropped) | `Open` fails with `mysql.schema.nullability_unavailable` naming the table and column; no fallback to "assume NOT NULL" |
+| `binlog_row_image` is not `FULL`, `binlog_format` is not `ROW`, or `binlog_row_value_options` is non-empty at `Open` | `strict`: `Open` fails with `mysql.config.binlog_row_image`, `mysql.config.binlog_format` or `mysql.config.binlog_row_value_options`. `legacy`: the same text is logged as a warning in N and `Open` fails from N+1 |
+| New pipeline with no `types.mode` | N: runs `legacy` with warnings. N+1 and later: `Open` fails with `mysql.config.types_mode_required` |
+| Writer session overrides the row image to `MINIMAL` or `NOBLOB` | A nil in a `NOT NULL` column halts with `mysql.types.null_in_not_null`. Since mysql#211 any skipped column halts first with `mysql.cdc.row_image_skipped_columns`, in every mode; nothing is emitted for the event |
+| NULL in a key column | Halts with `mysql.types.null_in_not_null` |
+| N+2 start with a `legacy`-stamped position in the `snapshot` phase | `Open` fails with `mysql.config.legacy_snapshot_removed`; nothing is read. Path: new connector instance with `strict` (re-snapshot). Avoidable before N+2 by the release-note callout |
+| Restart with a configuration that differs from the stamp | `mysql.types.stamp_mismatch` or `mysql.types.switch_in_snapshot` per the Transition table; nothing is read |
 | kill -9 between the first record under a new configuration and its ack | Restart sees the old stamp; refused unless the token is still set; records are re-emitted under the new configuration (at-least-once) |
 | DDL mid-stream changes nullability or type | Out of scope (DDL is untested today). A column whose schema-derived type no longer matches the registered schema must halt, not coerce. A test pins current behavior so the gap is visible |
 | Decimal text that does not parse (`types.decimal=double`) | Halt with the error class above; never fall back to a raw value (today's `ParseFloat` failure returns the raw string, `schema.go:393-396`) |
 | Snapshot and CDC disagree on a column type | Caught by a parity test that runs every supported type through both paths and compares the Avro-decoded value |
-| Downgrade after upgrade, `strict` pipeline | New position version is refused by the older build with `ErrPositionVersionUnsupported` (`common/position.go:113-118`), instead of mis-reading. A `legacy` pipeline never wrote v2 and downgrades cleanly |
+| Downgrade after upgrade, `strict` pipeline | New position version is refused by the older build with `ErrPositionVersionUnsupported` (`common/position.go:113-118`), instead of mis-reading. A `legacy` pipeline never writes v3, so it downgrades to any build that reads its current envelopes (builds before mysql#206 refuse its v2 snapshot positions, independently of this design) |
 | A processor in the path re-encodes the record | Schema re-inferred from values; see Consumers. Not detectable by the connector |
 | Destination given a string for a numeric column, or a nil for a `NOT NULL` column | See the destination inventory; verified per destination by a round-trip test, not assumed |
-| Snapshot resume with a decimal key or an integer key above 2^53 | Loses or duplicates rows in `legacy` today (mysql#204). `strict` resumes with typed binds or an explicit decimal cast; see Keys and snapshot positions |
+| Snapshot resume with a decimal key or an integer key above 2^53 | Fixed in every mode by mysql#206 (type-exact keys). `strict` adds one rule: a `BIGINT UNSIGNED` key above 2^63-1 is bound as `uint64`; see Keys and snapshot positions |
 | A resume predicate that binds `CAST(? AS UNSIGNED)` over a string | Loses `BIGINT UNSIGNED` rows above 2^63-1 (observed). Pinned by a test |
 
 ## Upgrade and rollback
@@ -797,19 +879,19 @@ rollout. Versions can go backwards (re-registering an older text returns its old
    unsigned halt (a bug fix, both modes), the Open checks on the binlog variables (refused in `strict`, a
    warning in `legacy`) and the per-column startup warnings in `legacy`. A pipeline opts into `strict` by
    setting it: from no position
-   directly (row 2), or through the token procedure (rows 5-6). `strict` pipelines write v2 positions.
+   directly (row 2), or through the token procedure (rows 5-6). `strict` pipelines write v3 positions.
    Unstamped positions are `legacy`. A new pipeline with no `types.mode` runs `legacy` and warns (row 1).
 2. **Switching an existing pipeline** (row 6): stop; destinations and consumers get ready for the new schema
    version; set `types.mode=strict` and `types.acceptChangeFrom=legacy`; start. Refused in the snapshot
    phase. Leave the token until the log line reports an acked record under the new stamp.
-3. **Release N+1:** the binlog variable checks refuse in `legacy` too (`MYSQL_BINLOG_ROW_IMAGE` and the other
-   two). A pipeline with no position and no `types.mode` is refused (`MYSQL_TYPES_MODE_REQUIRED`).
+3. **Release N+1:** the binlog variable checks refuse in `legacy` too (`mysql.config.binlog_row_image` and the other
+   two). A pipeline with no position and no `types.mode` is refused (`mysql.config.types_mode_required`).
    Existing `legacy` positions still run, with the same warnings. **Release N+2:** `legacy` is removed; row 3
-   becomes a refusal: `cdc` phase points to row 6, `snapshot` phase gets `MYSQL_LEGACY_SNAPSHOT_REMOVED` and a
+   becomes a refusal: `cdc` phase points to row 6, `snapshot` phase gets `mysql.config.legacy_snapshot_removed` and a
    re-snapshot on a new connector instance. Decided (see What `legacy` is).
-4. **Rollback:** from N to N-1 is refused by the position gate once N has written a v2 position, so only for
+4. **Rollback:** from N to N-1 is refused by the position gate once N has written a v3 position, so only for
    `strict` pipelines. To roll back, the operator recreates the connector (re-snapshot) or keeps running N
-   (and may go back to `legacy` with the token, which writes v1 positions again). The envelope bump is the
+   (and may go back to `legacy` with the token, which writes unstamped positions again). The envelope bump is the
    one-way door and is why it needs the upgrade test.
 
 Because the envelope bump is a serialized-format change, it ships with an upgrade test (see Test plan).
@@ -866,16 +948,17 @@ Written before the implementation (review the tests first):
 - Table-driven NULL tests: every supported type, nullable and not, in snapshot and CDC; assert real nil and
   that `NOT NULL` columns stay bare.
 - Nullability lookup: a user without `SELECT` on a captured table fails `Open` with
-  `MYSQL_NULLABILITY_UNAVAILABLE` (not zero columns, not NOT NULL).
+  `mysql.schema.nullability_unavailable` (not zero columns, not NOT NULL).
 - Row image: `Open` refuses `MINIMAL` and `NOBLOB`; a session-level `MINIMAL` UPDATE halts on the `NOT NULL`
-  primary key in `strict`; the known nullable-column residual case is pinned by a test that documents it.
+  primary key in `strict`. Skipped columns are already pinned by mysql#211's tests
+  (`cdc_skipped_columns_integration_test.go`); PR C re-runs them in `strict`.
 - Round-trip DECIMAL tests with precision 65, scale 30, negative values, trailing zeros, `0.00`, and the
   exact reproduction row from #191, in all three decimal modes, snapshot and CDC.
 - `BIGINT UNSIGNED` at 0, 2^63-1, 2^63, 2^64-1 under each mode and both paths; halting under `long` in
   `strict` and `legacy`; the snapshot path no longer returns `3474867090068222261`.
 - Decimal primary key (new): snapshot a table with a `DECIMAL(10,2)` key including negative values, with a
   small `fetchSize`, kill and restart at every chunk boundary; assert exactly the remaining keys are emitted,
-  in `strict` and for the `legacy` defect pinned as a failing-but-documented case (mysql#204). The same for
+  in `strict` and in `legacy` (both exact since mysql#206, which has its own key-type resume tests). The same for
   `BIGINT` keys above 2^53, `BIGINT UNSIGNED` keys above 2^63 and `DECIMAL(30,10)` keys that differ only
   below double precision. The key sets of the resume spike are the minimum. Run with prepared statements and
   with `interpolateParams=true`.
@@ -889,18 +972,18 @@ Written before the implementation (review the tests first):
   text.
 - Stamp: a table-driven test over every row of the Transition table (12 rows, with row 1 in its N and N+1
   forms, row 2 in its N+2 form for `legacy`, and row 3 in its N+2 forms: `cdc` refused pointing to row 6,
-  `snapshot` refused with `MYSQL_LEGACY_SNAPSHOT_REMOVED`), asserting the outcome and the error code.
-  Position round trip: v1 positions parse
-  as `legacy`; v2 positions carry all three fields; a build with an unknown extra setting reads the stamp.
+  `snapshot` refused with `mysql.config.legacy_snapshot_removed`), asserting the outcome and the error code.
+  Position round trip: unstamped positions (v0, v1, and v2 snapshot positions from mysql#206) parse
+  as `legacy`; v3 positions carry all three fields; a build with an unknown extra setting reads the stamp.
 - Unstamped never-emitted pipeline (new): a pipeline that has run and acked nothing (empty tables with
   `snapshot.enabled=false`, and a crash before the first ack) restarted on N with no `types.mode`: starts in
-  `legacy` with warnings in N, and is refused with `MYSQL_TYPES_MODE_REQUIRED` in N+1, and in both cases no
+  `legacy` with warnings in N, and is refused with `mysql.config.types_mode_required` in N+1, and in both cases no
   stamped position exists to disagree.
 - Overflow remedies: `BIGINT UNSIGNED` above 2^63-1 hit in each state of the overflow table (`strict`;
   `legacy` in phases `none`, `cdc`, `snapshot`); assert the code and that the remedy named is accepted by the
   transition table (following it does not hit a refusal). Includes the state **snapshot finished, no CDC ack
   yet** (position still a `snapshot_position`, overflow value is the first CDC record): in `legacy` assert
-  `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT`, in `strict` assert the new-instance remedy, in both assert that
+  `mysql.types.unsigned_overflow_legacy_snapshot`, in `strict` assert the new-instance remedy, in both assert that
   the `cdc` remedy is not offered, and that the restart with the `cdc` remedy applied is refused by rows 4
   and 9 (this is the stranded-pipeline regression). Then ack one CDC record, hit the overflow again, and
   assert the code and remedy move to the `cdc` forms.
@@ -910,7 +993,7 @@ Written before the implementation (review the tests first):
   the `cdc` forms. Variant: kill -9 after the first CDC record is emitted but before its `Ack`, restart, and
   assert the phase read at `Open` matches what the sticky rule reported.
 - Snapshot-phase legacy pipeline (new): from a v1 position with a `snapshot_position`, N+1 logs the warning
-  from the callout; N+2 refuses with `MYSQL_LEGACY_SNAPSHOT_REMOVED`; the same position after one acked CDC
+  from the callout; N+2 refuses with `mysql.config.legacy_snapshot_removed`; the same position after one acked CDC
   record is refused in N+2 with the row 6 instruction, and row 6 then succeeds.
 - Open checks: `binlog_format=STATEMENT`/`MIXED`, `binlog_row_value_options=PARTIAL_JSON` and `MINIMAL`/`NOBLOB`
   each fail `Open` with their code in `strict`; an absent variable is treated as unset. In `legacy`, the same
@@ -928,7 +1011,7 @@ Written before the implementation (review the tests first):
   `sdk.schema.encode.payload.enabled=false`; assert what the registry holds.
 - Upgrade test: write a v1 position with N-1 in the snapshot phase and again in the CDC phase, start N,
   verify resume without duplicates beyond at-least-once and with `legacy` types and v1 positions; then follow
-  row 6 and verify the next records carry the new schema version and a v2 stamp. And a downgrade test that
+  row 6 and verify the next records carry the new schema version and a v3 stamp. And a downgrade test that
   expects `ErrPositionVersionUnsupported` for a `strict` position.
 - kill -9 during a snapshot and during CDC after the switch to `strict`, verifying no loss and consistent
   types across the restart. The connector's existing crash test (`crash_integration_test.go`) is the base.
@@ -942,7 +1025,7 @@ original question numbers (3 was decided earlier and is recorded under Legacy li
 1. **`types.decimal` defaults to `string`.** Not `decimal`. Debezium parity is a documented difference, and
    `types.decimal=decimal` gives it. See DECIMAL and NUMERIC.
 2. **Halt on `BIGINT UNSIGNED` overflow.** `types.bigintUnsigned` defaults to `long`, and a value above 2^63-1
-   halts with `MYSQL_UNSIGNED_OVERFLOW` in both modes and both paths. `decimal` and `string` stay opt-ins. See
+   halts with `mysql.types.unsigned_overflow` in both modes and both paths. `decimal` and `string` stay opt-ins. See
    BIGINT UNSIGNED.
 3. **Legacy lifecycle.** See Legacy lifecycle (decided).
 4. **Row image.** A non-`FULL` `binlog_row_image` is refused at `Open` in `strict`. In `legacy` it warns in N
@@ -950,51 +1033,26 @@ original question numbers (3 was decided earlier and is recorded under Legacy li
    same staging (an extension of the decision, for one rule per check). See Row images.
 5. **`legacy` warns per column and nothing more.** It keeps `NULL` as zero and `DECIMAL` as `double` for N and
    N+1, with one warning per affected column. It does not refuse tables with nullable or decimal columns.
-6. **Session-level row-image residual risk: ship documented, and open the upstream `canal` change.** The
-   decision is to open it. Nothing has been filed; the issue text is drafted in the appendix for DeVaris to
-   file.
-7. **mysql#204 is tracked separately** as its own sev-0 item, with the `legacy` fix designed on its own. The
-   `strict` fix is in this design, and the `legacy` snapshot-phase overflow handling depends on #204 staying
-   unfixed in place (see What `legacy` is).
+6. **Session-level row-image residual risk: ship documented, and open the upstream `canal` change.** Done
+   differently and better (revision 5): mysql#211 points go-mysql at a ConduitIO fork that exposes
+   `canal.RowsEvent.SkippedColumns`, and the CDC handler halts on any skipped column with
+   `mysql.cdc.row_image_skipped_columns`, in every mode. Upstream: go-mysql-org/go-mysql#1205 (issue) and #1206
+   (PR), both open on 2026-10-15. The residual risk is closed; the appendix is obsolete.
+7. **mysql#204 is tracked separately** as its own sev-0 item, with the `legacy` fix designed on its own.
+   Revision 5: fixed for all modes by mysql#206 (see Keys and snapshot positions). The `legacy` snapshot-phase
+   decision (row 4) stands on its remaining reason.
 8. **The implementation lives in `ConduitIO/conduit-connector-mysql`** (certification decision 7).
 
 ## Open questions
 
 None.
 
-## Appendix: draft upstream issue for the canal change
+## Appendix: upstream canal change (obsolete)
 
-Draft only. To be filed by DeVaris against the `go-mysql-org/go-mysql` repository (the `canal` package).
-Not filed.
-
-Title: `canal: expose RowsEvent.SkippedColumns so handlers can tell "not in the row image" from NULL`
-
-Body:
-
-> When the server logs a partial row image (`binlog_row_image=MINIMAL` or `NOBLOB`, set globally or per
-> session), `replication.RowsEvent` records the columns that are absent from the image in `SkippedColumns`
-> and leaves their values nil (`replication/row_event.go`, the row decoding loop). `canal` builds its own
-> `canal.RowsEvent` in `canal/sync.go` and does not copy `SkippedColumns` (`canal/rows.go`). A `canal`
-> handler therefore sees nil for both "the column is NULL" and "the column was not in the row image", and
-> cannot tell them apart.
->
-> For a consumer that must not emit a wrong value, that is a data-integrity problem: a nullable column the
-> statement did not touch is indistinguishable from `NULL`. A global `binlog_row_image` check does not
-> help, because the variable is also a session variable and a writer session can set `MINIMAL` while the
-> global stays `FULL`.
->
-> Request: add `SkippedColumns [][]int` (same type as `replication.RowsEvent.SkippedColumns`; confirm against
-> the source) to
-> `canal.RowsEvent` and populate it in `canal/sync.go`. No behavior change for handlers that ignore it.
->
-> Reproduction: set `binlog_row_image=MINIMAL` in a writer session, run
-> `UPDATE t SET a = 1 WHERE id = 1` on a table with a nullable column `b` that has a value, and read the
-> event through a `canal` handler. The after image has `b == nil` and nothing in `canal.RowsEvent` says the
-> column was skipped. Read from the `go-mysql` v1.14.0 source; DeVaris to confirm the reproduction before
-> filing.
->
-> Context: the `conduit-connector-mysql` design for NULL handling, in the Conduit org.
-> We would use the field to halt on any skipped column.
+Revisions 1 to 4 drafted an upstream issue asking `canal` to expose `RowsEvent.SkippedColumns`. It was filed
+as go-mysql-org/go-mysql#1205 with PR #1206, and mysql#211 uses a ConduitIO fork with that change until a
+release contains it (see the `replace` in the connector's `go.mod`). The draft text is in the history of this
+file.
 
 ## Related
 
