@@ -48,9 +48,14 @@ func TestMain(m *testing.M) {
 //   - CONDUIT_BIN: absolute path of the conduit binary under test. Unset (the
 //     normal `go test ./...`): every check that runs the command is pending.
 //   - MIGRATE_HARNESS_REQUIRE_CLI=1: pending CLI checks fail instead. Implied
-//     when CONDUIT_BIN is set and pkg/kcmigrate exists, so the harness job
-//     cannot stay green on "pending" once the CLI lane's code is in the tree.
+//     when CONDUIT_BIN is set and cmd/conduit/root/migrate exists (the
+//     command is registered), so the harness job cannot stay green on
+//     "pending" once the command is in the tree. Keyed on the command, not on
+//     pkg/kcmigrate: the report types land there first (#3069), before there
+//     is anything to run.
 //   - MIGRATE_HARNESS_REQUIRE_MCP=1: the same for the MCP parity checks.
+//     Implied when CONDUIT_BIN is set and the MCP adapter's source registers
+//     kc_migrate.
 //   - MIGRATE_HARNESS_RELEASE=1: the release gate. Implies both, and
 //     certification entries must be certified.
 type runEnv struct {
@@ -75,10 +80,34 @@ func harnessEnv(t *testing.T) runEnv {
 	if e.bin != "" && !filepath.IsAbs(e.bin) {
 		t.Fatalf("CONDUIT_BIN must be absolute, got %q", e.bin)
 	}
-	_, statErr := os.Stat(filepath.Join(root, "pkg", "kcmigrate"))
+	_, statErr := os.Stat(filepath.Join(root, "cmd", "conduit", "root", "migrate"))
 	e.requireCLI = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_CLI") == "1" || (e.bin != "" && statErr == nil)
-	e.requireMCP = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_MCP") == "1"
+	e.requireMCP = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_MCP") == "1" || (e.bin != "" && sourceRegistersTool(t, root, harness.ToolKCMigrate))
 	return e
+}
+
+// sourceRegistersTool reports whether a non-test Go file of the MCP adapter
+// names the tool as a string literal, which is how catalog.go registers
+// tools. Once it does, parity checks fail instead of reporting pending.
+func sourceRegistersTool(t *testing.T, root, tool string) bool {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(root, "cmd", "conduit", "internal", "mcp", "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(b, []byte(`"`+tool+`"`)) {
+			return true
+		}
+	}
+	return false
 }
 
 // track records the subtest's outcome for the summary.

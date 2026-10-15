@@ -82,11 +82,30 @@ func (m MCP) Migrate(ctx context.Context, req Request) (Output, error) {
 	if err != nil {
 		return Output{}, cerrors.Errorf("mcp tools/call %s: %w", ToolKCMigrate, err)
 	}
+	// A tool error with structured content is a domain error envelope (the
+	// adapter's toolErr), compared like the CLI's. Without it there is
+	// nothing to compare: say what the tool said.
+	if res.IsError && res.StructuredContent == nil {
+		return Output{}, cerrors.Errorf("%s returned an error with no structured content: %s", ToolKCMigrate, toolText(res))
+	}
+	if res.StructuredContent == nil {
+		return Output{}, cerrors.Errorf("%s returned no structured content", ToolKCMigrate)
+	}
 	sc, err := json.Marshal(res.StructuredContent)
 	if err != nil {
 		return Output{}, cerrors.Errorf("marshal structured content: %w", err)
 	}
 	return splitMCPFiles(sc)
+}
+
+func toolText(res *mcp.CallToolResult) string {
+	var parts []string
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			parts = append(parts, tc.Text)
+		}
+	}
+	return truncate([]byte(strings.Join(parts, " ")), 2000)
 }
 
 type mcpFile struct {

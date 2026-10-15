@@ -71,9 +71,12 @@ Pending is never passing. A check whose surface does not exist yet (no
 `migrate kafka-connect`, no `kc_migrate`, no report schema) is skipped with
 `PENDING:` and counted in the job summary. It becomes a failure when:
 
-- `MIGRATE_HARNESS_REQUIRE_CLI=1`, or `CONDUIT_BIN` is set and `pkg/kcmigrate`
-  exists in the tree (the CLI has landed, so pending would hide a broken build);
-- `MIGRATE_HARNESS_REQUIRE_MCP=1` for the parity checks;
+- `MIGRATE_HARNESS_REQUIRE_CLI=1`, or `CONDUIT_BIN` is set and
+  `cmd/conduit/root/migrate` exists in the tree (the command is registered, so
+  pending would hide a broken build; `pkg/kcmigrate` alone does not count);
+- `MIGRATE_HARNESS_REQUIRE_MCP=1`, or `CONDUIT_BIN` is set and the MCP
+  adapter's source (`cmd/conduit/internal/mcp`) registers `kc_migrate`, for the
+  parity checks;
 - `MIGRATE_HARNESS_RELEASE=1`, the release gate, which also requires
   `tier: certified` for every emitted plugin.
 
