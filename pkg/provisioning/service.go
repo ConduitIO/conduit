@@ -274,7 +274,7 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	// check if pipeline should be running
 	switch cfg.Status {
 	case config.StatusRunning:
-		err := s.lifecycleService.Start(ctx, cfg.ID)
+		err := s.startOnBoot(ctx, cfg.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
 		}
@@ -296,6 +296,23 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	}
 
 	return nil
+}
+
+// bootStarter is implemented by lifecycle services that record a start
+// refusal as the pipeline's status on the boot path (pkg/lifecycle-poc,
+// #2989). provisionPipeline only runs from Init, at startup, so it uses it;
+// a live apply (plan.go) keeps the plain Start, whose caller gets the error.
+type bootStarter interface {
+	StartOnBoot(ctx context.Context, pipelineID string) error
+}
+
+// startOnBoot starts a provisioned pipeline at startup, through bootStarter
+// when the lifecycle service has it.
+func (s *Service) startOnBoot(ctx context.Context, pipelineID string) error {
+	if bs, ok := s.lifecycleService.(bootStarter); ok {
+		return bs.StartOnBoot(ctx, pipelineID)
+	}
+	return s.lifecycleService.Start(ctx, pipelineID)
 }
 
 func (s *Service) deleteOldPipelines(ctx context.Context, keepIDs []string) []string {
