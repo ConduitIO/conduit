@@ -1,0 +1,34 @@
+schemaVersion: 1
+id: dbz-mysql-avro
+family: debezium-mysql
+description: >-
+  The tutorial MySQL connector with Confluent Avro key and value converters
+  and a Schema Registry URL.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/tutorial/register-mysql-avro.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to mysql.internal.example"
+    - "schema.history.internal.kafka.bootstrap.servers rewritten to kafka.internal.example:9092"
+    - "schema registry URLs rewritten to schema-registry.internal.example"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: key.converter, status: translated}
+    - {key: value.converter, status: translated}
+    - {key: value.converter.schema.registry.url, status: translated}
+    - {key: key.converter.schema.registry.url, status: translated}
+covers:
+  - class: io.debezium.connector.mysql.MySqlConnector
+    keys: [key.converter, value.converter, key.converter.schema.registry.url, value.converter.schema.registry.url]
+emits:
+  - {plugin: mysql, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}
