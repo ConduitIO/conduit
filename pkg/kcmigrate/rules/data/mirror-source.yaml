@@ -24,6 +24,9 @@ emits:
   - {plugin: builtin:kafka, role: source}
   - {plugin: builtin:kafka, role: destination}
 finish:
+  # No default in 4.2 (MirrorConnectorConfig.java:270-273): Kafka Connect
+  # rejects a config without it.
+  - {kind: require-key, key: source.cluster.alias}
   - {kind: mm2-topic}
   # MirrorMaker reads a partition with no stored offset from the beginning
   # (sourceConsumerConfig puts auto.offset.reset=earliest if absent,

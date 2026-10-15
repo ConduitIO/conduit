@@ -18,7 +18,7 @@ sources:
   - https://github.com/apache/kafka/blob/4.2.0/connect/mirror-client/src/main/java/org/apache/kafka/connect/mirror/MirrorClientConfig.java
 keys:
   - {key: enabled, default: "true"}
-  - {key: source.cluster.alias, default: source}
+  - {key: source.cluster.alias}
   - {key: target.cluster.alias, default: target}
   - {key: replication.policy.class, default: org.apache.kafka.connect.mirror.DefaultReplicationPolicy}
   - {key: replication.policy.separator, default: "."}
