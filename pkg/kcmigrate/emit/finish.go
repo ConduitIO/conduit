@@ -30,11 +30,42 @@ import (
 // It returns connector-level notes for what it could not write.
 type Finisher func(p *Plan, a rules.Action) ([]kcmigrate.Note, error)
 
-// FinishMM2Topic names the MirrorMaker topic-naming finisher.
-const FinishMM2Topic = "mm2-topic"
+// Finisher names.
+const (
+	// FinishMM2Topic names the MirrorMaker topic-naming finisher.
+	FinishMM2Topic = "mm2-topic"
+	// FinishDefault writes a setting no key set, for an upstream default
+	// that Conduit's default differs from. Arguments: side, name, value.
+	FinishDefault = "default-setting"
+)
 
 var finishers = map[string]Finisher{
 	FinishMM2Topic: mm2Topic,
+	FinishDefault:  defaultSetting,
+}
+
+// defaultSetting writes value to setting name of side unless a key or the
+// worker set it: the upstream connector's own default, where Conduit's
+// differs (MirrorMaker reads a partition with no stored offset from the
+// beginning; the Kafka source starts at the end).
+func defaultSetting(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
+	side, name, value := a.Args["side"], a.Args["name"], a.Args["value"]
+	if name == "" || value == "" {
+		return nil, cerrors.Errorf(FinishDefault + " needs a name and a value")
+	}
+	idx, err := p.sides(side)
+	if err != nil {
+		return nil, cerrors.Errorf(FinishDefault+": %w", err)
+	}
+	for _, i := range idx {
+		if _, ok := p.connectors[i].Settings[name]; ok {
+			return nil, nil
+		}
+	}
+	if _, _, err := p.Set(side, name, value, "(default "+side+" "+name+")"); err != nil {
+		return nil, cerrors.Errorf(FinishDefault+": %w", err)
+	}
+	return nil, nil
 }
 
 // SetConfig gives the plan the connector's config, the last value of each

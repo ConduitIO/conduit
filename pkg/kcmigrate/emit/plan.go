@@ -51,6 +51,7 @@ type Plan struct {
 	File       string
 	connectors []connectorDef
 	dlq        *dlqDef
+	stopped    bool              // a key requires the pipeline stopped
 	scope      string            // rules.ScopeSource or rules.ScopeSink: which client Kafka Connect runs
 	owner      map[string]owner  // config path -> origin, key and layer that set it
 	superseded map[keyRef]string // origin and key -> the higher-layer key that replaced its value
@@ -367,6 +368,10 @@ func (p *Plan) supersededBy(origin, key string) (string, bool) {
 	by, ok := p.superseded[keyRef{origin: origin, key: key}]
 	return by, ok
 }
+
+// Stopped reports whether a key requires the pipeline written stopped,
+// regardless of --accept-gaps.
+func (p *Plan) Stopped() bool { return p.stopped }
 
 // Secrets returns the environment variables the pipeline references. A
 // variable whose setting a higher layer replaced is left out: the operator

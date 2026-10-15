@@ -115,12 +115,119 @@ func TestMirror_DisabledSyncsAreClean(t *testing.T) {
 	for _, n := range mmConnector(res).Notes {
 		is.True(!strings.Contains(n.Reason, "sync.topic"))
 	}
-	// Only the output-shape class note blocks now.
-	blocking := 0
+	// Only the class notes block now: output shape and stored offsets.
+	var blocking []string
 	for _, n := range mmConnector(res).Notes {
 		if n.Blocking {
-			blocking++
+			blocking = append(blocking, n.Code)
 		}
 	}
-	is.Equal(blocking, 1)
+	is.Equal(blocking, []string{"kc.offsets_not_migrated", "kc.output_shape_differs"})
+}
+
+// The worker configures Kafka Connect's producer only: none of its keys
+// reach MirrorMaker's own consumer of the source cluster, and a missing
+// source cluster is a blocking required setting, not the worker's cluster.
+func TestMirror_WorkerDoesNotReachSource(t *testing.T) {
+	is := is.New(t)
+	worker := "bootstrap.servers=worker:9092\nconsumer.bootstrap.servers=wc:9092\nconsumer.security.protocol=SASL_SSL\nconsumer.sasl.mechanism=PLAIN\n" +
+		`consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="w" password="WORKERCANARY";` + "\n"
+	res := mmRun(t, worker, "source.cluster.security.protocol=SASL_SSL\nsource.cluster.sasl.mechanism=SCRAM-SHA-512\n")
+	src := settings(t, res, "pipelines/mm.yaml", "source")
+	is.Equal(src["servers"], "src:9092")
+	is.Equal(src["saslMechanism"], "SCRAM-SHA-512")
+	_, ok := src["saslUsername"]
+	is.True(!ok)
+	is.True(!strings.Contains(file(res, SecretsTemplateFile), "CONSUMER_SASL_JAAS"))
+
+	// No source.cluster.bootstrap.servers: required, never the worker's.
+	e, err := rules.Builtin()
+	is.NoErr(err)
+	w := in("w.properties", worker)
+	cfg := strings.Replace(mmBase, "source.cluster.bootstrap.servers=src:9092\n", "", 1) + "topics=orders\n"
+	res, err = Run(context.Background(), e, withValidator(Request{ConduitVersion: "v", RequiredSettings: BuiltinRequired, Worker: &w, Inputs: []kcmigrate.Input{in("mm.properties", cfg)}}))
+	is.NoErr(err)
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "source")["servers"], "${KC_MM_SOURCE_SERVERS}")
+	var required bool
+	for _, n := range mmConnector(res).Notes {
+		required = required || (n.Rule == "required/source/servers" && n.Blocking)
+	}
+	is.True(required)
+}
+
+// MirrorMaker resumes from the offsets Kafka Connect stored, else from the
+// beginning. The offsets are not carried over: a blocking note says so, the
+// pipeline reads from the beginning like MirrorMaker without offsets, and
+// --accept-gaps names the note in acceptedGaps.
+func TestMirror_StartPosition(t *testing.T) {
+	is := is.New(t)
+	res := mmRun(t, "", "")
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "source")["readFromBeginning"], "true")
+	var note bool
+	for _, n := range mmConnector(res).Notes {
+		note = note || (n.Code == "kc.offsets_not_migrated" && n.Blocking)
+	}
+	is.True(note)
+
+	res = mmRun(t, "", "consumer.auto.offset.reset=latest\n")
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "source")["readFromBeginning"], "false")
+	res = mmRun(t, "", "consumer.auto.offset.reset=latest\nsource.consumer.auto.offset.reset=earliest\n")
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "source")["readFromBeginning"], "true") // source.consumer. wins
+	res = mmRun(t, "", "consumer.auto.offset.reset=none\n")
+	is.True(entryFor(mmConnector(res), "consumer.auto.offset.reset").Blocking)
+
+	e, err := rules.Builtin()
+	is.NoErr(err)
+	res, err = Run(context.Background(), e, withValidator(Request{ConduitVersion: "v", AcceptGaps: true, RequiredSettings: BuiltinRequired, Inputs: []kcmigrate.Input{in("mm.properties", mmBase+"topics=orders\n")}}))
+	is.NoErr(err)
+	var accepted bool
+	for _, g := range res.Report.AcceptedGaps {
+		accepted = accepted || g.Code == "kc.offsets_not_migrated"
+	}
+	is.True(accepted)
+}
+
+func TestMirror_IsolationLevel(t *testing.T) {
+	is := is.New(t)
+	res := mmRun(t, "", "consumer.isolation.level=read_uncommitted\n")
+	e := entryFor(mmConnector(res), "consumer.isolation.level")
+	is.Equal(e.Status, kcmigrate.StatusTranslated)
+	for _, k := range []string{"consumer.isolation.level", "source.consumer.isolation.level"} {
+		res = mmRun(t, "", k+"=read_committed\n")
+		is.True(entryFor(mmConnector(res), k).Blocking)
+	}
+}
+
+// enabled=false: Kafka Connect runs no tasks, so the pipeline is written
+// stopped, also under --accept-gaps, and the entry itself does not block.
+func TestMirror_Disabled(t *testing.T) {
+	is := is.New(t)
+	e, err := rules.Builtin()
+	is.NoErr(err)
+	res, err := Run(context.Background(), e, withValidator(Request{ConduitVersion: "v", AcceptGaps: true, RequiredSettings: BuiltinRequired, Inputs: []kcmigrate.Input{in("mm.properties", mmBase+"topics=orders\nenabled=false\n")}}))
+	is.NoErr(err)
+	en := entryFor(mmConnector(res), "enabled")
+	is.Equal(en.Status, kcmigrate.StatusTranslated)
+	is.True(!en.Blocking)
+	is.Equal(mmConnector(res).PipelineStatus, kcmigrate.PipelineStopped)
+	is.True(strings.Contains(file(res, "pipelines/mm.yaml"), "status: stopped"))
+}
+
+func TestMirror_NITs(t *testing.T) {
+	is := is.New(t)
+	// MirrorMaker's default topics.exclude drops these even when listed.
+	for _, topics := range []string{"orders,__consumer_offsets", "a.replica", "mm2-offsets.us.internal, orders"} {
+		res := mmRun(t, "", "topics="+topics+"\n")
+		is.True(entryFor(mmConnector(res), "topics").Blocking)
+	}
+	res := mmRun(t, "", "topics=orders,my__topic\n")
+	is.True(!entryFor(mmConnector(res), "topics").Blocking)
+
+	// consumer.override.ssl.* reaches only the offsets consumer.
+	res = mmRun(t, "", "consumer.override.ssl.truststore.location=/t.jks\n")
+	is.True(!entryFor(mmConnector(res), "consumer.override.ssl.truststore.location").Blocking)
+
+	// A custom config property filter matters only while configs sync.
+	res = mmRun(t, "", "sync.topic.configs.enabled=false\nconfig.property.filter.class=com.example.Filter\n")
+	is.True(!entryFor(mmConnector(res), "config.property.filter.class").Blocking)
 }

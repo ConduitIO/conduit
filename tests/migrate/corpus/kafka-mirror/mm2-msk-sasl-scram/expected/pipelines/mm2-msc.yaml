@@ -8,6 +8,7 @@ pipelines:
         type: source
         plugin: builtin:kafka
         settings:
+          readFromBeginning: "true"
           saslMechanism: SCRAM-SHA-512
           saslPassword: ${KC_MM2_MSC_SOURCE_CLUSTER_SASL_JAAS_CONFIG}
           saslUsername: example-user

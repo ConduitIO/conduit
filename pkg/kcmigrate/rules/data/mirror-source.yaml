@@ -25,7 +25,15 @@ emits:
   - {plugin: builtin:kafka, role: destination}
 finish:
   - {kind: mm2-topic}
+  # MirrorMaker reads a partition with no stored offset from the beginning
+  # (sourceConsumerConfig puts auto.offset.reset=earliest if absent,
+  # MirrorConnectorConfig.java:184); the Kafka source starts at the end.
+  - {kind: default-setting, side: source, name: readFromBeginning, value: "true"}
 notes:
+  - code: kc.offsets_not_migrated
+    blocking: true
+    reason: MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning (auto.offset.reset=earliest unless consumer.auto.offset.reset says otherwise). migrate does not carry the stored offsets over, so the pipeline starts every partition as if none were stored. With readFromBeginning true (the default written here) the records MirrorMaker already copied are copied again; with auto.offset.reset=latest the records written before the pipeline starts are skipped.
+    fix: Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied records (or the skipped ones, with latest) with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.
   - code: kc.output_shape_differs
     blocking: true
     reason: Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.
@@ -34,7 +42,7 @@ keys:
   - key: source.cluster.bootstrap.servers
     status: translated
     reason: The pipeline reads the source cluster.
-    emit: {kind: setting, side: source, name: servers, layer: "0"}
+    emit: {kind: setting, side: source, name: servers}
     diff: identity
   - key: source.cluster.security.protocol
     diff: identity
@@ -42,7 +50,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: source, layer: "0"}
+        emit: {kind: tls-from-protocol, side: source}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -54,7 +62,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: source, name: saslMechanism, layer: "0"}
+        emit: {kind: setting, side: source, name: saslMechanism}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -63,7 +71,7 @@ keys:
         fix: Use a supported mechanism, or keep this flow on MirrorMaker.
   - key: source.cluster.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: source, layer: "0"}
+    emit: {kind: sasl-jaas, side: source}
     secret: true
     diff: secret
   - key: {prefix: source.cluster.ssl.}
@@ -82,7 +90,7 @@ keys:
   - key: consumer.bootstrap.servers
     status: translated
     reason: MirrorMaker's consumer reads consumer.* above source.cluster.*.
-    emit: {kind: setting, side: source, name: servers, layer: "1"}
+    emit: {kind: setting, side: source, name: servers, layer: client}
     diff: identity
   - key: consumer.security.protocol
     diff: identity
@@ -90,7 +98,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: source, layer: "1"}
+        emit: {kind: tls-from-protocol, side: source, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -102,7 +110,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: source, name: saslMechanism, layer: "1"}
+        emit: {kind: setting, side: source, name: saslMechanism, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -111,7 +119,7 @@ keys:
         fix: Use a supported mechanism, or keep this flow on MirrorMaker.
   - key: consumer.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: source, layer: "1"}
+    emit: {kind: sasl-jaas, side: source, layer: client}
     secret: true
     diff: secret
   - key: {prefix: consumer.ssl.}
@@ -121,6 +129,37 @@ keys:
     reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
     fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
     diff: identity
+  - key: consumer.auto.offset.reset
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [earliest]
+        status: translated
+        reason: Applies only to partitions with no stored offsets, which after migration is every partition (see kc.offsets_not_migrated); they are read from the beginning, as MirrorMaker reads them.
+        emit: {kind: setting, side: source, name: readFromBeginning, value: "true", layer: client}
+      - match: [latest]
+        status: translated
+        reason: Applies only to partitions with no stored offsets, which after migration is every partition (see kc.offsets_not_migrated); they are read from the end, as MirrorMaker reads them.
+        emit: {kind: setting, side: source, name: readFromBeginning, value: "false", layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source starts a partition with no stored offset at the beginning or the end only; with none MirrorMaker fails on such a partition, and migrate carries no stored offsets over, so every partition would.
+        fix: Set auto.offset.reset to earliest or latest.
+  - key: consumer.isolation.level
+    diff: behavior
+    values:
+      - match: [read_uncommitted]
+        status: translated
+        reason: The Kafka source reads uncommitted records too, as MirrorMaker does by default.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source has no isolation setting and reads uncommitted records, including those of aborted transactions, which read_committed hides.
+        fix: Keep this flow on MirrorMaker if consumers rely on read_committed, or accept the difference with --accept-gaps.
   - key: {prefix: consumer.}
     status: unsupported
     code: kc.key_unsupported
@@ -130,7 +169,7 @@ keys:
   - key: source.consumer.bootstrap.servers
     status: translated
     reason: MirrorMaker's consumer reads source.consumer.* above source.cluster.*.
-    emit: {kind: setting, side: source, name: servers, layer: "2"}
+    emit: {kind: setting, side: source, name: servers, layer: cluster-client}
     diff: identity
   - key: source.consumer.security.protocol
     diff: identity
@@ -138,7 +177,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: source, layer: "2"}
+        emit: {kind: tls-from-protocol, side: source, layer: cluster-client}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -150,7 +189,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: source, name: saslMechanism, layer: "2"}
+        emit: {kind: setting, side: source, name: saslMechanism, layer: cluster-client}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -159,7 +198,7 @@ keys:
         fix: Use a supported mechanism, or keep this flow on MirrorMaker.
   - key: source.consumer.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: source, layer: "2"}
+    emit: {kind: sasl-jaas, side: source, layer: cluster-client}
     secret: true
     diff: secret
   - key: {prefix: source.consumer.ssl.}
@@ -169,6 +208,37 @@ keys:
     reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
     fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
     diff: identity
+  - key: source.consumer.auto.offset.reset
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [earliest]
+        status: translated
+        reason: Applies only to partitions with no stored offsets, which after migration is every partition (see kc.offsets_not_migrated); they are read from the beginning, as MirrorMaker reads them.
+        emit: {kind: setting, side: source, name: readFromBeginning, value: "true", layer: cluster-client}
+      - match: [latest]
+        status: translated
+        reason: Applies only to partitions with no stored offsets, which after migration is every partition (see kc.offsets_not_migrated); they are read from the end, as MirrorMaker reads them.
+        emit: {kind: setting, side: source, name: readFromBeginning, value: "false", layer: cluster-client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source starts a partition with no stored offset at the beginning or the end only; with none MirrorMaker fails on such a partition, and migrate carries no stored offsets over, so every partition would.
+        fix: Set auto.offset.reset to earliest or latest.
+  - key: source.consumer.isolation.level
+    diff: behavior
+    values:
+      - match: [read_uncommitted]
+        status: translated
+        reason: The Kafka source reads uncommitted records too, as MirrorMaker does by default.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source has no isolation setting and reads uncommitted records, including those of aborted transactions, which read_committed hides.
+        fix: Keep this flow on MirrorMaker if consumers rely on read_committed, or accept the difference with --accept-gaps.
   - key: {prefix: source.consumer.}
     status: unsupported
     code: kc.key_unsupported
@@ -217,6 +287,12 @@ keys:
     reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
     fix: None needed.
     diff: tuning
+  - key: {prefix: consumer.override.ssl.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
   - key: {prefix: consumer.override.}
     status: unsupported
     code: kc.key_unsupported
@@ -226,7 +302,7 @@ keys:
   - key: target.cluster.bootstrap.servers
     status: translated
     reason: Kafka Connect's producer writes the records to the worker's cluster; this fills the destination's servers when neither the worker file nor producer.override.bootstrap.servers sets them, and MirrorMaker requires the two to be the same cluster.
-    emit: {kind: setting, side: destination, name: servers, layer: "fallback"}
+    emit: {kind: setting, side: destination, name: servers, layer: fallback}
     diff: identity
   - key: target.cluster.security.protocol
     diff: identity
@@ -234,7 +310,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: destination, layer: "fallback"}
+        emit: {kind: tls-from-protocol, side: destination, layer: fallback}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -246,7 +322,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: destination, name: saslMechanism, layer: "fallback"}
+        emit: {kind: setting, side: destination, name: saslMechanism, layer: fallback}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -255,7 +331,7 @@ keys:
         fix: Use a supported mechanism, or keep this flow on MirrorMaker.
   - key: target.cluster.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: destination, layer: "fallback"}
+    emit: {kind: sasl-jaas, side: destination, layer: fallback}
     secret: true
     diff: secret
   - key: {prefix: target.cluster.ssl.}
@@ -347,6 +423,15 @@ keys:
   - key: topics
     diff: identity
     values:
+      # MirrorMaker's default topics.exclude (mm2.*\.internal, .*\.replica,
+      # __.*, DefaultTopicFilter.java:36) drops these even when listed; the
+      # pipeline would read them.
+      - pattern: '^(.*,)?\s*(__[A-Za-z0-9._-]*|[A-Za-z0-9._-]*\.replica|mm2[A-Za-z0-9._-]*\.internal)\s*(,.*)?$'
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A listed topic matches MirrorMaker's default topics.exclude (mm2.*\.internal, .*\.replica, __.*), so MirrorMaker never mirrored it; the pipeline would read it.
+        fix: Remove the internal, replica and __-prefixed topics from topics, then re-run.
       - pattern: '^[A-Za-z0-9_-]+(\s*,\s*[A-Za-z0-9_-]+)*$'
         status: translated
         reason: A literal topic list.
@@ -444,17 +529,11 @@ keys:
     fix: None needed.
     diff: tuning
   - key: config.property.filter.class
-    diff: behavior
-    values:
-      - match: [org.apache.kafka.connect.mirror.DefaultConfigPropertyFilter]
-        status: translated
-        emit: {kind: none}
-      - otherwise: true
-        status: unsupported
-        code: kc.key_unsupported
-        blocking: true
-        reason: A custom config property filter; topic configs are not synced by the pipeline.
-        fix: Create the destination topics ahead of time with the configs you need.
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters while topic configs are synced, which the pipeline does not do; sync.topic.configs.enabled reports that, blocking when on.
+    fix: None needed.
+    diff: tuning
   - key: sync.topic.acls.enabled
     diff: behavior
     ignoreCase: true
@@ -575,11 +654,9 @@ keys:
         reason: The flow is enabled.
         emit: {kind: none}
       - match: ["false"]
-        status: unsupported
-        blocking: true
-        code: kc.key_unsupported
-        reason: A disabled MirrorMaker flow mirrors nothing.
-        fix: Remove this connector from the migration, or enable it.
+        status: translated
+        reason: A disabled MirrorMaker flow runs no tasks, so the pipeline is written stopped, also under --accept-gaps.
+        emit: {kind: pipeline-stopped}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -699,6 +776,9 @@ defaults:
       fix: Create the destination topics ahead of time with the source topics' configs, or set sync.topic.configs.enabled=false if they already match.
   - key: config.properties.exclude
     default: 'follower\.replication\.throttled\.replicas, leader\.replication\.throttled\.replicas, message\.timestamp\.difference\.max\.ms, message\.timestamp\.type, unclean\.leader\.election\.enable, min\.insync\.replicas'
+    coveredBy: kc.default_differs
+  - key: config.property.filter.class
+    default: org.apache.kafka.connect.mirror.DefaultConfigPropertyFilter
     coveredBy: kc.default_differs
   - key: sync.topic.acls.enabled
     default: "true"

@@ -86,6 +86,11 @@ var (
 	// topic naming cannot be written as the destination's topic template.
 	// Blocking: the destination topic must be set by hand.
 	CodeTopicNameUnsupported = conduiterr.Register("kc.topic_name_unsupported", codes.InvalidArgument)
+	// CodeOffsetsNotMigrated: a connector-level note that the connector
+	// resumes from offsets Kafka Connect stored, which migrate does not carry
+	// over; the note says where the pipeline starts instead. Blocking:
+	// records are copied again or skipped.
+	CodeOffsetsNotMigrated = conduiterr.Register("kc.offsets_not_migrated", codes.InvalidArgument)
 	// CodeSecretPlaintext: a connector-level note that the input holds a
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.

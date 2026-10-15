@@ -39,6 +39,7 @@ const (
 	KindSASLJAAS   = "sasl-jaas"
 	KindHaltOnFail = "dlq-halt"
 	KindList       = "list-setting"
+	KindStopped    = "pipeline-stopped"
 )
 
 var kinds = map[string]Kind{
@@ -48,6 +49,7 @@ var kinds = map[string]Kind{
 	KindSASLJAAS:   saslJAAS,
 	KindHaltOnFail: haltOnFailure,
 	KindList:       listSetting,
+	KindStopped:    pipelineStopped,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -435,6 +437,16 @@ func saslJAAS(p *Plan, d *rules.Decision) error {
 	d.Entry.Secret = true
 	d.Entry.Target.Env = env
 	d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " The username is written to saslUsername; saslPassword is ${" + env + "}, to be filled with the password from this JAAS config.")
+	return nil
+}
+
+// pipelineStopped writes the pipeline stopped whatever else the report says,
+// also under --accept-gaps: the connector ran no tasks in Kafka Connect
+// (MirrorMaker's enabled=false), so a running pipeline would move data the
+// original never moved.
+func pipelineStopped(p *Plan, d *rules.Decision) error {
+	p.stopped = true
+	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: "/pipelines/0/status"}
 	return nil
 }
 

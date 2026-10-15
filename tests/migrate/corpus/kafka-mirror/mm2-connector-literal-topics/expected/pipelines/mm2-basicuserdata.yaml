@@ -8,6 +8,7 @@ pipelines:
         type: source
         plugin: builtin:kafka
         settings:
+          readFromBeginning: "true"
           servers: source-kafka-bootstrap.internal.example:9092
           topics: basicuserdata
       - id: destination

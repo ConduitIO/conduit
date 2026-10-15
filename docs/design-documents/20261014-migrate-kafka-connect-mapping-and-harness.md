@@ -631,20 +631,23 @@ equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connect
 | `replication.policy.class` | Default T; `IdentityReplicationPolicy` T; else U! | destination `topic` template | |
 | `replication.policy.separator` | T | in the template | |
 | `replication.policy.internal.topic.separator.enabled`, `forwarding.admin.class`, `admin.timeout.ms`, `config.providers` | U | none | `forwarding.admin.class` non-default: U! |
-| `source.cluster.bootstrap.servers` | T | source `servers` | MirrorMaker's own consumer reads the source cluster (corrected 2026-10-16, note below) |
-| `source.cluster.<client key>`, then `consumer.<client key>`, then `source.consumer.<client key>` (`bootstrap.servers`, `security.protocol`, `sasl.*`) | T | source `servers`, TLS and SASL | Merged in that order, later wins (`MirrorConnectorConfig.sourceConsumerConfig`). `ssl.*`: U! (PEM); other client keys: U |
-| `target.cluster.bootstrap.servers`, `target.cluster.<client key>` | T | destination `servers`, TLS and SASL, at the fallback layer | Used only when neither the worker file nor `producer.override.*` sets them: Kafka Connect's producer writes the records to the worker's cluster (corrected 2026-10-16, note below) |
-| `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list") |
+| `source.cluster.bootstrap.servers` | T | source `servers` | MirrorMaker's own consumer reads the source cluster (corrected 2026-10-15, note below). Absent (and no `consumer.`/`source.consumer.bootstrap.servers`): blocking `kc.setting_required`, never the worker's cluster |
+| `source.cluster.<client key>`, then `consumer.<client key>`, then `source.consumer.<client key>` (`bootstrap.servers`, `security.protocol`, `sasl.*`) | T | source `servers`, TLS and SASL | Merged in that order, later wins (`MirrorConnectorConfig.sourceConsumerConfig`). `ssl.*`: U! (PEM); other client keys: U. No worker key reaches this consumer |
+| `consumer.auto.offset.reset`, `source.consumer.auto.offset.reset` (same order) | `earliest`, `latest` T; else U! | source `readFromBeginning` | Absent: `readFromBeginning: true`, MirrorMaker's `earliest` (`MirrorConnectorConfig.java` line 184). `none` fails every partition, since no stored offsets are carried over |
+| `consumer.isolation.level`, `source.consumer.isolation.level` | `read_uncommitted` T; `read_committed` U! | none | The Kafka source reads uncommitted records |
+| `target.cluster.bootstrap.servers`, `target.cluster.<client key>` | T | destination `servers`, TLS and SASL, at the fallback layer | Used only when neither the worker file nor `producer.override.*` sets them: Kafka Connect's producer writes the records to the worker's cluster (corrected 2026-10-15, note below) |
+| `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list"). A listed topic that the default `topics.exclude` (`mm2.*\.internal`, `.*\.replica`, `__.*`) drops: U! |
 | `topics.exclude`, `topic.filter.class` (non-default) | U! | none | |
 | `refresh.topics.enabled`, `refresh.topics.interval.seconds` | U | none | New topics are not discovered. Absent means `true`: same status |
-| `enabled` | `false` T; `true` T | pipeline `status` | `false` writes the pipeline `stopped` |
-| `sync.topic.configs.enabled`, `sync.topic.configs.interval.seconds`, `config.properties.exclude`, `config.property.filter.class`, `sync.topic.acls.enabled`, `sync.topic.acls.interval.seconds` | U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time. Absent means `true`: same status |
+| `enabled` | `false` T; `true` T | pipeline `status` | `false` writes the pipeline `stopped`, also under `--accept-gaps`; the entry does not block (Kafka Connect runs no tasks for a disabled flow) |
+| `sync.topic.configs.enabled`, `sync.topic.acls.enabled` | `false` T; `true` U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time. Absent means `true`: same status |
+| `sync.topic.configs.interval.seconds`, `sync.topic.acls.interval.seconds`, `config.properties.exclude`, `config.property.filter.class` | U | none | Matter only while syncing, which the rows above report |
 | `replication.factor` | U | none | |
 | `emit.offset-syncs.enabled`, `offset-syncs.topic.location`, `offset-syncs.topic.replication.factor`, `offset.lag.max`, `heartbeats.replication.enabled`, `consumer.poll.timeout.ms` | U | none | |
 | `groups`, `groups.exclude`, `group.filter.class`, `emit.checkpoints.enabled`, `emit.checkpoints.interval.seconds`, `sync.group.offsets.enabled`, `sync.group.offsets.interval.seconds`, `refresh.groups.*`, `checkpoints.topic.replication.factor` | U! | none | Consumer-group offset translation; `emit.checkpoints.enabled` absent means `true`: same status. The report says plainly that a migration relying on consumer failover between clusters must not move |
 | `emit.heartbeats.*`, `heartbeats.topic.replication.factor` | U | none | Heartbeat connector only |
 
-**Where MirrorMaker's records come from and go to (corrected 2026-10-16; the decision on this correction is pending
+**Where MirrorMaker's records come from and go to (corrected 2026-10-15; the decision on this correction is pending
 DeVaris).** The first version of this table mapped `target.cluster.*` onto the destination. In connector form that
 is not what Kafka Connect does. Apache Kafka 4.2.0: `MirrorSourceTask` reads the source cluster with its own
 consumer, configured by `MirrorConnectorConfig.sourceConsumerConfig` (`connect/mirror/.../MirrorConnectorConfig.java`
@@ -657,7 +660,14 @@ cluster. `target.cluster.*` configures only MirrorMaker's own admin and offset-s
 target cluster be the same, so `target.cluster.*` is a good default for the destination when the run has no worker
 file, and the rules use it at a fallback layer below the worker and the overrides. Connect's
 `consumer.override.*` reaches only a source connector's offsets consumer, so it has no effect on MirrorMaker's data
-consumer and is unsupported, non-blocking, in the MirrorMaker rules.
+consumer and is unsupported, non-blocking, in the MirrorMaker rules (`consumer.override.ssl.*` included).
+
+**Where the pipeline starts (added 2026-10-15).** MirrorMaker resumes each partition from the offsets Kafka Connect
+stored for it, and reads a partition with none from the beginning. `migrate` does not carry those offsets over, so
+every MirrorMaker migration carries the blocking class note `kc.offsets_not_migrated`, and the source is written
+`readFromBeginning: true` unless `auto.offset.reset` says otherwise: records already mirrored are copied again
+(or, with `latest`, records written before the pipeline starts are skipped). Under `--accept-gaps` the report's
+`acceptedGaps` names the note. Found in review of #3118.
 
 #### Legacy and alias handling
 

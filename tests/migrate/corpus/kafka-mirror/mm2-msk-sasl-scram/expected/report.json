@@ -27,7 +27,7 @@
     "translated": 18,
     "approximated": 1,
     "unsupported": 33,
-    "blocking": 7
+    "blocking": 8
   },
   "connectors": [
     {
@@ -658,6 +658,13 @@
       ],
       "notes": [
         {
+          "code": "kc.offsets_not_migrated",
+          "reason": "MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning (auto.offset.reset=earliest unless consumer.auto.offset.reset says otherwise). migrate does not carry the stored offsets over, so the pipeline starts every partition as if none were stored. With readFromBeginning true (the default written here) the records MirrorMaker already copied are copied again; with auto.offset.reset=latest the records written before the pipeline starts are skipped.",
+          "fix": "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied records (or the skipped ones, with latest) with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
+          "blocking": true,
+          "rule": "mirror-source/notes/kc.offsets_not_migrated"
+        },
+        {
           "code": "kc.output_shape_differs",
           "reason": "Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.",
           "fix": "Keep this flow on MirrorMaker if consumers rely on partition numbers, headers or record timestamps, or accept the difference with --accept-gaps.",
@@ -667,7 +674,7 @@
         {
           "code": "kc.setting_required",
           "reason": "The builtin:kafka source requires topics, and no key of the Kafka Connect config sets it; the pipeline references ${KC_MM2_MSC_SOURCE_TOPICS} instead.",
-          "fix": "Set KC_MM2_MSC_SOURCE_TOPICS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds the value.",
+          "fix": "Set KC_MM2_MSC_SOURCE_TOPICS in the environment (see secrets.env.template).",
           "blocking": true,
           "rule": "required/source/topics"
         },
