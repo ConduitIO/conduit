@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -45,24 +46,32 @@ type destinationPluginAdapter struct {
 	// attached to the context of each call to the plugin, see
 	// schema_scope.go. Nil when the adapter is used without a runtime.
 	schemaService pconnutils.SchemaService
+	// policy is the operator's ambient-credentials policy, attached to the
+	// context of each call to the plugin.
+	policy hostpolicy.Policy
 }
 
 var _ connector.DestinationPlugin = (*destinationPluginAdapter)(nil)
 
-func newDestinationPluginAdapter(impl pconnector.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
+func newDestinationPluginAdapter(impl pconnector.DestinationPlugin, logger log.CtxLogger, policy hostpolicy.Policy) *destinationPluginAdapter {
 	return &destinationPluginAdapter{
 		impl:      impl,
 		logger:    logger.WithComponent("builtin.destinationPluginAdapter"),
 		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent(),
+		policy:    policy,
 	}
 }
 
 // pluginContext returns the context for a call into the plugin: it carries
-// the plugin logger and this runtime's schema service.
+// the plugin logger, this runtime's schema service and the operator's
+// ambient-credentials policy.
 func (d *destinationPluginAdapter) pluginContext(ctx context.Context) context.Context {
 	// Invariant 6: the connector resolves and registers schemas in its own
 	// runtime's registry, never in another runtime's in the same process.
-	return contextWithSchemaService(d.ctxLogger.WithContext(ctx), d.schemaService)
+	// Invariant (ambient credentials): this is the only place the policy
+	// enters a built-in connector, and it comes from the engine, never from
+	// the request.
+	return hostpolicy.WithPolicy(contextWithSchemaService(d.ctxLogger.WithContext(ctx), d.schemaService), d.policy)
 }
 
 func (d *destinationPluginAdapter) Configure(ctx context.Context, in pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error) {
@@ -96,6 +105,12 @@ func (d *destinationPluginAdapter) Run(ctx context.Context, stream pconnector.De
 	go func() {
 		err := d.impl.Run(d.pluginContext(ctx), stream)
 		if err != nil {
+			// No convertPolicyError here, unlike the source: the SDK turns a
+			// Write error into an ack error string and keeps running, so Run
+			// only ever returns stream errors. A policy refusal on Write reaches
+			// the engine as an ack error whose text starts with the stable code
+			// (hostpolicy.Error.Error), pinned by
+			// TestAmbientPolicy_DestinationWriteRefusalIsAckString.
 			if !inmemStream.Close(err) {
 				d.logger.Err(ctx, err).Msg("stream already stopped")
 			}

@@ -1,6 +1,7 @@
 # Rule data for `conduit migrate kafka-connect`
 
-One YAML file per Kafka Connect connector class (`scope: source` or `scope: sink`), one with the keys every
+One YAML file per Kafka Connect connector class (`scope: source` or `scope: sink`; `pipeline: none` with one
+`every` outcome for a class that produces no pipeline), one with the keys every
 connector shares (`scope: shared`) and one for worker properties (`scope: worker`). The format and the mapping
 tables these files implement are in
 `docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md`.

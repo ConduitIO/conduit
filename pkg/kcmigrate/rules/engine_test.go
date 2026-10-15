@@ -303,3 +303,44 @@ func TestEngine_RulesUsed(t *testing.T) {
 	is.Equal(got[0].Class, "(shared)")
 	is.Equal(len(e.RulesUsed(nil, true)), 1)
 }
+
+const noPipelineHead = "rulesVersion: 1\nscope: source\nclass: com.example.Aux\nupstream: {name: u, version: \"1\"}\npipeline: none\n"
+
+// A no-pipeline class (MirrorMaker's heartbeat and checkpoint connectors)
+// gives every key the file's one outcome and has nothing to emit.
+func TestLoad_NoPipelineClass(t *testing.T) {
+	every := "every: {status: unsupported, code: kc.connector_class_unsupported, reason: r, fix: f}\n"
+	is := is.New(t)
+	e, err := Load(fstest.MapFS{"aux.yaml": {Data: []byte(noPipelineHead + every)}})
+	is.NoErr(err)
+	cl := e.Classify(kcmigrate.Connector{Name: "a", Class: "com.example.Aux", Config: []kcmigrate.KV{
+		{Key: "name", Value: kcmigrate.NewValue("a")},
+		{Key: "connector.class", Value: kcmigrate.NewValue("com.example.Aux")},
+		{Key: "emit.heartbeats.interval.seconds", Value: kcmigrate.NewValue("5")},
+	}})
+	is.Equal(len(cl.Decisions), 3)
+	for _, d := range cl.Decisions {
+		is.Equal(d.Entry.Status, kcmigrate.StatusUnsupported)
+		is.Equal(d.Entry.Code, kcmigrate.CodeConnectorClassUnsupported.Reason())
+		is.True(!d.Entry.Blocking)
+		is.True(d.Emit == nil)
+	}
+	is.True(cl.Rules.NoPipeline())
+
+	for name, tt := range map[string]struct{ yaml, want string }{
+		"no every":         {noPipelineHead, "needs every"},
+		"every translated": {noPipelineHead + "every: {status: translated}\n", "every must be unsupported"},
+		"blocking no fix":  {noPipelineHead + "every: {status: unsupported, blocking: true, code: kc.connector_class_unsupported, reason: r}\n", "every must be unsupported"},
+		"with keys":        {noPipelineHead + every + "keys:\n  - key: a\n    status: translated\n    emit: {kind: none}\n    diff: identity\n", "no keys"},
+		"with emits":       {noPipelineHead + every + "emits:\n  - {plugin: builtin:kafka, role: source}\n", "no emits"},
+		"every elsewhere":  {"rulesVersion: 1\nscope: source\nclass: C\nupstream: {name: u, version: \"1\"}\n" + every, "every needs pipeline: none"},
+		"bad pipeline":     {"rulesVersion: 1\nscope: source\nclass: C\nupstream: {name: u, version: \"1\"}\npipeline: two\n", "pipeline must be"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			_, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(tt.yaml)}})
+			is.True(err != nil)
+			is.True(strings.Contains(err.Error(), tt.want))
+		})
+	}
+}

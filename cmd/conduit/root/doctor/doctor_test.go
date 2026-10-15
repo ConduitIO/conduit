@@ -356,3 +356,67 @@ func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
 	is.True(strings.Contains(out, name))
 	is.True(!strings.Contains(out, value))
 }
+
+// ambientFinding runs only connectors.ambient_credentials with --json against a
+// fixed environment and returns its decoded entry and the exit code.
+func ambientFinding(t *testing.T, env []string, extra ...string) (map[string]any, string, int) {
+	t.Helper()
+	is := is.New(t)
+	args, _ := tempConfigArgs(t)
+	args = append(args, extra...)
+	args = append(args, "--json", "--check", doctorcheck.NameConnectorsAmbientCredentials)
+	out, leaf, err := runDoctorEnv(t, func() []string { return env }, args...)
+	is.NoErr(err)
+	is.NoErr(testutils.ValidateEnvelope([]byte(out)))
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal([]byte(out), &got))
+	result, ok := got.Result.(map[string]any)
+	is.True(ok)
+	checks, ok := result["checks"].([]any)
+	is.True(ok)
+	is.Equal(len(checks), 1)
+	first, ok := checks[0].(map[string]any)
+	is.True(ok)
+	code, _ := cecdysis.ResultExitCode(leaf)
+	return first, out, code
+}
+
+func TestDoctor_AmbientCredentials(t *testing.T) {
+	t.Run("default is off and passes", func(t *testing.T) {
+		is := is.New(t)
+		f, _, code := ambientFinding(t, nil)
+		is.Equal(f["status"], "pass")
+		is.Equal(code, 0)
+	})
+	t.Run("enabled shows the effective policy", func(t *testing.T) {
+		is := is.New(t)
+		f, _, code := ambientFinding(t, nil,
+			"--connectors.ambient-credentials.enabled=true",
+			"--connectors.ambient-credentials.allow-resources", "acme-ingest-prod",
+			"--connectors.ambient-credentials.allow-endpoints", "https://minio.internal:9000")
+		is.Equal(f["status"], "pass")
+		is.Equal(code, 0)
+		msg, _ := f["message"].(string)
+		is.True(strings.Contains(msg, "acme-ingest-prod"))
+		is.True(strings.Contains(msg, "https://minio.internal:9000"))
+	})
+	t.Run("enabled without resources fails like conduit run would", func(t *testing.T) {
+		is := is.New(t)
+		f, _, code := ambientFinding(t, nil, "--connectors.ambient-credentials.enabled=true")
+		is.Equal(f["status"], "fail")
+		is.Equal(f["code"], "common.invalid_argument")
+		is.Equal(f["configPath"], "connectors.ambient-credentials.allow-resources")
+		is.Equal(code, 2)
+	})
+	t.Run("proxy variable without allow-proxy fails and never prints the value", func(t *testing.T) {
+		is := is.New(t)
+		f, out, code := ambientFinding(t, []string{"HTTPS_PROXY=http://user:VALUE-MUST-NOT-APPEAR@proxy:3128"},
+			"--connectors.ambient-credentials.enabled=true",
+			"--connectors.ambient-credentials.allow-resources", "acme-ingest-prod")
+		is.Equal(f["status"], "fail")
+		is.Equal(f["code"], "config.ambient_proxy_env")
+		is.True(code != 0)
+		is.True(strings.Contains(out, "HTTPS_PROXY"))
+		is.True(!strings.Contains(out, "VALUE-MUST-NOT-APPEAR"))
+	})
+}

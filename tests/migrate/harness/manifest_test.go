@@ -203,6 +203,10 @@ func TestCaseReady(t *testing.T) {
 	add("worker case with worker file: required", all, true, c, in)
 	c, in = mk("kafka-mirror", plain)
 	add("rejected input uses the family class", shared, false, c, in)
+	hb := FamilyAuxClasses["kafka-mirror"][1]
+	c, in = mk("kafka-mirror", plain, hb)
+	add("auxiliary class without its rule file: pending", shared, false, c, in)
+	add("auxiliary class with its rule file: required", RuleSet{Classes: map[string]bool{hb: true}, Shared: true}, true, c, in)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ready, why := CaseReady(tt.c, tt.in, tt.rs)
@@ -232,6 +236,12 @@ func TestLoadRuleSet(t *testing.T) {
 	is.True(rs.Shared)
 	is.True(!rs.Worker)
 	is.True(rs.Classes[ClassDebeziumPostgres])
+
+	// A family's auxiliary class is a known class too.
+	is.NoErr(os.WriteFile(filepath.Join(dir, "mirror-heartbeat.yaml"), []byte("rulesVersion: 1\nscope: source\nclass: org.apache.kafka.connect.mirror.MirrorHeartbeatConnector\n"), 0o600))
+	rs, err = LoadRuleSet(root)
+	is.NoErr(err)
+	is.True(rs.Classes["org.apache.kafka.connect.mirror.MirrorHeartbeatConnector"])
 }
 
 func TestLoadRuleSet_RejectsUnknownClassAndScope(t *testing.T) {
