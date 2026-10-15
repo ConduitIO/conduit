@@ -29,6 +29,16 @@ build: check-go-version
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+# coverage writes a Go cover profile for the unit tests under pkg/ (no Docker, no
+# integration tag). CI feeds it to .github/scripts/coverage_ratchet.py against
+# .github/coverage-baseline.txt; run that script locally to see the gate's verdict.
+COVER_OUT ?= cover.out
+
+.PHONY: coverage
+coverage:
+	go test $(GOTEST_FLAGS) -count=1 -coverprofile=$(COVER_OUT) ./pkg/...
+	@echo "Check against the baseline: python3 .github/scripts/coverage_ratchet.py $(COVER_OUT) .github/coverage-baseline.txt"
+
 # bench-engine runs the in-process engine benchmarks (fake connectors, no Docker)
 # on both pipeline engines. Output is plain `go test -bench` text, which is what
 # benchstat reads: save one run per revision and compare with bench-engine-compare.

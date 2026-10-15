@@ -116,6 +116,37 @@
 // application set itself. An embedder that needs its own limit should set the
 // same value on every Engine and call nothing else on those commons defaults.
 //
+// # Built-in plugin schema services are scoped per Engine
+//
+// Built-in connectors and processors resolve schemas through package-level
+// services in the connector and processor SDKs. Conduit installs a router
+// there once per process, and each call into a built-in plugin carries the
+// schema service of the Engine that created the plugin, so two Engines in one
+// process never read or register schemas in each other's registry
+// (https://github.com/ConduitIO/conduit/issues/3088). A schema call from a
+// built-in plugin that does not use the context Conduit handed it (for example
+// from a goroutine started with context.Background()) is refused with error
+// code plugin.builtin_schema_unscoped instead of being answered by another
+// Engine. Standalone plugins talk to their own Engine over gRPC or WASM host
+// functions and are not affected.
+//
+// This also applies to host code. An application that calls the SDK schema
+// packages directly (conduit-processor-sdk/schema or
+// conduit-connector-sdk/schema), outside any call Conduit makes into a
+// plugin, gets plugin.builtin_schema_unscoped: there is no Engine to answer
+// it. Use Engine-level APIs, or the schema registry, instead. Built-ins an
+// embedder supplies itself (Config.ProcessorPlugins, Config.ConnectorPlugins)
+// are scoped like Conduit's own, and must pass the context they are given down
+// to their schema calls.
+//
+// Only the schema services are race-free across concurrently created
+// Engines. Two loggers are still process-wide and are written by every
+// NewRuntime: pprocutils.Logger (built-in processors that log through
+// sdk.Logger(ctx) write to the most recently created Engine's logger) and,
+// when no embed logger is given, zerolog.DefaultContextLogger. Creating
+// Engines concurrently races on both. This affects log routing only, not
+// record data; tracked in https://github.com/ConduitIO/conduit/issues/3111.
+//
 // # Package boundary / deprecation policy
 //
 // This package's exported API (Options, Engine, Handle, PipelineConfig, New,

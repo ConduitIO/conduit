@@ -1,0 +1,35 @@
+schemaVersion: 1
+id: dbz-pg-pgoutput-tables
+family: debezium-postgres
+description: >-
+  pgoutput with an explicit slot, publication and a literal table list. The
+  connector name appears both in the REST wrapper and inside config.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/kstreams-live-update/pgsql-source.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to postgres.internal.example"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  notes: [kc.converter_unknown]
+  # No converter and no worker file: kc.converter_unknown is a blocking
+  # note (report contract, #3069), one per missing converter.
+  exitCode: 2
+  entries:
+    - {key: plugin.name, status: translated}
+    - {key: slot.name, status: approximated, blocking: false}
+    - {key: publication.name, status: approximated, blocking: false}
+    - {key: table.include.list, status: translated}
+    - {key: database.password, status: translated, secret: true}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [plugin.name, slot.name, publication.name, table.include.list]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

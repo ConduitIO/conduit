@@ -52,7 +52,7 @@ func TestProcessorWithID_ClassifiesAvroLimit(t *testing.T) {
 		sdk.ErrorRecord{Error: limitErr},
 		sdk.ErrorRecord{Error: otherErr},
 		single,
-	}}, "proc")
+	}}, "proc", nil)
 	got := p.Process(context.Background(), nil)
 	is.Equal(len(got), 3)
 

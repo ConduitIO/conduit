@@ -1,0 +1,17 @@
+{
+    "name": "mm2-basicuserdata",
+    "config": {
+      "connector.class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+      "key.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "header.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "source.cluster.alias": "source",
+      "target.cluster.alias": "target",
+      "source.cluster.bootstrap.servers": "source-kafka-bootstrap.internal.example:9092",
+      "target.cluster.bootstrap.servers": "target-kafka-bootstrap.internal.example:9092",
+      "topics": "basicuserdata",
+      "replication.factor": 1,
+      "offset-syncs.topic.replication.factor": 1,
+      "sync.topic.acls.enabled": false
+     }
+}

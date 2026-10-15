@@ -1,0 +1,506 @@
+# Keys every Kafka Connect connector shares. Mapping design
+# (docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md),
+# "Shared: every Kafka Connect connector". Source: Apache Kafka 4.2 generated
+# connect_config, source_connector_config, sink_connector_config.
+#
+# A class file's rule for the same key wins over these. Rows of the table that
+# this file does not translate yet (converters other than ByteArrayConverter,
+# SMTs, errors.tolerance=all, client TLS stores) are unsupported and blocking
+# here, so a migration that needs them stops instead of running differently.
+rulesVersion: 1
+scope: shared
+upstream: {name: kafka, version: "4.2"}
+keys:
+  - key: name
+    status: translated
+    reason: The connector name becomes the pipeline id and file name.
+    emit: {kind: none}
+    diff: identity
+  - key: connector.class
+    status: translated
+    reason: Selects the rule file and the Conduit plugins.
+    emit: {kind: none}
+    diff: identity
+  - key: connector.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline.
+    fix: None needed; check the plugin version the pipeline runs with in the registry.
+    diff: behavior
+  - key: key.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on key.converter.
+    fix: None needed.
+    diff: behavior
+  - key: value.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on value.converter.
+    fix: None needed.
+    diff: behavior
+  - key: header.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on header.converter.
+    fix: None needed.
+    diff: behavior
+  - key: tasks.max
+    diff: behavior
+    values:
+      - match: ["1"]
+        status: translated
+        reason: One task, one reader.
+        emit: {kind: none}
+      - pattern: '^[1-9][0-9]*$'
+        status: approximated
+        code: kc.key_approximated
+        reason: A Conduit pipeline reads its source with one reader; Kafka Connect ran several tasks. Parallel readers arrive with partition claims (v0.24).
+        fix: For sinks, raise sdk.batch.size on the destination if throughput falls short.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: tasks.max is not a positive integer.
+        fix: Set tasks.max to a positive integer in the Kafka Connect config.
+  - key: tasks.max.enforce
+    status: translated
+    reason: No-op in Conduit.
+    emit: {kind: none}
+    diff: tuning
+  - key: config.action.reload
+    status: translated
+    reason: No-op in Conduit.
+    emit: {kind: none}
+    diff: tuning
+
+  # Converters. Only the byte-preserving converter is translated in this
+  # version; the rest of the base design's converter table lands with the
+  # converter rules.
+  - key: key.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.converters.ByteArrayConverter]
+        status: translated
+        reason: Bytes pass through unchanged.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This converter is not translated by this version of migrate; the wire format of keys would differ.
+        fix: Keep this connector on Kafka Connect until migrate translates the converter.
+  - key: value.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.converters.ByteArrayConverter]
+        status: translated
+        reason: Bytes pass through unchanged.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This converter is not translated by this version of migrate; the wire format of values would differ.
+        fix: Keep this connector on Kafka Connect until migrate translates the converter.
+  - key: header.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.storage.SimpleHeaderConverter]
+        status: approximated
+        code: kc.key_approximated
+        reason: Kafka Connect's default header converter. Conduit carries headers as metadata strings; typed header values are not reproduced.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This header converter is not translated by this version of migrate.
+        fix: Keep this connector on Kafka Connect until migrate translates the converter.
+  - key: {prefix: key.converter.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A converter setting; the converter itself is reported on key.converter.
+    fix: None beyond the key.converter entry.
+    diff: identity
+  - key: {prefix: value.converter.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A converter setting; the converter itself is reported on value.converter.
+    fix: None beyond the value.converter entry.
+    diff: identity
+  - key: {prefix: header.converter.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A converter setting; the converter itself is reported on header.converter.
+    fix: None beyond the header.converter entry.
+    diff: identity
+
+  # SMTs and predicates. The emit-if-exact subset lands with the SMT rules;
+  # until then any transform blocks.
+  - key: transforms
+    diff: behavior
+    values:
+      - match: [""]
+        status: translated
+        reason: No transforms.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The connector has single message transforms, which this version of migrate does not translate. Transforms change data.
+        fix: Keep this connector on Kafka Connect, or remove the transforms and add the equivalent processors to the pipeline by hand.
+  - key: {prefix: transforms.}
+    status: unsupported
+    blocking: true
+    code: kc.smt_unsupported
+    reason: A single message transform setting; transforms are not translated by this version of migrate.
+    fix: Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).
+    diff: behavior
+  - key: predicates
+    diff: behavior
+    values:
+      - match: [""]
+        status: translated
+        reason: No predicates.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Predicates select which records a transform applies to; they are not translated by this version of migrate.
+        fix: Keep this connector on Kafka Connect, or express the predicate as a processor condition by hand.
+  - key: {prefix: predicates.}
+    status: unsupported
+    blocking: true
+    code: kc.smt_unsupported
+    reason: A predicate setting; predicates are not translated by this version of migrate.
+    fix: Keep this connector on Kafka Connect, or express the predicate as a processor condition by hand.
+    diff: behavior
+
+  # Error handling (base design, "Error handling and the DLQ").
+  - key: errors.tolerance
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [none]
+        status: translated
+        reason: The pipeline stops on the first failed record, as Kafka Connect does.
+        emit: {kind: dlq-halt}
+      - match: [all]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: errors.tolerance=all needs a dead-letter queue mapping, which this version of migrate does not write. Translating it literally would drop failed records.
+        fix: Set errors.tolerance=none, or keep this connector on Kafka Connect until the dead-letter queue mapping lands.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Kafka Connect accepts only none and all.
+        fix: Set errors.tolerance to none or all.
+  - key: errors.log.enable
+    status: translated
+    reason: Conduit logs failed records; no setting needed.
+    emit: {kind: none}
+    diff: tuning
+  - key: errors.log.include.messages
+    status: translated
+    reason: Conduit logs failed records; no setting needed.
+    emit: {kind: none}
+    diff: tuning
+  - key: errors.retry.timeout
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery, with its own backoff, not per operation.
+    diff: tuning
+  - key: errors.retry.delay.max.ms
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery, with its own backoff, not per operation.
+    diff: tuning
+  - key: {prefix: errors.deadletterqueue.}
+    status: translated
+    reason: Kafka Connect uses the dead-letter queue only with errors.tolerance=all, which this version reports as blocking; with errors.tolerance=none these keys have no effect.
+    emit: {kind: none}
+    diff: behavior
+
+  # Topics.
+  - key: topics
+    diff: identity
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default; topics.regex selects the topics, or the connector reads none.
+        emit: {kind: none}
+      - pattern: '(?s).'
+        status: translated
+        reason: Kafka Connect trims the list and splits it on commas with surrounding whitespace; written the same way.
+        emit: {kind: list-setting, side: consumer, name: topics}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a topic list.
+        fix: List the topics, separated by commas.
+  - key: topics.regex
+    diff: identity
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source takes a list of topics, not a pattern.
+        fix: List the topics in topics.
+  - key: topic.creation.groups
+    diff: behavior
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default (no topic creation groups).
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit's Kafka destination creates topics with the broker's defaults; partition count, replication factor and cleanup.policy can differ.
+        fix: Create the topics ahead of time with the settings Kafka Connect would have used.
+  - key: {prefix: topic.creation.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Conduit's Kafka destination creates topics with the broker's defaults; partition count, replication factor and cleanup.policy can differ.
+    fix: Create the topics ahead of time with the settings Kafka Connect would have used.
+    diff: behavior
+  - key: exactly.once.support
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [requested, ""]
+        status: translated
+        reason: No-op; Conduit is at-least-once.
+        emit: {kind: none}
+      - match: [required]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit delivers at least once; exactly-once source delivery is not reproduced.
+        fix: Make the consumers idempotent and set exactly.once.support=requested, or keep this connector on Kafka Connect.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Kafka Connect accepts only requested and required.
+        fix: Set exactly.once.support to requested or required.
+  - key: transaction.boundary
+    diff: behavior
+    values:
+      - match: [poll]
+        status: translated
+        reason: The upstream default; it has an effect only with exactly-once delivery, which Conduit does not offer.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A non-default transaction boundary only matters with exactly-once delivery, which Conduit does not offer; the connector's records were committed in other units.
+        fix: Remove the setting, or keep this connector on Kafka Connect.
+  - key: transaction.boundary.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Meaningful only with exactly-once delivery.
+    fix: None needed.
+    diff: tuning
+  - key: offsets.storage.topic
+    status: unsupported
+    code: kc.key_unsupported
+    reason: The connector's offset is not imported; the pipeline starts from its own position (a re-snapshot for sources).
+    fix: None; only the Debezium Postgres migration imports offsets in this version.
+    diff: identity
+
+  # Client overrides. A connector's producer.override./consumer.override. keys
+  # are the top layer of its client config (layer override, above every
+  # other layer of the connector's own keys) (Worker.baseProducerConfigs and
+  # baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-874 and 911-942).
+  - key: producer.override.bootstrap.servers
+    status: translated
+    reason: The connector's producer writes to these brokers instead of the worker's.
+    emit: {kind: setting, side: producer, name: servers, layer: override}
+    diff: identity
+  - key: consumer.override.bootstrap.servers
+    status: translated
+    reason: The connector's consumer reads from these brokers instead of the worker's.
+    emit: {kind: setting, side: consumer, name: servers, layer: override}
+    diff: identity
+  - key: producer.override.acks
+    diff: behavior
+    values:
+      - match: [all, "-1"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: all, layer: override}
+      - match: ["1"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: one, layer: override}
+      - match: ["0"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: none, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Kafka accepts only all, -1, 1 and 0.
+        fix: Set acks to one of all, -1, 1 or 0.
+  - key: producer.override.compression.type
+    diff: tuning
+    values:
+      - match: [none, gzip, snappy, lz4, zstd]
+        status: translated
+        emit: {kind: setting, side: producer, name: compression, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka destination supports none, gzip, snappy, lz4 and zstd.
+        fix: Use one of the supported codecs.
+  - key: producer.override.client.id
+    status: translated
+    emit: {kind: setting, side: producer, name: clientID, layer: override}
+    diff: tuning
+  - key: consumer.override.auto.offset.reset
+    diff: behavior
+    values:
+      - match: [earliest]
+        status: translated
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "true", layer: override}
+      - match: [latest]
+        status: translated
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "false", layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Only earliest and latest have a Conduit equivalent; none fails on a missing offset in Kafka Connect.
+        fix: Set auto.offset.reset to earliest or latest.
+  - key: consumer.override.group.id
+    status: translated
+    emit: {kind: setting, side: consumer, name: groupID, layer: override}
+    diff: identity
+  - key: consumer.override.client.id
+    status: translated
+    emit: {kind: setting, side: consumer, name: clientID, layer: override}
+    diff: tuning
+  - key: producer.override.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: producer, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: consumer.override.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: consumer, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: producer.override.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: producer, name: saslMechanism, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this connector on Kafka Connect.
+  - key: consumer.override.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: consumer, name: saslMechanism, layer: override}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this connector on Kafka Connect.
+  - key: producer.override.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: producer, layer: override}
+    secret: true
+    diff: secret
+  - key: consumer.override.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: consumer, layer: override}
+    secret: true
+    diff: secret
+  - key: {prefix: producer.override.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: consumer.override.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: producer.override.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).
+    fix: None needed; the Kafka connector's defaults apply.
+    lint: [kc.lint.client_override_policy, kc.lint.kip1188_override_risk]
+    diff: tuning
+  - key: {prefix: consumer.override.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A consumer tuning override with no Kafka connector setting (fetch.*, max.poll.records and the like).
+    fix: None needed; the Kafka connector's defaults apply.
+    lint: [kc.lint.client_override_policy, kc.lint.kip1188_override_risk]
+    diff: tuning
+  - key: {prefix: admin.override.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Kafka connector has no admin client settings.
+    fix: None needed.
+    lint: [kc.lint.client_override_policy, kc.lint.kip1188_override_risk]
+    diff: tuning
+
+defaults:
+  - key: errors.retry.timeout
+    default: "0"
+    note:
+      code: kc.default_differs
+      reason: Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.
+  - key: errors.retry.delay.max.ms
+    default: "60000"
+    coveredBy: kc.default_differs
+  - key: header.converter
+    default: org.apache.kafka.connect.storage.SimpleHeaderConverter
+    worker: true
+    note:
+      code: kc.default_differs
+      reason: Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.

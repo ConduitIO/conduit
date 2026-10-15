@@ -46,15 +46,27 @@ type connectorErrorsTask interface {
 // receives an error fails the run.
 //
 // Readers stop when ctx is done or stop is called. stop waits for every
-// reader to exit, so after it returns nothing reads the channels. That is
+// reader to return, so after it returns nothing reads the channels. That is
 // safe: a connector whose error is not read keeps it and returns it from
 // Teardown (see connector.persistErrReporter). One goroutine per connector,
-// all gone once stop returns.
+// plus one that waits for them; once stop returns, each reader has returned
+// from its read and has nothing left to do but exit.
 func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (stop func()) {
+	stop, _ = w.watchConnectorErrors(ctx, fail)
+	return stop
+}
+
+// watchConnectorErrors is WatchConnectorErrors that also returns done, which
+// is closed once every reader has returned, whichever of stop, ctx or a
+// received error released it. stop waits on done. Production code has no use
+// for done; tests use it to observe the ctx path, where nothing else signals
+// that the readers are gone (#3035).
+func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (stop func(), done <-chan struct{}) {
 	quit := make(chan struct{})
 	var (
-		wg   sync.WaitGroup
-		once sync.Once
+		wg      sync.WaitGroup
+		once    sync.Once
+		readers int
 	)
 
 	read := func(taskID string, errs <-chan error) {
@@ -82,6 +94,7 @@ func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (st
 		if t, ok := n.Task.(connectorErrorsTask); ok {
 			if errs := t.connectorErrors(); errs != nil {
 				wg.Add(1)
+				readers++
 				go read(n.Task.ID(), errs)
 			}
 		}
@@ -91,9 +104,20 @@ func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (st
 	}
 	walk(w.FirstTask)
 
+	// Every wg.Add has happened by now, so wg.Wait cannot return early.
+	allDone := make(chan struct{})
+	if readers == 0 {
+		close(allDone)
+	} else {
+		go func() {
+			wg.Wait()
+			close(allDone)
+		}()
+	}
+
 	var stopOnce sync.Once
 	return func() {
 		stopOnce.Do(func() { close(quit) })
-		wg.Wait()
-	}
+		<-allDone
+	}, allDone
 }

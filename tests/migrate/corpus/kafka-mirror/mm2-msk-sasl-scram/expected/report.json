@@ -1,0 +1,737 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 52,
+    "translated": 18,
+    "approximated": 1,
+    "unsupported": 33,
+    "blocking": 8
+  },
+  "connectors": [
+    {
+      "name": "mm2-msc",
+      "class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+      "role": "source",
+      "pipeline": "pipelines/mm2-msc.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:kafka",
+        "destination": "builtin:kafka"
+      },
+      "entries": [
+        {
+          "key": "name",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/name"
+          },
+          "reason": "The connector name becomes the pipeline id and file name.",
+          "blocking": false
+        },
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "replication.policy.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/replication.policy.class"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A custom replication policy names topics in code migrate cannot read.",
+          "fix": "Set the destination topic template on the pipeline by hand, or keep this flow on MirrorMaker.",
+          "blocking": true
+        },
+        {
+          "key": "clusters",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/clusters"
+          },
+          "code": "kc.key_unknown",
+          "reason": "No rule in the org.apache.kafka.connect.mirror.MirrorSourceConnector rules (written against kafka 4.2) knows clusters.",
+          "fix": "Check the key for a typo. If it is a key of a newer upstream version, keep this connector on Kafka Connect until migrate's rules cover it.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.alias",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.alias"
+          },
+          "reason": "Used in the destination topic name (DefaultReplicationPolicy names it alias, separator, topic).",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.bootstrap.servers",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.bootstrap.servers"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/servers"
+          },
+          "reason": "Kafka Connect's producer writes the records to the worker's cluster; this fills the destination's servers when neither the worker file nor producer.override.bootstrap.servers sets them, and MirrorMaker requires the two to be the same cluster.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.bootstrap.servers",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.bootstrap.servers"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/servers"
+          },
+          "reason": "The pipeline reads the source cluster.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.security.protocol",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.security.protocol"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/tls.enabled"
+          },
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.sasl.mechanism",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.sasl.mechanism"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/saslMechanism"
+          },
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.sasl.jaas.config",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.sasl.jaas.config"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/saslUsername",
+            "env": "KC_MM2_MSC_SOURCE_CLUSTER_SASL_JAAS_CONFIG"
+          },
+          "reason": "The username is written to saslUsername; saslPassword is ${KC_MM2_MSC_SOURCE_CLUSTER_SASL_JAAS_CONFIG}, to be filled with the password from this JAAS config.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "target.cluster.alias",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.alias"
+          },
+          "reason": "A metrics label.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.security.protocol",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.security.protocol"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/tls.enabled"
+          },
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.sasl.mechanism",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.sasl.mechanism"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/saslMechanism"
+          },
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.sasl.jaas.config",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.sasl.jaas.config"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/saslUsername",
+            "env": "KC_MM2_MSC_TARGET_CLUSTER_SASL_JAAS_CONFIG"
+          },
+          "reason": "The username is written to saslUsername; saslPassword is ${KC_MM2_MSC_TARGET_CLUSTER_SASL_JAAS_CONFIG}, to be filled with the password from this JAAS config.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "topics",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/topics"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "The Kafka source takes a list of topics, not a pattern; MirrorMaker would also pick up new matching topics.",
+          "fix": "List the topics to mirror, separated by commas.",
+          "blocking": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "approximated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/tasks.max"
+          },
+          "code": "kc.key_approximated",
+          "reason": "A Conduit pipeline reads its source with one reader; Kafka Connect ran several tasks. Parallel readers arrive with partition claims (v0.24).",
+          "fix": "For sinks, raise sdk.batch.size on the destination if throughput falls short.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/key.converter"
+          },
+          "reason": "Bytes pass through unchanged.",
+          "blocking": false
+        },
+        {
+          "key": "value.converter",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/value.converter"
+          },
+          "reason": "Bytes pass through unchanged.",
+          "blocking": false
+        },
+        {
+          "key": "replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/replication.factor"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "MirrorMaker creates remote topics with this replication factor; Conduit's Kafka destination creates topics with the broker's defaults.",
+          "fix": "Create the destination topics ahead of time with the replication factor you need.",
+          "blocking": false
+        },
+        {
+          "key": "offset-syncs.topic.replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/offset-syncs.topic.replication.factor"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "Offset syncs are not written.",
+          "fix": "None needed.",
+          "blocking": false
+        },
+        {
+          "key": "sync.topic.acls.interval.seconds",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/sync.topic.acls.interval.seconds"
+          },
+          "reason": "Only matters while sync.topic.acls.enabled is true, which is reported on its own.",
+          "blocking": false
+        },
+        {
+          "key": "sync.topic.configs.interval.seconds",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/sync.topic.configs.interval.seconds"
+          },
+          "reason": "Only matters while sync.topic.configs.enabled is true, which is reported on its own.",
+          "blocking": false
+        },
+        {
+          "key": "refresh.topics.interval.seconds",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/refresh.topics.interval.seconds"
+          },
+          "reason": "Only matters while refresh.topics.enabled is true, which is reported on its own.",
+          "blocking": false
+        },
+        {
+          "key": "refresh.groups.interval.seconds",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/refresh.groups.interval.seconds"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.",
+          "fix": "None needed.",
+          "blocking": false
+        },
+        {
+          "key": "consumer.group.id",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/consumer.group.id"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A setting of MirrorMaker's source consumer with no Kafka connector equivalent; MirrorMaker assigns partitions itself, so group.id has no effect either.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.max.poll.records",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.max.poll.records"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.receive.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.receive.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.send.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.send.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.max.partition.fetch.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.max.partition.fetch.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.message.max.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.message.max.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.compression.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.compression.type"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.max.request.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.max.request.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.buffer.memory",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.buffer.memory"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.batch.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/source.cluster.batch.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.max.poll.records",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.max.poll.records"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.receive.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.receive.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.send.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.send.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.max.partition.fetch.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.max.partition.fetch.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.message.max.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.message.max.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.compression.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.compression.type"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.max.request.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.max.request.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.buffer.memory",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.buffer.memory"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.batch.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/target.cluster.batch.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.max.poll.records",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.max.poll.records"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.receive.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.receive.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.send.buffer.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.send.buffer.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.max.partition.fetch.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.max.partition.fetch.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.message.max.bytes",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.message.max.bytes"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.compression.type",
+          "status": "translated",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.compression.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/compression"
+          },
+          "blocking": false
+        },
+        {
+          "key": "producer.override.max.request.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.max.request.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.buffer.memory",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.buffer.memory"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        },
+        {
+          "key": "producer.override.batch.size",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-msc.json",
+            "pointer": "/producer.override.batch.size"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A producer tuning override with no Kafka connector setting (linger.ms, batch.size, max.request.size and the like).",
+          "fix": "None needed; the Kafka connector's defaults apply.",
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.",
+          "fix": "Keep this flow on MirrorMaker if consumers rely on partition numbers, headers or record timestamps, or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "mirror-source/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.offsets_not_migrated",
+          "reason": "MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning unless auto.offset.reset says otherwise. migrate does not carry the stored offsets over. The pipeline reads every partition from the beginning (readFromBeginning: true), so the records MirrorMaker already copied are copied again.",
+          "fix": "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
+          "blocking": true,
+          "rule": "mm2-offsets"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:kafka source requires topics, and no key of the Kafka Connect config sets it; the pipeline references ${KC_MM2_MSC_SOURCE_TOPICS} instead.",
+          "fix": "Set KC_MM2_MSC_SOURCE_TOPICS in the environment (see secrets.env.template).",
+          "blocking": true,
+          "rule": "required/source/topics"
+        },
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+          "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "refresh.topics.enabled is absent (true), so MirrorMaker discovers new topics; the pipeline reads a fixed topic list.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/refresh.topics.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "sync.topic.configs.enabled is absent (true), so MirrorMaker syncs topic configs to the destination; the pipeline does not.",
+          "fix": "Create the destination topics ahead of time with the source topics' configs, or set sync.topic.configs.enabled=false if they already match.",
+          "blocking": true,
+          "rule": "mirror-source/defaults/sync.topic.configs.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "sync.topic.acls.enabled is absent (true), so MirrorMaker syncs topic ACLs to the destination; the pipeline does not.",
+          "fix": "Set the ACLs on the destination topics ahead of time, or set sync.topic.acls.enabled=false.",
+          "blocking": true,
+          "rule": "mirror-source/defaults/sync.topic.acls.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "emit.offset-syncs.enabled is absent (true), so MirrorMaker writes offset syncs for checkpointing; the pipeline does not, and consumer offsets cannot be translated for this flow.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/emit.offset-syncs.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "heartbeats.replication.enabled is absent (true), so MirrorMaker replicates heartbeat topics; the pipeline reads only the listed topics.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/heartbeats.replication.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.",
+          "blocking": false,
+          "rule": "shared/defaults/header.converter"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

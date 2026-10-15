@@ -245,6 +245,7 @@ func storeConfigDefaults(flags ecdysis.Flags) conduit.Config {
 	flags.SetDefault("log.format", cfg.Log.Format)
 	flags.SetDefault("connectors.path", cfg.Connectors.Path)
 	flags.SetDefault("connectors.max-receive-record-size", cfg.Connectors.MaxReceiveRecordSize)
+	flags.SetDefault("connectors.standalone.env-warning", cfg.Connectors.Standalone.EnvWarning)
 	flags.SetDefault("processors.path", cfg.Processors.Path)
 	flags.SetDefault("pipelines.path", cfg.Pipelines.Path)
 	flags.SetDefault("pipelines.exit-on-degraded", cfg.Pipelines.ExitOnDegraded)

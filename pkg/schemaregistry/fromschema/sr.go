@@ -42,6 +42,11 @@ func SrSchemaType(t schema.Type) sr.SchemaType {
 	switch t {
 	case schema.TypeAvro:
 		return sr.TypeAvro
+	case schema.TypeProtobuf:
+		// commons v0.8.0 added TypeProtobuf (compile-only, no decode yet). Conduit
+		// does not register Protobuf schemas with a registry yet, so it maps to the
+		// same "unknown" value as before, mirroring toschema's "not supported yet".
+		return sr.SchemaType(-1)
 	default:
 		return sr.SchemaType(-1) // unknown
 	}

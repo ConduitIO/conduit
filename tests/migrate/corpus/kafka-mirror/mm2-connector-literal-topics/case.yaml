@@ -1,0 +1,37 @@
+schemaVersion: 1
+id: mm2-connector-literal-topics
+family: kafka-mirror
+description: >-
+  MirrorSourceConnector in connector form with one literal topic and ACL sync
+  turned off. Numeric and boolean JSON values. Topic-config sync and
+  checkpoints are on by default, which is blocking.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/ibm-cloud-architecture/eda-tech-academy/blob/7d52faee3b7e9da52a8cdee3bda0eba4cb24d89c/tech-jam/mm2_json_files/mm2_source.json
+  license: Apache-2.0
+  copyright: IBM Cloud Architecture (eda-tech-academy contributors)
+  modifications:
+    - "template placeholders <NAME>, <SOURCE-ALIAS>, <TARGET-ALIAS> filled with mm2-basicuserdata, source, target"
+    - "bootstrap placeholders filled with *.internal.example hosts"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.default_differs]
+  entries:
+    - {key: topics, status: translated}
+    - {key: source.cluster.alias, status: translated}
+    - {key: target.cluster.alias, status: translated}
+    - {key: source.cluster.bootstrap.servers, status: translated}
+    - {key: target.cluster.bootstrap.servers, status: translated}
+    - {key: replication.factor, status: unsupported, blocking: false}
+    - {key: offset-syncs.topic.replication.factor, status: unsupported, blocking: false}
+    - {key: header.converter, status: translated}
+covers:
+  - class: org.apache.kafka.connect.mirror.MirrorSourceConnector
+    keys: [source.cluster.alias, target.cluster.alias, source.cluster.bootstrap.servers, target.cluster.bootstrap.servers, topics, replication.factor, offset-syncs.topic.replication.factor, sync.topic.acls.enabled]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

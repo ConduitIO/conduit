@@ -1,0 +1,61 @@
+name: coverage
+
+# Engine coverage gate (CLAUDE.md Process maturity table row "Coverage floor
+# enforcement").
+#
+# CLAUDE.md sets an 80% floor on engine packages, "a signal, not a goal".
+# Several engine packages are below it today, so this is a RATCHET, the same
+# shape as govulncheck.yml and for the same reason: a hard 80% would fail every
+# PR for debt unrelated to its diff (a check nobody reads), and report-only
+# would always be green (a signal nobody sees). The baseline in
+# .github/coverage-baseline.txt is each engine package's measured unit-test
+# coverage; a PR that drops a package more than the tolerance below its entry
+# fails, and a new engine package must reach 80%.
+#
+# NOT PATH-FILTERED, matching chaos.yml and govulncheck.yml: a check that may
+# one day be required must report on every PR.
+#
+# Deliberately a separate job from `test`, not a -coverprofile bolted on to it:
+# `test` is a required context and runs the integration tag against Docker; this
+# one needs neither and measures the same thing everywhere (no Docker, no
+# network). It re-runs the pkg/ unit tests (about a minute), which is the price
+# of not touching a required job.
+
+on:
+  push:
+    branches: [ main, 'release/**' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: coverage (engine ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Gate script tests
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_coverage_ratchet
+
+      - name: Measure
+        # No -race: coverage is a measurement and -race is already gated by
+        # `test`. Set mode (the default) is enough for statement coverage.
+        # A failing test fails this step, so a package whose tests did not pass
+        # cannot silently contribute a partial number.
+        run: make coverage COVER_OUT=cover.out
+
+      - name: Compare against the baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/coverage_ratchet.py \
+            cover.out .github/coverage-baseline.txt >> "$GITHUB_STEP_SUMMARY"

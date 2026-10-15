@@ -80,6 +80,10 @@ type DoctorCommand struct {
 	flags DoctorFlags
 	Cfg   conduit.Config
 
+	// Environ supplies the environment plugins.standalone_env classifies.
+	// Nil means os.Environ; tests set it to a fixed fake environment.
+	Environ func() []string
+
 	// out is the stream Render should write glyphs/color for — set from the
 	// *cobra.Command ExecuteWithResult receives via context, since
 	// CommandWithResult.Render has no writer parameter of its own but still
@@ -126,6 +130,7 @@ func (c *DoctorCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)
 	flags.SetDefault("connectors.max-receive-record-size", c.Cfg.Connectors.MaxReceiveRecordSize)
+	flags.SetDefault("connectors.standalone.env-warning", c.Cfg.Connectors.Standalone.EnvWarning)
 	flags.SetDefault("processors.path", c.Cfg.Processors.Path)
 	flags.SetDefault("pipelines.path", c.Cfg.Pipelines.Path)
 	flags.SetDefault("pipelines.exit-on-degraded", c.Cfg.Pipelines.ExitOnDegraded)
@@ -196,6 +201,7 @@ func (c *DoctorCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 		Deep:          c.flags.Deep,
 		RequireServer: c.flags.RequireServer,
 		Executable:    exe,
+		Environ:       c.Environ,
 	}
 
 	checks := doctorcheck.DefaultChecks(c.Cfg, log.Nop(), opts)

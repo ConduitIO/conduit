@@ -39,21 +39,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDoctorCmd wires a fresh DoctorCommand through the same decorator
+// buildDoctorCmdEnv wires a fresh DoctorCommand through the same decorator
 // cmd/conduit/cli uses for every CommandWithResult command, standalone
 // (not under the full root tree — root.go's own wiring is a one-line
 // registration, not doctor-specific behavior).
-func buildDoctorCmd(t *testing.T) *cobra.Command {
+func buildDoctorCmdEnv(t *testing.T, environ func() []string) *cobra.Command {
 	t.Helper()
 	e := ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithResultDecorator{}))
-	return e.MustBuildCobraCommand(&doctor.DoctorCommand{})
+	return e.MustBuildCobraCommand(&doctor.DoctorCommand{Environ: environ})
 }
 
 // runDoctor runs cmd with args and returns stdout+stderr combined, the leaf
 // *cobra.Command (for ResultExitCode), and any hard-failure error.
 func runDoctor(t *testing.T, args ...string) (output string, leaf *cobra.Command, err error) {
 	t.Helper()
-	cmd := buildDoctorCmd(t)
+	// An empty fake environment: tests that do not care about
+	// plugins.standalone_env must not depend on the machine's environment.
+	return runDoctorEnv(t, func() []string { return []string{} }, args...)
+}
+
+// runDoctorEnv is runDoctor with a fixed fake environment (see buildDoctorCmdEnv).
+func runDoctorEnv(t *testing.T, environ func() []string, args ...string) (output string, leaf *cobra.Command, err error) {
+	t.Helper()
+	cmd := buildDoctorCmdEnv(t, environ)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -233,4 +241,118 @@ func TestDoctor_NoDBDirLeftBehind_EndToEnd(t *testing.T) {
 
 	_, statErr = os.Stat(dbPath)
 	is.True(os.IsNotExist(statErr)) // still doesn't exist after the run
+}
+
+// fakeEnv is the fixed environment the standalone_env tests classify. Every
+// value is a sentinel that must never appear in any output. The flagged names
+// are chosen so that the first and the last in sorted order are both covered:
+// "AAA_..." sorts before everything else and "zzz_..." (lower case) after.
+func fakeEnv() (environ func() []string, sentinels []string) {
+	kv := [][2]string{
+		{"AAA_FIRST_TOKEN", "VALUE-MUST-NOT-APPEAR-1"},
+		{"AWS_SECRET_ACCESS_KEY", "VALUE-MUST-NOT-APPEAR-2"},
+		{"SENTINEL_API_TOKEN", "VALUE-MUST-NOT-APPEAR-3"},
+		{"POSTGRES_URL", "VALUE-MUST-NOT-APPEAR-4"},
+		{"zzz_last_password", "VALUE-MUST-NOT-APPEAR-5"},
+		{"PATH", "VALUE-MUST-NOT-APPEAR-6"},
+		{"HOME", "VALUE-MUST-NOT-APPEAR-7"},
+	}
+	env := make([]string, 0, len(kv))
+	for _, e := range kv {
+		env = append(env, e[0]+"="+e[1])
+		sentinels = append(sentinels, e[1])
+	}
+	return func() []string { return env }, sentinels
+}
+
+// standaloneEnvFinding runs only plugins.standalone_env with --json against
+// the fake environment and returns its decoded check entry plus the raw output.
+func standaloneEnvFinding(t *testing.T, args []string) (map[string]any, string) {
+	t.Helper()
+	is := is.New(t)
+	args = append(args, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
+
+	environ, sentinels := fakeEnv()
+	out, _, err := runDoctorEnv(t, environ, args...)
+	is.NoErr(err)
+	is.NoErr(testutils.ValidateEnvelope([]byte(out)))
+	for _, s := range sentinels {
+		is.True(!strings.Contains(out, s))
+	}
+
+	var got cecdysis.Result
+	is.NoErr(json.Unmarshal([]byte(out), &got))
+	result, ok := got.Result.(map[string]any)
+	is.True(ok)
+	checks, ok := result["checks"].([]any)
+	is.True(ok)
+	is.Equal(len(checks), 1)
+	first, ok := checks[0].(map[string]any)
+	is.True(ok)
+	is.Equal(first["name"], doctorcheck.NamePluginsStandaloneEnv)
+	return first, out
+}
+
+func installFakePlugin(t *testing.T, dir string) {
+	t.Helper()
+	is := is.New(t)
+	is.NoErr(os.MkdirAll(filepath.Join(dir, "connectors"), 0o755))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "connectors", "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+}
+
+// TestDoctor_StandaloneEnv_JSON asserts the finding carries the stable code and
+// the variable NAMES, and never their values. It runs against a fixed fake
+// environment, so it does not depend on the machine it runs on.
+func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
+	is := is.New(t)
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+
+	finding, out := standaloneEnvFinding(t, args) // also asserts no sentinel value appears in out
+	is.Equal(finding["status"], "warn")
+	is.Equal(finding["code"], "plugin.standalone_env_passed")
+	is.Equal(finding["configPath"], "connectors.standalone.env-warning")
+	msg, _ := finding["message"].(string)
+	for _, name := range []string{"AAA_FIRST_TOKEN", "AWS_SECRET_ACCESS_KEY", "SENTINEL_API_TOKEN", "POSTGRES_URL", "zzz_last_password"} {
+		is.True(strings.Contains(msg, name))
+	}
+	is.True(strings.Contains(msg, "5 host environment variable(s)"))
+	is.True(!strings.Contains(out, "HOME")) // benign names are neither flagged nor echoed
+}
+
+func TestDoctor_StandaloneEnv_Silenced(t *testing.T) {
+	is := is.New(t)
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+	args = append(args, "--connectors.standalone.env-warning=false")
+
+	finding, _ := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "pass")
+	_, hasCode := finding["code"]
+	is.True(!hasCode)
+}
+
+func TestDoctor_StandaloneEnv_NoPluginsInstalled(t *testing.T) {
+	is := is.New(t)
+	args, _ := tempConfigArgs(t)
+
+	finding, _ := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "pass")
+}
+
+// TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment pins the
+// production default: with no injected environment, doctor classifies the
+// process environment. The sentinel and its fake value come from t.Setenv.
+func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
+	is := is.New(t)
+	const name, value = "SENTINEL_DEFAULT_SEAM_TOKEN", "FAKE-VALUE-MUST-NOT-APPEAR-DEFAULT"
+	t.Setenv(name, value)
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+	args = append(args, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
+
+	out, _, err := runDoctorEnv(t, nil, args...)
+	is.NoErr(err)
+	is.True(strings.Contains(out, name))
+	is.True(!strings.Contains(out, value))
 }
