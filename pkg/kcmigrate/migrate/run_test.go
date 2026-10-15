@@ -394,3 +394,16 @@ func withValidator(req Request) Request {
 	}
 	return req
 }
+
+// REPORT.md depends only on the inputs and the rules: the Conduit version is
+// in report.json's generator (which the harness normalizes), never in the
+// Markdown, so a released binary and a dev build write the same file.
+func TestRenderMarkdown_VersionFree(t *testing.T) {
+	is := is.New(t)
+	rep := kcmigrate.NewReport("v0.20.2")
+	rep.Summarize()
+	a := RenderMarkdown(rep)
+	rep.Generator.Conduit = "(devel)"
+	is.Equal(RenderMarkdown(rep), a)
+	is.True(!strings.Contains(a, "v0.20.2"))
+}
