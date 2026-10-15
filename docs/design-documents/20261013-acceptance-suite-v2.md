@@ -21,6 +21,15 @@ because it also decides how the registry records a result and how non-Go connect
 
 Roadmap: v0.21, "Acceptance suite v2, the basis for Conduit Certified".
 
+**Status.** Implemented and released. Revision 2.0.0 ships in `conduit-connector-sdk` v0.16.0
+(`ConduitIO/conduit-connector-sdk#397`, harness fix `#408` for `#406`, release prep `#407`). It is marked released
+and pinned in the SDK's tests: case content hash `fd548736…3982`, suite source hash `20e6ec70…f234`. This document
+describes what shipped. Where the draft and the code differed, the code decided and the text was corrected. The
+author docs are `docs/acceptance-tests-v2.md` in the SDK.
+Revision 2.0.1 is planned as a patch: it logs the revision and source hash at the start of a run, runs with
+source schema extraction on (`ConduitIO/conduit-connector-sdk#395`), and fixes an order-dependent SDK test
+(`#405`). If turning extraction on changes what a connector has to do, it is a minor revision instead, not a patch.
+
 ## Context
 
 ### What v1 checks today
@@ -65,7 +74,7 @@ the contract other connectors are held to.
 
 ### What v1 catches and what it lets through
 
-The implementation PR carries a reference connector and a mutant for every case. The table shows the mutants that
+The implementation PR carries a reference connector and a mutant for every case except DST-02 (see below). The table shows the mutants that
 have a v1 counterpart; the v1 column is measured: the v1 suite was run against each of them.
 
 | Mutant (bug class) | Invariant | v1 | v2 case |
@@ -193,7 +202,7 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 | DST-08 | `large_record` | destination | A record of 1 MiB (up to 3 MiB, below the 4 MiB default gRPC limit) is stored intact | 3, 6 |
 | DST-09 | `graceful_stop_drains_in_flight` | destination | `Stop` while 50 batches are queued returns only after every record is acked and stored; nothing leaks | 7 |
 | DST-10 | `context_cancellation` | destination | Cancelling mid-stream ends `Run` within 15 seconds; whatever was acked is stored, checked before `Teardown` | 1, 7 |
-| DST-11 | `throughput_smoke` | destination | Records/s over N seconds (default 3), recorded, not asserted; all acks successful | none |
+| DST-11 | `throughput_smoke` | destination | Records/s over N seconds (default 3), recorded, never asserted. Fails only on a stall or a rejected record (a failed send, a nack) | none |
 | SRC-01 | `pipelined_and_lagging_acks` | source | Acks arrive from another goroutine, lagging reads by 50 records, while reading continues; no deadlock or loss; restart from the last position is clean | 2, 3 |
 | SRC-02 | `mixed_batch_sizes` | source | 1, 100 and 10000 records, snapshot then CDC, delivered once each. A duplicate fails the case, see the policy below | 3 |
 | SRC-03 | `crash_resume_no_gap` | source | Seven kills: three while reading the snapshot (50 of 100 records acked by the third); one right after the ack that completes the snapshot, resumed from exactly that position before any change is written (the boundary); then three while capturing changes (changes written after `Open`, a partial ack, a restart from that CDC position, more changes written after each restart). Seven restarts with a position are exercised; a source that misbehaves only from its eighth restart is not caught, and a test states that limit. The kill follows the connector's `Ack` return, not a sleep, and `Teardown` does not run. Every record is either acked in some run or delivered by the final run (records only delivered before a kill do not count), and no restart redelivers more than `MaxRedelivery` already acked records (`0` with `ExactResume`); redelivered records are not acked again, so the resume position never moves backwards. The data set scales with the bound | 2, 3 |
@@ -202,11 +211,27 @@ IDs are stable and never reused; reports, the registry and the language-neutral 
 | SRC-06 | `large_record` | source | A 1 MiB record arrives intact | 3, 6 |
 | SRC-07 | `graceful_stop_with_unacked` | source | `Stop` with delivered-but-unacked records reports the last delivered position (the host waits for that record to arrive before comparing, see below); resume from the last acked position leaves no gap; nothing leaks | 2, 7 |
 | SRC-08 | `context_cancellation` | source | An idle `Read` returns when its context is cancelled; an idle plugin stops and tears down | 7 |
-| SRC-09 | `throughput_smoke` | source | Records/s reading 2000 records, recorded, not asserted | none |
+| SRC-09 | `throughput_smoke` | source | Records/s reading 2000 records, recorded, never asserted. Fails only on a stall (not all 2000 delivered within the timeout), a failed ack or a failed shutdown | none |
 
 "Read-back" means the driver can return what the destination stored. DST-04 and the other stored-data checks
 need it; the cases that only need acks (DST-01 apart from the content check, DST-02, DST-03 apart from the
 content check, DST-09 apart from the content check, DST-10, DST-11) run for write-only destinations such as `log`.
+
+**DST-02 has no failing reference connector, by design.** Every other v2 case has at least one mutant of the
+reference connector that the case must fail. DST-02 cannot have one. The acks it slows down are sent by the
+SDK's destination plugin adapter, not by the connector, and a connector has no way to block or reorder them. A
+mutant connector would therefore pass DST-02 for the same reason a correct one does. The case guards the SDK's
+ack path against a deadlock under slow acks. An SDK change that broke that path would be caught there, which is
+mutation testing of the SDK, not of connectors. This is the one exception to "each new case can fail" (the DoD
+of `ConduitIO/conduit#3011`), and DeVaris accepted it.
+
+**The throughput smoke checks are stall checks, not benchmarks.** DST-11 and SRC-09 record records/s
+(`destination_throughput`, `source_throughput`) in the report and never compare them to a threshold. They fail
+only if records stop flowing within the timeout or a record is rejected. A destination's failed send or nack
+fails DST-11. A source that does not deliver all 2000 records, a failed ack or a failed shutdown fails SRC-09. The
+mutants are `dest_nacks_under_load` and `source_stalls`. "Sanity floor" in the roadmap item means this
+liveness floor, not a rate. The numbers are not a performance claim, and the docs say so. Claims need benchi
+(see Constraints). DeVaris accepted these semantics.
 
 **Policy for duplicates (SRC-02).** At-least-once allows a duplicate after a failure. Without a failure a
 duplicate is a defect: v1's `Read_Success` asserted unique positions, and a source that delivers its newest
@@ -475,7 +500,8 @@ Suite v2 deliberately does not cover, and the Certified bar is silent on:
 For a data-integrity test suite the failure that matters is a false pass.
 
 - **Suite passes a broken connector.** Mitigation: a mutant test per case in the SDK repo (a reference connector
-  with 28 fault-injecting variants (30 runs) plus five configurations the suite cannot verify, each run in a
+  with 31 fault-injecting variants (33 runs) plus five configurations the suite cannot verify, as shipped in
+  v0.16.0, each run in a
   subprocess restricted to the case that must fail it, and a test that pins the effective redelivery bound at
   exactly the declared one: a source redelivering N passes, N+1 fails).
   Two cases have no mutant, with reasons: DST-02, because acks are sent by the SDK's destination adapter and a
@@ -485,7 +511,9 @@ For a data-integrity test suite the failure that matters is a false pass.
   timeout, at least 10 seconds), and reads end on a quiet period. Cases that need the source to continue from a
   snapshot into change capture ack what they read, like a pipeline; a source may legitimately wait for acks.
   Flake rate is tracked once the suite runs in CI on the reference connector; the target is the CLAUDE.md
-  Certified bar.
+  Certified bar. One harness flake was found on `main` before the release and fixed in it
+  (`ConduitIO/conduit-connector-sdk#406`): after a crash, the harness could report its own stream close as a source
+  failure. A harness fix after a release is a patch revision (2.0.x).
 - **In-process crash is not a crash.** Stated above, with what it does and does not detect. The kill -9 test is
   attested, not enforced.
 - **Shared-memory artifacts.** The SDK middleware mutates records in place. The harness copies records on both
