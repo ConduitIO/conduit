@@ -1,0 +1,1152 @@
+{
+  "sessions": [
+    {
+      "name": "s1x1-unbuffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "1x1",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 44329.350000000006,
+            "sd_pct": 0.7971238415403916,
+            "min": 43586.7,
+            "max": 44854.2,
+            "aa_floor_pct": 2.3356957680078727,
+            "aa_typical_pct": 0.6611473802091132
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 64291.600000000006,
+            "sd_pct": 0.3361734788685899,
+            "min": 63951.1,
+            "max": 64689.1,
+            "aa_floor_pct": 0.7859129281440018,
+            "aa_typical_pct": 0.20312394939258505
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 51013.25,
+            "sd_pct": 0.4611305873513107,
+            "min": 50608.8,
+            "max": 51272.7,
+            "aa_floor_pct": 0.6137338463872454,
+            "aa_typical_pct": 0.45087714137224616
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": 45.03167765825575,
+            "round_deltas_pct": [
+              44.14263390645686,
+              45.37187593416249,
+              46.08471498303025,
+              44.5469670398849,
+              45.00534906141126
+            ],
+            "floor_pct": 2.3356957680078727,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 15.077820901953206,
+            "round_deltas_pct": [
+              14.160939934611658,
+              15.847132517460349,
+              15.422974115747992,
+              15.185597373982644,
+              14.461027222279094
+            ],
+            "floor_pct": 2.3356957680078727,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": -20.65332018490752,
+            "round_deltas_pct": [
+              -20.80001812045574,
+              -20.30980423618775,
+              -20.98901371772129,
+              -20.312684705311433,
+              -21.064272481559517
+            ],
+            "floor_pct": 0.7859129281440018,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-14T23:26:22.527425549Z",
+      "finished": "2026-10-15T00:10:46.151904207Z"
+    },
+    {
+      "name": "s2x2-unbuffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "2x2",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 27439.550000000003,
+            "sd_pct": 0.5339314889651643,
+            "min": 27257.3,
+            "max": 27729.9,
+            "aa_floor_pct": 1.2127351664254729,
+            "aa_typical_pct": 0.6655097900379034
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 28051.8,
+            "sd_pct": 0.26453433029512213,
+            "min": 27951.2,
+            "max": 28158.2,
+            "aa_floor_pct": 0.21232257303503843,
+            "aa_typical_pct": 0.03920548306501338
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 50304.25,
+            "sd_pct": 0.6751075790984509,
+            "min": 49816.6,
+            "max": 51056.1,
+            "aa_floor_pct": 1.7012658624532593,
+            "aa_typical_pct": 0.24066007358339794
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": 2.2312683699258784,
+            "round_deltas_pct": [
+              2.7614384454448837,
+              2.330702814461043,
+              1.7687618666933147,
+              1.341663902498259,
+              2.573497147871871
+            ],
+            "floor_pct": 1.2127351664254729,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 83.32753270370685,
+            "round_deltas_pct": [
+              83.67326447080644,
+              82.3073339060293,
+              83.95050737211226,
+              81.95224604542662,
+              84.5359806932865
+            ],
+            "floor_pct": 1.7012658624532593,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": 79.32628209241476,
+            "round_deltas_pct": [
+              78.73753739669274,
+              78.15506870560282,
+              80.75340998357497,
+              79.54337736203398,
+              79.90610228220648
+            ],
+            "floor_pct": 1.7012658624532593,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T00:10:46.215443091Z",
+      "finished": "2026-10-15T00:56:12.091356302Z"
+    },
+    {
+      "name": "s4x4-unbuffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "4x4",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 23142.9,
+            "sd_pct": 1.393976824981943,
+            "min": 22735.7,
+            "max": 23772.2,
+            "aa_floor_pct": 2.8204895307546343,
+            "aa_typical_pct": 1.8561925605528864
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 36639.35,
+            "sd_pct": 0.5335752924318835,
+            "min": 36455.5,
+            "max": 37015.1,
+            "aa_floor_pct": 1.5350221502928187,
+            "aa_typical_pct": 0.6953931572218223
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 47897.45,
+            "sd_pct": 0.8258921751609996,
+            "min": 47206,
+            "max": 48313,
+            "aa_floor_pct": 1.786070727569114,
+            "aa_typical_pct": 1.3942108128516064
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": 58.3178858310756,
+            "round_deltas_pct": [
+              57.74618251773478,
+              56.87007092502979,
+              59.88096223644595,
+              60.93392058918125,
+              56.32886422717588
+            ],
+            "floor_pct": 2.8204895307546343,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 106.96390685696258,
+            "round_deltas_pct": [
+              106.08521273123897,
+              103.9975535693209,
+              107.43114589097497,
+              108.5804118230093,
+              104.63551585228277
+            ],
+            "floor_pct": 2.8204895307546343,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": 30.726800557324296,
+            "round_deltas_pct": [
+              30.643549936981596,
+              30.042367142687116,
+              29.74099166616701,
+              29.606245258546863,
+              30.900660517118617
+            ],
+            "floor_pct": 1.786070727569114,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T00:56:12.15477356Z",
+      "finished": "2026-10-15T01:46:31.411962653Z"
+    },
+    {
+      "name": "s1x1-buffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "1x1",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 64777.05,
+            "sd_pct": 1.2228076154026308,
+            "min": 63706.9,
+            "max": 66225.2,
+            "aa_floor_pct": 1.2813853336796244,
+            "aa_typical_pct": 1.0664143932544823
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 61802.85,
+            "sd_pct": 0.3437856774810333,
+            "min": 61481.9,
+            "max": 62106.9,
+            "aa_floor_pct": 0.334732661157179,
+            "aa_typical_pct": 0.2750097010155118
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 42008.25,
+            "sd_pct": 0.3299936015233317,
+            "min": 41850.9,
+            "max": 42239.6,
+            "aa_floor_pct": 0.7598402901729712,
+            "aa_typical_pct": 0.5998909720082448
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": -4.591440950151333,
+            "round_deltas_pct": [
+              -5.743690435845094,
+              -4.833674171808848,
+              -6.066390541479407,
+              -3.241704281625852,
+              -4.0255392102815275
+            ],
+            "floor_pct": 1.2813853336796244,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": -35.14948581326257,
+            "round_deltas_pct": [
+              -36.156040418900034,
+              -35.17762101182286,
+              -35.90972216396528,
+              -34.323656751722545,
+              -34.624063011005504
+            ],
+            "floor_pct": 1.2813853336796244,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": -32.02862003936712,
+            "round_deltas_pct": [
+              -32.265585321219255,
+              -31.885172171925134,
+              -31.770664189865034,
+              -32.123294689443675,
+              -31.881943955659008
+            ],
+            "floor_pct": 0.7598402901729712,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T01:46:31.471543629Z",
+      "finished": "2026-10-15T02:31:06.103579142Z"
+    },
+    {
+      "name": "s2x2-buffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "2x2",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 46455.6,
+            "sd_pct": 2.07884672091695,
+            "min": 44467.6,
+            "max": 47701.9,
+            "aa_floor_pct": 2.5909959167937253,
+            "aa_typical_pct": 2.3117482958334468
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 26611.449999999997,
+            "sd_pct": 0.32978720922837584,
+            "min": 26511.7,
+            "max": 26773.9,
+            "aa_floor_pct": 0.7772840250056544,
+            "aa_typical_pct": 0.5242405065661123
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 60709.85,
+            "sd_pct": 1.5381190727590464,
+            "min": 58995.8,
+            "max": 61569.7,
+            "aa_floor_pct": 2.1147140060250846,
+            "aa_typical_pct": 1.3658192857766098
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": -42.716378649721456,
+            "round_deltas_pct": [
+              -42.212069640635484,
+              -43.12014572695843,
+              -41.91193196731351,
+              -40.83934397123771,
+              -43.46769700705605
+            ],
+            "floor_pct": 2.5909959167937253,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 30.683598963311205,
+            "round_deltas_pct": [
+              30.805166969834058,
+              28.21153472440221,
+              33.76196433883357,
+              35.370625180319145,
+              25.03902964982409
+            ],
+            "floor_pct": 2.5909959167937253,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": 128.13431812246233,
+            "round_deltas_pct": [
+              126.3537838375572,
+              125.4076357315292,
+              130.27442445420107,
+              128.81866812718513,
+              121.18155997541933
+            ],
+            "floor_pct": 2.1147140060250846,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T02:31:06.161180714Z",
+      "finished": "2026-10-15T03:17:38.593284256Z"
+    },
+    {
+      "name": "s4x4-buffered",
+      "status": "complete",
+      "runs": 30,
+      "expected_runs": 30,
+      "summary": {
+        "shape": "4x4",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 33716.15,
+            "sd_pct": 5.9000060991167915,
+            "min": 30649.4,
+            "max": 37546.4,
+            "aa_floor_pct": 19.571475885964695,
+            "aa_typical_pct": 8.542014800668413
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 35610,
+            "sd_pct": 0.5023170739903137,
+            "min": 35270.4,
+            "max": 35891.2,
+            "aa_floor_pct": 1.0746366797432159,
+            "aa_typical_pct": 0.6851502232480451
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 55320.8,
+            "sd_pct": 1.3625187657662752,
+            "min": 54261.4,
+            "max": 56399.7,
+            "aa_floor_pct": 3.00314257419371,
+            "aa_typical_pct": 1.8977656447326237
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": 5.617041091583702,
+            "round_deltas_pct": [
+              11.276717777355225,
+              5.518459401140957,
+              3.203320802005,
+              5.226340425092207,
+              2.8129256343313016
+            ],
+            "floor_pct": 19.571475885964695,
+            "resolved": false,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 64.0780456843382,
+            "round_deltas_pct": [
+              70.23288145208801,
+              65.15769560462297,
+              61.950013923698144,
+              62.672244421384214,
+              61.42536860477614
+            ],
+            "floor_pct": 19.571475885964695,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": 55.35186745296266,
+            "round_deltas_pct": [
+              52.98158038116608,
+              56.520192335974485,
+              56.923258539711476,
+              54.592703465902815,
+              57.008827060235866
+            ],
+            "floor_pct": 3.00314257419371,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T03:17:38.649791354Z",
+      "finished": "2026-10-15T04:09:22.071177775Z"
+    },
+    {
+      "name": "alt-a-1x1",
+      "status": "complete",
+      "runs": 50,
+      "expected_runs": 50,
+      "summary": {
+        "shape": "1x1",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 44413.25,
+            "sd_pct": 0.7971025876881538,
+            "min": 43771.6,
+            "max": 45089,
+            "aa_floor_pct": 1.427866470496852,
+            "aa_typical_pct": 0.608352369757597
+          },
+          {
+            "label": "v2",
+            "n": 10,
+            "median_rec_s": 64186.1,
+            "sd_pct": 0.4697913488077283,
+            "min": 63651.1,
+            "max": 64580.4,
+            "aa_floor_pct": 1.0738047055840638,
+            "aa_typical_pct": 0.6607929515418591
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 50692.05,
+            "sd_pct": 0.45302862200980004,
+            "min": 50358.9,
+            "max": 51093.2,
+            "aa_floor_pct": 1.415256824782943,
+            "aa_typical_pct": 0.5483866519852453
+          },
+          {
+            "label": "v2-alta",
+            "n": 10,
+            "median_rec_s": 231653.25,
+            "sd_pct": 0.9242169854702829,
+            "min": 227215,
+            "max": 233699.1,
+            "aa_floor_pct": 2.7745506936055833,
+            "aa_typical_pct": 1.3537724384570031
+          },
+          {
+            "label": "proto-alta",
+            "n": 10,
+            "median_rec_s": 83725.9,
+            "sd_pct": 0.46051164132456235,
+            "min": 83117.3,
+            "max": 84105.4,
+            "aa_floor_pct": 0.7503668845086903,
+            "aa_typical_pct": 0.04413821635905615
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "v2",
+            "X": "v1",
+            "median_delta_pct": 44.52016008736132,
+            "round_deltas_pct": [
+              43.90389593150592,
+              42.55431089043055,
+              45.715462037333204,
+              44.54158766182129,
+              45.168003952636056
+            ],
+            "floor_pct": 1.427866470496852,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 14.137222563086475,
+            "round_deltas_pct": [
+              14.276007842934323,
+              12.387476822422219,
+              14.843900635376464,
+              14.447481188293027,
+              14.442011648093567
+            ],
+            "floor_pct": 1.427866470496852,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "v2-alta",
+            "X": "v1",
+            "median_delta_pct": 421.5859006039865,
+            "round_deltas_pct": [
+              420.4773480712704,
+              416.0357137692887,
+              425.09011185438743,
+              424.7235065405296,
+              419.9274222022184
+            ],
+            "floor_pct": 2.7745506936055833,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto-alta",
+            "X": "v1",
+            "median_delta_pct": 88.51558937929558,
+            "round_deltas_pct": [
+              87.70733660834712,
+              86.66717832525248,
+              89.57050274361961,
+              87.61794328345078,
+              89.7168292729699
+            ],
+            "floor_pct": 1.427866470496852,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto",
+            "X": "v2",
+            "median_delta_pct": -21.02332124868156,
+            "round_deltas_pct": [
+              -20.588662938405513,
+              -21.161642800963786,
+              -21.186194635986713,
+              -20.820379075908836,
+              -21.165815791314078
+            ],
+            "floor_pct": 1.415256824782943,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "v2-alta",
+            "X": "v2",
+            "median_delta_pct": 260.90874815575336,
+            "round_deltas_pct": [
+              261.6839868734357,
+              261.992359645947,
+              260.3530500557697,
+              263.0259740665131,
+              258.15565968094114
+            ],
+            "floor_pct": 2.7745506936055833,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto-alta",
+            "X": "v2",
+            "median_delta_pct": 30.44241666030495,
+            "round_deltas_pct": [
+              30.439370938011546,
+              30.944604312056036,
+              30.09635360113704,
+              29.802049582030104,
+              30.68777148363133
+            ],
+            "floor_pct": 1.0738047055840638,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "v2-alta",
+            "X": "proto",
+            "median_delta_pct": 356.98142016351676,
+            "round_deltas_pct": [
+              355.4563620971394,
+              359.15766450086846,
+              357.22072217097696,
+              358.4841021334808,
+              354.31517212488603
+            ],
+            "floor_pct": 2.7745506936055833,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto-alta",
+            "X": "proto",
+            "median_delta_pct": 65.16574097910815,
+            "round_deltas_pct": [
+              64.25787017896167,
+              66.09250745987995,
+              65.06797635295958,
+              63.93365877120103,
+              65.7755107069811
+            ],
+            "floor_pct": 1.415256824782943,
+            "resolved": true,
+            "suggestive": false
+          },
+          {
+            "Y": "proto-alta",
+            "X": "v2-alta",
+            "median_delta_pct": -63.85723058061996,
+            "round_deltas_pct": [
+              -63.93554161311093,
+              -63.826693900355046,
+              -63.89752949752949,
+              -64.24441807068936,
+              -63.51090148901931
+            ],
+            "floor_pct": 2.7745506936055833,
+            "resolved": true,
+            "suggestive": false
+          }
+        ]
+      },
+      "started": "2026-10-15T04:09:22.129466451Z",
+      "finished": "2026-10-15T05:27:55.623704274Z"
+    },
+    {
+      "name": "s1x1-destbatch-unbuffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "1x1-destbatch",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 57907,
+            "sd_pct": 0.7098080831370355,
+            "min": 57155,
+            "max": 58587.5,
+            "aa_floor_pct": 2.0780334178986912,
+            "aa_typical_pct": 0.824635514531415
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 49351.4,
+            "sd_pct": 0.2415346285160188,
+            "min": 49096.1,
+            "max": 49463.1,
+            "aa_floor_pct": 0.5405724690963263,
+            "aa_typical_pct": 0.23518467962912998
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": -14.77472499007028,
+            "round_deltas_pct": [
+              -14.851872063737453,
+              -14.753627128505581,
+              -15.133127605249511,
+              -14.98032827858433,
+              -14.619764466523005
+            ],
+            "floor_pct": 2.0780334178986912,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl] not written within 45s; conduit errors:\n2026-10-15T05:27:57+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/1/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipeline can stall (sdk.batch.delay 0) or slow sharply\" stack=[{\"file\":\"/tmp/tmp.oXUmYi6vlJ/base/pkg/provisioning/servic..."
+          }
+        ]
+      },
+      "started": "2026-10-15T05:27:55.682572156Z",
+      "finished": "2026-10-15T05:58:17.8522634Z"
+    },
+    {
+      "name": "s2x2-destbatch-unbuffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "2x2-destbatch",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 39800.05,
+            "sd_pct": 1.1838856704097924,
+            "min": 38990.6,
+            "max": 40470.2,
+            "aa_floor_pct": 1.890032666011026,
+            "aa_typical_pct": 0.44095482504380107
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 90125.54999999999,
+            "sd_pct": 0.5514329449339472,
+            "min": 89605.8,
+            "max": 91295.6,
+            "aa_floor_pct": 1.4738935939957738,
+            "aa_typical_pct": 0.48479004707283924
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 126.44582104796346,
+            "round_deltas_pct": [
+              125.0083878491559,
+              124.69315849444102,
+              130.62946544847273,
+              131.2289815726759,
+              126.05679071440115
+            ],
+            "floor_pct": 1.890032666011026,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl] not written within 45s; conduit errors:\n2026-10-15T05:58:20+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/2/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/3/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipe..."
+          }
+        ]
+      },
+      "started": "2026-10-15T05:58:17.917953178Z",
+      "finished": "2026-10-15T06:32:09.446819067Z"
+    },
+    {
+      "name": "s4x4-destbatch-unbuffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "4x4-destbatch",
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 26649.35,
+            "sd_pct": 4.621927197367208,
+            "min": 25473.5,
+            "max": 28777.4,
+            "aa_floor_pct": 5.986923289437331,
+            "aa_typical_pct": 1.5885832171128145
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 89880.5,
+            "sd_pct": 0.6697785213535179,
+            "min": 89277.6,
+            "max": 91048,
+            "aa_floor_pct": 1.5245180685274853,
+            "aa_typical_pct": 0.3741208717072067
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 237.27089028437845,
+            "round_deltas_pct": [
+              213.554404650369,
+              223.189968580283,
+              235.70909336804556,
+              249.8746061972577,
+              245.13701288324418
+            ],
+            "floor_pct": 5.986923289437331,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl /sink/sink-3.jsonl /sink/sink-4.jsonl] not written within 45s; conduit errors:\n2026-10-15T06:32:11+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/4/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/5/settings/sdk.batch.size); destination connector \\\"sink-3\\\" (name \\\"sink-3\\\") sets sdk.batch.size=100 (/connectors/6/settings/sdk.batch.size); destination connector \\\"sink-4\\\" (n..."
+          }
+        ]
+      },
+      "started": "2026-10-15T06:32:09.507296849Z",
+      "finished": "2026-10-15T07:10:15.345036552Z"
+    },
+    {
+      "name": "s1x1-destbatch-buffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "1x1-destbatch",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 58029.75,
+            "sd_pct": 0.9143878411438612,
+            "min": 57126.9,
+            "max": 58843.2,
+            "aa_floor_pct": 1.8424567013148603,
+            "aa_typical_pct": 1.089922502095006
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 49191.1,
+            "sd_pct": 0.2678410344506881,
+            "min": 49003.7,
+            "max": 49461.3,
+            "aa_floor_pct": 0.9338070390603278,
+            "aa_typical_pct": 0.17371234454776885
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": -15.231239148884843,
+            "round_deltas_pct": [
+              -14.36335829489578,
+              -15.138757891403282,
+              -15.256312494884083,
+              -15.501793114337966,
+              -16.18557088099066
+            ],
+            "floor_pct": 1.8424567013148603,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl] not written within 45s; conduit errors:\n2026-10-15T07:10:17+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/1/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipeline can stall (sdk.batch.delay 0) or slow sharply\" stack=[{\"file\":\"/tmp/tmp.oXUmYi6vlJ/base/pkg/provisioning/servic..."
+          }
+        ]
+      },
+      "started": "2026-10-15T07:10:15.407565561Z",
+      "finished": "2026-10-15T07:40:37.277938226Z"
+    },
+    {
+      "name": "s2x2-destbatch-buffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "2x2-destbatch",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 39060.100000000006,
+            "sd_pct": 1.522709140540437,
+            "min": 38280.4,
+            "max": 40202.5,
+            "aa_floor_pct": 5.021107407446104,
+            "aa_typical_pct": 1.5628855596122297
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 90085,
+            "sd_pct": 0.9697992237753342,
+            "min": 89195.9,
+            "max": 91551.9,
+            "aa_floor_pct": 1.7728681397820776,
+            "aa_typical_pct": 0.6280108200125798
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 130.63177001594974,
+            "round_deltas_pct": [
+              132.60347543184693,
+              128.59269147169178,
+              129.91892499603955,
+              128.01846007219407,
+              135.70632461232194
+            ],
+            "floor_pct": 5.021107407446104,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl] not written within 45s; conduit errors:\n2026-10-15T07:40:39+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/2/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/3/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipe..."
+          }
+        ]
+      },
+      "started": "2026-10-15T07:40:37.340640833Z",
+      "finished": "2026-10-15T08:14:26.310662592Z"
+    },
+    {
+      "name": "s4x4-destbatch-buffered",
+      "status": "complete",
+      "runs": 20,
+      "expected_runs": 20,
+      "summary": {
+        "shape": "4x4-destbatch",
+        "bench_env": [
+          "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+        ],
+        "rounds": 5,
+        "warmup": "20s",
+        "window": "1m0s",
+        "arms": [
+          {
+            "label": "v1",
+            "n": 10,
+            "median_rec_s": 26857.6,
+            "sd_pct": 2.022041614960769,
+            "min": 25878.3,
+            "max": 27424,
+            "aa_floor_pct": 5.4176665391466985,
+            "aa_typical_pct": 3.2325491145359013
+          },
+          {
+            "label": "proto",
+            "n": 10,
+            "median_rec_s": 89295.1,
+            "sd_pct": 0.7446795584550336,
+            "min": 88761.9,
+            "max": 91071.1,
+            "aa_floor_pct": 1.7332611552951485,
+            "aa_typical_pct": 0.3050894622391578
+          }
+        ],
+        "comparisons": [
+          {
+            "Y": "proto",
+            "X": "v1",
+            "median_delta_pct": 232.47609615155488,
+            "round_deltas_pct": [
+              235.29680475526402,
+              235.81527730226156,
+              230.48968733882137,
+              232.33767011065143,
+              237.64366240587145
+            ],
+            "floor_pct": 5.4176665391466985,
+            "resolved": true,
+            "suggestive": false
+          }
+        ],
+        "skipped_arms": [
+          {
+            "label": "v2",
+            "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl /sink/sink-3.jsonl /sink/sink-4.jsonl] not written within 45s; conduit errors:\n2026-10-15T08:14:28+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/4/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/5/settings/sdk.batch.size); destination connector \\\"sink-3\\\" (name \\\"sink-3\\\") sets sdk.batch.size=100 (/connectors/6/settings/sdk.batch.size); destination connector \\\"sink-4\\\" (n..."
+          }
+        ]
+      },
+      "started": "2026-10-15T08:14:26.370494489Z",
+      "finished": "2026-10-15T08:52:27.773561831Z"
+    }
+  ]
+}

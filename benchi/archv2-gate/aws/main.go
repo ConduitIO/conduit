@@ -19,7 +19,8 @@
 // of Conduit's go.mod.
 //
 //	go run . launch  -manifest m.json -account <id> -main-sha <sha> \
-//	                 -fanout-pr 2946 -fanout-sha <sha> -harness-pr 2956 -harness-sha <sha>
+//	                 -fanout-pr 2946 -fanout-sha <sha> -harness-pr 2956 -harness-sha <sha> \
+//	                 [-proto-pr 2978 -proto-sha <sha>]
 //	go run . status  -manifest m.json
 //	go run . cleanup -manifest m.json [-delete-bucket]
 //
@@ -71,15 +72,21 @@ import (
 var userDataTmpl string
 
 const (
-	amiParameter   = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-	ssmCorePolicy  = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-	tagPurpose     = "archv2-gate-early"
+	amiParameter  = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+	ssmCorePolicy = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+	tagPurpose    = "archv2-gate-early"
+
+	// Session plans: see the -plan flag.
+	planEarly      = "early"
+	planMatrix     = "matrix"
 	ec2TrustPolicy = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}`
 )
 
 var (
 	shaRe   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	digitRe = regexp.MustCompile(`^[0-9]+$`)
+	// tagValueRe bounds -bench-tag; it also reaches user data via the tags.
+	tagValueRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 )
 
 // manifest records every resource launch created. It is rewritten after each
@@ -109,6 +116,11 @@ type manifest struct {
 	FanoutSHA           string    `json:"fanout_sha"`
 	HarnessPR           string    `json:"harness_pr"`
 	HarnessSHA          string    `json:"harness_sha"`
+	ProtoPR             string    `json:"proto_pr,omitempty"`
+	ProtoSHA            string    `json:"proto_sha,omitempty"`
+	Plan                string    `json:"plan"`
+	Warmup              string    `json:"warmup,omitempty"`
+	Window              string    `json:"window,omitempty"`
 	Rounds              int       `json:"rounds"`
 	MaxMinutes          int       `json:"max_minutes"`
 	Deleted             []string  `json:"deleted,omitempty"`
@@ -181,6 +193,63 @@ func main() {
 	}
 }
 
+// launchFlags are the launch flags that reach user data or decide the plan.
+type launchFlags struct {
+	plan, mainSHA, harnessSHA, harnessPR, fanoutSHA, fanoutPR, protoSHA, protoPR, benchTag string
+	window                                                                                 time.Duration
+}
+
+// validateLaunch checks every launch flag that reaches user data: commits are
+// full SHAs, PRs are numbers, the tag is a bounded slug, and the plan has the
+// inputs it needs and no others.
+func validateLaunch(f launchFlags) error {
+	shas := map[string]string{"main-sha": f.mainSHA, "harness-sha": f.harnessSHA}
+	prs := map[string]string{"harness-pr": f.harnessPR}
+	switch f.plan {
+	case planEarly:
+		shas["fanout-sha"], prs["fanout-pr"] = f.fanoutSHA, f.fanoutPR
+	case planMatrix:
+		if f.protoSHA == "" {
+			return errors.New("-plan matrix needs -proto-pr and -proto-sha")
+		}
+		if f.fanoutPR != "" || f.fanoutSHA != "" {
+			return errors.New("-plan matrix runs no fan-out session; drop -fanout-pr and -fanout-sha")
+		}
+		if f.window < 60*time.Second {
+			return fmt.Errorf("-window %s is below the 60s the gate requires", f.window)
+		}
+	default:
+		return fmt.Errorf(`-plan must be "early" or "matrix", got %q`, f.plan)
+	}
+	if !tagValueRe.MatchString(f.benchTag) {
+		return fmt.Errorf("-bench-tag %q: want lower-case letters, digits and '-'", f.benchTag)
+	}
+	for name, v := range shas {
+		if !shaRe.MatchString(v) {
+			return fmt.Errorf("-%s must be a full 40-character lowercase commit SHA, got %q", name, v)
+		}
+	}
+	for name, v := range prs {
+		if !digitRe.MatchString(v) {
+			return fmt.Errorf("-%s must be a PR number, got %q", name, v)
+		}
+	}
+	return validateProto(f.protoPR, f.protoSHA)
+}
+
+// validateProto checks the optional prototype flags: both empty, or a PR
+// number and a full commit SHA. The SHA reaches user data, so it must not be
+// free text.
+func validateProto(pr, sha string) error {
+	if pr == "" && sha == "" {
+		return nil
+	}
+	if !digitRe.MatchString(pr) || !shaRe.MatchString(sha) {
+		return fmt.Errorf("-proto-pr and -proto-sha go together: a PR number and a full 40-character lowercase SHA, got %q and %q", pr, sha)
+	}
+	return nil
+}
+
 func launch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("launch", flag.ExitOnError)
 	manifestPath := fs.String("manifest", "", "path of the manifest JSON to write (required)")
@@ -198,21 +267,24 @@ func launch(ctx context.Context, args []string) error {
 	fanoutSHA := fs.String("fanout-sha", "", "head commit of -fanout-pr (required)")
 	harnessPR := fs.String("harness-pr", "", "PR number carrying the harness (required)")
 	harnessSHA := fs.String("harness-sha", "", "commit of the harness to build (required)")
-	goVersion := fs.String("go-version", "1.25.14", "Go toolchain for the harness build (the images build in Docker)")
+	protoPR := fs.String("proto-pr", "", "PR number of the staged-batch prototype; with -proto-sha adds the Alternative A session with prototype arms")
+	protoSHA := fs.String("proto-sha", "", "head commit of -proto-pr")
+	plan := fs.String("plan", planEarly, `"early" (A/A, v1-vs-v2 and fan-out sessions on Docker images) or "matrix" (matrix/run.sh: v1 and v2 from -main-sha, proto from -proto-sha)`)
+	warmup := fs.Duration("warmup", 20*time.Second, "matrix plan: warmup discarded per run")
+	window := fs.Duration("window", 60*time.Second, "matrix plan: measurement window per run (the gate requires 60s)")
+	benchTag := fs.String("bench-tag", "archv2-gate-"+time.Now().UTC().Format("20060102"), `value of the "conduit-bench" tag on every resource; list resources by it to verify teardown`)
+	goVersion := fs.String("go-version", "1.26.9", "Go toolchain for the harness and matrix binary builds; match go.mod (the early plan's images build in Docker)")
 	_ = fs.Parse(args)
 
 	if *manifestPath == "" || *account == "" {
 		return errors.New("-manifest and -account are required")
 	}
-	for name, v := range map[string]string{"main-sha": *mainSHA, "fanout-sha": *fanoutSHA, "harness-sha": *harnessSHA} {
-		if !shaRe.MatchString(v) {
-			return fmt.Errorf("-%s must be a full 40-character lowercase commit SHA, got %q", name, v)
-		}
-	}
-	for name, v := range map[string]string{"fanout-pr": *fanoutPR, "harness-pr": *harnessPR} {
-		if !digitRe.MatchString(v) {
-			return fmt.Errorf("-%s must be a PR number, got %q", name, v)
-		}
+	if err := validateLaunch(launchFlags{
+		plan: *plan, mainSHA: *mainSHA, harnessSHA: *harnessSHA, harnessPR: *harnessPR,
+		fanoutSHA: *fanoutSHA, fanoutPR: *fanoutPR, protoSHA: *protoSHA, protoPR: *protoPR,
+		window: *window, benchTag: *benchTag,
+	}); err != nil {
+		return err
 	}
 	if _, err := os.Stat(*manifestPath); err == nil {
 		return fmt.Errorf("manifest %s already exists; run cleanup on it or pick another path", *manifestPath)
@@ -242,6 +314,11 @@ func launch(ctx context.Context, args []string) error {
 		FanoutSHA:  *fanoutSHA,
 		HarnessPR:  *harnessPR,
 		HarnessSHA: *harnessSHA,
+		ProtoPR:    *protoPR,
+		ProtoSHA:   *protoSHA,
+		Plan:       *plan,
+		Warmup:     warmup.String(),
+		Window:     window.String(),
 		Rounds:     *rounds,
 		MaxMinutes: *maxMinutes,
 		path:       *manifestPath,
@@ -260,6 +337,9 @@ func launch(ctx context.Context, args []string) error {
 		"Owner":     "devaris",
 		"ExpiresAt": m.ExpiresAt.Format(time.RFC3339),
 		"RunID":     m.RunID,
+		// One key across runs, one value per run: teardown is verified by
+		// listing resources with this tag.
+		"conduit-bench": *benchTag,
 	}
 
 	// Results bucket.
@@ -433,6 +513,7 @@ func runInstance(ctx context.Context, c clients, m *manifest, tags map[string]st
 		"MaxMinutes": o.MaxMinutes, "Bucket": m.Bucket, "Prefix": m.Prefix, "Region": m.Region,
 		"MainSHA": m.MainSHA, "FanoutSHA": m.FanoutSHA, "FanoutPR": m.FanoutPR,
 		"HarnessSHA": m.HarnessSHA, "HarnessPR": m.HarnessPR,
+		"ProtoSHA": m.ProtoSHA, "ProtoPR": m.ProtoPR, "Plan": m.Plan, "Warmup": m.Warmup, "Window": m.Window,
 		"GoVersion": o.GoVersion, "GoSHA256": goSHA, "Rounds": o.Rounds,
 	}); err != nil {
 		return fmt.Errorf("render user data: %w", err)

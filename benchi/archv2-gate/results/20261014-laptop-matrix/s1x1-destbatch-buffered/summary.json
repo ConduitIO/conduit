@@ -1,0 +1,88 @@
+{
+  "shape": "1x1-destbatch",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "8s",
+  "window": "25s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 24454.05,
+      "sd_pct": 1.5698054384307465,
+      "min": 23933.7,
+      "max": 25119.5,
+      "aa_floor_pct": 2.4190451811084155,
+      "aa_typical_pct": 1.7378987560044312
+    },
+    {
+      "label": "v2",
+      "n": 10,
+      "median_rec_s": 85.2,
+      "sd_pct": 0.4528887677147992,
+      "min": 84.6,
+      "max": 85.9,
+      "aa_floor_pct": 0.4728132387706923,
+      "aa_typical_pct": 0.3521126760563347
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 27701.9,
+      "sd_pct": 1.8276447849564867,
+      "min": 26698.8,
+      "max": 28412.6,
+      "aa_floor_pct": 4.7807898200026395,
+      "aa_typical_pct": 1.7087865024580877
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "v2",
+      "X": "v1",
+      "median_delta_pct": -99.6515914541763,
+      "round_deltas_pct": [
+        -99.6520249252955,
+        -99.65692213571968,
+        -99.64879366006292,
+        -99.65313958633685,
+        -99.65068784307445
+      ],
+      "floor_pct": 2.4190451811084155,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 13.28144008865608,
+      "round_deltas_pct": [
+        14.208234322254295,
+        11.35495763508191,
+        13.351224977065982,
+        14.287345610411114,
+        12.550184102497761
+      ],
+      "floor_pct": 4.7807898200026395,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v2",
+      "median_delta_pct": 32413.967136150233,
+      "round_deltas_pct": [
+        32720.808909730367,
+        32357.63403263403,
+        32174.82311320755,
+        32849.08877131099,
+        32120.51734273956
+      ],
+      "floor_pct": 4.7807898200026395,
+      "resolved": true,
+      "suggestive": false
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "shape": "4x4-destbatch",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "20s",
+  "window": "1m0s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 26857.6,
+      "sd_pct": 2.022041614960769,
+      "min": 25878.3,
+      "max": 27424,
+      "aa_floor_pct": 5.4176665391466985,
+      "aa_typical_pct": 3.2325491145359013
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 89295.1,
+      "sd_pct": 0.7446795584550336,
+      "min": 88761.9,
+      "max": 91071.1,
+      "aa_floor_pct": 1.7332611552951485,
+      "aa_typical_pct": 0.3050894622391578
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 232.47609615155488,
+      "round_deltas_pct": [
+        235.29680475526402,
+        235.81527730226156,
+        230.48968733882137,
+        232.33767011065143,
+        237.64366240587145
+      ],
+      "floor_pct": 5.4176665391466985,
+      "resolved": true,
+      "suggestive": false
+    }
+  ],
+  "skipped_arms": [
+    {
+      "label": "v2",
+      "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl /sink/sink-3.jsonl /sink/sink-4.jsonl] not written within 45s; conduit errors:\n2026-10-15T08:14:28+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/4/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/5/settings/sdk.batch.size); destination connector \\\"sink-3\\\" (name \\\"sink-3\\\") sets sdk.batch.size=100 (/connectors/6/settings/sdk.batch.size); destination connector \\\"sink-4\\\" (n..."
+    }
+  ]
+}
