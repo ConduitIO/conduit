@@ -32,6 +32,9 @@ import (
 
 type PluginService interface {
 	NewProcessor(ctx context.Context, pluginName string, id string, egressPolicy egress.Policy) (sdk.Processor, error)
+	// ResolvesToStandalone reports whether NewProcessor would build a
+	// standalone (WASM) processor for pluginName, without building one.
+	ResolvesToStandalone(pluginName string) bool
 }
 
 type Service struct {
@@ -195,6 +198,14 @@ func (s *Service) MakeRunnableProcessorForReconfigure(ctx context.Context, i *In
 		return nil, cerrors.Errorf("invalid condition: %w", err)
 	}
 	return newRunnableProcessor(p, cond, i), nil
+}
+
+// ResolvesToStandalone reports whether a processor with plugin reference
+// pluginName would run as a standalone (WASM) plugin if it were built now.
+// Records reach a standalone processor, and come back from it, through the
+// plugin protocol. It builds nothing.
+func (s *Service) ResolvesToStandalone(pluginName string) bool {
+	return s.registry.ResolvesToStandalone(pluginName)
 }
 
 // Create will create a new processor instance.

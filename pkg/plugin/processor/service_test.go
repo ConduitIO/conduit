@@ -137,3 +137,23 @@ func TestPluginService_Get(t *testing.T) {
 		})
 	}
 }
+
+// TestPluginService_ResolvesToStandalone: the rule NewProcessor applies, without
+// building a processor. Only a name without a type prefix asks the standalone
+// registry.
+func TestPluginService_ResolvesToStandalone(t *testing.T) {
+	is := is.New(t)
+	ctrl := gomock.NewController(t)
+
+	br := mock.NewRegistry(ctrl)
+	sr := mock.NewStandaloneRegistry(ctrl)
+	sr.EXPECT().Has(plugin.FullName("installed")).Return(true)
+	sr.EXPECT().Has(plugin.FullName("field.set@v0.1.0")).Return(false)
+	underTest := NewPluginService(log.Nop(), br, sr)
+
+	is.True(underTest.ResolvesToStandalone("standalone:anything"))
+	is.True(!underTest.ResolvesToStandalone("builtin:field.set"))
+	is.True(!underTest.ResolvesToStandalone("crunchy:field.set"))
+	is.True(underTest.ResolvesToStandalone("installed"))
+	is.True(!underTest.ResolvesToStandalone("field.set@v0.1.0"))
+}

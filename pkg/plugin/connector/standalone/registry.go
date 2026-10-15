@@ -274,6 +274,22 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 	)
 }
 
+// Has reports whether NewDispenser would find fullName in this registry: the
+// plugin name with the version given, or with no version (or @latest) any
+// registered version. It reads the same map NewDispenser does, including the
+// latest entries that List skips, and starts no plugin process.
+func (r *Registry) Has(fullName plugin.FullName) bool {
+	r.m.RLock()
+	defer r.m.RUnlock()
+
+	versions, ok := r.plugins[fullName.PluginName()]
+	if !ok {
+		return false
+	}
+	_, ok = versions[fullName.PluginVersion()]
+	return ok
+}
+
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
 	r.m.RLock()
 	defer r.m.RUnlock()

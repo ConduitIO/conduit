@@ -178,6 +178,22 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 	return p, nil
 }
 
+// Has reports whether NewProcessor would find fullName in this registry: the
+// plugin name with the version given, or with no version (or @latest) any
+// registered version. It reads the same map NewProcessor does, including the
+// latest entries that List skips, and builds nothing.
+func (r *Registry) Has(fullName plugin.FullName) bool {
+	r.m.RLock()
+	defer r.m.RUnlock()
+
+	versions, ok := r.plugins[fullName.PluginName()]
+	if !ok {
+		return false
+	}
+	_, ok = versions[fullName.PluginVersion()]
+	return ok
+}
+
 // Register registers a standalone processor plugin from the specified path.
 // If a plugin with the same name and version is already registered, it will
 // return plugin.ErrPluginAlreadyRegistered.

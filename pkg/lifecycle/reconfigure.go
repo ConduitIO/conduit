@@ -43,6 +43,10 @@ var ErrProcessorNotLiveReconfigurable = cerrors.New("processor is not live-recon
 // fails to open, the old processor keeps running and the error is returned — the
 // pipeline never drops (invariant 3).
 //
+// Returns the start checks' coded error (for example
+// pipeline.debezium_standalone_before_encode) if the new config fails them; the
+// old processor is kept.
+//
 // Returns ErrProcessorNotLiveReconfigurable if the processor is not a plain
 // single-worker node in the running pipeline; the caller should then fall back to
 // a restart. Returns an error (old processor kept) if building or opening the new
@@ -72,6 +76,14 @@ func (s *Service) ReconfigureProcessor(ctx context.Context, pipelineID, processo
 	instance, err := s.processors.Get(ctx, processorID)
 	if err != nil {
 		return cerrors.Errorf("could not fetch processor %q for live reconfigure: %w", processorID, err)
+	}
+	// The start checks (package starthook) apply to a live swap as well: the
+	// stored config already holds the new plugin, so a swap that would put a
+	// standalone plugin on the path into debezium.encode is refused here,
+	// before anything is built. The old processor keeps running and the
+	// caller rolls the stored config back.
+	if err := s.startChecks(ctx, rp.pipeline); err != nil {
+		return err
 	}
 	runnableProc, err := s.processors.MakeRunnableProcessorForReconfigure(ctx, instance)
 	if err != nil {

@@ -780,6 +780,16 @@ func (lcProcessorService) MakeRunnableProcessor(context.Context, *processor.Inst
 	return nil, cerrors.New("lcProcessorService: not implemented")
 }
 
+// ResolvesToStandalone satisfies the start checks' resolver. With no
+// processors it is never asked.
+func (lcProcessorService) ResolvesToStandalone(string) bool { return false }
+
+// ResolvesToStandalone lets staticFetcher serve as the lifecycle's
+// ConnectorPluginService. Every plugin it serves is built in to the child
+// process, and the start checks only ask when a pipeline contains
+// debezium.encode, which these pipelines never do.
+func (staticFetcher) ResolvesToStandalone(string) bool { return false }
+
 // lcPipelineService fulfills pkg/lifecycle-poc.PipelineService for a single,
 // fixed pipeline.Instance built once at process startup (never persisted -
 // see buildLifecycleChild's doc for why pipeline metadata durability is out

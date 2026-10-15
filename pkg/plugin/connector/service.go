@@ -50,6 +50,7 @@ type standaloneReg interface {
 	registry
 
 	Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int)
+	Has(fullName plugin.FullName) bool
 }
 
 type authManager interface {
@@ -106,6 +107,25 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		dispenser,
 		func() { s.authManager.Deregister(cfg.Token) },
 	), nil
+}
+
+// ResolvesToStandalone reports whether NewDispenser, given name, would dispense
+// a standalone plugin (a separate process reached over the plugin protocol).
+// It applies newDispenser's rule without starting anything: a "standalone:"
+// name is standalone, a "builtin:" name is not, and a name without a type
+// prefix is standalone when the standalone registry has it, because standalone
+// plugins take precedence. A name with an invalid prefix is not standalone
+// (NewDispenser refuses it anyway).
+func (s *PluginService) ResolvesToStandalone(name string) bool {
+	fullName := plugin.FullName(name)
+	switch fullName.PluginType() {
+	case plugin.PluginTypeStandalone:
+		return true
+	case plugin.PluginTypeAny:
+		return s.standaloneReg.Has(fullName)
+	default:
+		return false
+	}
 }
 
 func (s *PluginService) List(context.Context) (map[string]pconnector.Specification, error) {

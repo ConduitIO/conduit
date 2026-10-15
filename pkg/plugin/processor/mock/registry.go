@@ -144,6 +144,44 @@ func (m *StandaloneRegistry) EXPECT() *StandaloneRegistryMockRecorder {
 	return m.recorder
 }
 
+// Has mocks base method.
+func (m *StandaloneRegistry) Has(fullName plugin.FullName) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Has", fullName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// Has indicates an expected call of Has.
+func (mr *StandaloneRegistryMockRecorder) Has(fullName any) *StandaloneRegistryHasCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*StandaloneRegistry)(nil).Has), fullName)
+	return &StandaloneRegistryHasCall{Call: call}
+}
+
+// StandaloneRegistryHasCall wrap *gomock.Call
+type StandaloneRegistryHasCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *StandaloneRegistryHasCall) Return(arg0 bool) *StandaloneRegistryHasCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *StandaloneRegistryHasCall) Do(f func(plugin.FullName) bool) *StandaloneRegistryHasCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *StandaloneRegistryHasCall) DoAndReturn(f func(plugin.FullName) bool) *StandaloneRegistryHasCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // List mocks base method.
 func (m *StandaloneRegistry) List() map[plugin.FullName]sdk.Specification {
 	m.ctrl.T.Helper()

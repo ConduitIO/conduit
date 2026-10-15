@@ -74,6 +74,22 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.Equal("", cmp.Diff(got, want))
 	})
 
+	// Has must agree with NewProcessor's lookup, including the latest entry
+	// List skips (#3124 resolves plugin references with it).
+	t.Run("Has", func(t *testing.T) {
+		is := is.New(t)
+		for name, want := range map[plugin.FullName]bool{
+			"chaos-processor":                   true,
+			"chaos-processor@latest":            true,
+			"chaos-processor@v1.3.5":            true,
+			"standalone:chaos-processor@v1.3.5": true,
+			"chaos-processor@v9.9.9":            false,
+			"other-processor":                   false,
+		} {
+			is.Equal(underTest.Has(name), want) // name
+		}
+	})
+
 	t.Run("NewProcessor", func(t *testing.T) {
 		is := is.New(t)
 

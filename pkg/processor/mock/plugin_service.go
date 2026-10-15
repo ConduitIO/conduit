@@ -80,3 +80,41 @@ func (c *PluginServiceNewProcessorCall) DoAndReturn(f func(context.Context, stri
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// ResolvesToStandalone mocks base method.
+func (m *PluginService) ResolvesToStandalone(pluginName string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolvesToStandalone", pluginName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ResolvesToStandalone indicates an expected call of ResolvesToStandalone.
+func (mr *PluginServiceMockRecorder) ResolvesToStandalone(pluginName any) *PluginServiceResolvesToStandaloneCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolvesToStandalone", reflect.TypeOf((*PluginService)(nil).ResolvesToStandalone), pluginName)
+	return &PluginServiceResolvesToStandaloneCall{Call: call}
+}
+
+// PluginServiceResolvesToStandaloneCall wrap *gomock.Call
+type PluginServiceResolvesToStandaloneCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *PluginServiceResolvesToStandaloneCall) Return(arg0 bool) *PluginServiceResolvesToStandaloneCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *PluginServiceResolvesToStandaloneCall) Do(f func(string) bool) *PluginServiceResolvesToStandaloneCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *PluginServiceResolvesToStandaloneCall) DoAndReturn(f func(string) bool) *PluginServiceResolvesToStandaloneCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

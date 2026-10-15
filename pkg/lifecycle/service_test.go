@@ -1199,8 +1199,20 @@ func (s testProcessorService) Get(_ context.Context, id string) (*processor.Inst
 	return proc, nil
 }
 
+// ResolvesToStandalone treats a "standalone:" prefix as standalone and every
+// other plugin reference as built-in.
+func (s testProcessorService) ResolvesToStandalone(p string) bool {
+	return strings.HasPrefix(p, "standalone:")
+}
+
 // testConnectorPluginService fulfills the ConnectorPluginService interface.
 type testConnectorPluginService map[string]connectorPlugin.Dispenser
+
+// ResolvesToStandalone treats a "standalone:" prefix as standalone and every
+// other plugin reference as built-in.
+func (s testConnectorPluginService) ResolvesToStandalone(p string) bool {
+	return strings.HasPrefix(p, "standalone:")
+}
 
 func (s testConnectorPluginService) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
 	plug, ok := s[name]
