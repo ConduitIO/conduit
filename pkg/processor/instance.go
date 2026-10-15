@@ -102,4 +102,18 @@ type Parent struct {
 type Config struct {
 	Settings map[string]string
 	Workers  int
+	// SettingRefs holds settings whose value comes from the engine's
+	// environment, as the original template text (for example
+	// "postgres://app:${DB_PASSWORD}@db/app"). A key is in Settings or in
+	// SettingRefs, never both. Only the pipeline config parser populates it,
+	// for entities provisioned from a file; nothing reachable from the API
+	// does. It is resolved by pkg/secretref when a plugin is configured, and
+	// the resolved value is never assigned back here (Invariant R1).
+	//
+	// Compatibility contract (docs/design-documents/20261014-secrets-at-rest.md,
+	// D9): the stored JSON key is exactly "SettingRefs" and the type is
+	// map[string]string. The v0.20.2 downgrade guard decodes this key to
+	// refuse records it cannot run; renaming or retagging it would silently
+	// disable that guard. TestSettingRefs_StoredKeyPinned fails if it changes.
+	SettingRefs map[string]string `json:",omitempty"`
 }
