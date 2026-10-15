@@ -28,7 +28,8 @@ This document covers two steps:
    own ADR and the explicit versioning discussion that CLAUDE.md requires. This document recommends a
    direction. It does not decide the wire format.
 
-Step 1 is what DeVaris accepted for v0.21. Step 2 is a recommendation for a later decision.
+Step 1 is what DeVaris accepted for v0.21. The four decisions below were decided by DeVaris on 2026-10-15
+(see _Decisions_). Step 2 is recorded as a direction; its wire format is decided in its own ADR.
 
 ## Context
 
@@ -558,18 +559,19 @@ Each regression test is shown to fail on current `main` before it is shown to pa
 - The processor-side fixes also close #3127.
 - Step 2 is left as a recommendation for an ADR. It is not a commitment.
 
-## Decisions needed (DeVaris)
+## Decisions
 
-1. The range rule ±(2^53−1) (recommended), or the exactness rule.
-2. Nack under the DLQ policy on the destination side (recommended), but only together with the arch-v1
-   ordered nack and the arch-v2 validate-then-split. Otherwise, use the halt fallback on the destination
-   side for v0.21. Both options depend on Conduit wrapping the coded refusal in `cerrors.FatalError`.
-   Without it, the default DLQ turns the refusal into an endless recovery loop instead of a degraded
-   pipeline. Separately, as a release rule: `conduit-processor-sdk` must not ship its commons bump
-   without the guest per-index fix.
-3. Version the commons release as v0.9.0 (recommended; #290 already requires a minor bump), with Conduit
-   v0.21 taking #290 in the same bump.
-4. Open the step 2 ADR and a protocol versioning issue now, and implement after v0.21 (recommended).
+Decided by DeVaris on 2026-10-15. Each one is the recommendation this document made.
+
+1. **Rule:** the safe-integer range ±(2^53−1). Exactness is rejected.
+2. **Destination side:** nack under the DLQ policy, together with the arch-v1 ordered nack (via
+   `DestinationAckerNode`, never advancing `lastPosition`) and the arch-v2 validate-then-split. If
+   either cannot land in v0.21, use the halt fallback. Both options require Conduit to wrap the coded
+   refusal in `cerrors.FatalError` at its error-return sites. Release rule: `conduit-processor-sdk`
+   does not ship its commons bump without the guest per-index fix.
+3. **Versioning:** release `conduit-commons` as v0.9.0, and Conduit v0.21 takes #290 in the same bump.
+4. **Step 2:** open the ADR and a `conduit-connector-protocol` versioning issue now. Implementation
+   comes after v0.21.
 
 ## Related
 
