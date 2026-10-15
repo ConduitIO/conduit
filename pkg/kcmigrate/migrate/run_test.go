@@ -407,3 +407,31 @@ func TestRenderMarkdown_VersionFree(t *testing.T) {
 	is.Equal(RenderMarkdown(rep), a)
 	is.True(!strings.Contains(a, "v0.20.2"))
 }
+
+// A generated variable never takes a name that a ${env:...} reference in the
+// run already uses: the operator fills that variable with another value.
+func TestRun_GeneratedEnvAvoidsReferencedNames(t *testing.T) {
+	for _, order := range []string{"reference first", "literal first"} {
+		t.Run(order, func(t *testing.T) {
+			is := is.New(t)
+			lit := in("a.properties", "name=a\nconnector.class=com.example.ExampleSource\nexample.password=LIT\n")
+			ref := in("b.properties", "name=b\nconnector.class=com.example.ExampleSource\nexample.password=${env:KC_A_EXAMPLE_PASSWORD}\n")
+			inputs := []kcmigrate.Input{lit, ref}
+			if order == "reference first" {
+				inputs = []kcmigrate.Input{ref, lit}
+			}
+			res := runOne(t, Request{Inputs: inputs})
+			var a, b kcmigrate.ReportConnector
+			for _, c := range res.Report.Connectors {
+				switch c.Name {
+				case "a":
+					a = c
+				case "b":
+					b = c
+				}
+			}
+			is.Equal(entryFor(b, "example.password").Target.Env, "KC_A_EXAMPLE_PASSWORD")
+			is.True(entryFor(a, "example.password").Target.Env != "KC_A_EXAMPLE_PASSWORD")
+		})
+	}
+}

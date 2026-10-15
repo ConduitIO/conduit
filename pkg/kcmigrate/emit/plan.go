@@ -108,6 +108,24 @@ type EnvNames struct {
 // NewEnvNames returns an empty registry.
 func NewEnvNames() *EnvNames { return &EnvNames{owner: map[string]string{}} }
 
+// envReferenceOwner owns the names that ${env:NAME} references use.
+const envReferenceOwner = "\x00env"
+
+// Reserve marks name as used by a ${env:NAME} reference in the run, so no
+// generated variable takes it: the operator fills that variable for the
+// reference, with another value.
+func (n *EnvNames) Reserve(name string) { n.owner[name] = envReferenceOwner }
+
+// ReserveReferences reserves the variable of every value that is exactly a
+// ${env:NAME} reference.
+func (n *EnvNames) ReserveReferences(values []string) {
+	for _, v := range values {
+		if m := envReference.FindStringSubmatch(strings.TrimSpace(v)); m != nil {
+			n.Reserve(m[1])
+		}
+	}
+}
+
 // claim returns name, or name_2, name_3, ... if another owner has it.
 func (n *EnvNames) claim(name, owner string) string {
 	candidate := name
