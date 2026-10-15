@@ -116,6 +116,11 @@ jobs:
         if: steps.plan.outputs.proceed == 'true'
         with:
           ref: ${{ steps.plan.outputs.base }}
+          # create-pull-request sets up its own credentials. With checkout's
+          # persisted token as well, git sends two Authorization headers and
+          # GitHub rejects the push with HTTP 400 ("Duplicate header"), which
+          # failed the first live run (v0.20.1, run 38709572324).
+          persist-credentials: false
 
       - name: Script tests
         if: steps.plan.outputs.proceed == 'true'

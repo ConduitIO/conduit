@@ -1,0 +1,9 @@
+{
+          "connector.class"     : "io.confluent.connect.jdbc.JdbcSinkConnector",
+          "connection.url"      : "jdbc:mysql://mysql.internal.example:3306/demo",
+          "connection.user"     : "mysqluser",
+          "connection.password" : "PLACEHOLDER_SECRET_DB_PASSWORD",
+          "topics"              : "transactions",
+          "tasks.max"           : "4",
+          "auto.create"         : "true"
+        }

@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root/generate"
 	"github.com/conduitio/conduit/cmd/conduit/root/initialize"
 	"github.com/conduitio/conduit/cmd/conduit/root/mcp"
+	"github.com/conduitio/conduit/cmd/conduit/root/migrate"
 	"github.com/conduitio/conduit/cmd/conduit/root/open"
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/cmd/conduit/root/processorplugins"
@@ -102,6 +103,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&generate.Command{},
 		&initialize.InitCommand{Cfg: &runCmd.Cfg},
 		&mcp.MCPCommand{},
+		&migrate.MigrateCommand{},
 		&open.OpenCommand{},
 		&pipelines.PipelinesCommand{},
 		&processors.ProcessorsCommand{},

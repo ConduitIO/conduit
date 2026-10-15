@@ -14,7 +14,7 @@ you read and adapt. Only the Docker Compose quickstart is exercised in CI.
 
 ## Choices every example makes
 
-- **Image pinned by version**, `ghcr.io/conduitio/conduit:v0.20.0`, never `latest`.
+- **Image pinned by version**, `ghcr.io/conduitio/conduit:v0.20.2`, never `latest`.
   Release images are signed with cosign (keyless, GitHub OIDC). To verify before you
   deploy, see [`docs/releases.md`](../docs/releases.md); to pin harder, replace the
   tag with the `@sha256:` digest of the signed index.
