@@ -1,0 +1,39 @@
+schemaVersion: 1
+id: mm2-msk-sasl-scram
+family: kafka-mirror
+description: >-
+  AWS sample for migrating to MSK: SASL/SCRAM on both clusters, a custom
+  replication policy, a regex topic list, four tasks, client tuning keys and
+  the dedicated-mode key "clusters" set in connector form.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/aws-samples/mirrormaker2-msk-migration/blob/eb595196b48b7fcae15e674ed3e796e220e2214a/Configuration/connectors/sasl-scram/mm2-msc-sasl-auth.json
+  license: MIT-0
+  copyright: Amazon.com, Inc. or its affiliates
+  modifications:
+    - "bootstrap placeholders filled with b-1.source.internal.example and b-1.target.internal.example"
+    - "JAAS username placeholder set to example-user, password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/mm2-msc.json]}
+# "clusters" is a dedicated-mode (mm2.properties) key with no meaning in
+# connector form; no rule claims it.
+expectUnknown: [clusters]
+expect:
+  exitCode: 2
+  entries:
+    - {key: replication.policy.class, status: unsupported, blocking: true}
+    - {key: topics, status: unsupported, blocking: true}
+    - {key: tasks.max, status: approximated, blocking: false}
+    - {key: clusters, status: unsupported, blocking: true, code: kc.key_unknown}
+    - {key: source.cluster.sasl.jaas.config, status: translated, secret: true}
+    - {key: target.cluster.sasl.jaas.config, status: translated, secret: true}
+    - {key: source.cluster.security.protocol, status: translated}
+    - {key: source.cluster.sasl.mechanism, status: translated}
+covers:
+  - class: org.apache.kafka.connect.mirror.MirrorSourceConnector
+    keys: [replication.policy.class, topics, source.cluster.security.protocol, source.cluster.sasl.mechanism, source.cluster.sasl.jaas.config, refresh.topics.interval.seconds, sync.topic.acls.interval.seconds, sync.topic.configs.interval.seconds]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

@@ -1,0 +1,28 @@
+schemaVersion: 1
+id: standalone-properties-filestream
+family: common
+description: >-
+  Standalone .properties connector form (with the ASF license header as
+  comments) for FileStreamSource, a class outside the mapping table. Every
+  key must still be listed, and no pipeline is written.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/apache/kafka/blob/e2c58a0163c89d00cebc877fbdd81d4267be774f/config/connect-file-source.properties
+  license: Apache-2.0
+  copyright: The Apache Software Foundation
+  modifications:
+    - "none beyond the scrub check (the file has no hosts or secrets)"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connect-file-source.properties]}
+expect:
+  exitCode: 2
+  pipelines: 0
+  entries:
+    - {key: name, status: unsupported, blocking: true}
+    - {key: connector.class, status: unsupported, blocking: true, code: kc.connector_class_unsupported}
+    - {key: tasks.max, status: unsupported, blocking: true}
+    - {key: file, status: unsupported, blocking: true}
+    - {key: topic, status: unsupported, blocking: true}
+emits: []
+run: {tier: offline}
