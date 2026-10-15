@@ -50,13 +50,17 @@ of the certification check, which requires `tier: certified`.
 2. Copy the nearest case directory to `corpus/<family>/<new-id>/`. The
    directory name is the case id (`[a-z0-9-]+`).
 3. Put the upstream file in `input/` unchanged except for the scrub:
-   - hosts become `<name>.internal.example` (or `*.example`, `example.*`);
+   - hosts become `<name>.internal.example` (any name under the reserved
+     `.example` TLD, or `example.com`, `example.org`, `example.net` and their
+     subdomains; `example.prod.acme.com` is a real domain and is rejected);
      IP literals must be in a documentation range (192.0.2.0/24,
      198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32); `localhost` is rewritten
-     too;
-   - every secret value becomes a `PLACEHOLDER_SECRET_<WHAT>` canary or a
-     config-provider reference (`${file:...}`), including passwords embedded in
-     JDBC URLs and JAAS configs. The runner fails the case if a canary appears
+     too. This applies to the whole file, comments included: scrub-v1 also scans
+     the raw bytes, and only a few public documentation hosts (apache.org,
+     github.com, debezium.io, docs.confluent.io) are accepted there;
+   - every secret value becomes exactly a `PLACEHOLDER_SECRET_<WHAT>` canary
+     (`[A-Z0-9_]`) or exactly one config-provider reference (`${file:...}`),
+     including passwords embedded in JDBC URLs, URL userinfo and JAAS configs. The runner fails the case if a canary appears
      in any byte the command outputs;
    - bucket names, account ids and customer identifiers become `example-*`.
    For a body embedded in docs or a shell script (a `curl -d` payload), extract

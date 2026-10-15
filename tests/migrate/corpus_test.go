@@ -97,7 +97,8 @@ func TestCorpus_Inputs(t *testing.T) {
 	}
 }
 
-// TestCorpus_Scrub is scrub-v1 (rule 7) over every input file.
+// TestCorpus_Scrub is scrub-v1 (rule 7) over every input file: the
+// parsed-value check and the raw-bytes scan of the whole file.
 func TestCorpus_Scrub(t *testing.T) {
 	for _, c := range loadCorpus(t) {
 		files, err := harness.InputKeys(c.Dir, c.Inputs())
@@ -108,8 +109,22 @@ func TestCorpus_Scrub(t *testing.T) {
 		for _, f := range harness.Scrub(files) {
 			t.Errorf("%s: %s", c.Rel, f)
 		}
+		for _, in := range c.Inputs() {
+			b, err := os.ReadFile(filepath.Join(c.Dir, filepath.FromSlash(in)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range harness.ScrubRaw(in, b) {
+				t.Errorf("%s: %s", c.Rel, f)
+			}
+		}
 	}
 }
+
+// deniedRepoRe are repositories whose license is not on the allow-list,
+// whatever a case declares: the Confluent connector repositories are under
+// the Confluent Community License.
+var deniedRepoRe = regexp.MustCompile(`^confluentinc/kafka-connect-`)
 
 var githubRepoRe = regexp.MustCompile(`https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/blob/`)
 
@@ -139,6 +154,10 @@ func TestCorpus_Attribution(t *testing.T) {
 			t.Errorf("%s: provenance.ref names no GitHub blob URL", c.Rel)
 		}
 		for _, m := range repos {
+			if deniedRepoRe.MatchString(m[1]) {
+				t.Errorf("%s: %s is under the Confluent Community License and may not be used", c.Rel, m[1])
+				continue
+			}
 			lic, ok := rows[m[1]]
 			switch {
 			case !ok:

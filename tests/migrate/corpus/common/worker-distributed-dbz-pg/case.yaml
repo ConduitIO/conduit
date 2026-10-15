@@ -13,6 +13,7 @@ provenance:
   copyright: The Apache Software Foundation; Debezium Authors
   modifications:
     - "worker bootstrap.servers rewritten from localhost:9092 to kafka.internal.example:9092"
+    - "example listener hosts in a worker comment rewritten from myhost to myhost.internal.example"
     - "connector database.hostname rewritten to postgres.internal.example"
     - "connector database.password replaced with a PLACEHOLDER_SECRET_ canary"
 sanitized: {scrubbed: true, check: scrub-v1}

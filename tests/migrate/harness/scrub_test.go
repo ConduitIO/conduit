@@ -39,6 +39,13 @@ func TestScrub_Rejects(t *testing.T) {
 		"private ip":                 {"database.hostname", "10.0.0.12"},
 		"jdbc host":                  {"connection.url", "jdbc:mysql://mysql:3306/demo"},
 		"userinfo url":               {"store.url", "https://user@s3.acme.com"},
+		"example. prefix domain":     {"database.hostname", "example.prod.acme.com"},
+		"userinfo password":          {"connection.uri", "mongodb://admin:hunter2@mongo.internal.example:27017"},
+		"bare fqdn in non-host key":  {"topic.prefix", "db1.acme.io"},
+		"canary with suffix":         {"database.password", "PLACEHOLDER_SECRET_DB hunter2"},
+		"canary with prefix":         {"database.password", "xPLACEHOLDER_SECRET_DB"},
+		"reference plus literal":     {"database.password", "${env:DB_PASSWORD}hunter2"},
+		"lowercase canary":           {"database.password", "PLACEHOLDER_SECRET_db"},
 	}
 	for name, kv := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -66,6 +73,10 @@ func TestScrub_Accepts(t *testing.T) {
 		"path format":           {"path.format", "'year'=YYYY/'month'=MM/'day'=dd"},
 		"key converter":         {"key.converter", "io.confluent.connect.avro.AvroConverter"},
 		"secret-free key field": {"transforms.key.field", "id"},
+		"userinfo canary":       {"connection.uri", "mongodb://admin:PLACEHOLDER_SECRET_MONGO@mongo.internal.example:27017"},
+		"example.com subdomain": {"connection.url", "https://es.eu.example.org:9243"},
+		"java class name":       {"transforms.unwrap.type", "io.debezium.transforms.ExtractNewRecordState"},
+		"file reference path":   {"database.user", "${file:/secrets/mysql.properties:user}"},
 	}
 	for name, kv := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -84,5 +95,48 @@ func TestScrub_FindingDoesNotEchoSecret(t *testing.T) {
 	}
 	if strings.Contains(f[0].String(), "s3cr3t-value") {
 		t.Fatalf("finding echoes the secret: %s", f[0])
+	}
+}
+
+// TestScrubRaw_CatchesWhatParsingMisses covers the reviewer's misses of the
+// parsed-value check: text the parsers never return as a scalar value.
+func TestScrubRaw_CatchesWhatParsingMisses(t *testing.T) {
+	tests := map[string]struct{ name, in string }{
+		"properties comment host":   {"w.properties", "# primary is prod-db.acme.com:5432\na=1\n"},
+		"properties comment url":    {"w.properties", "# see http://wiki.corp.acme.com/kafka\n"},
+		"properties comment pw":     {"w.properties", "# old: password=hunter2\n"},
+		"nested json value":         {"c.json", `{"connector.class":"X","o":{"url":"http://db.acme.com"}}`},
+		"json array value":          {"c.json", `{"connector.class":"X","hosts":["kafka.acme.io:9092"]}`},
+		"rest export task trace":    {"r.json", `{"c":{"info":{"config":{"connector.class":"X"}},"status":{"tasks":[{"trace":"SQLException: jdbc:postgresql://prod.acme.com:5432/db"}]}}}`},
+		"rest export status worker": {"r.json", `{"c":{"info":{"config":{"connector.class":"X"}},"status":{"connector":{"worker_id":"10.1.2.3:8083"}}}}`},
+		"bare fqdn non-host key":    {"c.json", `{"connector.class":"X","note":"talk to kafka.prod.corp"}`},
+		"aws key id in comment":     {"w.properties", "# AKIAABCDEFGHIJKLMNOP\n"},
+		"pem block nested":          {"c.json", `{"connector.class":"X","o":{"ca":"-----BEGIN CERTIFICATE-----"}}`},
+		"userinfo in comment":       {"w.properties", "# was mongodb://admin:hunter2@mongo.internal.example\n"},
+		"example prefix in comment": {"w.properties", "# moved to example.prod.acme.com\n"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if f := ScrubRaw(tt.name, []byte(tt.in)); len(f) == 0 {
+				t.Fatalf("raw scan accepted %q", tt.in)
+			}
+		})
+	}
+}
+
+func TestScrubRaw_Accepts(t *testing.T) {
+	tests := map[string]string{
+		"asf license header": "# Licensed to the Apache Software Foundation (ASF).\n#    http://www.apache.org/licenses/LICENSE-2.0\n",
+		"jaas canary json":   `{"sasl.jaas.config":"ScramLoginModule required username=\"example-user\" password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\" ;"}`,
+		"topic names":        "# mm2-offsets.B.internal is the offsets topic\n",
+		"bind all":           "# Specify hostname as 0.0.0.0 to bind to all interfaces.\n",
+		"class and files":    `{"connector.class":"io.confluent.connect.s3.S3SinkConnector","x":"${file:/secrets/mysql.properties:password}"}`,
+	}
+	for name, in := range tests {
+		t.Run(name, func(t *testing.T) {
+			if f := ScrubRaw("x", []byte(in)); len(f) != 0 {
+				t.Fatalf("raw scan rejected: %v", f)
+			}
+		})
 	}
 }
