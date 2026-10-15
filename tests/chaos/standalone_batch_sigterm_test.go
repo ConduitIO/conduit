@@ -80,8 +80,9 @@ func buildStandaloneBinaries(t *testing.T) (conduitBin, pluginBin string) {
 			errStandaloneBuild = err
 			return
 		}
-		// not removed in t.Cleanup: shared by every test in the binary; the
-		// OS temp dir is the backstop
+		// Shared by every test in the binary (and every -count run), so it is
+		// removed after all tests finish, not in t.Cleanup. About 139MB.
+		afterTests = append(afterTests, func() { _ = os.RemoveAll(dir) })
 		build := func(out, pkg string) error {
 			cmd := exec.CommandContext(context.Background(), "go", "build", "-o", out, pkg)
 			cmd.Dir = root
