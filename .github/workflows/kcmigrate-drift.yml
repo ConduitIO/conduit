@@ -1,0 +1,134 @@
+name: kcmigrate upstream drift
+
+# Scheduled upstream key-drift check for `conduit migrate kafka-connect`
+# (lane-plan PR 20 of docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "Upstream drift"). The rule files in pkg/kcmigrate/rules/data were written
+# against committed key snapshots (pkg/kcmigrate/rules/upstream). This job
+# compares every snapshot that has a check section with the live upstream
+# docs, twice:
+#   * the docs of the snapshot's pinned version, which catches a snapshot
+#     transcribed wrong;
+#   * the docs of the newest version that publishes them, which catches
+#     drift: a key upstream added (a real config reports it as
+#     kc.key_unknown, blocking), removed, or whose default changed (an absent
+#     key now means something else).
+# Either fails the run and files (or comments on) one tracking issue. The
+# fix is a data PR: update the snapshot and the rules, or record why not.
+#
+# NOT A PULL-REQUEST CHECK, on purpose: it reads kafka.apache.org, and a
+# required check that fails when a third-party site is slow would block
+# unrelated merges. The parser and the comparison are tested offline in the
+# normal test job (pkg/kcmigrate/rules/drift, cmd/conduit/internal/kcdrift).
+# A pull request that edits this workflow, the tool or a snapshot runs it
+# too, so a change is exercised against the live docs before it merges. On a
+# pull request drift is a warning, not a failure (the drift is upstream's,
+# not the PR's, and the nightly files it); docs that cannot be read or parsed
+# still fail, since that is what the PR run is there to catch.
+#
+# This check existing is a precondition for unhiding `migrate` (decided
+# 2026-10-15): the snapshots are only as good as the job that keeps them
+# current.
+
+on:
+  schedule:
+    # Nightly, offset from chaos.yml (4:45), govulncheck.yml (5:15) and
+    # migrate-harness.yml (5:35).
+    - cron: '55 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/kcmigrate-drift.yml'
+      - 'cmd/conduit/internal/kcdrift/**'
+      - 'pkg/kcmigrate/rules/drift/**'
+      - 'pkg/kcmigrate/rules/upstream/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: upstream key drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      # Built first, so a compile error fails here and never reads as drift
+      # (go run exits 1 for both).
+      - name: Build kcdrift
+        run: go build -o "$RUNNER_TEMP/kcdrift" ./cmd/conduit/internal/kcdrift
+
+      - name: Compare snapshots with upstream docs
+        # Exit 1 is drift, 2 is docs that could not be read or parsed. Both
+        # fail, except drift on a pull request (see the header).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set +e
+          "$RUNNER_TEMP/kcdrift" > drift.md
+          rc=$?
+          set -e
+          cat drift.md
+          cat drift.md >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -eq 1 ] && [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "::warning::Upstream drift found (see the job summary). The nightly run files it; this pull request is not failed for it."
+            exit 0
+          fi
+          exit "$rc"
+
+      - name: Note a missing report
+        if: failure()
+        run: |
+          [ -s drift.md ] || echo "kcdrift printed no report; see the step log." > drift.md
+
+      # A scheduled failure has no PR to annotate, so it files (or comments on)
+      # an issue. Without this the only record is a red run nobody opens.
+      - name: File an issue on failure
+        if: failure() && github.event_name != 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const title = 'migrate kafka-connect: upstream key snapshots drifted';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let report = '';
+            try { report = fs.readFileSync('drift.md', 'utf8'); } catch (e) { report = '(no report; see the run log)'; }
+            const body = [
+              `The upstream-drift check failed: ${runUrl}`,
+              '',
+              report,
+              '',
+              'Fix with a data PR: update the snapshot in pkg/kcmigrate/rules/upstream and the rules in',
+              'pkg/kcmigrate/rules/data for every added key and changed default. A difference from the',
+              'pinned docs means the snapshot itself is wrong. Do not add an ignore entry just to make',
+              'this green; an ignore entry needs a reason a reviewer accepts.',
+            ].join('\n');
+            // Dedupe on title rather than a label so this does not depend on a
+            // label existing in the repo.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.find((i) => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }
