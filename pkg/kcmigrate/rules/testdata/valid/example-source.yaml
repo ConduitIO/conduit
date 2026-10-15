@@ -1,0 +1,67 @@
+# Test rules for an imaginary source class. Not production data.
+rulesVersion: 1
+scope: source
+class: com.example.ExampleSource
+upstream: {name: example, version: "1.0"}
+emits:
+  - {plugin: builtin:example, role: source}
+  - {plugin: builtin:kafka, role: destination}
+keys:
+  - key: connector.class
+    status: translated
+    emit: {kind: none}
+    diff: identity
+  - key: example.host
+    status: translated
+    emit: {kind: url, part: host}
+    diff: identity
+  - key: example.password
+    status: translated
+    emit: {kind: url, part: password}
+    diff: secret
+    secret: true
+  - key: example.mode
+    ignoreCase: true
+    diff: behavior
+    values:
+      - match: [fast]
+        status: translated
+        emit: {kind: setting, name: mode}
+      - match: [slow, legacy-slow]
+        status: approximated
+        code: kc.key_approximated
+        reason: Conduit has one mode; slow is close.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This mode has no Conduit equivalent.
+        fix: Use fast or slow.
+  - key: example.old.host
+    aliasOf: example.host
+    diff: identity
+  - key: example.old.mode
+    aliasOf: example.mode
+    diff: behavior
+  - key: {prefix: example.tuning.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Tuning keys have no equivalent.
+    fix: None needed.
+    diff: tuning
+  - key: {prefix: example.tuning.special.}
+    status: approximated
+    code: kc.key_approximated
+    reason: Special tuning maps to batch size.
+    diff: tuning
+  - key: {regex: '^example\.mask\.[0-9]+$'}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Masking is not supported.
+    fix: Mask in a processor.
+    diff: behavior
+  - key: name
+    status: translated
+    emit: {kind: none}
+    diff: identity
