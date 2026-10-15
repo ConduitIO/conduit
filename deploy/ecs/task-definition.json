@@ -10,7 +10,7 @@
   "containerDefinitions": [
     {
       "name": "conduit",
-      "image": "ghcr.io/conduitio/conduit:v0.20.0",
+      "image": "ghcr.io/conduitio/conduit:v0.20.1",
       "essential": true,
       "entryPoint": ["/bin/sh", "-c"],
       "command": [
