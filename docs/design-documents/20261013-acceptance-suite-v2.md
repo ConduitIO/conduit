@@ -74,8 +74,9 @@ the contract other connectors are held to.
 
 ### What v1 catches and what it lets through
 
-The implementation PR carries a reference connector and a mutant for every case except DST-02 (see below). The table shows the mutants that
-have a v1 counterpart; the v1 column is measured: the v1 suite was run against each of them.
+The implementation PR carries a reference connector and a mutant for every case except DST-02 (see below).
+The table shows the mutants that have a v1 counterpart; the v1 column is measured: the v1 suite was run against
+each of them.
 
 | Mutant (bug class) | Invariant | v1 | v2 case |
 | --- | --- | --- | --- |
