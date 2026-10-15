@@ -13,8 +13,9 @@
 // limitations under the License.
 
 // Package kcmigrate is the engine behind `conduit migrate kafka-connect`,
-// `conduit kc lint` and `conduit kc diff`. It describes the outcome of a
-// migration as a compatibility [Report].
+// `conduit kc lint` and `conduit kc diff`. It reads Kafka Connect worker and
+// connector configs into an intermediate representation (IR) and describes
+// the outcome of a migration as a compatibility [Report].
 //
 // The designs are docs/design-documents/20261012-migrate-kafka-connect.md
 // (the command surface) and 20261014-migrate-kafka-connect-mapping-and-harness.md
@@ -23,23 +24,36 @@
 //
 // # Core types
 //
+//   - [Input] is one named piece of content. The name is a label used in
+//     report origins; this package never opens it, so the CLI and the MCP
+//     tools share one code path (content in, content out).
+//   - [Connector] and [Worker] are the IR. A connector's config is an ordered
+//     list of [KV], one per occurrence of a key in the input, each with the
+//     [Origin] (file and line/column, or JSON pointer) it came from.
+//   - [Value] holds an input value. Its String, Format, GoString and JSON
+//     forms are redacted, so a value can only reach output through an
+//     explicit [Value.Reveal] call.
 //   - [Report] is the compatibility report, the `result` of the CLI's --json
 //     envelope and the content of report.json. Its JSON form is a public
 //     contract described by the schema embedded in package kcmigrate/schema.
-//   - [Entry] is the outcome for one input key occurrence, [Note] a
+//     [Entry] is the outcome for one input key occurrence, [Note] a
 //     connector-level difference with no input key.
-//   - [Origin] locates a key in the input: file and line/column, or a JSON
-//     pointer. It never carries a value.
 //
 // # Invariants
 //
-//   - Completeness: a report has one entry per input key occurrence, so the
-//     multiset of input keys equals the multiset of entry keys. Notes are
-//     outside that multiset.
+//   - Completeness: parsers never drop a key. Every occurrence of every key
+//     in a connector config becomes one [KV], duplicates included, in input
+//     order, and a report has one entry per KV, so the multiset of input keys
+//     equals the multiset of entry keys. A parser that cannot represent an
+//     input fails with a coded error instead of skipping part of it. Notes
+//     are outside that multiset.
+//   - No secrets in output: values are redacted by default (see [Value]);
+//     parse errors name locations and keys, never values.
 //   - Every approximated or unsupported entry has a code and a reason; every
 //     unsupported or blocking entry, and every blocking note, has a fix.
 //     [Report.Validate] enforces this for producers.
-//   - Determinism: [MarshalReport] depends only on the report's content.
+//   - Determinism: parsing and [MarshalReport] depend only on the input bytes
+//     and names; no map iteration order, clock or host reaches output.
 //
 // # What counts as an input key (pinned for the migration harness, #3071)
 //
