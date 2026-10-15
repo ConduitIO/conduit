@@ -28,7 +28,7 @@ import (
 
 // These tests pin how Kafka Connect builds a connector's Kafka clients
 // (Worker.baseProducerConfigs and baseConsumerConfigs, Apache Kafka 4.2.0,
-// connect/runtime/.../Worker.java:837-935): the worker's bootstrap.servers,
+// connect/runtime/.../Worker.java:837-874 and 911-942): the worker's bootstrap.servers,
 // then the worker's producer.- or consumer.-prefixed keys, then the
 // connector's producer.override. or consumer.override. keys, later ones
 // winning. The worker's own top-level security.protocol, sasl.* and ssl.*

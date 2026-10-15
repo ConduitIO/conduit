@@ -178,9 +178,9 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 // in input order. Names and pipeline files must be unique across the run.
 func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, workerDs []rules.Decision) ([]connectorRun, error) {
 	var runs []connectorRun
-	envs := emit.NewEnvNames()
 	names := map[string]string{} // connector name -> file it came from
 	files := map[string]string{} // pipeline file -> connector name
+	var all []kcmigrate.Connector
 	for _, in := range req.Inputs {
 		if err := ctx.Err(); err != nil {
 			return nil, cerrors.Errorf("migration canceled: %w", err)
@@ -189,27 +189,41 @@ func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, worke
 		if err != nil {
 			return nil, err
 		}
-		for _, c := range cs {
-			if err := checkName(c, names); err != nil {
-				return nil, err
-			}
-			run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
-			if err == nil && run.plan != nil {
-				run.rc.Notes = append(run.rc.Notes, engine.DefaultNotes(c, keysOf(workerDs))...)
-			}
-			if err != nil {
-				return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrating "+c.Name+": "+err.Error(), err)
-			}
-			if run.plan != nil {
-				if other, ok := files[run.plan.File]; ok {
-					ce := conduiterr.New(CodeConnectorNameInvalid, fmt.Sprintf("connectors %q and %q would both be written to %s", other, c.Name, run.plan.File))
-					ce.Suggestion = "rename one of the connectors; names that differ only in characters outside A-Z, a-z, 0-9, '.', '_' and '-' collide"
-					return nil, ce
-				}
-				files[run.plan.File] = c.Name
-			}
-			runs = append(runs, run)
+		all = append(all, cs...)
+	}
+	// Reserve every ${env:NAME} of the run before any variable is generated,
+	// whatever the input order.
+	envs := emit.NewEnvNames()
+	var values []string
+	for _, c := range all {
+		for _, kv := range c.Config {
+			values = append(values, kv.Value.Reveal()) // scanned for references only
 		}
+	}
+	for _, d := range workerDs {
+		values = append(values, d.KV.Value.Reveal())
+	}
+	envs.ReserveReferences(values)
+	for _, c := range all {
+		if err := checkName(c, names); err != nil {
+			return nil, err
+		}
+		run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
+		if err == nil && run.plan != nil {
+			run.rc.Notes = append(run.rc.Notes, engine.DefaultNotes(c, keysOf(workerDs))...)
+		}
+		if err != nil {
+			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrating "+c.Name+": "+err.Error(), err)
+		}
+		if run.plan != nil {
+			if other, ok := files[run.plan.File]; ok {
+				ce := conduiterr.New(CodeConnectorNameInvalid, fmt.Sprintf("connectors %q and %q would both be written to %s", other, c.Name, run.plan.File))
+				ce.Suggestion = "rename one of the connectors; names that differ only in characters outside A-Z, a-z, 0-9, '.', '_' and '-' collide"
+				return nil, ce
+			}
+			files[run.plan.File] = c.Name
+		}
+		runs = append(runs, run)
 	}
 	return runs, nil
 }
