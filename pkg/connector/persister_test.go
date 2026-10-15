@@ -233,13 +233,14 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 		t.Fatal("expected Wait to return once all connectors stopped and the final flush completed")
 	}
 
-	// connWg.Wait() (inside Wait) cannot unblock until all three
-	// ConnectorStopped calls have run, so the goroutine above must already
-	// be done - deterministically, not by timing.
+	// Wait unblocks once the third ConnectorStopped has released its
+	// connector, which can be before that call (and the goroutine's deferred
+	// close) has returned. So the goroutine finishing is waited for, bounded;
+	// it is not guaranteed to have finished already.
 	select {
 	case <-stoppedAll:
-	default:
-		t.Fatal("Wait returned before the connector-stop goroutine finished")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connector-stop goroutine did not finish")
 	}
 
 	// Wait also blocks on flushWg, so the flush triggered by the last
