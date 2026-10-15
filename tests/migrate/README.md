@@ -106,9 +106,11 @@ harness's own parsers, not by `pkg/kcmigrate`:
 - `.properties`: every logical line that is not blank or a comment, with
   `java.util.Properties` rules (continuations, `=`/`:`/whitespace separators,
   escapes). Duplicate keys count twice.
-- `.json`, REST wrapper `{"name": ..., "config": {...}}`: every `config` member
-  and every other top-level member (`name`). Bare map: every member. REST export
-  (`GET /connectors?expand=info`): the members of each `info.config`. Duplicate
-  members count twice; non-string values count like strings.
+- `.json`, REST wrapper `{"name": ..., "config": {...}}`: every `config` member.
+  The wrapper members (`name`, `type`, `tasks`, `initial_state`) are not config
+  keys and get no entry, as the report contract pins (#3069). Bare map: every
+  member. REST export (`GET /connectors?expand=info`): the members of each
+  `info.config` only. Duplicate members count twice; non-string values count
+  like strings.
 - A JSON document with no connector in it is "unrecognized" and its case must
   set `expect.error`.

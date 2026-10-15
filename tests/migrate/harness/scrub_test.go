@@ -46,6 +46,12 @@ func TestScrub_Rejects(t *testing.T) {
 		"canary with prefix":         {"database.password", "xPLACEHOLDER_SECRET_DB"},
 		"reference plus literal":     {"database.password", "${env:DB_PASSWORD}hunter2"},
 		"lowercase canary":           {"database.password", "PLACEHOLDER_SECRET_db"},
+		"numeric secret":             {"sasl.password", "12345678"},
+		"cctld host":                 {"topic.prefix", "prod-db.acme.ca"},
+		"xyz host":                   {"connection.url", "kafka.acme.xyz:9092"},
+		"info host":                  {"note", "db.acme.info"},
+		"uppercase host":             {"database.hostname", "PROD-DB.ACME.COM"},
+		"url query token":            {"connection.url", "https://es.internal.example:9200/?token=abc123"},
 	}
 	for name, kv := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -114,6 +120,18 @@ func TestScrubRaw_CatchesWhatParsingMisses(t *testing.T) {
 		"pem block nested":          {"c.json", `{"connector.class":"X","o":{"ca":"-----BEGIN CERTIFICATE-----"}}`},
 		"userinfo in comment":       {"w.properties", "# was mongodb://admin:hunter2@mongo.internal.example\n"},
 		"example prefix in comment": {"w.properties", "# moved to example.prod.acme.com\n"},
+		"nested secret member":      {"c.json", `{"connector.class":"X","extra":{"database.password":"hunter2"}}`},
+		"numeric secret member":     {"c.json", `{"connector.class":"X","sasl.password": 12345678}`},
+		"nested numeric secret":     {"c.json", `{"connector.class":"X","o":{"api.token":42}}`},
+		"secret in array object":    {"c.json", `{"connector.class":"X","a":[{"connection.password":"pw"}]}`},
+		"comment colon password":    {"w.properties", "# password: hunter2\n"},
+		"comment key=value secret":  {"w.properties", "# old ssl.key.password=changeit\n"},
+		"uppercase host comment":    {"w.properties", "# primary PROD-DB.ACME.COM\n"},
+		"uppercase host nested":     {"c.json", `{"connector.class":"X","o":{"h":"PROD-DB.ACME.COM"}}`},
+		"uppercase host trace":      {"r.json", `{"c":{"info":{"config":{"connector.class":"X"}},"status":{"tasks":[{"trace":"connect to PROD-DB.ACME.COM failed"}]}}}`},
+		"cctld host comment":        {"w.properties", "# replica prod-db.acme.ca\n"},
+		"xyz host raw":              {"c.json", `{"connector.class":"X","o":{"h":"kafka.acme.xyz"}}`},
+		"url query token raw":       {"w.properties", "# GET https://api.internal.example/v1?token=abc123\n"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -126,11 +144,16 @@ func TestScrubRaw_CatchesWhatParsingMisses(t *testing.T) {
 
 func TestScrubRaw_Accepts(t *testing.T) {
 	tests := map[string]string{
-		"asf license header": "# Licensed to the Apache Software Foundation (ASF).\n#    http://www.apache.org/licenses/LICENSE-2.0\n",
-		"jaas canary json":   `{"sasl.jaas.config":"ScramLoginModule required username=\"example-user\" password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\" ;"}`,
-		"topic names":        "# mm2-offsets.B.internal is the offsets topic\n",
-		"bind all":           "# Specify hostname as 0.0.0.0 to bind to all interfaces.\n",
-		"class and files":    `{"connector.class":"io.confluent.connect.s3.S3SinkConnector","x":"${file:/secrets/mysql.properties:password}"}`,
+		"asf license header":  "# Licensed to the Apache Software Foundation (ASF).\n#    http://www.apache.org/licenses/LICENSE-2.0\n",
+		"jaas canary json":    `{"sasl.jaas.config":"ScramLoginModule required username=\"example-user\" password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\" ;"}`,
+		"topic names":         "# mm2-offsets.B.internal is the offsets topic\n",
+		"bind all":            "# Specify hostname as 0.0.0.0 to bind to all interfaces.\n",
+		"class and files":     `{"connector.class":"io.confluent.connect.s3.S3SinkConnector","x":"${file:/secrets/mysql.properties:password}"}`,
+		"mm2 internal topics": "# mm2-offsets.B.internal, B.checkpoints.internal, MM2-CONFIGS.B.INTERNAL\n",
+		"config key names":    `{"database.server.id": "184054", "partition.duration.ms": 1800000, "plugin.name": "pgoutput"}`,
+		"properties keys":     "group.id=connect-cluster\noffset.flush.interval.ms=10000\n",
+		"placeholder members": `{"o":{"database.password":"PLACEHOLDER_SECRET_DB_PASSWORD","sasl.password":"${env:SASL}"}}`,
+		"canary query token":  "# https://api.internal.example/v1?token=PLACEHOLDER_SECRET_API_TOKEN\n",
 	}
 	for name, in := range tests {
 		t.Run(name, func(t *testing.T) {

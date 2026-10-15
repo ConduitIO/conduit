@@ -88,11 +88,11 @@ func TestParseInput_JSONShapes(t *testing.T) {
 		keys     []string
 		pointers []string
 	}{{
-		name:     "wrapper counts name and keeps duplicates in order",
-		in:       `{"name":"n","config":{"connector.class":"X","a":1,"a":true,"b":null,"o":{"x":1}}}`,
+		name:     "wrapper counts config members only and keeps duplicates in order",
+		in:       `{"name":"n","type":"source","config":{"connector.class":"X","a":1,"a":true,"b":null,"o":{"x":1}}}`,
 		shape:    ShapeWrapper,
-		keys:     []string{"name", "connector.class", "a", "a", "b", "o"},
-		pointers: []string{"/name", "/config/connector.class", "/config/a", "/config/a", "/config/b", "/config/o"},
+		keys:     []string{"connector.class", "a", "a", "b", "o"},
+		pointers: []string{"/config/connector.class", "/config/a", "/config/a", "/config/b", "/config/o"},
 	}, {
 		name:     "bare map with escaped pointer",
 		in:       `{"connector.class":"X","a/b~c":"v"}`,

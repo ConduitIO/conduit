@@ -18,7 +18,7 @@ upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
   exitCode: 2
-  notes: [kc.output_shape_differs]
+  notes: [kc.output_shape_differs, kc.converter_unknown]
   entries:
     - {key: transforms, status: translated}
     - {key: transforms.route.type, status: translated}

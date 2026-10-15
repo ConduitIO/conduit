@@ -18,7 +18,7 @@ expect:
   exitCode: 2
   # write.method absent (insert replaces, Conduit merges), schema.ignore
   # absent, and the destination's version setting that has no KC counterpart.
-  notes: [kc.default_differs, kc.setting_required]
+  notes: [kc.default_differs, kc.setting_required, kc.converter_unknown]
   entries:
     - {key: transforms.key.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
     - {key: behavior.on.null.values, status: approximated, blocking: true}

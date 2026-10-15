@@ -19,7 +19,7 @@ expect:
   # schema.include.list without a literal table list is U! (mapping table).
   exitCode: 2
   # plugin.name absent means decoderbufs: non-blocking default note.
-  notes: [kc.default_differs]
+  notes: [kc.default_differs, kc.converter_unknown]
   entries:
     - {key: schema.include.list, status: unsupported, blocking: true}
     - {key: database.password, status: translated, secret: true}

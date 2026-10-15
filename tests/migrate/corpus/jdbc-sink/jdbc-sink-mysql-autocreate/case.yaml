@@ -19,7 +19,7 @@ command: {args: [migrate, kafka-connect, input/sink-jdbc-mysql-00.json]}
 expect:
   exitCode: 2
   # delete.enabled absent: Kafka Connect ignored deletes, Conduit applies them.
-  notes: [kc.default_differs]
+  notes: [kc.default_differs, kc.converter_unknown]
   entries:
     - {key: auto.create, status: unsupported, blocking: true}
     - {key: tasks.max, status: approximated, blocking: false}

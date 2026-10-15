@@ -17,6 +17,7 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/sink-s3-train-movements-v00.json]}
 expect:
+  notes: [kc.converter_unknown]
   exitCode: 2
   entries:
     - {key: partitioner.class, status: unsupported, blocking: true}

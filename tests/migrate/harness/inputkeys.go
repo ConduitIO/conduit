@@ -350,10 +350,12 @@ func (n *jsonNode) member(key string) *jsonNode {
 
 // jsonKeys classifies the document and returns its key occurrences.
 //
-// Wrapper form: every top-level member other than "config" is counted as a
-// key too (in practice "name"). It names the pipeline, so it is input the
-// report must account for; counting it is the fail-closed choice, and the
-// report contract can relax it explicitly if the CLI lane decides otherwise.
+// Only connector config keys count, as the report contract pins (#3069): the
+// members of "config" in the wrapper form, every member of a bare map, and
+// the members of each info.config in a REST export. Wrapper members (name,
+// type, tasks, initial_state; info.name, status, ...) are not config keys
+// and get no report entry; they set connectors[].name and the pipeline
+// status.
 func jsonKeys(root *jsonNode) (string, []KeyOccurrence) {
 	if root.kind != 'o' {
 		return ShapeUnrecognized, nil
@@ -363,9 +365,7 @@ func jsonKeys(root *jsonNode) (string, []KeyOccurrence) {
 		for _, m := range root.members {
 			if m.key == "config" && m.value.kind == 'o' {
 				keys = append(keys, objectKeys(m.value, "/config", "")...)
-				continue
 			}
-			keys = append(keys, occurrence(m, "", ""))
 		}
 		return ShapeWrapper, keys
 	}

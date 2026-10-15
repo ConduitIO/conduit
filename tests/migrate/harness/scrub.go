@@ -47,21 +47,38 @@ var (
 	urlRe      = regexp.MustCompile(`(?i)[a-z][a-z0-9+.:-]*://([^/?#\s,;"'<>\\]*)`)
 	hostPortRe = regexp.MustCompile(`^\[?([A-Za-z0-9_.:-]+?)\]?:(\d{1,5})$`)
 	hostKeyRe  = regexp.MustCompile(`(?i)(hostname|\.host|(^|\.)servers|\.url|\.uris)$`)
-	// fqdnRe is a bare dotted name whose last label is a TLD from fqdnTLDs.
-	// Java class names (org.apache.kafka...) end in a class, not a TLD.
-	fqdnRe       = regexp.MustCompile(`(?i)^[a-z0-9-]+(\.[a-z0-9-]+)+$`)
-	ipv4Re       = regexp.MustCompile(`^\d{1,3}(\.\d{1,3}){3}$`)
-	awsKeyIDRe   = regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`)
-	tokenSplitRe = regexp.MustCompile(`[,\s;'"]+`)
-	rawSplitRe   = regexp.MustCompile(`[\s,;'"=()\[\]{}<>\\|]+`)
+	// fqdnRe is a bare dotted name; isBareHost decides whether its last
+	// label is a TLD. Java class names (org.apache.kafka...) end in a class.
+	fqdnRe = regexp.MustCompile(`(?i)^[a-z0-9-]+(\.[a-z0-9-]+)+$`)
+	// jsonMemberRe finds a quoted JSON member key and its scalar value at any
+	// depth of a raw file: a string (escapes kept) or a number/bool literal.
+	jsonMemberRe = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|(-?[0-9][0-9.eE+-]*|true|false))`)
+	jsonKeyRe    = regexp.MustCompile(`"(?:[^"\\]|\\.)*"\s*:`)
+	propKeyRe    = regexp.MustCompile(`^\s*[A-Za-z0-9_.>-]+\s*[=:]`)
+	// keyValueRe finds key=value and key: value in free text (comments).
+	keyValueRe = regexp.MustCompile(`([A-Za-z0-9_.-]+)\s*[=:]\s*([^\s,;"']+)`)
+	// queryTokenRe finds credential-like URL query parameters.
+	queryTokenRe = regexp.MustCompile(`(?i)[?&](token|access_token|auth_token|api_key|apikey|key|secret|sig|signature|password|pwd)=([^&\s"'#]*)`)
+	// kafkaInternalTopicRe are MirrorMaker internal topic names, which look
+	// like hosts under .internal and appear in upstream comments.
+	kafkaInternalTopicRe = regexp.MustCompile(`(?i)^(mm2-(offsets|configs|status|offset-syncs)\.[a-z0-9_-]+|[a-z0-9_-]+\.checkpoints|[a-z0-9_-]+\.heartbeats|heartbeats)\.internal$`)
+	ipv4Re               = regexp.MustCompile(`^\d{1,3}(\.\d{1,3}){3}$`)
+	awsKeyIDRe           = regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`)
+	tokenSplitRe         = regexp.MustCompile(`[,\s;'"]+`)
+	rawSplitRe           = regexp.MustCompile(`[\s,;'"=()\[\]{}<>\\|]+`)
 )
 
-// fqdnTLDs are the TLDs a bare name is treated as a host for. Not every TLD:
-// a list wide enough for real infrastructure names, narrow enough that file
-// names (mysql.properties, report.json) are not hosts.
+// fqdnTLDs are the generic TLDs a bare name is treated as a host for. Every
+// two-letter alphabetic last label also counts (country codes). A closed
+// list on purpose: inverting it would make every dotted value a host
+// (inventory.orders, schema-changes.inventory are table and topic names).
+// File names (mysql.properties, report.json) and Java packages end in labels
+// that are on neither list.
 var fqdnTLDs = []string{
-	"com", "net", "org", "io", "dev", "cloud", "co", "ai", "app", "us", "eu", "uk", "de", "fr", "in", "jp",
-	"internal", "local", "lan", "corp", "intra", "svc", "cluster", "amazonaws", "example",
+	"com", "net", "org", "edu", "gov", "mil", "int", "info", "biz", "xyz", "io", "dev", "cloud", "app", "ai",
+	"online", "site", "tech", "store", "shop", "host", "cc", "tv", "me", "pro", "systems", "network",
+	"services", "solutions", "digital", "group", "global", "company", "zone", "space", "link", "page", "run",
+	"internal", "local", "lan", "corp", "intra", "home", "svc", "cluster", "amazonaws", "example",
 }
 
 // publicDocHosts may appear in upstream license headers and comments of a
@@ -117,7 +134,9 @@ func Scrub(files []InputFile) []ScrubFinding {
 // ScrubRaw scans the whole file as text, line by line, independent of any
 // parser: comments, nested and non-string JSON values, REST-export status
 // and task traces all get the same host, URL, password, key-id and PEM
-// checks. It is what catches what the parsed-value check never sees.
+// checks, and every secret-named key, as a quoted JSON member at any depth
+// or as key=value / key: value in free text, must hold a placeholder. It is
+// what catches what the parsed-value check never sees.
 func ScrubRaw(name string, b []byte) []ScrubFinding {
 	var out []ScrubFinding
 	for i, line := range splitNaturalLines(string(b)) {
@@ -148,27 +167,65 @@ func scrubValue(key, value string) []string {
 
 func scrubText(line string) []string {
 	problems := secretsInText(line)
+	problems = append(problems, secretKeysInText(line)...)
 	var hosts []string
 	for _, m := range urlRe.FindAllStringSubmatch(line, -1) {
 		if h := authorityHost(m[1]); h != "" {
 			hosts = append(hosts, h)
 		}
 	}
-	for _, tok := range rawSplitRe.Split(urlRe.ReplaceAllString(line, " "), -1) {
+	// Config keys are names, not hosts (database.server.id, flush.interval.ms):
+	// drop quoted JSON member keys and a leading properties key first.
+	text := jsonKeyRe.ReplaceAllString(urlRe.ReplaceAllString(line, " "), " ")
+	text = propKeyRe.ReplaceAllString(text, " ")
+	for _, tok := range rawSplitRe.Split(text, -1) {
 		tok = strings.Trim(tok, ".:/")
 		switch {
 		case tok == "" || strings.HasPrefix(tok, "$"):
 		case hostPortRe.MatchString(tok):
 			hosts = append(hosts, hostPortRe.FindStringSubmatch(tok)[1])
-		case isBareHost(tok) && tok == strings.ToLower(tok):
-			// Lowercase only in free text: upstream comments name topics
-			// like mm2-offsets.B.internal, which are not hosts.
+		case isBareHost(tok):
 			hosts = append(hosts, tok)
 		}
 	}
 	for _, h := range hosts {
 		if !allowedHost(h) && !slices.Contains(publicDocHosts, strings.ToLower(h)) && h != "0.0.0.0" {
 			problems = append(problems, fmt.Sprintf("host %q is outside *.example, example.com/.org/.net and the documentation IP ranges", h))
+		}
+	}
+	return problems
+}
+
+// secretKeysInText applies the secret-key rule to text: quoted JSON members
+// at any depth, string or number, and key=value / key: value pairs.
+func secretKeysInText(line string) []string {
+	var problems []string
+	jsonKeys := map[int]bool{}
+	for _, m := range jsonMemberRe.FindAllStringSubmatchIndex(line, -1) {
+		key := line[m[2]:m[3]]
+		jsonKeys[m[0]] = true
+		if !secretKeyRe.MatchString(key) {
+			continue
+		}
+		if m[6] >= 0 { // a number or boolean under a secret key is a plaintext secret
+			problems = append(problems, fmt.Sprintf("secret-named JSON member %q has a literal value", key))
+			continue
+		}
+		v := line[m[4]:m[5]]
+		if !isPlaceholderSecret(v) && !embeddedPasswordRe.MatchString(v) {
+			problems = append(problems, fmt.Sprintf("secret-named JSON member %q is not a placeholder", key))
+		}
+	}
+	if len(jsonKeys) > 0 {
+		return problems // a JSON line; its members were checked above
+	}
+	for _, m := range keyValueRe.FindAllStringSubmatch(line, -1) {
+		key, v := m[1], strings.TrimRight(m[2], ".")
+		if !secretKeyRe.MatchString(key) || embeddedPasswordRe.MatchString(line) && !strings.EqualFold(key, "password") {
+			continue
+		}
+		if !isPlaceholderSecret(v) {
+			problems = append(problems, fmt.Sprintf("secret-named key %q has a value that is not a placeholder", key))
 		}
 	}
 	return problems
@@ -189,6 +246,11 @@ func secretsInText(s string) []string {
 			if j := strings.Index(userinfo, ":"); j >= 0 && !isPlaceholderSecret(userinfo[j+1:]) {
 				problems = append(problems, "URL userinfo carries a password that is not a placeholder")
 			}
+		}
+	}
+	for _, m := range queryTokenRe.FindAllStringSubmatch(s, -1) {
+		if !isPlaceholderSecret(m[2]) {
+			problems = append(problems, fmt.Sprintf("URL query parameter %s carries a value that is not a placeholder", m[1]))
 		}
 	}
 	if awsKeyIDRe.MatchString(s) {
@@ -238,6 +300,9 @@ func isBareHost(tok string) bool {
 		return false
 	}
 	tld := strings.ToLower(tok[strings.LastIndex(tok, ".")+1:])
+	if len(tld) == 2 && strings.Trim(tld, "abcdefghijklmnopqrstuvwxyz") == "" {
+		return true
+	}
 	return slices.Contains(fqdnTLDs, tld)
 }
 
@@ -262,6 +327,9 @@ func authorityHost(auth string) string {
 // ranges. Nothing else: example.prod.acme.com is a real domain.
 func allowedHost(h string) bool {
 	h = strings.ToLower(strings.TrimSuffix(h, "."))
+	if kafkaInternalTopicRe.MatchString(h) {
+		return true // a MirrorMaker internal topic name, not a host
+	}
 	if addr, err := netip.ParseAddr(h); err == nil {
 		for _, p := range docPrefixes {
 			if p.Contains(addr) {

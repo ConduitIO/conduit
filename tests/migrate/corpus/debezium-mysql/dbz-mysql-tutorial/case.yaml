@@ -20,7 +20,7 @@ expect:
   exitCode: 2
   # output shape (no Debezium envelope for MySQL in v0.21) and the absent
   # database.ssl.mode (preferred), which would be a TLS downgrade.
-  notes: [kc.output_shape_differs, kc.default_differs]
+  notes: [kc.output_shape_differs, kc.default_differs, kc.converter_unknown]
   entries:
     - {key: database.include.list, status: translated}
     - {key: database.server.id, status: unsupported, blocking: false}

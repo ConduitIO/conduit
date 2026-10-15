@@ -16,6 +16,7 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {kafka-connect-jdbc: "10.9.9", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
+  notes: [kc.converter_unknown]
   exitCode: 2
   entries:
     # JDBC parameters outside host, port, database and sslmode/ssl are U!.

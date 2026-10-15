@@ -16,9 +16,10 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
-  # Exit code not asserted: with no converter and no worker file the
-  # converter outcome (kc.converter_unknown) has no fixed blocking status in
-  # the design yet. Assert it once the CLI lane fixes it.
+  notes: [kc.converter_unknown]
+  # No converter and no worker file: kc.converter_unknown is a blocking
+  # note (report contract, #3069), one per missing converter.
+  exitCode: 2
   entries:
     - {key: plugin.name, status: translated}
     - {key: slot.name, status: approximated, blocking: false}

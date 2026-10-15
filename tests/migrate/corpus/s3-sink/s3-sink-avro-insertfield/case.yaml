@@ -17,7 +17,7 @@ upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/sink-s3-voluble.json]}
 expect:
   exitCode: 2
-  notes: [kc.output_shape_differs, kc.delivery_semantics_differ, kc.setting_required]
+  notes: [kc.output_shape_differs, kc.delivery_semantics_differ, kc.setting_required, kc.converter_unknown]
   entries:
     - {key: format.class, status: unsupported, blocking: true}
     - {key: transforms.AddMetadata.type, status: unsupported, blocking: true, code: kc.smt_unsupported}

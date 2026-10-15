@@ -17,7 +17,7 @@ upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/sink-s3-00.json]}
 expect:
   exitCode: 2
-  notes: [kc.output_shape_differs]
+  notes: [kc.output_shape_differs, kc.converter_unknown]
   entries:
     - {key: format.class, status: approximated, blocking: true}
     - {key: tasks.max, status: approximated, blocking: false}

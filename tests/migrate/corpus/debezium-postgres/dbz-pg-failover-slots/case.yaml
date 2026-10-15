@@ -16,6 +16,7 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/inventory-source.json]}
 expect:
+  notes: [kc.converter_unknown]
   exitCode: 2
   entries:
     - {key: slot.failover, status: unsupported, blocking: true}
