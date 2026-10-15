@@ -37,11 +37,39 @@ const (
 	// FinishDefault writes a setting no key set, for an upstream default
 	// that Conduit's default differs from. Arguments: side, name, value.
 	FinishDefault = "default-setting"
+	// FinishMM2Offsets names the finisher of MirrorMaker's
+	// kc.offsets_not_migrated note, which says where the pipeline starts.
+	FinishMM2Offsets = "mm2-offsets"
 )
 
 var finishers = map[string]Finisher{
-	FinishMM2Topic: mm2Topic,
-	FinishDefault:  defaultSetting,
+	FinishMM2Topic:   mm2Topic,
+	FinishDefault:    defaultSetting,
+	FinishMM2Offsets: mm2Offsets,
+}
+
+// mm2Offsets returns the blocking kc.offsets_not_migrated note. MirrorMaker
+// resumes every partition from the offsets Kafka Connect stored, which
+// migrate does not carry over, so the note states the start position the
+// pipeline was actually written with. Run it after every finisher that may
+// write readFromBeginning.
+func mm2Offsets(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
+	const head = "MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning unless auto.offset.reset says otherwise. migrate does not carry the stored offsets over. "
+	var start string
+	src := p.connector(SideSource)
+	switch v, ok := src.Settings["readFromBeginning"]; {
+	case ok && v == "true":
+		start = "The pipeline reads every partition from the beginning (readFromBeginning: true), so the records MirrorMaker already copied are copied again."
+	case ok && v == "false":
+		start = "The pipeline starts every partition at the end (readFromBeginning: false, from auto.offset.reset=latest), so the records written before it starts are skipped."
+	default:
+		start = "readFromBeginning is not written (a blocked auto.offset.reset owns it), so the Kafka source's default applies: it starts every partition at the end, and the records written before it starts are skipped."
+	}
+	return []kcmigrate.Note{{
+		Code: kcmigrate.CodeOffsetsNotMigrated.Reason(), Blocking: true, Rule: FinishMM2Offsets,
+		Reason: head + start,
+		Fix:    "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
+	}}, nil
 }
 
 // defaultSetting writes value to setting name of side unless a key or the

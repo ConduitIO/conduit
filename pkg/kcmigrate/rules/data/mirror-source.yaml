@@ -29,11 +29,9 @@ finish:
   # (sourceConsumerConfig puts auto.offset.reset=earliest if absent,
   # MirrorConnectorConfig.java:184); the Kafka source starts at the end.
   - {kind: default-setting, side: source, name: readFromBeginning, value: "true"}
+  # Says where the pipeline starts; after default-setting.
+  - {kind: mm2-offsets}
 notes:
-  - code: kc.offsets_not_migrated
-    blocking: true
-    reason: MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning (auto.offset.reset=earliest unless consumer.auto.offset.reset says otherwise). migrate does not carry the stored offsets over, so the pipeline starts every partition as if none were stored. With readFromBeginning true (the default written here) the records MirrorMaker already copied are copied again; with auto.offset.reset=latest the records written before the pipeline starts are skipped.
-    fix: Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied records (or the skipped ones, with latest) with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.
   - code: kc.output_shape_differs
     blocking: true
     reason: Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.

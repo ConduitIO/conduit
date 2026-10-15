@@ -122,7 +122,7 @@ func TestMirror_DisabledSyncsAreClean(t *testing.T) {
 			blocking = append(blocking, n.Code)
 		}
 	}
-	is.Equal(blocking, []string{"kc.offsets_not_migrated", "kc.output_shape_differs"})
+	is.Equal(blocking, []string{"kc.output_shape_differs", "kc.offsets_not_migrated"})
 }
 
 // The worker configures Kafka Connect's producer only: none of its keys
@@ -230,4 +230,38 @@ func TestMirror_NITs(t *testing.T) {
 	// A custom config property filter matters only while configs sync.
 	res = mmRun(t, "", "sync.topic.configs.enabled=false\nconfig.property.filter.class=com.example.Filter\n")
 	is.True(!entryFor(mmConnector(res), "config.property.filter.class").Blocking)
+}
+
+// The offsets note says where the pipeline actually starts.
+func TestMirror_OffsetsNoteFollowsStartPosition(t *testing.T) {
+	is := is.New(t)
+	reason := func(res Result) string {
+		for _, n := range mmConnector(res).Notes {
+			if n.Code == "kc.offsets_not_migrated" {
+				is.True(n.Blocking)
+				return n.Reason
+			}
+		}
+		t.Fatal("no kc.offsets_not_migrated note")
+		return ""
+	}
+	is.True(strings.Contains(reason(mmRun(t, "", "")), "readFromBeginning: true"))
+	is.True(strings.Contains(reason(mmRun(t, "", "consumer.auto.offset.reset=latest\n")), "readFromBeginning: false"))
+	res := mmRun(t, "", "consumer.auto.offset.reset=none\n")
+	_, ok := settings(t, res, "pipelines/mm.yaml", "source")["readFromBeginning"]
+	is.True(!ok) // the blocked key owns it
+	is.True(strings.Contains(reason(res), "not written"))
+}
+
+// A fallback cluster that a higher layer overrides in part says it is not
+// used as a whole.
+func TestMirror_PartialFallbackIsReported(t *testing.T) {
+	is := is.New(t)
+	res := mmRun(t, "producer.sasl.jaas.config=org.apache.kafka.common.security.kerberos.Nope required;\n",
+		"target.cluster.security.protocol=SASL_SSL\ntarget.cluster.sasl.mechanism=PLAIN\n"+
+			`target.cluster.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="t" password="p";`+"\n")
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "destination")["servers"], "tgt:9092")
+	e := entryFor(mmConnector(res), "target.cluster.bootstrap.servers")
+	is.True(strings.Contains(e.Reason, "not used as a whole"))
+	is.True(strings.Contains(e.Reason, "target.cluster.sasl.jaas.config"))
 }

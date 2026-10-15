@@ -354,9 +354,12 @@ as a whole or not at all: when any other layer names the side's brokers, none of
 entry says so, so two clusters' settings never mix. Entries a higher layer replaced are marked after every layer
 is applied, and a variable whose setting was replaced is not listed in `secrets.env.template`. A blocked key still
 owns every setting its rule could write: Kafka Connect would use its value, so the setting stays unset (a required
-one gets its variable) and no lower layer fills it, also under `--accept-gaps`. `kc.secret_plaintext` follows the
-input, not the pipeline: a literal secret in a key that ends up unused is still noted, on the worker file's entry
-when it is in the worker file. Found in review of #3117.
+one gets its variable) and no lower layer fills it, also under `--accept-gaps`. An unset claimed setting runs with
+Conduit's default, not with the value Kafka Connect would have used, so a rule must never treat unset as neutral:
+the blocking entry is what keeps such a pipeline stopped. A fallback cluster that a higher layer overrides in part
+(possible only with a worker file that lacks `bootstrap.servers`) says on its entries that it is not used as a
+whole. `kc.secret_plaintext` follows the input, not the pipeline: a literal secret in a key that ends up unused is
+still noted, on the worker file's entry when it is in the worker file. Found in review of #3117 and #3118.
 
 #### Debezium PostgreSQL
 
@@ -664,9 +667,11 @@ consumer and is unsupported, non-blocking, in the MirrorMaker rules (`consumer.o
 
 **Where the pipeline starts (added 2026-10-15).** MirrorMaker resumes each partition from the offsets Kafka Connect
 stored for it, and reads a partition with none from the beginning. `migrate` does not carry those offsets over, so
-every MirrorMaker migration carries the blocking class note `kc.offsets_not_migrated`, and the source is written
-`readFromBeginning: true` unless `auto.offset.reset` says otherwise: records already mirrored are copied again
-(or, with `latest`, records written before the pipeline starts are skipped). Under `--accept-gaps` the report's
+every MirrorMaker migration carries the blocking note `kc.offsets_not_migrated`, and the source is written
+`readFromBeginning: true` unless `auto.offset.reset` says otherwise. The note states the position actually written:
+`true` copies the records already mirrored again; `false` (from `latest`) and unset (a blocked `auto.offset.reset`
+owns the setting, so the Kafka source's default, the end, applies) skip the records written before the pipeline
+starts. Under `--accept-gaps` the report's
 `acceptedGaps` names the note. Found in review of #3118.
 
 #### Legacy and alias handling

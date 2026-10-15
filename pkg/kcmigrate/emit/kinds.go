@@ -95,7 +95,8 @@ func ApplyAll(p *Plan, connector, worker []rules.Decision) ([]kcmigrate.Entry, e
 			return nil, err
 		}
 	}
-	if err := applyFallback(p, connector, fallback); err != nil {
+	applied, err := applyFallback(p, connector, fallback)
+	if err != nil {
 		return nil, err
 	}
 	for i := range connector {
@@ -103,6 +104,7 @@ func ApplyAll(p *Plan, connector, worker []rules.Decision) ([]kcmigrate.Entry, e
 			markOverridden(&connector[i], by)
 		}
 	}
+	reportPartialFallback(p, connector, applied)
 	out := make([]kcmigrate.Entry, len(ws))
 	for i := range ws {
 		if by, ok := p.supersededBy(OriginWorker, ws[i].KV.Key); ok && ws[i].Entry.Target != nil {
@@ -123,7 +125,8 @@ func isFallback(a *rules.Action) bool {
 // bootstrap.servers, a producer.override.bootstrap.servers), the records go
 // to that cluster, and taking the fallback's credentials for it would mix
 // two clusters' settings.
-func applyFallback(p *Plan, ds []rules.Decision, idx []int) error {
+func applyFallback(p *Plan, ds []rules.Decision, idx []int) ([]int, error) {
+	var applied []int
 	used := map[string]string{} // side -> "" if the fallback is used, else the key naming the brokers
 	for _, i := range idx {
 		side := ds[i].Emit.Args["side"]
@@ -139,10 +142,37 @@ func applyFallback(p *Plan, ds []rules.Decision, idx []int) error {
 			continue
 		}
 		if err := apply(p, d, OriginConnector, LayerFallback); err != nil {
-			return err
+			return nil, err
+		}
+		applied = append(applied, i)
+	}
+	return applied, nil
+}
+
+// reportPartialFallback tells, on every applied fallback entry that kept
+// its target, which of the cluster's keys a higher layer replaced: the
+// destination then combines this cluster's settings with others' (a
+// worker file with no bootstrap.servers, which Kafka Connect refuses to
+// start with), and the report must not read as if the cluster were used
+// as a whole.
+func reportPartialFallback(p *Plan, ds []rules.Decision, applied []int) {
+	replaced := map[string][]string{} // side -> replaced keys
+	for _, i := range applied {
+		// Replaced before it was applied (a higher layer already owned the
+		// setting: no target) or after (superseded).
+		if _, ok := p.supersededBy(OriginConnector, ds[i].KV.Key); ok || (ds[i].Entry.Target == nil && !ds[i].Entry.Blocking) {
+			side := ds[i].Emit.Args["side"]
+			replaced[side] = append(replaced[side], ds[i].KV.Key)
 		}
 	}
-	return nil
+	for _, i := range applied {
+		d := &ds[i]
+		keys := replaced[d.Emit.Args["side"]]
+		if len(keys) == 0 || d.Entry.Target == nil {
+			continue
+		}
+		d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " This cluster is not used as a whole: a higher layer replaces " + strings.Join(keys, ", ") + ", so the destination combines this cluster's settings with others.")
+	}
 }
 
 // brokersOwner returns the key that set servers on side, or "".
