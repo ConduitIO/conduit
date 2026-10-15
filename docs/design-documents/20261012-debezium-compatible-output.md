@@ -279,9 +279,12 @@ message in the middle of a plan and in the middle of a batch. This design adds n
 separate lane owns the fix.
 
 **Headers.** The Kafka destination gains per-message headers (today it writes none). The PK-change headers
-`__debezium.newkey` and `__debezium.oldkey` carry the other key, serialized as Debezium's header converter
-would (**(V)**: the harness decides the exact bytes). The `__debezium.context.*` headers are produced when
-`debezium.extended.headers.enabled` is true (see _Settings_).
+`__debezium.newkey` and `__debezium.oldkey` carry the other key, serialized as Debezium's header converter would.
+Settled by the goldens ([`tests/debezium/README.md`](../../tests/debezium/README.md), item 5): the value is the key
+struct as Kafka's `Values.convertToString` writes it, `{"seq":2,"region":"us"}`, with a Decimal as
+`BigDecimal.toString` (`{"id":1.50}`). The `__debezium.context.*` headers are produced when
+`debezium.extended.headers.enabled` is true (see _Settings_); 3.7.0 writes them on every message, tombstones included,
+after the key headers (item 6).
 
 **Null versus empty key.** Truncate events and keyless-table events have a null key, which Kafka treats
 differently from an empty key (partitioning and compaction). The plan format distinguishes absent from
@@ -415,7 +418,9 @@ window (`debezium.dlq_not_halting`), so hand-written pipelines get the same guar
 
 ### Envelope and source schemas
 
-Reviewed against Debezium source; the harness golden files confirm.
+Reviewed against Debezium source and confirmed by the golden captures in `tests/debezium/testdata/golden` (2.7.4 and
+3.7.0); [`tests/debezium/README.md`](../../tests/debezium/README.md) lists what they settled. Where this section and
+the goldens disagree, the goldens win (decision 20).
 
 - **Envelope** (Connect name `<topic>.Envelope`, schema version 2): fields in this order: `before`, `after`
   (both optional structs named `<topic>.Value`), `source`, `transaction`, `op`, `ts_ms`, `ts_us`, `ts_ns`
@@ -427,16 +432,20 @@ Reviewed against Debezium source; the harness golden files confirm.
   `schema`, `table`, `txId`, `lsn`, `xmin`, and `origin`, `origin_lsn` from the 3.5 boundary.
 - **`snapshot`** is a string enum (`io.debezium.data.Enum` with an `allowed` parameter). Values Debezium can
   produce: `first`, `first_in_data_collection`, `last_in_data_collection`, `last`, `true`, `false`,
-  `incremental`. The Avro `allowed` list differs before and after 3.0.5 (DBZ-8496), selected by
-  `debezium.compat`. Conduit's snapshot is parallel per table, so it produces `true` and `false` only; the
+  `incremental`. The `allowed` list differs by version, selected by `debezium.compat`; the goldens show
+  `true,last,false,incremental` for 2.7.4 and
+  `true,first,first_in_data_collection,last_in_data_collection,last,false,incremental` for 3.7.0 (README
+  item 7). Conduit's snapshot is parallel per table, so it produces `true` and `false` only; the
   rest are documented in D4. The schema's `allowed` parameter still lists all values of the targeted version,
   so the schema is identical to Debezium's.
 - **Key** (`<topic>.Key`): key columns only.
 
 ### Type mapping
 
-The golden files from the harness are the specification. The table lists the intended category so the
-reviewer can check the shape; names marked **(V)** need confirmation.
+The golden files from the harness (`tests/debezium/testdata/golden`) are the specification;
+[`tests/debezium/README.md`](../../tests/debezium/README.md) lists what they settled, and the encoder's tests compare
+every captured message byte for byte. The table lists the intended category so the reviewer can check the shape; names
+marked **(V)** still need a golden case. Where a row and the goldens disagree, the goldens win (decision 20).
 
 | Postgres | Debezium type (default modes) | Record value | Notes |
 | --- | --- | --- | --- |
@@ -446,14 +455,14 @@ reviewer can check the shape; names marked **(V)** need confirmation.
 | `bool`, `text`, `varchar`, `char`, `bpchar`, `citext`, `inet`, `cidr`, `macaddr` | BOOLEAN / STRING | | `bpchar` keeps the padding Postgres sends; `xml` uses `io.debezium.data.Xml` |
 | `oid` | INT64 | int | |
 | `numeric(p,s)` | `org.apache.kafka.connect.data.Decimal`, params `scale`, `connect.decimal.precision` (always set) | decimal string | `setScale(s)` with **no rounding**: a value wider than the column scale is an encode error (`debezium.value_out_of_range`), as Debezium throws |
-| `numeric` (unconstrained) | `io.debezium.data.VariableScaleDecimal` struct (`scale`, `value`) | decimal string | value is `stripTrailingZeros`'d, so `1.10` encodes as scale 1 value 11; verify per version in the harness |
+| `numeric` (unconstrained) | `io.debezium.data.VariableScaleDecimal` struct (`scale`, `value`) | decimal string | trailing zeros are stripped (`1.10` is scale 1 value 11, `1.000` scale 0 value 1) but the scale never goes below 0 (`100` is scale 0 value 100); the same in 2.7.4 and 3.7.0 (README item 2) |
 | `numeric` `NaN`, `Infinity` | encode error in `precise` (Debezium throws) | | `debezium.value_out_of_range`; `double` and `string` modes carry them |
 | `money` | Decimal, scale from `money.fraction.digits`; `connect.decimal.precision` defaults to 64 | | `lc_monetary` pinned |
 | `date` | `io.debezium.time.Date` (int32 days) | int | no Avro `date` logical type; infinity strings handled as Debezium does **(V)** |
 | `time(p)` | adaptive: `Time` (p<=3), `MicroTime` (p<=6) | int | precision from typmod; typmod -1 means 6 |
 | `timetz` | `io.debezium.time.ZonedTime` string | string | |
 | `timestamp(p)` | adaptive: `Timestamp` (p<=3), `MicroTimestamp` (p<=6) | int64 | local datetime read as UTC epoch, no shift; typmod -1 means 6; `infinity`/`-infinity` strings handled as Debezium does |
-| `timestamptz` | `io.debezium.time.ZonedTimestamp` string, UTC, minimal fractional digits | string | `...05.1Z`, not `...05.100000Z` |
+| `timestamptz` | `io.debezium.time.ZonedTimestamp` string, UTC, always six fractional digits | string | `...05.100000Z`, not `...05.1Z` (README item 1; `timetz` does use minimal digits) |
 | `interval` | `io.debezium.time.MicroDuration` int64 (default `numeric`) | int64 | typmod decoded for field restriction; the Debezium `MicroDuration` formula is ported exactly, not approximated; D6 |
 | `uuid` | `io.debezium.data.Uuid` string | string | not the Avro `uuid` logical type |
 | `json`, `jsonb` | `io.debezium.data.Json` string | string | text as sent by Postgres |
@@ -464,9 +473,12 @@ reviewer can check the shape; names marked **(V)** need confirmation.
 | `bit(1)`, `bit(n)`, `varbit`, `ltree`, `point` and other geometric types, PostGIS `geometry`/`geography`, pgvector, ranges, `tsvector`, domains | per Debezium | | harness cases; anything Debezium does not map fails with `debezium.unsupported_type` unless `include.unknown.datatypes` |
 
 Optionality and defaults come from the catalog, not the Relation message (which carries neither):
-`pg_attribute.attnotnull` and `pg_get_expr` of the default. The source reads them over a regular
-connection when it first sees a relation shape. Literal defaults map to a schema default as Debezium does;
-non-literal defaults (`now()`, `nextval`) are omitted. Which defaults Debezium propagates is **(V)**.
+`pg_attribute.attnotnull` and `pg_get_expr` of the default. The source reads them over a regular connection when it
+first sees a relation shape. Literal defaults map to a schema default as Debezium does. The goldens settle what
+Debezium propagates for the cases captured (README item 3, table `golden.defaults`): literal text, integer, numeric
+and boolean defaults become schema defaults, and a `DEFAULT now()` column gets the schema default
+`1970-01-01T00:00:00.000000Z`, which `replace.null.with.default` then writes for an explicit NULL (D20). `nextval` and
+other non-literal defaults remain **(V)**.
 
 The source connection pins the settings that change WAL text: `DateStyle=ISO, MDY`, `IntervalStyle=postgres`,
 `TimeZone=UTC`, `extra_float_digits=3`, `bytea_output=hex`, `lc_monetary`, through runtime parameters on the
@@ -636,20 +648,24 @@ in parallel), so the harness compares snapshot output as a set keyed by primary 
   `TRUNCATE` that touches several tables is one WAL change and one record, so the flush gate is unaffected.
   Silent truncate loss in the **default** output is a separate bug (postgres#344, invariant 3) fixed on its
   own; it is not needed for this mode.
-- **Logical decoding messages (`op: m`).** The connector never asks pgoutput for messages today
-  (`messages 'true'` is not set in `subscription.go`). In this mode the source sets it and **emits** each
-  message to `<prefix>.message` with Debezium's key (`prefix`) and value (the envelope with `op: m`, `source`,
-  and a `message` struct of `prefix` and `content`); the exact schema names and `source` fields are **(V)**
-  in the harness. Which messages are emitted follows `message.prefix.include.list` / `.exclude.list`. A
-  message that cannot be encoded halts the pipeline with `debezium.logical_message_unencodable` naming the
-  prefix; that halt is the only fallback and there is no skip mode. Position and change key for transactional and
-  non-transactional messages are specified in
-  _Logical decoding messages: positions and change keys_. A message is one WAL change and one record.
+- **Logical decoding messages (`op: m`).** The connector never asks pgoutput for messages today (`messages 'true'` is
+  not set in `subscription.go`). In this mode the source sets it and **emits** each message to `<prefix>.message` with
+  Debezium's key (`prefix`) and value (the envelope with `op: m`, `source`, and a `message` struct of `prefix` and
+  `content`). The goldens settle the schemas (README item 8): key `io.debezium.connector.postgresql.MessageKey
+  {prefix}`, value `MessageValue` with fields `op, ts_ms, source, message` (2.7.4) or `op, ts_ms, source, transaction,
+  message` (3.7.0), no `ts_us`/`ts_ns`, and empty `source.schema` and `source.table`. Which messages are emitted
+  follows `message.prefix.include.list` / `.exclude.list`. A message that cannot be encoded halts the pipeline with
+  `debezium.logical_message_unencodable` naming the prefix; that halt is the only fallback and there is no skip mode.
+  Position and change key for transactional and non-transactional messages are specified in _Logical decoding
+  messages: positions and change keys_. A message is one WAL change and one record.
 - **Heartbeats.** The Debezium heartbeat topic is not emitted: the heartbeat writer was cut and the slot
   advances through the gate (postgres B2 note). D8.
 - **Transaction topic.** `<prefix>.transaction` (BEGIN and END events, key `id`, value `status`, `id`, `ts_ms`,
-  `event_count`, `data_collections`) is not produced in v0.21 (Q3). The per-event `transaction` field is
-  filled when `provide.transaction.metadata` is true, with `id` as `txId:lsn`.
+  `event_count`, `data_collections`) is not produced in v0.21 (Q3). The per-event `transaction` field is filled when
+  `provide.transaction.metadata` is true. The goldens (`json-txmeta`, README item 12) show its `id` is `<txId>:<this
+  event's LSN>`, so it differs per event within a transaction; `total_order` is the event's 1-based position in the
+  transaction and `data_collection_order` its position among that table's events. A primary-key change counts as two
+  events (delete and create).
 
 ### Logical decoding messages: positions and change keys
 
