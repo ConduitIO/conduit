@@ -314,16 +314,32 @@ Connector config keys common to all classes, and worker properties (`--worker`).
 | `producer.override.acks`, `.compression.type`, `.client.id`, `.security.protocol`, `.sasl.*` | T | destination `acks`, `compression`, `clientID`, TLS and SASL settings | `acks` map: Kafka `all` and `-1` to `all`, `1` to `one`, `0` to `none`. Security keys follow _Worker and Kafka client settings_ |
 | `consumer.override.auto.offset.reset` | T | source `readFromBeginning` (`earliest` true, `latest` false) | |
 | `consumer.override.group.id`, `.client.id`, `.security.protocol`, `.sasl.*` | T | source `groupID`, `clientID`, TLS and SASL | |
+| `producer.override.bootstrap.servers`, `consumer.override.bootstrap.servers` | T | destination / source `servers` | The connector's clients talk to other brokers than the worker's; never tuning (corrected 2026-10-15) |
 | any other `producer.override.*`, `consumer.override.*`, `admin.override.*` | U | none | Tuning (`linger.ms`, `batch.size`, `max.request.size`, `fetch.*`, `max.poll.records`). Non-blocking; `kc.lint.client_override_policy` and `kc.lint.kip1188_override_risk` apply |
 | Worker: `bootstrap.servers` | T | `servers` | |
 | Worker: `group.id`, `config.storage.*`, `offset.storage.*`, `status.storage.*`, `plugin.path`, `plugin.discovery`, `listeners`, `admin.listeners`, `rest.*`, `access.control.*`, `offset.flush.*`, `task.shutdown.graceful.timeout.ms`, `heartbeat.interval.ms`, `rebalance.timeout.ms`, `session.timeout.ms`, `worker.*`, `scheduled.rebalance.max.delay.ms`, `connections.max.idle.ms`, `request.timeout.ms`, `retry.backoff.*`, `reconnect.backoff.*`, `metadata.*`, `receive.buffer.bytes`, `send.buffer.bytes`, `client.dns.lookup`, `metrics.*`, `metric.reporters`, `topic.tracking.*`, `response.http.headers.config`, `rest.extension.classes` | T | none | No worker cluster in Conduit; reason recorded. `offset.storage.file.filename` (standalone): U with fix "export offsets through the REST API" |
 | Worker: `key.converter`, `value.converter`, `header.converter` | T | inherited by connectors that set none | |
 | Worker: `config.providers`, `config.providers.<name>.*` | T | none | Handled by _Secrets_: references pass through by name |
 | Worker: `connector.client.config.override.policy`, `connector.client.config.override.allowlist` | T | none | Read by the lint rules only |
-| Worker: `security.protocol`, `sasl.mechanism`, `sasl.jaas.config`, `ssl.truststore.*`/`ssl.keystore.*` | per _Worker and Kafka client settings_ | | JKS and PKCS12 stores: U!, fix "export PEM" |
-| Worker: `ssl.*` other, `sasl.*` other | U | none | Cipher suites, protocols, endpoint identification. U! when `ssl.endpoint.identification.algorithm` is empty (verification disabled) |
-| Worker: `producer.*`, `consumer.*`, `admin.*` | T for `acks`, `compression.type`, `client.id`; U otherwise | destination `acks`, `compression`, `clientID` | |
+| Worker: `security.protocol`, `sasl.*`, `ssl.*` (top level) | T | none | No-op: they configure the worker's own clients (internal topics, group membership) and never reach a connector's producer or consumer (corrected 2026-10-15, see the note below the table) |
+| Worker: `producer.bootstrap.servers`, `consumer.bootstrap.servers` | T | destination / source `servers` | Override the worker's `bootstrap.servers` for every connector's producer or consumer |
+| Worker: `producer.`/`consumer.` + `security.protocol`, `sasl.mechanism`, `sasl.jaas.config`, `client.id`; `producer.acks`, `producer.compression.type` | T | destination / source TLS, SASL, `clientID`, `acks`, `compression` | The middle layer of a connector's client config; a connector override wins over it |
+| Worker: `producer.ssl.*`, `consumer.ssl.*` | U! | none | Fix "export PEM and set `caCert`, `clientCert`, `clientKey`" |
+| Worker: `producer.*`, `consumer.*`, `admin.*` other | U | none | Tuning |
 | Worker: `exactly.once.source.support` | U! when `enabled` or `preparing`; T when `disabled` | none | |
+
+**How Kafka Connect layers a connector's client config (corrected 2026-10-15).** Apache Kafka 4.2.0,
+`connect/runtime/src/main/java/org/apache/kafka/connect/runtime/Worker.java`: `baseProducerConfigs` (lines
+837-876) and `baseConsumerConfigs` (lines 911-940) start from the worker's `bootstrap.servers` and Connect's own
+client defaults, then add `config.originalsWithPrefix("producer.")` (line 862) or `("consumer.")` (line 931),
+then the connector's `producer.override.`/`consumer.override.` keys. The worker's top-level `security.protocol`,
+`sasl.*` and `ssl.*` are not in that chain; they configure only the worker's own clients. The first version of
+this table mapped them onto every pipeline, which would have enabled TLS or SASL on pipelines whose Kafka Connect
+clients ran without them, and treated `producer.bootstrap.servers` and `producer.override.bootstrap.servers` as
+tuning, which would have written to the wrong cluster. Found in review of #3080. Connect's own client defaults
+(`acks=all`, idempotence off, `max.in.flight.requests.per.connection=1`, `auto.offset.reset=earliest`, group
+`connect-<name>`) are absent-key defaults of this layer and are tracked separately (they must be modelled before
+a sink family ships).
 
 #### Debezium PostgreSQL
 

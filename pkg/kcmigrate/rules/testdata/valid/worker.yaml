@@ -1,0 +1,24 @@
+rulesVersion: 1
+scope: worker
+upstream: {name: kafka, version: "4.2"}
+keys:
+  - key: group.id
+    status: translated
+    emit: {kind: none}
+    reason: Conduit has no worker cluster.
+    diff: identity
+  - key: bootstrap.servers
+    status: translated
+    emit: {kind: setting, side: destination, name: servers}
+    diff: identity
+  - key: worker.blocked
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A test worker key that blocks.
+    fix: Remove it.
+    diff: behavior
+  - key: value.converter
+    status: translated
+    emit: {kind: none}
+    diff: identity

@@ -1,0 +1,277 @@
+# Worker properties (connect-distributed.properties, connect-standalone.properties).
+# Mapping design, "Shared: every Kafka Connect connector", worker rows. A worker
+# setting is inherited by every migrated pipeline that does not set it itself.
+# Source: Apache Kafka 4.2 generated connect_config.
+rulesVersion: 1
+scope: worker
+upstream: {name: kafka, version: "4.2"}
+keys:
+  - key: bootstrap.servers
+    status: translated
+    emit: {kind: setting, side: kafka, name: servers}
+    diff: identity
+
+  # Worker-cluster settings with no Conduit equivalent: one Conduit instance
+  # runs the pipelines, so there is nothing to configure. Translated as no-ops.
+  - key: group.id
+    status: translated
+    reason: Conduit has no worker cluster.
+    emit: {kind: none}
+    diff: identity
+  - key: {regex: '^(config|offset|status)\.storage\.(topic|replication\.factor|partitions)$'}
+    status: translated
+    reason: Conduit has no worker cluster; it keeps pipeline state in its own store.
+    emit: {kind: none}
+    diff: identity
+  - key: offset.storage.file.filename
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A standalone worker's offsets are not imported; migrated pipelines start from their own position.
+    fix: Export the offsets through the Connect REST API (Kafka 3.5+) if you need them.
+    diff: identity
+  - key: {regex: '^(plugin\.path|plugin\.discovery|listeners|admin\.listeners|rest\..*|access\.control\..*|offset\.flush\..*|task\.shutdown\.graceful\.timeout\.ms|heartbeat\.interval\.ms|rebalance\.timeout\.ms|session\.timeout\.ms|worker\..*|scheduled\.rebalance\.max\.delay\.ms|connections\.max\.idle\.ms|request\.timeout\.ms|retry\.backoff\..*|reconnect\.backoff\..*|metadata\..*|receive\.buffer\.bytes|send\.buffer\.bytes|client\.dns\.lookup|metrics\..*|metric\.reporters|topic\.tracking\..*|response\.http\.headers\.config|rest\.extension\.classes)$'}
+    status: translated
+    reason: Conduit has no worker cluster; this worker setting has no effect on pipelines.
+    emit: {kind: none}
+    diff: tuning
+
+  # Converter defaults. The connector's own converter keys take precedence;
+  # the shared rules classify those.
+  - key: key.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.converters.ByteArrayConverter]
+        status: translated
+        reason: Bytes pass through unchanged.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This converter is not translated by this version of migrate; connectors inheriting it would write a different key format.
+        fix: Keep the connectors that inherit this converter on Kafka Connect until migrate translates it.
+  - key: value.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.converters.ByteArrayConverter]
+        status: translated
+        reason: Bytes pass through unchanged.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This converter is not translated by this version of migrate; connectors inheriting it would write a different value format.
+        fix: Keep the connectors that inherit this converter on Kafka Connect until migrate translates it.
+  - key: header.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.storage.SimpleHeaderConverter]
+        status: approximated
+        code: kc.key_approximated
+        reason: Kafka Connect's default header converter. Conduit carries headers as metadata strings; typed header values are not reproduced.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This header converter is not translated by this version of migrate.
+        fix: Keep the connectors that inherit this converter on Kafka Connect until migrate translates it.
+  - key: {regex: '^(key|value|header)\.converter\..+$'}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A converter setting; the converter itself is reported on its own key.
+    fix: None beyond the converter entry.
+    diff: identity
+
+  - key: {regex: '^config\.providers(\..+)?$'}
+    status: translated
+    reason: Config-provider references in connector configs pass through by name and become environment variables.
+    emit: {kind: none}
+    diff: tuning
+  - key: connector.client.config.override.policy
+    status: translated
+    reason: Read by kc lint only; Conduit has no client override policy.
+    emit: {kind: none}
+    lint: [kc.lint.client_override_policy, kc.lint.kip1188_override_risk]
+    diff: behavior
+  - key: connector.client.config.override.allowlist
+    status: translated
+    reason: Read by kc lint only.
+    emit: {kind: none}
+    lint: [kc.lint.kip1188_override_risk]
+    diff: behavior
+
+  # The worker's own clients. Its top-level security.protocol, sasl.* and
+  # ssl.* configure the clients the worker uses for its internal topics and
+  # group membership; they never reach a connector's producer or consumer,
+  # which get only bootstrap.servers and the producer.- or consumer.-prefixed
+  # keys below (Worker.baseProducerConfigs and baseConsumerConfigs, Apache
+  # Kafka 4.2.0, Worker.java:837-935). So they have no effect on a pipeline.
+  - key: {regex: '^(security\.protocol|sasl\..+|ssl\..+)$'}
+    status: translated
+    reason: Configures the worker's own Kafka clients, which Conduit does not have; connector clients take their security from the producer.- and consumer.-prefixed worker keys or their own overrides.
+    emit: {kind: none}
+    diff: tuning
+
+  # Client defaults for every connector's producer and consumer: the middle
+  # layer of a connector's client config, above bootstrap.servers and below
+  # the connector's own overrides.
+  - key: producer.bootstrap.servers
+    status: translated
+    reason: The worker's producer.-prefixed settings override bootstrap.servers for every connector's producer.
+    emit: {kind: setting, side: producer, name: servers, layer: client}
+    diff: identity
+  - key: producer.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: producer, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: producer.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: producer, name: saslMechanism, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep the connectors that use this producer on Kafka Connect.
+  - key: producer.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: producer, layer: client}
+    secret: true
+    diff: secret
+  - key: {prefix: producer.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipelines by hand.
+    diff: identity
+  - key: {prefix: producer.sasl.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A SASL setting with no Kafka connector equivalent (Kerberos, OAuth, login callbacks).
+    fix: None if the mechanism is PLAIN or SCRAM; otherwise keep the connectors that use this producer on Kafka Connect.
+    diff: identity
+  - key: producer.client.id
+    status: translated
+    emit: {kind: setting, side: producer, name: clientID, layer: client}
+    diff: tuning
+  - key: consumer.bootstrap.servers
+    status: translated
+    reason: The worker's consumer.-prefixed settings override bootstrap.servers for every connector's consumer.
+    emit: {kind: setting, side: consumer, name: servers, layer: client}
+    diff: identity
+  - key: consumer.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: consumer, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: consumer.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: consumer, name: saslMechanism, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep the connectors that use this consumer on Kafka Connect.
+  - key: consumer.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: consumer, layer: client}
+    secret: true
+    diff: secret
+  - key: {prefix: consumer.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipelines by hand.
+    diff: identity
+  - key: {prefix: consumer.sasl.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A SASL setting with no Kafka connector equivalent (Kerberos, OAuth, login callbacks).
+    fix: None if the mechanism is PLAIN or SCRAM; otherwise keep the connectors that use this consumer on Kafka Connect.
+    diff: identity
+  - key: consumer.client.id
+    status: translated
+    emit: {kind: setting, side: consumer, name: clientID, layer: client}
+    diff: tuning
+  - key: producer.acks
+    diff: behavior
+    values:
+      - match: [all, "-1"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: all, layer: client}
+      - match: ["1"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: one, layer: client}
+      - match: ["0"]
+        status: translated
+        emit: {kind: setting, side: producer, name: acks, value: none, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Kafka accepts only all, -1, 1 and 0.
+        fix: Set acks to one of all, -1, 1 or 0.
+  - key: producer.compression.type
+    diff: tuning
+    values:
+      - match: [none, gzip, snappy, lz4, zstd]
+        status: translated
+        emit: {kind: setting, side: producer, name: compression, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka destination supports none, gzip, snappy, lz4 and zstd.
+        fix: Use one of the supported codecs.
+  - key: {regex: '^(producer|consumer|admin)\..+$'}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A client tuning default with no Kafka connector setting.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: exactly.once.source.support
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [disabled]
+        status: translated
+        emit: {kind: none}
+      - match: [enabled, preparing]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit delivers at least once; exactly-once source delivery is not reproduced.
+        fix: Make the consumers idempotent, or keep these connectors on Kafka Connect.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Kafka accepts disabled, preparing and enabled.
+        fix: Set exactly.once.source.support to one of those.

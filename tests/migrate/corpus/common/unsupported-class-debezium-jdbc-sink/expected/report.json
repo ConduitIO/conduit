@@ -1,0 +1,177 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "(worker)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 11,
+    "translated": 0,
+    "approximated": 0,
+    "unsupported": 11,
+    "blocking": 11
+  },
+  "connectors": [
+    {
+      "name": "jdbc-sink",
+      "class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+      "role": "unknown",
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connector.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/tasks.max"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "topics",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/topics"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "connection.url",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connection.url"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "connection.username",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connection.username"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "connection.password",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connection.password"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true,
+          "secret": true
+        },
+        {
+          "key": "insert.mode",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/insert.mode"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "delete.enabled",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/delete.enabled"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "primary.key.mode",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/primary.key.mode"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "primary.key.fields",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/primary.key.fields"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "schema.evolution",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/schema.evolution"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class io.debezium.connector.jdbc.JdbcSinkConnector has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}
