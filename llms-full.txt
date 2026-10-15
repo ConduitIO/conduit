@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (139)
+## 3. Error codes (144)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1008,6 +1008,11 @@ Author: Meroxa, Inc.
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
+| `debezium.config_invalid` | InvalidArgument | CodeConfigInvalid: an encoder setting has a value outside its allowed set. |
+| `debezium.descriptor_missing` | InvalidArgument | CodeDescriptorMissing: a record has no descriptor, or the descriptor is not a valid Connect schema. |
+| `debezium.record_schema_mismatch` | InvalidArgument | CodeRecordSchemaMismatch: a record value does not match the descriptor it carries (wrong Go type, missing required field, unknown field). This is what a processor placed before debezium.encode causes when it changes a field without keeping it consistent with the descriptor. |
+| `debezium.unsupported_type` | Unimplemented | CodeUnsupportedType: a schema uses a type or logical type the encoder does not implement. |
+| `debezium.value_out_of_range` | InvalidArgument | CodeValueOutOfRange: a value cannot be represented in its schema without rounding or truncation (a decimal with more fractional digits than the column scale, an integer wider than its Connect type, NaN or infinity in a precise decimal). Debezium throws in the same cases. |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |
