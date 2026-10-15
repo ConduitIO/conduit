@@ -130,4 +130,4 @@ the client they built.
 - `AWS_ENDPOINT_URL_STS`, `AWS_ENDPOINT_URL_SSO`, `AWS_EC2_METADATA_SERVICE_ENDPOINT` and the
   matching profile keys redirect where credentials are fetched. They are not checked. Treat them
   as sensitive engine configuration.
-- Standalone plugins: see ConduitIO/conduit#3043.
+- Standalone plugins: see issue [#3043](https://github.com/ConduitIO/conduit/issues/3043).
