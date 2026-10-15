@@ -17,15 +17,18 @@ package schemaregistry
 import (
 	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"sync"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/rabin"
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
 	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -427,6 +430,24 @@ func TestClient_ErrorsAreNotCached(t *testing.T) {
 	is.Equal(ss.ID, 99)
 }
 
+// builtinRegistryURL starts the builtin schema registry linked into this test
+// binary and returns its address. It does not use
+// schemaregistrytest.TestSchemaRegistryURL, because with the integration tag
+// that returns a real Confluent registry, and these tests are about the
+// builtin one.
+func builtinRegistryURL(t *testing.T) string {
+	t.Helper()
+	reg, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	schemaregistry.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)), reg).RegisterHandlers(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
 // builtinRegistryIsPatched probes the builtin registry linked into this test
 // binary: v0.2.6 gives identical text registered as two different types the
 // same ID; v0.2.7 and later (SHA-256 over type, references and text) does not.
@@ -435,7 +456,7 @@ func TestClient_ErrorsAreNotCached(t *testing.T) {
 func builtinRegistryIsPatched(t *testing.T) bool {
 	t.Helper()
 	ctx := context.Background()
-	cl, err := sr.NewClient(sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
+	cl, err := sr.NewClient(sr.URLs(builtinRegistryURL(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +482,7 @@ func TestClient_CreateSchema_FingerprintCollision_BuiltinRegistry(t *testing.T) 
 	is := is.New(t)
 	ctx := context.Background()
 
-	registryURL := schemaregistrytest.TestSchemaRegistryURL(t)
+	registryURL := builtinRegistryURL(t)
 	c, err := NewClient(log.Nop(), sr.URLs(registryURL))
 	is.NoErr(err)
 
