@@ -163,10 +163,14 @@ As built (added 2026-10-15): the nightly job is `.github/workflows/kcmigrate-dri
 `cmd/conduit/internal/kcdrift`. A snapshot opts in with a `check` section naming the generated pages
 (`kafka.apache.org/<major><minor>/generated/<page>.html`) and the page keys it leaves out, each with a reason (a
 regex, or another snapshot's keys). A snapshot key records `documented` when the page shows a different default
-than the effective one it keeps, and `undocumented` when no page lists it. Each snapshot is compared twice: with
-its pinned version's pages, where a difference means the snapshot is wrong, and with the newest version that
-publishes them, where a difference is drift. Either fails the run and files one tracking issue. A pull request
-that touches the job or a snapshot runs it too, with drift as a warning. The offline parser and comparison tests
+than the effective one it keeps, `undocumented` when no page lists it, and `required` when the page shows no
+default at all (an empty cell, which is not the same as `null`), so a key that becomes required upstream is
+drift. Each snapshot is compared twice: with its pinned version's pages, where a difference means the snapshot is
+wrong (exit 3), and with the newest version that publishes them, where a difference is drift (exit 1). The
+release list (downloads.apache.org) is read too: a released version with no generated pages cannot be checked
+(exit 2, as is a page that cannot be read). Any of them fails the run and files one tracking issue, from a
+separate job that alone can write issues. A pull request that touches the job or a snapshot runs it too, with
+drift as a warning and the other codes failing. The offline parser and comparison tests
 run in the normal test job. Snapshots of non-Kafka upstreams (Debezium, Confluent) add their page format when
 their families land.
 

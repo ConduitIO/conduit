@@ -113,8 +113,8 @@ func fetchOnce(ctx context.Context, client *http.Client, url string) (body []byt
 	return b, false, nil
 }
 
-// Keys maps a key to its documented default; nil means no default.
-type Keys map[string]*string
+// Keys maps a key to its documented default, normalized (see cellValue).
+type Keys map[string]string
 
 var (
 	// One heading per key in Kafka's generated pages (ConfigDef.toHtml):
@@ -141,7 +141,7 @@ func ParseKafkaPage(b []byte) (Keys, error) {
 		if d == nil {
 			return nil, cerrors.Errorf("key %s has no Default row; the page format changed", key)
 		}
-		out[key] = documentedDefault(html.UnescapeString(string(d[1])))
+		out[key] = cellValue(html.UnescapeString(string(d[1])))
 	}
 	if len(out) == 0 {
 		return nil, cerrors.New("no keys found; the page format changed")
@@ -149,32 +149,49 @@ func ParseKafkaPage(b []byte) (Keys, error) {
 	return out, nil
 }
 
-// documentedDefault turns a page's Default cell into a default: an empty
-// cell and "null" are no default, `""` is the empty string.
-func documentedDefault(cell string) *string {
+// cellValue turns a page's Default cell into a comparable value. Kafka's
+// ConfigDef.toHtml writes an empty cell for a key with no default at all,
+// which makes it required (NO_DEFAULT_VALUE), "null" for a key whose default
+// is null (optional, unset), and `""` for the empty string. The three stay
+// apart, so a key that becomes required upstream shows as drift.
+func cellValue(cell string) string {
 	switch cell = strings.TrimSpace(cell); cell {
-	case "", "null":
-		return nil
+	case "":
+		return Required
+	case "null":
+		return NoDefault
 	case `""`:
-		v := ""
-		return &v
+		return ""
 	}
-	return &cell
+	return normalize(cell)
 }
 
-// NoDefault is how a missing default reads in a Change.
-const NoDefault = "<none>"
+// snapshotValue is the value a snapshot key should show on the page.
+func snapshotValue(k rules.SnapshotKey) string {
+	switch {
+	case k.Documented != nil:
+		return cellValue(*k.Documented) // spelled as on the page
+	case k.Required:
+		return Required
+	case k.Default == nil:
+		return NoDefault
+	}
+	return normalize(*k.Default)
+}
+
+// Values a Change shows for a key with no default.
+const (
+	NoDefault = "<none>"     // optional, unset (the page's "null")
+	Required  = "<required>" // no default at all (the page's empty cell)
+)
 
 var humanSuffix = regexp.MustCompile(`^(\S+) \([^)]*\)$`)
 
 // normalize makes two spellings of one default compare equal: the page's
 // "60000 (1 minute)" is 60000, and a list is compared element by element
 // (the page joins with ",", hand transcriptions with ", ").
-func normalize(v *string) string {
-	if v == nil {
-		return NoDefault
-	}
-	s := strings.TrimSpace(*v)
+func normalize(v string) string {
+	s := strings.TrimSpace(v)
 	if m := humanSuffix.FindStringSubmatch(s); m != nil {
 		s = m[1]
 	}
@@ -221,23 +238,19 @@ func Compare(snap rules.Snapshot, page Keys, ignore func(string) bool) []Change 
 		pd, on := page[k.Key]
 		switch {
 		case k.Undocumented && on:
-			out = append(out, Change{Key: k.Key, Kind: Added, Page: normalize(pd)}) // now documented: drop the mark
+			out = append(out, Change{Key: k.Key, Kind: Added, Page: pd}) // now documented: drop the mark
 		case k.Undocumented:
 		case !on:
 			out = append(out, Change{Key: k.Key, Kind: Removed})
 		default:
-			want := k.Default
-			if k.Documented != nil {
-				want = documentedDefault(*k.Documented) // spelled as on the page: "null" is none
-			}
-			if normalize(want) != normalize(pd) {
-				out = append(out, Change{Key: k.Key, Kind: Default, Snapshot: normalize(want), Page: normalize(pd)})
+			if want := snapshotValue(k); want != pd {
+				out = append(out, Change{Key: k.Key, Kind: Default, Snapshot: want, Page: pd})
 			}
 		}
 	}
 	for k, d := range page {
 		if !seen[k] && !ignore(k) {
-			out = append(out, Change{Key: k, Kind: Added, Page: normalize(d)})
+			out = append(out, Change{Key: k, Kind: Added, Page: d})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
@@ -355,6 +368,43 @@ func published(ctx context.Context, fetch Fetcher, v Version, page string) (bool
 	return false, err
 }
 
+// KafkaReleases lists the current Apache Kafka releases.
+const KafkaReleases = "https://downloads.apache.org/kafka/"
+
+var releaseDir = regexp.MustCompile(`href="(\d+)\.(\d+)\.\d+/"`)
+
+// NewestRelease returns the newest major.minor in the Apache Kafka release
+// list, so a release whose docs are not published yet is not mistaken for
+// "no newer version".
+func NewestRelease(ctx context.Context, fetch Fetcher) (Version, error) {
+	b, err := fetch(ctx, KafkaReleases)
+	if err != nil {
+		return Version{}, cerrors.Errorf("release list: %w", err)
+	}
+	var newest Version
+	found := false
+	for _, m := range releaseDir.FindAllSubmatch(b, -1) {
+		maj, err1 := strconv.Atoi(string(m[1]))
+		mnr, err2 := strconv.Atoi(string(m[2]))
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		v := Version{maj, mnr}
+		if !found || v.Major > newest.Major || (v.Major == newest.Major && v.Minor > newest.Minor) {
+			newest, found = v, true
+		}
+	}
+	if !found {
+		return Version{}, cerrors.Errorf("release list %s lists no versions; the page format changed", KafkaReleases)
+	}
+	return newest, nil
+}
+
+// After reports whether v is newer than o.
+func (v Version) After(o Version) bool {
+	return v.Major > o.Major || (v.Major == o.Major && v.Minor > o.Minor)
+}
+
 // Result is the outcome for one snapshot.
 type Result struct {
 	Name    string
@@ -362,13 +412,20 @@ type Result struct {
 	Latest  Version
 	Wrong   []Change // pinned page vs snapshot: the snapshot is wrong
 	Drifted []Change // latest page vs snapshot: upstream moved
+	// Unchecked is a release newer than Latest whose docs are not
+	// published, so its keys could not be compared.
+	Unchecked *Version
 }
 
-// Failed reports whether the snapshot needs a change.
-func (r Result) Failed() bool { return len(r.Wrong) > 0 || len(r.Drifted) > 0 }
+// Failed reports whether the snapshot needs a change or could not be
+// checked against the newest release.
+func (r Result) Failed() bool { return len(r.Wrong) > 0 || len(r.Drifted) > 0 || r.Unchecked != nil }
 
 // Check compares one snapshot with its pinned and latest pages.
-func Check(ctx context.Context, fetch Fetcher, name string, snap rules.Snapshot, others map[string]rules.Snapshot) (Result, error) {
+//
+// released is the newest Kafka release (NewestRelease); a release newer
+// than the newest documented version is reported as unchecked.
+func Check(ctx context.Context, fetch Fetcher, name string, snap rules.Snapshot, others map[string]rules.Snapshot, released Version) (Result, error) {
 	r := Result{Name: name}
 	pinned, err := ParseVersion(snap.Upstream.Version)
 	if err != nil {
@@ -394,6 +451,9 @@ func Check(ctx context.Context, fetch Fetcher, name string, snap rules.Snapshot,
 		}
 		r.Drifted = Compare(snap, keys, ignore)
 	}
+	if released.After(r.Latest) {
+		r.Unchecked = &released
+	}
 	return r, nil
 }
 
@@ -414,6 +474,9 @@ func Markdown(results []Result) string {
 			}
 			for _, c := range r.Drifted {
 				fmt.Fprintf(&b, "  - upstream %s: %s\n", r.Latest, c)
+			}
+			if r.Unchecked != nil {
+				fmt.Fprintf(&b, "  - Kafka %s is released, but its generated config pages are not published (%s), so its keys are not checked.\n", r.Unchecked, KafkaPageURL(*r.Unchecked, "connect_config"))
 			}
 		}
 	}

@@ -36,28 +36,48 @@ func TestRun(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
 	is.NoErr(os.WriteFile(filepath.Join(dir, "shared.keys.yaml"), []byte(testSnap), 0o600))
-	served := map[string][]byte{drift.KafkaPageURL(drift.Version{Major: 4, Minor: 2}, "p"): pageWith("1")}
+	v42, v43 := drift.Version{Major: 4, Minor: 2}, drift.Version{Major: 4, Minor: 3}
+	served := map[string][]byte{
+		drift.KafkaPageURL(v42, "p"): pageWith("1"),
+		drift.KafkaReleases:          []byte(`<a href="4.2.2/">4.2.2/</a>`),
+	}
 	fetch := func(_ context.Context, url string) ([]byte, error) {
 		if b, ok := served[url]; ok {
 			return b, nil
 		}
 		return nil, drift.ErrNotPublished
 	}
-	report, failed, err := run(context.Background(), dir, fetch)
+	ctx := context.Background()
+	report, code, err := run(ctx, dir, fetch)
 	is.NoErr(err)
-	is.True(!failed)
+	is.Equal(code, exitOK)
 	is.True(strings.Contains(report, "`shared`: matches 4.2"))
 
-	served[drift.KafkaPageURL(drift.Version{Major: 4, Minor: 3}, "p")] = pageWith("2")
-	report, failed, err = run(context.Background(), dir, fetch)
+	served[drift.KafkaPageURL(v43, "p")] = pageWith("2")
+	served[drift.KafkaReleases] = []byte(`<a href="4.3.0/">4.3.0/</a>`)
+	report, code, err = run(ctx, dir, fetch)
 	is.NoErr(err)
-	is.True(failed) // drift fails the job
+	is.Equal(code, exitDrift)
 	is.True(strings.Contains(report, "upstream 4.3: k: default 2, snapshot 1"))
 
-	broken := func(context.Context, string) ([]byte, error) { return nil, cerrors.New("dns") }
-	_, _, err = run(context.Background(), dir, broken)
-	is.True(err != nil) // unreadable docs are not "no drift"
+	// Released, docs not published: cannot be checked, which is not "no drift".
+	served[drift.KafkaReleases] = []byte(`<a href="4.4.0/">4.4.0/</a>`)
+	_, code, err = run(ctx, dir, fetch)
+	is.NoErr(err)
+	is.Equal(code, exitUnchecked)
 
-	_, _, err = run(context.Background(), t.TempDir(), fetch)
+	// The snapshot differs from its own pinned docs: the most serious.
+	served[drift.KafkaPageURL(v42, "p")] = pageWith("9")
+	_, code, err = run(ctx, dir, fetch)
+	is.NoErr(err)
+	is.Equal(code, exitSnapshotOff)
+
+	broken := func(context.Context, string) ([]byte, error) { return nil, cerrors.New("dns") }
+	_, code, err = run(ctx, dir, broken)
+	is.True(err != nil) // unreadable docs are not "no drift"
+	is.Equal(code, exitUnchecked)
+
+	_, code, err = run(ctx, t.TempDir(), fetch)
 	is.True(err != nil) // no snapshots
+	is.Equal(code, exitUnchecked)
 }

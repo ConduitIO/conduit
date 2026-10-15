@@ -20,10 +20,16 @@ name: kcmigrate upstream drift
 # unrelated merges. The parser and the comparison are tested offline in the
 # normal test job (pkg/kcmigrate/rules/drift, cmd/conduit/internal/kcdrift).
 # A pull request that edits this workflow, the tool or a snapshot runs it
-# too, so a change is exercised against the live docs before it merges. On a
-# pull request drift is a warning, not a failure (the drift is upstream's,
-# not the PR's, and the nightly files it); docs that cannot be read or parsed
-# still fail, since that is what the PR run is there to catch.
+# too, so a change is exercised against the live docs before it merges.
+#
+# Exit codes (cmd/conduit/internal/kcdrift): 3 a snapshot differs from its
+# own pinned version's docs, 2 a page or the release list cannot be read or
+# parsed or a released version (downloads.apache.org) has no generated pages
+# yet, 1 upstream drift. Every non-zero code fails the nightly. On a pull
+# request only 1 is a warning: that drift is upstream's, not the PR's, and
+# the nightly files it. 3 and 2 fail a pull request, since a snapshot edit
+# that is wrong for its own pinned version, or a tool that cannot read the
+# docs, is what the PR run is there to catch.
 #
 # This check existing is a precondition for unhiding `migrate` (decided
 # 2026-10-15): the snapshots are only as good as the job that keeps them
@@ -42,9 +48,9 @@ on:
       - 'pkg/kcmigrate/rules/drift/**'
       - 'pkg/kcmigrate/rules/upstream/**'
 
+# Read-only by default; only the issue job can write issues.
 permissions:
   contents: read
-  issues: write
 
 jobs:
   drift:
@@ -64,8 +70,8 @@ jobs:
         run: go build -o "$RUNNER_TEMP/kcdrift" ./cmd/conduit/internal/kcdrift
 
       - name: Compare snapshots with upstream docs
-        # Exit 1 is drift, 2 is docs that could not be read or parsed. Both
-        # fail, except drift on a pull request (see the header).
+        # Every non-zero exit fails, except drift (1) on a pull request (see
+        # the header).
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -86,10 +92,34 @@ jobs:
         run: |
           [ -s drift.md ] || echo "kcdrift printed no report; see the step log." > drift.md
 
-      # A scheduled failure has no PR to annotate, so it files (or comments on)
-      # an issue. Without this the only record is a red run nobody opens.
-      - name: File an issue on failure
-        if: failure() && github.event_name != 'pull_request'
+      - name: Keep the report for the issue job
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: drift.md
+          retention-days: 7
+
+  # A scheduled failure has no PR to annotate, so it files (or comments on)
+  # an issue. Without this the only record is a red run nobody opens. A
+  # separate job, so issues: write is granted to this script alone and never
+  # to the step that runs repository code.
+  file-issue:
+    name: file the drift issue
+    needs: drift
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Fetch the report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: drift-report
+
+      - name: File or update the issue
         uses: actions/github-script@v8
         with:
           script: |
@@ -105,8 +135,9 @@ jobs:
               '',
               'Fix with a data PR: update the snapshot in pkg/kcmigrate/rules/upstream and the rules in',
               'pkg/kcmigrate/rules/data for every added key and changed default. A difference from the',
-              'pinned docs means the snapshot itself is wrong. Do not add an ignore entry just to make',
-              'this green; an ignore entry needs a reason a reviewer accepts.',
+              'pinned docs means the snapshot itself is wrong. A released version without published docs',
+              'clears once the docs appear. Do not add an ignore entry just to make this green; an ignore',
+              'entry needs a reason a reviewer accepts.',
             ].join('\n');
             // Dedupe on title rather than a label so this does not depend on a
             // label existing in the repo.

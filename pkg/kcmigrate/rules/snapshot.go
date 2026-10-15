@@ -77,6 +77,10 @@ type SnapshotKey struct {
 	// Undocumented marks a key no checked page lists (a cluster-prefixed
 	// client key such as source.cluster.bootstrap.servers).
 	Undocumented bool `yaml:"undocumented"`
+	// Required marks a key with no default at all: the connector refuses a
+	// config without it. Default is then nil. A key that is optional and
+	// unset by default has neither.
+	Required bool `yaml:"required"`
 }
 
 // ParseSnapshot decodes a snapshot strictly.
@@ -89,6 +93,11 @@ func ParseSnapshot(b []byte) (Snapshot, error) {
 	}
 	if s.Upstream.Name == "" || s.Upstream.Version == "" || len(s.Keys) == 0 || len(s.Sources) == 0 {
 		return Snapshot{}, cerrors.New("a snapshot needs upstream, sources and keys")
+	}
+	for _, k := range s.Keys {
+		if k.Required && k.Default != nil {
+			return Snapshot{}, cerrors.Errorf("key %s is required and has a default", k.Key)
+		}
 	}
 	if c := s.Check; c != nil {
 		if c.Site != SiteKafka || len(c.Pages) == 0 {

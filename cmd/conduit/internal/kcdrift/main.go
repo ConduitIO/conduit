@@ -17,9 +17,16 @@
 // upstream key snapshot that has a check section with its pinned and newest
 // upstream docs and prints a Markdown report.
 //
-// Exit status: 0 when every snapshot matches, 1 when one differs (the
-// report says how), 2 when a page could not be read. Run from the
-// repository root:
+// Exit status, the most serious finding winning:
+//
+//	0  every snapshot matches its pinned and newest documented version
+//	3  a snapshot differs from its pinned version's docs: the snapshot is
+//	   wrong (fails pull-request runs too)
+//	2  a page or the release list could not be read or parsed, or a
+//	   released version has no generated pages, so it cannot be checked
+//	1  upstream drift: the newest documented version differs
+//
+// Run from the repository root:
 //
 //	go run ./cmd/conduit/internal/kcdrift
 package main
@@ -51,32 +58,67 @@ func check(dir string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	fetch := drift.HTTPFetcher(&http.Client{Timeout: 30 * time.Second})
-	report, failed, err := run(ctx, dir, fetch)
+	report, code, err := run(ctx, dir, fetch)
 	fmt.Print(report)
-	switch {
-	case err != nil:
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "kcdrift:", err)
-		return 2
-	case failed:
-		return 1
 	}
-	return 0
+	return code
 }
 
-func run(ctx context.Context, dir string, fetch drift.Fetcher) (report string, failed bool, err error) {
+// Exit codes; see the package doc.
+const (
+	exitOK          = 0
+	exitDrift       = 1
+	exitUnchecked   = 2
+	exitSnapshotOff = 3
+)
+
+// exitFor returns the exit code of results: the most serious finding.
+func exitFor(results []drift.Result) int {
+	var wrong, unchecked, drifted bool
+	for _, r := range results {
+		wrong = wrong || len(r.Wrong) > 0
+		unchecked = unchecked || r.Unchecked != nil
+		drifted = drifted || len(r.Drifted) > 0
+	}
+	switch {
+	case wrong:
+		return exitSnapshotOff
+	case unchecked:
+		return exitUnchecked
+	case drifted:
+		return exitDrift
+	}
+	return exitOK
+}
+
+func run(ctx context.Context, dir string, fetch drift.Fetcher) (report string, code int, err error) {
+	report, results, err := compare(ctx, dir, fetch)
+	if err != nil {
+		code := exitUnchecked
+		if exitFor(results) == exitSnapshotOff {
+			code = exitSnapshotOff
+		}
+		return report, code, err
+	}
+	return report, exitFor(results), nil
+}
+
+func compare(ctx context.Context, dir string, fetch drift.Fetcher) (string, []drift.Result, error) {
 	paths, err := filepath.Glob(filepath.Join(dir, "*.keys.yaml"))
 	if err != nil || len(paths) == 0 {
-		return "", false, cerrors.Errorf("no snapshots in %s: %v", dir, err)
+		return "", nil, cerrors.Errorf("no snapshots in %s: %v", dir, err)
 	}
 	snaps := map[string]rules.Snapshot{}
 	for _, p := range paths {
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return "", false, err
+			return "", nil, err
 		}
 		s, err := rules.ParseSnapshot(b)
 		if err != nil {
-			return "", false, cerrors.Errorf("%s: %w", p, err)
+			return "", nil, cerrors.Errorf("%s: %w", p, err)
 		}
 		snaps[strings.TrimSuffix(filepath.Base(p), ".keys.yaml")] = s
 	}
@@ -88,16 +130,19 @@ func run(ctx context.Context, dir string, fetch drift.Fetcher) (report string, f
 	}
 	sort.Strings(names)
 	if len(names) == 0 {
-		return "", false, cerrors.Errorf("no snapshot in %s has a check section", dir)
+		return "", nil, cerrors.Errorf("no snapshot in %s has a check section", dir)
+	}
+	released, err := drift.NewestRelease(ctx, fetch)
+	if err != nil {
+		return "", nil, err
 	}
 	var results []drift.Result
 	for _, n := range names {
-		r, err := drift.Check(ctx, fetch, n, snaps[n], snaps)
+		r, err := drift.Check(ctx, fetch, n, snaps[n], snaps, released)
 		if err != nil {
-			return drift.Markdown(results), false, cerrors.Errorf("%s: %w", n, err)
+			return drift.Markdown(results), results, cerrors.Errorf("%s: %w", n, err)
 		}
 		results = append(results, r)
-		failed = failed || r.Failed()
 	}
-	return drift.Markdown(results), failed, nil
+	return drift.Markdown(results), results, nil
 }
