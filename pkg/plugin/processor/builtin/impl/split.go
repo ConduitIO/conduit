@@ -91,7 +91,11 @@ func (p *SplitProcessor) Configure(ctx context.Context, c config.Config) error {
 func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		ref, err := p.referenceResolver.Resolve(&rec)
+		// Work on a private copy with plain nested maps. This keeps the input
+		// record untouched (Resolve creates missing parents) and makes nested
+		// fields resolvable no matter which map type the record carries.
+		base := cloneWithPlainMaps(rec)
+		ref, err := p.referenceResolver.Resolve(&base)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -105,11 +109,17 @@ func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []
 
 		mr := make(sdk.MultiRecord, val.Len())
 		for i := 0; i < val.Len(); i++ {
-			newRec := rec.Clone()
-			newRef, _ := p.referenceResolver.Resolve(&newRec)
-			item := val.Index(i)
+			newRec := cloneWithPlainMaps(base)
+			// Never discard this error: a nil reference here used to panic the
+			// whole process (#3152). Invariant 3: a record we can't split is
+			// returned as an ErrorRecord so the pipeline nacks it (DLQ or
+			// halt), it is never dropped.
+			newRef, err := p.referenceResolver.Resolve(&newRec)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to resolve the field in the copy of the record: %w", err)})
+			}
 
-			if err := newRef.Set(item.Interface()); err != nil {
+			if err := newRef.Set(val.Index(i).Interface()); err != nil {
 				return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to set the item: %w", err)})
 			}
 			if newRec.Metadata == nil {
@@ -122,4 +132,68 @@ func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []
 		out = append(out, mr)
 	}
 	return out
+}
+
+// cloneWithPlainMaps returns a copy of rec in which every structured value
+// (key, payload before, payload after) holds nested maps of type
+// map[string]any, which is the only map type the reference resolver can walk.
+//
+// Record.Clone is not enough: depending on the conduit-commons version it
+// retypes nested map[string]any to opencdc.StructuredData (and may share
+// nested slices with the original). The copy built here shares no nested map
+// or []any with rec whatever Clone does, so the result is also safe to hand to
+// a different pipeline branch.
+func cloneWithPlainMaps(rec opencdc.Record) opencdc.Record {
+	c := rec.Clone()
+	c.Key = plainData(rec.Key, c.Key)
+	c.Payload.Before = plainData(rec.Payload.Before, c.Payload.Before)
+	c.Payload.After = plainData(rec.Payload.After, c.Payload.After)
+	return c
+}
+
+// plainData rebuilds structured data from src with plain nested maps; any
+// other kind of data is returned as cloned.
+func plainData(src, cloned opencdc.Data) opencdc.Data {
+	sd, ok := src.(opencdc.StructuredData)
+	if !ok {
+		return cloned
+	}
+	if sd == nil {
+		return opencdc.StructuredData(nil)
+	}
+	return opencdc.StructuredData(plainMap(sd))
+}
+
+func plainMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = plainValue(v)
+	}
+	return out
+}
+
+func plainValue(v any) any {
+	switch v := v.(type) {
+	case opencdc.StructuredData:
+		if v == nil {
+			return v
+		}
+		return plainMap(v)
+	case map[string]any:
+		if v == nil {
+			return v
+		}
+		return plainMap(v)
+	case []any:
+		if v == nil {
+			return v
+		}
+		out := make([]any, len(v))
+		for i := range v {
+			out[i] = plainValue(v[i])
+		}
+		return out
+	default:
+		return v
+	}
 }
