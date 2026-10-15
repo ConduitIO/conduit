@@ -1,0 +1,35 @@
+version: "2.2"
+pipelines:
+  - id: s3-destination
+    status: running
+    name: s3-destination
+    description: >
+      Baseline for the S3 destination (#3009): generator -> builtin:s3 ->
+      MinIO. One object per batch of 1000 records, JSON lines, no partitioning.
+    connectors:
+      - id: s3-destination:generator
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          format.options.payload: string
+          operations: create
+      - id: s3-destination:s3
+        type: destination
+        plugin: builtin:s3
+        settings:
+          aws.accessKeyId: benchiminio
+          aws.secretAccessKey: benchiminiosecret
+          aws.region: us-east-1
+          aws.bucket: benchi
+          aws.endpoint: http://benchi-minio:9000
+          aws.pathStyle: "true"
+          prefix: bench
+          format: json
+          # One object per 1000 records; with the default (no batching) every
+          # record is its own PutObject, which measures request latency, not
+          # the connector.
+          sdk.batch.size: "1000"
+          sdk.batch.delay: "1s"
