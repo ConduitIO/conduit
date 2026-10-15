@@ -244,7 +244,10 @@ func TestRecovery_RefusedRestartDegradesWithoutRetry(t *testing.T) {
 	ce, ok := conduiterr.Get(h.ls.WaitPipeline(h.pl.ID))
 	is.True(ok)
 	is.Equal(ce.Code, starthook.CodeDebeziumStandaloneBeforeEncode)
-	time.Sleep(50 * time.Millisecond) // a retry would back off for at most 10ms
+	// The run is over: no live or backing-off run is left that could retry,
+	// and only the one backoff happened.
+	_, live := h.ls.runningPipelines.Get(h.pl.ID)
+	is.True(!live)
 	is.Equal(backoffs.Load(), int32(1))
 	// The first run built both processors; the refused restart built none.
 	is.Equal(h.plugins.built.Load(), builtBefore+2)

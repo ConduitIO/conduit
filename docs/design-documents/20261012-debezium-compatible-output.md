@@ -579,7 +579,8 @@ hook called in `startRun`, **before `buildRunnablePipeline`**, in **both** engin
 (`pkg/lifecycle/service.go`, `startRun` at the Start/recovery path before `buildRunnablePipeline`;
 `pkg/lifecycle-poc/service.go`, the same two points). The hook receives the stored pipeline entity (connectors,
 processors, DLQ settings, plugin specifications), so it covers every way a pipeline came to exist, including the
-recovery restart. There is one `startRun` per engine, shared by `Start` and the recovery restart, so one call site per
+recovery restart. (It does not cover the classic engine's live in-place processor swap, which changes a running
+pipeline without `startRun`; see _Implemented so far_ below.) There is one `startRun` per engine, shared by `Start` and the recovery restart, so one call site per
 engine
 covers both. A refusal on `Start` returns the stable error and the pipeline does not start. A refusal on a
 recovery restart marks the pipeline degraded with that error and is **not retried** (the configuration will not
@@ -592,7 +593,10 @@ the start path of both engines, so it is Tier 1 on its own review and gets its o
 Its first check is decision 18: a pipeline whose records can reach `debezium.encode` through a standalone plugin
 (a standalone source connector, a standalone processor before the encoder on its path, or an encoder that itself
 resolves to a standalone plugin) is refused with `pipeline.debezium_standalone_before_encode`, naming every
-offender. Plugin references are resolved with the standalone registries' `Has`, which reads the same map the
+offender. The classic engine's live in-place processor swap (`ReconfigureProcessor`, used by provisioning's live
+apply) builds a processor without going through `startRun`, so it runs the hook too, after the new config is stored
+and before the new processor is built; a refusal keeps the old processor and the apply rolls the config back. Arch
+v2 has no live swap and restarts instead. Plugin references are resolved with the standalone registries' `Has`, which reads the same map the
 dispenser does (including `@latest` and unversioned names), instead of `List()`. The four placement rules above and
 `debezium.encode_missing` are not implemented yet.
 

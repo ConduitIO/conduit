@@ -24,11 +24,19 @@
 // acked (invariants 1 and 3).
 //
 // Both engines call Check in startRun, which serves Start (from the API, from
-// provisioning, and from Init at boot) and the recovery restart, so every way
-// a pipeline comes to exist is covered. A refusal on Start is returned to the
-// caller and the pipeline does not start. A refusal on a recovery restart is
-// the recovery's error: the pipeline goes to degraded and is not retried,
-// because the configuration will not change by itself.
+// provisioning, and from Init at boot) and the recovery restart. A refusal on
+// Start is returned to the caller and the pipeline does not start. A refusal
+// on a recovery restart is the recovery's error: the pipeline goes to degraded
+// and is not retried, because the configuration will not change by itself.
+//
+// startRun is not the only place a running pipeline's processors change: the
+// classic engine's live in-place swap (pkg/lifecycle ReconfigureProcessor,
+// used by provisioning's live apply) builds a new processor without a
+// restart, so it calls Check too, after the new config is stored and before
+// the new processor is built. A refusal there keeps the old processor running
+// and is returned to the caller, which rolls the stored config back. The
+// arch-v2 engine has no live swap; it falls back to a restart, which goes
+// through startRun.
 //
 // A check applies only when the pipeline contains what it guards; for any
 // other pipeline Check resolves no plugin and returns nil.

@@ -24,7 +24,9 @@ import (
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -33,7 +35,11 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
+	procmock "github.com/conduitio/conduit/pkg/plugin/processor/mock"
+	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -80,11 +86,13 @@ type boundaryPlacement struct {
 }
 
 type boundaryHarness struct {
-	ls      *Service
-	pl      *pipeline.Instance
-	source  *connector.Instance
-	plugins *passthroughProcessorPlugins
-	records []opencdc.Record
+	ls       *Service
+	pl       *pipeline.Instance
+	source   *connector.Instance
+	plugins  *passthroughProcessorPlugins
+	procs    *processor.Service
+	pipeProc []string // pipeline processor IDs, in order
+	records  []opencdc.Record
 }
 
 // newBoundaryHarness builds the pipeline (the classic engine's twin of
@@ -106,7 +114,7 @@ func newBoundaryHarness(t *testing.T, place boundaryPlacement, run bool) *bounda
 	is.NoErr(err)
 	ctrl := gomock.NewController(t)
 
-	h := &boundaryHarness{pl: pl, plugins: plugins, records: generateRecords(10)}
+	h := &boundaryHarness{pl: pl, plugins: plugins, procs: procs, records: generateRecords(10)}
 	var source, dest, dlq *connector.Instance
 	var sourceDisp, destDisp, dlqDisp connectorPlugin.Dispenser
 	if run {
@@ -137,6 +145,7 @@ func newBoundaryHarness(t *testing.T, place boundaryPlacement, run bool) *bounda
 	}
 	for _, p := range place.pipeline {
 		id := create(p, processor.Parent{ID: pl.ID, Type: processor.ParentTypePipeline})
+		h.pipeProc = append(h.pipeProc, id)
 		_, err = ps.AddProcessor(ctx, pl.ID, id)
 		is.NoErr(err)
 	}
@@ -266,8 +275,116 @@ func TestRecovery_RefusedRestartDegradesWithoutRetry(t *testing.T) {
 	ce, ok := conduiterr.Get(h.ls.WaitPipeline(h.pl.ID))
 	is.True(ok)
 	is.Equal(ce.Code, starthook.CodeDebeziumStandaloneBeforeEncode)
-	time.Sleep(50 * time.Millisecond) // a retry would back off for at most 10ms
+	// The run is over: no live or backing-off run is left that could retry,
+	// and only the one backoff happened.
+	_, live := h.ls.runningPipelines.Get(h.pl.ID)
+	is.True(!live)
 	is.Equal(backoffs.Load(), int32(1))
 	// The first run built both processors; the refused restart built none.
 	is.Equal(h.plugins.built.Load(), builtBefore+2)
+}
+
+// TestReconfigureProcessor_RefusesStandaloneBeforeDebeziumEncode: the live
+// in-place swap (provisioning's applyInPlace) runs the start checks too. A swap
+// that puts a standalone plugin before debezium.encode is refused with the
+// code before the new processor is built; the old processor keeps running and
+// the pipeline keeps delivering.
+func TestReconfigureProcessor_RefusesStandaloneBeforeDebeziumEncode(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	h := newBoundaryHarness(t, boundaryPlacement{pipeline: []string{fieldPlugin, encodePlugin}}, true)
+
+	is.NoErr(h.ls.Start(ctx, h.pl.ID))
+	waitForAck(t, h.source, h.records[len(h.records)-1].Position)
+	builtBefore := h.plugins.built.Load()
+
+	// Provisioning persists the new config first, then asks for the swap.
+	_, err := h.procs.UpdateWhileRunning(ctx, h.pipeProc[0], wasmPlugin, processor.Config{})
+	is.NoErr(err)
+	err = h.ls.ReconfigureProcessor(ctx, h.pl.ID, h.pipeProc[0])
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // refusal must be coded
+	is.Equal(ce.Code, starthook.CodeDebeziumStandaloneBeforeEncode)
+	is.True(strings.Contains(ce.Message, wasmPlugin))
+
+	is.Equal(h.plugins.built.Load(), builtBefore) // nothing built
+	is.Equal(h.pl.GetStatus(), pipeline.StatusRunning)
+
+	is.NoErr(h.ls.Stop(ctx, h.pl.ID, false))
+	is.NoErr(h.ls.WaitPipeline(h.pl.ID))
+}
+
+// TestStart_RealResolverChain resolves through the real services: the
+// processor service and plugin service down to a standalone processor
+// registry (empty here), and the connector plugin service down to a
+// standalone connector registry loaded from a real plugin directory. The
+// source references the installed standalone plugin without a type prefix
+// and without a version, so only a lookup that sees the registry's latest
+// entry finds it; the unprefixed built-in processor before the encoder must
+// not be named, because no standalone processor of that name is installed.
+func TestStart_RealResolverChain(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+
+	procStandalone, err := proc_standalone.NewRegistry(logger, t.TempDir(), schema.NewInMemoryService())
+	is.NoErr(err)
+	procs := processor.NewService(logger, db, proc_plugin.NewPluginService(logger, procmock.NewRegistry(ctrl), procStandalone))
+
+	connStandalone := conn_standalone.NewRegistry(logger, "../plugin/connector/standalone/test")
+	connStandalone.Init(ctx, ":12345", server.DefaultMaxReceiveRecordSize)
+	connPlugins := connectorPlugin.NewPluginService(logger, pmock.NewBuiltinReg(ctrl), connStandalone, pmock.NewAuthManager(ctrl))
+
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "real-chain"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	source := dummySource(persister)
+	source.Plugin = "test-plugin" // installed in the standalone registry dir
+	dest := dummyDestination(persister)
+	stored := testProcessorService{
+		"field": {ID: "field", Plugin: "field.set"},
+		"enc":   {ID: "enc", Plugin: encodePlugin},
+	}
+	_, err = ps.AddProcessor(ctx, pl.ID, "field")
+	is.NoErr(err)
+	_, err = ps.AddProcessor(ctx, pl.ID, "enc")
+	is.NoErr(err)
+	_, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	_, err = ps.AddConnector(ctx, pl.ID, dest.ID)
+	is.NoErr(err)
+
+	err = starthook.Check(ctx, pl, starthook.Services{
+		Connectors:       testConnectorService{source.ID: source, dest.ID: dest},
+		Processors:       realResolverProcessors{testProcessorService: stored, real: procs},
+		ConnectorPlugins: connPlugins,
+	})
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, starthook.CodeDebeziumStandaloneBeforeEncode)
+	is.True(strings.Contains(ce.Message, `uses standalone plugin "test-plugin"`))
+	is.True(!strings.Contains(ce.Message, `"field"`))
+
+	// The same source with a builtin: prefix is not standalone.
+	source.Plugin = "builtin:test-plugin"
+	is.NoErr(starthook.Check(ctx, pl, starthook.Services{
+		Connectors:       testConnectorService{source.ID: source, dest.ID: dest},
+		Processors:       realResolverProcessors{testProcessorService: stored, real: procs},
+		ConnectorPlugins: connPlugins,
+	}))
+}
+
+// realResolverProcessors serves stored instances from a map (the encoder is
+// not a registered built-in yet, so the real service could not create it) and
+// resolves plugins through the real processor.Service.
+type realResolverProcessors struct {
+	testProcessorService
+	real *processor.Service
+}
+
+func (r realResolverProcessors) ResolvesToStandalone(p string) bool {
+	return r.real.ResolvesToStandalone(p)
 }
