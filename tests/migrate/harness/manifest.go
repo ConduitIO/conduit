@@ -55,6 +55,7 @@ const (
 	cmdKafkaConnect = "kafka-connect"
 	flagJSON        = "--json"
 	flagWorker      = "--worker"
+	roleSource      = "source"
 	// KeyConnectorClass is the Kafka Connect key that names the class.
 	KeyConnectorClass = "connector.class"
 )
@@ -353,7 +354,7 @@ func validateManifest(c *Case) []string {
 		}
 	}
 	for _, em := range m.Emits {
-		if em.Plugin == "" || (em.Role != "source" && em.Role != "destination") {
+		if em.Plugin == "" || (em.Role != roleSource && em.Role != "destination") {
 			add("emits entry %+v needs a plugin and role source|destination", em)
 		}
 	}
