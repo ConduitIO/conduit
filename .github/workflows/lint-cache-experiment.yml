@@ -1,0 +1,43 @@
+# TEMPORARY (#3066): measures golangci-lint wall time under each cache
+# option. Removed before this PR is ready for review.
+name: lint-cache-experiment
+
+on:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, skip-save-cache, skip-cache, source-hash-key]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+      - name: Golangci-lint version
+        id: golangci-lint-version
+        run: |
+          GOLANGCI_LINT_VERSION=$( go list -modfile=tools/go.mod -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2 )
+          echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Restore source-keyed lint cache
+        if: matrix.variant == 'source-hash-key'
+        id: srccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-exp-${{ runner.os }}-${{ steps.golangci-lint-version.outputs.v }}-${{ hashFiles('**/*.go', '**/go.mod', '**/go.sum', '.golangci.yml') }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ steps.golangci-lint-version.outputs.v }}
+          skip-cache: ${{ matrix.variant == 'skip-cache' || matrix.variant == 'source-hash-key' }}
+          skip-save-cache: ${{ matrix.variant == 'skip-save-cache' }}
+      - name: Save source-keyed lint cache
+        if: matrix.variant == 'source-hash-key' && steps.srccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ steps.srccache.outputs.cache-primary-key }}
