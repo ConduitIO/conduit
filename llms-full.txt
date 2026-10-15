@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (115)
+## 3. Error codes (116)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
