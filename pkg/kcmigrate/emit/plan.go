@@ -50,6 +50,7 @@ type Plan struct {
 	// File is the pipeline file path relative to the output directory.
 	File       string
 	connectors []connectorDef
+	dlq        *dlqDef
 	owner      map[string]string // config path -> key that set it
 	secrets    []Secret
 	envs       *EnvNames
@@ -79,6 +80,12 @@ type pipelineDef struct {
 	Status      string         `yaml:"status"`
 	Description string         `yaml:"description,omitempty"`
 	Connectors  []connectorDef `yaml:"connectors"`
+	DLQ         *dlqDef        `yaml:"dead-letter-queue,omitempty"`
+}
+
+type dlqDef struct {
+	WindowSize          int `yaml:"window-size"`
+	WindowNackThreshold int `yaml:"window-nack-threshold"`
 }
 
 type connectorDef struct {
@@ -162,44 +169,94 @@ func (e *ConflictError) Error() string {
 	return fmt.Sprintf("setting %s is already set by %s", e.Setting, e.Owner)
 }
 
-// Set writes setting on side for key and returns the JSON pointer to it in
-// the pipeline file. It fails with *ConflictError if another key owns the
-// setting, and with an error for an unknown side.
-func (p *Plan) Set(side, setting, value, key string) (string, error) {
-	i := p.index(side)
-	if i < 0 {
-		return "", cerrors.Errorf("unknown side %q", side)
-	}
-	path := fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", i, escapePointer(setting))
-	if owner, ok := p.owner[path]; ok && owner != key {
-		return "", &ConflictError{Setting: setting, Owner: owner}
-	}
-	c := &p.connectors[i]
-	if c.Settings == nil {
-		c.Settings = map[string]string{}
-	}
-	c.Settings[setting] = value
-	p.owner[path] = key
-	return path, nil
-}
+// Kafka-facing sides. A Kafka Connect connector talks to Kafka through a
+// producer (sources) or a consumer (sinks); MirrorMaker has both. Shared
+// rules name these instead of source or destination.
+const (
+	SideKafka    = "kafka"    // every builtin:kafka connector of the pipeline
+	SideProducer = "producer" // the destination, when it is builtin:kafka
+	SideConsumer = "consumer" // the source, when it is builtin:kafka
+)
 
-// Has reports whether setting on side is already written.
-func (p *Plan) Has(side, setting string) bool {
-	c := p.connector(side)
-	if c == nil {
-		return false
-	}
-	_, ok := c.Settings[setting]
-	return ok
-}
+const kafkaPlugin = "builtin:kafka"
 
-func (p *Plan) index(side string) int {
-	for i := range p.connectors {
-		if p.connectors[i].Type == side {
-			return i
+// ErrNoSide is returned by Set when the pipeline has no connector on the
+// named side, for example a producer setting on a sink's pipeline.
+var ErrNoSide = cerrors.New("the pipeline has no connector on this side")
+
+// sides resolves a side name to connector indexes.
+func (p *Plan) sides(side string) ([]int, error) {
+	var out []int
+	for i, c := range p.connectors {
+		kafka := c.Plugin == kafkaPlugin
+		switch side {
+		case SideSource, SideDestination:
+			if c.Type == side {
+				out = append(out, i)
+			}
+		case SideKafka:
+			if kafka {
+				out = append(out, i)
+			}
+		case SideProducer:
+			if kafka && c.Type == SideDestination {
+				out = append(out, i)
+			}
+		case SideConsumer:
+			if kafka && c.Type == SideSource {
+				out = append(out, i)
+			}
+		default:
+			return nil, cerrors.Errorf("unknown side %q", side)
 		}
 	}
-	return -1
+	if len(out) == 0 {
+		return nil, ErrNoSide
+	}
+	return out, nil
+}
+
+// Set writes setting on every connector of side for key and returns the
+// JSON pointer to the first. It fails with *ConflictError if another key
+// owns the setting on any of them (nothing is written then), with ErrNoSide
+// when the side does not exist in this pipeline, and with an error for an
+// unknown side.
+func (p *Plan) Set(side, setting, value, key string) (string, error) {
+	idx, err := p.sides(side)
+	if err != nil {
+		return "", err
+	}
+	paths := make([]string, len(idx))
+	for j, i := range idx {
+		paths[j] = fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", i, escapePointer(setting))
+		if owner, ok := p.owner[paths[j]]; ok && owner != key {
+			return "", &ConflictError{Setting: setting, Owner: owner}
+		}
+	}
+	for j, i := range idx {
+		c := &p.connectors[i]
+		if c.Settings == nil {
+			c.Settings = map[string]string{}
+		}
+		c.Settings[setting] = value
+		p.owner[paths[j]] = key
+	}
+	return paths[0], nil
+}
+
+// Has reports whether setting is written on every connector of side. A
+// side the pipeline lacks counts as written, so defaults skip it.
+func (p *Plan) Has(side, setting string) bool {
+	idx, err := p.sides(side)
+	if err != nil {
+		return true
+	}
+	for _, i := range idx {
+		if _, ok := p.connectors[i].Settings[setting]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Secrets returns the environment variables the pipeline references.
@@ -213,7 +270,7 @@ func (p *Plan) YAML(status, description string) ([]byte, error) {
 	err := enc.Encode(pipelineFile{
 		Version: "2.2",
 		Pipelines: []pipelineDef{{
-			ID: p.ID, Status: status, Description: description, Connectors: p.connectors,
+			ID: p.ID, Status: status, Description: description, Connectors: p.connectors, DLQ: p.dlq,
 		}},
 	})
 	if err == nil {
@@ -227,4 +284,13 @@ func (p *Plan) YAML(status, description string) ([]byte, error) {
 
 func escapePointer(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
+}
+
+// HaltOnFailure writes a dead-letter queue that stops the pipeline on the
+// first failed record (window 1, threshold 0), Kafka Connect's
+// errors.tolerance=none. It is Conduit's default too; writing it explicitly
+// keeps the behavior if the default ever changes.
+func (p *Plan) HaltOnFailure() string {
+	p.dlq = &dlqDef{WindowSize: 1, WindowNackThreshold: 0}
+	return "/pipelines/0/dead-letter-queue"
 }

@@ -32,13 +32,19 @@ type Kind func(p *Plan, d *rules.Decision) error
 
 // Kind names.
 const (
-	KindNone    = "none"
-	KindSetting = "setting"
+	KindNone       = "none"
+	KindSetting    = "setting"
+	KindTLS        = "tls-from-protocol"
+	KindSASLJAAS   = "sasl-jaas"
+	KindHaltOnFail = "dlq-halt"
 )
 
 var kinds = map[string]Kind{
-	KindNone:    func(*Plan, *rules.Decision) error { return nil },
-	KindSetting: setting,
+	KindNone:       func(*Plan, *rules.Decision) error { return nil },
+	KindSetting:    setting,
+	KindTLS:        tlsFromProtocol,
+	KindSASLJAAS:   saslJAAS,
+	KindHaltOnFail: haltOnFailure,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -101,11 +107,21 @@ func setting(p *Plan, d *rules.Decision) error {
 	if name == "" {
 		return cerrors.Errorf("key %s: emit kind setting needs a name", d.KV.Key)
 	}
-	value := d.KV.Value.Reveal() // the one place a value enters a pipeline
-	var env string
-	if d.Secret || IsSecretKey(d.KV.Key) || rules.IsReference(value) {
-		value, env = p.secretRef(d)
+	var value, env string
+	if v, ok := d.Emit.Args["value"]; ok {
+		value = v // a mapped value from rule data, for example acks=-1 -> all
+	} else {
+		value = d.KV.Value.Reveal() // the one place a raw value enters a pipeline
+		if d.Secret || IsSecretKey(d.KV.Key) || rules.IsReference(value) {
+			value, env = p.secretRef(d)
+		}
 	}
+	return set(p, d, side, name, value, env)
+}
+
+// set writes one setting for d and records the target, turning a conflict
+// into a blocking finding and a missing side into a non-blocking one.
+func set(p *Plan, d *rules.Decision, side, name, value, env string) error {
 	path, err := p.Set(side, name, value, d.KV.Key)
 	var conflict *ConflictError
 	switch {
@@ -117,8 +133,19 @@ func setting(p *Plan, d *rules.Decision) error {
 			Fix:    "Remove one of " + d.KV.Key + " and " + conflict.Owner + " from the Kafka Connect config, then re-run.",
 		}
 		return nil
+	case cerrors.Is(err, ErrNoSide):
+		d.Entry = kcmigrate.Entry{
+			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin,
+			Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+			Reason: d.KV.Key + " configures the Kafka " + side + ", which this pipeline does not have.",
+			Fix:    "Remove " + d.KV.Key + " from the Kafka Connect config; it does not apply to this connector.",
+		}
+		return nil
 	case err != nil:
 		return cerrors.Errorf("key %s: %w", d.KV.Key, err)
+	}
+	if d.Entry.Target != nil { // a kind that sets several settings points at the first
+		return nil
 	}
 	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: path, Env: env}
 	d.Entry.Secret = env != ""
@@ -194,14 +221,74 @@ func CheckActions(refs []rules.ActionRef) error {
 			errs = append(errs, cerrors.Errorf("%s: key %s: unknown emit kind %q", r.File, r.Key, a.Kind))
 			continue
 		}
-		if a.Kind == KindSetting {
-			if side := a.Args["side"]; side != SideSource && side != SideDestination {
-				errs = append(errs, cerrors.Errorf("%s: key %s: setting needs side source or destination", r.File, r.Key))
+		switch a.Kind {
+		case KindSetting, KindTLS, KindSASLJAAS:
+			switch a.Args["side"] {
+			case SideSource, SideDestination, SideKafka, SideProducer, SideConsumer:
+			default:
+				errs = append(errs, cerrors.Errorf("%s: key %s: %s needs side source, destination, kafka, producer or consumer", r.File, r.Key, a.Kind))
 			}
-			if a.Args["name"] == "" {
-				errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
-			}
+		}
+		if a.Kind == KindSetting && a.Args["name"] == "" {
+			errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
 		}
 	}
 	return cerrors.Join(errs...)
+}
+
+// tlsFromProtocol maps security.protocol onto tls.enabled. Argument: side.
+// SSL and SASL_SSL enable TLS; PLAINTEXT and SASL_PLAINTEXT write nothing
+// (TLS off is the connector default). Rule data restricts the values.
+func tlsFromProtocol(p *Plan, d *rules.Decision) error {
+	switch strings.ToUpper(d.KV.Value.Reveal()) {
+	case "SSL", "SASL_SSL":
+		return set(p, d, d.Emit.Args["side"], "tls.enabled", "true", "")
+	default:
+		return nil
+	}
+}
+
+// jaasLogin matches the two JAAS login modules the Kafka connector can
+// express: PLAIN and SCRAM with a username and a password.
+var (
+	jaasModule   = regexp.MustCompile(`^\s*org\.apache\.kafka\.common\.security\.(plain\.PlainLoginModule|scram\.ScramLoginModule)\s+required\b`)
+	jaasUsername = regexp.MustCompile(`\busername\s*=\s*"([^"]*)"`)
+	jaasPassword = regexp.MustCompile(`\bpassword\s*=\s*"([^"]*)"`)
+)
+
+// saslJAAS splits sasl.jaas.config into saslUsername and saslPassword (the
+// password always as a ${VAR} reference). Argument: side. A module other
+// than PLAIN or SCRAM, a reference, or a config without both fields cannot
+// be split offline and is unsupported and blocking: authenticating
+// differently would fail, or succeed as someone else.
+func saslJAAS(p *Plan, d *rules.Decision) error {
+	raw := d.KV.Value.Reveal() // parsed here; only the username is written as is
+	user, pass := jaasUsername.FindStringSubmatch(raw), jaasPassword.FindStringSubmatch(raw)
+	if !jaasModule.MatchString(raw) || user == nil || pass == nil {
+		d.Entry = kcmigrate.Entry{
+			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
+			Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+			Reason: "sasl.jaas.config is not a PlainLoginModule or ScramLoginModule with a username and a password written in it, so it cannot be turned into saslUsername and saslPassword.",
+			Fix:    "Write the JAAS config literally with username and password (the password may stay a reference elsewhere), or set saslUsername and saslPassword on the migrated pipeline by hand.",
+		}
+		return nil
+	}
+	side := d.Emit.Args["side"]
+	if err := set(p, d, side, "saslUsername", user[1], ""); err != nil || d.Entry.Code != "" {
+		return err
+	}
+	ref, env := p.secretRef(d)
+	if err := set(p, d, side, "saslPassword", ref, env); err != nil {
+		return err
+	}
+	d.Entry.Secret = true
+	d.Entry.Target.Env = env
+	d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " The username is written to saslUsername; saslPassword is ${" + env + "}, to be filled with the password from this JAAS config.")
+	return nil
+}
+
+// haltOnFailure writes the halting dead-letter queue (errors.tolerance=none).
+func haltOnFailure(p *Plan, d *rules.Decision) error {
+	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: p.HaltOnFailure()}
+	return nil
 }

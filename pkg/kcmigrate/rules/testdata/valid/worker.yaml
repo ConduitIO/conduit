@@ -18,3 +18,7 @@ keys:
     reason: A test worker key that blocks.
     fix: Remove it.
     diff: behavior
+  - key: value.converter
+    status: translated
+    emit: {kind: none}
+    diff: identity

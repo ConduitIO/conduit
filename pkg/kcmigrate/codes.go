@@ -62,6 +62,16 @@ var (
 	// CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since
 	// either value could be the one Kafka Connect used.
 	CodeKeyConflict = conduiterr.Register("kc.key_conflict", codes.InvalidArgument)
+	// CodeSMTUnsupported: a single message transform or predicate outside the
+	// subset migrate translates exactly. Blocking: transforms change data.
+	CodeSMTUnsupported = conduiterr.Register("kc.smt_unsupported", codes.InvalidArgument)
+	// CodeConverterUnsupported: a converter with no Conduit equivalent in
+	// this version. Blocking: the wire format would differ.
+	CodeConverterUnsupported = conduiterr.Register("kc.converter_unsupported", codes.InvalidArgument)
+	// CodeConverterUnknown: a connector-level note when neither the
+	// connector nor the worker file sets key.converter or value.converter,
+	// so the wire format is unknown. Blocking.
+	CodeConverterUnknown = conduiterr.Register("kc.converter_unknown", codes.InvalidArgument)
 	// CodeSecretPlaintext: a connector-level note that the input holds a
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.

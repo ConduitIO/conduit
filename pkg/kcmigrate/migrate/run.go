@@ -241,6 +241,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
+	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)
 	for _, s := range plan.Secrets() {
 		if s.Literal {
 			run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
@@ -407,4 +408,33 @@ func recordWorkerDowngrades(rep *kcmigrate.Report, runs []connectorRun, hasWorke
 		}
 	}
 	return false
+}
+
+// Converter keys, read by converterNotes.
+const keyConverter, valueConverter = "key.converter", "value.converter"
+
+// converterNotes returns a blocking kc.converter_unknown note for each of
+// key.converter and value.converter that neither the connector nor the
+// worker file sets. Kafka Connect would use the worker's default, which
+// migrate cannot see, so the wire format is unknown: not assumed.
+func converterNotes(connector, worker []rules.Decision) []kcmigrate.Note {
+	set := map[string]bool{}
+	for _, d := range connector {
+		set[d.KV.Key] = true
+	}
+	for _, d := range worker {
+		set[d.KV.Key] = true
+	}
+	var notes []kcmigrate.Note
+	for _, key := range []string{keyConverter, valueConverter} {
+		if set[key] {
+			continue
+		}
+		notes = append(notes, kcmigrate.Note{
+			Code: kcmigrate.CodeConverterUnknown.Reason(), Blocking: true, Rule: "shared/converters/" + key,
+			Reason: "Neither the connector nor a worker file sets " + key + ", so the format Kafka Connect used is unknown.",
+			Fix:    "Pass the worker properties with --worker, or set " + key + " on the connector, then re-run.",
+		})
+	}
+	return notes
 }

@@ -31,8 +31,8 @@
   },
   "summary": {
     "connectors": 3,
-    "keys": 9,
-    "translated": 6,
+    "keys": 11,
+    "translated": 8,
     "approximated": 0,
     "unsupported": 3,
     "blocking": 3
@@ -100,11 +100,31 @@
           "blocking": false
         },
         {
-          "key": "example.host",
+          "key": "key.converter",
           "status": "translated",
           "origin": {
             "file": "connectors/clean.properties",
             "line": 3,
+            "column": 1
+          },
+          "blocking": false
+        },
+        {
+          "key": "value.converter",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 4,
+            "column": 1
+          },
+          "blocking": false
+        },
+        {
+          "key": "example.host",
+          "status": "translated",
+          "origin": {
+            "file": "connectors/clean.properties",
+            "line": 5,
             "column": 1
           },
           "target": {
@@ -117,11 +137,11 @@
           "status": "translated",
           "origin": {
             "file": "connectors/clean.properties",
-            "line": 4,
+            "line": 6,
             "column": 1
           },
           "code": "kc.key_duplicate",
-          "reason": "Overridden by the occurrence at connectors/clean.properties:5:1; the last value wins, as in Kafka Connect.",
+          "reason": "Overridden by the occurrence at connectors/clean.properties:7:1; the last value wins, as in Kafka Connect.",
           "blocking": false
         },
         {
@@ -129,7 +149,7 @@
           "status": "unsupported",
           "origin": {
             "file": "connectors/clean.properties",
-            "line": 5,
+            "line": 7,
             "column": 1
           },
           "code": "kc.key_unsupported",

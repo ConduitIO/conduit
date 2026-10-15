@@ -54,6 +54,9 @@ func (e *Engine) Classes() []string {
 type ActionRef struct {
 	File, Key string
 	Action    Action
+	// Emits are the plugins of the file's class; empty for the shared and
+	// worker files, whose actions name Kafka sides.
+	Emits []Emit
 }
 
 // Actions lists every emit action of every loaded rule file, in file and
@@ -63,11 +66,11 @@ func (e *Engine) Actions() []ActionRef {
 	for _, f := range e.files {
 		for _, r := range f.Keys {
 			if r.Emit != nil {
-				out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *r.Emit})
+				out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *r.Emit, Emits: f.Emits})
 			}
 			for _, b := range r.Values {
 				if b.Emit != nil {
-					out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *b.Emit})
+					out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *b.Emit, Emits: f.Emits})
 				}
 			}
 		}
