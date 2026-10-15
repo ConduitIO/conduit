@@ -379,9 +379,23 @@ func TestGoldenPlans(t *testing.T) {
 		for _, tc := range []struct {
 			converter string
 			format    connect.DecimalFormat
-		}{{"json", connect.DecimalBase64}, {"json-numeric", connect.DecimalNumeric}} {
+		}{{"json", connect.DecimalBase64}, {"json-numeric", connect.DecimalNumeric}, {"json-txmeta", connect.DecimalBase64}} {
 			t.Run(version+"/"+tc.converter, func(t *testing.T) {
-				events := readEvents(t, version, tc.converter)
+				all := readEvents(t, version, tc.converter)
+				// The BEGIN/END topic is not produced by Conduit in v0.21
+				// (design D8/D12); its messages are excluded and counted.
+				var events []gEvent
+				txTopic := 0
+				for _, ev := range all {
+					if ev.Topic == "dbz.transaction" {
+						txTopic++
+						continue
+					}
+					events = append(events, ev)
+				}
+				if tc.converter == "json-txmeta" && txTopic == 0 {
+					t.Fatal("json-txmeta capture has no dbz.transaction messages")
+				}
 				conv := connect.NewJSONConverter()
 				conv.DecimalFormat = tc.format
 				converters := Converters{Key: conv, Value: conv}

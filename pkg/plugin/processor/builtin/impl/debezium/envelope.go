@@ -29,11 +29,17 @@ import (
 // Metadata keys of the record shape between the source and the encoder
 // (design: Record shape between source and processor).
 const (
-	MetaTopic       = "debezium.topic"
-	MetaOp          = "debezium.op"
-	MetaDescriptor  = "debezium.descriptor"
-	MetaOldKey      = "debezium.old_key" // schemaless JSON payload, NUMERIC decimals
-	MetaSourcePfx   = "debezium.source."
+	MetaTopic      = "debezium.topic"
+	MetaOp         = "debezium.op"
+	MetaDescriptor = "debezium.descriptor"
+	MetaOldKey     = "debezium.old_key" // schemaless JSON payload, NUMERIC decimals
+	MetaSourcePfx  = "debezium.source."
+	// MetaTxID, MetaTxTotal and MetaTxCollOrder fill the envelope's
+	// transaction block (provide.transaction.metadata). The id is
+	// "<txId>:<lsn>" with the change's own LSN, per event (golden
+	// json-txmeta). The orders are those of the plan's first event; a
+	// primary-key change is two events, so the source advances its counters
+	// by two for it.
 	MetaTxID        = "debezium.tx.id"
 	MetaTxTotal     = "debezium.tx.total_order"
 	MetaTxCollOrder = "debezium.tx.data_collection_order"
@@ -242,7 +248,12 @@ func (b *Builder) primaryKeyChange(sh *shape, rec opencdc.Record, topic string, 
 	if b.opts.TombstonesOnDelete {
 		msgs = append(msgs, b.tombstone(sh, topic, oldKey, source, newKeyHdr))
 	}
-	msgs = append(msgs, b.rowMessage(sh, topic, newKey, nil, after, "c", source, tx, oldKeyHdr))
+	// Debezium numbers every event it emits within the transaction, so the
+	// create is one past the delete in both orders (golden json-txmeta; the
+	// tombstone is not an event). The source must therefore count a
+	// primary-key change as two events when it numbers later changes of the
+	// same transaction.
+	msgs = append(msgs, b.rowMessage(sh, topic, newKey, nil, after, "c", source, nextEvent(tx), oldKeyHdr))
 	return msgs, nil
 }
 
@@ -272,7 +283,8 @@ func (b *Builder) withContext(hdrs []Header, source *connect.Struct) []Header {
 	if !b.opts.ExtendedHeaders {
 		return hdrs
 	}
-	logicalName := source.Values[2]
+	_, idx := source.Schema.Field("name")
+	logicalName := source.Values[idx]
 	str := &connect.Schema{Type: connect.TypeString}
 	out := append([]Header{}, hdrs...)
 	return append(
@@ -282,6 +294,15 @@ func (b *Builder) withContext(hdrs []Header, source *connect.Struct) []Header {
 		Header{Key: headerContextPfx + "connectorName", Schema: str, Value: connectorNamePgSQL},
 		Header{Key: headerContextPfx + "runId", Schema: str, Value: b.opts.RunID},
 	)
+}
+
+// nextEvent is the transaction block of the event after tx in the same
+// transaction and table: both orders advance by one.
+func nextEvent(tx *connect.Struct) *connect.Struct {
+	if tx == nil {
+		return nil
+	}
+	return &connect.Struct{Schema: tx.Schema, Values: []any{tx.Values[0], tx.Values[1].(int64) + 1, tx.Values[2].(int64) + 1}}
 }
 
 func txOrNil(tx *connect.Struct) any {

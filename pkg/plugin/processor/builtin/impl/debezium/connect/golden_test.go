@@ -131,6 +131,7 @@ func TestGoldenJSONConverter(t *testing.T) {
 		}{
 			{"json", DecimalBase64},
 			{"json-numeric", DecimalNumeric},
+			{"json-txmeta", DecimalBase64},
 		} {
 			t.Run(version+"/"+tc.converter, func(t *testing.T) {
 				if _, err := os.Stat(filepath.Join(goldenDir, version, tc.converter)); err != nil {

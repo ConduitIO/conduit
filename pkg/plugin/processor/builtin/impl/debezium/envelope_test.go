@@ -84,6 +84,11 @@ func genValue(t *rapid.T, s *connect.Schema, label string) any {
 func genRow(t *rapid.T, tb table, id int64, label string) opencdc.StructuredData {
 	row := opencdc.StructuredData{"id": id}
 	for _, c := range tb.cols[1:] {
+		// An optional field may be absent, not only null: that is the case
+		// in which an unknown field could take its place unnoticed.
+		if c.Schema.Optional && rapid.Bool().Draw(t, label+c.Name+"-absent") {
+			continue
+		}
 		row[c.Name] = genValue(t, c.Schema, label+c.Name)
 	}
 	return row

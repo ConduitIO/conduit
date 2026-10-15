@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
@@ -136,6 +137,16 @@ func (s *Schema) validate(path string) error {
 	if !s.Type.valid() {
 		return schemaErr(path, fmt.Sprintf("unknown type %q", s.Type))
 	}
+	// Connect names are Java Strings: invalid UTF-8 cannot come from Kafka
+	// Connect and could not be written back faithfully.
+	if !utf8.ValidString(s.Name) || (s.Doc != nil && !utf8.ValidString(*s.Doc)) {
+		return schemaErr(path, "name or doc is not valid UTF-8")
+	}
+	for _, p := range s.Parameters {
+		if !utf8.ValidString(p.Key) || !utf8.ValidString(p.Value) {
+			return schemaErr(path, "parameter is not valid UTF-8")
+		}
+	}
 	switch s.Type { //nolint:exhaustive // the remaining types share the default branch
 	case TypeArray:
 		if s.Items == nil {
@@ -159,6 +170,9 @@ func (s *Schema) validate(path string) error {
 		for _, f := range s.Fields {
 			if seen[f.Name] {
 				return schemaErr(path, fmt.Sprintf("duplicate field %q", f.Name))
+			}
+			if !utf8.ValidString(f.Name) {
+				return schemaErr(path, fmt.Sprintf("field name %q is not valid UTF-8", f.Name))
 			}
 			seen[f.Name] = true
 			if err := f.Schema.validate(path + "." + f.Name); err != nil {

@@ -206,8 +206,12 @@ func structValue(s *Schema, v any, path string) (*Struct, error) {
 		return nil, mismatch(path, fmt.Sprintf("struct value must be map[string]any, got %T", v))
 	}
 	out := &Struct{Schema: s, Values: make([]any, len(s.Fields))}
+	matched := 0
 	for i, f := range s.Fields {
 		fv, present := m[f.Name]
+		if present {
+			matched++
+		}
 		if !present && !f.Schema.Optional {
 			return nil, mismatch(path+"."+f.Name, "required field missing")
 		}
@@ -218,7 +222,9 @@ func structValue(s *Schema, v any, path string) (*Struct, error) {
 		out.Values[i] = cv
 	}
 	// Invariant 6: a field the schema does not know is never dropped silently.
-	if len(m) > len(s.Fields) {
+	// Every key of m must name a field; counting the matched keys is not
+	// enough, because an absent optional field makes room for an unknown one.
+	if matched != len(m) {
 		for k := range m {
 			if _, idx := s.Field(k); idx < 0 {
 				return nil, mismatch(path+"."+k, "field not in the descriptor")

@@ -328,6 +328,7 @@ Postgres source (new, all rejected unless `debezium.enabled` is true; unknown va
 | `key.converter`, `value.converter` | `avro` | `key.converter`, `value.converter` (`avro`, `json`) |
 | `json.schemas.enable` (per key and value) | `true` | `*.converter.schemas.enable` |
 | `json.decimal.format` | `BASE64` | `decimal.format` |
+| `json.replace.null.with.default` (per key and value) | `true` (D20) | `*.converter.replace.null.with.default` |
 | `avro.connect.meta.data` | `true` | `connect.meta.data` (controls `connect.name`/`connect.version`/`connect.parameters`) |
 | `avro.enhanced.schema.support` | `false` | `enhanced.avro.schema.support` |
 | `avro.scrub.invalid.names` | `false` | Confluent `scrub.invalid.names`; `migrate` must translate it |
@@ -912,6 +913,7 @@ sets the three components, and keeps every key in the report exactly once.
 | Debezium plugin version | `debezium.compat` | translated; blocking question if unknown |
 | `heartbeat.*`, `topic.heartbeat.prefix` | | unsupported; non-blocking only per the Postgres lane's slot-advance finding |
 | `key.converter`, `value.converter` | `key.converter`, `value.converter` on `debezium.encode` | `AvroConverter` and `JsonConverter` translated; `JsonSchemaConverter`, `ProtobufConverter`, Apicurio, custom: unsupported (blocking) |
+| `*.converter.replace.null.with.default` | `json.replace.null.with.default` on `debezium.encode` | translated (D20); absent means Connect's default, `true` |
 | `*.converter.schemas.enable`, `decimal.format`, `connect.meta.data`, `enhanced.avro.schema.support`, `*.subject.name.strategy`, `auto.register.schemas`, `use.latest.version` | processor settings above | translated |
 | `*.converter.schema.registry.url`, auth | engine config fragment, credentials as secrets | translated (secrets rules of #3026) |
 | SMTs that reshape the envelope | | unsupported (blocking) with debezium output |
@@ -950,6 +952,7 @@ undocumented difference fails the harness. The list is the current expectation; 
 | D17 | Logical decoding messages are emitted like Debezium; the only difference is the halt on a message that cannot be encoded. | equal / halt |
 | D18 | Plan semantics under failure and replay. Messages of a plan that go to different partitions are independent. **Local failures are removed before producing.** franz-go fails an oversized record locally (`MessageTooLarge`) and keeps producing later records for the partition, so without a check a delete could be lost while its tombstone is sent. The destination therefore size-checks every message of a plan, in one pass over the whole batch, before producing anything, using franz-go's own rule (see _Size check_ below), and fails the first offending record with `kafka.message_too_large` (table, key, message index) without producing that plan or any later record. **Broker-side errors cannot be predicted and no prefix property is claimed**: franz-go's `failAllRecords` fails only records already buffered, so what was written before a failure is a race, and recovery is replay of the unacked records, which replays whole plans. After replay a consumer can see an older state of a key after a newer one, and in the transient window before replay completes it can see a delete without its tombstone, or the create for a new key before the delete for the old. `(source.lsn, key)` dedupe cannot tell a delete event from its tombstone (the tombstone has no value and so no `source`). Debezium has comparable windows on a task restart; the plan makes them explicit. The chaos test asserts the state after replay only. Optionally the produce loop stops producing further records of a batch once a failure callback has been observed (best effort, not relied on). **Pending DeVaris confirmation**: this supersedes the earlier conditional approval of a one-message-at-a-time fallback, which is dropped. | documented; chaos test asserts the post-replay state only |
 | D19 | The record key is the primary key, else the first unique index, else `message.key.columns` (_Record shape_). When the table's replica identity does not carry every record-key column (`REPLICA IDENTITY USING INDEX` on another index, or an index that lacks a key column) the source halts with `debezium.replica_identity_index_not_key` instead of continuing as Debezium does **(V)**. Approved by DeVaris as stricter than Debezium. Escape: the drift approval mechanism over the already-written range (_Primary-key update_); a delete in that range halts (`debezium.delete_key_unavailable`). | halt, approved restart |
+| D20 | `replace.null.with.default` (Kafka Connect's JsonConverter default, `true`): an explicit NULL in a field whose schema has a default is written as the default, also for array elements and a top-level null; the goldens show `NULL` becoming `"dflt"` and `42`, and a NULL in a `DEFAULT now()` column becoming `1970-01-01T00:00:00.000000Z`. The SimpleHeaderConverter substitutes struct-field defaults only. Mirroring it is a coercion of present-null into a value (invariant 6 tension, like D15). **Decided (Q16): mirror Kafka Connect**, default `true`, as an explicit setting documented at the enforcement site; `false` keeps the NULL. A NULL in a column whose default is not a literal (`DEFAULT now()`) is written as the epoch, `1970-01-01T00:00:00.000000Z`. `migrate` carries over the Connect converter's `replace.null.with.default`. | equal to Kafka Connect under the configured setting |
 
 ## Failure modes
 
@@ -1255,6 +1258,7 @@ Added after the round-4 review:
 | --- | --- |
 | 14 | D19 approved by DeVaris: halt on a replica identity that does not carry the record key, stricter than Debezium, with the drift-approval escape. |
 | 15 | D18: no one-message-at-a-time fallback; transient windows documented; chaos asserts the post-replay state. **Pending DeVaris confirmation**; supersedes the earlier conditional approval of the fallback. |
+| 16 | D20 decided by DeVaris on 2026-10-15: mirror Kafka Connect. `replace.null.with.default` is an explicit setting, default `true`; `migrate` carries over the Connect converter's value. |
 
 Items marked **(V)** are not open decisions; they are facts the harness will establish before the corresponding
 implementation PR merges.

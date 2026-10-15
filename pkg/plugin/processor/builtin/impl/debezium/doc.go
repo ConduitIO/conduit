@@ -49,6 +49,15 @@
 //     partition. A primary-key change yields its three messages in Debezium's
 //     order.
 //
+// Null replaced by default (design D20). The JSON converter mirrors Kafka
+// Connect's replace.null.with.default, default true: an explicit NULL in a
+// column with a default is written as that default, and a NULL in a column
+// whose default is not a literal (DEFAULT now()) is written as
+// 1970-01-01T00:00:00.000000Z, the epoch Debezium puts in the schema. This is
+// what Debezium consumers already receive. The setting is explicit; false
+// keeps the NULL. The debezium.encode processor reference carries the same
+// text when the processor is registered.
+//
 // The golden files in tests/debezium/testdata/golden, captured from real
 // Debezium, are the specification; golden_test.go rebuilds every captured
 // event from a record and compares the bytes.

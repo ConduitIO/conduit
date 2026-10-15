@@ -49,14 +49,70 @@ type JSONConverter struct {
 	// DecimalFormat is decimal.format.
 	DecimalFormat DecimalFormat
 	// ReplaceNullWithDefault is replace.null.with.default: a null value in a
-	// field whose schema has a default is written as the default.
+	// field whose schema has a default is written as the default (also for
+	// array elements and a top-level null; oracle-verified). See
+	// DefaultReplaceNullWithDefault for why it is a setting.
 	ReplaceNullWithDefault bool
 }
 
+// DefaultReplaceNullWithDefault is the encoder's default for
+// replace.null.with.default: true, as in Kafka Connect, so consumers receive
+// the bytes they receive from Debezium today. Decided by DeVaris on
+// 2026-10-15 (design D20 / Q16).
+//
+// The consequence, documented as difference D20: an explicit NULL in a field
+// whose schema has a default is written as the default. For a column with a
+// literal default the consumer sees the default value; for a column whose
+// default is not a literal (DEFAULT now()), Debezium's schema default is the
+// epoch, so a NULL is written as 1970-01-01T00:00:00.000000Z. Pipelines that
+// must keep NULLs set the converter's replace.null.with.default to false.
+const DefaultReplaceNullWithDefault = true
+
 // NewJSONConverter returns a converter with the JsonConverter defaults:
-// schemas enabled, BASE64 decimals, nulls replaced by defaults.
+// schemas enabled, BASE64 decimals, and replace.null.with.default as
+// DefaultReplaceNullWithDefault says.
 func NewJSONConverter() JSONConverter {
-	return JSONConverter{SchemasEnable: true, DecimalFormat: DecimalBase64, ReplaceNullWithDefault: true}
+	return JSONConverter{SchemasEnable: true, DecimalFormat: DecimalBase64, ReplaceNullWithDefault: DefaultReplaceNullWithDefault}
+}
+
+// MaxNestingDepth is Jackson's default StreamWriteConstraints.maxNestingDepth,
+// which the JsonConverter enforces when it writes: the 1001st nested object
+// or array fails the record (DataException). The oracle (tests/debezium/oracle)
+// pins the boundary: 1000 nested arrays serialize, 1001 do not, and the
+// schemas.enable envelope counts toward the limit.
+const MaxNestingDepth = 1000
+
+// jsonWriter is the output of one Marshal call: the buffer and the current
+// container nesting depth.
+type jsonWriter struct {
+	buf   bytes.Buffer
+	depth int
+}
+
+// open writes a '{' or '[' and enforces MaxNestingDepth.
+func (w *jsonWriter) open(c byte, path string) error {
+	w.depth++
+	if w.depth > MaxNestingDepth {
+		return outOfRange(path, fmt.Sprintf("JSON nesting deeper than %d (Jackson's limit)", MaxNestingDepth))
+	}
+	w.buf.WriteByte(c)
+	return nil
+}
+
+func (w *jsonWriter) close(c byte) {
+	w.depth--
+	w.buf.WriteByte(c)
+}
+
+// str writes a JSON string. Invalid UTF-8 is refused: a Java String cannot
+// hold it, so Kafka Connect could never have produced the bytes, and writing
+// U+FFFD instead would change the data (invariant 6).
+func (w *jsonWriter) str(s, path string) error {
+	if !utf8.ValidString(s) {
+		return outOfRange(path, fmt.Sprintf("%q is not valid UTF-8", s))
+	}
+	appendJSONString(&w.buf, s)
+	return nil
 }
 
 // Marshal serializes a Connect value with its schema, as fromConnectData
@@ -73,103 +129,133 @@ func (c JSONConverter) Marshal(s *Schema, v any) ([]byte, error) {
 	if c.DecimalFormat != DecimalBase64 && c.DecimalFormat != DecimalNumeric {
 		return nil, conduiterr.New(CodeConfigInvalid, fmt.Sprintf("decimal.format %q is not BASE64 or NUMERIC", c.DecimalFormat))
 	}
-	var buf bytes.Buffer
+	w := &jsonWriter{}
 	if c.SchemasEnable {
-		buf.WriteString(`{"schema":`)
-		if err := c.appendSchema(&buf, s); err != nil {
+		if err := w.open('{', "$"); err != nil {
 			return nil, err
 		}
-		buf.WriteString(`,"payload":`)
+		w.buf.WriteString(`"schema":`)
+		if err := c.appendSchema(w, s, "$schema"); err != nil {
+			return nil, err
+		}
+		w.buf.WriteString(`,"payload":`)
 	}
-	if err := c.appendValue(&buf, s, v, "$"); err != nil {
+	if err := c.appendValue(w, s, v, "$"); err != nil {
 		return nil, err
 	}
 	if c.SchemasEnable {
-		buf.WriteByte('}')
+		w.close('}')
 	}
-	return buf.Bytes(), nil
+	return w.buf.Bytes(), nil
 }
 
 // MarshalSchema writes only the schema in JsonConverter form (asJsonSchema).
 func (c JSONConverter) MarshalSchema(s *Schema) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := c.appendSchema(&buf, s); err != nil {
+	w := &jsonWriter{}
+	if err := c.appendSchema(w, s, "$"); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return w.buf.Bytes(), nil
 }
 
 // appendSchema writes asJsonSchema's output. Key order is fixed by the
 // converter: type, then the child schemas, then optional, name, version, doc,
-// parameters and default. A struct field's schema gets "field" last.
-func (c JSONConverter) appendSchema(buf *bytes.Buffer, s *Schema) error {
-	buf.WriteString(`{"type":`)
-	appendJSONString(buf, string(s.Type))
+// parameters and default. A struct field's schema gets "field" last. An empty
+// parameter map is omitted, as the converter omits it (oracle EMPTYPARAMS).
+func (c JSONConverter) appendSchema(w *jsonWriter, s *Schema, path string) error {
+	return c.appendSchemaField(w, s, path, nil)
+}
+
+//nolint:gocyclo // one branch per schema attribute, in output order
+func (c JSONConverter) appendSchemaField(w *jsonWriter, s *Schema, path string, fieldName *string) error {
+	if err := w.open('{', path); err != nil {
+		return err
+	}
+	w.buf.WriteString(`"type":`)
+	if err := w.str(string(s.Type), path); err != nil {
+		return err
+	}
 	switch s.Type { //nolint:exhaustive // the remaining types share the default branch
 	case TypeArray:
-		buf.WriteString(`,"items":`)
-		if err := c.appendSchema(buf, s.Items); err != nil {
+		w.buf.WriteString(`,"items":`)
+		if err := c.appendSchema(w, s.Items, path+".items"); err != nil {
 			return err
 		}
 	case TypeMap:
-		buf.WriteString(`,"keys":`)
-		if err := c.appendSchema(buf, s.Keys); err != nil {
+		w.buf.WriteString(`,"keys":`)
+		if err := c.appendSchema(w, s.Keys, path+".keys"); err != nil {
 			return err
 		}
-		buf.WriteString(`,"values":`)
-		if err := c.appendSchema(buf, s.Values); err != nil {
+		w.buf.WriteString(`,"values":`)
+		if err := c.appendSchema(w, s.Values, path+".values"); err != nil {
 			return err
 		}
 	case TypeStruct:
-		buf.WriteString(`,"fields":[`)
+		w.buf.WriteString(`,"fields":`)
+		if err := w.open('[', path); err != nil {
+			return err
+		}
 		for i, f := range s.Fields {
 			if i > 0 {
-				buf.WriteByte(',')
+				w.buf.WriteByte(',')
 			}
-			if err := c.appendSchema(buf, f.Schema); err != nil {
+			name := f.Name
+			if err := c.appendSchemaField(w, f.Schema, path+"."+f.Name, &name); err != nil {
 				return err
 			}
-			// Replace the closing brace to append the field name.
-			buf.Truncate(buf.Len() - 1)
-			buf.WriteString(`,"field":`)
-			appendJSONString(buf, f.Name)
-			buf.WriteByte('}')
 		}
-		buf.WriteByte(']')
+		w.close(']')
 	}
-	buf.WriteString(`,"optional":`)
-	buf.WriteString(strconv.FormatBool(s.Optional))
+	w.buf.WriteString(`,"optional":`)
+	w.buf.WriteString(strconv.FormatBool(s.Optional))
 	if s.Name != "" {
-		buf.WriteString(`,"name":`)
-		appendJSONString(buf, s.Name)
-	}
-	if s.Version != nil {
-		buf.WriteString(`,"version":`)
-		buf.WriteString(strconv.Itoa(*s.Version))
-	}
-	if s.Doc != nil {
-		buf.WriteString(`,"doc":`)
-		appendJSONString(buf, *s.Doc)
-	}
-	if s.Parameters != nil {
-		buf.WriteString(`,"parameters":{`)
-		for i, p := range s.Parameters {
-			if i > 0 {
-				buf.WriteByte(',')
-			}
-			appendJSONString(buf, p.Key)
-			buf.WriteByte(':')
-			appendJSONString(buf, p.Value)
-		}
-		buf.WriteByte('}')
-	}
-	if s.HasDefault && s.Default != nil {
-		buf.WriteString(`,"default":`)
-		if err := c.appendValue(buf, s, s.Default, "$default"); err != nil {
+		w.buf.WriteString(`,"name":`)
+		if err := w.str(s.Name, path); err != nil {
 			return err
 		}
 	}
-	buf.WriteByte('}')
+	if s.Version != nil {
+		w.buf.WriteString(`,"version":`)
+		w.buf.WriteString(strconv.Itoa(*s.Version))
+	}
+	if s.Doc != nil {
+		w.buf.WriteString(`,"doc":`)
+		if err := w.str(*s.Doc, path); err != nil {
+			return err
+		}
+	}
+	if len(s.Parameters) > 0 {
+		w.buf.WriteString(`,"parameters":`)
+		if err := w.open('{', path); err != nil {
+			return err
+		}
+		for i, p := range s.Parameters {
+			if i > 0 {
+				w.buf.WriteByte(',')
+			}
+			if err := w.str(p.Key, path); err != nil {
+				return err
+			}
+			w.buf.WriteByte(':')
+			if err := w.str(p.Value, path); err != nil {
+				return err
+			}
+		}
+		w.close('}')
+	}
+	if s.HasDefault && s.Default != nil {
+		w.buf.WriteString(`,"default":`)
+		if err := c.appendValue(w, s, s.Default, path+"$default"); err != nil {
+			return err
+		}
+	}
+	if fieldName != nil {
+		w.buf.WriteString(`,"field":`)
+		if err := w.str(*fieldName, path); err != nil {
+			return err
+		}
+	}
+	w.close('}')
 	return nil
 }
 
@@ -177,13 +263,21 @@ func (c JSONConverter) appendSchema(buf *bytes.Buffer, s *Schema) error {
 // [FromGo].
 //
 //nolint:gocyclo // one branch per Connect type; splitting it hides the mapping
-func (c JSONConverter) appendValue(buf *bytes.Buffer, s *Schema, v any, path string) error {
+func (c JSONConverter) appendValue(w *jsonWriter, s *Schema, v any, path string) error {
 	if v == nil {
+		// Invariant 6: the one sanctioned replacement of a value, design D20
+		// (decided 2026-10-15: mirror Kafka Connect). With
+		// replace.null.with.default on, an explicit NULL in a field whose
+		// schema has a default is written as the default, as Connect writes
+		// it; a NULL in a DEFAULT now() column becomes the epoch
+		// (1970-01-01T00:00:00.000000Z). It is an explicit setting
+		// (ReplaceNullWithDefault, default DefaultReplaceNullWithDefault), and
+		// false writes the NULL.
 		if s.HasDefault && s.Default != nil && c.ReplaceNullWithDefault {
-			return c.appendValue(buf, s, s.Default, path)
+			return c.appendValue(w, s, s.Default, path)
 		}
 		if s.Optional {
-			buf.WriteString("null")
+			w.buf.WriteString("null")
 			return nil
 		}
 		return mismatch(path, "null value for required field")
@@ -194,11 +288,12 @@ func (c JSONConverter) appendValue(buf *bytes.Buffer, s *Schema, v any, path str
 			return mismatch(path, fmt.Sprintf("Decimal value must be connect.Decimal, got %T", v))
 		}
 		if c.DecimalFormat == DecimalNumeric {
-			buf.WriteString(plainDecimal(d))
+			// Jackson writes a DecimalNode with BigDecimal.toString, which
+			// switches to E notation (1E-7, 0E-10, 5E+3); oracle-verified.
+			w.buf.WriteString(javaBigDecimalString(d))
 			return nil
 		}
-		appendJSONString(buf, base64.StdEncoding.EncodeToString(twosComplement(d.Unscaled)))
-		return nil
+		return w.str(base64.StdEncoding.EncodeToString(twosComplement(d.Unscaled)), path)
 	}
 	switch s.Type {
 	case TypeInt8, TypeInt16, TypeInt32, TypeInt64:
@@ -206,55 +301,54 @@ func (c JSONConverter) appendValue(buf *bytes.Buffer, s *Schema, v any, path str
 		if !ok {
 			return mismatch(path, fmt.Sprintf("integer value must be int64, got %T", v))
 		}
-		buf.WriteString(strconv.FormatInt(i, 10))
+		w.buf.WriteString(strconv.FormatInt(i, 10))
 	case TypeFloat32:
 		f, ok := v.(float32)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("float value must be float32, got %T", v))
 		}
-		appendJavaFloat(buf, float64(f), 32)
+		appendJavaFloat(&w.buf, float64(f), 32)
 	case TypeFloat64:
 		f, ok := v.(float64)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("double value must be float64, got %T", v))
 		}
-		appendJavaFloat(buf, f, 64)
+		appendJavaFloat(&w.buf, f, 64)
 	case TypeBoolean:
 		b, ok := v.(bool)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("boolean value must be bool, got %T", v))
 		}
-		buf.WriteString(strconv.FormatBool(b))
+		w.buf.WriteString(strconv.FormatBool(b))
 	case TypeString:
 		str, ok := v.(string)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("string value must be string, got %T", v))
 		}
-		if !utf8.ValidString(str) {
-			return outOfRange(path, "string is not valid UTF-8")
-		}
-		appendJSONString(buf, str)
+		return w.str(str, path)
 	case TypeBytes:
 		b, ok := v.([]byte)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("bytes value must be []byte, got %T", v))
 		}
-		appendJSONString(buf, base64.StdEncoding.EncodeToString(b))
+		return w.str(base64.StdEncoding.EncodeToString(b), path)
 	case TypeArray:
 		arr, ok := v.([]any)
 		if !ok {
 			return mismatch(path, fmt.Sprintf("array value must be []any, got %T", v))
 		}
-		buf.WriteByte('[')
+		if err := w.open('[', path); err != nil {
+			return err
+		}
 		for i, e := range arr {
 			if i > 0 {
-				buf.WriteByte(',')
+				w.buf.WriteByte(',')
 			}
-			if err := c.appendValue(buf, s.Items, e, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			if err := c.appendValue(w, s.Items, e, fmt.Sprintf("%s[%d]", path, i)); err != nil {
 				return err
 			}
 		}
-		buf.WriteByte(']')
+		w.close(']')
 	case TypeMap:
 		entries, ok := v.([]MapEntry)
 		if !ok {
@@ -263,41 +357,43 @@ func (c JSONConverter) appendValue(buf *bytes.Buffer, s *Schema, v any, path str
 		// String-keyed maps are JSON objects; any other key type is an array
 		// of [key, value] pairs.
 		objectMode := s.Keys.Type == TypeString
+		open, end := byte('['), byte(']')
 		if objectMode {
-			buf.WriteByte('{')
-		} else {
-			buf.WriteByte('[')
+			open, end = '{', '}'
+		}
+		if err := w.open(open, path); err != nil {
+			return err
 		}
 		for i, e := range entries {
 			if i > 0 {
-				buf.WriteByte(',')
+				w.buf.WriteByte(',')
 			}
 			if objectMode {
 				k, ok := e.Key.(string)
 				if !ok {
 					return mismatch(path, "map key must be a string")
 				}
-				appendJSONString(buf, k)
-				buf.WriteByte(':')
-			} else {
-				buf.WriteByte('[')
-				if err := c.appendValue(buf, s.Keys, e.Key, path+"{key}"); err != nil {
+				if err := w.str(k, path); err != nil {
 					return err
 				}
-				buf.WriteByte(',')
+				w.buf.WriteByte(':')
+			} else {
+				if err := w.open('[', path); err != nil {
+					return err
+				}
+				if err := c.appendValue(w, s.Keys, e.Key, path+"{key}"); err != nil {
+					return err
+				}
+				w.buf.WriteByte(',')
 			}
-			if err := c.appendValue(buf, s.Values, e.Value, path+"{value}"); err != nil {
+			if err := c.appendValue(w, s.Values, e.Value, path+"{value}"); err != nil {
 				return err
 			}
 			if !objectMode {
-				buf.WriteByte(']')
+				w.close(']')
 			}
 		}
-		if objectMode {
-			buf.WriteByte('}')
-		} else {
-			buf.WriteByte(']')
-		}
+		w.close(end)
 	case TypeStruct:
 		st, ok := v.(*Struct)
 		if !ok {
@@ -306,18 +402,22 @@ func (c JSONConverter) appendValue(buf *bytes.Buffer, s *Schema, v any, path str
 		if len(st.Values) != len(s.Fields) {
 			return mismatch(path, "struct value has the wrong number of fields")
 		}
-		buf.WriteByte('{')
+		if err := w.open('{', path); err != nil {
+			return err
+		}
 		for i, f := range s.Fields {
 			if i > 0 {
-				buf.WriteByte(',')
+				w.buf.WriteByte(',')
 			}
-			appendJSONString(buf, f.Name)
-			buf.WriteByte(':')
-			if err := c.appendValue(buf, f.Schema, st.Values[i], path+"."+f.Name); err != nil {
+			if err := w.str(f.Name, path); err != nil {
+				return err
+			}
+			w.buf.WriteByte(':')
+			if err := c.appendValue(w, f.Schema, st.Values[i], path+"."+f.Name); err != nil {
 				return err
 			}
 		}
-		buf.WriteByte('}')
+		w.close('}')
 	default:
 		return conduiterr.New(CodeUnsupportedType, fmt.Sprintf("%s: unsupported Connect type %q", path, s.Type))
 	}

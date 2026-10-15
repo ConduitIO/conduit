@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
@@ -29,117 +30,163 @@ import (
 // the Kafka Connect default header.converter: a header value is written as
 // Values.convertToString(schema, value) in UTF-8.
 //
-// Golden-verified: strings (written raw), and key structs of integers,
-// strings, uuids and Decimals (the __debezium.newkey/oldkey headers, written
-// as {"seq":2,"region":"us"} and {"id":1.50}, a Decimal as
-// BigDecimal.toString). Float, bytes, array and map values port Values.append
-// from Kafka 3.7/4.x and are covered by unit tests only.
+// Verified against the golden captures (string headers, and key structs of
+// integers, strings, uuids and Decimals for __debezium.newkey/oldkey) and
+// against the converter oracle in tests/debezium/oracle (floats, Decimals,
+// bytes, arrays, maps, embedded escaping, struct-field defaults).
 type SimpleHeaderConverter struct{}
 
-// Marshal serializes one header value. A nil value is a null header value.
+// Marshal serializes one header value. A nil value is a null header value;
+// unlike the JsonConverter, a top-level null is not replaced by the schema
+// default (oracle TOPNULL).
 func (SimpleHeaderConverter) Marshal(s *Schema, v any) ([]byte, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var sb strings.Builder
-	if err := appendValuesString(&sb, s, v, false); err != nil {
+	if err := appendValuesString(&sb, s, v, false, "$header"); err != nil {
 		return nil, err
 	}
 	return []byte(sb.String()), nil
 }
 
+var valuesEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
 // appendValuesString is Values.append. Embedded values (inside a struct,
 // array or map) quote strings and escape only backslash and double quote;
-// a top-level string is written as is.
+// a top-level string is written as is. A struct field that is null takes the
+// field's default, because Values.append reads fields through Struct.get,
+// which substitutes it; array elements and map values do not (oracle
+// DEFAULTS). A value of the wrong Go type is an error, never a panic.
 //
 //nolint:gocyclo // one branch per Connect type; splitting it hides the mapping
-func appendValuesString(sb *strings.Builder, s *Schema, v any, embedded bool) error {
+func appendValuesString(sb *strings.Builder, s *Schema, v any, embedded bool, path string) error {
 	if v == nil {
 		sb.WriteString("null")
+		return nil
+	}
+	wrong := func() error {
+		return mismatch(path, fmt.Sprintf("%s header value has Go type %T", s.Type, v))
+	}
+	quoted := func(str string) error {
+		if !utf8.ValidString(str) {
+			return outOfRange(path, fmt.Sprintf("%q is not valid UTF-8", str))
+		}
+		if embedded {
+			sb.WriteByte('"')
+			sb.WriteString(valuesEscaper.Replace(str))
+			sb.WriteByte('"')
+		} else {
+			sb.WriteString(str)
+		}
 		return nil
 	}
 	if s.Name == LogicalDecimal {
 		d, ok := v.(Decimal)
 		if !ok {
-			return mismatch("header", fmt.Sprintf("Decimal value must be connect.Decimal, got %T", v))
+			return wrong()
 		}
 		sb.WriteString(javaBigDecimalString(d))
 		return nil
 	}
 	switch s.Type {
 	case TypeInt8, TypeInt16, TypeInt32, TypeInt64:
-		sb.WriteString(strconv.FormatInt(v.(int64), 10))
+		i, ok := v.(int64)
+		if !ok {
+			return wrong()
+		}
+		sb.WriteString(strconv.FormatInt(i, 10))
 	case TypeFloat32:
-		f := float64(v.(float32))
-		sb.WriteString(javaFloatOrSpecial(f, 32))
+		f, ok := v.(float32)
+		if !ok {
+			return wrong()
+		}
+		sb.WriteString(javaFloatOrSpecial(float64(f), 32))
 	case TypeFloat64:
-		sb.WriteString(javaFloatOrSpecial(v.(float64), 64))
+		f, ok := v.(float64)
+		if !ok {
+			return wrong()
+		}
+		sb.WriteString(javaFloatOrSpecial(f, 64))
 	case TypeBoolean:
-		sb.WriteString(strconv.FormatBool(v.(bool)))
+		b, ok := v.(bool)
+		if !ok {
+			return wrong()
+		}
+		sb.WriteString(strconv.FormatBool(b))
 	case TypeString:
-		str := v.(string)
-		if embedded {
-			sb.WriteByte('"')
-			sb.WriteString(strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(str))
-			sb.WriteByte('"')
-		} else {
-			sb.WriteString(str)
+		str, ok := v.(string)
+		if !ok {
+			return wrong()
 		}
+		return quoted(str)
 	case TypeBytes:
-		enc := base64.StdEncoding.EncodeToString(v.([]byte))
-		if embedded {
-			sb.WriteByte('"')
-			sb.WriteString(enc)
-			sb.WriteByte('"')
-		} else {
-			sb.WriteString(enc)
+		b, ok := v.([]byte)
+		if !ok {
+			return wrong()
 		}
+		return quoted(base64.StdEncoding.EncodeToString(b))
 	case TypeArray:
+		arr, ok := v.([]any)
+		if !ok {
+			return wrong()
+		}
 		sb.WriteByte('[')
-		for i, e := range v.([]any) {
+		for i, e := range arr {
 			if i > 0 {
 				sb.WriteByte(',')
 			}
-			if err := appendValuesString(sb, s.Items, e, true); err != nil {
+			if err := appendValuesString(sb, s.Items, e, true, fmt.Sprintf("%s[%d]", path, i)); err != nil {
 				return err
 			}
 		}
 		sb.WriteByte(']')
 	case TypeMap:
+		entries, ok := v.([]MapEntry)
+		if !ok {
+			return wrong()
+		}
 		sb.WriteByte('{')
-		for i, e := range v.([]MapEntry) {
+		for i, e := range entries {
 			if i > 0 {
 				sb.WriteByte(',')
 			}
-			if err := appendValuesString(sb, s.Keys, e.Key, true); err != nil {
+			if err := appendValuesString(sb, s.Keys, e.Key, true, path+"{key}"); err != nil {
 				return err
 			}
 			sb.WriteByte(':')
-			if err := appendValuesString(sb, s.Values, e.Value, true); err != nil {
+			if err := appendValuesString(sb, s.Values, e.Value, true, path+"{value}"); err != nil {
 				return err
 			}
 		}
 		sb.WriteByte('}')
 	case TypeStruct:
 		st, ok := v.(*Struct)
-		if !ok {
-			return mismatch("header", fmt.Sprintf("struct value must be *connect.Struct, got %T", v))
+		if !ok || len(st.Values) != len(s.Fields) {
+			return wrong()
 		}
 		sb.WriteByte('{')
 		for i, f := range s.Fields {
 			if i > 0 {
 				sb.WriteByte(',')
 			}
+			if !utf8.ValidString(f.Name) {
+				return outOfRange(path, fmt.Sprintf("field name %q is not valid UTF-8", f.Name))
+			}
 			sb.WriteByte('"')
-			sb.WriteString(strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(f.Name))
+			sb.WriteString(valuesEscaper.Replace(f.Name))
 			sb.WriteString(`":`)
-			if err := appendValuesString(sb, f.Schema, st.Values[i], true); err != nil {
+			fv := st.Values[i]
+			if fv == nil && f.Schema.HasDefault {
+				fv = f.Schema.Default // Struct.get substitutes the default
+			}
+			if err := appendValuesString(sb, f.Schema, fv, true, path+"."+f.Name); err != nil {
 				return err
 			}
 		}
 		sb.WriteByte('}')
 	default:
-		return conduiterr.New(CodeUnsupportedType, fmt.Sprintf("header: unsupported Connect type %q", s.Type))
+		return conduiterr.New(CodeUnsupportedType, fmt.Sprintf("%s: unsupported Connect type %q", path, s.Type))
 	}
 	return nil
 }
