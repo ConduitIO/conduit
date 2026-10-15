@@ -77,7 +77,14 @@ their wire header (schema ID) byte for byte and by decoded value, and
   before the workload and differ across hosts (two fresh stacks on one host
   agree on them);
 - the per-run `__debezium.context.runId` header;
-- the partition of a null-key message (sticky partitioner).
+- the partition of a null-key message (sticky partitioner);
+- the partition and offset of a message whose key holds one of these values: the
+  `dbz.transaction` topic is keyed by `<txId>:<lsn>`, so its messages hash to
+  host-dependent partitions. That topic is compared as a multiset of masked
+  messages;
+- the Java identity hash Debezium prints as the `data_collection` of a logical
+  decoding message in a transaction `END` event
+  (`...LogicalDecodingMessageId@1d709497`), which changes every run.
 
 Offsets, keys, headers, schema IDs and every other byte must match. The
 `debezium goldens` workflow re-captures weekly and on changes here, fails when

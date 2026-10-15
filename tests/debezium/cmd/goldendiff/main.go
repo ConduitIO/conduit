@@ -35,6 +35,12 @@
 //     wrote before the workload, which differs across hosts.
 //   - the __debezium.context.runId header: generated per connector start.
 //   - the partition of a null-key message: the sticky partitioner picks it.
+//   - the partition and offset of a message whose key holds a volatile value
+//     (the dbz.transaction topic is keyed by "<txId>:<lsn>", so its messages
+//     hash to host-dependent partitions). Those topics are compared as a
+//     multiset of masked messages.
+//   - the identity hash Debezium prints for a logical message's data
+//     collection in a transaction END event (LogicalDecodingMessageId@1d709497).
 //
 // Every other byte must match.
 package main
@@ -47,6 +53,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -60,7 +67,14 @@ var volatileJSON = []*regexp.Regexp{
 	regexp.MustCompile(`"(ts_ms|ts_us|ts_ns|lsn|txId)":-?[0-9]+`),
 	regexp.MustCompile(`"sequence":"\[[^\]]*\]"`),
 	regexp.MustCompile(`"id":"[0-9]+:[0-9]+"`),
+	// Debezium names a logical decoding message's "data collection" in the
+	// transaction END event with Java's Object.toString, an identity hash
+	// that changes every run.
+	regexp.MustCompile(`"data_collection":"[A-Za-z0-9_.$]+@[0-9a-f]+"`),
 }
+
+// runIDHeader is generated per connector start and never compared.
+const runIDHeader = "__debezium.context.runId"
 
 func maskJSON(b []byte) []byte {
 	for _, re := range volatileJSON {
@@ -172,12 +186,69 @@ func compareDir(a, b string, avro bool) ([]string, error) {
 			diffs = append(diffs, "schemas.json differs")
 		}
 	}
-	for i := 0; i < min(len(ea), len(eb)); i++ {
-		if d := compareEvent(ea[i], eb[i], regA, regB); d != "" {
-			diffs = append(diffs, fmt.Sprintf("event %d (%s): %s", i, ea[i].id(), d))
+	oa, ua, err := splitVolatileKeys(ea)
+	if err != nil {
+		return nil, err
+	}
+	ob, ub, err := splitVolatileKeys(eb)
+	if err != nil {
+		return nil, err
+	}
+	if len(oa) != len(ob) {
+		diffs = append(diffs, fmt.Sprintf("ordered event count %d != %d", len(oa), len(ob)))
+	}
+	for i := 0; i < min(len(oa), len(ob)); i++ {
+		if d := compareEvent(oa[i], ob[i], regA, regB); d != "" {
+			diffs = append(diffs, fmt.Sprintf("event %d (%s): %s", i, oa[i].id(), d))
+		}
+	}
+	for topic, xs := range ua {
+		ys := ub[topic]
+		sort.Strings(xs)
+		sort.Strings(ys)
+		if strings.Join(xs, "\n") != strings.Join(ys, "\n") {
+			diffs = append(diffs, fmt.Sprintf("%s: the multiset of masked messages differs (%d vs %d messages)", topic, len(xs), len(ys)))
+		}
+	}
+	for topic := range ub {
+		if _, ok := ua[topic]; !ok {
+			diffs = append(diffs, fmt.Sprintf("%s: only in the fresh capture", topic))
 		}
 	}
 	return diffs, nil
+}
+
+// splitVolatileKeys separates the messages whose key contains a volatile
+// value. Their partition and offset depend on the host, so they are returned
+// per topic as masked, position-free strings; every other message keeps its
+// position.
+func splitVolatileKeys(evs []event) ([]event, map[string][]string, error) {
+	var ordered []event
+	unordered := map[string][]string{}
+	for _, ev := range evs {
+		key, err := ev.Key.raw()
+		if err != nil {
+			return nil, nil, err
+		}
+		if key == nil || bytes.Equal(maskJSON(key), key) {
+			ordered = append(ordered, ev)
+			continue
+		}
+		val, err := ev.Value.raw()
+		if err != nil {
+			return nil, nil, err
+		}
+		var hs []string
+		for _, h := range ev.Headers {
+			hv, _ := h.Value.raw()
+			if h.Key == runIDHeader {
+				hv = nil
+			}
+			hs = append(hs, h.Key+"="+string(maskJSON(hv)))
+		}
+		unordered[ev.Topic] = append(unordered[ev.Topic], string(maskJSON(key))+"\x00"+string(maskJSON(val))+"\x00"+strings.Join(hs, "\x00"))
+	}
+	return ordered, unordered, nil
 }
 
 // compareEvent returns "" when the two events match, otherwise a description
@@ -203,7 +274,7 @@ func compareEvent(x, y event, regA, regB *registry) string {
 		if hx.Key != hy.Key {
 			return fmt.Sprintf("header %d key %q vs %q", i, hx.Key, hy.Key)
 		}
-		if hx.Key == "__debezium.context.runId" {
+		if hx.Key == runIDHeader {
 			continue
 		}
 		if d := compareBlob("header "+hx.Key, hx.Value, hy.Value, nil, nil); d != "" {

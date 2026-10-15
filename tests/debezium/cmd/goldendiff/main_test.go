@@ -135,6 +135,26 @@ func TestGoldenDiff(t *testing.T) {
 			}
 		}, false},
 		{"avro identical", "avro", nil, false},
+		{"transaction topic on other partitions, ids shifted", "json-txmeta", func(i int, ev map[string]any) {
+			if ev["topic"] != "dbz.transaction" {
+				return
+			}
+			ev["partition"] = float64((i * 7) % 3)
+			ev["offset"] = float64(1000 - i)
+			shift := regexp.MustCompile(`"id":"([0-9]+):[0-9]+"`)
+			for _, k := range []string{"key", "value"} {
+				if b, ok := ev[k].(map[string]any); ok {
+					b["text"] = shift.ReplaceAllString(b["text"].(string), `"id":"$1:1"`)
+				}
+			}
+		}, false},
+		{"transaction topic BEGIN turned into END", "json-txmeta", func(i int, ev map[string]any) {
+			if ev["topic"] == "dbz.transaction" {
+				if v, ok := ev["value"].(map[string]any); ok && strings.Contains(v["text"].(string), `"status":"BEGIN"`) {
+					v["text"] = strings.Replace(v["text"].(string), `"status":"BEGIN"`, `"status":"END"`, 1)
+				}
+			}
+		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := committedRoot(t, "3.7.0", tc.converter)
