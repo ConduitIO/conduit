@@ -148,12 +148,19 @@ func (s *Store) PrepareSet(id string, instance *Instance) (func(context.Context)
 		return nil, cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
 	}
 
+	// LastActiveConfig is copied as a whole Config value, so its SettingRefs
+	// travels with it; Config is rebuilt field by field and needs each one.
 	icopy := Instance{
 		ID:   instance.ID,
 		Type: instance.Type,
 		Config: Config{
 			Name:     instance.Config.Name,
 			Settings: instance.Config.Settings,
+			// Copied explicitly: this whitelist copy would otherwise drop the
+			// field without an error, and omitempty hides the drop from the
+			// golden tests. Invariant 6: nothing written by the parser is
+			// silently discarded on a position flush.
+			SettingRefs: instance.Config.SettingRefs,
 		},
 		PipelineID:       instance.PipelineID,
 		Plugin:           instance.Plugin,

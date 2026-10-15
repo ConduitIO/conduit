@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (138)
+## 3. Error codes (139)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1130,6 +1130,7 @@ Author: Meroxa, Inc.
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 | `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error. With a DLQ enabled (threshold above 0) it is routed to the dead-letter queue; otherwise the pipeline is degraded (classic engine, avro.decode and processor paths) or recovering (classic engine destination path, and architecture v2), and a recovering pipeline re-reads the same record. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit. |
+| `secretref.env_unset` | FailedPrecondition | CodeEnvUnset is raised when a settings reference names an environment variable that is not set in the engine's environment. The message names the variable, the entity and the settings key, never a value. Export the variable in the engine's environment, or set it to the empty string if an empty value is intended. FailedPrecondition: the engine's environment is missing a value. |
 
 ## 4. MCP tool catalog (13)
 

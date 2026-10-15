@@ -27,6 +27,9 @@
   - `processor` - Code regarding processors, including processor store, processor service, running processor instances.
   - `provisioning` - Exposes a provisioning service that can be used to provision Conduit resources.
   - `schemaregistry` - Code regarding the schema registry.
+  - `secretref` - Resolves `${VAR}` settings references from the engine's environment when a plugin is configured,
+      into a transient map that redacts itself when printed. See
+      `docs/design-documents/20261014-secrets-at-rest.md`.
   - `web` - Everything related to Conduit's hosted pages. Currently `web/ui`: the
       `go:embed`-ded, built-in web UI (observe + operate) served at `/` by `conduit run`,
       gated by `api.http.ui.enabled`. See
