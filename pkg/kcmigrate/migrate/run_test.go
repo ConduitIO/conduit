@@ -73,7 +73,7 @@ func TestRun_Verdicts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			res, err := Run(context.Background(), testEngine(t), Request{Inputs: tt.inputs, Strict: tt.strict, AcceptGaps: tt.acc, ConduitVersion: "v0.21.0-test"})
+			res, err := Run(context.Background(), testEngine(t), withValidator(Request{Inputs: tt.inputs, Strict: tt.strict, AcceptGaps: tt.acc, ConduitVersion: "v0.21.0-test"}))
 			is.NoErr(err)
 			is.Equal(res.OK, tt.wantOK)
 			is.Equal(len(res.Report.AcceptedGaps), tt.wantGaps)
@@ -89,14 +89,14 @@ func TestRun_Verdicts(t *testing.T) {
 func TestRun_Golden(t *testing.T) {
 	is := is.New(t)
 	worker := in("connect-distributed.properties", "group.id=connect\nbootstrap.servers=k.internal.example:9092\n")
-	res, err := Run(context.Background(), testEngine(t), Request{
+	res, err := Run(context.Background(), testEngine(t), withValidator(Request{
 		Inputs: []kcmigrate.Input{
 			in("connectors/clean.properties", cleanConnector+"example.mode=turbo\n"),
 			in("connectors/blocking.json", blockingConnector),
 		},
 		Worker:         &worker,
 		ConduitVersion: "v0.21.0-test",
-	})
+	}))
 	is.NoErr(err)
 	is.True(!res.OK)
 	for _, f := range res.Files {
@@ -117,9 +117,9 @@ func TestRun_Golden(t *testing.T) {
 
 func TestRun_NoValueReachesOutput(t *testing.T) {
 	is := is.New(t)
-	res, err := Run(context.Background(), testEngine(t), Request{
+	res, err := Run(context.Background(), testEngine(t), withValidator(Request{
 		Inputs: []kcmigrate.Input{in("b.json", blockingConnector), in("c.properties", "name=c\nconnector.class=com.example.ExampleSource\nexample.password=CANARY-pw-2\nexample.mode=CANARY-mode\n")},
-	})
+	}))
 	is.NoErr(err)
 	for _, f := range res.Files {
 		is.True(!bytes.Contains(f.Content, []byte("CANARY")))
@@ -129,10 +129,10 @@ func TestRun_NoValueReachesOutput(t *testing.T) {
 func TestRun_Deterministic(t *testing.T) {
 	is := is.New(t)
 	req := Request{Inputs: []kcmigrate.Input{in("b.json", blockingConnector), in("a.properties", cleanConnector)}, ConduitVersion: "v"}
-	first, err := Run(context.Background(), testEngine(t), req)
+	first, err := Run(context.Background(), testEngine(t), withValidator(req))
 	is.NoErr(err)
 	for range 10 {
-		again, err := Run(context.Background(), testEngine(t), req)
+		again, err := Run(context.Background(), testEngine(t), withValidator(req))
 		is.NoErr(err)
 		for i := range first.Files {
 			is.Equal(first.Files[i].Content, again.Files[i].Content)
@@ -156,7 +156,7 @@ func TestRun_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			_, err := Run(context.Background(), testEngine(t), Request{Inputs: tt.inputs})
+			_, err := Run(context.Background(), testEngine(t), withValidator(Request{Inputs: tt.inputs}))
 			ce, ok := conduiterr.Get(err)
 			is.True(ok)
 			is.Equal(ce.Code, tt.code)
@@ -169,7 +169,7 @@ func TestRun_Canceled(t *testing.T) {
 	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Run(ctx, testEngine(t), Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
+	_, err := Run(ctx, testEngine(t), withValidator(Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}}))
 	is.True(err != nil && strings.Contains(err.Error(), "canceled"))
 }
 
@@ -178,7 +178,7 @@ func runOne(t *testing.T, req Request) Result {
 	if req.ConduitVersion == "" {
 		req.ConduitVersion = "v"
 	}
-	res, err := Run(context.Background(), testEngine(t), req)
+	res, err := Run(context.Background(), testEngine(t), withValidator(req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,10 +285,10 @@ func TestRun_PipelineStatus(t *testing.T) {
 
 func TestRun_ValidatorFailureIsInternal(t *testing.T) {
 	is := is.New(t)
-	_, err := Run(context.Background(), testEngine(t), Request{
+	_, err := Run(context.Background(), testEngine(t), withValidator(Request{
 		Inputs:           []kcmigrate.Input{in("a.properties", cleanConnector)},
 		ValidatePipeline: func(string, []byte) error { return cerrors.New("bad") },
-	})
+	}))
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInternal)
@@ -296,11 +296,82 @@ func TestRun_ValidatorFailureIsInternal(t *testing.T) {
 
 func TestRun_PipelineFileCollision(t *testing.T) {
 	is := is.New(t)
-	_, err := Run(context.Background(), testEngine(t), Request{Inputs: []kcmigrate.Input{
+	_, err := Run(context.Background(), testEngine(t), withValidator(Request{Inputs: []kcmigrate.Input{
 		in("a.properties", "name=a/b\nconnector.class=com.example.ExampleSource\n"),
 		in("b.properties", "name=a_b\nconnector.class=com.example.ExampleSource\n"),
-	}})
+	}}))
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, CodeConnectorNameInvalid)
+}
+
+// Secret variables are unique across the run: two connectors whose names
+// sanitize alike (my-conn, my_conn) must not share a variable, or one
+// connector would run with the other's password.
+func TestRun_SecretEnvUniqueAcrossConnectors(t *testing.T) {
+	is := is.New(t)
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{
+		in("a.properties", "name=my-conn\nconnector.class=com.example.ExampleSource\nexample.password=A\n"),
+		in("b.properties", "name=my_conn\nconnector.class=com.example.ExampleSource\nexample.password=B\n"),
+	}})
+	a := entryFor(res.Report.Connectors[0], "example.password").Target.Env
+	b := entryFor(res.Report.Connectors[1], "example.password").Target.Env
+	is.True(a != b)
+	tmpl := file(res, SecretsTemplateFile)
+	is.True(strings.Contains(tmpl, "\n"+a+"=\n"))
+	is.True(strings.Contains(tmpl, "\n"+b+"=\n"))
+	is.True(strings.Contains(file(res, "pipelines/my-conn.yaml"), "${"+a+"}"))
+	is.True(strings.Contains(file(res, "pipelines/my_conn.yaml"), "${"+b+"}"))
+}
+
+// A blocking worker entry applies to every pipeline that inherits the
+// worker, so they are written stopped.
+func TestRun_BlockingWorkerEntryStopsPipelines(t *testing.T) {
+	is := is.New(t)
+	worker := in("w.properties", "worker.blocked=x\n")
+	res := runOne(t, Request{Worker: &worker, Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
+	is.True(!res.OK)
+	is.Equal(res.Report.Connectors[1].PipelineStatus, kcmigrate.PipelineStopped)
+	is.True(strings.Contains(file(res, "pipelines/clean.yaml"), "status: stopped"))
+
+	res = runOne(t, Request{Worker: &worker, AcceptGaps: true, Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
+	is.Equal(res.Report.Connectors[1].PipelineStatus, kcmigrate.PipelineRunning)
+}
+
+func TestRun_RequiresAValidator(t *testing.T) {
+	is := is.New(t)
+	_, err := Run(context.Background(), testEngine(t), Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}, ConduitVersion: "v"})
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInternal)
+}
+
+func entryFor(rc kcmigrate.ReportConnector, key string) kcmigrate.Entry {
+	for _, e := range rc.Entries {
+		if e.Key == key {
+			return e
+		}
+	}
+	return kcmigrate.Entry{}
+}
+
+// withValidator gives a request the engine's own pipeline parser and config
+// validation as its required validator. The CLI passes the full
+// `pipelines validate` engine, which this package cannot import.
+func withValidator(req Request) Request {
+	if req.ValidatePipeline == nil {
+		req.ValidatePipeline = func(_ string, content []byte) error {
+			ps, err := provyaml.NewParser(log.Nop()).Parse(context.Background(), bytes.NewReader(content))
+			if err != nil {
+				return err
+			}
+			for _, p := range ps {
+				if err := config.Validate(p); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return req
 }

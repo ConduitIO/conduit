@@ -52,6 +52,7 @@ type Plan struct {
 	connectors []connectorDef
 	owner      map[string]string // config path -> key that set it
 	secrets    []Secret
+	envs       *EnvNames
 }
 
 // Secret is an environment variable a pipeline references instead of a
@@ -89,10 +90,34 @@ type connectorDef struct {
 
 var fileUnsafe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
+// EnvNames hands out the secret variables of one migration run. It is
+// shared by every plan of the run, so two connectors whose names sanitize
+// alike (my-conn and my_conn) never share a variable and run with each
+// other's secret.
+type EnvNames struct {
+	owner map[string]string // variable -> connector and key it stands for
+}
+
+// NewEnvNames returns an empty registry.
+func NewEnvNames() *EnvNames { return &EnvNames{owner: map[string]string{}} }
+
+// claim returns name, or name_2, name_3, ... if another owner has it.
+func (n *EnvNames) claim(name, owner string) string {
+	candidate := name
+	for i := 2; ; i++ {
+		if o, ok := n.owner[candidate]; !ok || o == owner {
+			n.owner[candidate] = owner
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s_%d", name, i)
+	}
+}
+
 // NewPlan starts a pipeline for connector name with the plugins the class's
-// rule file emits: one source and one destination.
-func NewPlan(name string, emits []rules.Emit) (*Plan, error) {
-	p := &Plan{ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", owner: map[string]string{}}
+// rule file emits: one source and one destination. envs is the run's
+// variable registry.
+func NewPlan(name string, emits []rules.Emit, envs *EnvNames) (*Plan, error) {
+	p := &Plan{ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", owner: map[string]string{}, envs: envs}
 	for _, side := range []string{SideSource, SideDestination} {
 		var plugin string
 		for _, e := range emits {

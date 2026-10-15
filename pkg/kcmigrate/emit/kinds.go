@@ -17,7 +17,6 @@ package emit
 import (
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -64,16 +63,21 @@ func Apply(p *Plan, ds []rules.Decision) error {
 }
 
 // ApplyDefaults applies worker decisions to p: a worker setting is inherited
-// only where the connector did not set it. Worker entries get no target,
-// since one worker setting can land in many pipelines.
-func ApplyDefaults(p *Plan, ds []rules.Decision) error {
+// only where the connector did not set it. ds is not modified, since one
+// worker setting lands in many pipelines; the entries as applied to p are
+// returned, index-aligned with ds, so the caller can record a downgrade (a
+// worker value that cannot be emitted) on the worker's own entry. Dropping
+// the refined copy would let a pipeline run without the setting it needed.
+func ApplyDefaults(p *Plan, ds []rules.Decision) ([]kcmigrate.Entry, error) {
+	out := make([]kcmigrate.Entry, len(ds))
 	for i := range ds {
-		d := ds[i] // a copy: worker entries are not modified per pipeline
+		d := ds[i]
 		if err := apply(p, &d, true); err != nil {
-			return err
+			return nil, err
 		}
+		out[i] = d.Entry
 	}
-	return nil
+	return out, nil
 }
 
 func apply(p *Plan, d *rules.Decision, onlyUnset bool) error {
@@ -146,10 +150,9 @@ func (p *Plan) secretRef(d *rules.Decision) (ref, env string) {
 		default:
 			s.Literal = true
 		}
-		// Two keys that sanitize to one name keep separate variables.
-		if p.envTaken(s.Env, s.Key) {
-			s.Env += "_" + strconv.Itoa(len(p.secrets)+1)
-		}
+		// Unique across the run: two keys or connectors that sanitize to
+		// one name keep separate variables.
+		s.Env = p.envs.claim(s.Env, p.ID+"\x00"+s.Key)
 	}
 	if s.Reference != "" {
 		d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " The value was the config-provider reference " + s.Reference + "; populate " + s.Env + " from it.")
@@ -174,15 +177,6 @@ func IsSecretKey(key string) bool {
 	}
 	for _, s := range secretSuffixes {
 		if strings.HasSuffix(k, s) {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *Plan) envTaken(env, key string) bool {
-	for _, s := range p.secrets {
-		if s.Env == env && s.Key != key {
 			return true
 		}
 	}

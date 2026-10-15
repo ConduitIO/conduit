@@ -11,3 +11,10 @@ keys:
     status: translated
     emit: {kind: setting, side: destination, name: servers}
     diff: identity
+  - key: worker.blocked
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A test worker key that blocks.
+    fix: Remove it.
+    diff: behavior

@@ -66,10 +66,10 @@ func TestIsSecretKey(t *testing.T) {
 
 func TestPlan(t *testing.T) {
 	is := is.New(t)
-	_, err := NewPlan("p", []rules.Emit{{Plugin: "builtin:a", Role: "source"}})
+	_, err := NewPlan("p", []rules.Emit{{Plugin: "builtin:a", Role: "source"}}, NewEnvNames())
 	is.True(err != nil) // no destination
 
-	p, err := NewPlan("my connector/1", []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}})
+	p, err := NewPlan("my connector/1", []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}}, NewEnvNames())
 	is.NoErr(err)
 	is.Equal(p.File, "pipelines/my_connector_1.yaml")
 	path, err := p.Set(SideDestination, "a/b", "1", "k1")

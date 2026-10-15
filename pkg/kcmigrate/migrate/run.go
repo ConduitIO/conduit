@@ -62,8 +62,8 @@ type Request struct {
 	AcceptGaps bool
 	// ConduitVersion goes into the report's generator.
 	ConduitVersion string
-	// ValidatePipeline, when set, checks every generated pipeline file. A
-	// failure is a translator bug and fails the run as internal.error. The
+	// ValidatePipeline checks every generated pipeline file. It is required:
+	// a failure is a translator bug and fails the run as internal.error. The
 	// CLI and the MCP tool pass the `pipelines validate` engine, which lives
 	// under cmd/conduit and so cannot be imported here.
 	ValidatePipeline func(name string, content []byte) error
@@ -106,6 +106,9 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	if err := kcmigrate.CheckLimits(all); err != nil {
 		return Result{}, err
 	}
+	if req.ValidatePipeline == nil {
+		return Result{}, conduiterr.New(conduiterr.CodeInternal, "migrate.Run needs a pipeline validator")
+	}
 	if len(req.Inputs) == 0 {
 		ce := conduiterr.New(kcmigrate.CodeInputUnrecognized, "no connector config to migrate")
 		ce.Suggestion = "pass one or more connector configs: files, directories, or - for standard input"
@@ -129,6 +132,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
+	workerBlocks := recordWorkerDowngrades(rep, runs, req.Worker != nil)
 	first := len(rep.Connectors)
 	for _, r := range runs {
 		rep.Connectors = append(rep.Connectors, r.rc)
@@ -140,7 +144,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	for i := range runs {
 		rc := &rep.Connectors[first+i]
 		if runs[i].plan != nil {
-			rc.PipelineStatus = pipelineStatus(*rc, runs[i].state, req.AcceptGaps)
+			rc.PipelineStatus = pipelineStatus(*rc, runs[i].state, req.AcceptGaps, workerBlocks)
 		}
 	}
 	rep.Summarize()
@@ -173,6 +177,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 // in input order. Names and pipeline files must be unique across the run.
 func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, workerDs []rules.Decision) ([]connectorRun, error) {
 	var runs []connectorRun
+	envs := emit.NewEnvNames()
 	names := map[string]string{} // connector name -> file it came from
 	files := map[string]string{} // pipeline file -> connector name
 	for _, in := range req.Inputs {
@@ -187,7 +192,7 @@ func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, worke
 			if err := checkName(c, names); err != nil {
 				return nil, err
 			}
-			run, err := migrateConnector(engine.Classify(c), c.State, workerDs)
+			run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
 			if err != nil {
 				return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrating "+c.Name+": "+err.Error(), err)
 			}
@@ -210,23 +215,28 @@ type connectorRun struct {
 	rc    kcmigrate.ReportConnector
 	plan  *emit.Plan // nil when no pipeline is written (unknown class)
 	state string
+	// workerEntries are the worker entries as applied to this pipeline,
+	// index-aligned with the worker's decisions.
+	workerEntries []kcmigrate.Entry
 }
 
-func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decision) (connectorRun, error) {
+func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decision, envs *emit.EnvNames) (connectorRun, error) {
 	run := connectorRun{rc: cl.Connector, state: state}
 	if cl.Rules == nil {
 		return run, nil
 	}
-	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Emits)
+	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Emits, envs)
 	if err != nil {
 		return run, err
 	}
 	if err := emit.Apply(plan, cl.Decisions); err != nil {
 		return run, err
 	}
-	if err := emit.ApplyDefaults(plan, workerDs); err != nil {
+	applied, err := emit.ApplyDefaults(plan, workerDs)
+	if err != nil {
 		return run, err
 	}
+	run.workerEntries = applied
 	run.plan = plan
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
 	run.rc.Pipeline = plan.File
@@ -244,14 +254,18 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	return run, nil
 }
 
-// pipelineStatus is stopped when the connector has a blocking entry or note
-// that was not accepted, or when Kafka Connect had it paused or stopped.
-func pipelineStatus(rc kcmigrate.ReportConnector, state string, accept bool) kcmigrate.PipelineStatus {
+// pipelineStatus is stopped when the connector, or the worker every
+// pipeline inherits from, has a blocking entry or note that was not
+// accepted, or when Kafka Connect had the connector paused or stopped.
+func pipelineStatus(rc kcmigrate.ReportConnector, state string, accept, workerBlocks bool) kcmigrate.PipelineStatus {
 	if state == "PAUSED" || state == "STOPPED" {
 		return kcmigrate.PipelineStopped
 	}
 	if accept {
 		return kcmigrate.PipelineRunning
+	}
+	if workerBlocks {
+		return kcmigrate.PipelineStopped
 	}
 	for _, e := range rc.Entries {
 		if e.Blocking {
@@ -282,10 +296,8 @@ func renderPipelines(runs []connectorRun, rcs []kcmigrate.ReportConnector, req R
 		if err != nil {
 			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "could not encode a pipeline", err)
 		}
-		if req.ValidatePipeline != nil {
-			if err := req.ValidatePipeline(r.plan.File, b); err != nil {
-				return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrate generated a pipeline that does not validate ("+r.plan.File+"): "+err.Error(), err)
-			}
+		if err := req.ValidatePipeline(r.plan.File, b); err != nil {
+			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrate generated a pipeline that does not validate ("+r.plan.File+"): "+err.Error(), err)
 		}
 		out = append(out, File{Path: r.plan.File, Content: b})
 	}
@@ -370,4 +382,29 @@ func verdict(rep *kcmigrate.Report, req Request) bool {
 		return false
 	}
 	return true
+}
+
+// recordWorkerDowngrades puts a worker setting that turned blocking while it
+// was applied to a pipeline (a JAAS config that cannot be split, for one) on
+// the worker's own entry, and reports whether any worker entry blocks. The
+// worker is the report's first element when there is one.
+func recordWorkerDowngrades(rep *kcmigrate.Report, runs []connectorRun, hasWorker bool) bool {
+	if !hasWorker {
+		return false
+	}
+	worker := rep.Connectors[0].Entries
+	for _, r := range runs {
+		for i, refined := range r.workerEntries {
+			if refined.Blocking && !worker[i].Blocking {
+				refined.Target = nil
+				worker[i] = refined
+			}
+		}
+	}
+	for _, e := range worker {
+		if e.Blocking {
+			return true
+		}
+	}
+	return false
 }
