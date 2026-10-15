@@ -186,4 +186,13 @@
 // SDK batching must exit promptly on SIGTERM with no stop error (invariant 7)
 // and with every record written (invariant 3). Bumping the SDK pin re-runs
 // it, since go.mod is on the chaos workflow's data-path list.
+//
+// Source failure racing a graceful stop (sigterm_source_failure_test.go,
+// #2977): the lifecycle child from recovery_child.go, run on the default
+// engine (pkg/lifecycle) instead of arch-v2. Its source fails while the
+// destination still holds acks, so the failed source node is still draining
+// when SIGTERM arrives and runs the runtime's own shutdown (StopAll, then
+// Wait). The process must exit within a bound and a restart must replay what
+// was not acked (invariants 3 and 7). This is the end-to-end form of #2969,
+// which hung exactly there.
 package chaos
