@@ -133,6 +133,14 @@ envelope.
   behavior (see `cmd/conduit/root/pipelines/list_test.go`'s own doc comment), not a bug or a
   migration backlog item — scripts and the MCP layer already consume this shape.
 
+**Errors under `--json` (v0.21 addendum, #2989).** Until v0.21 a failing Family B command printed
+cobra's plain `Error: rpc error: ...` line on stderr and nothing on stdout, so the stable code the server
+attached was only reachable by parsing text. A failing Family B command now prints one object on stdout,
+`{"error": {"code", "message", "suggestion", "configPath", "fix"}}` (the envelope's `ResultError` fields,
+empty ones omitted), decoded from the gRPC status's Conduit `ErrorInfo` detail, and cobra's error and usage
+output are silenced for that run. The exit code is unchanged. Success output is still the raw result value.
+This is not the Family A envelope (no `command`/`ok`), so the schema-golden classification is unaffected.
+
 Forcing one schema across both was considered and rejected: Family B's payloads are
 heterogeneous proto/API messages whose shape is dictated by the gRPC/HTTP API contract, not this
 CLI layer. Migrating Family B onto the envelope is a breaking change to already-consumed output
