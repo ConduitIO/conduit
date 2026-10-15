@@ -1052,8 +1052,33 @@ message UpdateConnectorResponse {
 
 message DeleteConnectorRequest {
   string id = 1;
+  // Delete the connector even if its delete hook fails. The hook still runs
+  // first; if it succeeds this is an ordinary delete. If it fails, the
+  // connector is removed anyway, the response carries a
+  // connector.orphaned_resources warning, and the possible orphan is
+  // recorded for `conduit doctor` until acknowledged. Without force, a
+  // failing hook fails the delete with connector.delete_hook_failed and the
+  // connector is kept.
+  bool force = 2;
+  // Clear the orphan entry a forced delete recorded for this connector ID,
+  // after its leftovers were cleaned up. Only valid when no connector with
+  // this ID exists; nothing else is deleted.
+  bool acknowledge_orphan = 3;
 }
-message DeleteConnectorResponse {}
+message DeleteConnectorResponse {
+  // Coded warnings about the delete. Empty unless force was set and the
+  // delete hook failed.
+  repeated Warning warnings = 1;
+}
+
+// Warning is a coded, non-fatal finding returned next to a successful result.
+message Warning {
+  // Stable code, e.g. "connector.orphaned_resources".
+  string code = 1;
+  string message = 2;
+  // Suggested next step.
+  string suggestion = 3;
+}
 
 message ListConnectorPluginsRequest {
   // Regex to filter plugins by name.

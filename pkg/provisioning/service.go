@@ -159,7 +159,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if pl.ProvisionedBy != pipeline.ProvisionTypeConfig {
 		return ErrNotProvisionedByConfig
 	}
-	oldConfig, err := s.Export(ctx, id)
+	// exportForDelete, not Export: a previous attempt may have deleted some
+	// children before a connector's delete hook failed (#3058).
+	oldConfig, err := s.exportForDelete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("failed to export pipeline: %w", err)
 	}

@@ -42,6 +42,26 @@ func (m *MockConnectorService) EXPECT() *MockConnectorServiceMockRecorder {
 	return m.recorder
 }
 
+// DeleteConnector mocks base method.
+func (m *MockConnectorService) DeleteConnector(ctx context.Context, in *apiv1.DeleteConnectorRequest, opts ...grpc.CallOption) (*apiv1.DeleteConnectorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteConnector", varargs...)
+	ret0, _ := ret[0].(*apiv1.DeleteConnectorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteConnector indicates an expected call of DeleteConnector.
+func (mr *MockConnectorServiceMockRecorder) DeleteConnector(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConnector", reflect.TypeOf((*MockConnectorService)(nil).DeleteConnector), varargs...)
+}
+
 // GetConnector mocks base method.
 func (m *MockConnectorService) GetConnector(ctx context.Context, in *apiv1.GetConnectorRequest, opts ...grpc.CallOption) (*apiv1.GetConnectorResponse, error) {
 	m.ctrl.T.Helper()
