@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
-	github.com/conduitio/conduit-commons v0.7.0
+	github.com/conduitio/conduit-commons v0.7.1
 	github.com/conduitio/conduit-connector-file v0.10.8
 	github.com/conduitio/conduit-connector-generator v0.10.4
 	github.com/conduitio/conduit-connector-kafka v0.12.6
@@ -20,7 +20,7 @@ require (
 	github.com/conduitio/conduit-connector-s3 v0.9.5
 	github.com/conduitio/conduit-connector-sdk v0.14.2
 	github.com/conduitio/conduit-processor-sdk v0.6.0
-	github.com/conduitio/conduit-schema-registry v0.2.6
+	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
