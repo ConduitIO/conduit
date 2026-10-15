@@ -28,7 +28,7 @@ check:
       reason: MirrorMaker's top-level client keys; the rules cover the cluster-prefixed forms (source.cluster.*, target.cluster.*), which is where connector-form configs set them.
 keys:
   - {key: enabled, default: "true"}
-  - {key: source.cluster.alias}
+  - {key: source.cluster.alias, required: true}
   - {key: target.cluster.alias, default: target}
   - {key: replication.policy.class, default: org.apache.kafka.connect.mirror.DefaultReplicationPolicy}
   - {key: replication.policy.separator, default: "."}
