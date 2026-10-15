@@ -1,0 +1,733 @@
+# MirrorMaker 2 in connector form (org.apache.kafka.connect.mirror.MirrorSourceConnector)
+# to builtin:kafka source (the source cluster) and builtin:kafka destination.
+# Mapping design 20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "MirrorMaker-style Kafka to Kafka", with two corrections from the Apache
+# Kafka 4.2.0 sources:
+#   - MirrorSourceTask reads the source cluster with its own consumer:
+#     source.cluster.* (client keys only), then the connector's consumer.*,
+#     then source.consumer.* (MirrorConnectorConfig.sourceConsumerConfig).
+#     Those layer onto the pipeline's source.
+#   - The records are written by Kafka Connect's producer, to the worker's
+#     cluster (Worker.baseProducerConfigs), not by a target.cluster.* client.
+#     target.cluster.* is MirrorMaker's own target admin and offset-sync
+#     client; it fills the destination only when neither the worker nor a
+#     producer.override.* key does (layer fallback). A correct deployment has
+#     the two equal.
+# v0.21 never writes the Kafka mirror settings (design
+# 20261012-kafka-mirror-passthrough.md): partitions, headers and timestamps
+# are not preserved, which the class note says on every migration.
+rulesVersion: 1
+scope: source
+class: org.apache.kafka.connect.mirror.MirrorSourceConnector
+upstream: {name: kafka, version: "4.2"}
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:kafka, role: destination}
+finish:
+  - {kind: mm2-topic}
+notes:
+  - code: kc.output_shape_differs
+    blocking: true
+    reason: Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.
+    fix: Keep this flow on MirrorMaker if consumers rely on partition numbers, headers or record timestamps, or accept the difference with --accept-gaps.
+keys:
+  - key: source.cluster.bootstrap.servers
+    status: translated
+    reason: The pipeline reads the source cluster.
+    emit: {kind: setting, side: source, name: servers, layer: "0"}
+    diff: identity
+  - key: source.cluster.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: source, layer: "0"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: source.cluster.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: source, name: saslMechanism, layer: "0"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this flow on MirrorMaker.
+  - key: source.cluster.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: source, layer: "0"}
+    secret: true
+    diff: secret
+  - key: {prefix: source.cluster.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: source.cluster.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A source-cluster client setting with no Kafka connector equivalent (tuning, buffers, fetch sizes).
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: consumer.bootstrap.servers
+    status: translated
+    reason: MirrorMaker's consumer reads consumer.* above source.cluster.*.
+    emit: {kind: setting, side: source, name: servers, layer: "1"}
+    diff: identity
+  - key: consumer.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: source, layer: "1"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: consumer.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: source, name: saslMechanism, layer: "1"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this flow on MirrorMaker.
+  - key: consumer.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: source, layer: "1"}
+    secret: true
+    diff: secret
+  - key: {prefix: consumer.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: consumer.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's source consumer with no Kafka connector equivalent; MirrorMaker assigns partitions itself, so group.id has no effect either.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: source.consumer.bootstrap.servers
+    status: translated
+    reason: MirrorMaker's consumer reads source.consumer.* above source.cluster.*.
+    emit: {kind: setting, side: source, name: servers, layer: "2"}
+    diff: identity
+  - key: source.consumer.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: source, layer: "2"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: source.consumer.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: source, name: saslMechanism, layer: "2"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this flow on MirrorMaker.
+  - key: source.consumer.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: source, layer: "2"}
+    secret: true
+    diff: secret
+  - key: {prefix: source.consumer.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: source.consumer.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's source consumer with no Kafka connector equivalent; MirrorMaker assigns partitions itself, so group.id has no effect either.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: consumer.override.auto.offset.reset
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.group.id
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.client.id
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.security.protocol
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.sasl.mechanism
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.sasl.jaas.config
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: consumer.override.bootstrap.servers
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only; MirrorMaker's data consumer is configured by source.cluster.*, consumer.* and source.consumer.*.
+    fix: None needed.
+    diff: tuning
+  - key: {prefix: consumer.override.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Kafka Connect applies consumer overrides to a source connector's offsets consumer only.
+    fix: None needed.
+    diff: tuning
+  - key: target.cluster.bootstrap.servers
+    status: translated
+    reason: Kafka Connect's producer writes the records to the worker's cluster; this fills the destination's servers when neither the worker file nor producer.override.bootstrap.servers sets them, and MirrorMaker requires the two to be the same cluster.
+    emit: {kind: setting, side: destination, name: servers, layer: "fallback"}
+    diff: identity
+  - key: target.cluster.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: destination, layer: "fallback"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: target.cluster.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: destination, name: saslMechanism, layer: "fallback"}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep this flow on MirrorMaker.
+  - key: target.cluster.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: destination, layer: "fallback"}
+    secret: true
+    diff: secret
+  - key: {prefix: target.cluster.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipeline by hand.
+    diff: identity
+  - key: {prefix: target.cluster.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A target-cluster client setting of MirrorMaker's admin and offset-sync clients, with no Kafka connector equivalent.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: producer.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's offset-sync producer; Kafka Connect's own producer, which writes the records, takes producer.override.* instead.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: source.producer.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's offset-sync producer.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: target.producer.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's offset-sync producer.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: source.admin.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's admin client.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: target.admin.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's admin client.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: {prefix: admin.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorMaker's admin client.
+    fix: None needed; the Kafka connector's defaults apply.
+    diff: tuning
+  - key: source.cluster.alias
+    status: translated
+    reason: Used in the destination topic name (DefaultReplicationPolicy names it alias, separator, topic).
+    emit: {kind: none}
+    diff: identity
+  - key: target.cluster.alias
+    status: translated
+    reason: A metrics label.
+    emit: {kind: none}
+    diff: tuning
+  - key: replication.policy.class
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.mirror.DefaultReplicationPolicy, DefaultReplicationPolicy]
+        status: translated
+        reason: The destination topic is <alias><separator><topic>, written as a topic template.
+        emit: {kind: none}
+      - match: [org.apache.kafka.connect.mirror.IdentityReplicationPolicy, IdentityReplicationPolicy]
+        status: translated
+        reason: The destination topic keeps the source topic's name.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A custom replication policy names topics in code migrate cannot read.
+        fix: Set the destination topic template on the pipeline by hand, or keep this flow on MirrorMaker.
+  - key: replication.policy.separator
+    status: translated
+    reason: Used in the destination topic name.
+    emit: {kind: none}
+    diff: identity
+  - key: replication.policy.internal.topic.separator.enabled
+    status: translated
+    reason: Applies to MirrorMaker's internal topics, which are not migrated.
+    emit: {kind: none}
+    diff: tuning
+  - key: topics
+    diff: identity
+    values:
+      - pattern: '^[A-Za-z0-9_-]+(\s*,\s*[A-Za-z0-9_-]+)*$'
+        status: translated
+        reason: A literal topic list.
+        emit: {kind: list-setting, side: source, name: topics}
+      - pattern: '^[A-Za-z0-9._-]+(\s*,\s*[A-Za-z0-9._-]+)*$'
+        status: approximated
+        code: kc.key_approximated
+        reason: MirrorMaker treats each entry as a regex, where '.' matches any character; the pipeline reads exactly these topics, so a topic only the regex matched (orders.v1 also matching ordersXv1) is not mirrored.
+        emit: {kind: list-setting, side: source, name: topics}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source takes a list of topics, not a pattern; MirrorMaker would also pick up new matching topics.
+        fix: List the topics to mirror, separated by commas.
+  - key: topics.exclude
+    diff: identity
+    values:
+      - match: ['mm2.*\.internal, .*\.replica, __.*']
+        status: translated
+        reason: The default excludes internal topics, which a literal topic list does not include.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka source has no topic exclusion.
+        fix: List only the topics to mirror in topics.
+  - key: topic.filter.class
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.mirror.DefaultTopicFilter]
+        status: translated
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A custom topic filter selects topics in code migrate cannot read.
+        fix: List the topics to mirror in topics.
+  - key: refresh.topics.enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: Topics are fixed, as in the pipeline.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: false
+        code: kc.key_unsupported
+        reason: 'New topics matching the selection are not discovered: the pipeline reads a fixed topic list.'
+        fix: Re-run migrate after adding topics.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: refresh.topics.interval.seconds
+    status: translated
+    reason: Only matters while refresh.topics.enabled is true, which is reported on its own.
+    emit: {kind: none}
+    diff: tuning
+  - key: sync.topic.configs.enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: Topic configs are not synced, as in the pipeline.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Topic configs (retention, cleanup.policy, compaction) are not synced to the destination.
+        fix: Create the destination topics ahead of time with the source topics' configs.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: sync.topic.configs.interval.seconds
+    status: translated
+    reason: Only matters while sync.topic.configs.enabled is true, which is reported on its own.
+    emit: {kind: none}
+    diff: tuning
+  - key: config.properties.exclude
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters while topic configs are synced, which the pipeline does not do.
+    fix: None needed.
+    diff: tuning
+  - key: config.property.filter.class
+    diff: behavior
+    values:
+      - match: [org.apache.kafka.connect.mirror.DefaultConfigPropertyFilter]
+        status: translated
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        code: kc.key_unsupported
+        blocking: true
+        reason: A custom config property filter; topic configs are not synced by the pipeline.
+        fix: Create the destination topics ahead of time with the configs you need.
+  - key: sync.topic.acls.enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: ACLs are not synced, as in the pipeline.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Topic ACLs are not synced to the destination cluster.
+        fix: Set the ACLs on the destination topics ahead of time.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: sync.topic.acls.interval.seconds
+    status: translated
+    reason: Only matters while sync.topic.acls.enabled is true, which is reported on its own.
+    emit: {kind: none}
+    diff: tuning
+  - key: replication.factor
+    status: unsupported
+    code: kc.key_unsupported
+    reason: MirrorMaker creates remote topics with this replication factor; Conduit's Kafka destination creates topics with the broker's defaults.
+    fix: Create the destination topics ahead of time with the replication factor you need.
+    diff: behavior
+  - key: emit.offset-syncs.enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: No offset syncs, as in the pipeline.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: false
+        code: kc.key_unsupported
+        reason: Offset syncs are not written, so a MirrorCheckpointConnector cannot translate consumer offsets for this flow.
+        fix: None if consumers do not fail over between the clusters; otherwise keep this flow on MirrorMaker.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: offset-syncs.topic.location
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Offset syncs are not written.
+    fix: None needed.
+    diff: tuning
+  - key: offset-syncs.topic.replication.factor
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Offset syncs are not written.
+    fix: None needed.
+    diff: tuning
+  - key: offset.lag.max
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Offset syncs are not written.
+    fix: None needed.
+    diff: tuning
+  - key: heartbeats.replication.enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: Heartbeat topics are not replicated, as in the pipeline.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: false
+        code: kc.key_unsupported
+        reason: Heartbeat topics are not replicated unless listed in topics.
+        fix: List the heartbeat topics in topics if you monitor them.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: consumer.poll.timeout.ms
+    status: translated
+    reason: Consumer tuning with no Kafka connector equivalent.
+    emit: {kind: none}
+    diff: tuning
+  - key: admin.timeout.ms
+    status: translated
+    reason: MirrorMaker's admin client; no effect on the records.
+    emit: {kind: none}
+    diff: tuning
+  - key: forwarding.admin.class
+    diff: behavior
+    values:
+      - match: [org.apache.kafka.clients.admin.ForwardingAdmin]
+        status: translated
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A custom admin manages topics and configs in code migrate cannot read.
+        fix: Keep this flow on MirrorMaker.
+  - key: enabled
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["true"]
+        status: translated
+        reason: The flow is enabled.
+        emit: {kind: none}
+      - match: ["false"]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A disabled MirrorMaker flow mirrors nothing.
+        fix: Remove this connector from the migration, or enable it.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: groups
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: groups.exclude
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: group.filter.class
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: emit.checkpoints.enabled
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: emit.checkpoints.interval.seconds
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: sync.group.offsets.enabled
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: sync.group.offsets.interval.seconds
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: refresh.groups.enabled
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: refresh.groups.interval.seconds
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: checkpoints.topic.replication.factor
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: emit.heartbeats.enabled
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: emit.heartbeats.interval.seconds
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: heartbeats.topic.replication.factor
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A setting of MirrorCheckpointConnector or MirrorHeartbeatConnector, with no effect on MirrorSourceConnector. Consumer-group offset translation has no equivalent in this version; a migration that relies on consumers failing over between clusters must not move.
+    fix: None needed.
+    diff: tuning
+  - key: header.converter
+    diff: identity
+    values:
+      - match: [org.apache.kafka.connect.converters.ByteArrayConverter, org.apache.kafka.connect.storage.SimpleHeaderConverter]
+        status: translated
+        reason: Headers are not carried in this version (see the class note), so the header converter has nothing to convert.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This header converter is not translated by this version of migrate.
+        fix: Keep this flow on MirrorMaker until migrate translates the converter.
+defaults:
+  - key: topics
+    default: ".*"
+    note:
+      code: kc.default_differs
+      blocking: true
+      reason: topics is absent, so MirrorMaker mirrors every topic; the pipeline needs a topic list.
+      fix: Set topics to the list of topics to mirror, then re-run.
+  - key: refresh.topics.enabled
+    default: "true"
+    note:
+      code: kc.default_differs
+      reason: refresh.topics.enabled is absent (true), so MirrorMaker discovers new topics; the pipeline reads a fixed topic list.
+  - key: sync.topic.configs.enabled
+    default: "true"
+    note:
+      code: kc.default_differs
+      blocking: true
+      reason: sync.topic.configs.enabled is absent (true), so MirrorMaker syncs topic configs to the destination; the pipeline does not.
+      fix: Create the destination topics ahead of time with the source topics' configs, or set sync.topic.configs.enabled=false if they already match.
+  - key: config.properties.exclude
+    default: 'follower\.replication\.throttled\.replicas, leader\.replication\.throttled\.replicas, message\.timestamp\.difference\.max\.ms, message\.timestamp\.type, unclean\.leader\.election\.enable, min\.insync\.replicas'
+    coveredBy: kc.default_differs
+  - key: sync.topic.acls.enabled
+    default: "true"
+    note:
+      code: kc.default_differs
+      blocking: true
+      reason: sync.topic.acls.enabled is absent (true), so MirrorMaker syncs topic ACLs to the destination; the pipeline does not.
+      fix: Set the ACLs on the destination topics ahead of time, or set sync.topic.acls.enabled=false.
+  - key: replication.factor
+    default: "2"
+    note:
+      code: kc.default_differs
+      reason: replication.factor is absent, so MirrorMaker creates remote topics with replication factor 2; Conduit's Kafka destination creates topics with the broker's defaults.
+  - key: emit.offset-syncs.enabled
+    default: "true"
+    note:
+      code: kc.default_differs
+      reason: emit.offset-syncs.enabled is absent (true), so MirrorMaker writes offset syncs for checkpointing; the pipeline does not, and consumer offsets cannot be translated for this flow.
+  - key: offset-syncs.topic.location
+    default: source
+    coveredBy: kc.default_differs
+  - key: offset-syncs.topic.replication.factor
+    default: "3"
+    coveredBy: kc.default_differs
+  - key: offset.lag.max
+    default: "100"
+    coveredBy: kc.default_differs
+  - key: heartbeats.replication.enabled
+    default: "true"
+    note:
+      code: kc.default_differs
+      reason: heartbeats.replication.enabled is absent (true), so MirrorMaker replicates heartbeat topics; the pipeline reads only the listed topics.

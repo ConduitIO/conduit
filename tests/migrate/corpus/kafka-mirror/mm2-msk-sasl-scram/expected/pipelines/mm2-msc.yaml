@@ -1,0 +1,26 @@
+version: "2.2"
+pipelines:
+  - id: mm2-msc
+    status: stopped
+    description: Migrated from Kafka Connect connector "mm2-msc" (org.apache.kafka.connect.mirror.MirrorSourceConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          saslMechanism: SCRAM-SHA-512
+          saslPassword: ${KC_MM2_MSC_SOURCE_CLUSTER_SASL_JAAS_CONFIG}
+          saslUsername: example-user
+          servers: b-1.source.internal.example:9096
+          tls.enabled: "true"
+          topics: ${KC_MM2_MSC_SOURCE_TOPICS}
+      - id: destination
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          compression: gzip
+          saslMechanism: SCRAM-SHA-512
+          saslPassword: ${KC_MM2_MSC_TARGET_CLUSTER_SASL_JAAS_CONFIG}
+          saslUsername: example-user
+          servers: b-1.target.internal.example:9096
+          tls.enabled: "true"

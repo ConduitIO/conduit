@@ -631,8 +631,9 @@ equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connect
 | `replication.policy.class` | Default T; `IdentityReplicationPolicy` T; else U! | destination `topic` template | |
 | `replication.policy.separator` | T | in the template | |
 | `replication.policy.internal.topic.separator.enabled`, `forwarding.admin.class`, `admin.timeout.ms`, `config.providers` | U | none | `forwarding.admin.class` non-default: U! |
-| `source.cluster.bootstrap.servers`, `target.cluster.bootstrap.servers` | T | source `servers`, destination `servers` | |
-| `source.cluster.<client key>`, `target.cluster.<client key>` (`security.protocol`, `sasl.*`, `ssl.*`) | per _Worker and Kafka client settings_ | source / destination TLS and SASL | JKS: U! |
+| `source.cluster.bootstrap.servers` | T | source `servers` | MirrorMaker's own consumer reads the source cluster (corrected 2026-10-16, note below) |
+| `source.cluster.<client key>`, then `consumer.<client key>`, then `source.consumer.<client key>` (`bootstrap.servers`, `security.protocol`, `sasl.*`) | T | source `servers`, TLS and SASL | Merged in that order, later wins (`MirrorConnectorConfig.sourceConsumerConfig`). `ssl.*`: U! (PEM); other client keys: U |
+| `target.cluster.bootstrap.servers`, `target.cluster.<client key>` | T | destination `servers`, TLS and SASL, at the fallback layer | Used only when neither the worker file nor `producer.override.*` sets them: Kafka Connect's producer writes the records to the worker's cluster (corrected 2026-10-16, note below) |
 | `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list") |
 | `topics.exclude`, `topic.filter.class` (non-default) | U! | none | |
 | `refresh.topics.enabled`, `refresh.topics.interval.seconds` | U | none | New topics are not discovered. Absent means `true`: same status |
@@ -642,6 +643,21 @@ equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connect
 | `emit.offset-syncs.enabled`, `offset-syncs.topic.location`, `offset-syncs.topic.replication.factor`, `offset.lag.max`, `heartbeats.replication.enabled`, `consumer.poll.timeout.ms` | U | none | |
 | `groups`, `groups.exclude`, `group.filter.class`, `emit.checkpoints.enabled`, `emit.checkpoints.interval.seconds`, `sync.group.offsets.enabled`, `sync.group.offsets.interval.seconds`, `refresh.groups.*`, `checkpoints.topic.replication.factor` | U! | none | Consumer-group offset translation; `emit.checkpoints.enabled` absent means `true`: same status. The report says plainly that a migration relying on consumer failover between clusters must not move |
 | `emit.heartbeats.*`, `heartbeats.topic.replication.factor` | U | none | Heartbeat connector only |
+
+**Where MirrorMaker's records come from and go to (corrected 2026-10-16; the decision on this correction is pending
+DeVaris).** The first version of this table mapped `target.cluster.*` onto the destination. In connector form that
+is not what Kafka Connect does. Apache Kafka 4.2.0: `MirrorSourceTask` reads the source cluster with its own
+consumer, configured by `MirrorConnectorConfig.sourceConsumerConfig` (`connect/mirror/.../MirrorConnectorConfig.java`
+lines 171-186), which merges `source.cluster.*` (client keys only), then the connector's `consumer.*`, then
+`source.consumer.*`. The task's records are written by Kafka Connect's own producer, which
+`Worker.baseProducerConfigs` builds from the worker's `bootstrap.servers`, the worker's `producer.*` keys and the
+connector's `producer.override.*` (`connect/runtime/.../Worker.java` lines 837-874), so they go to the worker's
+cluster. `target.cluster.*` configures only MirrorMaker's own admin and offset-sync clients on the target
+(`targetAdminConfig` and `targetProducerConfig`, lines 188-206). A correct deployment has the worker's cluster and the
+target cluster be the same, so `target.cluster.*` is a good default for the destination when the run has no worker
+file, and the rules use it at a fallback layer below the worker and the overrides. Connect's
+`consumer.override.*` reaches only a source connector's offsets consumer, so it has no effect on MirrorMaker's data
+consumer and is unsupported, non-blocking, in the MirrorMaker rules.
 
 #### Legacy and alias handling
 
