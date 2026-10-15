@@ -2300,11 +2300,10 @@ func (s *Service) runningWriteTimeout() time.Duration {
 // closes startupDone when the write returns. It returns when the write has
 // returned or after statusWriteTimeout, whichever comes first, so a hung
 // pipeline store cannot hold Start (or a recovery restart) forever. The write
-// carries the same timeout, so backends that honour the context give up too;
-// for one that ignores it (badger) the write goroutine finishes on its own,
-// and the cleanup goroutine, which waits for startupDone, keeps the tomb and
-// Wait from finishing before it does. Mirrors
-// pkg/lifecycle.Service.announceRunning.
+// carries the same timeout, so every backend gives up too. badger may still
+// apply a write it gave up on (ErrWriteAbandoned); it orders that write
+// before any later write to the same pipeline's key, so it cannot overwrite
+// a newer status. Mirrors pkg/lifecycle.Service.announceRunning.
 func (s *Service) announceRunning(ctx context.Context, rp *runnablePipeline, startupDone chan struct{}) {
 	done := make(chan struct{})
 	go func() {

@@ -1318,11 +1318,12 @@ func (s *Service) runningWriteTimeout() time.Duration {
 //
 // The write uses a context that ignores the caller's cancellation (an API
 // client that gives up must not fail it on backends that honour the context,
-// SQLite and Postgres) and carries the same timeout, so those backends give
-// up too. A backend that ignores the context (badger) is still bounded here:
-// the write goroutine is left to finish on its own. It cannot outlive the
-// run unnoticed: the cleanup goroutine waits for startupDone, so the tomb,
-// and with it Wait, does not finish before the write returns.
+// SQLite and Postgres) and carries the same timeout, so every backend gives
+// up too. badger may still apply a write it gave up on (ErrWriteAbandoned);
+// it orders that write before any later write to the same pipeline's key, so
+// it cannot overwrite a newer status. The cleanup goroutine waits for
+// startupDone, so the tomb, and with it Wait, does not finish before the
+// write returns.
 func (s *Service) announceRunning(ctx context.Context, rp *runnablePipeline, startupDone chan struct{}) {
 	done := make(chan struct{})
 	go func() {
