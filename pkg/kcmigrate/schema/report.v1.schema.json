@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://conduit.io/schemas/kc-report/v1.json",
+  "title": "Kafka Connect migration compatibility report, version 1",
+  "description": "The report `conduit migrate kafka-connect` writes to report.json and returns as the `result` of its --json envelope (the envelope's `summary` is this document's `summary`). Contract: docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md, 'The compatibility report as a contract'. Hand-written, not reflected from Go types, so a struct change cannot silently change the contract. Adding a field, a code or an enum member is additive and keeps reportVersion 1; removing or renaming a field, or changing what status or blocking mean, bumps it. Consumers must ignore fields they do not know.",
+  "type": "object",
+  "required": ["reportVersion", "generator", "summary", "connectors", "acceptedGaps"],
+  "additionalProperties": false,
+  "properties": {
+    "reportVersion": {"const": 1},
+    "generator": {
+      "description": "What produced the report: the Conduit version and every rule file used, with the upstream version it was written against.",
+      "type": "object",
+      "required": ["conduit", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "conduit": {"type": "string", "minLength": 1},
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["class", "rulesVersion", "upstream"],
+            "additionalProperties": false,
+            "properties": {
+              "class": {"type": "string", "minLength": 1},
+              "rulesVersion": {"type": "integer", "minimum": 1},
+              "upstream": {
+                "type": "object",
+                "required": ["name", "version"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "version": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "description": "keys equals the number of entries, which equals the number of input key occurrences across all inputs; translated, approximated and unsupported partition keys; blocking counts blocking entries and blocking notes. The run is ok when blocking is 0.",
+      "type": "object",
+      "required": ["connectors", "keys", "translated", "approximated", "unsupported", "blocking"],
+      "additionalProperties": false,
+      "properties": {
+        "connectors": {"type": "integer", "minimum": 0},
+        "keys": {"type": "integer", "minimum": 0},
+        "translated": {"type": "integer", "minimum": 0},
+        "approximated": {"type": "integer", "minimum": 0},
+        "unsupported": {"type": "integer", "minimum": 0},
+        "blocking": {"type": "integer", "minimum": 0}
+      }
+    },
+    "connectors": {
+      "description": "One element per connector, in input order, and one per worker file (role worker).",
+      "type": "array",
+      "items": {"$ref": "#/$defs/connector"}
+    },
+    "acceptedGaps": {
+      "description": "Blocking entries and notes that --accept-gaps let through. Empty without that flag.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["connector", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "connector": {"type": "string"},
+          "code": {"$ref": "#/$defs/code"},
+          "key": {"type": "string"},
+          "origin": {"$ref": "#/$defs/origin"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "code": {
+      "description": "A stable error or finding code in domain.reason form, for example kc.key_unsupported.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "status": {"enum": ["translated", "approximated", "unsupported"]},
+    "origin": {
+      "description": "Where a key is in the input: line and column (1-based) for properties, a JSON pointer for JSON. file is relative to the common parent of all inputs, with forward slashes; <stdin> for standard input. Never carries a value.",
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "column": {"type": "integer", "minimum": 1},
+        "pointer": {"type": "string", "pattern": "^(/.*)?$"}
+      },
+      "oneOf": [
+        {"required": ["line", "column"], "not": {"required": ["pointer"]}},
+        {"required": ["pointer"], "not": {"anyOf": [{"required": ["line"]}, {"required": ["column"]}]}}
+      ]
+    },
+    "connector": {
+      "type": "object",
+      "required": ["name", "class", "role", "entries", "notes", "transforms"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "class": {"type": "string"},
+        "role": {"enum": ["source", "sink", "worker", "unknown"]},
+        "pipeline": {"description": "Generated pipeline file, relative to the output directory. Absent when none is written.", "type": "string", "minLength": 1},
+        "pipelineStatus": {"enum": ["running", "stopped"]},
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": {"type": "string"},
+            "destination": {"type": "string"},
+            "certification": {"description": "Certification tier per emitted plugin, read from the registry index at run time.", "type": "object", "additionalProperties": {"type": "string"}}
+          }
+        },
+        "entries": {
+          "description": "One per input key occurrence, in origin order. The earlier of two duplicate keys has code kc.key_duplicate.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/entry"}
+        },
+        "notes": {
+          "description": "Differences with no input key (absent-key defaults, output shape, delivery semantics, required settings). Not part of the completeness multiset.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/note"}
+        },
+        "transforms": {
+          "description": "Index of the SMT chain. Each SMT sub-key also has its own entry.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["alias", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "alias": {"type": "string"},
+              "class": {"type": "string"},
+              "status": {"$ref": "#/$defs/status"},
+              "processor": {"type": "string"}
+            }
+          }
+        },
+        "resume": {
+          "description": "How the pipeline starts relative to the original connector's position (Debezium Postgres offset import, docs/design-documents/20261012-migrate-debezium-postgres-offset-import.md).",
+          "type": "object",
+          "required": ["strategy", "snapshot"],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {"enum": ["fresh", "reuse"]},
+            "snapshot": {"enum": ["will-run", "skipped"]},
+            "import": {
+              "type": "object",
+              "required": ["setting", "source"],
+              "additionalProperties": false,
+              "properties": {
+                "setting": {"type": "string"},
+                "source": {"enum": ["rest", "topic", "file"]},
+                "topic": {"type": "string"},
+                "key": {"type": "string"}
+              }
+            },
+            "preflights": {"enum": ["pending", "passed", "failed"]},
+            "notes": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "outputCompat": {
+          "description": "Debezium-compatible output mode, when the pipeline uses it (docs/design-documents/20261012-debezium-compatible-output.md).",
+          "type": "object",
+          "required": ["mode", "converters", "differences"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"type": "string", "minLength": 1},
+            "compat": {"type": "string"},
+            "converters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {"type": "string"},
+                "value": {"type": "string"},
+                "header": {"type": "string"}
+              }
+            },
+            "subjectStrategy": {"type": "string"},
+            "differences": {"description": "Ids of the intentional differences that apply to this config.", "type": "array", "items": {"type": "string"}}
+          }
+        }
+      },
+      "dependentRequired": {"pipeline": ["pipelineStatus"], "pipelineStatus": ["pipeline"]}
+    },
+    "entry": {
+      "type": "object",
+      "required": ["key", "status", "origin", "blocking"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {"type": "string"},
+        "status": {"$ref": "#/$defs/status"},
+        "origin": {"$ref": "#/$defs/origin"},
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "configPath": {"description": "JSON pointer into the generated pipeline file.", "type": "string", "pattern": "^(/.*)?$"},
+            "env": {"description": "Environment variable a secret was replaced with.", "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$"}
+          }
+        },
+        "code": {"$ref": "#/$defs/code"},
+        "reason": {"type": "string", "minLength": 1},
+        "fix": {"type": "string", "minLength": 1},
+        "blocking": {"type": "boolean"},
+        "secret": {"const": true}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"enum": ["approximated", "unsupported"]}}}, "then": {"required": ["reason", "code"]}},
+        {"if": {"properties": {"status": {"const": "unsupported"}}}, "then": {"required": ["fix"]}},
+        {"if": {"properties": {"blocking": {"const": true}}}, "then": {"required": ["fix"]}}
+      ]
+    },
+    "note": {
+      "type": "object",
+      "required": ["code", "reason", "blocking", "rule"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"$ref": "#/$defs/code"},
+        "reason": {"type": "string", "minLength": 1},
+        "fix": {"type": "string", "minLength": 1},
+        "blocking": {"type": "boolean"},
+        "rule": {"description": "The rule that emitted the note.", "type": "string", "minLength": 1}
+      },
+      "if": {"properties": {"blocking": {"const": true}}},
+      "then": {"required": ["fix"]}
+    }
+  }
+}
