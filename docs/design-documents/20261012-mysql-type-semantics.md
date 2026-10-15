@@ -1047,14 +1047,14 @@ original question numbers (3 was decided earlier and is recorded under Legacy li
 
 Decided by DeVaris, 2026-10-15, on revision 6:
 
-9. **Design signed off.** Implementation as PR C (Tier 1) after mysql#226; PR B (warnings only) is optional.
-10. **The Avro `decimal` logical type is cut from N.** N ships `types.decimal` in {`string`, `double`} and
-    `types.bigintUnsigned` in {`long`, `string`}. `decimal` for either setting is a configuration error in N
-    naming the setting; it can be added later as a new value without a format change.
-11. **Certification requires `strict`.** The MySQL source is not Certified in v0.21 without it. The certified
-    configuration is `types.mode=strict` (with the defaults `types.decimal=string`,
-    `types.bigintUnsigned=long`); the acceptance suite and the chaos harness run in that configuration, and the
-    docs and registry entry state that `legacy` is not covered by the certification.
+- **9. Design signed off.** Implementation as PR C (Tier 1) after mysql#226; PR B (warnings only) is optional.
+- **10. The Avro `decimal` logical type is cut from N.** N ships `types.decimal` in {`string`, `double`} and
+  `types.bigintUnsigned` in {`long`, `string`}. `decimal` for either setting is a configuration error in N
+  naming the setting; it can be added later as a new value without a format change.
+- **11. Certification requires `strict`.** The MySQL source is not Certified in v0.21 without it. The certified
+  configuration is `types.mode=strict` (with the defaults `types.decimal=string`,
+  `types.bigintUnsigned=long`); the acceptance suite and the chaos harness run in that configuration, and the
+  docs and registry entry state that `legacy` is not covered by the certification.
 
 ## Open questions
 
