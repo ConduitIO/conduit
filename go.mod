@@ -18,7 +18,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.14.4
 	github.com/conduitio/conduit-connector-protocol v0.10.0
 	github.com/conduitio/conduit-connector-s3 v0.9.5
-	github.com/conduitio/conduit-connector-sdk v0.15.0
+	github.com/conduitio/conduit-connector-sdk v0.16.1-0.20261015065140-884b069b6295
 	github.com/conduitio/conduit-processor-sdk v0.8.0
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
