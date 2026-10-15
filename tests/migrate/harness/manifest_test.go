@@ -233,3 +233,27 @@ func TestLoadRuleSet(t *testing.T) {
 	is.True(!rs.Worker)
 	is.True(rs.Classes[ClassDebeziumPostgres])
 }
+
+func TestLoadRuleSet_RejectsUnknownClassAndScope(t *testing.T) {
+	for name, body := range map[string]string{
+		"class typo":       "rulesVersion: 1\nscope: source\nclass: io.debezium.connector.postgresql.PostgresConector\n",
+		"class missing":    "rulesVersion: 1\nscope: sink\n",
+		"unknown scope":    "rulesVersion: 1\nscope: connector\nclass: io.debezium.connector.postgresql.PostgresConnector\n",
+		"scope missing":    "rulesVersion: 1\nclass: io.debezium.connector.postgresql.PostgresConnector\n",
+		"class outside v1": "rulesVersion: 1\nscope: sink\nclass: io.aiven.kafka.connect.opensearch.OpenSearchSinkConnector\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, filepath.FromSlash(RuleDataDir))
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "x.yaml"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadRuleSet(root); err == nil {
+				t.Fatal("expected an error, so the family cannot stay pending on a broken rule file")
+			}
+		})
+	}
+}

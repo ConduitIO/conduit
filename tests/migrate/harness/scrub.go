@@ -55,12 +55,16 @@ var (
 	jsonMemberRe = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|(-?[0-9][0-9.eE+-]*|true|false))`)
 	jsonKeyRe    = regexp.MustCompile(`"(?:[^"\\]|\\.)*"\s*:`)
 	propKeyRe    = regexp.MustCompile(`^\s*[A-Za-z0-9_.>-]+\s*[=:]`)
+	// escapedMemberRe is jsonMemberRe one level of string escaping down:
+	// \"key\": \"value\" inside a JSON string value.
+	escapedMemberRe = regexp.MustCompile(`\\"([^"\\]*)\\"\s*:\s*(?:\\"([^"\\]*)\\"|(-?[0-9][0-9.eE+-]*|true|false))`)
 	// keyValueRe finds key=value and key: value in free text (comments).
 	keyValueRe = regexp.MustCompile(`([A-Za-z0-9_.-]+)\s*[=:]\s*([^\s,;"']+)`)
 	// queryTokenRe finds credential-like URL query parameters.
 	queryTokenRe = regexp.MustCompile(`(?i)[?&](token|access_token|auth_token|api_key|apikey|key|secret|sig|signature|password|pwd)=([^&\s"'#]*)`)
 	// kafkaInternalTopicRe are MirrorMaker internal topic names, which look
-	// like hosts under .internal and appear in upstream comments.
+	// like hosts under .internal and appear in upstream comments. Exempt only
+	// as bare tokens in comment text (scrubText), never in allowedHost.
 	kafkaInternalTopicRe = regexp.MustCompile(`(?i)^(mm2-(offsets|configs|status|offset-syncs)\.[a-z0-9_-]+|[a-z0-9_-]+\.checkpoints|[a-z0-9_-]+\.heartbeats|heartbeats)\.internal$`)
 	ipv4Re               = regexp.MustCompile(`^\d{1,3}(\.\d{1,3}){3}$`)
 	awsKeyIDRe           = regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`)
@@ -144,7 +148,7 @@ func ScrubRaw(name string, b []byte) []ScrubFinding {
 			out = append(out, ScrubFinding{File: name, Line: i + 1, Problem: p})
 		}
 	}
-	return out
+	return append(out, jsonSecretMembers(name, string(b))...)
 }
 
 func scrubValue(key, value string) []string {
@@ -165,9 +169,43 @@ func scrubValue(key, value string) []string {
 	return problems
 }
 
+// jsonSecretMembers applies the secret-key rule to every quoted JSON member
+// of the whole text, so a member split across lines is still seen, and to
+// every escaped member (\"key\": \"value\"), so a config embedded as an
+// escaped JSON string is seen too.
+func jsonSecretMembers(name, text string) []ScrubFinding {
+	var out []ScrubFinding
+	for _, re := range []*regexp.Regexp{jsonMemberRe, escapedMemberRe} {
+		for _, m := range re.FindAllStringSubmatchIndex(text, -1) {
+			key := text[m[2]:m[3]]
+			if !secretKeyRe.MatchString(key) {
+				continue
+			}
+			var problem string
+			switch {
+			case m[6] >= 0: // a number or boolean under a secret key is a plaintext secret
+				problem = fmt.Sprintf("secret-named JSON member %q has a literal value", key)
+			case !isPlaceholderSecret(text[m[4]:m[5]]) && !embeddedPasswordRe.MatchString(text[m[4]:m[5]]):
+				problem = fmt.Sprintf("secret-named JSON member %q is not a placeholder", key)
+			default:
+				continue
+			}
+			out = append(out, ScrubFinding{File: name, Line: strings.Count(text[:m[0]], "\n") + 1, Problem: problem})
+		}
+	}
+	return out
+}
+
+// isCommentLine is a .properties comment (or shell-style) line.
+func isCommentLine(line string) bool {
+	t := strings.TrimLeft(line, " \t\f")
+	return strings.HasPrefix(t, "#") || strings.HasPrefix(t, "!")
+}
+
 func scrubText(line string) []string {
 	problems := secretsInText(line)
 	problems = append(problems, secretKeysInText(line)...)
+	comment := isCommentLine(line)
 	var hosts []string
 	for _, m := range urlRe.FindAllStringSubmatch(line, -1) {
 		if h := authorityHost(m[1]); h != "" {
@@ -184,6 +222,10 @@ func scrubText(line string) []string {
 		case tok == "" || strings.HasPrefix(tok, "$"):
 		case hostPortRe.MatchString(tok):
 			hosts = append(hosts, hostPortRe.FindStringSubmatch(tok)[1])
+		case comment && kafkaInternalTopicRe.MatchString(tok):
+			// A MirrorMaker internal topic named in an upstream comment. Only
+			// a bare token in comment text: with a port, in a URL or in a
+			// value it is a host and is checked.
 		case isBareHost(tok):
 			hosts = append(hosts, tok)
 		}
@@ -196,32 +238,19 @@ func scrubText(line string) []string {
 	return problems
 }
 
-// secretKeysInText applies the secret-key rule to text: quoted JSON members
-// at any depth, string or number, and key=value / key: value pairs.
+// secretKeysInText applies the secret-key rule to key=value / key: value
+// pairs in a non-JSON line (comments, properties). JSON members are checked
+// over the whole file by jsonSecretMembers.
 func secretKeysInText(line string) []string {
+	if jsonKeyRe.MatchString(line) {
+		return nil
+	}
 	var problems []string
-	jsonKeys := map[int]bool{}
-	for _, m := range jsonMemberRe.FindAllStringSubmatchIndex(line, -1) {
-		key := line[m[2]:m[3]]
-		jsonKeys[m[0]] = true
-		if !secretKeyRe.MatchString(key) {
-			continue
-		}
-		if m[6] >= 0 { // a number or boolean under a secret key is a plaintext secret
-			problems = append(problems, fmt.Sprintf("secret-named JSON member %q has a literal value", key))
-			continue
-		}
-		v := line[m[4]:m[5]]
-		if !isPlaceholderSecret(v) && !embeddedPasswordRe.MatchString(v) {
-			problems = append(problems, fmt.Sprintf("secret-named JSON member %q is not a placeholder", key))
-		}
-	}
-	if len(jsonKeys) > 0 {
-		return problems // a JSON line; its members were checked above
-	}
 	for _, m := range keyValueRe.FindAllStringSubmatch(line, -1) {
 		key, v := m[1], strings.TrimRight(m[2], ".")
-		if !secretKeyRe.MatchString(key) || embeddedPasswordRe.MatchString(line) && !strings.EqualFold(key, "password") {
+		// A JAAS config's value is a login-module string; its password= is
+		// checked by secretsInText.
+		if !secretKeyRe.MatchString(key) || strings.Contains(strings.ToLower(key), "jaas") {
 			continue
 		}
 		if !isPlaceholderSecret(v) {
@@ -327,9 +356,6 @@ func authorityHost(auth string) string {
 // ranges. Nothing else: example.prod.acme.com is a real domain.
 func allowedHost(h string) bool {
 	h = strings.ToLower(strings.TrimSuffix(h, "."))
-	if kafkaInternalTopicRe.MatchString(h) {
-		return true // a MirrorMaker internal topic name, not a host
-	}
 	if addr, err := netip.ParseAddr(h); err == nil {
 		for _, p := range docPrefixes {
 			if p.Contains(addr) {

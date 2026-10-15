@@ -125,7 +125,10 @@ func TestRunDev_HotReload_EndToEnd(t *testing.T) {
 	is.NoErr(os.WriteFile(pipelinePath, []byte(pipelineYAML(outputPath, "20", "after")), 0o600))
 
 	deadline := time.Now().Add(15 * time.Second)
-	for startedCount(logs) < 2 && time.Now().Before(deadline) {
+	// The "applied" log line carrying the mode is written after the second
+	// "pipeline started", so wait for both instead of checking the mode once
+	// the restart is seen.
+	for (startedCount(logs) < 2 || !strings.Contains(logs.String(), `"mode":"restart"`)) && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	is.Equal(startedCount(logs), 2) // restarted: a second "pipeline started"
