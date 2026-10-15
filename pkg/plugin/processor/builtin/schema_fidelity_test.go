@@ -27,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	sdkschema "github.com/conduitio/conduit-processor-sdk/schema"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
@@ -114,4 +115,51 @@ func TestBuiltinProcessor_SchemaFidelity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuiltinProcessor_PinnedOlderSchemaFailsOnDroppedField is the regression
+// test for built-in processors silently losing fields when they attach a
+// different schema version (conduit-processor-sdk#172, invariant 6). field.set
+// pins the payload schema version to an older one that lacks a field the
+// record holds. The encoder would drop that field without an error, so the
+// record must fail with sdk.ErrFieldNotInSchema instead.
+func TestBuiltinProcessor_PinnedOlderSchemaFailsOnDroppedField(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	sr, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+	is.NoErr(err)
+	reg := NewRegistry(log.Nop(), DefaultBuiltinProcessors, sr)
+	p, err := reg.NewProcessor(ctx, plugin.FullName("builtin:field.set"), "pin-older", egress.Policy{})
+	is.NoErr(err)
+	is.NoErr(p.Configure(ctx, config.Config{
+		"field": `.Metadata["` + opencdc.MetadataPayloadSchemaVersion + `"]`,
+		"value": "1",
+	}))
+
+	subject := strings.ReplaceAll(t.Name(), "/", ".")
+	v1, err := sdkschema.Create(ctx, schema.TypeAvro, subject,
+		[]byte(`{"type":"record","name":"Row","fields":[{"name":"n","type":"long"}]}`))
+	is.NoErr(err)
+	is.Equal(v1.Version, 1)
+	v2, err := sdkschema.Create(ctx, schema.TypeAvro, subject,
+		[]byte(`{"type":"record","name":"Row","fields":[{"name":"n","type":"long"},{"name":"added","type":"string"}]}`))
+	is.NoErr(err)
+	is.Equal(v2.Version, 2)
+
+	raw, err := v2.Marshal(opencdc.StructuredData{"n": int64(1), "added": "kept"})
+	is.NoErr(err)
+	rec := opencdc.Record{Metadata: opencdc.Metadata{}, Payload: opencdc.Change{After: opencdc.RawData(raw)}}
+	schema.AttachPayloadSchemaToRecord(rec, v2)
+
+	out := p.Process(ctx, []opencdc.Record{rec})
+	is.Equal(len(out), 1)
+	errRec, ok := out[0].(sdk.ErrorRecord)
+	if !ok {
+		t.Fatalf("field %q would be dropped silently by schema %s:1, expected ErrorRecord, got %T: %+v", "added", subject, out[0], out[0])
+	}
+	if !cerrors.Is(errRec.Error, sdk.ErrFieldNotInSchema) {
+		t.Fatalf("expected sdk.ErrFieldNotInSchema, got %v", errRec.Error)
+	}
+	is.True(strings.Contains(errRec.Error.Error(), `"added"`)) // the error names the field
 }
