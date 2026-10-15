@@ -10,11 +10,14 @@ name: migrate harness
 #
 # Until the CLI lane (#3003) lands `migrate kafka-connect`, every check that
 # runs the command reports PENDING (skipped, counted in the job summary),
-# never passing. Once the command is registered (cmd/conduit/root/migrate
-# exists), the CLI checks fail instead of reporting pending, and once the
-# MCP adapter's source registers kc_migrate, the parity checks do too (see
-# tests/migrate/run_test.go, runEnv), so the job cannot stay green on checks
-# it did not run. pkg/kcmigrate alone (report types, #3069) does not flip it.
+# never passing. Pending ends per family, not all at once: a case becomes
+# required when the rule data in pkg/kcmigrate/rules/data covers it (its
+# family's class file; the shared file for unsupported-class cases; the
+# worker file for --worker cases). The command landing hidden with every
+# class unsupported (#3074) leaves every case pending; each family's
+# rule-file PR turns its cases on and must carry their goldens. MCP parity
+# becomes required for ready cases once the MCP adapter's source registers
+# kc_migrate (see tests/migrate/run_test.go, runEnv).
 #
 # NOT YET A REQUIRED CHECK. It is written to the always-report/fail-closed
 # contract (chaos.yml, bundle-e2e.yml) so that it can become one by adding

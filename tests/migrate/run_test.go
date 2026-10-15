@@ -47,23 +47,26 @@ func TestMain(m *testing.M) {
 //
 //   - CONDUIT_BIN: absolute path of the conduit binary under test. Unset (the
 //     normal `go test ./...`): every check that runs the command is pending.
-//   - MIGRATE_HARNESS_REQUIRE_CLI=1: pending CLI checks fail instead. Implied
-//     when CONDUIT_BIN is set and cmd/conduit/root/migrate exists (the
-//     command is registered), so the harness job cannot stay green on
-//     "pending" once the command is in the tree. Keyed on the command, not on
-//     pkg/kcmigrate: the report types land there first (#3069), before there
-//     is anything to run.
-//   - MIGRATE_HARNESS_REQUIRE_MCP=1: the same for the MCP parity checks.
-//     Implied when CONDUIT_BIN is set and the MCP adapter's source registers
-//     kc_migrate.
+//   - With CONDUIT_BIN set, a case is required, not pending, once the rule
+//     data in pkg/kcmigrate/rules/data covers it (harness.CaseReady): its
+//     family's class file, the shared file for unsupported-class cases, the
+//     worker file for --worker cases. Families without a rule file stay
+//     pending, so the command landing hidden with every class unsupported
+//     (#3074) changes nothing; each family's rule-file PR turns its cases on.
+//   - MCP parity is required for a ready case once a top-level Go file of
+//     cmd/conduit/internal/mcp registers kc_migrate.
+//   - MIGRATE_HARNESS_REQUIRE_CLI=1 / MIGRATE_HARNESS_REQUIRE_MCP=1: every
+//     case required, ready or not.
 //   - MIGRATE_HARNESS_RELEASE=1: the release gate. Implies both, and
 //     certification entries must be certified.
 type runEnv struct {
-	bin        string
-	repoRoot   string
-	requireCLI bool
-	requireMCP bool
-	release    bool
+	bin           string
+	repoRoot      string
+	rules         harness.RuleSet
+	forceCLI      bool
+	forceMCP      bool
+	mcpRegistered bool
+	release       bool
 }
 
 func harnessEnv(t *testing.T) runEnv {
@@ -80,15 +83,34 @@ func harnessEnv(t *testing.T) runEnv {
 	if e.bin != "" && !filepath.IsAbs(e.bin) {
 		t.Fatalf("CONDUIT_BIN must be absolute, got %q", e.bin)
 	}
-	_, statErr := os.Stat(filepath.Join(root, "cmd", "conduit", "root", "migrate"))
-	e.requireCLI = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_CLI") == "1" || (e.bin != "" && statErr == nil)
-	e.requireMCP = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_MCP") == "1" || (e.bin != "" && sourceRegistersTool(t, root, harness.ToolKCMigrate))
+	if e.rules, err = harness.LoadRuleSet(root); err != nil {
+		t.Fatal(err)
+	}
+	e.forceCLI = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_CLI") == "1"
+	e.forceMCP = e.release || os.Getenv("MIGRATE_HARNESS_REQUIRE_MCP") == "1"
+	e.mcpRegistered = sourceRegistersTool(t, root, harness.ToolKCMigrate)
 	return e
+}
+
+// cliRequired decides whether a case's CLI checks are required. It returns
+// a pending error when the case's rule data is missing.
+func (e runEnv) cliRequired(c harness.Case, inputs []harness.InputFile) (bool, error) {
+	if e.forceCLI {
+		return true, nil
+	}
+	ready, why := harness.CaseReady(c, inputs, e.rules)
+	if !ready {
+		return false, cerrors.Errorf("%s: %w", why, harness.ErrPending)
+	}
+	return e.bin != "", nil
 }
 
 // sourceRegistersTool reports whether a non-test Go file of the MCP adapter
 // names the tool as a string literal, which is how catalog.go registers
-// tools. Once it does, parity checks fail instead of reporting pending.
+// tools. Once it does, parity checks of ready cases fail instead of
+// reporting pending. It scans only the top level of cmd/conduit/internal/mcp
+// (where catalog.go lives), not subdirectories: a registration moved into a
+// subpackage would leave parity pending until this glob follows it.
 func sourceRegistersTool(t *testing.T, root, tool string) bool {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(root, "cmd", "conduit", "internal", "mcp", "*.go"))
@@ -175,64 +197,18 @@ func TestMigrate_CLI(t *testing.T) {
 
 	var mu sync.Mutex
 	var emitted []string
+	declared := 0 // ready cases that declare emitted plugins
 
 	for _, c := range cases {
 		t.Run(c.Rel, func(t *testing.T) {
 			name := "cli/" + c.Rel
 			track(t, name)
-			if avail != nil {
-				pending(t, name, e.requireCLI, avail)
-			}
-			inputs, err := harness.InputKeys(c.Dir, c.Inputs())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			outDirA := filepath.Join(t.TempDir(), "out")
-			outA, err := cli.Migrate(ctx, harness.Request{Case: c, WorkDir: c.Dir, Args: c.Manifest.Command.Args, OutDir: outDirA})
-			if err != nil {
-				t.Fatal(err)
-			}
-			res := harness.CheckOutput(harness.Check{Case: c, Inputs: inputs, Out: outA, HostPaths: hostPaths(c.Dir, outDirA)})
-			for _, p := range res.Problems {
-				t.Error(p)
-			}
-			if err := harness.ValidateSchema(e.repoRoot, harness.EnvelopeSchemaPath, outA.Stdout); err != nil {
-				t.Errorf("envelope: %v", err)
-			}
-			if res.Envelope != nil && res.Envelope.Error == nil {
-				// The CLI exists, so the schema must too (fail closed).
-				if err := harness.ValidateSchema(e.repoRoot, harness.ReportSchemaPath, res.Envelope.Result); err != nil {
-					t.Errorf("report: %v", err)
-				}
-			}
-
-			workB := t.TempDir()
-			outDirB := filepath.Join(t.TempDir(), "out")
-			outB, err := cli.Migrate(ctx, harness.Request{Case: c, WorkDir: workB, Args: absArgs(c), OutDir: outDirB})
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, p := range harness.CompareRuns(outA, outB) {
-				t.Error("determinism: " + p)
-			}
-
-			goldens, err := harness.CompareGoldens(c.Dir, outA, *update)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, p := range goldens {
-				t.Error(p)
-			}
-
-			if _, err := os.Stat(filepath.Join(outDirA, "pipelines")); err == nil {
-				if err := cli.ValidatePipelines(ctx, filepath.Join(outDirA, "pipelines")); err != nil {
-					t.Errorf("generated pipelines do not validate: %v", err)
-				}
-			}
-
+			plugins := runCLICase(ctx, t, e, cli, avail, c)
 			mu.Lock()
-			emitted = append(emitted, res.Plugins...)
+			emitted = append(emitted, plugins...)
+			if len(c.Manifest.Emits) > 0 {
+				declared++
+			}
 			mu.Unlock()
 		})
 	}
@@ -240,7 +216,12 @@ func TestMigrate_CLI(t *testing.T) {
 	t.Run("certification", func(t *testing.T) {
 		track(t, "cli/certification")
 		if avail != nil {
-			pending(t, "cli/certification", e.requireCLI, avail)
+			pending(t, "cli/certification", e.forceCLI, avail)
+		}
+		if declared == 0 && !e.forceCLI {
+			// Unsupported-class cases emit nothing; the gate starts with the
+			// first ready case that declares an emitted plugin.
+			pending(t, "cli/certification", false, cerrors.Errorf("no ready case emits a plugin yet: %w", harness.ErrPending))
 		}
 		entries, problems := harness.LoadCertification(filepath.Join(corpusRoot, "certification.yaml"))
 		for _, p := range problems {
@@ -253,6 +234,68 @@ func TestMigrate_CLI(t *testing.T) {
 			t.Error(p)
 		}
 	})
+}
+
+// runCLICase runs one case through the CLI and every check, and returns the
+// plugins its pipelines reference. It skips (pending) or fails as runEnv says.
+func runCLICase(ctx context.Context, t *testing.T, e runEnv, cli harness.CLI, avail error, c harness.Case) []string {
+	t.Helper()
+	inputs, err := harness.InputKeys(c.Dir, c.Inputs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	required, notReady := e.cliRequired(c, inputs)
+	if avail != nil {
+		pending(t, "cli/"+c.Rel, required, avail)
+	}
+	if notReady != nil {
+		pending(t, "cli/"+c.Rel, false, notReady)
+	}
+
+	outDirA := filepath.Join(t.TempDir(), "out")
+	outA, err := cli.Migrate(ctx, harness.Request{Case: c, WorkDir: c.Dir, Args: c.Manifest.Command.Args, OutDir: outDirA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := harness.CheckOutput(harness.Check{Case: c, Inputs: inputs, Out: outA, HostPaths: hostPaths(c.Dir, outDirA)})
+	for _, p := range res.Problems {
+		t.Error(p)
+	}
+	if err := harness.ValidateSchema(e.repoRoot, harness.EnvelopeSchemaPath, outA.Stdout); err != nil {
+		t.Errorf("envelope: %v", err)
+	}
+	if res.Envelope != nil && res.Envelope.Error == nil {
+		// The CLI exists, so the schema must too (fail closed).
+		if err := harness.ValidateSchema(e.repoRoot, harness.ReportSchemaPath, res.Envelope.Result); err != nil {
+			t.Errorf("report: %v", err)
+		}
+	}
+
+	workB := t.TempDir()
+	outDirB := filepath.Join(t.TempDir(), "out")
+	outB, err := cli.Migrate(ctx, harness.Request{Case: c, WorkDir: workB, Args: absArgs(c), OutDir: outDirB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range harness.CompareRuns(outA, outB) {
+		t.Error("determinism: " + p)
+	}
+
+	goldens, err := harness.CompareGoldens(c.Dir, outA, *update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range goldens {
+		t.Error(p)
+	}
+
+	if _, err := os.Stat(filepath.Join(outDirA, "pipelines")); err == nil {
+		if err := cli.ValidatePipelines(ctx, filepath.Join(outDirA, "pipelines")); err != nil {
+			t.Errorf("generated pipelines do not validate: %v", err)
+		}
+	}
+
+	return res.Plugins
 }
 
 // TestMigrate_MCPParity runs every case through the kc_migrate MCP tool and
@@ -272,15 +315,20 @@ func TestMigrate_MCPParity(t *testing.T) {
 		t.Run(c.Rel, func(t *testing.T) {
 			name := "mcp/" + c.Rel
 			track(t, name)
-			if cliAvail != nil {
-				pending(t, name, e.requireMCP, cliAvail)
-			}
-			if mcpAvail != nil {
-				pending(t, name, e.requireMCP, mcpAvail)
-			}
 			inputs, err := harness.InputKeys(c.Dir, c.Inputs())
 			if err != nil {
 				t.Fatal(err)
+			}
+			cliReq, notReady := e.cliRequired(c, inputs)
+			required := e.forceMCP || (cliReq && e.mcpRegistered)
+			if cliAvail != nil {
+				pending(t, name, required, cliAvail)
+			}
+			if mcpAvail != nil {
+				pending(t, name, required, mcpAvail)
+			}
+			if notReady != nil && !e.forceMCP {
+				pending(t, name, false, notReady)
 			}
 			cliOut, err := cli.Migrate(ctx, harness.Request{Case: c, WorkDir: c.Dir, Args: c.Manifest.Command.Args, OutDir: filepath.Join(t.TempDir(), "out")})
 			if err != nil {

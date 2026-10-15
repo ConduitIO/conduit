@@ -61,7 +61,8 @@ and checks, in order:
    input paths is byte-identical;
 8. the goldens in `expected/` (rule 1 normalization only);
 9. `conduit pipelines validate --json` on the generated pipelines;
-10. after all cases, rule 4 over the plugins the pipelines actually reference.
+10. after all cases, rule 4 over the plugins the pipelines actually reference
+    (pending until a ready case declares an emitted plugin).
 
 `TestMigrate_MCPParity` runs each case through the `kc_migrate` tool of
 `conduit mcp` and requires the same `ok`, `summary`, `result`, `error` and
@@ -71,12 +72,17 @@ Pending is never passing. A check whose surface does not exist yet (no
 `migrate kafka-connect`, no `kc_migrate`, no report schema) is skipped with
 `PENDING:` and counted in the job summary. It becomes a failure when:
 
-- `MIGRATE_HARNESS_REQUIRE_CLI=1`, or `CONDUIT_BIN` is set and
-  `cmd/conduit/root/migrate` exists in the tree (the command is registered, so
-  pending would hide a broken build; `pkg/kcmigrate` alone does not count);
-- `MIGRATE_HARNESS_REQUIRE_MCP=1`, or `CONDUIT_BIN` is set and the MCP
-  adapter's source (`cmd/conduit/internal/mcp`) registers `kc_migrate`, for the
-  parity checks;
+- `CONDUIT_BIN` is set and the rule data in `pkg/kcmigrate/rules/data` covers
+  the case: its family's class file, the shared file for an unsupported-class
+  case, the worker file for a `--worker` case. Families without a rule file
+  stay pending, so the command landing with every class unsupported changes
+  nothing, and each family's rule-file PR turns its own cases on. That PR must
+  carry the goldens for those cases (`-update`), or the harness fails on
+  `expected/ is missing`;
+- for parity, additionally once a top-level file of `cmd/conduit/internal/mcp`
+  registers `kc_migrate`;
+- `MIGRATE_HARNESS_REQUIRE_CLI=1` / `MIGRATE_HARNESS_REQUIRE_MCP=1`: every case,
+  ready or not;
 - `MIGRATE_HARNESS_RELEASE=1`, the release gate, which also requires
   `tier: certified` for every emitted plugin.
 

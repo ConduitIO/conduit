@@ -34,9 +34,12 @@ import (
 // and unsupported classes rather than one connector family.
 const FamilyCommon = "common"
 
+// FamilyDebeziumPostgres is the Debezium Postgres family.
+const FamilyDebeziumPostgres = "debezium-postgres"
+
 // Families are the corpus families of the design, in its order.
 var Families = []string{
-	"debezium-postgres", "debezium-mysql", "jdbc-source", "jdbc-sink",
+	FamilyDebeziumPostgres, "debezium-mysql", "jdbc-source", "jdbc-sink",
 	"s3-sink", "elasticsearch-sink", "kafka-mirror", FamilyCommon,
 }
 
@@ -51,6 +54,9 @@ const (
 	cmdMigrate      = "migrate"
 	cmdKafkaConnect = "kafka-connect"
 	flagJSON        = "--json"
+	flagWorker      = "--worker"
+	// KeyConnectorClass is the Kafka Connect key that names the class.
+	KeyConnectorClass = "connector.class"
 )
 
 // Status values of a report entry (base design, "Output: the compatibility report").
@@ -64,7 +70,7 @@ var (
 	caseIDRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	commitRe   = regexp.MustCompile(`/[0-9a-f]{40}/`)
 	codeRe     = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_-]+)+$`)
-	inputFlags = map[string]bool{"--worker": true}
+	inputFlags = map[string]bool{flagWorker: true}
 	// runnerFlags are added by the runner; a case must not set them.
 	runnerFlags = []string{flagJSON, "--out", "--force", "--quiet", "--no-color"}
 )

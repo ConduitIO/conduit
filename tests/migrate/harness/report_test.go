@@ -59,10 +59,9 @@ func goodReport() (Summary, Report) {
 		ReportVersion: 1,
 		Generator:     map[string]any{"conduit": "v0.21.0"},
 		Connectors: []ReportConnector{{
-			Name: "orders", Class: "io.debezium.connector.postgresql.PostgresConnector", Role: "source",
+			Name: "orders", Class: ClassDebeziumPostgres, Role: "source",
 			Pipeline: "pipelines/orders.yaml", PipelineStatus: statusStopped,
 			Entries: []Entry{
-				{Key: "name", Status: StatusTranslated, Origin: origin("/name")},
 				{Key: "connector.class", Status: StatusTranslated, Origin: origin("/config/connector.class")},
 				{Key: "database.hostname", Status: StatusTranslated, Origin: origin("/config/database.hostname"), Target: &Target{ConfigPath: "/pipelines/0/connectors/0/settings/url"}},
 				{Key: "database.password", Status: StatusTranslated, Secret: true, Origin: origin("/config/database.password"), Target: &Target{ConfigPath: "/pipelines/0/connectors/0/settings/url", Env: "KC_ORDERS_DATABASE_PASSWORD"}},
@@ -71,7 +70,7 @@ func goodReport() (Summary, Report) {
 			Notes: []Note{{Code: "kc.default_differs", Reason: "plugin.name defaults to decoderbufs", Fix: "none needed"}},
 		}},
 	}
-	return Summary{Connectors: 1, Keys: 5, Translated: 4, Unsupported: 1, Blocking: 1}, rep
+	return Summary{Connectors: 1, Keys: 4, Translated: 3, Unsupported: 1, Blocking: 1}, rep
 }
 
 const goodPipeline = `version: "2.2"
@@ -122,15 +121,15 @@ func TestCheckOutput_Mutations(t *testing.T) {
 		name: "a key is silently dropped",
 		mutate: func(_ *testing.T, sum *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
 			e := rep.Connectors[0].Entries
-			rep.Connectors[0].Entries = slices.Delete(slices.Clone(e), 2, 3)
-			sum.Keys, sum.Translated = 4, 3
+			rep.Connectors[0].Entries = slices.Delete(slices.Clone(e), 1, 2)
+			sum.Keys, sum.Translated = 3, 2
 		},
 		want: "silently dropped",
 	}, {
 		name: "entries out of input order",
 		mutate: func(_ *testing.T, _ *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
 			e := rep.Connectors[0].Entries
-			e[2], e[3] = e[3], e[2]
+			e[1], e[2] = e[2], e[1]
 		},
 		want: "input order",
 	}, {
@@ -138,9 +137,9 @@ func TestCheckOutput_Mutations(t *testing.T) {
 		// unsupported to translated, with a self-consistent report.
 		name: "a blocking key flipped to translated",
 		mutate: func(_ *testing.T, sum *Summary, rep *Report, out *Output, ok *bool, exit *int) {
-			e := &rep.Connectors[0].Entries[4]
+			e := &rep.Connectors[0].Entries[3]
 			e.Status, e.Blocking, e.Code, e.Reason, e.Fix = StatusTranslated, false, "", "", ""
-			*sum = Summary{Connectors: 1, Keys: 5, Translated: 5}
+			*sum = Summary{Connectors: 1, Keys: 4, Translated: 4}
 			rep.Connectors[0].PipelineStatus = statusRunning
 			out.Files["pipelines/orders.yaml"] = []byte(strings.Replace(goodPipeline, "status: stopped", "status: running", 1))
 			*ok, *exit = true, 0
@@ -165,7 +164,7 @@ func TestCheckOutput_Mutations(t *testing.T) {
 	}, {
 		name: "an unexpected kc.key_unknown",
 		mutate: func(_ *testing.T, _ *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
-			rep.Connectors[0].Entries[4].Code = codeKeyUnknown
+			rep.Connectors[0].Entries[3].Code = codeKeyUnknown
 		},
 		want: "expectUnknown",
 	}, {
@@ -183,20 +182,20 @@ func TestCheckOutput_Mutations(t *testing.T) {
 	}, {
 		name: "a credential not marked secret",
 		mutate: func(_ *testing.T, _ *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
-			rep.Connectors[0].Entries[3].Secret = false
+			rep.Connectors[0].Entries[2].Secret = false
 		},
 		want: "not marked secret",
 	}, {
 		name: "origin points at the wrong place",
 		mutate: func(_ *testing.T, _ *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
-			rep.Connectors[0].Entries[2].Origin.Pointer = "/config/database.port"
+			rep.Connectors[0].Entries[1].Origin.Pointer = "/config/database.port"
 		},
 		want: "origin",
 	}, {
 		name: "an entry for a key that is not in the input",
 		mutate: func(_ *testing.T, sum *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
 			rep.Connectors[0].Entries = append(rep.Connectors[0].Entries, Entry{Key: "made.up", Status: StatusTranslated, Origin: Origin{File: "connector.json", Pointer: "/config/made.up"}})
-			sum.Keys, sum.Translated = 6, 5
+			sum.Keys, sum.Translated = 5, 4
 		},
 		want: "not in the input",
 	}, {
@@ -218,7 +217,7 @@ func TestCheckOutput_Mutations(t *testing.T) {
 	}, {
 		name: "an unsupported entry without a fix",
 		mutate: func(_ *testing.T, _ *Summary, rep *Report, _ *Output, _ *bool, _ *int) {
-			rep.Connectors[0].Entries[4].Fix = ""
+			rep.Connectors[0].Entries[3].Fix = ""
 		},
 		want: "need code and fix",
 	}, {
@@ -315,13 +314,11 @@ func TestCompareGoldens(t *testing.T) {
 
 func TestSplitMCPFiles(t *testing.T) {
 	is := is.New(t)
-	for _, sc := range []string{
-		`{"ok":true,"result":{"reportVersion":1},"files":[{"path":"pipelines/a.yaml","content":"x"}]}`,
-		`{"ok":true,"result":{"reportVersion":1,"files":[{"path":"pipelines/a.yaml","content":"x"}]}}`,
-	} {
-		out, err := splitMCPFiles([]byte(sc))
-		is.NoErr(err)
-		is.Equal(string(out.Files["pipelines/a.yaml"]), "x")
-		is.True(!strings.Contains(string(out.Stdout), "files"))
-	}
+	out, err := splitMCPFiles([]byte(`{"ok":true,"result":{"reportVersion":1},"files":[{"path":"pipelines/a.yaml","content":"x"}]}`))
+	is.NoErr(err)
+	is.Equal(string(out.Files["pipelines/a.yaml"]), "x")
+	is.True(!strings.Contains(string(out.Stdout), "files"))
+	// files[] inside result breaks the pinned contract.
+	_, err = splitMCPFiles([]byte(`{"ok":true,"result":{"reportVersion":1,"files":[]}}`))
+	is.True(err != nil)
 }

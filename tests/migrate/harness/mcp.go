@@ -125,7 +125,7 @@ func (m MCP) arguments(req Request) (map[string]any, error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "--worker" && i+1 < len(args):
+		case a == flagWorker && i+1 < len(args):
 			f, err := readInput(req.Case.Dir, args[i+1], label[args[i+1]])
 			if err != nil {
 				return nil, err
@@ -161,50 +161,36 @@ func readInput(caseDir, rel, label string) (mcpFile, error) {
 	return mcpFile{Name: label, Content: string(b)}, nil
 }
 
-// splitMCPFiles separates the returned files from the envelope. The design
-// says the tool returns the CLI's result "plus files[] of {path, content}"
-// without fixing where files sits; both placements are accepted until the
-// CLI lane's tool schema pins one.
+// splitMCPFiles separates the returned files from the envelope. The
+// contract (#3069) puts files[] at the top level beside result, so result
+// is the same document as report.json; files[] inside result is a contract
+// violation and an error here.
 func splitMCPFiles(sc []byte) (Output, error) {
 	var env map[string]json.RawMessage
 	if err := json.Unmarshal(sc, &env); err != nil {
 		return Output{}, cerrors.Errorf("structured content is not an object: %w", err)
 	}
+	if raw, ok := env["result"]; ok {
+		var result map[string]json.RawMessage
+		if json.Unmarshal(raw, &result) == nil {
+			if _, bad := result["files"]; bad {
+				return Output{}, cerrors.New("kc_migrate put files[] inside result; the contract (#3069) puts it at the top level")
+			}
+		}
+	}
 	files := map[string][]byte{}
-	take := func(raw json.RawMessage) error {
+	if raw, ok := env["files"]; ok {
 		var fs []struct {
 			Path    string `json:"path"`
 			Content string `json:"content"`
 		}
 		if err := json.Unmarshal(raw, &fs); err != nil {
-			return cerrors.Errorf("files: %w", err)
+			return Output{}, cerrors.Errorf("files: %w", err)
 		}
 		for _, f := range fs {
 			files[f.Path] = []byte(f.Content)
 		}
-		return nil
-	}
-	if raw, ok := env["files"]; ok {
-		if err := take(raw); err != nil {
-			return Output{}, err
-		}
 		delete(env, "files")
-	}
-	if raw, ok := env["result"]; ok {
-		var result map[string]json.RawMessage
-		if json.Unmarshal(raw, &result) == nil {
-			if fr, ok := result["files"]; ok {
-				if err := take(fr); err != nil {
-					return Output{}, err
-				}
-				delete(result, "files")
-				b, err := json.Marshal(result)
-				if err != nil {
-					return Output{}, cerrors.Errorf("marshal result: %w", err)
-				}
-				env["result"] = b
-			}
-		}
 	}
 	stdout, err := json.Marshal(env)
 	if err != nil {
