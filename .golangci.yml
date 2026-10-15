@@ -185,6 +185,23 @@ linters:
         - pattern: '^pconnector\.(Source|Destination)(Configure|LifecycleOnCreated|LifecycleOnUpdated|LifecycleOnDeleted)Request\.(Config|ConfigBefore|ConfigAfter)$'
           pkg: '^github\.com/conduitio/conduit-connector-protocol/pconnector$'
           msg: never log a raw pconnector request Config/ConfigBefore/ConfigAfter field - wrap it in log.RedactAll(...) (pkg/foundation/log/redact.go) and silence this line with a `//nolint:forbidigo` explaining it is wrapped.
+        # conduit-commons#305 / #308: the Avro codec's package-level API shares
+        # process-wide state. avro.DefaultConfig holds one encoder/decoder cache
+        # for the whole process, keyed by the schema's String(), where a
+        # reference to a named type is just its name. avro.DefaultSchemaCache
+        # makes every parsed named type visible to every later parse. Two
+        # pipelines in one process whose schemas share a type name then encode
+        # with each other's definitions, and the bytes are written and acked
+        # without an error. Encode and decode through conduit-commons
+        # schema/avro (one isolated config per Serde), or build a private
+        # avro.Config{}.Freeze() / &avro.SchemaCache{} owned by one schema.
+        # The rule covers both codecs (hamba/avro and the iskorotkov fork).
+        - pattern: '^avro\.(Marshal|Unmarshal|NewEncoder|NewDecoder|NewEncoderForSchema|NewDecoderForSchema|Register|RegisterTypeConverters|DefaultConfig|DefaultSchemaCache)$'
+          pkg: '^github\.com/(hamba|iskorotkov)/avro/v2$'
+          msg: the Avro codec's package-level API shares one cache per process and can encode with another schema's named types (conduit-commons#305) - use conduit-commons schema/avro, or a private avro.Config{}.Freeze() owned by one schema.
+        - pattern: '^avro\.(Parse|ParseBytes|ParseFiles|MustParse|ParseWithCache|ParseBytesWithCache)$'
+          pkg: '^github\.com/(hamba|iskorotkov)/avro/v2$'
+          msg: parse Avro schemas through conduit-commons schema/avro.Parse; the codec's Parse/ParseBytes register named types in a process-wide cache (conduit-commons#308). A call that passes a fresh &avro.SchemaCache{} owned by one schema may be silenced with a `//nolint:forbidigo` saying so.
       exclude-godoc-examples: true
     gocyclo:
       min-complexity: 20
