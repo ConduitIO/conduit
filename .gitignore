@@ -91,3 +91,6 @@ __pycache__/
 # Golden databases for the storage-engine upgrade gate (tests/upgrade/storecompat).
 !tests/upgrade/storecompat/testdata/*/conduit.db
 !tests/upgrade/storecompat/testdata/*/conduit.db/**
+
+# Fail files rapid writes to replay a failing property locally.
+testdata/rapid/
