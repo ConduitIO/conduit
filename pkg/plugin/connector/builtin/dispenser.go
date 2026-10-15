@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
@@ -27,6 +28,9 @@ type Dispenser struct {
 	specifierPlugin   func() pconnector.SpecifierPlugin
 	sourcePlugin      func() pconnector.SourcePlugin
 	destinationPlugin func() pconnector.DestinationPlugin
+	// schemaService is the owning runtime's connector schema service, handed
+	// to every source and destination adapter this dispenser creates.
+	schemaService pconnutils.SchemaService
 }
 
 func NewDispenser(
@@ -50,11 +54,15 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 }
 
 func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
-	return newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source")), nil
+	a := newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source"))
+	a.schemaService = d.schemaService
+	return a, nil
 }
 
 func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
-	return newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination")), nil
+	a := newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination"))
+	a.schemaService = d.schemaService
+	return a, nil
 }
 
 func (d *Dispenser) pluginLogger(pluginType string) log.CtxLogger {

@@ -20,29 +20,50 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
+// processorWithID is the outermost wrapper of every built-in processor. Each
+// call into the processor gets the processor ID (for logs) and the schema
+// service of the runtime that created the processor (see schema_scope.go).
 type processorWithID struct {
 	sdk.Processor
 	id string
+	// schemaService is the owning runtime's schema service. It is read by
+	// scopedSchemaService when the processor, or the SDK middleware wrapped
+	// inside it, calls schema.Get or schema.Create. Nil only in tests that
+	// do not resolve schemas.
+	schemaService pprocutils.SchemaService
 }
 
-func newProcessorWithID(processor sdk.Processor, id string) *processorWithID {
+func newProcessorWithID(processor sdk.Processor, id string, schemaService pprocutils.SchemaService) *processorWithID {
 	return &processorWithID{
-		Processor: processor,
-		id:        id,
+		Processor:     processor,
+		id:            id,
+		schemaService: schemaService,
 	}
 }
 
-func (p *processorWithID) Configure(ctx context.Context, cfg config.Config) error {
+// callContext returns the context for a call into the wrapped processor.
+func (p *processorWithID) callContext(ctx context.Context) context.Context {
 	ctx = ctxutil.ContextWithProcessorID(ctx, p.id)
+	if p.schemaService != nil {
+		// Invariant 6: the processor resolves schemas in its own runtime's
+		// registry, never in the registry of another runtime in the process.
+		ctx = contextWithSchemaService(ctx, p.schemaService)
+	}
+	return ctx
+}
+
+func (p *processorWithID) Configure(ctx context.Context, cfg config.Config) error {
+	ctx = p.callContext(ctx)
 	return p.Processor.Configure(ctx, cfg)
 }
 
 func (p *processorWithID) Open(ctx context.Context) error {
-	ctx = ctxutil.ContextWithProcessorID(ctx, p.id)
+	ctx = p.callContext(ctx)
 	return p.Processor.Open(ctx)
 }
 
@@ -51,7 +72,7 @@ func (p *processorWithID) Open(ctx context.Context) error {
 // processor-sdk schema decode middleware (see Registry.NewProcessor), whose
 // errors carry no code of their own.
 func (p *processorWithID) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	ctx = ctxutil.ContextWithProcessorID(ctx, p.id)
+	ctx = p.callContext(ctx)
 	out := p.Processor.Process(ctx, records)
 	for i, rec := range out {
 		if er, ok := rec.(sdk.ErrorRecord); ok {
@@ -63,6 +84,6 @@ func (p *processorWithID) Process(ctx context.Context, records []opencdc.Record)
 }
 
 func (p *processorWithID) Teardown(ctx context.Context) error {
-	ctx = ctxutil.ContextWithProcessorID(ctx, p.id)
+	ctx = p.callContext(ctx)
 	return p.Processor.Teardown(ctx)
 }

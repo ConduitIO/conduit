@@ -116,6 +116,25 @@
 // application set itself. An embedder that needs its own limit should set the
 // same value on every Engine and call nothing else on those commons defaults.
 //
+// # Built-in plugin schema services are scoped per Engine
+//
+// Built-in connectors and processors resolve schemas through package-level
+// services in the connector and processor SDKs. Conduit installs a router
+// there once per process, and each call into a built-in plugin carries the
+// schema service of the Engine that created the plugin, so two Engines in one
+// process never read or register schemas in each other's registry
+// (https://github.com/ConduitIO/conduit/issues/3088). A schema call from a
+// built-in plugin that does not use the context Conduit handed it (for example
+// from a goroutine started with context.Background()) is refused with error
+// code plugin.builtin_schema_unscoped instead of being answered by another
+// Engine. Standalone plugins talk to their own Engine over gRPC or WASM host
+// functions and are not affected.
+//
+// The processor SDK's logger (pprocutils.Logger) is still process-wide: with
+// two Engines in one process, built-in processors that log through
+// sdk.Logger(ctx) write to the logger of the most recently created Engine.
+// This affects log routing only, not record data.
+//
 // # Package boundary / deprecation policy
 //
 // This package's exported API (Options, Engine, Handle, PipelineConfig, New,
