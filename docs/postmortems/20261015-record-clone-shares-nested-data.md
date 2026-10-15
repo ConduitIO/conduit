@@ -41,11 +41,23 @@ Conduit v0.20.3; #340 for `release/v0.8.x` → v0.8.3). No production occurrence
     (2023-11-09) is the first release with it. From v0.11.0, Conduit uses `conduit-commons`'
     `opencdc.Record`, which carries the same code (`conduit-commons#1`, 2023-12-05). #1622
     (2024-07-01) removed Conduit's own `pkg/record`.
-  - Run end to end: `main` at `5679267` and `release/v0.20.x` (commons v0.7.1), with the repro
-    tests below. Earlier versions are inferred from the code, which is unchanged since #1247.
+  - Reproduced on `main` at `5679267` and on `release/v0.20.x` (commons v0.7.1) with package-level
+    repro tests that call the engine's `stream.Message.Clone` and run real built-in processors on
+    the copies. No full pipeline was run. Earlier versions are inferred from the code, which is
+    unchanged since #1247.
 - **`conduit-commons`:** every release, v0.0.x through v0.8.2.
-- **SDKs and standalone plugins:** anything that calls `Record.Clone` or `StructuredData.Clone` and
-  then changes one of the copies.
+- **SDKs and plugins:** anything that calls `Record.Clone` or `StructuredData.Clone` and then
+  changes one of the copies.
+  - Built-in connectors and processors are compiled into Conduit, so they use Conduit's
+    `conduit-commons`, whatever their own `go.mod` pins. They are fixed by Conduit's bump.
+  - Standalone plugins use the commons they were built with. `conduit-processor-sdk` v0.8.1 and
+    `conduit-connector-sdk` v0.16.1 both pin commons v0.8.0. In the connector SDK, `Clone` is
+    called only by the v2 acceptance harness (`acceptance_v2_harness.go`, which clones what it sends
+    to the destination and keeps the originals to compare against) and by the internal reference
+    connector. Neither runs in a production connector. A shallow copy there could let the SDK's
+    destination middleware change the harness's kept originals, which would weaken what the
+    acceptance suite checks; we found no middleware that changes nested values in place. Rebuilding
+    on commons v0.8.3 removes the question.
 
 ### Paths that clone
 
@@ -54,35 +66,52 @@ Conduit v0.20.3; #340 for `release/v0.8.x` → v0.8.3). No production occurrence
 | arch v1 fan-out (`pkg/lifecycle/stream/fanout.go`) | **always**, once per destination, whenever a pipeline has more than one destination (one destination takes a shortcut and doesn't clone) | Each destination branch gets a clone, and destination-level processors run on it. The main exposure |
 | `clone` processor (v0.14.0+) | every record, `count` times | Copies share nested data with each other and the original |
 | `split` processor (v0.14.0+) | every element | Split records share the rest of the record |
-| arch v2 fan-out (`pkg/lifecycle-poc/funnel`) | branches that contain a processor get `Batch.clone()`; destination-only branches share the records on purpose (#2946, 2026-10-12) | A processor in one branch that changes a nested array in place also changes the record a sibling destination-only branch is writing at the same moment. That is corrupted output and a data race |
+| arch v2 fan-out (`pkg/lifecycle-poc/funnel`) | branches that contain a processor get `Batch.clone()`; destination-only branches share the records on purpose (#2946, 2026-10-12) | A processor in one branch that changes a nested array in place also changes the record a sibling destination-only branch is writing at the same moment. That is corrupted output and a data race. #2946's safety argument (`branchMutatesRecords`) also leans on `Clone`: it counts a built-in destination as read-only because the in-memory plugin stream clones each request (`conduit-connector-protocol` `pconnector/clone.go`), and with a shallow `Clone` that copy shared nested data with the records the siblings read |
 | inspector (`pkg/inspector`) | once per record, sent to every session | The inspector's copy shares nested values with the record the pipeline keeps processing |
 
 ### What changes data silently
 
-A copy is only corrupted if something changes a nested container **in place**. Built-in processors
+A copy is only corrupted if something changes, **in place**, a nested array, an element inside one
+(including a map), or a nested `StructuredData`. Built-in processors
 mostly replace values through references (`Set`), and the reference resolver cannot walk into
 arrays, so they don't do that. The one in-tree mutator we found is the **JavaScript processor**
 (`custom.javascript`). goja wraps the record's Go maps and slices live, so a script that does
-`record.Payload.After.tags[0] = "x"` writes into the shared slice. Standalone and WASM processors
-receive a serialized copy and cannot reach the engine's records.
+`record.Payload.After.tags[0] = "x"` writes into the shared slice, and
+`record.Payload.After.items[0].x = 1` writes into a map inside it.
+
+Standalone (WASM) processors cannot reach the engine's records: the engine serializes every batch
+to protobuf for each call (`pkg/plugin/processor/standalone/processor.go`, `Process`, and the host
+module's `commandRequest` / `commandResponse` in `host_module.go`), so the module works on its own
+copy. A standalone processor that calls `rec.Clone()` **inside the module** is a different case.
+It uses the `conduit-commons` it was built with (`conduit-processor-sdk` v0.8.1 pins commons
+v0.8.0), so its copies share nested data with each other until it is rebuilt against commons
+v0.8.3 or later (or v0.9.0).
 
 ### Inspector risk
 
 The inspector clones a record once and hands the copy to session goroutines, which marshal it for
-the API while the pipeline keeps processing the original. With nested values shared, a later
-processor that changes a nested `StructuredData` map in place while a session marshals it is a
-concurrent map read and write. Go treats that as a fatal error, not a panic, and the whole process
-exits. A shared slice is a data race instead, which shows up as a torn view in the inspector only.
-We have not observed either. Under the old `Clone` a nested map is shared only if it was already
-`StructuredData` (for example a record cloned twice), so the window is narrow, but it exists
-whenever someone inspects a pipeline that has a JavaScript processor downstream.
+the API while the pipeline keeps processing the original. The old `Clone` shared every `[]any`
+whole, together with everything inside it, so the maps in an array of objects
+(`items: [{...}, {...}]`, the common shape for line items, tags with attributes, or any JSON
+array) were shared too, as was any nested `StructuredData`.
+
+A JavaScript processor downstream of the inspected component that runs `items[0].x = 1` while a
+session marshals the same record is a concurrent map read and write. Go treats that as a fatal
+error, not a panic, and the whole process exits, taking every pipeline with it. A write into a
+shared slice element that is not a map is a data race instead, which shows up as a torn view in
+the inspector only. We have not observed either. The window is a session marshalling at the same
+moment as the write, so it needs an open inspector session, an array of objects, and an in-place
+JavaScript change downstream, but nothing else.
 
 ### Blast radius
 
 - **Silent:** any pipeline that clones (more than one destination on arch v1, `clone`, `split`,
-  arch v2 branches with processors) and has a JavaScript processor that changes a nested array or
-  a nested `StructuredData` in place after the clone. The sibling copies and the original carry the
-  change to their destinations, with acks. Nothing logs it.
+  arch v2 branches with processors) and has a JavaScript processor that changes, in place after
+  the clone, a nested array, an element inside one (including a map), or a nested
+  `StructuredData`. The sibling copies and the original carry the change to their destinations,
+  with acks. Nothing logs it.
+- **Standalone processors built against commons ≤ v0.8.2** that clone records inside the module
+  and then change one copy in place.
 - **Loud:** nested-path processors after a clone nack the record (DLQ or stopped pipeline).
 - **Shape:** `avro.encode` after a clone registers a schema with `record` where the uncloned data
   gives `map`. The published example output for `avro.encode` encodes this wrong shape, because the
