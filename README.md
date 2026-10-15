@@ -326,6 +326,27 @@ Since standalone connectors communicate with Conduit through gRPC they can be
 written in virtually any programming language, as long as the connector follows
 the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
 
+### Ambient cloud credentials
+
+Built-in connectors never use the Conduit host's own cloud identity (for AWS,
+the default credential chain: environment, shared config, IRSA, ECS and EC2
+roles) unless the operator turns it on. The API is unauthenticated by default,
+so a pipeline author must not be able to act as the host:
+
+```yaml
+connectors:
+  ambient-credentials:
+    enabled: true
+    allow-resources: ["acme-ingest-prod"] # exact bucket names, required
+    allow-endpoints: ["https://minio.internal:9000"] # only for custom endpoints
+```
+
+Pipelines then use `builtin:s3` with no keys. Static keys in a pipeline work as
+before. See [ambient credentials](docs/operations/ambient-credentials.md) for
+the rules, error codes and runbook, and run
+`conduit doctor --check connectors.ambient_credentials` to see the effective
+policy.
+
 ## Processors
 
 A processor is a component that operates on a single record that flows through a

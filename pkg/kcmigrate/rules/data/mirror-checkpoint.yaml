@@ -1,0 +1,18 @@
+# MirrorMaker 2's checkpoint connector (org.apache.kafka.connect.mirror.MirrorCheckpointConnector).
+# Mapping design 20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "MirrorMaker-style Kafka to Kafka": it produces no pipeline, and every key
+# blocks. MirrorCheckpointTask translates consumer-group offsets from the
+# source to the target cluster, using the offset syncs MirrorSourceConnector
+# writes; this version has no offset translation, and the migrated
+# MirrorSourceConnector pipeline writes no offset syncs.
+rulesVersion: 1
+scope: source
+class: org.apache.kafka.connect.mirror.MirrorCheckpointConnector
+upstream: {name: kafka, version: "4.2"}
+pipeline: none
+every:
+  status: unsupported
+  blocking: true
+  code: kc.connector_class_unsupported
+  reason: MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.
+  fix: Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.
