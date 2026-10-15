@@ -1,0 +1,51 @@
+{
+  "shape": "2x2-destbatch",
+  "rounds": 5,
+  "warmup": "20s",
+  "window": "1m0s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 39800.05,
+      "sd_pct": 1.1838856704097924,
+      "min": 38990.6,
+      "max": 40470.2,
+      "aa_floor_pct": 1.890032666011026,
+      "aa_typical_pct": 0.44095482504380107
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 90125.54999999999,
+      "sd_pct": 0.5514329449339472,
+      "min": 89605.8,
+      "max": 91295.6,
+      "aa_floor_pct": 1.4738935939957738,
+      "aa_typical_pct": 0.48479004707283924
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 126.44582104796346,
+      "round_deltas_pct": [
+        125.0083878491559,
+        124.69315849444102,
+        130.62946544847273,
+        131.2289815726759,
+        126.05679071440115
+      ],
+      "floor_pct": 1.890032666011026,
+      "resolved": true,
+      "suggestive": false
+    }
+  ],
+  "skipped_arms": [
+    {
+      "label": "v2",
+      "reason": "sinks [/sink/sink-1.jsonl /sink/sink-2.jsonl] not written within 45s; conduit errors:\n2026-10-15T05:58:20+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/2/settings/sdk.batch.size); destination connector \\\"sink-2\\\" (name \\\"sink-2\\\") sets sdk.batch.size=100 (/connectors/3/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipe..."
+    }
+  ]
+}

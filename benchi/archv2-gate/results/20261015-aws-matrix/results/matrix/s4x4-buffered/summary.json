@@ -1,0 +1,88 @@
+{
+  "shape": "4x4",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "20s",
+  "window": "1m0s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 33716.15,
+      "sd_pct": 5.9000060991167915,
+      "min": 30649.4,
+      "max": 37546.4,
+      "aa_floor_pct": 19.571475885964695,
+      "aa_typical_pct": 8.542014800668413
+    },
+    {
+      "label": "v2",
+      "n": 10,
+      "median_rec_s": 35610,
+      "sd_pct": 0.5023170739903137,
+      "min": 35270.4,
+      "max": 35891.2,
+      "aa_floor_pct": 1.0746366797432159,
+      "aa_typical_pct": 0.6851502232480451
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 55320.8,
+      "sd_pct": 1.3625187657662752,
+      "min": 54261.4,
+      "max": 56399.7,
+      "aa_floor_pct": 3.00314257419371,
+      "aa_typical_pct": 1.8977656447326237
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "v2",
+      "X": "v1",
+      "median_delta_pct": 5.617041091583702,
+      "round_deltas_pct": [
+        11.276717777355225,
+        5.518459401140957,
+        3.203320802005,
+        5.226340425092207,
+        2.8129256343313016
+      ],
+      "floor_pct": 19.571475885964695,
+      "resolved": false,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": 64.0780456843382,
+      "round_deltas_pct": [
+        70.23288145208801,
+        65.15769560462297,
+        61.950013923698144,
+        62.672244421384214,
+        61.42536860477614
+      ],
+      "floor_pct": 19.571475885964695,
+      "resolved": true,
+      "suggestive": false
+    },
+    {
+      "Y": "proto",
+      "X": "v2",
+      "median_delta_pct": 55.35186745296266,
+      "round_deltas_pct": [
+        52.98158038116608,
+        56.520192335974485,
+        56.923258539711476,
+        54.592703465902815,
+        57.008827060235866
+      ],
+      "floor_pct": 3.00314257419371,
+      "resolved": true,
+      "suggestive": false
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+2026-10-14T23:23:17Z bootstrap start
+2026-10-14T23:24:24Z docker 25.0.16 and go version go1.26.9 linux/amd64 installed
+2026-10-14T23:25:16Z images and harness built
+2026-10-14T23:25:19Z quiet 60s before sessions
+2026-10-14T23:26:21Z matrix start (rounds 5, warmup 20s, window 1m0s)
+2026-10-15T08:52:27Z matrix exit 0
+2026-10-15T08:52:29Z DONE, halting (instance terminates on halt)

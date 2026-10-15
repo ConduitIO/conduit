@@ -1,0 +1,66 @@
+=== s1x1-unbuffered 2026-10-14T23:26:22Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s2x2-unbuffered 2026-10-15T00:10:46Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s4x4-unbuffered 2026-10-15T00:56:12Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s1x1-buffered 2026-10-15T01:46:31Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s2x2-buffered 2026-10-15T02:31:06Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s4x4-buffered 2026-10-15T03:17:38Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== alt-a-1x1 2026-10-15T04:09:22Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s1x1-destbatch-unbuffered 2026-10-15T05:27:55Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s2x2-destbatch-unbuffered 2026-10-15T05:58:17Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s4x4-destbatch-unbuffered 2026-10-15T06:32:09Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s1x1-destbatch-buffered 2026-10-15T07:10:15Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s2x2-destbatch-buffered 2026-10-15T07:40:37Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== s4x4-destbatch-buffered 2026-10-15T08:14:26Z
+_suggestive_ if not resolved, but every per-round delta has the same sign and the median delta exceeds
+twice the larger typical difference: one disturbed run may be hiding a consistent effect. Suggestive is
+a reason to rerun on quiet hardware, not a result. Rates from different sessions are not comparable.
+=== done 2026-10-15T08:52:27Z
+alt-a-1x1                        complete   
+s1x1-buffered                    complete   
+s1x1-destbatch-buffered          complete   
+s1x1-destbatch-unbuffered        complete   
+s1x1-unbuffered                  complete   
+s2x2-buffered                    complete   
+s2x2-destbatch-buffered          complete   
+s2x2-destbatch-unbuffered        complete   
+s2x2-unbuffered                  complete   
+s4x4-buffered                    complete   
+s4x4-destbatch-buffered          complete   
+s4x4-destbatch-unbuffered        complete   
+s4x4-unbuffered                  complete   

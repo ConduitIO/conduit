@@ -1,5 +1,9 @@
 # Engine matrix, 2026-10-14, laptop
 
+> **Superseded by `../20261015-aws-matrix/`.** That run, on a dedicated VM with 60 s windows and A/A
+> floors of a few percent, finds the prototype resolved _slower_ than v1 and v2 in most 1x1 sessions.
+> This laptop run's floors hid that. Read the AWS run first; this file is kept as the record.
+
 **Indicative laptop numbers, not a gate result and not a performance claim.** The machine was shared and
 heavily loaded, the windows are shorter than the gate requires, and no number here may be quoted outside
 this directory as a measurement of Conduit. They are an input to the single-engine design (#2971), to be

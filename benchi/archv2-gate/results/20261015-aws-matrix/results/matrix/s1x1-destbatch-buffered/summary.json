@@ -1,0 +1,54 @@
+{
+  "shape": "1x1-destbatch",
+  "bench_env": [
+    "CONDUIT_BENCH_DEST_ACK_LATENCY=1us"
+  ],
+  "rounds": 5,
+  "warmup": "20s",
+  "window": "1m0s",
+  "arms": [
+    {
+      "label": "v1",
+      "n": 10,
+      "median_rec_s": 58029.75,
+      "sd_pct": 0.9143878411438612,
+      "min": 57126.9,
+      "max": 58843.2,
+      "aa_floor_pct": 1.8424567013148603,
+      "aa_typical_pct": 1.089922502095006
+    },
+    {
+      "label": "proto",
+      "n": 10,
+      "median_rec_s": 49191.1,
+      "sd_pct": 0.2678410344506881,
+      "min": 49003.7,
+      "max": 49461.3,
+      "aa_floor_pct": 0.9338070390603278,
+      "aa_typical_pct": 0.17371234454776885
+    }
+  ],
+  "comparisons": [
+    {
+      "Y": "proto",
+      "X": "v1",
+      "median_delta_pct": -15.231239148884843,
+      "round_deltas_pct": [
+        -14.36335829489578,
+        -15.138757891403282,
+        -15.256312494884083,
+        -15.501793114337966,
+        -16.18557088099066
+      ],
+      "floor_pct": 1.8424567013148603,
+      "resolved": true,
+      "suggestive": false
+    }
+  ],
+  "skipped_arms": [
+    {
+      "label": "v2",
+      "reason": "sinks [/sink/sink-1.jsonl] not written within 45s; conduit errors:\n2026-10-15T07:10:17+00:00 ERR provisioning failed error=\"pipeline \\\"archv2-gate\\\", error while provisioning: could not start the pipeline \\\"archv2-gate\\\": can't start pipeline archv2-gate on pipeline architecture v2: destination connector \\\"sink-1\\\" (name \\\"sink-1\\\") sets sdk.batch.size=100 (/connectors/1/settings/sdk.batch.size); v2 waits for every ack before the next read, and a destination batch larger than the records per write withholds its acks until it flushes, so the pipeline can stall (sdk.batch.delay 0) or slow sharply\" stack=[{\"file\":\"/tmp/tmp.oXUmYi6vlJ/base/pkg/provisioning/servic..."
+    }
+  ]
+}
