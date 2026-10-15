@@ -35,6 +35,8 @@ What the policy enforces when a pipeline sets no static keys:
   it loads any credentials.
 - On: the bucket must be an exact `allow-resources` entry. Access-point ARNs and aliases
   (`arn:...`, `-s3alias`, `--ol-s3`, `--op-s3`, `--x-s3`, `.mrap`) are always refused.
+- `allow-endpoints` entries are exact `https://host[:port]`: user info, a query, a fragment, a
+  leading dot (suffix-like), and link-local or metadata addresses are startup errors.
 - The endpoint the AWS SDK resolves (from `aws.endpoint`, `AWS_ENDPOINT_URL_S3`, `AWS_ENDPOINT_URL`
   or a shared-config profile) must be https and an exact `allow-endpoints` entry. No suffix
   matching: `https://x.execute-api.us-east-1.amazonaws.com` is not "an AWS endpoint" for this
@@ -99,6 +101,18 @@ the client they built.
 - Fix: unset the proxy variables for the Conduit process, or set `allow-proxy: true` if the proxy
   is trusted to reach only intended destinations. Under `allow-proxy`, the metadata address
   refusal does not apply.
+
+### `conduit pipelines apply` (or MCP `deploy`/`apply`) fails with `config.ambient_proxy_env`
+
+- Symptom: applying pipelines locally fails at once, naming the proxy variables, although
+  `conduit run` is not involved.
+- Diagnosis: without a reachable server, `conduit pipelines apply` and the MCP `deploy`/`apply`
+  tools (with `--allow-mutations`) build a local engine from the same `conduit.yaml` and
+  environment, so the same startup checks run, and they apply the same operator policy, never a
+  broader one. A proxy variable in the shell that runs the command trips the check.
+- Fix: run the command without the proxy variables (for example `env -u HTTPS_PROXY conduit
+  pipelines apply ...`), or set `allow-proxy: true` if the proxy is trusted. Every other
+  `connectors.ambient-credentials` startup error behaves the same way here.
 
 ### Pipeline fails with `connector.endpoint_not_allowed`
 

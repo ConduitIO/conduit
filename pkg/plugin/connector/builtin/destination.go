@@ -105,7 +105,13 @@ func (d *destinationPluginAdapter) Run(ctx context.Context, stream pconnector.De
 	go func() {
 		err := d.impl.Run(d.pluginContext(ctx), stream)
 		if err != nil {
-			if !inmemStream.Close(convertPolicyError(err)) {
+			// No convertPolicyError here, unlike the source: the SDK turns a
+			// Write error into an ack error string and keeps running, so Run
+			// only ever returns stream errors. A policy refusal on Write reaches
+			// the engine as an ack error whose text starts with the stable code
+			// (hostpolicy.Error.Error), pinned by
+			// TestAmbientPolicy_DestinationWriteRefusalIsAckString.
+			if !inmemStream.Close(err) {
 				d.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {

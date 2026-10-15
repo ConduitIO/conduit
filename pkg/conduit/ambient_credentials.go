@@ -130,6 +130,11 @@ func (c Config) AmbientCredentialsPolicy(getenv func(string) string) (hostpolicy
 // processors.egress.allow (exact hosts, no wildcard, no path), then requires
 // https and normalizes it the way hostpolicy matches it.
 func parseAmbientEndpoint(raw string) (hostpolicy.Endpoint, error) {
+	// egress.ParseAllowEntry drops user info, a query and a fragment without
+	// complaint; an allowlist entry carrying them is a mistake, so refuse it.
+	if strings.ContainsAny(raw, "@?#") {
+		return hostpolicy.Endpoint{}, fmt.Errorf("entry %q must be a plain https://host[:port] (no user info, query or fragment)", raw)
+	}
 	e, err := egress.ParseAllowEntry(raw)
 	if err != nil {
 		return hostpolicy.Endpoint{}, err //nolint:wrapcheck // message is wrapped by the caller with the config path

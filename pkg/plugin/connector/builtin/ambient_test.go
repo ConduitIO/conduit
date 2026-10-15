@@ -36,6 +36,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -99,8 +100,16 @@ func (s *ambientSource) Open(ctx context.Context, _ opencdc.Position) error {
 
 func (s *ambientSource) Read(ctx context.Context) (opencdc.Record, error) {
 	s.cfg.probe.record("source.Read", ctx)
+	if s.cfg.Bucket == refuseOnReadBucket {
+		// A refusal mid-stream, e.g. a redirect refused by the transport guard.
+		return opencdc.Record{}, hostpolicy.NewError(hostpolicy.CodeRedirectRefused, "refused redirect").At("aws.endpoint")
+	}
 	return opencdc.Record{Position: opencdc.Position("p1")}, nil
 }
+
+// refuseOnReadBucket makes the probe source fail its first Read with a policy
+// refusal, after Configure and Open succeeded.
+const refuseOnReadBucket = "refuse-on-read"
 
 func (s *ambientSource) ReadN(ctx context.Context, _ int) ([]opencdc.Record, error) {
 	r, err := s.Read(ctx)
@@ -132,6 +141,9 @@ func (d *ambientDestination) Open(ctx context.Context) error {
 
 func (d *ambientDestination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
 	d.cfg.probe.record("destination.Write", ctx)
+	if d.cfg.Bucket == refuseOnReadBucket {
+		return 0, hostpolicy.NewError(hostpolicy.CodeRedirectRefused, "refused redirect").At("aws.endpoint")
+	}
 	return len(recs), nil
 }
 func (d *ambientDestination) Teardown(context.Context) error { return nil }
@@ -283,6 +295,10 @@ func TestAmbientPolicy_DeniedWithoutOperatorOptIn(t *testing.T) {
 			is.True(ok)
 			if tc.want == conduiterr.CodeAmbientCredentialsDisabled {
 				is.Equal(got.AmbientCredentials, false)
+				// A disabled operator config hands connectors the zero policy,
+				// not the inert allowlists.
+				is.Equal(len(got.AllowResources), 0)
+				is.Equal(len(got.AllowEndpoints), 0)
 			}
 		})
 	}
@@ -323,6 +339,31 @@ func TestAmbientPolicy_AuditLog(t *testing.T) {
 	mu.Lock()
 	out := buf.String()
 	mu.Unlock()
+
+	// Field-by-field on each line, so a field on one line cannot satisfy the
+	// other line's assertion.
+	lines := map[string]map[string]any{}
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(l), &m) == nil {
+			if msg, _ := m["message"].(string); strings.HasPrefix(msg, "ambient credentials ") {
+				lines[msg] = m
+			}
+		}
+	}
+	used, denied := lines["ambient credentials in use"], lines["ambient credentials denied"]
+	is.True(used != nil)
+	is.True(denied != nil)
+	for _, m := range []map[string]any{used, denied} {
+		is.Equal(m["connector_id"], "conn-1")
+		is.Equal(m["plugin"], "ambienttest")
+		is.Equal(m["component"], "connector.AmbientCredentials")
+	}
+	is.Equal(used["region"], "us-east-1")
+	is.Equal(denied["decision"], "deny")
+	is.Equal(denied["reason"], "connector.resource_not_allowed")
+	is.Equal(denied["config_path"], "bucket")
+
 	for _, want := range []string{
 		`"message":"ambient credentials in use"`,
 		`"component":"connector.AmbientCredentials"`,
@@ -386,16 +427,24 @@ func TestAmbientCodes_RegisteredInConduitErr(t *testing.T) {
 	}
 }
 
-// TestAmbientPolicy_OnlyRuntimeSetsPolicy: no tooling path (MCP validate or
-// dry_run, provisioning, pipeline import) can hand built-in connectors a
-// policy. The only non-test caller of WithAmbientCredentialsPolicy in the
-// module is the engine runtime, which builds it from conduit.Config.
+// TestAmbientPolicy_OnlyRuntimeSetsPolicy: no tooling path can hand built-in
+// connectors a policy of its own making. Across every non-test file in the
+// module:
+//   - WithAmbientCredentialsPolicy is called (qualified or not) only from
+//     pkg/conduit/runtime.go, which builds the policy from conduit.Config;
+//   - the Registry's ambient field is assigned only inside that option, and
+//     never set in a composite literal;
+//   - hostpolicy.WithPolicy is called only by the builtin adapters.
+//
+// Other entry points (MCP deploy/apply, `conduit pipelines apply`) reach the
+// registry through NewRuntime, so they carry the same process's operator
+// policy, never a broader one.
 func TestAmbientPolicy_OnlyRuntimeSetsPolicy(t *testing.T) {
 	root, err := filepath.Abs("../../../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var callers []string
+	var optionCalls, fieldWrites, withPolicy []string
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -414,19 +463,128 @@ func TestAmbientPolicy_OnlyRuntimeSetsPolicy(t *testing.T) {
 		if err != nil {
 			return nil //nolint:nilerr // generated or non-buildable files are not callers
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "WithAmbientCredentialsPolicy" {
-				rel, _ := filepath.Rel(root, path)
-				callers = append(callers, rel)
-			}
-			return true
-		})
+		rel, _ := filepath.Rel(root, path)
+		c := scanPolicyCallers(f, rel)
+		optionCalls = append(optionCalls, c.option...)
+		fieldWrites = append(fieldWrites, c.field...)
+		withPolicy = append(withPolicy, c.withPolicy...)
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(callers) != 1 || callers[0] != filepath.Join("pkg", "conduit", "runtime.go") {
-		t.Fatalf("WithAmbientCredentialsPolicy must be called only from pkg/conduit/runtime.go, got %v", callers)
+	builtinDir := filepath.Join("pkg", "plugin", "connector", "builtin")
+	want := func(name string, got []string, allowed ...string) {
+		t.Helper()
+		if len(got) != len(allowed) {
+			t.Errorf("%s: got callers %v, want exactly %v", name, got, allowed)
+			return
+		}
+		for i := range got {
+			if got[i] != allowed[i] {
+				t.Errorf("%s: got callers %v, want exactly %v", name, got, allowed)
+				return
+			}
+		}
+	}
+	want("WithAmbientCredentialsPolicy", optionCalls, filepath.Join("pkg", "conduit", "runtime.go"))
+	want("Registry.ambient writes", fieldWrites, filepath.Join(builtinDir, "ambient.go"))
+	want("hostpolicy.WithPolicy", withPolicy, filepath.Join(builtinDir, "destination.go"), filepath.Join(builtinDir, "source.go"))
+}
+
+// TestAmbientPolicy_RunStreamRefusalIsCoded: a refusal returned while the
+// source is running reaches the engine through the Run stream as a coded
+// ConduitError, not a bare string.
+func TestAmbientPolicy_RunStreamRefusalIsCoded(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pol := hostpolicy.Policy{AmbientCredentials: true, AllowResources: []string{refuseOnReadBucket}}
+	d := dispenseAmbient(t, newAmbientTestRegistry(t, log.Nop(), newProbe(), WithAmbientCredentialsPolicy(pol)))
+
+	src, err := d.DispenseSource()
+	is.NoErr(err)
+	_, err = src.Configure(ctx, pconnector.SourceConfigureRequest{Config: map[string]string{"bucket": refuseOnReadBucket}})
+	is.NoErr(err)
+	_, err = src.Open(ctx, pconnector.SourceOpenRequest{})
+	is.NoErr(err)
+	stream := src.NewStream()
+	is.NoErr(src.Run(ctx, stream))
+	_, err = stream.(*InMemorySourceRunStream).Client().Recv()
+	ce, ok := conduiterr.Get(err)
+	if !ok {
+		t.Fatalf("expected a ConduitError from the Run stream, got %v", err)
+	}
+	is.Equal(ce.Code, conduiterr.CodeRedirectRefused)
+	is.Equal(ce.ConfigPath, "aws.endpoint")
+}
+
+// TestAmbientPolicy_DestinationWriteRefusalIsAckString pins how a Write
+// refusal reaches the engine: as the ack error of the record (not acked as
+// written), with the stable code as the text prefix. The SDK carries ack
+// errors as strings, so there is no ConduitError to convert.
+func TestAmbientPolicy_DestinationWriteRefusalIsAckString(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pol := hostpolicy.Policy{AmbientCredentials: true, AllowResources: []string{refuseOnReadBucket}}
+	d := dispenseAmbient(t, newAmbientTestRegistry(t, log.Nop(), newProbe(), WithAmbientCredentialsPolicy(pol)))
+
+	dst, err := d.DispenseDestination()
+	is.NoErr(err)
+	_, err = dst.Configure(ctx, pconnector.DestinationConfigureRequest{Config: map[string]string{"bucket": refuseOnReadBucket}})
+	is.NoErr(err)
+	_, err = dst.Open(ctx, pconnector.DestinationOpenRequest{})
+	is.NoErr(err)
+	stream := dst.NewStream()
+	is.NoErr(dst.Run(ctx, stream))
+	client := stream.(*InMemoryDestinationRunStream).Client()
+	is.NoErr(client.Send(pconnector.DestinationRunRequest{Records: []opencdc.Record{{Position: opencdc.Position("p1")}}}))
+	resp, err := client.Recv()
+	is.NoErr(err)
+	is.Equal(len(resp.Acks), 1)
+	is.True(strings.HasPrefix(resp.Acks[0].Error, "connector.redirect_refused: aws.endpoint: "))
+}
+
+type policyCallers struct{ option, field, withPolicy []string }
+
+// scanPolicyCallers records, for one file, the calls and writes
+// TestAmbientPolicy_OnlyRuntimeSetsPolicy restricts.
+func scanPolicyCallers(f *ast.File, rel string) policyCallers {
+	var c policyCallers
+	inBuiltin := strings.HasPrefix(rel, filepath.Join("pkg", "plugin", "connector", "builtin"))
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CallExpr:
+			c.addCall(n, rel)
+		case *ast.AssignStmt:
+			for _, lhs := range n.Lhs {
+				if sel, ok := lhs.(*ast.SelectorExpr); ok && sel.Sel.Name == "ambient" {
+					c.field = append(c.field, rel)
+				}
+			}
+		case *ast.KeyValueExpr:
+			if k, ok := n.Key.(*ast.Ident); ok && k.Name == "ambient" && inBuiltin {
+				c.field = append(c.field, rel+" (composite literal)")
+			}
+		}
+		return true
+	})
+	return c
+}
+
+func (c *policyCallers) addCall(n *ast.CallExpr, rel string) {
+	switch fn := n.Fun.(type) {
+	case *ast.SelectorExpr:
+		if fn.Sel.Name == "WithAmbientCredentialsPolicy" {
+			c.option = append(c.option, rel)
+		}
+		if x, ok := fn.X.(*ast.Ident); ok && x.Name == "hostpolicy" && fn.Sel.Name == "WithPolicy" {
+			c.withPolicy = append(c.withPolicy, rel)
+		}
+	case *ast.Ident:
+		if fn.Name == "WithAmbientCredentialsPolicy" {
+			c.option = append(c.option, rel)
+		}
 	}
 }
