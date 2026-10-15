@@ -59,13 +59,14 @@ func TestMirror_Defaults(t *testing.T) {
 	p := file(res, "pipelines/mm.yaml")
 	is.True(strings.Contains(p, "servers: src:9092"))
 	is.True(strings.Contains(p, "servers: tgt:9092"))
-	is.True(strings.Contains(p, `topic: source.{{ index .Metadata "opencdc.collection" }}`))
+	is.True(!strings.Contains(p, "topic: "))                                                // source.cluster.alias is required and absent
 	is.True(!strings.Contains(p, "mirror: ") && !strings.Contains(p, "emitMirrorMetadata")) // v0.21 never writes the mirror settings (#3038)
 	var codes []string
 	for _, n := range mmConnector(res).Notes {
 		codes = append(codes, n.Code)
 	}
 	is.True(strings.Contains(strings.Join(codes, " "), "kc.output_shape_differs"))
+	is.True(strings.Contains(strings.Join(codes, " "), "kc.key_required"))
 	is.True(!res.OK)
 	is.Equal(mmConnector(res).PipelineStatus, kcmigrate.PipelineStopped)
 }
@@ -111,7 +112,7 @@ func TestMirror_TopicsAndPolicy(t *testing.T) {
 
 func TestMirror_DisabledSyncsAreClean(t *testing.T) {
 	is := is.New(t)
-	res := mmRun(t, "", "sync.topic.configs.enabled=false\nsync.topic.acls.enabled=false\n")
+	res := mmRun(t, "", "source.cluster.alias=src\nsync.topic.configs.enabled=false\nsync.topic.acls.enabled=false\n")
 	for _, n := range mmConnector(res).Notes {
 		is.True(!strings.Contains(n.Reason, "sync.topic"))
 	}
@@ -264,4 +265,97 @@ func TestMirror_PartialFallbackIsReported(t *testing.T) {
 	e := entryFor(mmConnector(res), "target.cluster.bootstrap.servers")
 	is.True(strings.Contains(e.Reason, "not used as a whole"))
 	is.True(strings.Contains(e.Reason, "target.cluster.sasl.jaas.config"))
+}
+
+// source.cluster.alias has no default in Apache Kafka 4.2
+// (MirrorConnectorConfig.java:270-273): a config without it is one Kafka
+// Connect rejects. The run blocks on it and writes no topic prefix it would
+// have to guess.
+func TestMirror_AliasRequired(t *testing.T) {
+	is := is.New(t)
+	res := mmRun(t, "", "")
+	var note *kcmigrate.Note
+	for i, n := range mmConnector(res).Notes {
+		if n.Code == "kc.key_required" {
+			note = &mmConnector(res).Notes[i]
+		}
+	}
+	is.True(note != nil)
+	is.True(note.Blocking)
+	is.True(strings.Contains(note.Reason, "source.cluster.alias"))
+	_, ok := settings(t, res, "pipelines/mm.yaml", "destination")["topic"]
+	is.True(!ok) // no guessed "source." prefix
+
+	res = mmRun(t, "", "source.cluster.alias=us\n")
+	for _, n := range mmConnector(res).Notes {
+		is.True(n.Code != "kc.key_required")
+	}
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "destination")["topic"], `us.{{ index .Metadata "opencdc.collection" }}`)
+}
+
+func auxRun(t *testing.T, accept bool, config string) Result {
+	t.Helper()
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), e, withValidator(Request{ConduitVersion: "v", AcceptGaps: accept, RequiredSettings: BuiltinRequired, Inputs: []kcmigrate.Input{in("c.properties", config)}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// MirrorHeartbeatConnector copies no data: no pipeline, every key
+// unsupported and non-blocking, so the run passes.
+func TestMirror_HeartbeatNoPipeline(t *testing.T) {
+	is := is.New(t)
+	res := auxRun(t, false, "name=hb\nconnector.class=org.apache.kafka.connect.mirror.MirrorHeartbeatConnector\nsource.cluster.alias=a\nemit.heartbeats.interval.seconds=5\n")
+	rc := mmConnector(res)
+	is.Equal(len(rc.Entries), 4)
+	for _, e := range rc.Entries {
+		is.Equal(e.Status, kcmigrate.StatusUnsupported)
+		is.Equal(e.Code, kcmigrate.CodeConnectorClassUnsupported.Reason())
+		is.True(!e.Blocking)
+	}
+	is.Equal(rc.Pipeline, "")
+	is.Equal(rc.PipelineStatus, kcmigrate.PipelineStatus(""))
+	is.True(res.OK)
+	// Retiring it stops the heartbeats; the note says so, without blocking.
+	var stops bool
+	for _, n := range rc.Notes {
+		stops = stops || (n.Code == kcmigrate.CodeOutputShapeDiffers.Reason() && !n.Blocking && strings.Contains(n.Reason, "Heartbeats stop"))
+	}
+	is.True(stops)
+	is.True(strings.Contains(file(res, "REPORT.md"), "Heartbeats stop"))
+	for _, f := range res.Files {
+		is.True(!strings.HasPrefix(f.Path, "pipelines/"))
+	}
+}
+
+// MirrorCheckpointConnector translates consumer offsets, which has no
+// equivalent: no pipeline and every key blocks. A literal secret is still
+// noted, since the input holds it.
+func TestMirror_CheckpointNoPipeline(t *testing.T) {
+	is := is.New(t)
+	cfg := "name=cp\nconnector.class=org.apache.kafka.connect.mirror.MirrorCheckpointConnector\ngroups=.*\n" +
+		`target.cluster.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="u" password="CPCANARY";` + "\n"
+	res := auxRun(t, false, cfg)
+	rc := mmConnector(res)
+	for _, e := range rc.Entries {
+		is.Equal(e.Code, kcmigrate.CodeConnectorClassUnsupported.Reason())
+		is.True(e.Blocking)
+	}
+	is.True(entryFor(rc, "target.cluster.sasl.jaas.config").Secret)
+	var plaintext bool
+	for _, n := range rc.Notes {
+		plaintext = plaintext || n.Code == kcmigrate.CodeSecretPlaintext.Reason()
+	}
+	is.True(plaintext)
+	is.True(!res.OK)
+	is.Equal(rc.Pipeline, "")
+	for _, f := range res.Files {
+		is.True(!strings.Contains(string(f.Content), "CPCANARY"))
+	}
+	is.True(auxRun(t, true, cfg).OK) // accepted gaps
 }

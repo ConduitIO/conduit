@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,8 +42,22 @@ var FamilyClasses = map[string]string{
 	"jdbc-sink":            "io.confluent.connect.jdbc.JdbcSinkConnector",
 	"s3-sink":              "io.confluent.connect.s3.S3SinkConnector",
 	"elasticsearch-sink":   "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
-	"kafka-mirror":         "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+	FamilyKafkaMirror:      "org.apache.kafka.connect.mirror.MirrorSourceConnector",
 }
+
+// FamilyAuxClasses lists, per family, the classes that belong to it besides
+// its main class: connectors deployed alongside the main one, each with its
+// own rule file (MirrorMaker's checkpoint and heartbeat connectors, which
+// produce no pipeline). Their cases name the class in connector.class.
+var FamilyAuxClasses = map[string][]string{
+	FamilyKafkaMirror: {
+		"org.apache.kafka.connect.mirror.MirrorCheckpointConnector",
+		"org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+	},
+}
+
+// FamilyKafkaMirror is the MirrorMaker family.
+const FamilyKafkaMirror = "kafka-mirror"
 
 // RuleSet is what the rule data in the tree covers.
 type RuleSet struct {
@@ -94,18 +109,17 @@ func LoadRuleSet(repoRoot string) (RuleSet, error) {
 }
 
 func knownClass(c string) bool {
-	for _, cl := range FamilyClasses {
-		if cl == c {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(sortedClasses(), c)
 }
 
+// sortedClasses returns every family's main and auxiliary classes.
 func sortedClasses() []string {
 	out := make([]string, 0, len(FamilyClasses))
 	for _, cl := range FamilyClasses {
 		out = append(out, cl)
+	}
+	for _, cls := range FamilyAuxClasses {
+		out = append(out, cls...)
 	}
 	sort.Strings(out)
 	return out
@@ -133,7 +147,7 @@ func CaseReady(c Case, inputs []InputFile, rs RuleSet) (bool, string) {
 		}
 	}
 	known := map[string]bool{}
-	for _, cl := range FamilyClasses {
+	for _, cl := range sortedClasses() {
 		known[cl] = true
 	}
 	var missing []string

@@ -32,6 +32,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
+
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/badger"
 	"github.com/conduitio/conduit-commons/database/inmemory"
@@ -546,12 +548,24 @@ func createServices(r *Runtime) error {
 	tokenService := connutils.NewAuthManager()
 	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
 
+	// Operator policy for built-in connectors' use of the host's ambient cloud
+	// credentials (connectors.ambient-credentials.*). Off by default: the zero
+	// policy denies. Validated in Config.Validate; rebuilt here as the single
+	// source of truth and re-checked so a caller that skipped Validate still
+	// fails closed.
+	ambientPolicy, ambientWarnings, err := r.Config.AmbientCredentialsPolicy(os.Getenv)
+	if err != nil {
+		return cerrors.Errorf("invalid ambient credentials config: %w", err)
+	}
+	r.logAmbientCredentialsPolicy(ambientPolicy, ambientWarnings)
+
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
 			r.logger,
 			r.Config.ConnectorPlugins,
 			connSchemaService,
+			conn_builtin.WithAmbientCredentialsPolicy(ambientPolicy),
 		),
 		conn_standalone.NewRegistry(
 			r.logger,
@@ -1645,5 +1659,23 @@ func (r *Runtime) devPipelineStatus(ctx context.Context, pipelineID string) (boo
 		return false, nil
 	default:
 		return false, nil
+	}
+}
+
+// logAmbientCredentialsPolicy logs the effective ambient-credentials policy at
+// startup, so an operator can see what is on without reading the config.
+// Endpoint and resource lists are counted, not printed (they are shown by
+// `conduit doctor`).
+func (r *Runtime) logAmbientCredentialsPolicy(p hostpolicy.Policy, warnings []string) {
+	ctx := context.Background()
+	logger := r.logger.WithComponent("connector.AmbientCredentials")
+	logger.Info(ctx).
+		Bool("enabled", p.AmbientCredentials).
+		Int("allow_endpoints_count", len(p.AllowEndpoints)).
+		Int("allow_resources_count", len(p.AllowResources)).
+		Bool("allow_proxy", p.AllowProxy).
+		Msg("ambient credentials policy")
+	for _, w := range warnings {
+		logger.Warn(ctx).Msg(w)
 	}
 }
