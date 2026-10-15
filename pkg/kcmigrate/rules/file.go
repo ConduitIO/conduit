@@ -53,11 +53,40 @@ type File struct {
 	// requires a certification entry for each.
 	Emits []Emit `yaml:"emits"`
 	Keys  []Rule `yaml:"keys"`
+	// Defaults are the upstream defaults Conduit does not share. Each one
+	// adds a connector-level note when its key is absent, because an absent
+	// key has no entry to carry the difference (mapping design, "Absent keys
+	// are evaluated mechanically").
+	Defaults []Default `yaml:"defaults"`
 
 	name     string // file name, for errors
 	exact    map[string]*Rule
 	prefixes []*Rule // longest first
 	regexes  []*Rule
+}
+
+// Default describes an upstream default whose outcome is not plainly
+// translated.
+type Default struct {
+	Key string `yaml:"key"`
+	// Default is the upstream default value, as in the upstream snapshot.
+	Default string `yaml:"default"`
+	// Worker means a worker file can set the key too (converters); the note
+	// is added only when neither the connector nor the worker sets it.
+	Worker bool `yaml:"worker"`
+	// Note is added when the key is absent.
+	Note *NoteSpec `yaml:"note"`
+	// CoveredBy names the code of another note of this file that already
+	// covers the difference, so per-key notes would be noise.
+	CoveredBy string `yaml:"coveredBy"`
+}
+
+// NoteSpec is a connector-level note in rule data.
+type NoteSpec struct {
+	Code     string `yaml:"code"`
+	Reason   string `yaml:"reason"`
+	Fix      string `yaml:"fix"`
+	Blocking bool   `yaml:"blocking"`
 }
 
 // Upstream is the project and version the rules were written against.
@@ -218,12 +247,41 @@ func (f *File) validate() error {
 			fail("key %s: %v", id, err)
 		}
 	}
+	errs = append(errs, f.validateDefaults()...)
 	for _, r := range f.Keys {
 		if r.AliasOf != "" && !seen[r.AliasOf] {
 			fail("key %s: aliasOf %q has no exact rule in this file", r.Key, r.AliasOf)
 		}
 	}
 	return cerrors.Join(errs...)
+}
+
+func (f *File) validateDefaults() []error {
+	var errs []error
+	fail := func(format string, args ...any) {
+		errs = append(errs, cerrors.Errorf("%s: "+format, append([]any{f.name}, args...)...))
+	}
+	noteCodes := map[string]bool{}
+	for _, d := range f.Defaults {
+		if d.Note != nil {
+			noteCodes[d.Note.Code] = true
+		}
+	}
+	for _, d := range f.Defaults {
+		if d.Key == "" || (d.Note == nil) == (d.CoveredBy == "") {
+			fail("default %q needs a key and exactly one of note, coveredBy", d.Key)
+			continue
+		}
+		if d.CoveredBy != "" && !noteCodes[d.CoveredBy] {
+			fail("default %s: coveredBy %q is not the code of a note in this file", d.Key, d.CoveredBy)
+		}
+		if n := d.Note; n != nil {
+			if _, ok := conduiterr.LookupCode(n.Code); !ok || !strings.HasPrefix(n.Code, "kc.") || n.Reason == "" || (n.Blocking && n.Fix == "") {
+				fail("default %s: a note needs a registered kc.* code, a reason, and a fix when blocking", d.Key)
+			}
+		}
+	}
+	return errs
 }
 
 func (r *Rule) validate() []error {

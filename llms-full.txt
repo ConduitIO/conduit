@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (132)
+## 3. Error codes (133)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1021,6 +1021,7 @@ Author: Meroxa, Inc.
 | `kc.connector_class_unsupported` | InvalidArgument | CodeConnectorClassUnsupported: the connector class has no mapping; every key of the connector is listed with this code and no pipeline is written. |
 | `kc.converter_unknown` | InvalidArgument | CodeConverterUnknown: a connector-level note when neither the connector nor the worker file sets key.converter or value.converter, so the wire format is unknown. Blocking. |
 | `kc.converter_unsupported` | InvalidArgument | CodeConverterUnsupported: a converter with no Conduit equivalent in this version. Blocking: the wire format would differ. |
+| `kc.default_differs` | InvalidArgument | CodeDefaultDiffers: a connector-level note for an absent key whose Kafka Connect default differs from Conduit's behavior. |
 | `kc.key_approximated` | InvalidArgument | CodeKeyApproximated: translated with a documented difference. |
 | `kc.key_conflict` | InvalidArgument | CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since either value could be the one Kafka Connect used. |
 | `kc.key_deprecated` | InvalidArgument | CodeKeyDeprecated: a legacy key name, handled as its current name. |

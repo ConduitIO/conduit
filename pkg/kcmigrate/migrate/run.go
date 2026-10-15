@@ -194,6 +194,9 @@ func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, worke
 				return nil, err
 			}
 			run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
+			if err == nil && run.plan != nil {
+				run.rc.Notes = append(run.rc.Notes, engine.DefaultNotes(c, keysOf(workerDs))...)
+			}
 			if err != nil {
 				return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrating "+c.Name+": "+err.Error(), err)
 			}
@@ -454,4 +457,12 @@ func markSecrets(rep *kcmigrate.Report) {
 			}
 		}
 	}
+}
+
+func keysOf(ds []rules.Decision) map[string]bool {
+	out := map[string]bool{}
+	for _, d := range ds {
+		out[d.KV.Key] = true
+	}
+	return out
 }
