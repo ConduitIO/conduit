@@ -60,6 +60,20 @@ func buildInstallCmd(t *testing.T) *cobra.Command {
 	return e.MustBuildCobraCommand(&processorplugins.InstallCommand{})
 }
 
+// TestInstall_HelpDoesNotClaimHostedIndexLacksProcessors guards #2819: the
+// --help text told users the hosted index did not serve processors after it
+// started serving ai.chunk and ai.embed, so a reader who checked --help was
+// sent to the offline paths for no reason.
+func TestInstall_HelpDoesNotClaimHostedIndexLacksProcessors(t *testing.T) {
+	long := buildInstallCmd(t).Long
+
+	assert.NotContains(t, long, "until the hosted index serves processors")
+	assert.Contains(t, long, "hosted registry index, which serves published\nprocessors")
+	// The offline paths are still real and still documented.
+	assert.Contains(t, long, "--index-file")
+	assert.Contains(t, long, "--bundle")
+}
+
 func runInstall(t *testing.T, args ...string) (output string, err error) {
 	t.Helper()
 	cmd := buildInstallCmd(t)

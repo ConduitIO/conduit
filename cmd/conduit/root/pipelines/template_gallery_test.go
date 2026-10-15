@@ -38,6 +38,8 @@ package pipelines
 import (
 	"bytes"
 	"context"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,6 +52,7 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	yamlparser "github.com/conduitio/conduit/pkg/provisioning/config/yaml"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
@@ -389,12 +392,12 @@ func TestGalleryTemplates_ScaffoldParseableYAML(t *testing.T) {
 // that fails opaquely on first `conduit run` because a plugin isn't
 // present"): scaffolding postgres-pgvector-rag must surface its
 // GalleryTemplate.Prerequisites in BOTH the --json result and the
-// human-readable Render output, citing the `conduit
-// processor-plugins install ai.chunk`/`ai.embed` commands (installable as of
-// issue #2818's fix, still gated on minConduitVersion 0.20.0 — see
+// human-readable Render output, citing the `conduit connectors install
+// pgvector` and `conduit processor-plugins install ai.chunk`/`ai.embed`
+// commands (the processors are still gated on minConduitVersion 0.20.0 — see
 // TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality) and
-// pointing at a local build as the fallback for pgvector (always) and
-// ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
+// pointing at a local build as the fallback for pgvector (offline or
+// air-gapped) and ai.chunk/ai.embed (only on a pre-0.20.0 Conduit).
 func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -416,6 +419,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	is.True(len(result.Prerequisites) >= 2)
 
 	joined := strings.Join(result.Prerequisites, "\n")
+	is.True(strings.Contains(joined, "conduit connectors install pgvector"))
 	is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector ./cmd/connector"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.chunk"))
 	is.True(strings.Contains(joined, "conduit processor-plugins install ai.embed"))
@@ -428,6 +432,7 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 	cmd2.SetOut(&out2)
 	cmd2.SetArgs([]string{"--pipelines.path=" + dir, "--template=postgres-pgvector-rag", "--force"})
 	is.NoErr(cmd2.Execute())
+	is.True(strings.Contains(out2.String(), "conduit connectors install pgvector"))
 	is.True(strings.Contains(out2.String(), "go build -o conduit-connector-pgvector ./cmd/connector"))
 }
 
@@ -489,13 +494,14 @@ func TestInitCommand_TemplateScaffold_PgvectorRAG_EmitsPrerequisites(t *testing.
 // registry index and confirm what "true" would even mean for an unknown
 // future plugin.
 //
-// REVISIT the pgvector block below the moment
-// github.com/conduitio/conduit-connector-pgvector cuts a tagged release
-// that ConduitIO/conduit-connector-registry's index.json picks up — at that
-// point `conduit connectors install pgvector@<version>` becomes a claim
-// this test should REQUIRE, not forbid, and template_gallery.go's
-// Prerequisites/README.md's table should switch back to the registry
-// install path.
+// UPDATE (pgvector published): conduit-connector-pgvector v0.1.0
+// (2026-08-24) is in the hosted index, and once the index was re-signed on
+// 2026-10-07 (it had gone stale, failing every install with
+// registry.index_stale) `conduit connectors install pgvector` installed
+// v0.1.0 end to end from a clean --connectors.path on a build of main. The
+// pgvector block below therefore flipped from FORBIDDING the registry
+// install to REQUIRING it, and from requiring the build-from-source steps as
+// the only path to requiring them as the offline/air-gapped fallback.
 func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testing.T) {
 	is := is.New(t)
 
@@ -523,18 +529,19 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 		})
 	}
 
-	// (2) pgvector: no tagged release exists anywhere, so a registry install
-	// can never succeed — the prose must never claim otherwise. This substring
-	// check is a heuristic, not a proof: a truthful sentence that happened to
-	// read "do not run `conduit connectors install pgvector`" would also trip
-	// it. That is an accepted, narrow false-positive risk given the prose is
-	// authored entirely in this repo (template_gallery.go) — not a general
-	// claim that substring matching soundly detects "is this a working
-	// instruction or a warning."
-	t.Run("pgvector_not_registry_installable", func(t *testing.T) {
+	// (2) pgvector: v0.1.0 is published to the signed registry, so the
+	// registry install is the instruction and building from source is only
+	// the offline/air-gapped fallback. The negative checks pin out the old
+	// "no tagged release / not installable" claims, which were true until
+	// v0.1.0 shipped and would now send readers to a needless local build.
+	t.Run("pgvector_registry_installable", func(t *testing.T) {
 		is := is.New(t)
-		is.True(!strings.Contains(joined, "connectors install pgvector"))
-		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector"))
+		is.True(strings.Contains(joined, "conduit connectors install pgvector"))
+		is.True(strings.Contains(joined, "v0.1.0"))                                 // the published connector version
+		is.True(strings.Contains(joined, "air-gapped"))                             // the fallback is scoped, not the default
+		is.True(strings.Contains(joined, "go build -o conduit-connector-pgvector")) // the fallback itself
+		is.True(!strings.Contains(joined, "no tagged release"))
+		is.True(!strings.Contains(joined, "NOT installable"))
 	})
 
 	// (3) ai.chunk/ai.embed: published to the signed registry (0.1.0 per the
@@ -566,14 +573,17 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 			"0.20.0",                                 // its actual value
 			"registry.incompatible_version",          // the code for a too-old Conduit
 			"2818",                                   // the tracking issue, now fixed
-			"go build -o conduit-connector-pgvector", // the pgvector fallback
+			"conduit connectors install pgvector",    // the pgvector install
+			"go build -o conduit-connector-pgvector", // the pgvector offline fallback
+			"air-gapped",                             // ...scoped as a fallback
 			"GOOS=wasip1 GOARCH=wasm",                // the processor fallback, for pre-0.20.0 builds
 			"pipeline.fanout_requires_arch_v2",       // the real arch-v2 error
 		} {
 			is.True(strings.Contains(text, fact)) // README must state this fact too
 		}
-		// Same never-claim rule as (2), applied to the README.
-		is.True(!strings.Contains(text, "connectors install pgvector`"))
+		// Same retired claims as (2), applied to the README.
+		is.True(!strings.Contains(text, "no tagged release"))
+		is.True(!strings.Contains(text, "Not yet in the registry"))
 	})
 
 	t.Run("ai.chunk_ai.embed_published_and_installable", func(t *testing.T) {
@@ -600,6 +610,108 @@ func TestGalleryCatalog_PgvectorRAG_PrerequisitesMatchPublishedReality(t *testin
 		// a working alternative).
 		is.True(strings.Contains(joined, "not a workaround"))
 	})
+}
+
+// TestGalleryCatalog_PgvectorRAG_EmbedEgressAdmitsProvider guards the
+// template's embedding-provider egress settings. WASM host egress is closed by
+// default, so a scaffolded postgres-pgvector-rag pipeline only reaches its
+// provider if the embed processor opts in (sdk.egress.allow) for the exact
+// target its ollama.baseURL names, and the provider is loopback, so the entry
+// must be an IP literal (the gate refuses loopback except by an exact
+// (IP, port) carve-out; "localhost" cannot be allowlisted for http). The
+// template shipped without any of this and every embed call failed with
+// "http egress is not enabled for this processor"; the e2e suites did not
+// notice because they patched the settings in themselves.
+//
+// This runs in the required unit-test job (no docker, no sibling repos). It
+// resolves the policy the same way processor.Service.resolveEgressPolicy does,
+// against the ceiling the prerequisite note tells the operator to open, and
+// checks that the note names that ceiling.
+func TestGalleryCatalog_PgvectorRAG_EmbedEgressAdmitsProvider(t *testing.T) {
+	is := is.New(t)
+
+	tmpl, ok := lookupGalleryTemplate(templateNamePostgresPgvectorRAG)
+	is.True(ok)
+
+	pipelines, err := yamlparser.NewParser(log.Nop()).Parse(context.Background(), strings.NewReader(tmpl.YAML))
+	is.NoErr(err)
+	is.Equal(len(pipelines), 1)
+
+	var settings map[string]string
+	for _, p := range pipelines[0].Processors {
+		if p.Plugin == "standalone:ai.embed" {
+			settings = p.Settings
+		}
+	}
+	is.True(settings != nil) // the template must still have an ai.embed processor
+
+	allowRaw, ok := settings[egress.ConfigKeyAllow]
+	if !ok {
+		t.Fatalf("ai.embed has no %s setting: egress is off by default, so every embed call fails", egress.ConfigKeyAllow)
+	}
+
+	baseURL, err := url.Parse(settings["ollama.baseURL"])
+	is.NoErr(err)
+	port := baseURL.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[baseURL.Scheme]
+	}
+
+	requested, err := egress.PolicyFromSettings(settings)
+	is.NoErr(err) // a malformed allowlist (e.g. http://localhost) fails the pipeline build
+	is.True(requested.Enabled)
+
+	// The ceiling the prerequisite note documents (enabled + the same entry),
+	// and the unrestricted single-tenant ceiling (enabled alone). Both must
+	// admit the provider with nothing dropped.
+	documentedCeilingAllow, err := egress.ParseAllowlist(allowRaw)
+	is.NoErr(err)
+	ceilings := map[string]egress.Policy{
+		"documented":   {Enabled: true, Allowlist: documentedCeilingAllow},
+		"unrestricted": {Enabled: true},
+	}
+	for name, ceiling := range ceilings {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			effective, dropped := egress.ResolvePolicy(requested, ceiling)
+			is.Equal(len(dropped), 0)
+			is.True(effective.Enabled)
+
+			// Stage 1: the baseURL's scheme+host:port is allowlisted.
+			is.True(effective.MatchHostPort(baseURL.Scheme, baseURL.Hostname(), port))
+
+			// Stage 2: a loopback/private target is only dialable through an
+			// IP-literal entry for the exact (IP, port). A hostname would pass
+			// stage 1 and still be refused at connect time.
+			ip := net.ParseIP(baseURL.Hostname())
+			if ip == nil {
+				t.Fatalf("ollama.baseURL host %q is not an IP literal; a local provider needs an exact (IP, port) carve-out", baseURL.Hostname())
+			}
+			if refused, _ := egress.Refuse(ip); refused {
+				carveOut := false
+				for _, e := range effective.Allowlist {
+					if e.IsIP() && e.IP.Equal(ip) && e.Port == port {
+						carveOut = true
+					}
+				}
+				is.True(carveOut) // no exact (IP, port) carve-out for the provider
+			}
+		})
+	}
+
+	// The engine ceiling is operator config, not pipeline config, so the
+	// template cannot open it. The prerequisite note and README must tell the
+	// operator exactly how.
+	joined := strings.Join(tmpl.Prerequisites, "\n")
+	readme, err := os.ReadFile(filepath.Join("templates", templateNamePostgresPgvectorRAG, "README.md"))
+	is.NoErr(err)
+	for _, fact := range []string{
+		"--processors.egress.enabled",
+		"--processors.egress.allow " + allowRaw,
+	} {
+		is.True(strings.Contains(joined, fact))         // prerequisite note must state it
+		is.True(strings.Contains(string(readme), fact)) // README must state it
+	}
 }
 
 // TestInitCommand_TemplateScaffold_BuiltinOnlyTemplate_NoPrerequisites is

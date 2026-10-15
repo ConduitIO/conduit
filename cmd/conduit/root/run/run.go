@@ -128,6 +128,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)
 	flags.SetDefault("connectors.max-receive-record-size", c.Cfg.Connectors.MaxReceiveRecordSize)
+	flags.SetDefault("connectors.standalone.env-warning", c.Cfg.Connectors.Standalone.EnvWarning)
 	flags.SetDefault("processors.path", c.Cfg.Processors.Path)
 	flags.SetDefault("pipelines.path", c.Cfg.Pipelines.Path)
 	flags.SetDefault("pipelines.exit-on-degraded", c.Cfg.Pipelines.ExitOnDegraded)
@@ -138,6 +139,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("pipelines.error-recovery.max-retries-window", c.Cfg.Pipelines.ErrorRecovery.MaxRetriesWindow)
 	flags.SetDefault("schema-registry.type", c.Cfg.SchemaRegistry.Type)
 	flags.SetDefault("schema-registry.confluent.connection-string", c.Cfg.SchemaRegistry.Confluent.ConnectionString)
+	flags.SetDefault("schema.avro.max-elements", c.Cfg.Schema.Avro.MaxElements)
 	flags.SetDefault("preview.pipeline-arch-v2", c.Cfg.Preview.PipelineArchV2)
 	flags.SetDefault("preview.pipeline-arch-v2-disable-metrics", c.Cfg.Preview.PipelineArchV2DisableMetrics)
 

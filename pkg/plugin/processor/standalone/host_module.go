@@ -78,6 +78,8 @@ func hostModuleOptions(
 	logger log.CtxLogger,
 	requests <-chan *processorv1.CommandRequest,
 	responses chan<- tuple[*processorv1.CommandResponse, error],
+	abandoned <-chan struct{},
+	closed <-chan struct{},
 	schemaService pprocutils.SchemaService,
 	httpService pprocutils.HTTPService,
 ) hostModuleOption {
@@ -85,6 +87,8 @@ func hostModuleOptions(
 		m.logger = logger
 		m.commandRequests = requests
 		m.commandResponses = responses
+		m.abandoned = abandoned
+		m.closed = closed
 		m.schemaService = schemaService
 		m.httpService = httpService
 	})
@@ -95,7 +99,17 @@ type hostModuleInstance struct {
 	logger           log.CtxLogger
 	commandRequests  <-chan *processorv1.CommandRequest
 	commandResponses chan<- tuple[*processorv1.CommandResponse, error]
-	schemaService    pprocutils.SchemaService
+	// abandoned is closed by wasmProcessor once it has given up waiting for a
+	// command's response (deadline or cancellation). From then on nobody reads
+	// commandResponses, so command_response must drop instead of blocking. A nil
+	// channel (tests building the instance by hand) never fires, which keeps the
+	// original blocking behaviour.
+	abandoned <-chan struct{}
+	// closed is closed by wasmProcessor when it shuts down. command_request then
+	// returns ErrorCodeNoMoreCommands, which makes the guest exit. commandRequests
+	// itself is never closed (see wasmProcessor.closed). Nil never fires.
+	closed        <-chan struct{}
+	schemaService pprocutils.SchemaService
 	// httpService is the per-processor egress capability, bound host-side to this
 	// instance's resolved egress policy. It is genuinely per-instance state — never
 	// a shared registry field — so one processor's allowlist cannot leak to
@@ -118,11 +132,12 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	m.logger.Trace(ctx).Msg("executing command_request")
 
 	if m.parkedCommandRequest == nil {
-		// No parked command, so we need to wait for the next one. If the command
-		// channel is closed, then we return an error.
-		var ok bool
-		m.parkedCommandRequest, ok = <-m.commandRequests
-		if !ok {
+		// No parked command, so we need to wait for the next one. If the
+		// processor is shutting down, we return an error, which tells the guest
+		// there are no more commands and to exit.
+		select {
+		case m.parkedCommandRequest = <-m.commandRequests:
+		case <-m.closed:
 			return pprocutils.ErrorCodeNoMoreCommands
 		}
 	}
@@ -160,12 +175,30 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 	err := proto.Unmarshal(buf, &resp)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf command response")
-		m.commandResponses <- tuple[*processorv1.CommandResponse, error]{nil, err}
+		m.sendCommandResponse(ctx, tuple[*processorv1.CommandResponse, error]{nil, err})
 		return pprocutils.ErrorCodeUnknownCommandResponse
 	}
 
-	m.commandResponses <- tuple[*processorv1.CommandResponse, error]{&resp, nil}
+	m.sendCommandResponse(ctx, tuple[*processorv1.CommandResponse, error]{&resp, nil})
 	return 0
+}
+
+// sendCommandResponse hands a response to wasmProcessor.executeCommand.
+//
+// commandResponses is unbuffered, so this blocks until executeCommand receives.
+// If executeCommand gave up first (its context expired while the guest was still
+// working), nobody will ever receive; blocking here would pin the guest inside
+// this host call forever, so it could never read the next command, including
+// Teardown (#2981). The abandoned channel releases it, and the late response is
+// dropped. Dropping is safe: wasmProcessor stops issuing commands once it has
+// abandoned one, so the response can never be mistaken for the answer to a later
+// command.
+func (m *hostModuleInstance) sendCommandResponse(ctx context.Context, r tuple[*processorv1.CommandResponse, error]) {
+	select {
+	case m.commandResponses <- r:
+	case <-m.abandoned:
+		m.logger.Warn(ctx).Msg("dropping command response: the command was abandoned after its deadline")
+	}
 }
 
 // handleWasmRequest is a helper function that handles WASM requests. It

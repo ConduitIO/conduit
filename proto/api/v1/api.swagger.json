@@ -1670,7 +1670,7 @@
         },
         "error": {
           "type": "string",
-          "description": "Error message when pipeline status is STATUS_DEGRADED."
+          "description": "Error message recorded with the pipeline's last terminal status.\nAlways set when status is STATUS_DEGRADED. May be set when status is\nSTATUS_STOPPED, if the run ended with an error after a stop was\nrequested (a node failed while draining, or the pipeline was force\nstopped); the pipeline is not degraded in that case and is not\nrecovered. Empty while the pipeline is running or recovering."
         },
         "stoppedReason": {
           "$ref": "#/definitions/StateStoppedReason"
@@ -1991,7 +1991,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings are the connector plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateConnector, a value that is exactly \"***\" keeps\nthe stored value for that key, but only when no other setting in the\nupdate changes, so a GetConnector response can be sent back unchanged. If\nany other setting differs from the stored one (a changed value, an added\nkey or a removed key), every \"***\" is rejected\n(orchestrator.redacted_setting_with_other_changes) and the real values\nmust be sent. \"***\" is also rejected for a key with no stored value,\nincluding every key in CreateConnector\n(orchestrator.redacted_setting_without_stored_value), and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. This keeps a caller from pointing a host at its own\nserver and having the stored password sent there."
         }
       }
     },
@@ -2053,7 +2054,7 @@
         },
         "plugin": {
           "type": "string",
-          "title": "Used to reference a plugin. Its format is as follows:\n[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]\nPLUGIN-TYPE: One of: builtin, standalone or any (default).\nPLUGIN-NAME: The name of the plugin as specified in the plugin specifications.\nVERSION: The plugin version as specified in the plugin specifications or latest (default).\nFor more information, see: https://conduit.io/docs/using/connectors/referencing"
+          "title": "Used to reference a plugin. Its format is as follows:\n[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]\nPLUGIN-TYPE: One of: builtin, standalone or any (default).\nPLUGIN-NAME: The name of the plugin as specified in the plugin specifications.\nVERSION: The plugin version as specified in the plugin specifications or latest (default).\nFor more information, see: https://conduitdata.io/docs/using/connectors/referencing"
         },
         "pipelineId": {
           "type": "string",
@@ -2401,7 +2402,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "title": "settings are the plugin settings"
+          "description": "settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every\nvalue is redacted to \"***\" and only keys are returned, because settings\nroutinely hold credentials. In UpdateDLQ, a value that is exactly \"***\"\nkeeps the stored value for that key, but only when no other setting in\nthe update changes, so a GetDLQ response can be sent back unchanged. If\nany other setting differs from the stored one (a changed value, an added\nkey or a removed key), every \"***\" is rejected\n(orchestrator.redacted_setting_with_other_changes) and the real values\nmust be sent. \"***\" is also rejected for a key with no stored value\n(orchestrator.redacted_setting_without_stored_value) and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. This keeps a caller from pointing a host at its own\nserver and having the stored password sent there."
         },
         "windowSize": {
           "type": "string",
@@ -2471,7 +2472,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "processors": {
           "type": "array",
@@ -2492,7 +2494,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "windowSize": {
           "type": "string",
@@ -2517,7 +2520,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings must carry real values: a value that is exactly \"***\" (the\nplaceholder API responses use for redacted values) is rejected with\norchestrator.redacted_setting_without_stored_value."
         },
         "workers": {
           "type": "integer",
@@ -2538,7 +2542,7 @@
         "STATUS_RECOVERING"
       ],
       "default": "STATUS_UNSPECIFIED",
-      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
+      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline is stopped: by a user (Stop, including a force stop), or by\nConduit itself (an engine shutdown, or a pipeline that was running\nbefore a restart and has not been resumed). State.stopped_reason tells\nthe two apart. A stopped pipeline is not necessarily clean: if the run\nhit an error while draining after the stop was requested, the error is\nrecorded in State.error and the status is still STATUS_STOPPED.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
     },
     "v1PlanPipelineRequest": {
       "type": "object",
@@ -2632,7 +2636,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "settings are the processor plugin settings. In responses every value is\nredacted to \"***\" and only keys are returned, because settings routinely\nhold credentials. In UpdateProcessor, a value that is exactly \"***\" keeps\nthe stored value for that key, but only when no other setting in the\nupdate changes, so a GetProcessor response can be sent back unchanged. If\nany other setting differs from the stored one (a changed value, an added\nkey or a removed key), every \"***\" is rejected\n(orchestrator.redacted_setting_with_other_changes) and the real values\nmust be sent. \"***\" is also rejected for a key with no stored value,\nincluding every key in CreateProcessor\n(orchestrator.redacted_setting_without_stored_value), and when the\nupdate changes the plugin, including only its version\n(orchestrator.redacted_setting_plugin_changed). Any other value replaces\nthe stored one, and a key left out is removed. A real value of exactly\n\"***\" cannot be set. This keeps a caller from pointing a host at its own\nserver and having the stored password sent there."
         },
         "workers": {
           "type": "integer",

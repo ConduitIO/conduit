@@ -1,6 +1,6 @@
 # Conduit Processor for <resource>
 
-[Conduit](https://conduit.io) processor for <resource>.
+[Conduit](https://conduitdata.io) processor for <resource>.
 
 ## How to build?
 

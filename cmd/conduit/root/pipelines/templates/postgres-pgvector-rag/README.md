@@ -29,7 +29,7 @@ is):
 
 | Plugin | Kind | Install |
 | --- | --- | --- |
-| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | **Not yet in the registry** — the repo has no tagged release, so there is no version to pass to `conduit connectors install`. Build it: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. Switch to the registry install once a tagged release ships. |
+| `standalone:pgvector` (destination) | Standalone Go connector (`conduit-connector-pgvector`) | Published to the signed registry at **v0.1.0** — install with `conduit connectors install pgvector`. Offline or air-gapped: clone the repo, `go build -o conduit-connector-pgvector ./cmd/connector`, and place the binary under `--connectors.path`. |
 | `standalone:ai.chunk` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.chunk` (the `registry.incompatible_version` refusal tracked as [#2818](https://github.com/ConduitIO/conduit/issues/2818) is fixed). Requires a running Conduit that satisfies `minConduitVersion` **0.20.0** (a v0.20.0 nightly or later; v0.19.0 stable is correctly refused as too old). On an older Conduit, build it yourself: clone `conduit-processor-ai`, `GOOS=wasip1 GOARCH=wasm go build -tags wasm -o ai-chunk.wasm ./cmd/chunking`, and place the `.wasm` under `--processors.path`. |
 | `standalone:ai.embed` (processor) | Standalone WASM processor (`conduit-processor-ai`) | Published to the signed registry at **0.1.0** — install with `conduit processor-plugins install ai.embed`, same `minConduitVersion` 0.20.0 requirement as `ai.chunk`. On an older Conduit, build it the same way (`./cmd/embedding`). |
 
@@ -42,12 +42,11 @@ processors' genuine `minConduitVersion: 0.20.0` requirement: a v0.19.0 stable Co
 correctly refused with `registry.incompatible_version` (it really predates the release these
 processors target), while any v0.20.0 nightly or the eventual v0.20.0 stable release installs
 them successfully. `--bundle` applies the identical version algebra offline, so it is not a
-workaround for that version requirement. A registry install for the pgvector destination is
-separately impossible today for an unrelated reason — `conduit-connector-pgvector` has not cut a
-tagged release, so there is no version for `conduit connectors install` to resolve; that plugin
-still needs to be built from source (see the table above). `conduit pipelines init --template
-postgres-pgvector-rag` names all three realities in its prerequisite note every time this template
-is scaffolded.
+workaround for that version requirement. The pgvector destination has no such requirement
+(`minConduitVersion` 0.15.0) and installs with `conduit connectors install pgvector`; build it from
+source only when the host cannot reach the registry (see the table above). `conduit pipelines init
+--template postgres-pgvector-rag` names all three installs in its prerequisite note every time this
+template is scaffolded.
 
 ## Requires pipeline architecture v2
 
@@ -56,8 +55,60 @@ fan-out (`sdk.MultiRecord`) is only supported by **pipeline architecture v2**; t
 one-record-in-one-record-out and fails, at the chunk step, with a
 `pipeline.fanout_requires_arch_v2` error (`FailedPrecondition`) naming this flag. Run this pipeline
 with `--preview.pipeline-arch-v2` (or `preview.pipeline-arch-v2: true` in the config). Architecture v2
-is currently a **preview** engine — it is more allocation-efficient than the default but does not yet
-have automatic error-recovery parity; review its status before depending on it for production data.
+is a **preview** engine. A single pipeline engine that supports record fan-out is planned; until it
+ships, pipelines that need record fan-out cannot run on the classic engine at all, so until then this
+template depends on the preview engine; review its status before relying on it for production data.
+
+## Requires network egress for the embedding provider
+
+The embedding processor is a WASM guest, and WASM processors have no network access unless both
+the pipeline and the operator allow it:
+
+1. **Pipeline opt-in (already in the template).** The embed processor carries
+   `sdk.egress.allow: http://127.0.0.1:11434`, matching its `ollama.baseURL`.
+2. **Engine ceiling (you set this).** Engine egress is deny-all by default and the template cannot
+   change that. Start Conduit with:
+
+   ```shell
+   conduit run --preview.pipeline-arch-v2 \
+     --processors.egress.enabled --processors.egress.allow http://127.0.0.1:11434
+   ```
+
+   or set the same in `conduit.yaml`:
+
+   ```yaml
+   processors:
+     egress:
+       enabled: true
+       allow:
+         - http://127.0.0.1:11434
+   ```
+
+Without the ceiling, every embed call fails with `ai.embedding_provider_error` wrapping
+`http egress is not enabled for this processor`, and the source record is nacked.
+
+Ollama must be listening on `127.0.0.1:11434` with the model pulled (`ollama pull
+nomic-embed-text`). Keep the address an IP literal in both places: the egress gate refuses loopback
+addresses unless the exact (IP, port) pair is allowlisted, and `http://localhost:11434` is rejected
+as an allowlist entry. If Ollama runs elsewhere (another host, a container IP), change
+`ollama.baseURL`, `sdk.egress.allow` and `--processors.egress.allow` together.
+
+To use a hosted provider instead, for example OpenAI, replace the embed processor's `provider`,
+`model`, `ollama.baseURL` and `sdk.egress.allow` settings with:
+
+```yaml
+          provider: openai
+          model: text-embedding-3-small    # 1536 dimensions: update the destination's dimension and the vector(N) column
+          openai.authSecretRef: openai_key
+          sdk.egress.allow: api.openai.com
+          sdk.egress.secretRefs: openai_key
+```
+
+then start Conduit with `--processors.egress.enabled --processors.egress.allow api.openai.com
+--processors.egress.secret-refs openai_key` and `CONDUIT_SECRET_OPENAI_KEY="Bearer sk-..."` in its
+environment. The key is injected into the request by the host; it never appears in the pipeline
+file or reaches the processor. See the "Processor host egress" section of the Conduit README for
+the full model.
 
 You'll also need the pgvector target table created ahead of time, matching the `dimension` you
 configure (768 for the template's default `nomic-embed-text` model):
@@ -87,7 +138,8 @@ CREATE INDEX ON document_chunks (source_key);
 | | `outputField` | Left at its default (`.Payload.After.text`) — composes with `ai.embed`'s default `inputField` with zero configuration. |
 | `standalone:ai.embed` (processor) | `provider` | `ollama` — local, keyless, no cloud credentials needed to try this template. |
 | | `model` | `nomic-embed-text` (768-dimensional). Change this and `dimension` below together. |
-| | `ollama.baseURL` | Ollama's default local address. |
+| | `ollama.baseURL` | `http://127.0.0.1:11434`, Ollama's default port as a loopback IP literal (`localhost` cannot pass the egress gate). |
+| | `sdk.egress.allow` | Host-reserved egress opt-in for this processor: exactly the `ollama.baseURL` target. Needs the engine ceiling as well (see [Requires network egress](#requires-network-egress-for-the-embedding-provider)). |
 | `standalone:pgvector` (destination) | `url` | Connection string for the pgvector-enabled Postgres instance — can be the same database as the source, or a dedicated one. **Placeholder — must be replaced.** |
 | | `table` | Target table for embedding rows. Must already exist (see the `CREATE TABLE` above). |
 | | `dimension` | **Must match the embedding model's output dimension** (768 for `nomic-embed-text`). Validated at connector startup; a mismatch refuses to run. |

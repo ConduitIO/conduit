@@ -784,6 +784,11 @@ func TestServiceLifecycle_NxM_PartialGracefulStop_Escalates(t *testing.T) {
 
 	releaseFn()
 
-	_ = ls.WaitPipeline(pl.ID)
-	waitForStatus(t, pl, pipeline.StatusDegraded)
+	// The escalation happened inside a requested stop, so the run ends
+	// stopped with the escalation error recorded, not Degraded (#2901).
+	waitCE, ok := conduiterr.Get(ls.WaitPipeline(pl.ID))
+	is.True(ok)
+	is.Equal(waitCE.Code, CodePartialGracefulStopEscalated)
+	waitForStatus(t, pl, pipeline.StatusUserStopped)
+	is.True(strings.Contains(pl.Error, sourceA.ID))
 }

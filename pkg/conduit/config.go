@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,12 +27,14 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/registry/index"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
 )
@@ -138,6 +141,16 @@ type Config struct {
 
 		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
 		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
+
+		Standalone struct {
+			// EnvWarning controls the one-time startup warning (and the
+			// plugins.standalone_env doctor finding) listing the names of
+			// sensitive host environment variables that standalone connector
+			// plugin processes inherit. Advisory only: it does not change the
+			// environment plugins receive. Operators who have reviewed the list
+			// can set it to false. See docs/operations/standalone-plugin-environment.md.
+			EnvWarning bool `long:"connectors.standalone.env-warning" mapstructure:"env-warning" usage:"warn at startup about sensitive host environment variables passed to standalone connector plugins"`
+		}
 	}
 
 	Install struct {
@@ -261,11 +274,53 @@ type Config struct {
 		}
 	} `mapstructure:"schema-registry"`
 
+	Schema struct {
+		Avro struct {
+			// MaxElements bounds how many elements one Avro array or map may
+			// declare when Conduit decodes Avro in-process: the built-in
+			// avro.decode processor and the schema middleware of built-in
+			// connectors and processors. A payload over the limit fails to
+			// decode with schema.avro.limit_exceeded; it is never truncated.
+			// 0 removes the limit (the pre-v0.20.1 behavior, which leaves
+			// the decoder open to allocating whatever a payload declares).
+			// Standalone plugins decode in their own process with their own
+			// SDK and are not governed by this setting. Applied once at
+			// startup, process-wide (see schemaregistry.ApplyAvroMaxElements).
+			MaxElements int `long:"schema.avro.max-elements" mapstructure:"max-elements" usage:"maximum elements in one Avro array or map decoded in-process (built-in processors and connectors); larger payloads fail with schema.avro.limit_exceeded; 0 = no limit"`
+		} `mapstructure:"avro"`
+	} `mapstructure:"schema"`
+
 	Preview struct {
-		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (supports multiple sources, or multiple destinations, per pipeline; N sources AND M destinations together is wired but not yet verified — see slice 3c. A record split before a fan-out point is not supported and fails with a coded error)"`
+		// PipelineArchV2 runs pipelines on the preview engine
+		// (pkg/lifecycle-poc) instead of the classic default (pkg/lifecycle).
+		// It is required for record fan-out: the classic engine is
+		// one-record-in-one-record-out and stops a pipeline whose processor
+		// splits a record with stream.CodeFanOutRequiresArchV2. Keep the usage
+		// string in sync with that code's godoc, which is what reaches
+		// llms-full.txt.
+		PipelineArchV2               bool `long:"preview.pipeline-arch-v2" mapstructure:"pipeline-arch-v2" usage:"enables the preview pipeline engine (architecture v2). Required for pipelines with a processor that splits one record into several (record fan-out, e.g. ai.chunk, split, clone), including the postgres-pgvector-rag template: the classic default engine cannot run them and stops with pipeline.fanout_requires_arch_v2. Known limit: a split record whose pieces are cut across a multi-destination fan-out fails with pipeline.split_run_straddles_fanout. A destination (or the dead-letter queue) with sdk.batch.size above 1 is refused at start with pipeline.archv2_destination_batching_unsupported, because v2 waits for every ack before the next read. This flag is temporary: a single pipeline engine that supports record fan-out is planned, and the flag will then be deprecated"`
 		PipelineArchV2DisableMetrics bool `long:"preview.pipeline-arch-v2-disable-metrics" mapstructure:"pipeline-arch-v2-disable-metrics" usage:"disables metrics about amount of data (in bytes) moved in pipeline architecture v2 (increases performance)"`
 	}
+
+	// Generate configures `conduit generate`. It is read only by that
+	// command; the engine (`conduit run`) ignores it.
+	//
+	// The fields deliberately have no `long` tag: `conduit generate` has its
+	// own --provider flag, and a long tag would add a --generate.provider
+	// flag to every command that embeds Config (run, doctor, connectors, ...)
+	// where it would do nothing. They are set in conduit.yaml or through
+	// their environment variables.
+	Generate struct {
+		// Provider selects the generation provider (anthropic, openai,
+		// ollama) when the --provider flag is not given. Precedence:
+		// --provider, then CONDUIT_GENERATE_PROVIDER, then this, then
+		// auto-detection. Empty means "not set". The value is validated
+		// when `conduit generate` resolves its provider, not at engine
+		// startup: an unknown name fails generate with
+		// common.invalid_argument and config path /generate/provider, and
+		// never stops `conduit run`.
+		Provider string `mapstructure:"provider"`
+	} `mapstructure:"generate"`
 
 	Dev struct {
 		CPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
@@ -319,6 +374,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
 	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
+	cfg.Connectors.Standalone.EnvWarning = true
 
 	cfg.Install.AllowUnsigned = false
 	cfg.Install.MaxStaleness = index.DefaultMaxStaleness
@@ -339,6 +395,8 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 	cfg.SchemaRegistry.Confluent.Authentication.Type = SchemaRegistryAuthTypeNone
+
+	cfg.Schema.Avro.MaxElements = schemaregistry.DefaultAvroMaxElements
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	cfg.ProcessorPlugins = proc_builtin.DefaultBuiltinProcessors
@@ -439,6 +497,20 @@ func (c Config) validateSchemaRegistryConfig() error {
 		// all good
 	default:
 		return invalidConfigFieldErr("schema-registry.type")
+	}
+	return nil
+}
+
+// validateSchemaConfig checks schema.* engine settings. The error is coded
+// (common.invalid_argument) and carries the setting's config path, so the
+// CLI, API and MCP surfaces can point at the field to fix.
+func (c Config) validateSchemaConfig() error {
+	if n := c.Schema.Avro.MaxElements; n < 0 {
+		ce := conduiterr.New(conduiterr.CodeInvalidArgument,
+			fmt.Sprintf("%q config value mustn't be negative (got: %d)", schemaregistry.AvroMaxElementsConfigPath, n))
+		ce.ConfigPath = schemaregistry.AvroMaxElementsConfigPath
+		ce.Suggestion = "set " + schemaregistry.AvroMaxElementsConfigPath + " to a positive element limit, or 0 for no limit"
+		return ce
 	}
 	return nil
 }
@@ -548,6 +620,10 @@ func (c Config) Validate() error {
 	}
 
 	if err := c.validateAPIConfig(); err != nil {
+		return err
+	}
+
+	if err := c.validateSchemaConfig(); err != nil {
 		return err
 	}
 

@@ -53,6 +53,15 @@ var (
 		"Number of times a pipeline have been recovering (by pipeline name)",
 		[]string{labelPipelineName},
 	)
+	// PipelineStatusPersistFailures counts pipeline status writes that did
+	// not reach the pipeline store (#2898). A run keeps going when its status
+	// write fails, so this counter is how an operator sees that the stored
+	// status, which decides what the next boot starts, lags the live one.
+	PipelineStatusPersistFailures = metrics.NewLabeledCounter(
+		"conduit_pipeline_status_persist_failures_total",
+		"Number of pipeline status writes that failed to reach the pipeline store (by pipeline name).",
+		[]string{labelPipelineName},
+	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
 		[]string{labelType})

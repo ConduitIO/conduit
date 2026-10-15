@@ -38,4 +38,35 @@ var (
 	// CodePipelineNameMissing is raised when a pipeline config is missing
 	// the required name field.
 	CodePipelineNameMissing = conduiterr.Register("pipeline.name_missing", codes.InvalidArgument)
+	// CodeShuttingDown is raised when a pipeline start is refused because
+	// Conduit has begun shutting down: once shutdown starts, no new pipeline
+	// run is started (including automatic recovery restarts), so that every
+	// run is drained before positions are flushed and the database is closed.
+	// Unavailable: retry against the instance after it restarts.
+	CodeShuttingDown = conduiterr.Register("pipeline.shutting_down", codes.Unavailable)
+	// CodePipelineStopping is raised when a pipeline start is refused because
+	// the pipeline's previous run has stopped but is still writing its
+	// terminal status. Starting a new run in that window would let the old
+	// run's status overwrite the new run's. Unavailable: retry the start
+	// shortly. The window lasts until one status write completes, which is
+	// bounded (30s) on databases that honour request contexts (SQLite,
+	// Postgres); badger ignores the context, so a hung write there can hold
+	// it longer.
+	CodePipelineStopping = conduiterr.Register("pipeline.stopping", codes.Unavailable)
+	// CodePipelineConfigChanging is raised when a pipeline start is refused
+	// because an update, delete or connector/processor change on that pipeline
+	// is writing its config. Starting inside that window would build the run
+	// from a half-applied config, or for a pipeline that is being deleted. The
+	// change is a short store write, never a node operation. Unavailable: retry
+	// the start shortly.
+	CodePipelineConfigChanging = conduiterr.Register("pipeline.config_changing", codes.Unavailable)
+	// CodeStatusPersistFailed is raised when a pipeline's status could not be
+	// written to the pipeline store. The in-memory status, which the API, the
+	// CLI and the lifecycle read, has already moved; the store still holds
+	// the previous status, which is what the next boot will act on. The
+	// lifecycle treats the write as a report: a run whose status was not
+	// persisted keeps running, and Start and Stop do not return this error.
+	// Check the database (/healthz, free disk) and whether position writes
+	// are failing too. Unavailable: the store may accept the write later.
+	CodeStatusPersistFailed = conduiterr.Register("pipeline.status_persist_failed", codes.Unavailable)
 )

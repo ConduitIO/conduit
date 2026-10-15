@@ -40,6 +40,24 @@ var (
 	// or processor provisioned by a config file is mutated through the API
 	// instead of the config file.
 	CodeImmutableProvisionedByConfig = conduiterr.Register("orchestrator.immutable_provisioned_by_config", codes.FailedPrecondition)
+	// CodeRedactedSettingWithoutStoredValue is raised when an update sends
+	// the redacted placeholder "***" for a setting that has no stored value.
+	// "***" in an update means "keep the stored value"; with nothing stored
+	// there is nothing to keep, and storing "***" itself would silently
+	// break the setting.
+	CodeRedactedSettingWithoutStoredValue = conduiterr.Register("orchestrator.redacted_setting_without_stored_value", codes.InvalidArgument)
+	// CodeRedactedSettingPluginChanged is raised when an update sends "***"
+	// for a setting while changing the plugin (including only its version).
+	// A stored value, typically a credential, is never carried to a
+	// different plugin; the update must send real values.
+	CodeRedactedSettingPluginChanged = conduiterr.Register("orchestrator.redacted_setting_plugin_changed", codes.InvalidArgument)
+	// CodeRedactedSettingWithOtherChanges is raised when an update sends "***"
+	// (keep the stored value) for a setting while any other setting in the same
+	// update changes: a different value, an added key, or a removed key. A
+	// stored value is kept only by a pure round trip, so an update that
+	// repoints a host or URL cannot also ask Conduit to send the stored
+	// credential there. The update must send real values.
+	CodeRedactedSettingWithOtherChanges = conduiterr.Register("orchestrator.redacted_setting_with_other_changes", codes.InvalidArgument)
 )
 
 // pipelineRunningErr wraps pipeline.ErrPipelineRunning with the

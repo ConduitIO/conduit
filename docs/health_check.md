@@ -57,6 +57,9 @@ $ curl "http://localhost:8080/readyz"
 }
 ```
 
+`degradedPipelines` lists only pipelines that failed on their own. A force-stopped pipeline is
+user-stopped, not degraded, so it does not appear there, even if its stop recorded an error.
+
 Use `/readyz` as the readiness probe and `/healthz` as the liveness probe.
 
 ## Metrics

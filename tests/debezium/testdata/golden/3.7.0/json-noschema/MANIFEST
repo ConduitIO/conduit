@@ -1,0 +1,3 @@
+debezium_image=quay.io/debezium/connect@sha256:65a33b215d88122d8db8c1c35f24e8e1aafbadcc148df3064a4d60f3e38ddd6e
+converter=json-noschema
+connector_status={"name":"golden","connector":{"state":"RUNNING","worker_id":"172.27.0.5:8083","version":"3.7.0.Final"},"tasks":[{"id":0,"state":"RUNNING","worker_id":"172.27.0.5:8083","version":"3.7.0.Final"}],"type":"source"}

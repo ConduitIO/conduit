@@ -96,11 +96,14 @@ func readLifecycleResult(ctx context.Context, client *api.Client, id, action str
 // PipelineStatus). State.stopped_reason now distinguishes them directly on the
 // wire; switching this label to read it (instead of inferring from the action)
 // is a tracked follow-up (issue #2630). Until then: a successful "stop" action's read-back can
-// only ever be StatusUserStopped (StatusSystemStopped is set exclusively during
-// server-startup reconciliation of pipelines that were running before a restart,
-// pkg/pipeline/service.go, never by a StopPipeline RPC succeeding), so inferring
-// "UserStopped" from a STATUS_STOPPED read-back right after this command's own
-// stop call is correct.
+// only ever be StatusUserStopped. StatusSystemStopped is set by server-startup
+// reconciliation of pipelines that were running before a restart
+// (pkg/pipeline/service.go) and by a server shutdown (lifecycle StopAll), never by
+// a StopPipeline RPC succeeding; and a run a user stopped stays UserStopped even if
+// a shutdown reaches it before it finishes draining, because the first stop request
+// decides the status (docs/architecture-decision-records/20261007-stop-requested-never-recovers.md).
+// So inferring "UserStopped" from a STATUS_STOPPED read-back right after this
+// command's own stop call is correct.
 //
 // Mirrored (not shared via import) in
 // cmd/conduit/internal/mcp/tools_lifecycle.go, since the mcp package cannot

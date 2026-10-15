@@ -1,0 +1,48 @@
+{
+  "orders-cdc": {
+    "info": {
+      "name": "orders-cdc",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "database.hostname": "db.internal.example",
+        "database.port": "5432",
+        "database.user": "debezium",
+        "database.password": "${file:/opt/secrets/db.properties:password}",
+        "database.dbname": "orders",
+        "topic.prefix": "orders",
+        "table.include.list": "public.orders",
+        "name": "orders-cdc"
+      },
+      "tasks": [{"connector": "orders-cdc", "task": 0}],
+      "type": "source"
+    },
+    "status": {
+      "name": "orders-cdc",
+      "connector": {"state": "RUNNING", "worker_id": "connect-0.internal.example:8083"},
+      "tasks": [{"id": 0, "state": "RUNNING", "worker_id": "connect-0.internal.example:8083"}],
+      "type": "source"
+    }
+  },
+  "s3-sink": {
+    "info": {
+      "name": "s3-sink",
+      "config": {
+        "connector.class": "io.confluent.connect.s3.S3SinkConnector",
+        "topics": "orders.public.orders",
+        "s3.bucket.name": "example-bucket",
+        "s3.region": "us-east-1",
+        "flush.size": "1000",
+        "format.class": "io.confluent.connect.s3.format.json.JsonFormat",
+        "name": "s3-sink"
+      },
+      "tasks": [],
+      "type": "sink"
+    },
+    "status": {
+      "name": "s3-sink",
+      "connector": {"state": "PAUSED", "worker_id": "connect-1.internal.example:8083"},
+      "tasks": [],
+      "type": "sink"
+    }
+  }
+}

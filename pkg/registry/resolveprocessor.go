@@ -76,7 +76,7 @@ func findProcessor(payload index.Payload, name string) (*index.Processor, error)
 	}
 	e := conduiterr.New(CodeProcessorNotFound, fmt.Sprintf(
 		"processor %q not found in the registry index", name))
-	e.Suggestion = "check the exact spelling — this is an exact-match lookup with no fuzzy suggestion, by design; if the hosted index does not yet carry processors, use the interim offline (--index-file/--bundle) install path"
+	e.Suggestion = "check the exact spelling — this is an exact-match lookup with no fuzzy suggestion, by design; a processor not published to the hosted index can still be installed from a locally-provided signed index (--index-file) or a signed bundle (--bundle)"
 	return nil, e
 }
 

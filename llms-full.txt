@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.8)
+### file (v0.10.9)
 
 A file source and destination plugin for Conduit.
 
@@ -115,12 +115,12 @@ Author: Meroxa, Inc.
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
-| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format). |  |
+| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
 | `sdk.record.format.options` | string |  | no | Options to configure the chosen output record format. Options are normally key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except for the `template` record format, where options are a Go template. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### generator (v0.10.4)
+### generator (v0.10.7)
 
 A plugin capable of generating dummy records (in different formats).
 
@@ -213,7 +213,7 @@ Author: Meroxa, Inc.
 | `format.type` | string |  | no | The format of the generated payload data (raw, structured, file). | inclusion(raw,structured,file) |
 | `operations` | string | create | yes | Comma separated list of record operations to generate. Allowed values are "create", "update", "delete", "snapshot". | required |
 | `rate` | float |  | no | The maximum rate in records per second, at which records are generated (0 means no rate limit). |  |
-| `readTime` | duration |  | no | The time it takes to 'read' a record. Deprecated: use `rate` instead. |  |
+| `readTime` | duration |  | no | The time it takes to 'read' a record.  Deprecated: use `rate` instead. |  |
 | `recordCount` | int |  | no | Number of records to be generated (0 means infinite). | greater-than(-1) |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.12.5)
+### kafka (v0.13.0)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -256,7 +256,7 @@ connector SDK:
 - `sdk.record.format`: used to choose the format
 - `sdk.record.format.options`: used to configure the specifics of the chosen format
 
-See [this article](https://conduit.io/docs/connectors/output-formats) for more
+See [this article](https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format) for more
 info on configuring the output format.
 
 **Batching**
@@ -320,7 +320,7 @@ Author: Meroxa, Inc.
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
-| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format). |  |
+| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
 | `sdk.record.format.options` | string |  | no | Options to configure the chosen output record format. Options are normally key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except for the `template` record format, where options are a Go template. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
@@ -328,7 +328,7 @@ Author: Meroxa, Inc.
 | `tls.enabled` | bool |  | no | TLSEnabled defines whether TLS is needed to communicate with the Kafka cluster. |  |
 | `topic` | string | {{ index .Metadata "opencdc.collection" }} | no | Topic is the Kafka topic. It can contain a [Go template](https://pkg.go.dev/text/template) that will be executed for each record to determine the topic. By default, the topic is the value of the `opencdc.collection` metadata field. |  |
 
-### log (v0.7.5)
+### log (v0.7.6)
 
 A destination connector that logs all incoming records.
 
@@ -350,7 +350,7 @@ the log level of the connector in order for the records to show up in the logs.
 
 **Known issues**
 
-- **Only when using as a [standalone connector](https://conduit.io/docs/core-concepts#standalone-connector)**: Messages larger than 64KB will not be logged when using `log.level` as `info`.
+- **Only when using as a [standalone connector](https://conduitdata.io/docs/core-concepts#standalone-connector)**: Messages larger than 64KB will not be logged when using `log.level` as `info`.
   This is a known issue caused by the default buffer value of `go-plugin`. More information can be found in [this comment](https://github.com/ConduitIO/conduit-connector-log/issues/81#issuecomment-2904224580).
 
 
@@ -370,12 +370,12 @@ Author: Meroxa, Inc.
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
-| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format). |  |
+| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
 | `sdk.record.format.options` | string |  | no | Options to configure the chosen output record format. Options are normally key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except for the `template` record format, where options are a Go template. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.14.2)
+### postgres (v0.14.4)
 
 Conduit connector for PostgreSQL
 
@@ -448,6 +448,247 @@ The connector will automatically look up the primary key column for the specifie
 and use them as the key value. If that can't be determined, the connector will return
 an error.
 
+The table's `REPLICA IDENTITY` must carry the primary key in deletes. `DEFAULT` and
+`FULL` always do. `USING INDEX` does only if the index includes the primary-key
+column; otherwise Postgres sends deletes without the key, and they cannot be applied
+downstream. The source refuses to open on such a table with the error code
+`postgres.replica_identity.excludes_key`. Fix it with
+`ALTER TABLE <table> REPLICA IDENTITY FULL`, or use a unique index that includes the
+primary key.
+
+**Numeric Columns**
+
+A `numeric` column with a precision and scale, `numeric(p,s)`, is an Avro
+`decimal(p,s)` and its values are `big.Rat`.
+
+A `numeric` column **without** a precision and scale can hold any value Postgres
+can store, which no Avro `decimal` can. With `logrepl.withAvroSchema: true` (the
+default) it is an Avro `string` holding the exact text of the value, with its
+scale (`1.50` stays `1.50`), and `NaN`, `Infinity` and
+`-Infinity` as those three words: **a consumer of such a column must handle
+them**, a plain decimal parser will reject them. Earlier versions used `decimal(65535, 65531)`, which could not encode a
+value of 10000 or more and stopped the pipeline. The first record after an
+upgrade registers a new schema version for the table; consumers must read the
+field as a string. This connector's destination writes the string to a `numeric`
+column exactly.
+
+**Known issue:** a zero with a display scale reads as `0` in the snapshot and as
+`0.000` (its stored text) in change data capture. The values are numerically
+equal; only the text differs. Tracked in
+[#391](https://github.com/ConduitIO/conduit-connector-postgres/issues/391).
+
+So the Go type of an unconstrained `numeric` depends on the setting: a `string`
+with `logrepl.withAvroSchema: true`, a `big.Rat` with `false`.
+
+Without an Avro schema, a `numeric` is a `big.Rat`; `NaN`, `Infinity` and
+`-Infinity` are the strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and the same
+applies to the elements of `numeric[]` (finite elements are unchanged). A `NULL`
+stays `NULL`.
+
+`NaN` in a `numeric(p,s)` column (the infinities cannot be stored there) cannot
+be an Avro decimal, and the connector never replaces it with `NULL` or a number:
+the source stops with the error code `postgres.source.numeric_not_representable`,
+which names the table, the column, the value and the row's key. To continue:
+
+- **Change data capture:** restart once with `logrepl.withAvroSchema: false`
+  from the same position. The value is delivered as a string. **Then set it
+  back to `true` as soon as that record has been delivered.** Without an Avro
+  schema a finite `numeric` is a `big.Rat`, which a standalone connector
+  cannot send to Conduit (#378): the next finite numeric would stop the
+  pipeline. Built-in pipelines are not affected.
+  On a standalone connector the SDK also fails the whole read batch on the
+  first record it cannot send, so if the NaN/Infinity record or its batch
+  contains any finite numeric, it is never delivered with Avro off and this
+  workaround does not help (#378 is the fix). While Avro is off,
+  JSON-serializing destinations receive a finite numeric as the string `"3/2"`.
+- **Snapshot:** `UPDATE` the row to a finite value (or `NULL`) and restart.
+- Removing the row, or adding a `CHECK` constraint, does not help for a change
+  that is already in the WAL: it is read again after every restart. Do not drop
+  the replication slot to get past it, that loses the position. A constraint
+  only keeps new bad values out.
+
+**Infinite Dates and Timestamps**
+
+`date`, `timestamp` and `timestamptz` columns can hold `infinity` and
+`-infinity`. The Avro date and timestamp types cannot represent them. Earlier
+versions wrote them as `1970-01-02` and `1969-12-31` (dates) without any error.
+
+- With `logrepl.withAvroSchema: true` (the default), the source stops with the
+  error code `postgres.source.temporal_not_representable`, which names the
+  table, the column and the value. Removing the row does not help once the
+  change is in the WAL: set `logrepl.withAvroSchema` to `false`.
+- With `logrepl.withAvroSchema: false`, the values are emitted as the strings
+  `"infinity"` and `"-infinity"`.
+
+The same applies per element of `date[]`, `timestamp[]`, `timestamptz[]` and
+`numeric[]` (for `numeric[]`, `NaN`, `Infinity` and `-Infinity` elements are
+emitted as strings; finite elements are unchanged). The connector has no Avro
+mapping for array columns, so with the default `logrepl.withAvroSchema: true`
+a table with an array column already stops with a schema error before any
+record is emitted.
+
+**Before Image of Updates and Deletes**
+
+`Payload.Before` is set only when Postgres sends the whole old row, which it does
+under `REPLICA IDENTITY FULL`. Under `DEFAULT` and `USING INDEX`, Postgres sends only
+the identity columns of the old row, so deletes and key-changing updates carry no
+`Before`. The deleted row's key is in the record `Key`. A key-changing update carries
+the new key in `Key`; the old key is not carried. If you need the old row or the old
+key, set `REPLICA IDENTITY FULL` on the table.
+
+:warning: The Postgres destination does not delete the old row when a primary key
+changes. It upserts on the new key, so a primary-key-changing `UPDATE` leaves the row
+under its old key in the destination next to the new one. This happens with or without
+Avro and under `REPLICA IDENTITY FULL` as well. It is a known destination bug
+([#386](https://github.com/ConduitIO/conduit-connector-postgres/issues/386)). Until it
+is fixed, avoid changing primary keys on tables replicated to Postgres, or reconcile
+the old rows by hand.
+
+**Delete With a Missing Key**
+
+**Symptom.** The pipeline fails and keeps failing after restarts with
+`postgres.replica_identity.excludes_key: delete on table "<table>" (WAL LSN <a>, in the
+transaction that commits at LSN <b>) arrived without a value for key column ...`.
+The replication slot retains WAL while it is stuck.
+
+**Diagnosis.** The table's `REPLICA IDENTITY` was changed while the pipeline was
+running, to `USING INDEX` on an index whose key columns do not include the primary key
+(columns in `INCLUDE` do not count), or the identity index was dropped. Postgres then
+sends the delete without the key. Check with
+`SELECT relreplident FROM pg_class WHERE oid = '<table>'::regclass` (`i` is
+`USING INDEX`).
+
+**Remediation.**
+
+1. Fix the identity so that new deletes carry the key:
+   `ALTER TABLE <table> REPLICA IDENTITY FULL`, or `REPLICA IDENTITY DEFAULT`, or
+   `REPLICA IDENTITY USING INDEX <index>` on a unique index that has the primary key
+   among its key columns. This does not repair the change already in the WAL. A restart
+   alone fails on it again.
+2. Stop the pipeline. Postgres refuses to read or advance a slot while a connection
+   uses it.
+3. Find the row. The error carries no row values, because they would end up in logs.
+   Read the stuck transaction from the slot instead, as a superuser or a role with
+   `REPLICATION`. Peeking does not consume anything. `<c>` is the commit LSN `<b>`
+   from the error with its low hex part incremented by one (`0/40C5318` becomes
+   `0/40C5319`); the error prints it:
+
+   ```sql
+   SELECT xid, lsn, encode(data, 'escape') AS message
+   FROM pg_logical_slot_peek_binary_changes(
+          '<slot name>', '<c>', NULL,
+          'proto_version', '1', 'publication_names', '<publication name>');
+   ```
+
+   Use the values of `logrepl.slotName` and `logrepl.publicationName` (defaults
+   `conduitslot` and `conduitpub`).
+   The output can start with earlier transactions that the pipeline already delivered
+   but Postgres has not yet been told about (the connector reports its position
+   periodically). They can contain the same value as the stuck delete, so do not read
+   them. Read only the transaction (`xid`) that contains the `D` row whose `lsn` is the
+   WAL LSN `<a>` in the error.
+   Each row is one pgoutput message. `B` and `C` begin and commit the transaction. `R`
+   names a table and its columns. `I`, `U` and `D` are the changes. A `K` tuple follows
+   the table's object id: a 2-byte column count, then one entry per column, `n` for NULL
+   or `t`, a 4-byte length and the text value. For this error the only non-null columns
+   are those of the identity index, so the readable text is the value to look for, for
+   example `222` in a `D` row that shows `K ... n t ... 222 n`. Postgres only accepts a
+   unique index as a replica identity, so that value identifies the row in the
+   destination. Only tables in the publication appear, which are the tables the pipeline
+   captures.
+4. Delete that row from the destination yourself. The change has no key, so the pipeline
+   cannot do it. Then work out what else step 5 would skip. It skips every change the
+   peek lists before the stuck one, and the other changes of the stuck transaction.
+   Postgres has not been told they are done, and the pipeline may have read them
+   without the destination writing them before it stopped. Get the source connector's
+   last acknowledged position from Conduit:
+   `GET /v1/connectors/<source connector id>`, field `sourceState.position`. It is
+   base64 of JSON, for example
+   `{"version":2,"type":2,"last_lsn":"0/40845E8","tx_commit_lsn":"0/40846E8","tx_seq":1}`
+   (decode it with `base64 -d`). Conduit sets it only when the destination acknowledges a
+   record, never when the source reads one, so `last_lsn` is the WAL LSN of the last
+   change the destination has confirmed. If Conduit was restarted since the pipeline
+   stopped, it reports the last position it saved, which can be slightly older; that errs
+   on the safe side. Find the peek row of kind `I`, `U` or `D` whose `lsn` equals
+   `last_lsn`. Ignore `B` and `C` rows: a `C` row can show the same number as the first
+   change after it. If several rows share that `lsn` (a `COPY` or another statement
+   that changes many rows can do that), use `tx_seq`. It numbers the transaction's
+   `I`, `U`, `D` and `T` (truncate) rows in the order listed, starting at 1 after its
+   `B` row. `R` (relation), `Y` (type) and `O` (origin) rows are not counted. The row
+   with that number is the one to match, and it is an `I`, `U` or `D` row. The matched row
+   itself and everything listed before it are in the destination. For each change
+   listed after it, up to the stuck one and including the rest of the stuck transaction,
+   check the destination for its rows and apply any that are missing by hand (`I` and
+   `U` carry the full new row; `D` carries the identity columns). If no row matches,
+   treat every listed change as unconfirmed. A position without `last_lsn` (a pipeline
+   still in its snapshot) matches nothing.
+5. Skip the transaction. Use the same `<c>` as in step 3. Writing it as a literal is
+   deliberate: `'<b>'::pg_lsn + 1` only works from Postgres 14.
+   - Postgres 11 or later:
+     `SELECT pg_replication_slot_advance('<slot name>', '<c>');`
+   - Postgres 10 has no such function. Consume the changes up to `<c>` instead. This
+     skips exactly the same changes and needs no new snapshot:
+     `SELECT count(*) FROM pg_logical_slot_get_binary_changes('<slot name>', '<c>', NULL, 'proto_version', '1', 'publication_names', '<publication name>');`
+
+   Advancing to `<c>` is what skips the transaction. Advancing to the change LSN
+   (`<a>`) or to the commit LSN `<b>` itself does not: Postgres replays the transaction
+   and the pipeline fails on the same delete.
+6. Start the pipeline.
+
+**Skipping the transaction skips that change, and it skips the whole transaction,
+including its other changes to captured tables.** Skipping data is your decision and the
+connector cannot check it for you.
+
+**Unchanged TOASTed Columns**
+
+Postgres stores large field values (`text`, `bytea`, `jsonb`, and other
+variable-length types past a size threshold) out-of-line using
+[TOAST](https://www.postgresql.org/docs/current/storage-toast.html). When a row is
+updated but a TOASTed column is **not** changed, Postgres omits that column's value
+from the logical-replication message to avoid re-transmitting large unchanged data.
+
+For such columns, this connector **omits the field from the record payload** rather
+than emitting it as `NULL`. Emitting `NULL` would be silent data corruption — a
+downstream sink cannot distinguish "the value was set to NULL" from "the value did
+not change". Omission preserves that distinction: absence means "unchanged".
+
+What this means for your destination:
+
+- **Partial-update / upsert sinks** (including this connector's own Postgres
+  destination, which builds its `ON CONFLICT DO UPDATE SET` clause only from the
+  fields present in the payload) handle omission correctly — an absent field is left
+  untouched in the target row.
+- **Full-row / full-document replace sinks** must treat an absent field as
+  "unchanged" and preserve the existing target value. If a sink cannot do this, set
+  `REPLICA IDENTITY FULL` on the source table. Under `REPLICA IDENTITY FULL` the old
+  row image carries every column, and this connector backfills unchanged TOASTed
+  values from it so the payload is always complete.
+
+With the default `logrepl.withAvroSchema: true` and the default
+`REPLICA IDENTITY`, an update that leaves a TOASTed column unchanged still stops the
+source: the field is omitted, but the Avro payload schema requires it, so the record
+cannot be encoded
+([#383](https://github.com/ConduitIO/conduit-connector-postgres/issues/383)). Set
+`REPLICA IDENTITY FULL` on such tables.
+
+**Limitations**
+
+- **`TRUNCATE` is not propagated.** OpenCDC has no truncate operation, so a
+  `TRUNCATE` on a published table produces no record: rows it removed remain in
+  the destination. If the publication publishes `truncate` (the one the
+  connector creates does by default), the connector logs a `WARN` ("TRUNCATE was NOT
+  propagated") naming the table and the LSN, at most once a minute per table.
+  A restricted or user-supplied publication (for example
+  `publish = 'insert, update, delete'`) never sends the message, so there is
+  no warning and no other signal. The `suppressed` field counts the TRUNCATEs
+  of that table the rate limit swallowed since the previous warning; when
+  another table's warning evicts an expired entry that still holds a count, a
+  one-line summary with that count is logged. Treat the log lines as a signal,
+  not a precise counter: a count still pending when the process exits is
+  lost. Inserts, updates and deletes around the `TRUNCATE` are delivered as
+  usual. A configurable policy for TRUNCATE is planned. Until then, treat the
+  warning as a signal to reconcile the destination by hand.
+
 **Destination**
 
 The Postgres Destination takes a Conduit record and stores it using a SQL statement.
@@ -467,6 +708,56 @@ If the target table does not contain a record with the same key as a record bein
 deleted, the record will be ignored.
 
 If there is no key, the record will be simply appended.
+
+**Numeric columns**
+
+Decimal values (`big.Rat`) are sent to Postgres as exact decimal strings, and
+Postgres applies the column's precision and scale itself when it stores the
+value. The destination never reads or caches a column's scale, so an
+`ALTER TABLE ... ALTER COLUMN ... TYPE numeric(p,s)` takes effect on the next
+write without restarting the pipeline, and the table is resolved through the
+connection's `search_path` like the rest of the statement.
+
+Postgres rounds half away from zero when a value has more fractional digits
+than the column's scale, and rejects a value that exceeds the column's
+precision (`numeric field overflow`). A rejected batch is not acknowledged.
+
+A decimal that has no finite expansion, such as 1/3, is truncated toward zero
+after 1001 fractional digits before it is sent. So is a decimal that terminates
+but needs more than 16383 fractional digits, which Postgres rejects on every
+numeric column. Postgres allows a column scale of at most 1000, so the
+truncation never changes the result of the column's rounding. An unconstrained
+`numeric` column stores all 1001 digits.
+
+The destination no longer checks that the target column is numeric. The general
+rule: any column whose text input accepts the decimal string stores it.
+Postgres converts the string, and the examples below were checked on
+Postgres 17.5:
+
+- `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
+  value is rejected, except on a destination that was already running when the
+  column was changed to an integer type: the cached prepared statement still
+  types the parameter as `numeric`, so 5/2 is silently rounded to 3
+  (see #367).
+- `real`, `float8`: stored as the nearest binary float.
+- `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
+- `oid`: stored if the value is a whole number (7 is stored as `7`).
+- `text`: stored as the decimal string. `varchar(n)` and `char(n)`: rejected
+  with 22001 if the string is longer than `n`.
+- `boolean`: 1 is stored as `true` and 0 as `false`; other values are rejected.
+- `date`: 20261012 is stored as `2026-10-12`.
+- `timestamp`: 20261012 is stored as `2026-10-12 00:00:00`.
+- `timestamptz`: 20261012 is stored as `2026-10-12 00:00:00+00` (session time
+  zone UTC).
+- `interval`: 12345 is stored as `03:25:45`.
+- `json`, `jsonb`: 1/4 is stored as the JSON number `0.25`.
+- `bytea`: 5/2 is stored as `\x322e35`, the ASCII bytes of `2.5`.
+- `bit(n)`: stored if the decimal string is exactly `n` binary digits (101 is
+  stored as `101` in a `bit(3)`).
+- `time`, `inet`: rejected.
+
+Every accepted conversion to a non-numeric type is a silent coercion if the
+schema maps a numeric field to the wrong column, so check the mapping.
 
 
 Author: Meroxa, Inc.
@@ -502,14 +793,14 @@ Author: Meroxa, Inc.
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
-| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format). |  |
+| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
 | `sdk.record.format.options` | string |  | no | Options to configure the chosen output record format. Options are normally key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except for the `template` record format, where options are a Go template. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
 
-### s3 (v0.9.3)
+### s3 (v0.9.5)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -550,9 +841,87 @@ The connector goes through two modes.
   captures new actions made on the bucket. the _Position_ during this mode is
   the object key attached to an underscore, a "c" for CDC, and the object's
   _lastModifiedDate_ in seconds. As an example: "thisIsAKey_c1634049397". This
-  position is used to return only the actions with a _lastModifiedDate_ higher
-  than the last record returned, which will ensure that no duplications are in
-  place.
+  position is used to resume from the last record returned.
+
+  **CDC mode is listing based and best effort, bounded by `lookbackPeriod`.**
+  It detects changes by listing the bucket, which cannot be lossless: an
+  object that becomes visible in a listing late can be missed. Lossless S3
+  change capture needs bucket event notifications, which this connector does
+  not use. Every poll selects the objects modified since `lookbackPeriod`
+  (default 5m) before the newest object seen so far, and skips versions it
+  already delivered, so objects that become visible late, within that
+  window, are picked up: S3 stamps an object with the time its upload began,
+  a multipart upload with the time it was initiated, and lists in key order.
+  The object store's own timestamps decide, so the clock of the machine
+  running Conduit does not matter, with one exception: the newest timestamp
+  is capped at this machine's clock, so one bogus timestamp from the future
+  (a store clock that stepped forward, or a misbehaving endpoint) cannot hide
+  the objects written after it. The cap lowers the window's start, which
+  causes redelivery. If this machine's clock is behind the store's by more
+  than `lookbackPeriod` the source logs a warning with the code
+  `s3.source.host_clock_behind_store`: the window is stretched by the skew.
+
+  Delivery is at-least-once. After a restart the objects modified within
+  `lookbackPeriod` of the newest object are delivered again. The snapshot
+  hands over to CDC from the newest object that existed when the snapshot
+  started (found by one extra listing of the prefix, one request per 1000
+  keys, at the start of the snapshot), minus `lookbackPeriod`, so CDC
+  redelivers the objects written while the snapshot ran, however long it
+  took, plus those within `lookbackPeriod` before it started. On a bucket
+  that was bulk loaded recently this can be every object of the load.
+
+  The versions remembered for deduplication are limited to about 256 MiB
+  (peak memory of a poll is about 1.5 times that, candidates included). If
+  the objects inside the window need more, the window is **shortened**
+  instead of stopping the source: the oldest remembered entries are
+  forgotten by whole seconds and the window starts just above them. The
+  source logs a warning with the code `s3.source.dedupe_window_shrunk`
+  naming the effective lookback and the number of forgotten entries. While
+  the window is shortened, an object that becomes visible late by more than
+  the effective lookback can be missed, so the tolerance for late-visible
+  objects is lower than `lookbackPeriod`; lower `lookbackPeriod` to avoid
+  the shrinking. The source stops, with the error
+  `s3.source.dedupe_window_overflow` (after a warning), only if the versions
+  sharing a single second of `LastModified` do not fit, or when entries
+  stamped at or after this machine's present second (a store clock that is
+  ahead, or bogus timestamps from the future) take the budget: a shortened
+  window never starts later than the present second, because that would hide
+  the objects written from now on, so the source stops instead (the message
+  names the clock skew and says to fix the clock). A store clock that is ahead
+  by less than `lookbackPeriod` is normal and does not stop the source as long
+  as the entries stamped in the present and the future fit the budget. A
+  future-stamped object can therefore raise the start of the window at most
+  up to the present second, never past it. The shortened window is not
+  remembered across restarts: after a restart the window is rebuilt from the
+  position and shortened again, so a restart delivers the window's objects
+  again (duplicates, never a skip). When more objects share a second than
+  one poll can hand over, they are delivered over several polls, oldest
+  first, and the newest tracked entries may be dropped from tracking to make
+  room; those are delivered again later (duplicates). A catch-up after
+  downtime is delivered in bounded batches, oldest first. A resume position
+  with a timestamp in the future, which only an older release could have
+  written, is clamped to this machine's clock with a warning.
+
+  Known limits (listing cannot see these, or sees them too late):
+  * an upload that takes longer than `lookbackPeriod` to complete is missed
+    when newer objects were seen in the meantime (multipart uploads carry
+    their initiation time);
+  * replica buckets whose replication lag exceeds `lookbackPeriod`;
+  * an identical re-put of an object within the same second is not seen as a
+    change;
+  * in an unversioned bucket an overwrite is reported as a create (there is
+    no older version to compare with) and a delete is not reported;
+  * in a versioned bucket intermediate versions that appear and are
+    superseded within one poll are not emitted, only the latest; removing a
+    delete marker (undelete) and permanently deleting the latest version are
+    not emitted;
+  * a GetObject that fails for another reason than the object having been
+    deleted, for example an object archived to Glacier or Deep Archive,
+    stops the source with that error.
+
+  Objects deleted between being listed and being read are skipped, in the
+  snapshot and in CDC. Values of `lookbackPeriod` above 1h log a warning and
+  above 24h are rejected.
 
 **Record Keys**
 
@@ -581,8 +950,11 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
+| `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
+| `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
 | `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
+| `lookbackPeriod` | duration | 5m | no | How far back, from the newest object seen, every CDC poll looks for objects that became visible late. S3 stamps an object with the time its upload began (a multipart upload with the time it was initiated), not the time it completed, and lists in key order, so an object can show up after newer ones were already delivered. Each poll selects the objects modified since (newest LastModified seen - lookbackPeriod) that were not delivered yet. Listing based CDC is best effort and bounded by this value: an upload that completes later than this value after newer objects were seen can still be missed (see the connector description for the full list of known limits). Cost: memory for the objects modified within the window (limit about 256 MiB; beyond it the window is shortened with a warning s3.source.dedupe_window_shrunk, which lowers the tolerance for late-visible objects, so lower this value instead), and redelivery (at-least-once) of the objects modified within the window after a restart and when the snapshot hands over to CDC. Listing cost does not depend on it. Values above 1h log a warning, above 24h are rejected, and 0 disables the lookback. |  |
 | `pollingPeriod` | duration | 1s | no | polling period for the CDC mode, formatted as a time.Duration string. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -601,6 +973,8 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
+| `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
+| `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
 | `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
 | `format` | string |  | yes | the destination format, either "json" or "parquet". | required, inclusion(parquet,json) |
@@ -609,12 +983,12 @@ Author: Meroxa, Inc.
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
-| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format). |  |
+| `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
 | `sdk.record.format.options` | string |  | no | Options to configure the chosen output record format. Options are normally key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except for the `template` record format, where options are a Go template. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (103)
+## 3. Error codes (139)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -633,6 +1007,7 @@ Author: Meroxa, Inc.
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
+| `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |
@@ -643,16 +1018,44 @@ Author: Meroxa, Inc.
 | `generate.validate_failed` | FailedPrecondition | CodeValidateFailed: a candidate parsed but never passed validate within the retry budget. FailedPrecondition (exit 2, validation): the request was understood, the artifact it produced is not usable as-is, and the findings say exactly why.  The last attempt's validate.Report travels back on Result.Report — it is never discarded, because the findings are the only thing that tells the user (or an agent) what to change. |
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |
+| `kc.connector_class_unsupported` | InvalidArgument | CodeConnectorClassUnsupported: the connector class has no mapping; every key of the connector is listed with this code and no pipeline is written. |
+| `kc.converter_unknown` | InvalidArgument | CodeConverterUnknown: a connector-level note when neither the connector nor the worker file sets key.converter or value.converter, so the wire format is unknown. Blocking. |
+| `kc.converter_unsupported` | InvalidArgument | CodeConverterUnsupported: a converter with no Conduit equivalent in this version. Blocking: the wire format would differ. |
+| `kc.default_differs` | InvalidArgument | CodeDefaultDiffers: a connector-level note for an absent key whose Kafka Connect default differs from Conduit's behavior. |
+| `kc.key_approximated` | InvalidArgument | CodeKeyApproximated: translated with a documented difference. |
+| `kc.key_conflict` | InvalidArgument | CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since either value could be the one Kafka Connect used. |
+| `kc.key_deprecated` | InvalidArgument | CodeKeyDeprecated: a legacy key name, handled as its current name. |
+| `kc.key_duplicate` | InvalidArgument | CodeKeyDuplicate: an earlier occurrence of a key that appears again later in the same connector config; the last value wins. |
+| `kc.key_required` | InvalidArgument | CodeKeyRequired: a connector-level note for a key the upstream connector requires (it has no default) that the config does not set. Kafka Connect rejects such a config. Blocking. |
+| `kc.key_unknown` | InvalidArgument | CodeKeyUnknown: no rule claims the key. Always blocking: an unknown key may change behavior, and the safe direction is to stop. |
+| `kc.key_unsupported` | InvalidArgument | CodeKeyUnsupported: a known key with no Conduit equivalent for its value. |
+| `kc.offsets_not_migrated` | InvalidArgument | CodeOffsetsNotMigrated: a connector-level note that the connector resumes from offsets Kafka Connect stored, which migrate does not carry over; the note says where the pipeline starts instead. Blocking: records are copied again or skipped. |
+| `kc.output_shape_differs` | InvalidArgument | CodeOutputShapeDiffers: a connector-level note that records, objects or topics differ in shape or layout from the original connector's. |
+| `kc.secret_plaintext` | InvalidArgument | CodeSecretPlaintext: a connector-level note that the input holds a secret as a literal value. The value is not copied anywhere, but the input file is itself a leak. |
+| `kc.setting_required` | InvalidArgument | CodeSettingRequired: a connector-level note for a setting the Conduit plugin requires that no Kafka Connect key provides; it is written as an environment variable to fill. Blocking: the pipeline cannot run as is. |
+| `kc.smt_unsupported` | InvalidArgument | CodeSMTUnsupported: a single message transform or predicate outside the subset migrate translates exactly. Blocking: transforms change data. |
+| `kc.topic_name_unsupported` | InvalidArgument | CodeTopicNameUnsupported: a connector-level note that the connector's topic naming cannot be written as the destination's topic template. Blocking: the destination topic must be set by hand. |
 | `lifecycle_v2.partial_graceful_stop_escalated` | Aborted | CodePartialGracefulStopEscalated is returned by Stop/StopAndWait for an N-source pipeline (slice 3b of the arch-v2 multi-connector epic) when a graceful stop arms some sources within the deadline but not others. See stopRunnablePipeline's doc and the adversarial-review finding this closes (H1, docs/design-documents/20260801-archv2-multiconnector-nsource.md).  Leaving that state unresolved would strand the pipeline reporting StatusRunning indefinitely: the still-unarmed worker(s) keep reading, workersWg never drains, and runPipeline's cleanup goroutine (the only thing that ever writes a terminal status) never runs - invisible to an operator except as an error return that may go to a disconnected caller. Instead the pipeline's tomb is force-killed with this code so every still-unarmed worker's next context check observes cancellation and unwinds, guaranteeing the pipeline reaches a terminal (Degraded) status instead of a silent, half-stopped one. At-least-once is preserved: this never acks anything, so an interrupted worker's in-flight, unacked batch simply replays on the pipeline's next start (invariant 3). |
 | `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |
+| `migrate.connector_name_invalid` | InvalidArgument | CodeConnectorNameInvalid is raised when a connector has no name, or two connectors of one run share a name. Each connector becomes one pipeline named after it, so either case would leave a pipeline unnamed or written over another. |
+| `migrate.input_too_large` | InvalidArgument | CodeInputTooLarge is raised when the inputs exceed [MaxInputBytes] in total, [MaxInputs] in number, or [MaxJSONDepth] in JSON nesting. |
+| `migrate.input_unreadable` | InvalidArgument | CodeInputUnreadable is raised when an input cannot be parsed in the format it was detected or declared as: a properties syntax error, a JSON syntax error, or JSON that is not valid UTF-8. ConfigPath carries the location. |
+| `migrate.input_unrecognized` | InvalidArgument | CodeInputUnrecognized is raised when an input parses but is not a shape this package reads: format detection failed, a JSON config value is not a scalar, or the input is a MirrorMaker dedicated-mode mm2.properties. |
+| `migrate.output_exists` | AlreadyExists | CodeOutputExists is raised when the output directory is not empty and overwriting was not requested. |
+| `migrate.output_unwritable` | Unavailable | CodeOutputUnwritable is raised when the output directory or a file in it cannot be written. |
 | `orchestrator.connector_has_processors_attached` | FailedPrecondition | CodeConnectorHasProcessorsAttached is raised when a connector cannot be deleted because it still has processors attached. |
 | `orchestrator.immutable_provisioned_by_config` | FailedPrecondition | CodeImmutableProvisionedByConfig is raised when a pipeline, connector, or processor provisioned by a config file is mutated through the API instead of the config file. |
 | `orchestrator.invalid_processor_parent_type` | InvalidArgument | CodeInvalidProcessorParentType is raised when a processor's parent is neither a pipeline nor a connector. |
 | `orchestrator.pipeline_has_connectors_attached` | FailedPrecondition | CodePipelineHasConnectorsAttached is raised when a pipeline cannot be deleted because it still has connectors attached. |
 | `orchestrator.pipeline_has_processors_attached` | FailedPrecondition | CodePipelineHasProcessorsAttached is raised when a pipeline cannot be deleted because it still has processors attached. |
+| `orchestrator.redacted_setting_plugin_changed` | InvalidArgument | CodeRedactedSettingPluginChanged is raised when an update sends "***" for a setting while changing the plugin (including only its version). A stored value, typically a credential, is never carried to a different plugin; the update must send real values. |
+| `orchestrator.redacted_setting_with_other_changes` | InvalidArgument | CodeRedactedSettingWithOtherChanges is raised when an update sends "***" (keep the stored value) for a setting while any other setting in the same update changes: a different value, an added key, or a removed key. A stored value is kept only by a pure round trip, so an update that repoints a host or URL cannot also ask Conduit to send the stored credential there. The update must send real values. |
+| `orchestrator.redacted_setting_without_stored_value` | InvalidArgument | CodeRedactedSettingWithoutStoredValue is raised when an update sends the redacted placeholder "***" for a setting that has no stored value. "***" in an update means "keep the stored value"; with nothing stored there is nothing to keep, and storing "***" itself would silently break the setting. |
+| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a destination connector, or the dead-letter-queue connector, sets sdk.batch.size above 1 (#2979).  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/connectors/<index>/settings/sdk.batch.size or /dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the destination, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
+| `pipeline.config_changing` | Unavailable | CodePipelineConfigChanging is raised when a pipeline start is refused because an update, delete or connector/processor change on that pipeline is writing its config. Starting inside that window would build the run from a half-applied config, or for a pipeline that is being deleted. The change is a short store write, never a node operation. Unavailable: retry the start shortly. |
 | `pipeline.duplicate_source_position` | FailedPrecondition | CodeDuplicateSourcePosition is returned when a single batch read from a source contains two or more records carrying identical position bytes, and that batch is fanned out to multiple destinations.  A position is a record's identity: multiAckNacker keys its per-position unanimity tally on it, and connector.Source.Ack advances the persisted position from it. Two records sharing one position make those two things ambiguous — the tally cannot tell the records apart, so one of them could never reach unanimity, and because positions are released to the source strictly in order (invariant 4), a single unresolvable slot silently stops the WHOLE batch from ever being acked. The pipeline would keep running, reading and writing records, while its source position never advanced and no error was ever surfaced.  Failing loudly here is deliberate. At-least-once is not violated by the stall (nothing is acked, so nothing is lost — the records replay on restart), but a silent, unbounded liveness failure is far worse for an operator than a clear error naming the offending connector behaviour. Emitting duplicate positions within one batch is a connector contract violation, so this is a user-actionable error, not an internal assertion. |
 | `pipeline.empty_source_position` | FailedPrecondition | CodeEmptySourcePosition is returned when a batch about to be acked to the source contains a record with an empty/nil position.  connector.Source.Ack persists State.Position = p[len(p)-1] unconditionally, so acking an empty position OVERWRITES the durable source position with nothing: on restart the source resumes from an empty position — a full re-snapshot for Postgres, offset 0 for file/Kafka. That is an invariant-2 (monotonic, crash-safe positions) violation.  There are two distinct causes, and the suggestion names both because they call for different fixes.  The one reachable today is a SOURCE CONNECTOR emitting a record with an empty position, which is then acked or nacked. Nothing in the read path validates positions, so it reaches Worker.Ack/Worker.Nack unaltered. Like CodeDuplicateSourcePosition, that is a connector contract violation — every record must carry a distinct, non-empty position.  The second is a processor-chain shape: Batch.SplitRecord gives every piece after the first a nil position, so a sub-batch covering only the tail of a split run collapses to nils. On the ack path this is reachable; on the nack path the run ledger currently withholds split members and forwards the run's own non-nil origPos instead, so the guard there is a contract check rather than a live route. |
-| `pipeline.fanout_requires_arch_v2` | FailedPrecondition | CodeFanOutRequiresArchV2 is raised when a processor returns a fan-out result (sdk.MultiRecord — one input record producing N output records, e.g. ai.chunk, split, clone) on the default (classic) pipeline engine, which is one-record-in-one-record-out and cannot express fan-out. Fan-out is supported only by pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled via --preview.pipeline-arch-v2. FailedPrecondition: the pipeline as configured cannot run on this engine. |
+| `pipeline.fanout_requires_arch_v2` | FailedPrecondition | CodeFanOutRequiresArchV2 is raised when a processor returns a fan-out result (sdk.MultiRecord — one input record producing N output records, e.g. ai.chunk, split, clone) on the classic default pipeline engine, which is one-record-in-one-record-out and cannot run it. Record fan-out needs the preview engine, pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled with --preview.pipeline-arch-v2 or preview.pipeline-arch-v2: true; the postgres-pgvector-rag template is one such pipeline. A single pipeline engine that supports record fan-out is planned (design #2971). FailedPrecondition: the pipeline as configured cannot run on this engine. |
 | `pipeline.instance_not_found` | NotFound | CodePipelineNotFound is raised when a referenced pipeline instance cannot be located. |
 | `pipeline.name_already_exists` | AlreadyExists | CodePipelineNameAlreadyExists is raised when a pipeline config's name collides with an existing pipeline's name. |
 | `pipeline.name_missing` | InvalidArgument | CodePipelineNameMissing is raised when a pipeline config is missing the required name field. |
@@ -660,12 +1063,17 @@ Author: Meroxa, Inc.
 | `pipeline.retry_not_converging` | FailedPrecondition | CodeRetryNotConverging is returned when Worker.doTask's RecordFlagRetry self-recursion (see worker.go's retryAttempt) detects that a processor is not making progress on a retried sub-batch, or has exceeded the hard iteration cap that backstops that detection.  ProcessorTask.Do marks a sub-batch RecordFlagRetry for exactly those records the processor returned NO result for, then Worker.doTask re-feeds that sub-batch to the same task. If the same records come back unresolved again and again, the recursion is a fixpoint: it would recurse forever, growing the goroutine stack without bound until it hit Go's 1GB limit and crashed the ENTIRE process - not just the offending pipeline - with an unrecoverable fatal error. See #2726.  What actually triggers this, and what does NOT: a processor that simply returns FEWER records than it received is NOT this condition. ProcessorTask.Do rejects an empty result and pads exactly len(in)-len(out) entries, so such a processor shrinks the retry group every round and converges normally - a size threshold or a rate-limit path that returns partial results is fine. The reachable trigger is a record that comes back with no result AT ALL: for a standalone (WASM) processor, a ProcessedRecord whose Record oneof is unset, which in practice means a malformed or version-mismatched plugin.  This is fixed loudly instead of silently: nothing in the un-converged sub-batch (or anything after it in the same batch - Worker.doTask's tainted loop never advances its cursor past a Retry group it recursed into) is ever acked or nacked before this error is returned, so every record in it is redelivered on restart (invariant 3). No source position is corrupted or skipped (invariant 2). |
 | `pipeline.running` | FailedPrecondition | CodePipelineRunning is raised when an operation requires the pipeline to be stopped, but it is currently running. |
 | `pipeline.shared_destination_poisoned` | Aborted | CodeSharedDestinationPoisoned is returned when a worker in an N-source pipeline (slice 3b) tries to enter a shared destination subtree that a PREVIOUS pass already poisoned, after an error left the shared destination's single gRPC ack stream desynchronized. See Worker.doTask's poisoning store/check for the mechanics, and the adversarial-review finding this closes (H2, docs/design-documents/20260801-archv2-multiconnector-nsource.md).  This is a Tier-1 invariant-1 backstop, not merely retry hygiene. DestinationTask.Do writes a batch and reads back exactly that many acks off the destination's single gRPC stream, matching each ack to the position it just sent in strict send order; if Do returns early on an Ack() error, whatever acks were still queued behind it are never read by THIS pass. Without this check, the very next worker to acquire the shared boundary's mutex would read those leftover acks as if they were its own - and connector-defined positions are only unique WITHIN a source, so two sources emitting byte-identical position bytes (routine: two file sources, two offset-based connectors, ...) would make validateAcks' byte-for-byte comparison PASS, silently acking records upstream that this worker's own destination write never durably confirmed.  Recovering from this requires a full pipeline restart (a fresh Sink, a fresh gRPC stream, and therefore a fresh, unpoisoned TaskNode) - which is exactly what happens once this error propagates through Worker.Do/lifecycle-poc.Service.runPipeline's existing tomb-kill and recovery/degrade classification, so no special-casing is needed beyond returning this error from doTask. |
+| `pipeline.shutting_down` | Unavailable | CodeShuttingDown is raised when a pipeline start is refused because Conduit has begun shutting down: once shutdown starts, no new pipeline run is started (including automatic recovery restarts), so that every run is drained before positions are flushed and the database is closed. Unavailable: retry against the instance after it restarts. |
 | `pipeline.split_run_straddles_fanout` | FailedPrecondition | CodeSplitRunStraddlesFanOut is returned when a batch reaching a multi-destination fan-out holds only part of a split run — i.e. a processor before the fan-out split a record, and a later pre-fan-out processor resolved only some of the resulting pieces (for example by returning fewer records than it received, which marks the remainder Retry).  The run-completion ledger (see run_ledger.go) is per-Batch, and Batch.clone gives each branch its own copy so branches cannot race or bleed decisions into each other. That copy carries the run's whole-run member count, so a branch holding only part of the run can never complete it — and neither can the parent side. The run's original source position would then be withheld forever while later positions ack past it, silently skipping the record on restart.  Failing loud is deliberate and restores the behaviour that predates the ledger: this shape already failed loud before (via CodeEmptySourcePosition on the nil-position tail), and silently withholding would have disarmed that backstop. Nothing is acked and nothing is lost — the records are redelivered on restart (invariant 3). Joining a run's tally across fan-out branches is possible but is deliberately not attempted here without a real use case. |
+| `pipeline.status_persist_failed` | Unavailable | CodeStatusPersistFailed is raised when a pipeline's status could not be written to the pipeline store. The in-memory status, which the API, the CLI and the lifecycle read, has already moved; the store still holds the previous status, which is what the next boot will act on. The lifecycle treats the write as a report: a run whose status was not persisted keeps running, and Start and Stop do not return this error. Check the database (/healthz, free disk) and whether position writes are failing too. Unavailable: the store may accept the write later. |
+| `pipeline.stopping` | Unavailable | CodePipelineStopping is raised when a pipeline start is refused because the pipeline's previous run has stopped but is still writing its terminal status. Starting a new run in that window would let the old run's status overwrite the new run's. Unavailable: retry the start shortly. The window lasts until one status write completes, which is bounded (30s) on databases that honour request contexts (SQLite, Postgres); badger ignores the context, so a hung write there can hold it longer. |
 | `pipelines.init_destination_exists` | AlreadyExists | CodeDestinationExists is raised by `pipelines init` when the resolved pipeline file already exists and --force was not passed. This is the fix for the command's previous behavior: os.OpenFile with O_TRUNC and no existence check, which silently overwrote an existing pipeline configuration. --force opts into the overwrite; --dry-run never touches the filesystem and is exempt from this check entirely (see InitCommand.checkDestination).  codes.AlreadyExists classifies to exitcode.Validation (2) via pkg/conduit/exitcode, the same bucket as pkg/scaffold's analogous CodeDestinationExists for connector/processor scaffolding. |
 | `pipelines.init_path_unwritable` | FailedPrecondition | CodePipelinesPathUnwritable is raised by `pipelines init` when the *shape or accessibility of the destination path* prevents the write: something that is not a directory already occupies the path, a path component is unreadable or unwritable, the pipeline file path is itself a directory, or a parent directory does not exist (which is what a pipeline name containing a path separator produces). It is scoped by isDestinationShapedError in init.go — deliberately NOT every failure the create/open can return. A full device, a quota, or an I/O error is not a destination problem and stays on conduiterr.CodeInternal (exit 1), so that "disk full" cannot classify differently depending on whether the filesystem reports ENOSPC at open (macOS) or at write (Linux).  "The pipeline file already exists" is CodeDestinationExists, not this.  It replaces the generic conduiterr.CodeInternal ("internal.error", exit 1) this path used to return for everything. internal.error is the unclassified-bug bucket; an unwritable destination is an ordinary, user-fixable condition, and reporting it as a bug both misleads the user and makes the CLI's exit code useless for branching.  codes.FailedPrecondition classifies to exitcode.Validation (2), not Environment (3): in this codebase Environment means a dependency Conduit needs is unreachable (the server, the database, a bound listen address), whereas the destination path is part of the request itself — it comes from --pipelines.path (default ./pipelines) and the positional pipeline name. The remediation is always "point the command somewhere writable, or make this path writable", which is caller-side, so Validation is the honest bucket even when the underlying OS error is EACCES.  Known inconsistency, deliberately not resolved here: pkg/scaffold (`connectors new`) and cmd/conduit/root/initialize (`conduit init`) both map an equivalent MkdirAll failure on a user-supplied path to an Internal code and exit 1. Aligning all three is worth a follow-up; this command is the one a developer-experience audit found, and exit 2 is the correct answer for it. |
 | `pipelines.init_template_flags_exclusive` | InvalidArgument | CodeTemplateFlagsExclusive is raised when --template (including the literal value "list") is combined with --source/--destination. A named template already fully determines the source+destination+settings triple; mixing it with --source/--destination is ambiguous by construction, so this is rejected rather than silently picking a winner (templates workstream doc §7). |
 | `pipelines.init_template_version_mismatch` | FailedPrecondition | CodeTemplateVersionMismatch is raised when an embedded template's pinned connector settings no longer match the parameter shape of the built-in connector actually compiled into this binary. This is a packaging bug in the vendored template (the fixture drifted from the connector version this release ships), not a user config error — refusing up front here is strictly better than scaffolding a pipeline that parses fine but fails far away, and confusingly, at `conduit run` (templates workstream doc §7's "version-pinned mismatch" row). codes.FailedPrecondition classifies to exitcode.Validation (2). |
 | `pipelines.init_unknown_template` | InvalidArgument | CodeUnknownTemplate is raised by `pipelines init --template <name>` when name doesn't match any entry in the embedded template gallery (see template_gallery.go). codes.InvalidArgument classifies to exitcode.Validation (2): the fix is on the caller's side (a typo, or a template that doesn't exist yet), not the environment. |
+| `plugin.builtin_schema_unscoped` | Internal | CodeBuiltinSchemaUnscoped is raised when a built-in connector or processor calls the SDK schema service (schema.Get or schema.Create) with a context that was not derived from a call Conduit made into that plugin, so Conduit cannot tell which runtime's schema registry the call belongs to. The call is refused rather than answered from another runtime's registry. It indicates a bug in the plugin (for example a goroutine started with context.Background() that resolves schemas): pass the context Conduit hands to Open, Read, Write or Process down to schema calls. Internal: a plugin bug, not a configuration problem. |
+| `plugin.standalone_env_passed` | FailedPrecondition | CodeEnvPassedToPlugins is the stable code carried by the startup log event and by the `plugins.standalone_env` doctor finding when the host environment contains variables that standalone connector plugin processes will inherit and whose names look like credentials or configuration secrets. Operators can alert on the log field `code` or on the doctor finding code. By design this is a log/finding code, not an error code: no API or CLI call fails with it. It is registered in conduiterr so the code set that llms.txt publishes, and that alerting can rely on, stays complete. |
 | `processor.instance_not_found` | NotFound | CodeProcessorNotFound is raised when a referenced processor instance cannot be located. |
 | `processor.plugin_not_found` | NotFound | CodeProcessorPluginNotFound is raised when a referenced processor plugin cannot be located. |
 | `provisioning.live_apply_unauthorized` | FailedPrecondition | CodeLiveApplyUnauthorized is raised by ApplyPlanLive when it refuses to apply a restart-class (EffectRestart) change to a currently-running pipeline because the caller did not authorize it — see ApplyPlanLive's allowRestartOnRunning parameter and docs/design-documents/20260708-live-server-deploy-apply.md, "Item 6 (reworked conservative): the data-path gate". The authorization is a process-level operator flag (conduit.Config.API.AllowLiveRestartApply), never a value the RPC caller/agent can set directly — see pkg/http/api/pipeline_v1.go's ApplyPipeline handler, the only caller that can set allowRestartOnRunning to true. |
@@ -699,6 +1107,7 @@ Author: Meroxa, Inc.
 | `registry.processor_in_use` | FailedPrecondition | CodeProcessorInUse is raised when an UninstallProcessor is refused because a pipeline still references the exact standalone:<name>[@version] in a processors block. Distinct from CodeConnectorInUse: the in-use scan is a separate code path (the processors blocks of provisioned pipeline YAML, not the connectors blocks). codes.FailedPrecondition, like its connector sibling. |
 | `registry.processor_not_found` | NotFound | CodeProcessorNotFound is raised when an exact-match name lookup in the index's processors[] collection fails. Distinct from CodeConnectorNotFound so an operator/agent can tell which collection was searched (a name may legitimately exist in one and not the other); codes.NotFound, exactly like its connector sibling. Same anti-typosquat stance as findConnector: exact-match only, never a fuzzy suggestion. |
 | `registry.processor_not_installed` | NotFound | CodeProcessorNotInstalled is raised on an UninstallProcessor/manifest lookup miss. Distinct from CodeConnectorNotInstalled so an operator/agent can tell which install directory (--processors.path vs --connectors.path) was searched; codes.NotFound, exactly like its connector sibling. |
+| `registry.processor_validation_timeout` | DeadlineExceeded | CodeProcessorValidationTimeout is raised when the install-time WASM check of a processor artifact (compile it, ask it for its Specification) does not finish before its deadline. Distinct from CodeInvalidProcessorArtifact: the artifact was not shown to be bad, the check just did not complete, so "retry" is a sensible next step and a verdict on the artifact is not. codes.DeadlineExceeded, which the CLI reports as an environment failure (exit 3) rather than a validation one (exit 2). Nothing is installed. |
 | `registry.provenance_invalid` | PermissionDenied | CodeProvenanceInvalid is raised when the SLSA provenance's subject-digest match or builder.id/configSource.uri binding fails (trust.ErrProvenanceInvalid). |
 | `registry.schema_too_new` | FailedPrecondition | CodeSchemaTooNew is raised when payload.schemaVersion exceeds the highest this build was compiled to understand. |
 | `registry.trust_anchor_expired` | FailedPrecondition | CodeTrustAnchorExpired is raised when no keyId in signatures[] matches any of this build's compiled-in trust anchors at all — the "upgrade Conduit" case, distinct from CodeIndexIntegrity's "recognized key, verification failed". |
@@ -721,6 +1130,7 @@ Author: Meroxa, Inc.
 | `scaffold.toolchain_unavailable` | Unavailable | CodeToolchainUnavailable is raised when the preflight (Go on PATH at the minimum version, git on PATH, GOPATH/bin writable) fails. Maps to gRPC Unavailable -> exitcode.Environment (3): the fix is "install or upgrade a toolchain component", not "change your command line". |
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
+| `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error. With a DLQ enabled (threshold above 0) it is routed to the dead-letter queue; otherwise the pipeline is degraded (classic engine, avro.decode and processor paths) or recovering (classic engine destination path, and architecture v2), and a recovering pipeline re-reads the same record. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit. |
 
 ## 4. MCP tool catalog (13)
 
@@ -736,6 +1146,6 @@ Author: Meroxa, Inc.
 | `repair_apply` | write (requires --allow-mutations) | Applies the plan computed by repair — safe fixes only, unless select names others — only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). A data-path-adjacent fix (connector settings, a connector's own plugin/type, DLQ config, any id field) is NEVER applied by this tool, even if selected explicitly — it comes back in the result as a skipped fix; only the CLI's --escalate flag (human-only) can apply one. Same engine as `conduit pipelines repair --apply`. |
 | `scaffold_connector` | write (requires --allow-mutations) | Scaffolds a new Go connector plugin repository (source and/or destination). Same engine as `conduit connector new`. |
 | `scaffold_processor` | write (requires --allow-mutations) | Scaffolds a new Go (WASM) processor plugin repository. Same engine as `conduit processor new`. |
-| `start` | write (requires --allow-mutations) | Starts a pipeline registered in a running Conduit (transitions to Running). Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is already running (pipeline.running). Same engine as `conduit pipelines start`. |
+| `start` | write (requires --allow-mutations) | Starts a pipeline registered in a running Conduit (transitions to Running). Requires --api-address, like inspect; no offline fallback. Refused if the pipeline is already running (pipeline.running), while its previous run is still stopping (pipeline.stopping; retry shortly), while a change to its config is being written (pipeline.config_changing; retry shortly), or if Conduit is shutting down (pipeline.shutting_down). Same engine as `conduit pipelines start`. |
 | `stop` | write (requires --allow-mutations) | Stops a running pipeline registered in a running Conduit — graceful drain by default, or immediate with force:true. Requires --api-address, like inspect; no offline fallback. Refused if the pipeline isn't running (pipeline.not_running). Same engine as `conduit pipelines stop`. |
 | `validate` | read | Offline, static validation of a pipeline configuration (errors only, no side effects). Same engine as `conduit pipelines validate`. |

@@ -1,6 +1,6 @@
 # Conduit Connector Template
 
-This is a template project for building [Conduit](https://conduit.io) connectors
+This is a template project for building [Conduit](https://conduitdata.io) connectors
 in Go. It makes it possible to start working on a Conduit connector in a matter
 of seconds.
 

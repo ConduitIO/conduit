@@ -102,6 +102,10 @@ type childConfig struct {
 	// scenario's behavior unchanged - the child runs runChild, not
 	// runChildSigterm.
 	sigtermMode bool
+
+	// storeFailAfter: store fault injection for the child (see
+	// childEnv.storeFailAfter, child.go). 0 disables it.
+	storeFailAfter int
 }
 
 func (c childConfig) env() []string {
@@ -119,6 +123,7 @@ func (c childConfig) env() []string {
 		envSigtermMode + "=" + strconv.FormatBool(c.sigtermMode),
 		envPersistDelayMS + "=" + strconv.Itoa(c.persistDelayMS),
 		envHoldAt + "=" + strconv.FormatUint(c.holdAt, 10),
+		envStoreFailAfter + "=" + strconv.Itoa(c.storeFailAfter),
 	}
 }
 

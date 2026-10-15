@@ -1,0 +1,21 @@
+version: "2.2"
+pipelines:
+  - id: quickstart
+    description: Generates five structured records per second and appends them to /data/records.ndjson.
+    status: running
+    name: quickstart
+    connectors:
+      - id: generator
+        type: source
+        plugin: "builtin:generator"
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          rate: "5"
+      - id: file
+        type: destination
+        plugin: "builtin:file"
+        settings:
+          path: /data/records.ndjson

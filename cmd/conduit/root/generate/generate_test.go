@@ -100,7 +100,20 @@ func TestFlags_NoApplyPathExists(t *testing.T) {
 		is.True(!slices.Contains(names, forbidden))
 	}
 	slices.Sort(names)
-	is.Equal(names, []string{"force", "max-retries", "model", "no-color", "out", "provider"})
+	is.Equal(names, []string{"config.path", "force", "max-retries", "model", "no-color", "out", "provider"})
+}
+
+// generate ships as a preview: it reliably picks connectors but often drops
+// requested processor steps. The label and the review warning are what keep a
+// user from deploying an incomplete pipeline unread, so their removal has to be
+// a deliberate test change, not a quiet doc edit.
+func TestDocs_PreviewLabel(t *testing.T) {
+	is := is.New(t)
+	docs := (&Command{}).Docs()
+
+	is.True(strings.HasPrefix(docs.Short, "Preview. "))
+	is.True(strings.HasPrefix(docs.Long, "Preview. "))
+	is.True(strings.Contains(docs.Long, "review the generated file before deploying"))
 }
 
 func TestArgs(t *testing.T) {

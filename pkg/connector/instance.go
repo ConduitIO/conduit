@@ -132,16 +132,20 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 
 	switch i.Type {
 	case TypeSource:
+		errs := make(chan error)
 		return &Source{
-			Instance:  i,
-			dispenser: pluginDispenser,
-			errs:      make(chan error),
+			Instance:    i,
+			dispenser:   pluginDispenser,
+			errs:        errs,
+			persistErrs: newPersistErrReporter(errs),
 		}, nil
 	case TypeDestination:
+		errs := make(chan error)
 		return &Destination{
-			Instance:  i,
-			dispenser: pluginDispenser,
-			errs:      make(chan error),
+			Instance:    i,
+			dispenser:   pluginDispenser,
+			errs:        errs,
+			persistErrs: newPersistErrReporter(errs),
 		}, nil
 	default:
 		return nil, ErrInvalidConnectorType

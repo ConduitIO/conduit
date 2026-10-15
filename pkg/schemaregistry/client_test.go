@@ -16,6 +16,8 @@ package schemaregistry
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"sync"
@@ -185,8 +187,19 @@ func TestClient_CacheHit(t *testing.T) {
 	)
 	is.NoErr(err)
 
-	want, err := c.CreateSchema(ctx, "test-cache-hit", sr.Schema{
-		Schema: `"int"`,
+	// The assertions below expect exactly 5 requests in a fixed order, which
+	// only holds if both the subject and the schema are new to the registry:
+	//   - CreateSchema sets compatibility (the PUT /config request) only when
+	//     it registers a new subject;
+	//   - sr.Client.CreateSchema issues one GET /subjects/<s>/versions/<v> per
+	//     subject that already uses the schema ID, concurrently.
+	// Under -tags integration the registry is a real server that outlives a
+	// single run, so a fixed subject and schema made every repetition after
+	// the first (-count=3 in the flake hunt) see 4 requests instead of 5.
+	id := uniqueID(t)
+	subject := "test-cache-hit-" + id
+	want, err := c.CreateSchema(ctx, subject, sr.Schema{
+		Schema: fmt.Sprintf(`{"type":"record","name":"CacheHit_%s","fields":[{"name":"f","type":"int"}]}`, id),
 		Type:   sr.TypeAvro,
 	})
 	is.NoErr(err)
@@ -194,13 +207,13 @@ func TestClient_CacheHit(t *testing.T) {
 	is.Equal(len(rtr.Records()), 5)
 	rtr.AssertRecord(is, 0,
 		assertMethod("GET"),
-		assertRequestURI("/subjects/test-cache-hit/versions?deleted=true"),
+		assertRequestURI(fmt.Sprintf("/subjects/%s/versions?deleted=true", subject)),
 		assertResponseStatus(404),
 		assertError(nil),
 	)
 	rtr.AssertRecord(is, 1,
 		assertMethod("POST"),
-		assertRequestURI("/subjects/test-cache-hit/versions"),
+		assertRequestURI(fmt.Sprintf("/subjects/%s/versions", subject)),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
@@ -212,13 +225,13 @@ func TestClient_CacheHit(t *testing.T) {
 	)
 	rtr.AssertRecord(is, 3,
 		assertMethod("GET"),
-		assertRequestURI("/subjects/test-cache-hit/versions/1"),
+		assertRequestURI(fmt.Sprintf("/subjects/%s/versions/%d", subject, want.Version)),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
 	rtr.AssertRecord(is, 4,
 		assertMethod("PUT"),
-		assertRequestURI("/config/test-cache-hit"),
+		assertRequestURI(fmt.Sprintf("/config/%s", subject)),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
@@ -250,12 +263,23 @@ func TestClient_CacheHit(t *testing.T) {
 	})
 }
 
+// uniqueID returns a random hex string, usable in both subject names and Avro
+// names, for tests that need a subject or schema the registry has not seen.
+func uniqueID(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("failed to generate random ID: %v", err)
+	}
+	return hex.EncodeToString(b)
+}
+
 // roundTripRecorder wraps a http.RoundTripper and records all requests and
 // responses going through it. It also provides utility methods to assert the
 // records. It is safe for concurrent use.
 type roundTripRecorder struct {
 	rt      http.RoundTripper
-	records []roundTripRecord
+	records []*roundTripRecord
 	m       sync.Mutex
 }
 
@@ -269,24 +293,30 @@ type roundTripRecord struct {
 func newRoundTripRecorder(rt http.RoundTripper) *roundTripRecorder {
 	return &roundTripRecorder{
 		rt:      rt,
-		records: make([]roundTripRecord, 0),
+		records: make([]*roundTripRecord, 0),
 	}
 }
 
 func (r *roundTripRecorder) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	// Records are stored by pointer: sr.Client issues some requests
+	// concurrently, and a pointer into a []roundTripRecord would be left
+	// aimed at the old backing array when a concurrent append reallocates,
+	// silently losing the response.
+	rec := &roundTripRecord{Request: req}
 	r.m.Lock()
-	r.records = append(r.records, roundTripRecord{Request: req})
-	rec := &r.records[len(r.records)-1]
+	r.records = append(r.records, rec)
 	r.m.Unlock()
 
 	defer func() {
+		r.m.Lock()
+		defer r.m.Unlock()
 		rec.Response = resp
 		rec.Error = err
 	}()
 	return r.rt.RoundTrip(req)
 }
 
-func (r *roundTripRecorder) Records() []roundTripRecord {
+func (r *roundTripRecorder) Records() []*roundTripRecord {
 	r.m.Lock()
 	defer r.m.Unlock()
 	return r.records
@@ -295,7 +325,7 @@ func (r *roundTripRecorder) Records() []roundTripRecord {
 func (r *roundTripRecorder) Clear() {
 	r.m.Lock()
 	defer r.m.Unlock()
-	r.records = make([]roundTripRecord, 0)
+	r.records = make([]*roundTripRecord, 0)
 }
 
 func (r *roundTripRecorder) AssertRecord(is *is.I, index int, asserters ...roundTripRecordAsserter) {
@@ -304,7 +334,7 @@ func (r *roundTripRecorder) AssertRecord(is *is.I, index int, asserters ...round
 
 	is.Helper()
 	is.True(len(r.records) > index) // record with index does not exist
-	rec := r.records[index]
+	rec := *r.records[index]
 	for _, assert := range asserters {
 		assert(is, rec)
 	}

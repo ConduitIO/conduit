@@ -1,12 +1,12 @@
 # Conduit Processor Template
 
-This is a template project for building [Conduit](https://conduit.io) processors in Go. It makes it possible to
+This is a template project for building [Conduit](https://conduitdata.io) processors in Go. It makes it possible to
 start working on a Conduit processor in a matter of seconds.
 
 > [!TIP]
 > Are you looking to write a simple processor for your specific use case? In that case you could take the simpler
 > approach - check out the
-> [documentation](https://conduit.io/docs/developing/processors/building#using-sdknewprocesorfunc) how you
+> [documentation](https://conduitdata.io/docs/developing/processors/building#using-sdknewprocesorfunc) how you
 > can write a processor in a single function!
 
 ## Quick start

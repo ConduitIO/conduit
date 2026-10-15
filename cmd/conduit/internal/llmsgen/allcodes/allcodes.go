@@ -59,11 +59,15 @@ import (
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/deploy"
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/generate"
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"
+	_ "github.com/conduitio/conduit/cmd/conduit/root/migrate"
 	_ "github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	_ "github.com/conduitio/conduit/pkg/connector"
+	_ "github.com/conduitio/conduit/pkg/kcmigrate"
+	_ "github.com/conduitio/conduit/pkg/kcmigrate/migrate"
 	_ "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	_ "github.com/conduitio/conduit/pkg/orchestrator"
 	_ "github.com/conduitio/conduit/pkg/pipeline"
+	_ "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	_ "github.com/conduitio/conduit/pkg/processor"
 	_ "github.com/conduitio/conduit/pkg/provisioning"
 	_ "github.com/conduitio/conduit/pkg/provisioning/config"
@@ -72,6 +76,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/registry/policy"
 	_ "github.com/conduitio/conduit/pkg/registry/trust"
 	_ "github.com/conduitio/conduit/pkg/scaffold"
+	_ "github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 // Codes returns every conduiterr.Code visible once every package this

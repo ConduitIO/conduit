@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 type Destination struct {
@@ -35,6 +36,15 @@ type Destination struct {
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
+	// persistErrs delivers persister failures to errs without ever blocking
+	// a persister callback forever (see persistErrReporter). Stopped when
+	// Teardown starts and when Open fails after registering a persist.
+	// Created in Instance.Connector.
+	persistErrs *persistErrReporter
+	// pendingPersistErr holds a persist failure that could not be delivered
+	// on errs, returned by Teardown. Guarded by pendingMu.
+	pendingMu         sync.Mutex
+	pendingPersistErr error
 
 	// stream is the stream used to exchange records and acks with the
 	// destination plugin.
@@ -81,6 +91,10 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 	defer func() {
 		// ensure the plugin gets torn down if something bad happens
 		if err != nil {
+			// The node does not call Teardown after a failed Open, so nothing
+			// will read errs: a lifecycle-event persist registered below
+			// must not block its persister callback on it (#2925).
+			d.persistErrs.stop()
 			_, tdErr := d.plugin.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 			if tdErr != nil {
 				d.Instance.logger.Err(ctx, tdErr).Msg("could not tear down destination connector plugin")
@@ -96,7 +110,8 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 
 	// TODO add proper support for lifecycle events to DLQs (see https://github.com/ConduitIO/conduit/issues/1016#issuecomment-1535119773)
 	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
-		lifecycleEventTriggered, err := d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
+		var lifecycleEventTriggered bool
+		lifecycleEventTriggered, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, d.Instance.Config.Settings)
 		if err != nil {
 			return err
 		}
@@ -105,9 +120,9 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 			// when a lifecycle event is successfully triggered we consider the config active
 			d.Instance.LastActiveConfig = d.Instance.Config
 			// persist connector in the next batch to store last active config
-			err := d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
+			err = d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
 				if err != nil {
-					d.errs <- err
+					d.reportPersistError(err)
 				}
 			})
 			if err != nil {
@@ -156,7 +171,13 @@ func (d *Destination) Stop(ctx context.Context, lastPosition opencdc.Position) e
 	return nil
 }
 
+// Teardown closes the destination's stream and plugin. It returns an error if
+// a persist failure for this destination arrived after errs stopped being
+// read (see reportPersistError), even when the plugin tore down cleanly.
 func (d *Destination) Teardown(ctx context.Context) error {
+	// From here on nothing reads errs; persist failures are kept instead.
+	d.persistErrs.stop()
+
 	// lock destination as we are about to mutate the plugin field
 	d.Instance.Lock()
 	defer d.Instance.Unlock()
@@ -182,12 +203,37 @@ func (d *Destination) Teardown(ctx context.Context) error {
 		d.Instance.persister.ConnectorStopped()
 	}
 
+	d.pendingMu.Lock()
+	persistErr := d.pendingPersistErr
+	d.pendingMu.Unlock()
+	if persistErr != nil {
+		persistErr = cerrors.Errorf("failed to persist destination connector state: %w", persistErr)
+	}
+
 	if err != nil {
-		return cerrors.Errorf("could not tear down destination connector plugin: %w", err)
+		return cerrors.Join(cerrors.Errorf("could not tear down destination connector plugin: %w", err), persistErr)
+	}
+	if persistErr != nil {
+		return persistErr
 	}
 
 	d.Instance.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
 	return nil
+}
+
+// reportPersistError surfaces a failed state write for this destination on
+// errs while the node reads it. Once persistErrs is stopped it keeps the
+// error for Teardown instead, so the persister callback it runs in never
+// blocks forever (see persistErrReporter).
+func (d *Destination) reportPersistError(err error) {
+	if d.persistErrs.send(err) {
+		return
+	}
+	d.pendingMu.Lock()
+	d.pendingPersistErr = cerrors.Join(d.pendingPersistErr, err)
+	d.pendingMu.Unlock()
+	d.Instance.logger.Err(context.Background(), err).
+		Msg("failed to persist destination connector state while stopping")
 }
 
 func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) error {
@@ -226,7 +272,10 @@ func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
 	for i, ack := range resp.Acks {
 		acks[i] = DestinationAck{Position: ack.Position}
 		if ack.Error != "" {
-			acks[i].Error = cerrors.New(ack.Error)
+			// The ack error crossed the plugin protocol as a string. An
+			// SDK schema-middleware decode that hit the Avro element limit
+			// is tagged schema.avro.limit_exceeded here.
+			acks[i].Error = schemaregistry.ClassifyDecodeError(cerrors.New(ack.Error))
 		}
 	}
 	return acks, nil

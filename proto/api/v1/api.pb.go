@@ -32,7 +32,12 @@ const (
 	Pipeline_STATUS_UNSPECIFIED Pipeline_Status = 0
 	// Pipeline is running.
 	Pipeline_STATUS_RUNNING Pipeline_Status = 1
-	// Pipeline gracefully stopped.
+	// Pipeline is stopped: by a user (Stop, including a force stop), or by
+	// Conduit itself (an engine shutdown, or a pipeline that was running
+	// before a restart and has not been resumed). State.stopped_reason tells
+	// the two apart. A stopped pipeline is not necessarily clean: if the run
+	// hit an error while draining after the stop was requested, the error is
+	// recorded in State.error and the status is still STATUS_STOPPED.
 	Pipeline_STATUS_STOPPED Pipeline_Status = 2
 	// Pipeline stopped with an error (see State.error).
 	Pipeline_STATUS_DEGRADED Pipeline_Status = 3
@@ -2449,7 +2454,7 @@ type CreateConnectorRequest struct {
 	// PLUGIN-TYPE: One of: builtin, standalone or any (default).
 	// PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
 	// VERSION: The plugin version as specified in the plugin specifications or latest (default).
-	// For more information, see: https://conduit.io/docs/using/connectors/referencing
+	// For more information, see: https://conduitdata.io/docs/using/connectors/referencing
 	Plugin string `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
 	// ID of the pipeline to which the connector will get attached.
 	PipelineId string            `protobuf:"bytes,3,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`
@@ -4283,7 +4288,12 @@ type Pipeline_State struct {
 	unknownFields protoimpl.UnknownFields
 
 	Status Pipeline_Status `protobuf:"varint,1,opt,name=status,proto3,enum=api.v1.Pipeline_Status" json:"status,omitempty"`
-	// Error message when pipeline status is STATUS_DEGRADED.
+	// Error message recorded with the pipeline's last terminal status.
+	// Always set when status is STATUS_DEGRADED. May be set when status is
+	// STATUS_STOPPED, if the run ended with an error after a stop was
+	// requested (a node failed while draining, or the pipeline was force
+	// stopped); the pipeline is not degraded in that case and is not
+	// recovered. Empty while the pipeline is running or recovering.
 	Error         string                       `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	StoppedReason Pipeline_State_StoppedReason `protobuf:"varint,3,opt,name=stopped_reason,json=stoppedReason,proto3,enum=api.v1.Pipeline_State_StoppedReason" json:"stopped_reason,omitempty"`
 }
@@ -4404,7 +4414,21 @@ type Pipeline_DLQ struct {
 	// plugin is the connector plugin used for storing DLQ records
 	// default = builtin:log, configured to log with level WARN
 	Plugin string `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	// settings are the plugin settings
+	// settings are the plugin settings. In responses (GetDLQ, UpdateDLQ) every
+	// value is redacted to "***" and only keys are returned, because settings
+	// routinely hold credentials. In UpdateDLQ, a value that is exactly "***"
+	// keeps the stored value for that key, but only when no other setting in
+	// the update changes, so a GetDLQ response can be sent back unchanged. If
+	// any other setting differs from the stored one (a changed value, an added
+	// key or a removed key), every "***" is rejected
+	// (orchestrator.redacted_setting_with_other_changes) and the real values
+	// must be sent. "***" is also rejected for a key with no stored value
+	// (orchestrator.redacted_setting_without_stored_value) and when the
+	// update changes the plugin, including only its version
+	// (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+	// the stored one, and a key left out is removed. A real value of exactly
+	// "***" cannot be set. This keeps a caller from pointing a host at its own
+	// server and having the stored password sent there.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// window_size defines how many last acks/nacks are monitored in the window
 	// that controls if the pipeline should stop (0 disables the window)
@@ -4575,7 +4599,23 @@ type Connector_Config struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name     string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// settings are the connector plugin settings. In responses every value is
+	// redacted to "***" and only keys are returned, because settings routinely
+	// hold credentials. In UpdateConnector, a value that is exactly "***" keeps
+	// the stored value for that key, but only when no other setting in the
+	// update changes, so a GetConnector response can be sent back unchanged. If
+	// any other setting differs from the stored one (a changed value, an added
+	// key or a removed key), every "***" is rejected
+	// (orchestrator.redacted_setting_with_other_changes) and the real values
+	// must be sent. "***" is also rejected for a key with no stored value,
+	// including every key in CreateConnector
+	// (orchestrator.redacted_setting_without_stored_value), and when the
+	// update changes the plugin, including only its version
+	// (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+	// the stored one, and a key left out is removed. A real value of exactly
+	// "***" cannot be set. This keeps a caller from pointing a host at its own
+	// server and having the stored password sent there.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
@@ -4685,6 +4725,22 @@ type Processor_Config struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// settings are the processor plugin settings. In responses every value is
+	// redacted to "***" and only keys are returned, because settings routinely
+	// hold credentials. In UpdateProcessor, a value that is exactly "***" keeps
+	// the stored value for that key, but only when no other setting in the
+	// update changes, so a GetProcessor response can be sent back unchanged. If
+	// any other setting differs from the stored one (a changed value, an added
+	// key or a removed key), every "***" is rejected
+	// (orchestrator.redacted_setting_with_other_changes) and the real values
+	// must be sent. "***" is also rejected for a key with no stored value,
+	// including every key in CreateProcessor
+	// (orchestrator.redacted_setting_without_stored_value), and when the
+	// update changes the plugin, including only its version
+	// (orchestrator.redacted_setting_plugin_changed). Any other value replaces
+	// the stored one, and a key left out is removed. A real value of exactly
+	// "***" cannot be set. This keeps a caller from pointing a host at its own
+	// server and having the stored password sent there.
 	Settings map[string]string `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Workers  int32             `protobuf:"varint,2,opt,name=workers,proto3" json:"workers,omitempty"`
 }
@@ -4876,9 +4932,12 @@ type PipelineDocument_Connector struct {
 
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// type is "source" or "destination".
-	Type       string                        `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Plugin     string                        `protobuf:"bytes,3,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	Name       string                        `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Type   string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Plugin string `protobuf:"bytes,3,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Name   string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// settings must carry real values: a value that is exactly "***" (the
+	// placeholder API responses use for redacted values) is rejected with
+	// orchestrator.redacted_setting_without_stored_value.
 	Settings   map[string]string             `protobuf:"bytes,5,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Processors []*PipelineDocument_Processor `protobuf:"bytes,6,rep,name=processors,proto3" json:"processors,omitempty"`
 }
@@ -4962,8 +5021,11 @@ type PipelineDocument_Processor struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Id        string            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Plugin    string            `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Plugin string `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	// settings must carry real values: a value that is exactly "***" (the
+	// placeholder API responses use for redacted values) is rejected with
+	// orchestrator.redacted_setting_without_stored_value.
 	Settings  map[string]string `protobuf:"bytes,3,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Workers   int32             `protobuf:"varint,4,opt,name=workers,proto3" json:"workers,omitempty"`
 	Condition string            `protobuf:"bytes,5,opt,name=condition,proto3" json:"condition,omitempty"`
@@ -5041,7 +5103,10 @@ type PipelineDocument_DLQ struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Plugin              string            `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Plugin string `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	// settings must carry real values: a value that is exactly "***" (the
+	// placeholder API responses use for redacted values) is rejected with
+	// orchestrator.redacted_setting_without_stored_value.
 	Settings            map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	WindowSize          uint64            `protobuf:"varint,3,opt,name=window_size,json=windowSize,proto3" json:"window_size,omitempty"`
 	WindowNackThreshold uint64            `protobuf:"varint,4,opt,name=window_nack_threshold,json=windowNackThreshold,proto3" json:"window_nack_threshold,omitempty"`

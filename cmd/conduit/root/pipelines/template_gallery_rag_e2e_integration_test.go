@@ -43,8 +43,16 @@
 // every derived chunk row THROUGH the engine's tombstone fan-out.
 //
 // The only mocked boundary is the embedding provider's HTTP endpoint (an
-// in-process httptest server standing in for Ollama), admitted through the
-// engine's SSRF egress gate by an explicit loopback (IP,port) carve-out — the
+// in-process httptest server standing in for Ollama). The pipeline's egress
+// settings are the template's own: the test does not add sdk.egress.allow or
+// change its scheme or host, and opens the engine ceiling exactly as the template's
+// prerequisite note tells an operator to. The one deviation is the port: the
+// mock binds the template's provider host on an ephemeral port (so the test
+// does not collide with a real Ollama on 11434), and every occurrence of the
+// template's host:port is rewritten to it, so scheme, host and the
+// allowlist-vs-baseURL agreement are exactly what a user scaffolds. An earlier
+// version of this test patched the egress opt-in in itself, which is why it
+// stayed green while the shipped template could not reach Ollama at all. The
 // WASM boundary, the connector protocol, the egress gate, the pipeline
 // lifecycle, and pgvector are all real.
 //
@@ -58,12 +66,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +81,7 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
+	yamlparser "github.com/conduitio/conduit/pkg/provisioning/config/yaml"
 	json "github.com/goccy/go-json"
 	"github.com/jackc/pgx/v5"
 	"github.com/matryer/is"
@@ -113,7 +124,6 @@ const (
 	ragTemplateSourceURLPlaceholder = "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 	ragTemplateDestURLPlaceholder   = "postgres://user:password@localhost:5432/vectordb?sslmode=disable"
 	ragTemplateDestTablePlaceholder = "document_chunks"
-	ragTemplateOllamaBaseURLDefault = "http://localhost:11434"
 )
 
 // buildAIProcessorWASM builds the REAL ai.chunk and ai.embed standalone-WASM
@@ -190,17 +200,24 @@ func requireNonEmptyFile(t *testing.T, path string) {
 	}
 }
 
-// ragTemplateMockHostPort is hp(t, srv) from rag_e2e_test.go / the
-// host_module_egress_test.go host:port helper: httptest.NewServer binds a
-// loopback ephemeral port; return its "host:port" so the SAME string feeds the
-// ollama.baseURL, the ceiling allowlist, and the per-processor sdk.egress.allow.
-func ragTemplateMockHostPort(t *testing.T, srv *httptest.Server) string {
+// embedProcessorSettings returns the scaffolded pipeline's ai.embed processor
+// settings, parsed with the engine's own pipeline-config parser so the test
+// reads exactly what the engine will.
+func embedProcessorSettings(t *testing.T, pipelineYAML string) map[string]string {
 	t.Helper()
-	u, err := url.Parse(srv.URL)
+	pipelines, err := yamlparser.NewParser(log.Nop()).Parse(context.Background(), strings.NewReader(pipelineYAML))
 	if err != nil {
-		t.Fatalf("parse mock server URL %q: %v", srv.URL, err)
+		t.Fatalf("parse scaffolded template: %v", err)
 	}
-	return u.Host
+	for _, pl := range pipelines {
+		for _, p := range pl.Processors {
+			if p.Plugin == "standalone:ai.embed" {
+				return p.Settings
+			}
+		}
+	}
+	t.Fatalf("scaffolded template has no standalone:ai.embed processor — template shape changed")
+	return nil
 }
 
 // ollamaMockRequest mirrors conduit-processor-ai embed's ollama request wire
@@ -214,12 +231,17 @@ type ollamaMockRequest struct {
 
 // newOllamaMockServer stands in for Ollama's POST /api/embeddings, returning a
 // fixed 768-dimension vector (ragTemplateVectorDim) — the ONLY mocked boundary
-// in this suite. Binds loopback via httptest, so its (IP,port) is admissible
-// through the egress gate only by an explicit carve-out (see the test body).
-func newOllamaMockServer(t *testing.T) *httptest.Server {
+// in this suite. It listens on host (the template's provider host) with an
+// ephemeral port; for a loopback host that (IP,port) is admissible through the
+// egress gate only by an explicit carve-out, which must come from the template.
+func newOllamaMockServer(t *testing.T, host string) *httptest.Server {
 	t.Helper()
 	is := is.New(t)
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	lis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatalf("listen for the ollama mock on %s: %v", host, err)
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ollamaMockRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -233,6 +255,10 @@ func newOllamaMockServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		is.NoErr(json.NewEncoder(w).Encode(map[string]any{"embedding": vec}))
 	}))
+	_ = srv.Listener.Close()
+	srv.Listener = lis
+	srv.Start()
+	return srv
 }
 
 // patchExactlyOnce replaces old with new in s, asserting old occurs EXACTLY
@@ -356,26 +382,6 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 	_, err = pg.Exec(ctx, `INSERT INTO my_table (id, content) VALUES ($1, $2)`, seedRowID, seedContent)
 	is.NoErr(err)
 
-	// --- mock embedding provider on loopback. Its (IP,port) is what both
-	// egress sides must admit by exact carve-out. ---
-	srv := newOllamaMockServer(t)
-	defer srv.Close()
-	mockHostPort := ragTemplateMockHostPort(t, srv) // e.g. 127.0.0.1:54321
-	// The allowlist entry MUST carry the http:// scheme and be the literal
-	// resolved loopback (IP,port), not "localhost": ParseAllowEntry defaults a
-	// bare host:port to the https scheme, which would never match the guest's
-	// http egress call; and the dial-time gate refuses loopback except by an
-	// exact IP-literal (IP,port) carve-out (egress/ipguard.go, policy.go's
-	// matchesCarveOut). Deriving from srv.URL keeps it correct whether httptest
-	// bound 127.0.0.1 or [::1].
-	allowSpec := "http://" + mockHostPort
-	ollamaBaseURL := "http://" + mockHostPort
-
-	// --- pre-flight egress-intersection sanity: fail fast with a clear message
-	// if the ceiling ∩ per-processor request does not admit the mock, rather
-	// than a mysterious embed timeout at run time. ---
-	preflightEgressAdmitsMock(t, allowSpec)
-
 	// --- scaffold via the REAL `conduit pipelines init`. ---
 	pipelinesDir := filepath.Join(tmp, "pipelines")
 	is.NoErr(os.MkdirAll(pipelinesDir, 0o755))
@@ -393,27 +399,42 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 		}
 	}
 
-	// --- anchored patches ONLY: source url, destination url + table, embed's
-	// ollama.baseURL, and an added per-processor sdk.egress.allow. No structural
-	// rewrite; dimension left at the template default 768. ---
+	// --- anchored patches ONLY for the placeholders a user must fill in:
+	// source url, destination url + table. No structural rewrite; dimension
+	// left at the template default 768; embed's egress settings untouched. ---
 	yaml = patchExactlyOnce(t, yaml, "url: "+ragTemplateSourceURLPlaceholder, "url: "+ragTemplatePGConnString)
 	yaml = patchExactlyOnce(t, yaml, "url: "+ragTemplateDestURLPlaceholder, "url: "+ragTemplatePGConnString)
 	yaml = patchExactlyOnce(t, yaml, "table: "+ragTemplateDestTablePlaceholder, "table: "+vectorTable)
-	// Replace the embed processor's ollama.baseURL line and, on the same
-	// anchored replace, append the per-processor egress opt-in at the same
-	// 10-space settings indentation. Both are required: the ceiling alone
-	// resolves to deny-all without the per-processor sdk.egress.allow
-	// (PolicyFromSettings returns DenyAll when the key is absent), and vice
-	// versa (ResolvePolicy intersects the two).
-	embedAnchor := "ollama.baseURL: " + ragTemplateOllamaBaseURLDefault
-	embedReplacement := "ollama.baseURL: " + ollamaBaseURL + "\n          sdk.egress.allow: " + allowSpec
-	yaml = patchExactlyOnce(t, yaml, embedAnchor, embedReplacement)
+
+	// --- mock embedding provider on the template's own provider host, with
+	// only the port changed (see the file header for why). ---
+	templateBaseURL, err := url.Parse(embedProcessorSettings(t, yaml)["ollama.baseURL"])
+	is.NoErr(err)
+	if templateBaseURL.Port() == "" {
+		t.Fatalf("template ollama.baseURL %q has no explicit port — update this test's port rewrite", templateBaseURL)
+	}
+	srv := newOllamaMockServer(t, templateBaseURL.Hostname())
+	defer srv.Close()
+	mockPort := strconv.Itoa(srv.Listener.Addr().(*net.TCPAddr).Port)
+	mockHostPort := net.JoinHostPort(templateBaseURL.Hostname(), mockPort)
+	// Rewrite EVERY occurrence of the template's host:port (baseURL, the
+	// sdk.egress.allow entry, and comments) so the two settings keep whatever
+	// relationship the template gives them — including none.
+	if !strings.Contains(yaml, templateBaseURL.Host) {
+		t.Fatalf("template host:port %q not found in scaffolded YAML", templateBaseURL.Host)
+	}
+	yaml = strings.ReplaceAll(yaml, templateBaseURL.Host, mockHostPort)
+	embedSettings := embedProcessorSettings(t, yaml)
+	t.Logf("embed settings under test: ollama.baseURL=%q %s=%q",
+		embedSettings["ollama.baseURL"], egress.ConfigKeyAllow, embedSettings[egress.ConfigKeyAllow])
 
 	is.NoErr(os.WriteFile(pipelinePath, []byte(yaml), 0o600))
 
 	// --- boot the real engine. Capture logs to a sink for diagnosis on
-	// timeout. Egress ceiling opened AND scoped to exactly the mock's (IP,port)
-	// (the per-processor opt-in is patched above). ---
+	// timeout. The egress ceiling is opened the way the template's prerequisite
+	// note documents (--processors.egress.enabled --processors.egress.allow
+	// <the template's sdk.egress.allow entry>); the per-processor opt-in is the
+	// template's own. ---
 	logs := &safeBuffer{}
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = filepath.Join(tmp, "conduit.db")
@@ -422,7 +443,9 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 	cfg.Processors.Path = procDir
 	cfg.Connectors.Path = connDir
 	cfg.Processors.Egress.Enabled = true
-	cfg.Processors.Egress.Allow = []string{allowSpec}
+	if allow := embedSettings[egress.ConfigKeyAllow]; allow != "" {
+		cfg.Processors.Egress.Allow = []string{allow}
+	}
 	// The chunk processor fans one source record into many chunk records
 	// (sdk.MultiRecord). Fan-out is only supported by pipeline architecture v2
 	// (the classic 1-in-1-out stream node rejects MultiRecord as an "unknown
@@ -501,34 +524,4 @@ func TestTemplateGalleryRAG_Integration(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatalf("runtime did not shut down after context cancellation\n\n=== LOGS ===\n%s", logs.String())
 	}
-}
-
-// preflightEgressAdmitsMock reconstructs the engine's egress resolution
-// (per-processor request ∩ engine ceiling) from the exported egress primitives
-// and asserts the mock's (scheme,host,port) survives with nothing dropped — the
-// same computation resolveEgressPolicy performs at processor open, run here so a
-// misconfigured allowlist fails with a clear message rather than an opaque embed
-// timeout during the run.
-func preflightEgressAdmitsMock(t *testing.T, allowSpec string) {
-	t.Helper()
-	is := is.New(t)
-
-	ceilingAllow, err := egress.ParseAllowlist(allowSpec)
-	is.NoErr(err)
-	ceiling := egress.Policy{Enabled: true, Allowlist: ceilingAllow}
-
-	requested, err := egress.PolicyFromSettings(map[string]string{egress.ConfigKeyAllow: allowSpec})
-	is.NoErr(err)
-
-	effective, dropped := egress.ResolvePolicy(requested, ceiling)
-	is.Equal(len(dropped), 0) // nothing the pipeline requested falls outside the ceiling
-	is.True(effective.Enabled)
-
-	u, err := url.Parse(allowSpec)
-	is.NoErr(err)
-	port := u.Port()
-	if port == "" {
-		port = "80" // http default; ParseAllowEntry does the same
-	}
-	is.True(effective.MatchHostPort(u.Scheme, u.Hostname(), port)) // the mock target is admitted
 }

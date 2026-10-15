@@ -41,102 +41,42 @@ package funnel
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
+	"github.com/conduitio/conduit/pkg/internal/enginetest"
 )
-
-// benchSource is a Source with no mocking framework in the path: Read hands
-// back a pre-built batch and Ack is a no-op counter.
-type benchSource struct {
-	id        string
-	batch     []opencdc.Record
-	acked     int
-	readCalls int
-}
-
-func newBenchSource(id string, batchSize int) *benchSource {
-	recs := make([]opencdc.Record, batchSize)
-	for i := range recs {
-		recs[i] = opencdc.Record{
-			Position: opencdc.Position(strconv.Itoa(i)),
-			Metadata: opencdc.Metadata{opencdc.MetadataConduitSourceConnectorID: id},
-			Payload: opencdc.Change{
-				After: opencdc.StructuredData{"id": i, "name": "benchmark-record"},
-			},
-		}
-	}
-	return &benchSource{id: id, batch: recs}
-}
-
-func (s *benchSource) ID() string                     { return s.id }
-func (s *benchSource) Open(context.Context) error     { return nil }
-func (s *benchSource) Teardown(context.Context) error { return nil }
-func (s *benchSource) Errors() <-chan error           { return nil }
-
-func (s *benchSource) Read(context.Context) ([]opencdc.Record, error) {
-	s.readCalls++
-	// Fresh positions each pass so the run ledger and posIndex behave as they
-	// would with a real source, rather than seeing repeats.
-	out := make([]opencdc.Record, len(s.batch))
-	for i := range s.batch {
-		r := s.batch[i]
-		r.Position = opencdc.Position(strconv.Itoa(s.readCalls*len(s.batch) + i))
-		out[i] = r
-	}
-	return out, nil
-}
-
-func (s *benchSource) Ack(_ context.Context, p []opencdc.Position) error {
-	s.acked += len(p)
-	return nil
-}
-
-// benchDestination accepts everything and acks it immediately.
-type benchDestination struct {
-	id      string
-	pending []opencdc.Position
-}
-
-func (d *benchDestination) ID() string                     { return d.id }
-func (d *benchDestination) Open(context.Context) error     { return nil }
-func (d *benchDestination) Teardown(context.Context) error { return nil }
-func (d *benchDestination) Errors() <-chan error           { return nil }
-
-func (d *benchDestination) Write(_ context.Context, recs []opencdc.Record) error {
-	for _, r := range recs {
-		d.pending = append(d.pending, r.Position)
-	}
-	return nil
-}
-
-func (d *benchDestination) Ack(context.Context) ([]connector.DestinationAck, error) {
-	acks := make([]connector.DestinationAck, len(d.pending))
-	for i, p := range d.pending {
-		acks[i] = connector.DestinationAck{Position: p}
-	}
-	d.pending = d.pending[:0]
-	return acks, nil
-}
 
 // benchWorker builds a worker over batchSize-record reads and destCount
 // destinations, optionally marking the destinations as a shared boundary (the
 // N-source serialization point).
-func benchWorker(b *testing.B, batchSize, destCount int, shared bool) *Worker {
+func benchWorker(b testing.TB, batchSize, destCount int, shared bool) *Worker {
 	b.Helper()
 	logger := log.Nop()
 
-	src := newBenchSource("bench-src", batchSize)
+	// The shared kit fakes (pkg/internal/enginetest) replace the plain structs
+	// this file used to define. They are still free of any mocking framework,
+	// which is the property that matters; Discard keeps memory flat across b.N.
+	//
+	// The record shape is built once and only its position varies, so the
+	// timed path measures the engine and not the fake's record construction.
+	proto := enginetest.StructuredShape("bench-src", 0)
+	src := enginetest.NewSource(enginetest.SourceConfig{
+		ID: "bench-src", BatchSize: batchSize, Discard: true,
+		Shape: func(srcID string, i int) opencdc.Record {
+			r := proto
+			r.Position = enginetest.Position(srcID, i)
+			return r
+		},
+	})
 	srcTask := NewSourceTask("bench-src", src, logger, &NoOpConnectorMetrics{})
 	srcNode := &TaskNode{Task: srcTask}
 
 	for i := range destCount {
 		id := fmt.Sprintf("bench-dst-%d", i)
-		dt := NewDestinationTask(id, &benchDestination{id: id}, logger, &NoOpConnectorMetrics{})
+		dt := NewDestinationTask(id, enginetest.NewDestination(enginetest.DestinationConfig{ID: id, Discard: true}), logger, &NoOpConnectorMetrics{})
 		n := &TaskNode{Task: dt}
 		if shared {
 			n.MarkSharedBoundary()
@@ -144,7 +84,7 @@ func benchWorker(b *testing.B, batchSize, destCount int, shared bool) *Worker {
 		srcNode.Next = append(srcNode.Next, n)
 	}
 
-	dlq := NewDLQ("bench-dlq", &benchDestination{id: "bench-dlq"}, logger, &NoOpConnectorMetrics{}, 1, 0)
+	dlq := NewDLQ("bench-dlq", enginetest.NewDestination(enginetest.DestinationConfig{ID: "bench-dlq", Discard: true}), logger, &NoOpConnectorMetrics{}, 1, 0)
 
 	w, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
 	if err != nil {

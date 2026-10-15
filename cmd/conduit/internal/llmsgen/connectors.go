@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
@@ -95,8 +96,8 @@ func gatherConnectors(modVersions moduleVersions) ([]connectorInfo, error) {
 
 		out = append(out, connectorInfo{
 			Name:              spec.Name,
-			Summary:           spec.Summary,
-			Description:       spec.Description,
+			Summary:           rewriteRetiredDocsLinks(spec.Summary),
+			Description:       rewriteRetiredDocsLinks(spec.Description),
 			Version:           version,
 			Author:            spec.Author,
 			SourceParams:      gatherParams(spec.SourceParams),
@@ -123,7 +124,7 @@ func gatherParams(params config.Parameters) []paramInfo {
 			Type:        p.Type.String(),
 			Default:     p.Default,
 			Required:    isRequired(p),
-			Description: p.Description,
+			Description: rewriteRetiredDocsLinks(p.Description),
 			Validations: renderValidations(p),
 		})
 	}
@@ -159,4 +160,32 @@ func renderValidations(p config.Parameter) []string {
 		}
 	}
 	return out
+}
+
+// retiredDocsLinks rewrites links to conduit.io, the project's former docs
+// domain, which no longer resolves (#2860). The live site is conduitdata.io.
+//
+// The links arrive verbatim from connector specifications compiled into this
+// build — the sdk.record.format description in conduit-connector-sdk and the
+// built-in connectors' own descriptions — so they cannot be fixed in this repo
+// without re-tagging those modules. Rewriting them here keeps llms-full.txt,
+// the agent-facing description of Conduit, free of dead links in the meantime;
+// the upstream sources should still be fixed, after which these entries are
+// no-ops.
+//
+// Pairs are tried in order at each position, so specific paths that moved on
+// the new site come before the host-only fallback. Every target was checked
+// to resolve when this list was written.
+var retiredDocsLinks = strings.NewReplacer(
+	// The old output-formats page moved under configuration-parameters; the
+	// same path on conduitdata.io is a 404.
+	"https://conduit.io/docs/connectors/output-formats", "https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format",
+	"https://conduit.io/", "https://conduitdata.io/",
+	"http://conduit.io/", "https://conduitdata.io/",
+)
+
+// rewriteRetiredDocsLinks applies retiredDocsLinks to s. It is pure and
+// deterministic, so it keeps the generator's byte-for-byte drift guard intact.
+func rewriteRetiredDocsLinks(s string) string {
+	return retiredDocsLinks.Replace(s)
 }

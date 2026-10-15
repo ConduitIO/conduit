@@ -701,10 +701,11 @@ func TestServiceLifecycle_PipelineForceStop(t *testing.T) {
 	// the fatal tag on the force-stop kill.
 	is.True(cerrors.IsFatalError(err))
 	is.True(cerrors.Is(err, pipeline.ErrForceStop))
-	// Fatal terminal error routes to StatusDegraded (the fatal arm of the cleanup
-	// switch), matching v1. Without the fatal tag, the non-fatal arm writes no
-	// status and the pipeline would remain StatusRunning.
-	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	// A force stop is a requested stop, not a failure (#2901, ADR
+	// 20261007-stop-requested-never-recovers): UserStopped, with the
+	// force-stop error recorded, matching v1.
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
+	is.True(strings.Contains(pl.Error, pipeline.ErrForceStop.Error()))
 }
 
 // TestServiceLifecycle_Recovery_TransientErrorRecovers is the core arch-v2
@@ -1075,7 +1076,7 @@ func TestServiceLifecycle_Recovery_ForceStopDuringWorkerReleaseWindow(t *testing
 	is.True(err != nil)
 	is.True(cerrors.IsFatalError(err))
 	is.True(cerrors.Is(err, pipeline.ErrForceStop))
-	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus()) // a force stop is a stop (#2901)
 
 	// The pre-recovery run's own terminal classification (the transient
 	// error that triggered recovery) must be untouched by our stray Kill
@@ -1389,16 +1390,13 @@ func TestServiceLifecycle_Stop_TransientErrorMidDrain_NoRecovery(t *testing.T) {
 	is.NoErr(<-stopErr) // Stop itself (rp.w.Stop) completes once the batch unwinds
 
 	// The core O3 assertion: the pipeline finalizes UserStopped, never
-	// Recovering. WaitPipeline's own return is intentionally not asserted
-	// here: it races runPipeline's cleanup deleting the runningPipelines
-	// entry, and can surface either the tomb's raw (pre-reassignment) Kill
-	// error or nil depending on which side of that race the caller lands on
-	// — the same documented caveat TestServiceLifecycle_Recovery_
-	// GracefulShutdownDuringBackoff already establishes for the sibling
-	// isGracefulShutdown arm, which this new arm mirrors. The reliable
-	// signal is the persisted status, not this return value.
-	_ = ls.WaitPipeline(pl.ID)
+	// Recovering. Since #2901 the drain error is kept rather than dropped:
+	// the tomb error and the recorded terminal error are the same error, so
+	// WaitPipeline returns it whichever side of the cleanup it lands on, and
+	// the pipeline's error message carries it.
+	is.True(ls.WaitPipeline(pl.ID) != nil)
 	waitForStatus(t, pl, pipeline.StatusUserStopped)
+	is.True(pl.Error != "")
 
 	for _, s := range rec.snapshot() {
 		if s == pipeline.StatusRecovering {
@@ -1764,8 +1762,13 @@ func TestServiceLifecycle_NSource_PartialGracefulStop_Escalates(t *testing.T) {
 	// running with no operator-visible signal, has nothing left to make it
 	// exit, and A's own exit (once release is closed) would just loop back
 	// into reading a fresh batch instead of terminating.
-	_ = ls.WaitPipeline(pl.ID)
-	waitForStatus(t, pl, pipeline.StatusDegraded)
+	// The escalation happened inside a requested stop, so the run ends
+	// stopped with the escalation error recorded, not Degraded (#2901).
+	waitCE, ok := conduiterr.Get(ls.WaitPipeline(pl.ID))
+	is.True(ok)
+	is.Equal(waitCE.Code, CodePartialGracefulStopEscalated)
+	waitForStatus(t, pl, pipeline.StatusUserStopped)
+	is.True(pl.Error != "")
 }
 
 // TestServiceLifecycle_NSource_FatalErrorOneSource_DegradesWholePipeline

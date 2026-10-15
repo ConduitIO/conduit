@@ -25,9 +25,9 @@ import (
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -56,7 +56,14 @@ type blueprint struct {
 
 type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser
 
-func newDispenserFactory(conn sdk.Connector) dispenserFactory {
+// newDispenserFactory returns a factory of dispensers for conn. service is the
+// runtime's connector schema service; a nil service leaves the plugin without
+// a schema scope (only used to read the specification).
+func newDispenserFactory(conn sdk.Connector, service *connutils.SchemaService) dispenserFactory {
+	var scoped pconnutils.SchemaService
+	if service != nil {
+		scoped = service // avoid a non-nil interface holding a nil pointer
+	}
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -65,7 +72,7 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	}
 
 	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser {
-		return NewDispenser(
+		d := NewDispenser(
 			name,
 			logger,
 			func() pconnector.SpecifierPlugin {
@@ -78,6 +85,8 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg, conn.NewSpecification().DestinationParams)
 			},
 		)
+		d.schemaService = scoped
+		return d
 	}
 }
 
@@ -93,8 +102,11 @@ type Registry struct {
 
 func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
-	// The built-in plugins use Conduit's own schema service
-	schema.Service = service
+	// Built-in connectors resolve schemas through the connector SDK's
+	// package-level service. It is installed once per process as a router
+	// that answers each call from the schema service of the runtime the
+	// calling connector belongs to (see schema_scope.go, issue #3088).
+	installScopedSchemaService()
 
 	r := &Registry{
 		logger:     logger,
@@ -120,7 +132,7 @@ func (r *Registry) Init(ctx context.Context) {
 func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.connectors))
 	for moduleName, conn := range r.connectors {
-		factory := newDispenserFactory(conn)
+		factory := newDispenserFactory(conn, r.service)
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {

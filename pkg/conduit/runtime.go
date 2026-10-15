@@ -343,6 +343,13 @@ type lifecycleService interface {
 	// provisioning.LifecycleService (see StopAndWait above) — it is used by the
 	// live in-place apply path. See lifecycle.Service.ReconfigureProcessor.
 	ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error
+	// IsActive keeps this interface a superset of
+	// orchestrator.LifecycleService: Delete and Update are admitted by run
+	// liveness, not by status (#2899 item 2).
+	IsActive(pipelineID string) bool
+	// TryLockForMutation is the other half of that interface: the orchestrator
+	// excludes Start while it writes config (#2961).
+	TryLockForMutation(pipelineID string) (unlock func(), ok bool)
 	Init(ctx context.Context) error
 }
 
@@ -352,6 +359,15 @@ type lifecycleService interface {
 // `conduit run` (via Entrypoint.Serve) always does.
 func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	if err := cfg.Validate(); err != nil {
+		return nil, cerrors.Errorf("invalid config: %w", err)
+	}
+
+	// Process-wide, and before any service exists: conduit-commons caches
+	// parsed schemas, and a schema parsed before this call would keep the
+	// previous limit. Governs every in-process Avro decode (avro.decode and
+	// the SDK schema middleware of built-in connectors and processors).
+	// Invariant 6: a payload over the limit fails decode; never truncated.
+	if err := schemaregistry.ApplyAvroMaxElements(cfg.Schema.Avro.MaxElements); err != nil {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
@@ -537,7 +553,11 @@ func createServices(r *Runtime) error {
 			r.Config.ConnectorPlugins,
 			connSchemaService,
 		),
-		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
+		conn_standalone.NewRegistry(
+			r.logger,
+			r.Config.Connectors.Path,
+			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
+		),
 		tokenService,
 	)
 
