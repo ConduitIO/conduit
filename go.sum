@@ -162,8 +162,8 @@ github.com/codahale/rfc6979 v0.0.0-20141003034818-6a90f24967eb/go.mod h1:ZjrT6AX
 github.com/cohere-ai/cohere-go/v2 v2.14.1 h1:fXNrV02rfrP9ieI+S6mHV6Nt2Z0uEDPkK3rnc5bJWCM=
 github.com/cohere-ai/cohere-go/v2 v2.14.1/go.mod h1:MuiJkCxlR18BDV2qQPbz2Yb/OCVphT1y6nD2zYaKeR0=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
-github.com/conduitio/conduit-commons v0.8.0 h1:NLjtS018Kys1oe1wfuu4DTUE4zILhcKgEsbbWPq0X3k=
-github.com/conduitio/conduit-commons v0.8.0/go.mod h1:aeZE6tPtrw0eUw3yIs34WdeebPdDrbFYhsPUkBR+t/g=
+github.com/conduitio/conduit-commons v0.8.1 h1:pZz44eJIMFuGyRxAmNIV4mtc3pLjDUJZE5+sL8Cl2tA=
+github.com/conduitio/conduit-commons v0.8.1/go.mod h1:aeZE6tPtrw0eUw3yIs34WdeebPdDrbFYhsPUkBR+t/g=
 github.com/conduitio/conduit-connector-file v0.10.9 h1:YX7/lx8Dm1JojgA3nDXMINmUXZj0sq0SSXpTe1eT904=
 github.com/conduitio/conduit-connector-file v0.10.9/go.mod h1:nYhAcrSHhYMnXPezqWOXYcV0THACWG7YT8Jye2WXBZA=
 github.com/conduitio/conduit-connector-generator v0.10.7 h1:xGJxZijaUD4u37c13CgqbXdKAxE8b3vvkZxN15Ruo3A=
@@ -182,8 +182,8 @@ github.com/conduitio/conduit-connector-sdk v0.15.0 h1:5s30CEuKQL3a9lTVH0Nmy/vKev
 github.com/conduitio/conduit-connector-sdk v0.15.0/go.mod h1:OQpCZ5wveCpFdsvWzkH8mfVrm/y22nE2zaPjgtf9MeU=
 github.com/conduitio/conduit-processor-sdk v0.7.0 h1:j1vAxqQ1kI+zzGAAt30//xqPzps8iO+rnOpgnDHEKPg=
 github.com/conduitio/conduit-processor-sdk v0.7.0/go.mod h1:YpPIUxBF6C39XA3iYjklzvPv5Zh0HOxrM2jwbC7Su4k=
-github.com/conduitio/conduit-schema-registry v0.2.6 h1:39a7AUp3ZM6Hq1vKKpVTmwSTvKbwKC2kxsnkP6H9qrQ=
-github.com/conduitio/conduit-schema-registry v0.2.6/go.mod h1:1A1FUC3SZeU8tBEtSY35Xzfrw7k3Z6FHA0XWyROkbyE=
+github.com/conduitio/conduit-schema-registry v0.2.7 h1:NIMtqiNUrR3TDEtArnNLk1aIw2W4pGwdR409QlC3Xa4=
+github.com/conduitio/conduit-schema-registry v0.2.7/go.mod h1:1A1FUC3SZeU8tBEtSY35Xzfrw7k3Z6FHA0XWyROkbyE=
 github.com/conduitio/ecdysis v0.6.0 h1:sSvB6wMXoBOya96dpAEJxOV7VvvVFEokQavKsG61tcM=
 github.com/conduitio/ecdysis v0.6.0/go.mod h1:NnWv7W3fa5TXqlP2tuiOcbHMUyGRH6FcW1pjooRvSfE=
 github.com/conduitio/evolviconf v0.1.1 h1:IKacjKLc8r0h0Epi0Eo1O4/aoZLb4Z7JFb3xKd6gCTw=
