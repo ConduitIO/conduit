@@ -75,6 +75,9 @@ func TestEngine_Connector(t *testing.T) {
 		{"second value of a branch", "example.mode", "legacy-slow", got{kcmigrate.StatusApproximated, "kc.key_approximated", false}},
 		{"unlisted value", "example.mode", "turbo", got{kcmigrate.StatusUnsupported, "kc.key_unsupported", true}},
 		{"empty value", "example.mode", "", got{kcmigrate.StatusUnsupported, "kc.key_unsupported", true}},
+		// Kafka Connect's ConfigDef.parseType trims string values, so a
+		// trailing space does not change which value a key has.
+		{"value with surrounding space", "example.mode", " fast \t", got{kcmigrate.StatusTranslated, "", false}},
 		{"reference as value", "example.mode", "${file:/etc/x.properties:mode}", got{kcmigrate.StatusUnsupported, "kc.key_unsupported", true}},
 		{"reference where value does not matter", "example.password", "${env:PW}", got{kcmigrate.StatusTranslated, "", false}},
 		{"alias of translated", "example.old.host", "h", got{kcmigrate.StatusApproximated, "kc.key_deprecated", false}},

@@ -179,7 +179,9 @@ func (r *Rule) outcomeFor(v kcmigrate.Value) Outcome {
 	if len(r.Values) == 0 {
 		return r.Outcome
 	}
-	raw := v.Reveal() // compared only, never copied into the outcome
+	// Compared only, never copied into the outcome. Trimmed as Kafka
+	// Connect's ConfigDef.parseType trims every string-typed value.
+	raw := strings.TrimSpace(v.Reveal())
 	if referencePattern.MatchString(raw) {
 		return Outcome{
 			Status: kcmigrate.StatusUnsupported, Blocking: true, Code: kcmigrate.CodeKeyUnsupported.Reason(),
