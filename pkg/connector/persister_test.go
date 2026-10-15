@@ -184,21 +184,29 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 // the last stop has actually completed. It used to simulate "connectors are
 // still open" by having a background goroutine time.Sleep(100ms) before
 // calling ConnectorStopped, then asserting Wait() unblocked within a
-// delay..delay+10ms wall-clock window. Under load the goroutine could be
-// descheduled past the 10ms tolerance (or, on a fast/idle machine, Wait()
-// could unblock suspiciously close to the sleep boundary), so the test
-// flaked independently of the fakeClock work in #2544 - it never went
+// delay..delay+10ms wall-clock window, which flaked under load. It never went
 // through clock.AfterFunc (ConnectorStopped triggers an immediate flush, not
 // the delay-threshold timer), so there is no timer to fake here.
 //
-// Instead of tightening an already-flaky tolerance, this drops wall-clock
-// timing entirely: it synchronizes the goroutine and the Wait() call with
-// channels, and proves the "and flush" half of the contract by asserting the
-// persisted state is already visible in the store by the time Wait()
-// returns - which is only possible if Wait() actually blocked on flushWg
-// until the automatic flush triggered by the final ConnectorStopped call
-// finished. A 5s timeout guards against a genuine deadlock; it is not part
-// of the assertion.
+// What Wait guarantees, and what it does not:
+//
+//   - Guaranteed: the flush triggered by the last ConnectorStopped has written
+//     to the store. ConnectorStopped publishes that flush generation
+//     (triggerFlush sets p.flush) while holding m, BEFORE it calls
+//     connWg.Done. Wait's connWg.Wait therefore cannot return until that
+//     generation is published, and WaitPendingWrites then blocks on its
+//     writeDone. So store.Get right after Wait returns must see the record.
+//   - NOT guaranteed: that the goroutine calling ConnectorStopped has itself
+//     returned. connWg.Done runs inside the third ConnectorStopped, before it
+//     unlocks m and returns, and before that goroutine's deferred
+//     close(stoppedAll). Wait can return in that window. An earlier version
+//     of this test asserted stoppedAll was already closed with a
+//     non-blocking select and called that deterministic; it flaked in CI
+//     (run 38772862899). The goroutine must still finish promptly, so the
+//     test waits for it with a deadline instead.
+//
+// The 5s timeouts guard against a genuine deadlock; they are not part of the
+// assertion.
 func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -210,14 +218,14 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 	persister.ConnectorStarted()
 
 	stoppedAll := make(chan struct{})
+	var persistErr error
 	go func() {
 		defer close(stoppedAll)
 		persister.ConnectorStopped()
 		persister.ConnectorStopped()
 		// before the last stop we persist another change which should be
 		// flushed automatically when the last connector is stopped
-		err := persister.Persist(ctx, conn, func(err error) {})
-		is.NoErr(err)
+		persistErr = persister.Persist(ctx, conn, func(err error) {})
 		persister.ConnectorStopped()
 	}()
 
@@ -233,21 +241,22 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 		t.Fatal("expected Wait to return once all connectors stopped and the final flush completed")
 	}
 
-	// connWg.Wait() (inside Wait) cannot unblock until all three
-	// ConnectorStopped calls have run, so the goroutine above must already
-	// be done - deterministically, not by timing.
-	select {
-	case <-stoppedAll:
-	default:
-		t.Fatal("Wait returned before the connector-stop goroutine finished")
-	}
-
-	// Wait also blocks on flushWg, so the flush triggered by the last
-	// ConnectorStopped must have completed by the time Wait returns - no
-	// polling or sleeping needed to observe the persisted state.
+	// The flush triggered by the last ConnectorStopped was published before
+	// connWg.Done and Wait blocked on its write, so the persisted state is
+	// visible now, with no polling. Checked before joining the goroutine so a
+	// regression in that ordering fails here rather than being masked.
 	got, err := store.Get(ctx, conn.ID)
 	is.NoErr(err)
 	is.Equal(conn, got)
+
+	// The stop goroutine may still be between connWg.Done and its deferred
+	// close (see the doc comment), but it has nothing left to block on.
+	select {
+	case <-stoppedAll:
+	case <-time.After(5 * time.Second):
+		t.Fatal("connector-stop goroutine did not finish after Wait returned")
+	}
+	is.NoErr(persistErr)
 }
 
 func initPersisterTest(
