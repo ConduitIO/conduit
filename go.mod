@@ -37,6 +37,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/in-toto/attestation v1.2.0
+	github.com/iskorotkov/avro/v2 v2.34.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.20.0
@@ -149,7 +150,6 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/in-toto/in-toto-golang v0.11.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/iskorotkov/avro/v2 v2.34.0 // indirect
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 // indirect
