@@ -59,13 +59,14 @@ func TestMirror_Defaults(t *testing.T) {
 	p := file(res, "pipelines/mm.yaml")
 	is.True(strings.Contains(p, "servers: src:9092"))
 	is.True(strings.Contains(p, "servers: tgt:9092"))
-	is.True(strings.Contains(p, `topic: source.{{ index .Metadata "opencdc.collection" }}`))
+	is.True(!strings.Contains(p, "topic: "))                                                // source.cluster.alias is required and absent
 	is.True(!strings.Contains(p, "mirror: ") && !strings.Contains(p, "emitMirrorMetadata")) // v0.21 never writes the mirror settings (#3038)
 	var codes []string
 	for _, n := range mmConnector(res).Notes {
 		codes = append(codes, n.Code)
 	}
 	is.True(strings.Contains(strings.Join(codes, " "), "kc.output_shape_differs"))
+	is.True(strings.Contains(strings.Join(codes, " "), "kc.key_required"))
 	is.True(!res.OK)
 	is.Equal(mmConnector(res).PipelineStatus, kcmigrate.PipelineStopped)
 }
@@ -111,7 +112,7 @@ func TestMirror_TopicsAndPolicy(t *testing.T) {
 
 func TestMirror_DisabledSyncsAreClean(t *testing.T) {
 	is := is.New(t)
-	res := mmRun(t, "", "sync.topic.configs.enabled=false\nsync.topic.acls.enabled=false\n")
+	res := mmRun(t, "", "source.cluster.alias=src\nsync.topic.configs.enabled=false\nsync.topic.acls.enabled=false\n")
 	for _, n := range mmConnector(res).Notes {
 		is.True(!strings.Contains(n.Reason, "sync.topic"))
 	}
@@ -264,4 +265,30 @@ func TestMirror_PartialFallbackIsReported(t *testing.T) {
 	e := entryFor(mmConnector(res), "target.cluster.bootstrap.servers")
 	is.True(strings.Contains(e.Reason, "not used as a whole"))
 	is.True(strings.Contains(e.Reason, "target.cluster.sasl.jaas.config"))
+}
+
+// source.cluster.alias has no default in Apache Kafka 4.2
+// (MirrorConnectorConfig.java:270-273): a config without it is one Kafka
+// Connect rejects. The run blocks on it and writes no topic prefix it would
+// have to guess.
+func TestMirror_AliasRequired(t *testing.T) {
+	is := is.New(t)
+	res := mmRun(t, "", "")
+	var note *kcmigrate.Note
+	for i, n := range mmConnector(res).Notes {
+		if n.Code == "kc.key_required" {
+			note = &mmConnector(res).Notes[i]
+		}
+	}
+	is.True(note != nil)
+	is.True(note.Blocking)
+	is.True(strings.Contains(note.Reason, "source.cluster.alias"))
+	_, ok := settings(t, res, "pipelines/mm.yaml", "destination")["topic"]
+	is.True(!ok) // no guessed "source." prefix
+
+	res = mmRun(t, "", "source.cluster.alias=us\n")
+	for _, n := range mmConnector(res).Notes {
+		is.True(n.Code != "kc.key_required")
+	}
+	is.Equal(settings(t, res, "pipelines/mm.yaml", "destination")["topic"], `us.{{ index .Metadata "opencdc.collection" }}`)
 }
