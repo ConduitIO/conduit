@@ -130,10 +130,22 @@
 // Engine. Standalone plugins talk to their own Engine over gRPC or WASM host
 // functions and are not affected.
 //
-// The processor SDK's logger (pprocutils.Logger) is still process-wide: with
-// two Engines in one process, built-in processors that log through
-// sdk.Logger(ctx) write to the logger of the most recently created Engine.
-// This affects log routing only, not record data.
+// This also applies to host code. An application that calls the SDK schema
+// packages directly (conduit-processor-sdk/schema or
+// conduit-connector-sdk/schema), outside any call Conduit makes into a
+// plugin, gets plugin.builtin_schema_unscoped: there is no Engine to answer
+// it. Use Engine-level APIs, or the schema registry, instead. Built-ins an
+// embedder supplies itself (Config.ProcessorPlugins, Config.ConnectorPlugins)
+// are scoped like Conduit's own, and must pass the context they are given down
+// to their schema calls.
+//
+// Only the schema services are race-free across concurrently created
+// Engines. Two loggers are still process-wide and are written by every
+// NewRuntime: pprocutils.Logger (built-in processors that log through
+// sdk.Logger(ctx) write to the most recently created Engine's logger) and,
+// when no embed logger is given, zerolog.DefaultContextLogger. Creating
+// Engines concurrently races on both. This affects log routing only, not
+// record data; tracked in https://github.com/ConduitIO/conduit/issues/3111.
 //
 // # Package boundary / deprecation policy
 //

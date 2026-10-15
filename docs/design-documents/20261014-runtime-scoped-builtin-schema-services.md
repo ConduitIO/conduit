@@ -48,7 +48,8 @@ format change.
    destination adapters, whose `pluginContext` adds it to every call, including `Run`. The connector
    schema service still checks the token.
 
-`pprocutils.Logger` stays process-wide (log routing only, not data); documented in `doc.go`.
+`pprocutils.Logger` stays process-wide (log routing only, not data); documented in `doc.go` and tracked
+in [#3111](https://github.com/ConduitIO/conduit/issues/3111).
 
 ## Alternatives considered
 
@@ -75,10 +76,25 @@ format change.
   pipeline). No in-tree built-in processor does this: the only schema callers are the SDK middleware
   and the avro processors, which use their own injected registry. Connectors: such a call already
   failed with `invalid token` before this change, so there is no new failure.
+- **Host or embedder code calls the SDK schema packages outside any plugin call** (for example an
+  application seeding or reading schemas through `conduit-processor-sdk/schema.Create` or
+  `conduit-connector-sdk/schema.Get` on its own context). Before, this was answered by the most
+  recently created runtime's registry; now it is refused with `plugin.builtin_schema_unscoped`. With
+  more than one runtime there is no correct answer to give, and with one runtime the registry is
+  reachable directly. In-tree, only tests did this (`schema_fidelity_test.go` now scopes its context).
+  Called out in the v0.21 release notes.
+- **Embedder-supplied built-ins** (`Config.ProcessorPlugins`, `Config.ConnectorPlugins`). They are
+  dispensed through the same registries and wrappers, so they are scoped like Conduit's own. One that
+  resolves schemas on a context it did not receive from Conduit is refused, as above, where before it
+  silently used the last runtime's registry. The SDK middleware always uses the call context, so a
+  plugin built on the SDK middleware is unaffected.
 - **A wrapper between Conduit and the plugin drops context values.** Not possible with
   `context.WithValue` descendants; `ccontext.Detach` preserves values.
-- **Two runtimes created concurrently.** `sync.Once` makes the install race-free; the router has no
-  per-runtime state.
+- **Two runtimes created concurrently.** `sync.Once` makes the schema service install race-free, and the
+  router has no per-runtime state. This holds for the schema services only: `NewRuntime` still writes
+  `zerolog.DefaultContextLogger` (`pkg/conduit/runtime.go`, CLI logger path) and `NewRegistry` still
+  writes `pprocutils.Logger` on every call, so concurrent creation races on those two loggers. That is
+  pre-existing and log-only; tracked in [#3111](https://github.com/ConduitIO/conduit/issues/3111).
 - **Runtime closed while another lives.** Nothing to clean up: the service lives only in contexts of
   that runtime's plugins.
 - **Crash, partition, duplicates, ordering:** unchanged; this changes which registry answers, not
@@ -101,8 +117,10 @@ suggestion, and shows up wherever record errors surface (DLQ metadata, pipeline 
 `pkg/conduit/runtime_schema_scope_test.go` builds two runtimes with distinct registries holding a
 different schema under the same subject and version, and probe built-in plugins that call the SDK
 schema packages as the SDK middleware does. Each runtime's processor and connector must see only its
-own schema, the schema a connector creates must land only in its own registry, and an unscoped call
-must be refused with the code. It fails on main (wrong schema for runtime A's processor, `invalid
+own schema, the schema a connector creates must land only in its own registry, a destination behind
+the SDK's real batching and schema decode middleware (`sdk.batch.delay` set, so the flush and decode
+run on the SDK's timer goroutine) must decode with its own runtime's schema, and an unscoped call must
+be refused with the code. It fails on main (wrong schema for runtime A's processor, `invalid
 token` for A's connector).
 
 ## Related

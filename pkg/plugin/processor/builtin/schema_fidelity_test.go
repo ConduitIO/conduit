@@ -69,6 +69,9 @@ func TestBuiltinProcessor_SchemaFidelity(t *testing.T) {
 			sr, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
 			is.NoErr(err)
 			reg := NewRegistry(log.Nop(), DefaultBuiltinProcessors, sr)
+			// The test seeds and reads schemas outside a processor call, so it
+			// scopes its own calls to this registry's runtime (see schema_scope.go).
+			ctx = contextWithSchemaService(ctx, reg.schemaService)
 			p, err := reg.NewProcessor(ctx, plugin.FullName("builtin:field.set"), "fidelity", egress.Policy{})
 			is.NoErr(err)
 			is.NoErr(p.Configure(ctx, config.Config{"field": tc.field, "value": tc.value}))
@@ -130,6 +133,8 @@ func TestBuiltinProcessor_PinnedOlderSchemaFailsOnDroppedField(t *testing.T) {
 	sr, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
 	is.NoErr(err)
 	reg := NewRegistry(log.Nop(), DefaultBuiltinProcessors, sr)
+	// See TestBuiltinProcessor_SchemaFidelity: scope the test's own schema calls.
+	ctx = contextWithSchemaService(ctx, reg.schemaService)
 	p, err := reg.NewProcessor(ctx, plugin.FullName("builtin:field.set"), "pin-older", egress.Policy{})
 	is.NoErr(err)
 	is.NoErr(p.Configure(ctx, config.Config{

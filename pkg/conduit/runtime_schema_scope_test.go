@@ -18,9 +18,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
+	cschema "github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	connsdk "github.com/conduitio/conduit-connector-sdk"
 	connschema "github.com/conduitio/conduit-connector-sdk/schema"
@@ -59,12 +61,13 @@ func TestRuntime_BuiltinSchemaServicesScopedPerRuntime(t *testing.T) {
 	type runtimeUnderTest struct {
 		r       *Runtime
 		probe   *schemaProbeResults
+		schema  string // this runtime's "shared" v1 schema
 		field   string // field name only this runtime's "shared" v1 schema has
 		created string // subject the probe connector registers
 	}
 	newRuntime := func(name, schema, field string) runtimeUnderTest {
 		t.Helper()
-		probe := &schemaProbeResults{}
+		probe := &schemaProbeResults{written: make(chan opencdc.Record, 1)}
 
 		cfg := DefaultConfig()
 		cfg.DB.Type = DBTypeInMemory
@@ -89,7 +92,7 @@ func TestRuntime_BuiltinSchemaServicesScopedPerRuntime(t *testing.T) {
 			t.Fatalf("runtime %s: create schema: %v", name, err)
 		}
 		r.connectorPluginService.Init(ctx, "", r.Config.Connectors.MaxReceiveRecordSize)
-		return runtimeUnderTest{r: r, probe: probe, field: field, created: name + "-created"}
+		return runtimeUnderTest{r: r, probe: probe, schema: schema, field: field, created: name + "-created"}
 	}
 
 	// Order matters: A is created first, so on main its plugins were the ones
@@ -141,6 +144,62 @@ func TestRuntime_BuiltinSchemaServicesScopedPerRuntime(t *testing.T) {
 			_, err = other.r.SchemaRegistry.SchemaBySubjectVersion(ctx, rt.created, 1)
 			is.True(err != nil)
 		})
+
+		// A destination through the SDK's real schema decode middleware, with
+		// sdk.batch.delay set so the batch is flushed (and decoded) on the
+		// SDK's timer goroutine rather than in the Run call itself.
+		t.Run(name+"/destination batched decode", func(t *testing.T) {
+			is := is.New(t)
+			field := strings.Trim(rt.field, `"`)
+			value := map[string]any{"fromA": "hello", "fromB": true}[field]
+
+			sch := cschema.Schema{Subject: subject, Version: 1, Type: cschema.TypeAvro, Bytes: []byte(rt.schema)}
+			raw, err := sch.Marshal(opencdc.StructuredData{field: value})
+			is.NoErr(err)
+			rec := opencdc.Record{
+				Position: opencdc.Position("p1"),
+				Metadata: opencdc.Metadata{},
+				Payload:  opencdc.Change{After: opencdc.RawData(raw)},
+			}
+			cschema.AttachPayloadSchemaToRecord(rec, sch)
+
+			d, err := rt.r.connectorPluginService.NewDispenser(log.Nop(), "builtin:schemaprobe", "dest-"+name)
+			is.NoErr(err)
+			dst, err := d.DispenseDestination()
+			is.NoErr(err)
+			_, err = dst.Configure(ctx, pconnector.DestinationConfigureRequest{Config: config.Config{
+				"sdk.batch.size":  "100",
+				"sdk.batch.delay": "10ms",
+			}})
+			is.NoErr(err)
+			_, err = dst.Open(ctx, pconnector.DestinationOpenRequest{})
+			is.NoErr(err)
+
+			runCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			stream := dst.NewStream()
+			is.NoErr(dst.Run(runCtx, stream))
+			is.NoErr(stream.Client().Send(pconnector.DestinationRunRequest{Records: []opencdc.Record{rec}}))
+
+			resp, err := stream.Client().Recv()
+			is.NoErr(err)
+			is.Equal(len(resp.Acks), 1)
+			is.Equal(resp.Acks[0].Error, "") // on main: invalid token for runtime A
+
+			var got opencdc.Record
+			select {
+			case got = <-rt.probe.written:
+			case <-time.After(5 * time.Second):
+				t.Fatal("destination did not write the record")
+			}
+			// Decoded with this runtime's schema.
+			sd, ok := got.Payload.After.(opencdc.StructuredData)
+			is.True(ok)
+			is.Equal(sd[field], value)
+
+			_, _ = dst.Stop(ctx, pconnector.DestinationStopRequest{LastPosition: rec.Position})
+			_, _ = dst.Teardown(ctx, pconnector.DestinationTeardownRequest{})
+		})
 	}
 
 	// A call that does not come through a runtime's built-in plugin (no scope
@@ -168,6 +227,8 @@ type schemaProbeResults struct {
 
 	connectorGot string
 	connectorErr error
+
+	written chan opencdc.Record // records the probe destination wrote
 }
 
 // schemaProbeProcessor resolves a schema through the processor SDK's schema
@@ -203,12 +264,49 @@ func (p *schemaProbeProcessor) Process(ctx context.Context, records []opencdc.Re
 func schemaProbeConnector(createSubject string, results *schemaProbeResults) connsdk.Connector {
 	return connsdk.Connector{
 		NewSpecification: func() connsdk.Specification {
-			return connsdk.Specification{Name: "schemaprobe", Version: "v0.0.1"}
+			return connsdk.Specification{Name: "schemaprobe", Version: "v0.0.1", DestinationParams: schemaProbeDestinationParams}
 		},
 		NewSource: func() connsdk.Source {
 			return &schemaProbeSource{createSubject: createSubject, results: results}
 		},
+		NewDestination: func() connsdk.Destination {
+			return connsdk.DestinationWithMiddleware(&schemaProbeDestination{results: results})
+		},
 	}
+}
+
+// schemaProbeDestination runs behind the SDK's batching and schema decode
+// middleware and hands every written record to the test.
+type schemaProbeDestination struct {
+	connsdk.UnimplementedDestination
+	cfg     schemaProbeDestinationConfig
+	results *schemaProbeResults
+}
+
+type schemaProbeDestinationConfig struct {
+	connsdk.UnimplementedDestinationConfig
+	connsdk.DestinationWithBatch
+	connsdk.DestinationWithSchemaExtraction
+}
+
+// schemaProbeDestinationParams are the parameters of the middleware above,
+// with the SDK's defaults except key decoding, which the probe records lack.
+var schemaProbeDestinationParams = config.Parameters{
+	"sdk.batch.size":                     {Type: config.ParameterTypeInt, Default: "0"},
+	"sdk.batch.delay":                    {Type: config.ParameterTypeDuration, Default: "0"},
+	"sdk.schema.extract.payload.enabled": {Type: config.ParameterTypeBool, Default: "true"},
+	"sdk.schema.extract.key.enabled":     {Type: config.ParameterTypeBool, Default: "false"},
+}
+
+func (d *schemaProbeDestination) Config() connsdk.DestinationConfig { return &d.cfg }
+func (d *schemaProbeDestination) Open(context.Context) error        { return nil }
+func (d *schemaProbeDestination) Teardown(context.Context) error    { return nil }
+
+func (d *schemaProbeDestination) Write(_ context.Context, recs []opencdc.Record) (int, error) {
+	for _, r := range recs {
+		d.results.written <- r
+	}
+	return len(recs), nil
 }
 
 type schemaProbeSource struct {
