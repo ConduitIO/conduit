@@ -84,6 +84,13 @@ func TestParseProperties_JavaSemantics(t *testing.T) {
 		{"latin-1 bytes", "a=\xe9", []kvWant{{"a", "é", 1, 1}}},
 		{"utf-8 read as latin-1, as Java does", "a=é", []kvWant{{"a", "Ã©", 1, 1}}},
 		{"empty", "", []kvWant{}},
+		// Java 9+ LineReader: a comment is recognized while the logical line is
+		// still empty, including after a continuation that left it empty, and
+		// an emptied logical line produces no key.
+		{"comment after emptied continuation", "\\\n#hidden=1\nb=2", []kvWant{{"b", "2", 3, 1}}},
+		{"bang comment after emptied continuation", "  \\\n  !hidden\nb=2", []kvWant{{"b", "2", 3, 1}}},
+		{"emptied continuation into blank line", "\\\n\nb=2", []kvWant{{"b", "2", 3, 1}}},
+		{"lone continuation at EOF", "\\", []kvWant{{"", "", 1, 1}}}, // Java returns the emptied line at EOF
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

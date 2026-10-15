@@ -33,7 +33,8 @@ import (
 //     backslashes continues on the next line, whose leading whitespace is
 //     dropped.
 //   - A logical line whose first non-whitespace character is '#' or '!' is a
-//     comment. Blank lines are skipped.
+//     comment, also after a continuation that left the line empty (Java 9+).
+//     Blank lines are skipped.
 //   - The key ends at the first unescaped '=', ':' or whitespace; one
 //     separator and the whitespace around it are skipped.
 //   - Escapes: \t \n \r \f \uXXXX; any other escaped character is itself.
@@ -53,14 +54,26 @@ func ParseProperties(in Input) ([]KV, error) {
 		}
 		origin := Origin{File: in.Name, Line: ln.num, Column: off + 1}
 		logical := append([]byte(nil), ln.text[off:]...)
+		skip := false
 		for endsInOddBackslashes(logical) {
 			logical = logical[:len(logical)-1]
 			if i == len(lines) {
-				break
+				break // at EOF Java keeps the line, even when it is now empty
 			}
 			next := lines[i]
 			i++
-			logical = append(logical, next.text[skipPropsWS(next.text, 0):]...)
+			rest := next.text[skipPropsWS(next.text, 0):]
+			// Java 9+ LineReader: while the logical line is still empty, a
+			// blank line ends it with nothing to load, and '#' or '!' starts
+			// a comment that runs to the end of that natural line.
+			if len(logical) == 0 && (len(rest) == 0 || rest[0] == '#' || rest[0] == '!') {
+				skip = true
+				break
+			}
+			logical = append(logical, rest...)
+		}
+		if skip {
+			continue
 		}
 		kv, err := parsePropsLine(logical, origin)
 		if err != nil {
