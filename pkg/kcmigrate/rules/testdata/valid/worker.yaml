@@ -1,0 +1,9 @@
+rulesVersion: 1
+scope: worker
+upstream: {name: kafka, version: "4.2"}
+keys:
+  - key: group.id
+    status: translated
+    emit: {kind: none}
+    reason: Conduit has no worker cluster.
+    diff: identity

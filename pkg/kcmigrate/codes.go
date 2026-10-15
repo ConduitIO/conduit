@@ -35,3 +35,28 @@ var (
 	// total, [MaxInputs] in number, or [MaxJSONDepth] in JSON nesting.
 	CodeInputTooLarge = conduiterr.Register("migrate.input_too_large", codes.InvalidArgument)
 )
+
+// Finding codes: the code of a report entry. They are domain results, not
+// command errors, so they never appear in the envelope's error field; the
+// command reduces a run with blocking findings to exit code 2, which is why
+// they are registered as InvalidArgument. They are public contracts from
+// first release. Each one's fix text comes from the rule or the engine that
+// emits it.
+var (
+	// CodeKeyUnknown: no rule claims the key. Always blocking: an unknown key
+	// may change behavior, and the safe direction is to stop.
+	CodeKeyUnknown = conduiterr.Register("kc.key_unknown", codes.InvalidArgument)
+	// CodeKeyUnsupported: a known key with no Conduit equivalent for its value.
+	CodeKeyUnsupported = conduiterr.Register("kc.key_unsupported", codes.InvalidArgument)
+	// CodeKeyApproximated: translated with a documented difference.
+	CodeKeyApproximated = conduiterr.Register("kc.key_approximated", codes.InvalidArgument)
+	// CodeKeyDeprecated: a legacy key name, handled as its current name.
+	CodeKeyDeprecated = conduiterr.Register("kc.key_deprecated", codes.InvalidArgument)
+	// CodeKeyDuplicate: an earlier occurrence of a key that appears again
+	// later in the same connector config; the last value wins.
+	CodeKeyDuplicate = conduiterr.Register("kc.key_duplicate", codes.InvalidArgument)
+	// CodeConnectorClassUnsupported: the connector class has no mapping; every
+	// key of the connector is listed with this code and no pipeline is
+	// written.
+	CodeConnectorClassUnsupported = conduiterr.Register("kc.connector_class_unsupported", codes.InvalidArgument)
+)

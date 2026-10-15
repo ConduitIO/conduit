@@ -1,0 +1,326 @@
+// Copyright © 2026 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package rules
+
+import (
+	"bytes"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/kcmigrate"
+	"github.com/conduitio/yaml/v3"
+)
+
+// Scopes of a rule file.
+const (
+	ScopeSource = "source" // one connector class whose connectors are sources
+	ScopeSink   = "sink"   // one connector class whose connectors are sinks
+	ScopeShared = "shared" // keys common to every connector class
+	ScopeWorker = "worker" // worker properties
+)
+
+// Diff classes, consumed by `kc diff`.
+const (
+	DiffIdentity = "identity"
+	DiffBehavior = "behavior"
+	DiffTuning   = "tuning"
+	DiffSecret   = "secret"
+)
+
+// File is one rule file. Unknown fields are rejected, so a typo in rule data
+// fails the build instead of being ignored.
+type File struct {
+	RulesVersion int      `yaml:"rulesVersion"`
+	Scope        string   `yaml:"scope"`
+	Class        string   `yaml:"class"`
+	Upstream     Upstream `yaml:"upstream"`
+	// Emits lists every Conduit plugin this class can produce; the harness
+	// requires a certification entry for each.
+	Emits []Emit `yaml:"emits"`
+	Keys  []Rule `yaml:"keys"`
+
+	name     string // file name, for errors
+	exact    map[string]*Rule
+	prefixes []*Rule // longest first
+	regexes  []*Rule
+}
+
+// Upstream is the project and version the rules were written against.
+type Upstream struct {
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+}
+
+// Emit is a Conduit plugin a class maps to.
+type Emit struct {
+	Plugin string `yaml:"plugin"`
+	Role   string `yaml:"role"`
+}
+
+// Rule classifies the keys its Key matches.
+type Rule struct {
+	Key     KeyMatch `yaml:"key"`
+	Outcome `yaml:",inline"`
+	// Values gives per-value outcomes. The last branch must be the
+	// "otherwise" branch, unsupported and blocking, so a value the rule does
+	// not list (a new upstream enum member, a typo) is never accepted.
+	Values []ValueBranch `yaml:"values"`
+	// IgnoreCase makes Values match case-insensitively, for upstream enums
+	// that are parsed that way.
+	IgnoreCase bool `yaml:"ignoreCase"`
+	// Emit names what a translated key becomes; kinds are code. The kind
+	// "none" records a deliberate no-op.
+	Emit *Action `yaml:"emit"`
+	// Diff is the `kc diff` class of a change to this key.
+	Diff string `yaml:"diff"`
+	// Lint lists the `kc lint` rules that read this key.
+	Lint []string `yaml:"lint"`
+	// Secret marks the value as a secret whatever its name.
+	Secret bool `yaml:"secret"`
+	// AliasOf names the current name of a legacy key. The key is handled as
+	// that key and additionally reports kc.key_deprecated.
+	AliasOf string `yaml:"aliasOf"`
+
+	re *regexp.Regexp
+}
+
+// Outcome is what a rule says about a key. It becomes a report entry.
+type Outcome struct {
+	Status   kcmigrate.Status `yaml:"status"`
+	Blocking bool             `yaml:"blocking"`
+	Code     string           `yaml:"code"`
+	Reason   string           `yaml:"reason"`
+	Fix      string           `yaml:"fix"`
+}
+
+// ValueBranch is the outcome for a set of values.
+type ValueBranch struct {
+	Match     []string `yaml:"match"`
+	Otherwise bool     `yaml:"otherwise"`
+	Outcome   `yaml:",inline"`
+	Emit      *Action `yaml:"emit"`
+}
+
+// Action is an emit kind and its arguments.
+type Action struct {
+	Kind string            `yaml:"kind"`
+	Args map[string]string `yaml:",inline"`
+}
+
+// KeyMatch is a key pattern: an exact key (a YAML string), or a mapping with
+// one of prefix or regex. Regexes are RE2, so matching is linear in the key.
+type KeyMatch struct {
+	Exact  string
+	Prefix string
+	Regex  string
+}
+
+// UnmarshalYAML reads a string as an exact key and a mapping as prefix or
+// regex.
+func (k *KeyMatch) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		k.Exact = n.Value
+		return nil
+	}
+	var m struct {
+		Prefix string `yaml:"prefix"`
+		Regex  string `yaml:"regex"`
+	}
+	if err := n.Decode(&m); err != nil {
+		return cerrors.Errorf("key: %w", err)
+	}
+	if (m.Prefix == "") == (m.Regex == "") {
+		return cerrors.Errorf("line %d: key must be a string or have exactly one of prefix, regex", n.Line)
+	}
+	k.Prefix, k.Regex = m.Prefix, m.Regex
+	return nil
+}
+
+func (k KeyMatch) String() string {
+	switch {
+	case k.Prefix != "":
+		return "prefix " + k.Prefix
+	case k.Regex != "":
+		return "regex " + k.Regex
+	default:
+		return k.Exact
+	}
+}
+
+// parseFile decodes and validates one rule file.
+func parseFile(name string, b []byte) (*File, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	var f File
+	if err := dec.Decode(&f); err != nil {
+		return nil, cerrors.Errorf("%s: %w", name, err)
+	}
+	f.name = name
+	if err := f.validate(); err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (f *File) validate() error {
+	var errs []error
+	fail := func(format string, args ...any) {
+		errs = append(errs, cerrors.Errorf("%s: "+format, append([]any{f.name}, args...)...))
+	}
+	if f.RulesVersion != 1 {
+		fail("rulesVersion must be 1")
+	}
+	switch f.Scope {
+	case ScopeSource, ScopeSink:
+		if f.Class == "" {
+			fail("scope %s needs a class", f.Scope)
+		}
+	case ScopeShared, ScopeWorker:
+		if f.Class != "" || len(f.Emits) > 0 {
+			fail("scope %s has no class and no emits", f.Scope)
+		}
+	default:
+		fail("unknown scope %q", f.Scope)
+	}
+	if f.Upstream.Name == "" || f.Upstream.Version == "" {
+		fail("upstream needs name and version")
+	}
+	seen := map[string]bool{}
+	for i := range f.Keys {
+		r := &f.Keys[i]
+		id := r.Key.String()
+		if seen[id] {
+			fail("key %s has two rules", id)
+		}
+		seen[id] = true
+		for _, err := range r.validate() {
+			fail("key %s: %v", id, err)
+		}
+	}
+	for _, r := range f.Keys {
+		if r.AliasOf != "" && !seen[r.AliasOf] {
+			fail("key %s: aliasOf %q has no exact rule in this file", r.Key, r.AliasOf)
+		}
+	}
+	return cerrors.Join(errs...)
+}
+
+func (r *Rule) validate() []error {
+	var errs []error
+	if r.Key.Regex != "" {
+		re, err := regexp.Compile(r.Key.Regex)
+		if err != nil {
+			errs = append(errs, cerrors.Errorf("regex: %w", err))
+		}
+		r.re = re
+	}
+	switch r.Diff {
+	case DiffIdentity, DiffBehavior, DiffTuning, DiffSecret:
+	default:
+		errs = append(errs, cerrors.Errorf("diff must be identity, behavior, tuning or secret, not %q", r.Diff))
+	}
+	if r.AliasOf != "" {
+		if r.Status != "" || len(r.Values) > 0 || r.Emit != nil {
+			errs = append(errs, cerrors.New("an aliasOf rule takes its outcome from the aliased key"))
+		}
+		return errs
+	}
+	if len(r.Values) == 0 {
+		return append(errs, r.Outcome.validate(r.Emit)...)
+	}
+	return append(errs, r.validateValues()...)
+}
+
+func (r *Rule) validateValues() []error {
+	var errs []error
+	if r.Outcome != (Outcome{}) {
+		errs = append(errs, cerrors.New("a rule with values sets its outcome per value"))
+	}
+	values := map[string]bool{}
+	for i, b := range r.Values {
+		last := i == len(r.Values)-1
+		switch {
+		case b.Otherwise && !last, !b.Otherwise && last:
+			errs = append(errs, cerrors.New("values must end with exactly one otherwise branch"))
+		case b.Otherwise && (b.Status != kcmigrate.StatusUnsupported || !b.Blocking || b.Code != kcmigrate.CodeKeyUnsupported.Reason()):
+			errs = append(errs, cerrors.New("the otherwise branch must be unsupported, blocking, kc.key_unsupported"))
+		case !b.Otherwise && len(b.Match) == 0:
+			errs = append(errs, cerrors.New("a value branch needs match"))
+		}
+		for _, v := range b.Match {
+			if r.IgnoreCase {
+				v = strings.ToLower(v)
+			}
+			if values[v] {
+				errs = append(errs, cerrors.Errorf("value %q is in two branches", v))
+			}
+			values[v] = true
+		}
+		emit := b.Emit
+		if emit == nil {
+			emit = r.Emit
+		}
+		errs = append(errs, b.Outcome.validate(emit)...)
+	}
+	return errs
+}
+
+func (o Outcome) validate(emit *Action) []error {
+	var errs []error
+	switch o.Status {
+	case kcmigrate.StatusTranslated:
+		if emit == nil || emit.Kind == "" {
+			errs = append(errs, cerrors.New("a translated outcome names an emit kind (none for a no-op)"))
+		}
+	case kcmigrate.StatusApproximated, kcmigrate.StatusUnsupported:
+		if o.Code == "" || o.Reason == "" {
+			errs = append(errs, cerrors.Errorf("a %s outcome needs code and reason", o.Status))
+		}
+	default:
+		errs = append(errs, cerrors.Errorf("unknown status %q", o.Status))
+	}
+	if (o.Status == kcmigrate.StatusUnsupported || o.Blocking) && o.Fix == "" {
+		errs = append(errs, cerrors.New("an unsupported or blocking outcome needs a fix"))
+	}
+	if o.Code != "" {
+		if _, ok := conduiterr.LookupCode(o.Code); !ok || !strings.HasPrefix(o.Code, "kc.") {
+			errs = append(errs, cerrors.Errorf("code %q is not a registered kc.* code", o.Code))
+		}
+	}
+	return errs
+}
+
+func (o Outcome) entry(key string, origin kcmigrate.Origin) kcmigrate.Entry {
+	return kcmigrate.Entry{
+		Key: key, Status: o.Status, Origin: origin,
+		Code: o.Code, Reason: o.Reason, Fix: o.Fix, Blocking: o.Blocking,
+	}
+}
+
+func (f *File) info() kcmigrate.RulesInfo {
+	class := f.Class
+	if class == "" {
+		class = "(" + f.Scope + ")"
+	}
+	return kcmigrate.RulesInfo{
+		Class: class, RulesVersion: f.RulesVersion,
+		Upstream: kcmigrate.Upstream{Name: f.Upstream.Name, Version: f.Upstream.Version},
+	}
+}
+
+func (f *File) String() string { return fmt.Sprintf("%s (%s)", f.name, f.Scope) }
