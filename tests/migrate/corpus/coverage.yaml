@@ -1,0 +1,19 @@
+# Corpus coverage declarations (harness rule 3).
+#
+# families: which runner tiers each family has. A family without a compose
+# fixture is offline-only, and its certification page says "mapping
+# unverified against a live oracle".
+#
+# uncovered: rule-file keys that no case's `covers` names, each with a reason.
+# Checked once pkg/kcmigrate/rules/data exists; empty until then.
+schemaVersion: 1
+families:
+  debezium-postgres:  {run: offline}
+  debezium-mysql:     {run: offline}
+  jdbc-source:        {run: none, reason: "no case yet; owned by #3006"}
+  jdbc-sink:          {run: offline}
+  s3-sink:            {run: offline}
+  elasticsearch-sink: {run: offline}
+  kafka-mirror:       {run: offline}
+  common:             {run: offline}
+uncovered: []

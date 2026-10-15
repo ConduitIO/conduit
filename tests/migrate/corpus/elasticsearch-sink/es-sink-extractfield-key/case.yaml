@@ -1,0 +1,32 @@
+schemaVersion: 1
+id: es-sink-extractfield-key
+family: elasticsearch-sink
+description: >-
+  Elasticsearch sink from the Debezium unwrap-smt example: ExtractNewRecordState
+  then ExtractField$Key, key.ignore=false, null values delete documents.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/unwrap-smt/es-sink.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "connection.url host rewritten to elastic.internal.example"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-elasticsearch: "15.0.0", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  # write.method absent (insert replaces, Conduit merges), schema.ignore
+  # absent, and the destination's version setting that has no KC counterpart.
+  notes: [kc.default_differs, kc.setting_required, kc.converter_unknown]
+  entries:
+    - {key: transforms.key.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: behavior.on.null.values, status: approximated, blocking: true}
+    - {key: connection.url, status: translated}
+covers:
+  - class: io.confluent.connect.elasticsearch.ElasticsearchSinkConnector
+    keys: [connection.url, key.ignore, behavior.on.null.values, topics]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: elasticsearch, role: destination}
+run: {tier: offline}

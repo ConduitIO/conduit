@@ -64,6 +64,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	_ "github.com/conduitio/conduit/pkg/orchestrator"
 	_ "github.com/conduitio/conduit/pkg/pipeline"
+	_ "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	_ "github.com/conduitio/conduit/pkg/processor"
 	_ "github.com/conduitio/conduit/pkg/provisioning"
 	_ "github.com/conduitio/conduit/pkg/provisioning/config"

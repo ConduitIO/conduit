@@ -1,0 +1,182 @@
+name: bump-image-pin
+
+# After a STABLE release is published, open a PR that bumps the pinned
+# ghcr.io/conduitio/conduit:vX.Y.Z image in deploy/ (and the README quickstart).
+# Tracks issue #3023 (v0.21: ops/deploy/gates).
+#
+# TRIGGER: workflow_run on the "Release" workflow, not `release: published` and
+# not a bare tag push. Two reasons, both measured against how release.yml works:
+#   * release.yml publishes the GitHub release with GITHUB_TOKEN, and events
+#     created by GITHUB_TOKEN do not start other workflows, so `release:
+#     published` would never fire for it.
+#   * A tag push starts this at the same moment as release.yml, before the image
+#     is built and signed. workflow_run waits for Release to finish successfully,
+#     so the image and its signature exist before anything is verified.
+# release.yml (the signing workflow) is not edited.
+#
+# STABLE TAGS ONLY: the tag must be exactly vX.Y.Z. Nightlies and prereleases
+# make Release run too, and are skipped here (not failed).
+#
+# NEVER PUSHES TO main: it pushes a bump-image-pin/<tag> branch and opens a PR
+# against the base branch. dependabot-auto-merge is disabled, so nothing merges
+# without a maintainer. Because the PR is opened with GITHUB_TOKEN, GitHub does
+# not start the PR's own checks; a maintainer re-runs them by closing and
+# reopening the PR (or pushing an empty commit) before merging. Same limitation
+# as buf-update.yaml.
+#
+# BEFORE BUMPING: the image must exist and its cosign signature must verify
+# against the Release workflow at that exact tag (verify_release_image.sh). A
+# failed verification fails the run and opens nothing.
+#
+# WHICH BRANCHES: the automatic path always targets the default branch. Examples
+# only exist from v0.21 on, and a release branch pins its own minor line on
+# purpose, so a patch tag on release/vX.Y.x does not rewrite a different branch's
+# examples. The script also never downgrades: a v0.20.x patch published after main
+# pins v0.21.0 changes nothing. To bump a release branch that has deploy/, run
+# this workflow manually with `base` set to that branch.
+#
+# DRY RUN: workflow_dispatch defaults to dry_run=true. It verifies the image,
+# prints the files that would change and the diff, and opens no PR.
+
+on:
+  workflow_run:
+    workflows: [ Release ]
+    types: [ completed ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Stable release tag to pin, e.g. v0.21.0'
+        required: true
+        type: string
+      base:
+        description: 'Branch to bump and open the PR against'
+        required: false
+        default: main
+        type: string
+      dry_run:
+        description: 'Verify and show the diff; open no PR'
+        required: false
+        default: true
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: bump-image-pin-${{ github.event.workflow_run.head_branch || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: bump image pin
+    # A Release run for a branch push or a failed release does nothing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write       # push the bump-image-pin/<tag> branch (never main)
+      pull-requests: write  # open the PR
+    env:
+      # Through env, not ${{ }} in scripts, so nothing from the event payload is
+      # interpolated into a shell.
+      EVENT_NAME: ${{ github.event_name }}
+      RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+      INPUT_TAG: ${{ inputs.tag }}
+      INPUT_BASE: ${{ inputs.base }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Decide what to do
+        id: plan
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"; base="${INPUT_BASE:-$DEFAULT_BRANCH}"; dry_run="$INPUT_DRY_RUN"
+          else
+            tag="$RUN_TAG"; base="$DEFAULT_BRANCH"; dry_run=false
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "::error::'$tag' is not a stable release tag (vX.Y.Z)" >&2
+              exit 1
+            fi
+            echo "'$tag' is not a stable release tag; nothing to do."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "proceed=true"
+            echo "tag=$tag"
+            echo "base=$base"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.plan.outputs.proceed == 'true'
+        with:
+          ref: ${{ steps.plan.outputs.base }}
+
+      - name: Script tests
+        if: steps.plan.outputs.proceed == 'true'
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_bump_image_pin
+
+      - name: Install cosign
+        if: steps.plan.outputs.proceed == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: 'v3.1.3'
+
+      - name: Verify the release image exists and is signed
+        if: steps.plan.outputs.proceed == 'true'
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: .github/scripts/verify_release_image.sh "$TAG"
+
+      - name: Bump the pins
+        id: bump
+        if: steps.plan.outputs.proceed == 'true'
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          changed="$(python3 .github/scripts/bump_image_pin.py --tag "$TAG")"
+          if [ -z "$changed" ]; then
+            echo "Nothing to bump: every pin is already at or above $TAG."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "### Image pin bump to \`$TAG\`"
+            echo
+            while IFS= read -r file; do printf -- '- %s\n' "$file"; done <<< "$changed"
+            echo
+            echo '```diff'
+            git diff -U0
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.bump.outputs.changed == 'true' && steps.plan.outputs.dry_run != 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          base: ${{ steps.plan.outputs.base }}
+          branch: bump-image-pin/${{ steps.plan.outputs.tag }}
+          delete-branch: true
+          commit-message: "chore(deploy): pin examples to conduit ${{ steps.plan.outputs.tag }}"
+          title: "chore(deploy): pin examples to conduit ${{ steps.plan.outputs.tag }}"
+          body: |
+            Automated by `.github/workflows/bump-image-pin.yml` after `${{ steps.plan.outputs.tag }}` was released.
+
+            Before opening this PR the workflow checked that `ghcr.io/conduitio/conduit:${{ steps.plan.outputs.tag }}`
+            exists and that its cosign signature verifies against the Release workflow at that tag.
+
+            Tier 3. Only the `ghcr.io/conduitio/conduit:vX.Y.Z` pins under `deploy/` and the README are rewritten.
+            The pages in the docs repo (conduit-site) that name the version are not covered and need a separate edit.
+
+            This PR was opened with `GITHUB_TOKEN`, so its checks did not start automatically: close and
+            reopen it (or push an empty commit) to run them before merging.
+
+            Roadmap item: v0.21: ops/deploy/gates (#3023).
