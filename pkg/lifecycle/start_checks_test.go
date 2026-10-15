@@ -306,6 +306,8 @@ func TestReconfigureProcessor_RefusesStandaloneBeforeDebeziumEncode(t *testing.T
 	is.True(ok) // refusal must be coded
 	is.Equal(ce.Code, starthook.CodeDebeziumStandaloneBeforeEncode)
 	is.True(strings.Contains(ce.Message, wasmPlugin))
+	is.True(strings.HasPrefix(ce.Message, "can't apply processor change to"))
+	is.True(strings.Contains(ce.Message, "the whole stored path"))
 
 	is.Equal(h.plugins.built.Load(), builtBefore) // nothing built
 	is.Equal(h.pl.GetStatus(), pipeline.StatusRunning)

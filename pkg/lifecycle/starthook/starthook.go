@@ -57,10 +57,14 @@ type Topology struct {
 	PipelineID string
 	// FromConfig is true when the pipeline was provisioned from a config
 	// document, so a JSON pointer into that document addresses something.
-	FromConfig   bool
-	Sources      []Connector
-	Processors   []Processor
-	Destinations []Connector
+	FromConfig bool
+	// ChangedProcessor is set when the check runs for a live change to one
+	// processor of a running pipeline rather than for a start (see
+	// CheckProcessorChange). It only changes the wording of a refusal.
+	ChangedProcessor string
+	Sources          []Connector
+	Processors       []Processor
+	Destinations     []Connector
 }
 
 // Connector is one connector of a Topology.
@@ -98,6 +102,24 @@ func Check(ctx context.Context, pl *pipeline.Instance, svc Services) error {
 		Connector: svc.ConnectorPlugins.ResolvesToStandalone,
 	}
 	return CheckTopology(t, r)
+}
+
+// CheckProcessorChange runs the start checks for a live in-place change to
+// processor processorID of the running pipeline pl, after the new config has
+// been stored and before the new processor is built. The checks read the whole
+// stored pipeline, not only the changed processor, so a refusal can name an
+// offender elsewhere on the path; its message says the change was not applied
+// rather than that the pipeline cannot start.
+func CheckProcessorChange(ctx context.Context, pl *pipeline.Instance, processorID string, svc Services) error {
+	t, err := Load(ctx, pl, svc)
+	if err != nil {
+		return err
+	}
+	t.ChangedProcessor = processorID
+	return CheckTopology(t, Resolver{
+		Processor: svc.Processors.ResolvesToStandalone,
+		Connector: svc.ConnectorPlugins.ResolvesToStandalone,
+	})
 }
 
 // CheckTopology runs every start check against t.

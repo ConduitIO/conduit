@@ -28,7 +28,8 @@ import (
 // type prefix or version.
 const DebeziumEncodePlugin = "debezium.encode"
 
-// CodeDebeziumStandaloneBeforeEncode is returned by Start when a pipeline
+// CodeDebeziumStandaloneBeforeEncode is returned by Start, and by a live
+// in-place processor change (which then is not applied), when a pipeline
 // contains a debezium.encode processor and a record could reach it through a
 // standalone plugin: a standalone source connector, a standalone (WASM)
 // processor that runs before it on the same path, or a debezium.encode that
@@ -191,13 +192,21 @@ func errStandaloneBeforeEncode(t Topology, encoders []string, offenders []bounda
 			parts[i] += " (" + o.configPath + ")"
 		}
 	}
+	what := fmt.Sprintf("can't start pipeline %s", t.PipelineID)
+	if t.ChangedProcessor != "" {
+		// A live change is checked against the whole stored path, so the
+		// offender may be another processor or the source, not the one changed.
+		what = fmt.Sprintf("can't apply processor change to %q in running pipeline %s "+
+			"(the change was not applied; the check covers the whole stored path, not only the changed processor)",
+			userID(t, "", t.ChangedProcessor), t.PipelineID)
+	}
 	ce := conduiterr.New(
 		CodeDebeziumStandaloneBeforeEncode,
 		fmt.Sprintf(
-			"can't start pipeline %s: records reach %s processor %s through a standalone plugin: %s; "+
+			"%s: records reach %s processor %s through a standalone plugin: %s; "+
 				"the plugin protocol turns int64 values into floats and bytes into base64, "+
 				"so %s would refuse those records",
-			t.PipelineID, DebeziumEncodePlugin, strings.Join(ids, ", "), strings.Join(parts, "; "), DebeziumEncodePlugin,
+			what, DebeziumEncodePlugin, strings.Join(ids, ", "), strings.Join(parts, "; "), DebeziumEncodePlugin,
 		),
 	)
 	ce.Suggestion = "use built-in plugins on the path into " + DebeziumEncodePlugin +
