@@ -1,0 +1,33 @@
+schemaVersion: 1
+id: jdbc-sink-pg-bare-map
+family: jdbc-sink
+description: >-
+  Bare config map with name inside it, a literal table.name.format and a
+  currentSchema JDBC URL parameter, which has no Conduit counterpart.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/postgres-toast/jdbc-sink.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "JDBC URL host rewritten to sink-db.internal.example"
+    - "password in the JDBC URL query replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-jdbc: "10.9.9", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  notes: [kc.converter_unknown]
+  exitCode: 2
+  entries:
+    # JDBC parameters outside host, port, database and sslmode/ssl are U!.
+    - {key: connection.url, status: unsupported, blocking: true}
+    - {key: auto.create, status: translated}
+    - {key: delete.enabled, status: translated}
+    - {key: name, status: translated}
+covers:
+  - class: io.confluent.connect.jdbc.JdbcSinkConnector
+    keys: [connection.url, table.name.format, auto.create, insert.mode, delete.enabled]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:postgres, role: destination}
+run: {tier: offline}

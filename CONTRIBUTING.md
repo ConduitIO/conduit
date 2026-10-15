@@ -105,6 +105,16 @@ To propose a new template:
 6. Push to the branch
 7. Create new pull request
 
+## Adding a Kafka Connect migration case
+
+The migration harness (`tests/migrate`, #3010) holds real Kafka Connect configurations and the
+outcome `conduit migrate kafka-connect` must produce for each. A case is a sanitized upstream
+config under a permissive license, a `case.yaml` recording where it came from and what is
+expected, and, once the command exists, its goldens. The procedure, the scrub rules and the
+license allow-list are in [`tests/migrate/README.md`](tests/migrate/README.md); run
+`go test ./tests/migrate/...` before opening the PR. Connector lanes add the cases for their
+connector in the PR that certifies it.
+
 ## Changing a pipeline engine
 
 The engines are `pkg/lifecycle` (v1, default) and `pkg/lifecycle-poc` (arch-v2, behind

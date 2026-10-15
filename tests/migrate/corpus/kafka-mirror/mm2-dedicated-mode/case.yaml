@@ -1,0 +1,23 @@
+schemaVersion: 1
+id: mm2-dedicated-mode
+family: kafka-mirror
+description: >-
+  Apache Kafka's dedicated-mode mm2.properties (clusters, A->B.*). Not a v1
+  input format (D4): migrate must reject it with migrate.input_unrecognized
+  instead of translating part of it.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/apache/kafka/blob/e2c58a0163c89d00cebc877fbdd81d4267be774f/config/connect-mirror-maker.properties
+  license: Apache-2.0
+  copyright: The Apache Software Foundation
+  modifications:
+    - "A_hostN and B_hostN rewritten to a-hostN.internal.example and b-hostN.internal.example"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/connect-mirror-maker.properties]}
+expect:
+  exitCode: 2
+  error: migrate.input_unrecognized
+  pipelines: 0
+emits: []
+run: {tier: offline}
