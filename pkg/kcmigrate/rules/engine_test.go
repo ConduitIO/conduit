@@ -142,7 +142,7 @@ func TestEngine_Worker(t *testing.T) {
 	is := is.New(t)
 	e := loadValid(t)
 	w := kcmigrate.Worker{File: "connect.properties", Props: connector("", "group.id", "g", "tasks.max", "1").Config}
-	rc := e.Worker(w)
+	_, rc := e.Worker(w)
 	is.Equal(rc.Name, "connect.properties")
 	is.Equal(rc.Role, kcmigrate.RoleWorker)
 	is.Equal(rc.Entries[0].Status, kcmigrate.StatusTranslated)
@@ -150,7 +150,8 @@ func TestEngine_Worker(t *testing.T) {
 
 	none, err := Load(fstest.MapFS{})
 	is.NoErr(err)
-	is.Equal(none.Worker(w).Entries[0].Code, "kc.key_unknown")
+	_, nrc := none.Worker(w)
+	is.Equal(nrc.Entries[0].Code, "kc.key_unknown")
 }
 
 func TestEngine_Rules(t *testing.T) {

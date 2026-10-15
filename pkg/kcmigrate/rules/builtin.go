@@ -48,3 +48,29 @@ func (e *Engine) Classes() []string {
 	sort.Strings(out)
 	return out
 }
+
+// ActionRef is one emit action in the rule data, for checks that every
+// action names a kind the emitters implement.
+type ActionRef struct {
+	File, Key string
+	Action    Action
+}
+
+// Actions lists every emit action of every loaded rule file, in file and
+// rule order.
+func (e *Engine) Actions() []ActionRef {
+	var out []ActionRef
+	for _, f := range e.files {
+		for _, r := range f.Keys {
+			if r.Emit != nil {
+				out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *r.Emit})
+			}
+			for _, b := range r.Values {
+				if b.Emit != nil {
+					out = append(out, ActionRef{File: f.name, Key: r.Key.String(), Action: *b.Emit})
+				}
+			}
+		}
+	}
+	return out
+}

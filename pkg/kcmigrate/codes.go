@@ -59,4 +59,11 @@ var (
 	// key of the connector is listed with this code and no pipeline is
 	// written.
 	CodeConnectorClassUnsupported = conduiterr.Register("kc.connector_class_unsupported", codes.InvalidArgument)
+	// CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since
+	// either value could be the one Kafka Connect used.
+	CodeKeyConflict = conduiterr.Register("kc.key_conflict", codes.InvalidArgument)
+	// CodeSecretPlaintext: a connector-level note that the input holds a
+	// secret as a literal value. The value is not copied anywhere, but the
+	// input file is itself a leak.
+	CodeSecretPlaintext = conduiterr.Register("kc.secret_plaintext", codes.InvalidArgument)
 )

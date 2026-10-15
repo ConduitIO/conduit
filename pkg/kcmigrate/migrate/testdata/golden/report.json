@@ -32,10 +32,10 @@
   "summary": {
     "connectors": 3,
     "keys": 9,
-    "translated": 5,
+    "translated": 6,
     "approximated": 0,
-    "unsupported": 4,
-    "blocking": 4
+    "unsupported": 3,
+    "blocking": 3
   },
   "connectors": [
     {
@@ -56,16 +56,13 @@
         },
         {
           "key": "bootstrap.servers",
-          "status": "unsupported",
+          "status": "translated",
           "origin": {
             "file": "connect-distributed.properties",
             "line": 2,
             "column": 1
           },
-          "code": "kc.key_unknown",
-          "reason": "No rule in the worker rules (written against kafka 4.2) knows bootstrap.servers.",
-          "fix": "Check the key for a typo. If it is a key of a newer upstream version, keep this connector on Kafka Connect until migrate's rules cover it.",
-          "blocking": true
+          "blocking": false
         }
       ],
       "notes": [],
@@ -75,6 +72,12 @@
       "name": "clean",
       "class": "com.example.ExampleSource",
       "role": "source",
+      "pipeline": "pipelines/clean.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:example",
+        "destination": "builtin:kafka"
+      },
       "entries": [
         {
           "key": "name",
@@ -103,6 +106,9 @@
             "file": "connectors/clean.properties",
             "line": 3,
             "column": 1
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/host"
           },
           "blocking": false
         },

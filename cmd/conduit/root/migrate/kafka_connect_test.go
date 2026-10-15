@@ -16,6 +16,7 @@ package migrate
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,7 +110,7 @@ func TestKafkaConnect_WritesOutputs(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(out, "report.json"))
 	is.NoErr(err)
 	is.NoErr(schema.ValidateReport(b))
-	is.True(strings.Contains(r.stdout, "Wrote report.json and REPORT.md to "+out))
+	is.True(strings.Contains(r.stdout, "Wrote 2 files to "+out+": report.json, REPORT.md."))
 
 	// A second run refuses the non-empty directory, then --force overwrites.
 	r = execute(t, "", p, "--out", out, "--json")
@@ -253,4 +254,13 @@ func TestKafkaConnect_ForceClearsStalePipelines(t *testing.T) {
 	_, err = os.Stat(mine)
 	is.NoErr(err)
 	is.True(strings.Contains(r.stdout, "Removed 2 files"))
+}
+
+func TestValidatePipeline(t *testing.T) {
+	is := is.New(t)
+	v := ValidatePipeline(context.Background())
+	ok := "version: \"2.2\"\npipelines:\n  - id: p\n    status: running\n    connectors:\n      - id: source\n        type: source\n        plugin: builtin:kafka\n      - id: destination\n        type: destination\n        plugin: builtin:log\n"
+	is.NoErr(v("p.yaml", []byte(ok)))
+	err := v("p.yaml", []byte(strings.Replace(ok, "builtin:log", "builtin:nope", 1)))
+	is.True(err != nil && strings.Contains(err.Error(), "connector.plugin_not_found"))
 }

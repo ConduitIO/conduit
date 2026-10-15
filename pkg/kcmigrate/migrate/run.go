@@ -22,11 +22,14 @@ package migrate
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
+	"github.com/conduitio/conduit/pkg/kcmigrate/emit"
 	"github.com/conduitio/conduit/pkg/kcmigrate/rules"
 	"google.golang.org/grpc/codes"
 )
@@ -59,6 +62,11 @@ type Request struct {
 	AcceptGaps bool
 	// ConduitVersion goes into the report's generator.
 	ConduitVersion string
+	// ValidatePipeline checks every generated pipeline file. It is required:
+	// a failure is a translator bug and fails the run as internal.error. The
+	// CLI and the MCP tool pass the `pipelines validate` engine, which lives
+	// under cmd/conduit and so cannot be imported here.
+	ValidatePipeline func(name string, content []byte) error
 }
 
 // File is an output file, with a path relative to the output directory.
@@ -71,7 +79,9 @@ type File struct {
 // findings still returns a Result and a nil error.
 type Result struct {
 	Report *kcmigrate.Report
-	// Files are the outputs in a fixed order: report.json, REPORT.md.
+	// Files are the outputs in a fixed order: report.json, REPORT.md, the
+	// pipeline files in connector order, then secrets.env.template if any
+	// pipeline references a secret.
 	Files []File
 	// OK is the verdict: no blocking finding outside acceptedGaps, and under
 	// Strict no approximated entry and no accepted gap either.
@@ -80,8 +90,9 @@ type Result struct {
 
 // Output file names.
 const (
-	ReportFile         = "report.json"
-	ReportMarkdownFile = "REPORT.md"
+	ReportFile          = "report.json"
+	ReportMarkdownFile  = "REPORT.md"
+	SecretsTemplateFile = "secrets.env.template" //nolint:gosec // a file name, not a credential
 )
 
 // Run migrates req.Inputs with the rules in engine. A non-nil error is a
@@ -95,6 +106,9 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	if err := kcmigrate.CheckLimits(all); err != nil {
 		return Result{}, err
 	}
+	if req.ValidatePipeline == nil {
+		return Result{}, conduiterr.New(conduiterr.CodeInternal, "migrate.Run needs a pipeline validator")
+	}
 	if len(req.Inputs) == 0 {
 		ce := conduiterr.New(kcmigrate.CodeInputUnrecognized, "no connector config to migrate")
 		ce.Suggestion = "pass one or more connector configs: files, directories, or - for standard input"
@@ -103,33 +117,35 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 
 	rep := kcmigrate.NewReport(req.ConduitVersion)
 	rep.Generator.Rules = engine.Rules()
+	var workerDs []rules.Decision
 	if req.Worker != nil {
 		w, err := kcmigrate.ParseWorker(*req.Worker)
 		if err != nil {
 			return Result{}, err
 		}
-		rep.Connectors = append(rep.Connectors, engine.Worker(w))
+		ds, rc := engine.Worker(w)
+		workerDs = ds
+		rep.Connectors = append(rep.Connectors, rc)
 	}
 
-	names := map[string]string{} // connector name -> file it came from
-	for _, in := range req.Inputs {
-		if err := ctx.Err(); err != nil {
-			return Result{}, cerrors.Errorf("migration canceled: %w", err)
-		}
-		cs, err := kcmigrate.ParseConnectors(in, req.Format)
-		if err != nil {
-			return Result{}, err
-		}
-		for _, c := range cs {
-			if err := checkName(c, names); err != nil {
-				return Result{}, err
-			}
-			rep.Connectors = append(rep.Connectors, engine.Connector(c))
-		}
+	runs, err := migrateInputs(ctx, engine, req, workerDs)
+	if err != nil {
+		return Result{}, err
+	}
+	workerBlocks := recordWorkerDowngrades(rep, runs, req.Worker != nil)
+	first := len(rep.Connectors)
+	for _, r := range runs {
+		rep.Connectors = append(rep.Connectors, r.rc)
 	}
 
 	if req.AcceptGaps {
 		rep.AcceptedGaps = acceptedGaps(rep)
+	}
+	for i := range runs {
+		rc := &rep.Connectors[first+i]
+		if runs[i].plan != nil {
+			rc.PipelineStatus = pipelineStatus(*rc, runs[i].state, req.AcceptGaps, workerBlocks)
+		}
 	}
 	rep.Summarize()
 	if err := rep.Validate(); err != nil {
@@ -142,14 +158,185 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	if err != nil {
 		return Result{}, conduiterr.Wrap(conduiterr.CodeInternal, "could not encode the report", err)
 	}
-	return Result{
-		Report: rep,
-		Files: []File{
-			{Path: ReportFile, Content: reportJSON},
-			{Path: ReportMarkdownFile, Content: []byte(RenderMarkdown(rep))},
-		},
-		OK: verdict(rep, req),
-	}, nil
+	out := []File{
+		{Path: ReportFile, Content: reportJSON},
+		{Path: ReportMarkdownFile, Content: []byte(RenderMarkdown(rep))},
+	}
+	pipelines, err := renderPipelines(runs, rep.Connectors[first:], req, reportJSON)
+	if err != nil {
+		return Result{}, err
+	}
+	out = append(out, pipelines...)
+	if tmpl := secretsTemplate(runs); tmpl != nil {
+		out = append(out, File{Path: SecretsTemplateFile, Content: tmpl})
+	}
+	return Result{Report: rep, Files: out, OK: verdict(rep, req)}, nil
+}
+
+// migrateInputs parses, classifies and plans every connector of the inputs,
+// in input order. Names and pipeline files must be unique across the run.
+func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, workerDs []rules.Decision) ([]connectorRun, error) {
+	var runs []connectorRun
+	envs := emit.NewEnvNames()
+	names := map[string]string{} // connector name -> file it came from
+	files := map[string]string{} // pipeline file -> connector name
+	for _, in := range req.Inputs {
+		if err := ctx.Err(); err != nil {
+			return nil, cerrors.Errorf("migration canceled: %w", err)
+		}
+		cs, err := kcmigrate.ParseConnectors(in, req.Format)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cs {
+			if err := checkName(c, names); err != nil {
+				return nil, err
+			}
+			run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
+			if err != nil {
+				return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrating "+c.Name+": "+err.Error(), err)
+			}
+			if run.plan != nil {
+				if other, ok := files[run.plan.File]; ok {
+					ce := conduiterr.New(CodeConnectorNameInvalid, fmt.Sprintf("connectors %q and %q would both be written to %s", other, c.Name, run.plan.File))
+					ce.Suggestion = "rename one of the connectors; names that differ only in characters outside A-Z, a-z, 0-9, '.', '_' and '-' collide"
+					return nil, ce
+				}
+				files[run.plan.File] = c.Name
+			}
+			runs = append(runs, run)
+		}
+	}
+	return runs, nil
+}
+
+// connectorRun is one connector after classification and emission.
+type connectorRun struct {
+	rc    kcmigrate.ReportConnector
+	plan  *emit.Plan // nil when no pipeline is written (unknown class)
+	state string
+	// workerEntries are the worker entries as applied to this pipeline,
+	// index-aligned with the worker's decisions.
+	workerEntries []kcmigrate.Entry
+}
+
+func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decision, envs *emit.EnvNames) (connectorRun, error) {
+	run := connectorRun{rc: cl.Connector, state: state}
+	if cl.Rules == nil {
+		return run, nil
+	}
+	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Emits, envs)
+	if err != nil {
+		return run, err
+	}
+	if err := emit.Apply(plan, cl.Decisions); err != nil {
+		return run, err
+	}
+	applied, err := emit.ApplyDefaults(plan, workerDs)
+	if err != nil {
+		return run, err
+	}
+	run.workerEntries = applied
+	run.plan = plan
+	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
+	run.rc.Pipeline = plan.File
+	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
+	for _, s := range plan.Secrets() {
+		if s.Literal {
+			run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
+				Code: kcmigrate.CodeSecretPlaintext.Reason(), Rule: "secrets",
+				Reason: "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+				Fix:    "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+			})
+			break
+		}
+	}
+	return run, nil
+}
+
+// pipelineStatus is stopped when the connector, or the worker every
+// pipeline inherits from, has a blocking entry or note that was not
+// accepted, or when Kafka Connect had the connector paused or stopped.
+func pipelineStatus(rc kcmigrate.ReportConnector, state string, accept, workerBlocks bool) kcmigrate.PipelineStatus {
+	if state == "PAUSED" || state == "STOPPED" {
+		return kcmigrate.PipelineStopped
+	}
+	if accept {
+		return kcmigrate.PipelineRunning
+	}
+	if workerBlocks {
+		return kcmigrate.PipelineStopped
+	}
+	for _, e := range rc.Entries {
+		if e.Blocking {
+			return kcmigrate.PipelineStopped
+		}
+	}
+	for _, n := range rc.Notes {
+		if n.Blocking {
+			return kcmigrate.PipelineStopped
+		}
+	}
+	return kcmigrate.PipelineRunning
+}
+
+// renderPipelines writes one pipeline file per planned connector. The
+// description carries the report hash, so a pipeline can be traced back to
+// the exact report it was generated with.
+func renderPipelines(runs []connectorRun, rcs []kcmigrate.ReportConnector, req Request, reportJSON []byte) ([]File, error) {
+	sum := sha256.Sum256(reportJSON)
+	var out []File
+	for i, r := range runs {
+		if r.plan == nil {
+			continue
+		}
+		rc := rcs[i]
+		desc := fmt.Sprintf("Migrated from Kafka Connect connector %q (%s) by conduit %s; report sha256:%x", rc.Name, rc.Class, req.ConduitVersion, sum)
+		b, err := r.plan.YAML(string(rc.PipelineStatus), desc)
+		if err != nil {
+			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "could not encode a pipeline", err)
+		}
+		if err := req.ValidatePipeline(r.plan.File, b); err != nil {
+			return nil, conduiterr.Wrap(conduiterr.CodeInternal, "migrate generated a pipeline that does not validate ("+r.plan.File+"): "+err.Error(), err)
+		}
+		out = append(out, File{Path: r.plan.File, Content: b})
+	}
+	return out, nil
+}
+
+// secretsTemplate lists every variable the pipelines reference, once, with
+// the keys it stands for. It never contains a value.
+func secretsTemplate(runs []connectorRun) []byte {
+	var order []string
+	refs := map[string][]emit.Secret{}
+	for _, r := range runs {
+		if r.plan == nil {
+			continue
+		}
+		for _, s := range r.plan.Secrets() {
+			if _, ok := refs[s.Env]; !ok {
+				order = append(order, s.Env)
+			}
+			refs[s.Env] = append(refs[s.Env], s)
+		}
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("# Environment variables the migrated pipelines reference. migrate never writes their values.\n")
+	for _, env := range order {
+		b.WriteString("\n")
+		for _, s := range refs[env] {
+			fmt.Fprintf(&b, "# %s: %s (%s)", s.Connector, s.Key, s.Origin)
+			if s.Reference != "" {
+				fmt.Fprintf(&b, ", from %s", s.Reference)
+			}
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "%s=\n", env)
+	}
+	return []byte(b.String())
 }
 
 func checkName(c kcmigrate.Connector, seen map[string]string) error {
@@ -195,4 +382,29 @@ func verdict(rep *kcmigrate.Report, req Request) bool {
 		return false
 	}
 	return true
+}
+
+// recordWorkerDowngrades puts a worker setting that turned blocking while it
+// was applied to a pipeline (a JAAS config that cannot be split, for one) on
+// the worker's own entry, and reports whether any worker entry blocks. The
+// worker is the report's first element when there is one.
+func recordWorkerDowngrades(rep *kcmigrate.Report, runs []connectorRun, hasWorker bool) bool {
+	if !hasWorker {
+		return false
+	}
+	worker := rep.Connectors[0].Entries
+	for _, r := range runs {
+		for i, refined := range r.workerEntries {
+			if refined.Blocking && !worker[i].Blocking {
+				refined.Target = nil
+				worker[i] = refined
+			}
+		}
+	}
+	for _, e := range worker {
+		if e.Blocking {
+			return true
+		}
+	}
+	return false
 }

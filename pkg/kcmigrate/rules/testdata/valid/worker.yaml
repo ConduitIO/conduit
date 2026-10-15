@@ -7,3 +7,14 @@ keys:
     emit: {kind: none}
     reason: Conduit has no worker cluster.
     diff: identity
+  - key: bootstrap.servers
+    status: translated
+    emit: {kind: setting, side: destination, name: servers}
+    diff: identity
+  - key: worker.blocked
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A test worker key that blocks.
+    fix: Remove it.
+    diff: behavior

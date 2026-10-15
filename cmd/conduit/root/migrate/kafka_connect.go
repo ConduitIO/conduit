@@ -64,6 +64,7 @@ type KafkaConnectCommand struct {
 	renderer *ui.Renderer
 	wrote    bool
 	removed  []string
+	written  []string
 }
 
 func (c *KafkaConnectCommand) Usage() string { return "kafka-connect <input>..." }
@@ -147,7 +148,8 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 	res, err := migrate.Run(ctx, engine, migrate.Request{
 		Inputs: inputs, Worker: worker, Format: format,
 		Strict: c.flags.Strict, AcceptGaps: c.flags.AcceptGaps,
-		ConduitVersion: conduit.Version(false),
+		ConduitVersion:   conduit.Version(false),
+		ValidatePipeline: ValidatePipeline(ctx),
 	})
 	if err != nil {
 		return cecdysis.Outcome{}, err
@@ -159,6 +161,9 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 		}
 		c.removed = removed
 		c.wrote = true
+		for _, f := range res.Files {
+			c.written = append(c.written, f.Path)
+		}
 	}
 	return cecdysis.Outcome{OK: res.OK, Summary: res.Report.Summary, Result: res.Report}, nil
 }
@@ -248,7 +253,7 @@ func (c *KafkaConnectCommand) renderFiles(b *strings.Builder) {
 		fmt.Fprintf(b, "Removed %d files of an earlier run from %s: %s.\n", len(c.removed), c.flags.Out, strings.Join(c.removed, ", "))
 	}
 	if c.wrote {
-		fmt.Fprintf(b, "Wrote %s and %s to %s.\n", migrate.ReportFile, migrate.ReportMarkdownFile, c.flags.Out)
+		fmt.Fprintf(b, "Wrote %d files to %s: %s.\n", len(c.written), c.flags.Out, strings.Join(c.written, ", "))
 	} else {
 		fmt.Fprintln(b, "Dry run: no files written.")
 	}

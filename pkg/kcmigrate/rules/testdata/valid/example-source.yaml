@@ -13,11 +13,11 @@ keys:
     diff: identity
   - key: example.host
     status: translated
-    emit: {kind: url, part: host}
+    emit: {kind: setting, side: source, name: host}
     diff: identity
   - key: example.password
     status: translated
-    emit: {kind: url, part: password}
+    emit: {kind: setting, side: source, name: password}
     diff: secret
     secret: true
   - key: example.mode
@@ -26,7 +26,7 @@ keys:
     values:
       - match: [fast]
         status: translated
-        emit: {kind: setting, name: mode}
+        emit: {kind: setting, side: source, name: mode}
       - match: [slow, legacy-slow]
         status: approximated
         code: kc.key_approximated
@@ -64,4 +64,8 @@ keys:
   - key: name
     status: translated
     emit: {kind: none}
+    diff: identity
+  - key: example.servers
+    status: translated
+    emit: {kind: setting, side: destination, name: servers}
     diff: identity
