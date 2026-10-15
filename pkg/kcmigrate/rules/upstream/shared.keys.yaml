@@ -6,7 +6,9 @@
 # connect_config / source_connector_config / sink_connector_config pages).
 # The upstream-drift job (lane-plan PR 20 of the mapping design) will
 # regenerate it from the live pages and fail the nightly on any difference.
-# A key without "default" has no upstream default (null).
+# A key without "default" has no upstream default (null, optional);
+# "required: true" marks a key with no default at all, which the connector
+# refuses to start without.
 scope: shared
 upstream: {name: kafka, version: "4.2"}
 sources:
@@ -19,8 +21,8 @@ check:
   site: kafka
   pages: [source_connector_config, sink_connector_config]
 keys:
-  - {key: name}
-  - {key: connector.class}
+  - {key: name, required: true}
+  - {key: connector.class, required: true}
   - {key: connector.plugin.version}
   - {key: tasks.max, default: "1"}
   - {key: tasks.max.enforce, default: "true"}

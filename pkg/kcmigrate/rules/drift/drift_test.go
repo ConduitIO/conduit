@@ -57,13 +57,12 @@ func TestParseKafkaPage(t *testing.T) {
 	))
 	is.NoErr(err)
 	is.Equal(len(keys), 6)
-	is.True(keys["required"] == nil)
-	is.True(keys["nullable"] == nil)
-	is.Equal(*keys["empty"], "")
-	is.Equal(normalize(keys["timeout.ms"]), "60000")
-	is.Equal(*keys["amp"], "a&b")
-	exclude := `mm2.*\.internal, .*\.replica, __.*`
-	is.Equal(normalize(keys["topics.exclude"]), normalize(&exclude)) // list spacing does not matter
+	is.Equal(keys["required"], Required) // an empty cell: no default at all
+	is.Equal(keys["nullable"], NoDefault)
+	is.Equal(keys["empty"], "")
+	is.Equal(keys["timeout.ms"], "60000")
+	is.Equal(keys["amp"], "a&b")
+	is.Equal(keys["topics.exclude"], normalize(`mm2.*\.internal, .*\.replica, __.*`)) // list spacing does not matter
 
 	_, err = ParseKafkaPage([]byte("<html>moved</html>"))
 	is.True(err != nil) // a format change fails, it does not read as "every key removed"
@@ -95,26 +94,34 @@ keys:
   - {key: gone}
   - {key: effective, default: Simple, documented: "null"}
   - {key: prefixed.servers, undocumented: true}
+  - {key: must, required: true}
+  - {key: optional}
 `)
-	two, one := "2", "1"
 	ig, err := Ignorer(s, nil)
 	is.NoErr(err)
-	got := Compare(s, Keys{"same": &one, "changed": &two, "effective": nil, "new": nil, "sasl.mechanism": nil}, ig)
+	got := Compare(s, Keys{"same": "1", "changed": "2", "effective": NoDefault, "must": Required, "optional": NoDefault, "new": NoDefault, "sasl.mechanism": NoDefault}, ig)
 	is.Equal(len(got), 3)
 	is.Equal(got[0], Change{Key: "changed", Kind: Default, Snapshot: "1", Page: "2"})
 	is.Equal(got[1], Change{Key: "gone", Kind: Removed})
 	is.Equal(got[2], Change{Key: "new", Kind: Added, Page: NoDefault})
 
 	// An undocumented key that appears on the page is reported, so the mark
-	// does not outlive the reason for it.
-	got = Compare(s, Keys{"same": &one, "changed": &one, "gone": nil, "effective": nil, "prefixed.servers": nil}, ig)
-	is.Equal(got, []Change{{Key: "prefixed.servers", Kind: Added, Page: NoDefault}})
+	// does not outlive the reason for it. An optional key that becomes
+	// required upstream, and the reverse, are drift.
+	got = Compare(s, Keys{"same": "1", "changed": "1", "gone": NoDefault, "effective": NoDefault, "prefixed.servers": NoDefault, "must": NoDefault, "optional": Required}, ig)
+	is.Equal(got, []Change{
+		{Key: "must", Kind: Default, Snapshot: Required, Page: NoDefault},
+		{Key: "optional", Kind: Default, Snapshot: NoDefault, Page: Required},
+		{Key: "prefixed.servers", Kind: Added, Page: NoDefault},
+	})
+	_, err = rules.ParseSnapshot([]byte(snapHead + "keys:\n  - {key: k, required: true, default: x}\n"))
+	is.True(err != nil) // required and a default contradict
 
 	// An ignore entry can name another snapshot, whose keys it leaves out.
 	m := snapshot(t, snapHead+"check:\n  site: kafka\n  pages: [p]\n  ignore:\n    - {snapshot: shared, reason: shared keys}\nkeys:\n  - {key: own}\n")
 	ig, err = Ignorer(m, map[string]rules.Snapshot{"shared": snapshot(t, snapHead+"keys:\n  - {key: name}\n")})
 	is.NoErr(err)
-	is.Equal(len(Compare(m, Keys{"own": nil, "name": nil}, ig)), 0)
+	is.Equal(len(Compare(m, Keys{"own": NoDefault, "name": Required}, ig)), 0)
 	_, err = Ignorer(m, nil)
 	is.True(err != nil) // a dangling snapshot name
 }
@@ -149,12 +156,12 @@ func TestLatest(t *testing.T) {
 
 func TestCheck(t *testing.T) {
 	is := is.New(t)
-	s := snapshot(t, snapHead+"check:\n  site: kafka\n  pages: [a, b]\nkeys:\n  - {key: x, default: \"1\"}\n  - {key: y}\n")
+	s := snapshot(t, snapHead+"check:\n  site: kafka\n  pages: [a, b]\nkeys:\n  - {key: x, default: \"1\"}\n  - {key: y, required: true}\n")
 	p := pages{
 		KafkaPageURL(Version{4, 2}, "a"): page(entry("x", "1")),
 		KafkaPageURL(Version{4, 2}, "b"): page(entry("y", "")),
 	}
-	r, err := Check(context.Background(), p.fetch, "s", s, nil)
+	r, err := Check(context.Background(), p.fetch, "s", s, nil, Version{4, 2})
 	is.NoErr(err)
 	is.True(!r.Failed())
 	is.Equal(r.Latest, Version{4, 2})
@@ -162,17 +169,25 @@ func TestCheck(t *testing.T) {
 
 	p[KafkaPageURL(Version{4, 3}, "a")] = page(entry("x", "2"), entry("z", ""))
 	p[KafkaPageURL(Version{4, 3}, "b")] = page(entry("y", ""))
-	r, err = Check(context.Background(), p.fetch, "s", s, nil)
+	r, err = Check(context.Background(), p.fetch, "s", s, nil, Version{4, 3})
 	is.NoErr(err)
 	is.True(r.Failed())
 	is.Equal(len(r.Wrong), 0)
-	is.Equal(r.Drifted, []Change{{Key: "x", Kind: Default, Snapshot: "1", Page: "2"}, {Key: "z", Kind: Added, Page: NoDefault}})
+	is.Equal(r.Drifted, []Change{{Key: "x", Kind: Default, Snapshot: "1", Page: "2"}, {Key: "z", Kind: Added, Page: Required}})
+	is.True(r.Unchecked == nil)
 	md := Markdown([]Result{r})
 	is.True(strings.Contains(md, "upstream 4.3: x: default 2, snapshot 1"))
 	is.True(strings.Contains(md, "upstream 4.3: z: added"))
 
+	// A release newer than the newest documented version cannot be
+	// checked: it is reported, never read as "no newer version".
+	r, err = Check(context.Background(), p.fetch, "s", s, nil, Version{4, 4})
+	is.NoErr(err)
+	is.Equal(*r.Unchecked, Version{4, 4})
+	is.True(strings.Contains(Markdown([]Result{r}), "Kafka 4.4 is released, but its generated config pages are not published"))
+
 	delete(p, KafkaPageURL(Version{4, 2}, "b"))
-	_, err = Check(context.Background(), p.fetch, "s", s, nil)
+	_, err = Check(context.Background(), p.fetch, "s", s, nil, Version{4, 3})
 	is.True(err != nil) // a missing pinned page is an error
 }
 
@@ -249,4 +264,16 @@ func TestCommittedSnapshotsHaveValidChecks(t *testing.T) {
 		is.NoErr(err)
 	}
 	is.True(checked > 0)
+}
+
+func TestNewestRelease(t *testing.T) {
+	is := is.New(t)
+	list := pages{KafkaReleases: []byte(`<a href="4.1.2/">4.1.2/</a> <a href="4.10.0/">x</a> <a href="4.3.1/">x</a> <a href="KEYS">KEYS</a>`)}
+	v, err := NewestRelease(context.Background(), list.fetch)
+	is.NoErr(err)
+	is.Equal(v, Version{4, 10}) // numeric, not lexical
+	_, err = NewestRelease(context.Background(), pages{KafkaReleases: []byte("moved")}.fetch)
+	is.True(err != nil) // an unreadable list fails, it does not read as "nothing released"
+	_, err = NewestRelease(context.Background(), pages{}.fetch)
+	is.True(err != nil)
 }
