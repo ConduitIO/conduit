@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -54,7 +55,7 @@ type blueprint struct {
 	dispenserFactory dispenserFactory
 }
 
-type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger, policy hostpolicy.Policy) connector.Dispenser
 
 // newDispenserFactory returns a factory of dispensers for conn. service is the
 // runtime's connector schema service; a nil service leaves the plugin without
@@ -71,7 +72,7 @@ func newDispenserFactory(conn sdk.Connector, service *connutils.SchemaService) d
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser {
+	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger, policy hostpolicy.Policy) connector.Dispenser {
 		d := NewDispenser(
 			name,
 			logger,
@@ -86,6 +87,7 @@ func newDispenserFactory(conn sdk.Connector, service *connutils.SchemaService) d
 			},
 		)
 		d.schemaService = scoped
+		d.policy = policy
 		return d
 	}
 }
@@ -98,9 +100,12 @@ type Registry struct {
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
 	service *connutils.SchemaService
+	// ambient is the operator's ambient-credentials policy; the zero value
+	// denies. Set once at construction, read-only afterwards.
+	ambient hostpolicy.Policy
 }
 
-func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService, opts ...RegistryOption) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	// Built-in connectors resolve schemas through the connector SDK's
 	// package-level service. It is installed once per process as a router
@@ -112,6 +117,9 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 		logger:     logger,
 		connectors: connectors,
 		service:    service,
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	return r
@@ -167,7 +175,7 @@ func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string
 }
 
 func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
-	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{})
+	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{}, hostpolicy.Policy{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
@@ -229,7 +237,9 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		return nil, err
 	}
 
-	return b.dispenserFactory(fullName, cfg, logger), nil
+	// Invariant (ambient credentials): the policy is bound here, by the engine,
+	// to this connector instance; nothing in cfg or the pipeline config feeds it.
+	return b.dispenserFactory(fullName, cfg, logger, r.policyFor(fullName.PluginName(), cfg.ConnectorID)), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
