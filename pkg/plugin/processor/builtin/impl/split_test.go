@@ -16,6 +16,8 @@ package impl
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -155,6 +157,17 @@ func processNoPanic(t *testing.T, proc *SplitProcessor, recs []opencdc.Record) (
 	return proc.Process(context.Background(), recs)
 }
 
+// asMap views either kind of nested map (same storage) as map[string]any.
+func asMap(v any) map[string]any {
+	switch v := v.(type) {
+	case map[string]any:
+		return v
+	case opencdc.StructuredData:
+		return v
+	}
+	panic(fmt.Sprintf("not a map: %T", v))
+}
+
 func TestSplitProcessor_Process_NestedField(t *testing.T) {
 	ctx := context.Background()
 
@@ -164,7 +177,7 @@ func TestSplitProcessor_Process_NestedField(t *testing.T) {
 	}
 	// holder returns the map that contains the split field.
 	afterNested := func(r opencdc.Record) map[string]any {
-		return r.Payload.After.(opencdc.StructuredData)["nested"].(map[string]any)
+		return asMap(r.Payload.After.(opencdc.StructuredData)["nested"])
 	}
 
 	testCases := []struct {
@@ -210,7 +223,7 @@ func TestSplitProcessor_Process_NestedField(t *testing.T) {
 				})
 			},
 			holder: func(r opencdc.Record) map[string]any {
-				return afterNested(r)["deeper"].(map[string]any)
+				return asMap(afterNested(r)["deeper"])
 			},
 		},
 		{
@@ -223,7 +236,7 @@ func TestSplitProcessor_Process_NestedField(t *testing.T) {
 				}}}
 			},
 			holder: func(r opencdc.Record) map[string]any {
-				return r.Payload.Before.(opencdc.StructuredData)["nested"].(map[string]any)
+				return asMap(r.Payload.Before.(opencdc.StructuredData)["nested"])
 			},
 		},
 		{
@@ -236,7 +249,7 @@ func TestSplitProcessor_Process_NestedField(t *testing.T) {
 				}}
 			},
 			holder: func(r opencdc.Record) map[string]any {
-				return r.Key.(opencdc.StructuredData)["nested"].(map[string]any)
+				return asMap(r.Key.(opencdc.StructuredData)["nested"])
 			},
 		},
 	}
@@ -323,4 +336,128 @@ func TestSplitProcessor_Process_NestedField_Fail(t *testing.T) {
 			is.True(strings.Contains(er.Error.Error(), tc.wantErr))
 		})
 	}
+}
+
+// Output must have exactly the types Record.Clone produces (that is what split
+// emitted for top-level fields before #3152), whichever conduit-commons
+// version is in use, and must not share anything with the input or between
+// siblings, typed slices included.
+func TestSplitProcessor_Process_MatchesClone(t *testing.T) {
+	ctx := context.Background()
+	newRec := func() opencdc.Record {
+		return opencdc.Record{
+			Position: opencdc.Position("p"),
+			Metadata: opencdc.Metadata{"k": "v"},
+			Key:      opencdc.StructuredData{"id": 1},
+			Payload: opencdc.Change{
+				Before: opencdc.StructuredData(nil),
+				After: opencdc.StructuredData{
+					"items":  []any{"a", map[string]any{"m": []string{"x"}}},
+					"plain":  map[string]any{"deep": map[string]any{"z": 1}},
+					"named":  opencdc.StructuredData{"deep": map[string]any{"z": 1}},
+					"tags":   []string{"t1", "t2"},
+					"list":   []map[string]any{{"q": 1}},
+					"anys":   []any{map[string]any{"r": 1}},
+					"nilmap": map[string]any(nil),
+					"nilsd":  opencdc.StructuredData(nil),
+					"nilsl":  []string(nil),
+				},
+			},
+		}
+	}
+
+	proc := NewSplitProcessor(log.Nop())
+	is := is.New(t)
+	is.NoErr(proc.Configure(ctx, config.Config{"field": ".Payload.After.items"}))
+
+	in := newRec()
+	out := processNoPanic(t, proc, []opencdc.Record{in})
+	is.Equal(len(out), 1)
+	mr, ok := out[0].(sdk.MultiRecord)
+	if !ok {
+		t.Fatalf("want MultiRecord, got %T (%v)", out[0], out[0])
+	}
+	is.Equal(len(mr), 2)
+	is.Equal(in, newRec()) // input untouched
+
+	for i, item := range newRec().Payload.After.(opencdc.StructuredData)["items"].([]any) {
+		want := newRec().Clone()
+		want.Payload.After.(opencdc.StructuredData)["items"] = item
+		want.Metadata["split.index"] = strconv.Itoa(i)
+		if !reflect.DeepEqual(mr[i], want) {
+			t.Fatalf("output %d differs from Clone (types included):\n got %#v\nwant %#v", i, mr[i], want)
+		}
+	}
+
+	// No sharing: edit every container of output 0, nothing else may change.
+	a0 := mr[0].Payload.After.(opencdc.StructuredData)
+	a0["tags"].([]string)[0] = "edited"
+	a0["list"].([]map[string]any)[0]["q"] = "edited"
+	a0["anys"].([]any)[0].(map[string]any)["r"] = "edited"
+	asMap(asMap(a0["plain"])["deep"])["z"] = "edited"
+	asMap(asMap(a0["named"])["deep"])["z"] = "edited"
+	mr[0].Metadata["k"] = "edited"
+	is.Equal(in, newRec())
+	// output 1 is compared with a fresh expectation
+	want1 := newRec().Clone()
+	want1.Payload.After.(opencdc.StructuredData)["items"] = newRec().Payload.After.(opencdc.StructuredData)["items"].([]any)[1]
+	want1.Metadata["split.index"] = "1"
+	if !reflect.DeepEqual(mr[1], want1) {
+		t.Fatalf("output 1 changed when output 0 was edited: %#v", mr[1])
+	}
+
+	// A slice item that is itself a container is not shared with the input.
+	mr[1].Payload.After.(opencdc.StructuredData)["items"].(map[string]any)["m"].([]string)[0] = "edited"
+	is.Equal(in, newRec())
+}
+
+// A typed-nil structured value with a field whose parents are missing used to
+// reach the resolver's nil-map assignment and panic (no recover on this path).
+func TestSplitProcessor_Process_NilStructuredData(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		field string
+		rec   opencdc.Record
+	}{
+		{".Key.a.b.items", opencdc.Record{Key: opencdc.StructuredData(nil)}},
+		{".Payload.Before.a.b.items", opencdc.Record{Payload: opencdc.Change{Before: opencdc.StructuredData(nil)}}},
+		{".Payload.After.a.b.items", opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData(nil)}}},
+		{".Payload.After.a.b.items", opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"a": opencdc.StructuredData(nil)}}}},
+		{".Payload.After.a.b.items", opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"a": map[string]any(nil)}}}},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			is := is.New(t)
+			proc := NewSplitProcessor(log.Nop())
+			is.NoErr(proc.Configure(ctx, config.Config{"field": tc.field}))
+			out := processNoPanic(t, proc, []opencdc.Record{tc.rec})
+			is.Equal(len(out), 1)
+			_, ok := out[0].(sdk.ErrorRecord)
+			if !ok {
+				t.Fatalf("want ErrorRecord, got %T", out[0])
+			}
+		})
+	}
+}
+
+// When a record fails, split returns what it has so far; the funnel retries the
+// records after it. Pins the existing behaviour.
+func TestSplitProcessor_Process_FailsMidBatch(t *testing.T) {
+	ctx := context.Background()
+	is := is.New(t)
+	proc := NewSplitProcessor(log.Nop())
+	is.NoErr(proc.Configure(ctx, config.Config{"field": ".Payload.After.nested.items"}))
+
+	good := func() opencdc.Record {
+		return opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{
+			"nested": map[string]any{"items": []any{1, 2}},
+		}}}
+	}
+	bad := opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"nested": "str"}}}
+
+	out := processNoPanic(t, proc, []opencdc.Record{good(), bad, good()})
+	is.Equal(len(out), 2)
+	_, ok := out[0].(sdk.MultiRecord)
+	is.True(ok)
+	_, ok = out[1].(sdk.ErrorRecord)
+	is.True(ok)
 }

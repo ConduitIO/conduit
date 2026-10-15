@@ -91,16 +91,18 @@ func (p *SplitProcessor) Configure(ctx context.Context, c config.Config) error {
 func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		// Work on a private copy with plain nested maps. This keeps the input
-		// record untouched (Resolve creates missing parents) and makes nested
-		// fields resolvable no matter which map type the record carries.
-		base := cloneWithPlainMaps(rec)
-		ref, err := p.referenceResolver.Resolve(&base)
+		// Read the slice from a private copy: resolving creates missing parent
+		// fields, and that must not touch the caller's record.
+		work := isolatedClone(rec)
+		fillNilData(&work)
+		var val reflect.Value
+		err := p.withReference(&work, func(ref sdk.Reference) error {
+			val = reflect.ValueOf(ref.Get())
+			return nil
+		})
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-
-		val := reflect.ValueOf(ref.Get())
 		if val.Kind() != reflect.Slice {
 			return append(out, sdk.ErrorRecord{
 				Error: cerrors.Errorf("field %q is not a slice", p.config.Field),
@@ -109,18 +111,19 @@ func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []
 
 		mr := make(sdk.MultiRecord, val.Len())
 		for i := 0; i < val.Len(); i++ {
-			newRec := cloneWithPlainMaps(base)
-			// Never discard this error: a nil reference here used to panic the
+			newRec := isolatedClone(rec)
+			// Never discard an error here: a nil reference used to panic the
 			// whole process (#3152). Invariant 3: a record we can't split is
 			// returned as an ErrorRecord so the pipeline nacks it (DLQ or
-			// halt), it is never dropped.
-			newRef, err := p.referenceResolver.Resolve(&newRec)
+			// halt); it is never dropped.
+			err := p.withReference(&newRec, func(ref sdk.Reference) error {
+				if err := ref.Set(deepCopy(val.Index(i).Interface())); err != nil {
+					return cerrors.Errorf("failed to set the item: %w", err)
+				}
+				return nil
+			})
 			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to resolve the field in the copy of the record: %w", err)})
-			}
-
-			if err := newRef.Set(val.Index(i).Interface()); err != nil {
-				return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to set the item: %w", err)})
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
 			if newRec.Metadata == nil {
 				newRec.Metadata = make(map[string]string)
@@ -134,66 +137,213 @@ func (p *SplitProcessor) Process(_ context.Context, records []opencdc.Record) []
 	return out
 }
 
-// cloneWithPlainMaps returns a copy of rec in which every structured value
-// (key, payload before, payload after) holds nested maps of type
-// map[string]any, which is the only map type the reference resolver can walk.
+// isolatedClone returns rec.Clone() with every structured value (key, payload
+// before, payload after) deep-copied, keeping each value's Go type.
 //
-// Record.Clone is not enough: depending on the conduit-commons version it
-// retypes nested map[string]any to opencdc.StructuredData (and may share
-// nested slices with the original). The copy built here shares no nested map
-// or []any with rec whatever Clone does, so the result is also safe to hand to
-// a different pipeline branch.
-func cloneWithPlainMaps(rec opencdc.Record) opencdc.Record {
+// The types are exactly what Record.Clone produces, whichever conduit-commons
+// version is in use: the output of split matches the output of Clone. What
+// Clone does not guarantee, depending on the version, is isolation: it may
+// share nested slices and nested opencdc.StructuredData with rec. Output
+// records of split must share nothing with each other or with the input.
+func isolatedClone(rec opencdc.Record) opencdc.Record {
 	c := rec.Clone()
-	c.Key = plainData(rec.Key, c.Key)
-	c.Payload.Before = plainData(rec.Payload.Before, c.Payload.Before)
-	c.Payload.After = plainData(rec.Payload.After, c.Payload.After)
+	c.Key = isolateData(c.Key)
+	c.Payload.Before = isolateData(c.Payload.Before)
+	c.Payload.After = isolateData(c.Payload.After)
 	return c
 }
 
-// plainData rebuilds structured data from src with plain nested maps; any
-// other kind of data is returned as cloned.
-func plainData(src, cloned opencdc.Data) opencdc.Data {
-	sd, ok := src.(opencdc.StructuredData)
-	if !ok {
-		return cloned
+func isolateData(d opencdc.Data) opencdc.Data {
+	if sd, ok := d.(opencdc.StructuredData); ok {
+		//nolint:forcetypeassert // deepCopy preserves the type.
+		return deepCopy(sd).(opencdc.StructuredData)
 	}
-	if sd == nil {
-		return opencdc.StructuredData(nil)
-	}
-	return opencdc.StructuredData(plainMap(sd))
+	return d
 }
 
-func plainMap(m map[string]any) map[string]any {
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = plainValue(v)
-	}
-	return out
-}
-
-func plainValue(v any) any {
-	switch v := v.(type) {
-	case opencdc.StructuredData:
-		if v == nil {
-			return v
+// fillNilData replaces typed-nil structured data with an empty map. The
+// reference resolver assigns into the map when it creates missing parent
+// fields, which panics on a nil map. Only used on a throwaway copy.
+func fillNilData(rec *opencdc.Record) {
+	fill := func(d opencdc.Data) opencdc.Data {
+		if sd, ok := d.(opencdc.StructuredData); ok && sd == nil {
+			return opencdc.StructuredData{}
 		}
-		return plainMap(v)
+		return d
+	}
+	rec.Key = fill(rec.Key)
+	rec.Payload.Before = fill(rec.Payload.Before)
+	rec.Payload.After = fill(rec.Payload.After)
+}
+
+// withReference resolves the configured field in rec, calls fn with the
+// reference, and puts rec's nested map types back as they were.
+//
+// The reference resolver only walks map[string]any, but records carry nested
+// maps of both map[string]any and opencdc.StructuredData (Record.Clone retypes
+// them in some conduit-commons versions). For the duration of the call every
+// nested StructuredData reachable through maps is replaced by a
+// map[string]any view of the same storage, then swapped back, so the caller
+// sees the original types and a single code path works for both.
+//
+// rec must be private to the caller: the views are written into its maps.
+// A panic in the resolver (it assigns into nil maps in some cases) is turned
+// into an error, because nothing recovers on the processor path.
+func (p *SplitProcessor) withReference(rec *opencdc.Record, fn func(sdk.Reference) error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = cerrors.Errorf("failed to resolve field %q: %v", p.config.Field, r)
+		}
+	}()
+
+	var views []mapView
+	for _, d := range []opencdc.Data{rec.Key, rec.Payload.Before, rec.Payload.After} {
+		if sd, ok := d.(opencdc.StructuredData); ok && sd != nil {
+			views = plainViews(sd, views)
+		}
+	}
+	defer func() {
+		for _, v := range views {
+			v.restore()
+		}
+	}()
+
+	ref, err := p.referenceResolver.Resolve(rec)
+	if err != nil {
+		return err //nolint:wrapcheck // the resolver's error already names the path.
+	}
+	return fn(ref)
+}
+
+// mapView records a nested map entry that was replaced by a plain
+// map[string]any view.
+type mapView struct {
+	parent map[string]any
+	key    string
+	orig   any
+	view   map[string]any
+}
+
+func (v mapView) restore() {
+	// If the entry was replaced meanwhile (e.g. by Set), leave it alone.
+	cur, ok := v.parent[v.key].(map[string]any)
+	if ok && reflect.ValueOf(cur).Pointer() == reflect.ValueOf(v.view).Pointer() {
+		v.parent[v.key] = v.orig
+	}
+}
+
+func plainViews(m map[string]any, views []mapView) []mapView {
+	for k, v := range m {
+		switch c := v.(type) {
+		case opencdc.StructuredData:
+			view := map[string]any(c)
+			if c == nil {
+				// A nil map can't be walked into either; use an empty one for
+				// the duration of the call.
+				view = map[string]any{}
+			}
+			m[k] = view
+			views = append(views, mapView{parent: m, key: k, orig: c, view: view})
+			views = plainViews(view, views)
+		case map[string]any:
+			if c != nil {
+				views = plainViews(c, views)
+			}
+		}
+	}
+	return views
+}
+
+// deepCopy copies maps, slices and arrays at every depth and keeps every
+// value's Go type (map[string]any stays map[string]any, opencdc.StructuredData
+// stays StructuredData, nil stays nil). Pointers and struct fields are
+// shared.
+func deepCopy(v any) any {
+	switch v := v.(type) {
+	case nil:
+		return nil
+	case string, bool, int, int64, float64:
+		return v
 	case map[string]any:
 		if v == nil {
 			return v
 		}
-		return plainMap(v)
+		out := make(map[string]any, len(v))
+		for k, e := range v {
+			out[k] = deepCopy(e)
+		}
+		return out
+	case opencdc.StructuredData:
+		if v == nil {
+			return v
+		}
+		out := make(opencdc.StructuredData, len(v))
+		for k, e := range v {
+			out[k] = deepCopy(e)
+		}
+		return out
 	case []any:
 		if v == nil {
 			return v
 		}
 		out := make([]any, len(v))
-		for i := range v {
-			out[i] = plainValue(v[i])
+		for i, e := range v {
+			out[i] = deepCopy(e)
 		}
 		return out
+	}
+	return copyValue(reflect.ValueOf(v)).Interface()
+}
+
+func copyValue(rv reflect.Value) reflect.Value {
+	switch rv.Kind() { //nolint:exhaustive // other kinds are copied by value.
+	case reflect.Map:
+		if rv.IsNil() {
+			return rv
+		}
+		out := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+		for it := rv.MapRange(); it.Next(); {
+			out.SetMapIndex(it.Key(), copyValue(it.Value()))
+		}
+		return out
+	case reflect.Slice:
+		if rv.IsNil() {
+			return rv
+		}
+		out := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Len())
+		if isScalarKind(rv.Type().Elem().Kind()) {
+			reflect.Copy(out, rv)
+			return out
+		}
+		for i := 0; i < rv.Len(); i++ {
+			out.Index(i).Set(copyValue(rv.Index(i)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(rv.Type()).Elem()
+		for i := 0; i < rv.Len(); i++ {
+			out.Index(i).Set(copyValue(rv.Index(i)))
+		}
+		return out
+	case reflect.Interface:
+		if rv.IsNil() {
+			return rv
+		}
+		out := reflect.New(rv.Type()).Elem()
+		out.Set(copyValue(rv.Elem()))
+		return out
 	default:
-		return v
+		return rv
+	}
+}
+
+func isScalarKind(k reflect.Kind) bool {
+	switch k { //nolint:exhaustive // only scalar kinds matter.
+	case reflect.Bool, reflect.String, reflect.Float32, reflect.Float64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return true
+	default:
+		return false
 	}
 }
