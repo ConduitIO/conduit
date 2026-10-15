@@ -644,7 +644,7 @@ equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connect
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |
-| `source.cluster.alias` | T | destination `topic` template prefix | `DefaultReplicationPolicy`: `<alias><separator><topic>` |
+| `source.cluster.alias` | T | destination `topic` template prefix | `DefaultReplicationPolicy`: `<alias><separator><topic>`. Required, no default in 4.2 (`MirrorConnectorConfig.java` lines 270-273): absent is the blocking note `kc.key_required` and no prefix is written (corrected 2026-10-15; found by the upstream-drift check) |
 | `target.cluster.alias` | T | none | Metrics label |
 | `replication.policy.class` | Default T; `IdentityReplicationPolicy` T; else U! | destination `topic` template | |
 | `replication.policy.separator` | T | in the template | |
@@ -781,7 +781,8 @@ by connector, with a "before you deploy" section (secrets, `kc.secret_stored_exp
 **Error codes.** New in this document, in addition to the base table: `kc.key_deprecated` (A), `kc.key_duplicate`
 (T, no-op), `kc.default_differs`, `kc.output_shape_differs`, `kc.delivery_semantics_differ`,
 `kc.setting_required` (notes), `kc.topic_name_unsupported` (note: a topic naming the destination's topic
-template cannot express), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
+template cannot express), `kc.key_required` (note: a key the upstream connector requires is absent, so Kafka
+Connect would reject the config), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
 diff codes below. All are registered through `conduiterr.Register`; the registry-completeness test in
 `pkg/conduit/exitcode` already fails a registered code with no exit bucket. Every code has a `fix` text. A table
 test fails if a code is emitted by a rule file but not registered, or registered but never emitted by any rule,
