@@ -18,7 +18,7 @@ require (
 	github.com/bufbuild/protocompile v0.14.2-0.20260127163740-a85d2ef77713 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/conduitio/conduit-connector-protocol v0.10.0 // indirect
-	github.com/conduitio/conduit-processor-sdk v0.7.0 // indirect
+	github.com/conduitio/conduit-processor-sdk v0.8.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.6 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
