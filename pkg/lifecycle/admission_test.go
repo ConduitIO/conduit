@@ -342,3 +342,44 @@ func TestServiceLifecycle_IsActive_DuringBackoff(t *testing.T) {
 	is.True(!r.ls.IsActive(r.pl.ID))
 	is.Equal(len(r.runs()), 1) // no restart after the stop
 }
+
+// TestServiceLifecycle_WaitPipeline_WaitsForFailureNotification: a run that
+// fails is removed from runningPipelines before its cleanup notifies the
+// OnFailure handlers. WaitPipeline, called in that window, used to return the
+// terminal error at once; it must return only once the run has fully exited,
+// handlers included.
+func TestServiceLifecycle_WaitPipeline_WaitsForFailureNotification(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	r := newAdmissionRun(t)
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() { closeIfOpen(release) })
+	r.ls.OnFailure(func(FailureEvent) {
+		close(entered)
+		<-release
+	})
+
+	is.NoErr(r.ls.Start(ctx, r.pl.ID))
+	fatal := cerrors.FatalError(cerrors.New("fatal test error"))
+	injectSourceError(ctx, t, r.ls, r.pl.ID, fatal)
+	waitClosed(t, entered, "the OnFailure handler to be called")
+
+	waited := make(chan error, 1)
+	go func() { waited <- r.ls.WaitPipeline(r.pl.ID) }()
+	select {
+	case err := <-waited:
+		t.Fatalf("WaitPipeline returned (%v) while the failure notification was still running", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case err := <-waited:
+		is.True(cerrors.Is(err, fatal))
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitPipeline did not return after the run exited")
+	}
+	is.Equal(len(r.alive()), 0)
+}

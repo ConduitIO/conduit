@@ -108,6 +108,12 @@ type Service struct {
 	// same WaitPipeline lookup-after-delete race — see
 	// docs/design-documents/20260706-forceful-stop-test-determinism.md.
 	terminalErrors *csync.Map[string, error]
+	// terminalRunExited holds, next to terminalErrors, the Dead channel of the
+	// run that recorded the error. WaitPipeline waits on it, so a caller that
+	// finds the pipeline already removed from runningPipelines still returns
+	// only once that run has fully exited, after its OnFailure notification
+	// (#3141 follow-up). Written and cleared with terminalErrors.
+	terminalRunExited *csync.Map[string, <-chan struct{}]
 
 	// testWorkersReleased, if set, is called synchronously from runPipeline
 	// immediately after this run's worker goroutines are released (i.e.
@@ -206,16 +212,17 @@ func NewService(
 	metricsDisabled bool,
 ) *Service {
 	return &Service{
-		logger:           logger.WithComponent("lifecycle.Service"),
-		errRecoveryCfg:   errRecoveryCfg,
-		connectors:       connectors,
-		processors:       processors,
-		connectorPlugins: connectorPlugins,
-		pipelines:        pipelines,
-		runningPipelines: csync.NewMap[string, *runnablePipeline](),
-		terminalErrors:   csync.NewMap[string, error](),
-		starting:         make(map[string]*reservation),
-		metricsDisabled:  metricsDisabled,
+		logger:            logger.WithComponent("lifecycle.Service"),
+		errRecoveryCfg:    errRecoveryCfg,
+		connectors:        connectors,
+		processors:        processors,
+		connectorPlugins:  connectorPlugins,
+		pipelines:         pipelines,
+		runningPipelines:  csync.NewMap[string, *runnablePipeline](),
+		terminalErrors:    csync.NewMap[string, error](),
+		terminalRunExited: csync.NewMap[string, <-chan struct{}](),
+		starting:          make(map[string]*reservation),
+		metricsDisabled:   metricsDisabled,
 	}
 }
 
@@ -545,6 +552,7 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	// A new run supersedes any terminal error recorded by a previous run of this
 	// pipeline, so a later WaitPipeline can't return a stale result.
 	s.terminalErrors.Delete(pipelineID)
+	s.terminalRunExited.Delete(pipelineID)
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running pipeline")
 
@@ -980,6 +988,13 @@ func (s *Service) WaitPipeline(id string) error {
 	// if the pipeline ran and stopped, its terminal error is here — recovering
 	// the result the lookup above would otherwise have lost to the cleanup race.
 	if err, ok := s.terminalErrors.Get(id); ok {
+		// Invariant 7: return only once the run has fully exited. Its cleanup
+		// removes it from runningPipelines before it notifies OnFailure
+		// handlers and returns, so without this wait a caller could see the
+		// result while the run is still finishing.
+		if dead, ok := s.terminalRunExited.Get(id); ok {
+			<-dead
+		}
 		return err
 	}
 	return nil
@@ -2119,6 +2134,9 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		owned := s.ownsPipeline(rp)
 		if owned {
 			s.terminalErrors.Set(rp.pipeline.ID, err)
+			if rp.t != nil {
+				s.terminalRunExited.Set(rp.pipeline.ID, rp.t.Dead())
+			}
 		}
 
 		// All workers have stopped, so remove this run from runningPipelines —
