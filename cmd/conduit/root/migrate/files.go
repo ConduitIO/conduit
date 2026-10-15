@@ -95,9 +95,11 @@ func readInputs(args []string, worker string, stdin io.Reader) ([]kcmigrate.Inpu
 }
 
 // expand returns the absolute path of a file, or the .json and .properties
-// files of a directory (not recursed), sorted. A directory with any other
-// non-hidden file fails rather than skipping it, because a skipped file could
-// be a connector config.
+// files of a directory, sorted. A directory with any other non-hidden file,
+// or with a subdirectory, fails rather than skipping it, because a skipped
+// file could be a connector config. Subdirectories are not recursed: an
+// output directory or a vendored tree under the input would otherwise be
+// migrated by accident.
 func expand(arg string) ([]string, error) {
 	abs, err := filepath.Abs(arg)
 	if err != nil {
@@ -118,7 +120,9 @@ func expand(arg string) ([]string, error) {
 	for _, e := range entries {
 		name := e.Name()
 		switch {
-		case strings.HasPrefix(name, "."), e.IsDir():
+		case strings.HasPrefix(name, "."):
+		case e.IsDir():
+			other = append(other, name+"/")
 		case inputExts[filepath.Ext(name)]:
 			out = append(out, filepath.Join(abs, name))
 		default:
@@ -127,9 +131,9 @@ func expand(arg string) ([]string, error) {
 	}
 	if len(other) > 0 {
 		ce := conduiterr.New(kcmigrate.CodeInputUnrecognized,
-			fmt.Sprintf("%s contains files that are neither .json nor .properties: %s", arg, strings.Join(other, ", ")))
+			fmt.Sprintf("%s contains entries that are not .json or .properties files: %s", arg, strings.Join(other, ", ")))
 		ce.ConfigPath = arg
-		ce.Suggestion = "pass the connector config files explicitly, or move the other files out of the directory"
+		ce.Suggestion = "pass the connector config files (or each subdirectory) explicitly, or move the other entries out of the directory"
 		return nil, ce
 	}
 	sort.Strings(out)
@@ -189,29 +193,39 @@ func unreadable(label, msg, suggestion string) error {
 	return ce
 }
 
-// writeOutputs writes files under dir. A non-empty dir is refused unless
-// force is set; force overwrites the files this run writes and leaves every
-// other file alone. Each file is written to a temporary name and renamed,
-// so a reader never sees a half-written file.
-func writeOutputs(dir string, files []migrate.File, force bool) error {
+// writeOutputs writes files under dir and returns the stale files it
+// removed. A non-empty dir is refused unless force is set. With force, the
+// files this run writes are overwritten, and pipeline files and a secrets
+// template that an earlier migrate run wrote, for connectors this run does
+// not have, are removed, so the directory never mixes two runs. Files
+// migrate did not write are left alone. Each file is written to a temporary
+// name and renamed, so a reader never sees a half-written file.
+func writeOutputs(dir string, files []migrate.File, force bool) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	switch {
 	case err == nil && len(entries) > 0 && !force:
 		ce := conduiterr.New(migrate.CodeOutputExists, dir+" is not empty")
 		ce.ConfigPath = "--out"
-		ce.Suggestion = "pass --force to overwrite the migration files in it, or choose another --out directory"
-		return ce
+		ce.Suggestion = "pass --force to replace the migration files in it, or choose another --out directory"
+		return nil, ce
 	case err != nil && !os.IsNotExist(err):
-		return unwritable(dir, err)
+		return nil, unwritable(dir, err)
+	}
+	var removed []string
+	if force {
+		var err error
+		if removed, err = removeStale(dir, files); err != nil {
+			return nil, err
+		}
 	}
 	for _, f := range files {
 		path := filepath.Join(dir, filepath.FromSlash(f.Path))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return unwritable(dir, err)
+			return nil, unwritable(dir, err)
 		}
 		tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 		if err != nil {
-			return unwritable(path, err)
+			return nil, unwritable(path, err)
 		}
 		_, werr := tmp.Write(f.Content)
 		cerr := tmp.Close()
@@ -223,10 +237,45 @@ func writeOutputs(dir string, files []migrate.File, force bool) error {
 		}
 		if werr != nil {
 			_ = os.Remove(tmp.Name())
-			return unwritable(path, werr)
+			return nil, unwritable(path, werr)
 		}
 	}
-	return nil
+	return removed, nil
+}
+
+// Markers of files an earlier migrate run wrote. Only files that carry one
+// are ever removed.
+const (
+	pipelineMarker = "description: Migrated from Kafka Connect connector "
+	templateMarker = "# Environment variables the migrated pipelines reference."
+)
+
+func removeStale(dir string, files []migrate.File) ([]string, error) {
+	keep := map[string]bool{}
+	for _, f := range files {
+		keep[filepath.FromSlash(f.Path)] = true
+	}
+	candidates, _ := filepath.Glob(filepath.Join(dir, "pipelines", "*.yaml"))
+	candidates = append(candidates, filepath.Join(dir, "secrets.env.template"))
+	var removed []string
+	for _, path := range candidates {
+		rel, err := filepath.Rel(dir, path)
+		if err != nil || keep[rel] {
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue // absent, or not readable: not ours to remove
+		}
+		if !strings.Contains(string(b), pipelineMarker) && !strings.HasPrefix(string(b), templateMarker) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return nil, unwritable(path, err)
+		}
+		removed = append(removed, filepath.ToSlash(rel))
+	}
+	return removed, nil
 }
 
 func unwritable(path string, err error) error {

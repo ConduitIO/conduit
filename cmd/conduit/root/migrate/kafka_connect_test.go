@@ -23,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
 	"github.com/conduitio/conduit/pkg/kcmigrate/schema"
 	"github.com/conduitio/ecdysis"
@@ -147,6 +148,8 @@ func TestKafkaConnect_InputErrors(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "mixed/a.json", connectorJSON)
 	writeFile(t, dir, "mixed/notes.txt", "x")
+	writeFile(t, dir, "nested/a.json", connectorJSON)
+	writeFile(t, dir, "nested/more/b.json", connectorJSON)
 	tests := []struct {
 		name string
 		args []string
@@ -155,6 +158,8 @@ func TestKafkaConnect_InputErrors(t *testing.T) {
 		{"missing file", []string{filepath.Join(dir, "nope.json")}, "migrate.input_unreadable"},
 		{"directory with other files", []string{filepath.Join(dir, "mixed")}, "migrate.input_unrecognized"},
 		{"stdin twice", []string{"-", "-"}, "migrate.input_unreadable"},
+		// A subdirectory could hold connector configs; it is refused, never skipped.
+		{"directory with a subdirectory", []string{filepath.Join(dir, "nested")}, "migrate.input_unrecognized"},
 		{"bad format", []string{"-", "--format", "xml"}, "migrate.input_unrecognized"},
 	}
 	for _, tt := range tests {
@@ -203,4 +208,49 @@ func errCode(t *testing.T, stdout string) string {
 		return ""
 	}
 	return env.Error.Code
+}
+
+// No input is a usage error with a stable code and exit 2, in an envelope
+// under --json, not a silent exit 1.
+func TestKafkaConnect_NoInput(t *testing.T) {
+	is := is.New(t)
+	r := execute(t, "", "--json", "--dry-run")
+	is.True(r.err != nil)
+	is.NoErr(testutils.ValidateEnvelope([]byte(r.stdout)))
+	is.Equal(errCode(t, r.stdout), "migrate.input_unrecognized")
+	is.Equal(exitcode.ExitCode(r.err), exitcode.Validation)
+
+	r = execute(t, "", "--dry-run")
+	is.True(strings.Contains(r.stdout, "migrate.input_unrecognized"))
+}
+
+func TestKafkaConnect_HelpListsExitCodes(t *testing.T) {
+	is := is.New(t)
+	long := (&KafkaConnectCommand{}).Docs().Long
+	for _, s := range []string{"exits 0", "2 when", "3 when", "1 on an internal error"} {
+		is.True(strings.Contains(long, s))
+	}
+}
+
+// With --force, pipeline files an earlier run wrote for connectors that are
+// gone are removed, so the directory never mixes runs. Files migrate did not
+// write are left alone.
+func TestKafkaConnect_ForceClearsStalePipelines(t *testing.T) {
+	is := is.New(t)
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out")
+	stale := writeFile(t, out, "pipelines/old.yaml", "version: \"2.2\"\npipelines:\n  - id: old\n    description: Migrated from Kafka Connect connector \"old\" (X) by conduit v; report sha256:00\n")
+	mine := writeFile(t, out, "pipelines/hand-written.yaml", "version: \"2.2\"\npipelines: []\n")
+	staleTmpl := writeFile(t, out, "secrets.env.template", "# Environment variables the migrated pipelines reference. migrate never writes their values.\nX=\n")
+	p := writeFile(t, dir, "orders.json", connectorJSON)
+
+	r := execute(t, "", p, "--out", out, "--force")
+	is.NoErr(r.err)
+	_, err := os.Stat(stale)
+	is.True(os.IsNotExist(err))
+	_, err = os.Stat(staleTmpl)
+	is.True(os.IsNotExist(err))
+	_, err = os.Stat(mine)
+	is.NoErr(err)
+	is.True(strings.Contains(r.stdout, "Removed 2 files"))
 }

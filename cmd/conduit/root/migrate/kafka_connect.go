@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
 	"github.com/conduitio/conduit/pkg/kcmigrate/migrate"
@@ -64,6 +63,7 @@ type KafkaConnectCommand struct {
 	stdin    io.Reader
 	renderer *ui.Renderer
 	wrote    bool
+	removed  []string
 }
 
 func (c *KafkaConnectCommand) Usage() string { return "kafka-connect <input>..." }
@@ -81,8 +81,10 @@ any of these forms: a .properties file, a connector as the Connect REST API take
 a bare config map, or the output of GET /connectors?expand=info&expand=status.
 
 The command is offline: it reads its inputs and writes --out, nothing else. It exits 0 when no
-entry blocks, 2 when one does (or on bad input), and 1 on an internal error. With --dry-run it
-writes nothing and exits the same way.
+entry blocks, 2 when one does (or on bad input), 3 when an output file cannot be written, and
+1 on an internal error. With --dry-run it writes nothing and exits the same way. --force
+replaces the files of an earlier run in --out, including pipeline files for connectors this
+run no longer has; files migrate did not write are left alone.
 
 Connector classes this version migrates: ` + classList() + `.`,
 		Example: "conduit migrate kafka-connect connectors/orders.json\n" +
@@ -101,10 +103,10 @@ func classList() string {
 
 func (c *KafkaConnectCommand) Flags() []ecdysis.Flag { return ecdysis.BuildFlags(&c.flags) }
 
+// Args records the inputs. No input is checked in ExecuteWithResult, so it
+// is a coded usage error with an envelope under --json instead of cobra's
+// silent exit.
 func (c *KafkaConnectCommand) Args(args []string) error {
-	if len(args) == 0 {
-		return cerrors.New("requires at least one input: a file, a directory or - for standard input")
-	}
 	c.args = args
 	return nil
 }
@@ -125,6 +127,11 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 	}
 	c.renderer = ui.NewRenderer(out, c.flags.NoColor)
 
+	if len(c.args) == 0 {
+		ce := conduiterr.New(kcmigrate.CodeInputUnrecognized, "no input: pass at least one connector config")
+		ce.Suggestion = "pass files, directories, or - for standard input, for example: conduit migrate kafka-connect connectors/"
+		return cecdysis.Outcome{}, ce
+	}
 	format, err := kcmigrate.ParseFormat(c.flags.Format)
 	if err != nil {
 		return cecdysis.Outcome{}, err
@@ -146,9 +153,11 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 		return cecdysis.Outcome{}, err
 	}
 	if !c.flags.DryRun {
-		if err := writeOutputs(c.flags.Out, res.Files, c.flags.Force); err != nil {
+		removed, err := writeOutputs(c.flags.Out, res.Files, c.flags.Force)
+		if err != nil {
 			return cecdysis.Outcome{}, err
 		}
+		c.removed = removed
 		c.wrote = true
 	}
 	return cecdysis.Outcome{OK: res.OK, Summary: res.Report.Summary, Result: res.Report}, nil
@@ -204,11 +213,7 @@ func (c *KafkaConnectCommand) Render(outcome cecdysis.Outcome) string {
 		fmt.Fprintln(&b, "--strict: the ⚠ items above and any accepted gaps fail the run.")
 	}
 	if !c.flags.Quiet {
-		if c.wrote {
-			fmt.Fprintf(&b, "Wrote %s and %s to %s.\n", migrate.ReportFile, migrate.ReportMarkdownFile, c.flags.Out)
-		} else {
-			fmt.Fprintln(&b, "Dry run: no files written.")
-		}
+		c.renderFiles(&b)
 	}
 	return b.String()
 }
@@ -234,5 +239,17 @@ func targetText(rc kcmigrate.ReportConnector) string {
 		return fmt.Sprintf("%s source, %s destination (%s)", rc.Target.Source, rc.Target.Destination, rc.PipelineStatus)
 	default:
 		return rc.Pipeline
+	}
+}
+
+// renderFiles says what the run wrote and removed.
+func (c *KafkaConnectCommand) renderFiles(b *strings.Builder) {
+	if len(c.removed) > 0 {
+		fmt.Fprintf(b, "Removed %d files of an earlier run from %s: %s.\n", len(c.removed), c.flags.Out, strings.Join(c.removed, ", "))
+	}
+	if c.wrote {
+		fmt.Fprintf(b, "Wrote %s and %s to %s.\n", migrate.ReportFile, migrate.ReportMarkdownFile, c.flags.Out)
+	} else {
+		fmt.Fprintln(b, "Dry run: no files written.")
 	}
 }
