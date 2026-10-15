@@ -300,3 +300,21 @@ func TestService_NewDispenser_Destination_TokenHandling(t *testing.T) {
 	_, err = destination.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 	is.NoErr(err)
 }
+
+// TestService_ResolvesToStandalone: the rule NewDispenser applies, without
+// dispensing. Only a name without a type prefix asks the standalone registry.
+func TestService_ResolvesToStandalone(t *testing.T) {
+	is := is.New(t)
+	ctrl := gomock.NewController(t)
+
+	standaloneReg := mock.NewStandaloneReg(ctrl)
+	standaloneReg.EXPECT().Has(plugin.FullName("installed")).Return(true)
+	standaloneReg.EXPECT().Has(plugin.FullName("postgres@v0.14.0")).Return(false)
+	underTest := connector.NewPluginService(log.Nop(), mock.NewBuiltinReg(ctrl), standaloneReg, mock.NewAuthManager(ctrl))
+
+	is.True(underTest.ResolvesToStandalone("standalone:anything"))
+	is.True(!underTest.ResolvesToStandalone("builtin:postgres"))
+	is.True(!underTest.ResolvesToStandalone("crunchy:postgres"))
+	is.True(underTest.ResolvesToStandalone("installed"))
+	is.True(!underTest.ResolvesToStandalone("postgres@v0.14.0"))
+}

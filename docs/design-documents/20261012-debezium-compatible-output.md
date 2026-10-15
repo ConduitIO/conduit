@@ -588,6 +588,14 @@ a plugin, so it starts no process. The hook is a list of
 checks, empty unless a registered check applies; it adds no behavior to pipelines without `debezium.*`. It touches
 the start path of both engines, so it is Tier 1 on its own review and gets its own PR.
 
+**Implemented so far (#3124).** The hook is `pkg/lifecycle/starthook`, called from `startRun` in both engines.
+Its first check is decision 18: a pipeline whose records can reach `debezium.encode` through a standalone plugin
+(a standalone source connector, a standalone processor before the encoder on its path, or an encoder that itself
+resolves to a standalone plugin) is refused with `pipeline.debezium_standalone_before_encode`, naming every
+offender. Plugin references are resolved with the standalone registries' `Has`, which reads the same map the
+dispenser does (including `@latest` and unversioned names), instead of `List()`. The four placement rules above and
+`debezium.encode_missing` are not implemented yet.
+
 **Runtime net.** The hook is a guard, not the guarantee. The Kafka destination fails any record that carries
 `debezium.*` metadata but no `kafka.messages.version` with `kafka.debezium_record_unencoded` before producing it:
 a typed record that bypassed the encoder (a skipped processor, a hook that did not run) never reaches a topic as an

@@ -76,7 +76,11 @@ func (noopV2ProcessorService) MakeRunnableProcessor(context.Context, *processor.
 	return nil, cerrors.New("noopV2ProcessorService: not implemented")
 }
 
+func (noopV2ProcessorService) ResolvesToStandalone(string) bool { return false }
+
 type noopV2ConnectorPluginService struct{}
+
+func (noopV2ConnectorPluginService) ResolvesToStandalone(string) bool { return false }
 
 func (noopV2ConnectorPluginService) NewDispenser(log.CtxLogger, string, string) (connectorPlugin.Dispenser, error) {
 	return nil, cerrors.New("noopV2ConnectorPluginService: not implemented")

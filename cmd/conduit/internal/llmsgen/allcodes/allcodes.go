@@ -65,6 +65,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/kcmigrate"
 	_ "github.com/conduitio/conduit/pkg/kcmigrate/migrate"
 	_ "github.com/conduitio/conduit/pkg/lifecycle-poc"
+	_ "github.com/conduitio/conduit/pkg/lifecycle/starthook"
 	_ "github.com/conduitio/conduit/pkg/orchestrator"
 	_ "github.com/conduitio/conduit/pkg/pipeline"
 	_ "github.com/conduitio/conduit/pkg/plugin/connector/standalone"

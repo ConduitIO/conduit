@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
+	"github.com/conduitio/conduit/pkg/lifecycle/starthook"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -428,11 +429,19 @@ type ConnectorService interface {
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
+	// ResolvesToStandalone reports whether a processor with this plugin
+	// reference would run as a standalone plugin. The start checks
+	// (pkg/lifecycle/starthook) use it.
+	ResolvesToStandalone(pluginName string) bool
 }
 
 // ConnectorPluginService can create a connector plugin dispenser.
 type ConnectorPluginService interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
+	// ResolvesToStandalone reports whether NewDispenser would dispense a
+	// standalone plugin for name, without dispensing one. The start checks
+	// (pkg/lifecycle/starthook) use it.
+	ResolvesToStandalone(name string) bool
 }
 
 // PipelineService can fetch, list and update the status of a pipeline instance.
@@ -522,6 +531,12 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	if err := s.checkDestinationBatching(ctx, pl); err != nil {
 		return err
 	}
+	// Same point, same reason: the start checks shared with the classic engine
+	// (package starthook). On a recovery restart the refusal is the recovery's
+	// error: the pipeline is degraded and not retried.
+	if err := s.startChecks(ctx, pl); err != nil {
+		return err
+	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building tasks")
@@ -558,6 +573,16 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
 
 	return nil
+}
+
+// startChecks runs the start checks shared by both engines (see package
+// starthook) against the stored pipeline.
+func (s *Service) startChecks(ctx context.Context, pl *pipeline.Instance) error {
+	return starthook.Check(ctx, pl, starthook.Services{
+		Connectors:       s.connectors,
+		Processors:       s.processors,
+		ConnectorPlugins: s.connectorPlugins,
+	})
 }
 
 // Stop will attempt to gracefully stop a given pipeline by calling each worker's

@@ -282,6 +282,44 @@ func (m *StandaloneReg) EXPECT() *StandaloneRegMockRecorder {
 	return m.recorder
 }
 
+// Has mocks base method.
+func (m *StandaloneReg) Has(fullName plugin.FullName) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Has", fullName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// Has indicates an expected call of Has.
+func (mr *StandaloneRegMockRecorder) Has(fullName any) *StandaloneRegHasCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*StandaloneReg)(nil).Has), fullName)
+	return &StandaloneRegHasCall{Call: call}
+}
+
+// StandaloneRegHasCall wrap *gomock.Call
+type StandaloneRegHasCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *StandaloneRegHasCall) Return(arg0 bool) *StandaloneRegHasCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *StandaloneRegHasCall) Do(f func(plugin.FullName) bool) *StandaloneRegHasCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *StandaloneRegHasCall) DoAndReturn(f func(plugin.FullName) bool) *StandaloneRegHasCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Init mocks base method.
 func (m *StandaloneReg) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
 	m.ctrl.T.Helper()

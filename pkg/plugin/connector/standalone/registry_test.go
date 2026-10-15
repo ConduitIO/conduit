@@ -142,3 +142,24 @@ func TestRegistry_List(t *testing.T) {
 	}
 	is.Equal(got, want)
 }
+
+// TestRegistry_Has: Has agrees with NewDispenser's lookup, including the latest
+// entry that List skips (#3124 resolves plugin references with it).
+func TestRegistry_Has(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	r := NewRegistry(log.Nop(), testPluginDir)
+	r.Init(ctx, ":12345", server.DefaultMaxReceiveRecordSize)
+
+	for name, want := range map[string]bool{
+		testPluginName:                           true,
+		testPluginName + "@latest":               true,
+		testPluginName + "@" + testPluginVersion: true,
+		"standalone:" + testPluginName:           true,
+		testPluginName + "@v9.9.9":               false,
+		"not-" + testPluginName:                  false,
+	} {
+		is.Equal(r.Has(plugin.FullName(name)), want) // name
+	}
+}

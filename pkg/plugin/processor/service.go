@@ -34,6 +34,7 @@ type registry interface {
 type standaloneRegistry interface {
 	registry
 	Register(ctx context.Context, path string) (plugin.FullName, error)
+	Has(fullName plugin.FullName) bool
 }
 
 type PluginService struct {
@@ -73,6 +74,27 @@ func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id 
 		return d, err
 	default:
 		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
+	}
+}
+
+// ResolvesToStandalone reports whether NewProcessor, given pluginName, would
+// build a standalone (WASM) processor. It applies NewProcessor's rule without
+// building anything: a "standalone:" name is standalone, a "builtin:" name is
+// not, and a name without a type prefix is standalone when the standalone
+// registry has it, because standalone plugins take precedence. A name with an
+// invalid prefix is not standalone (NewProcessor refuses it anyway).
+//
+// The answer can change if a standalone plugin with the same name is
+// registered later, so it holds for the moment it is asked.
+func (s *PluginService) ResolvesToStandalone(pluginName string) bool {
+	fullName := plugin.FullName(pluginName)
+	switch fullName.PluginType() {
+	case plugin.PluginTypeStandalone:
+		return true
+	case plugin.PluginTypeAny:
+		return s.standaloneReg.Has(fullName)
+	default:
+		return false
 	}
 }
 
