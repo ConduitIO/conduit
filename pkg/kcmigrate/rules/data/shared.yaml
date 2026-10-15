@@ -27,6 +27,24 @@ keys:
     reason: Conduit pins plugin versions in the registry, not per pipeline.
     fix: None needed; check the plugin version the pipeline runs with in the registry.
     diff: behavior
+  - key: key.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on key.converter.
+    fix: None needed.
+    diff: behavior
+  - key: value.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on value.converter.
+    fix: None needed.
+    diff: behavior
+  - key: header.converter.plugin.version
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit pins plugin versions in the registry, not per pipeline; the converter itself is reported on header.converter.
+    fix: None needed.
+    diff: behavior
   - key: tasks.max
     diff: behavior
     values:
@@ -238,6 +256,19 @@ keys:
         code: kc.key_unsupported
         reason: The Kafka source takes a list of topics, not a pattern.
         fix: List the topics in topics.
+  - key: topic.creation.groups
+    diff: behavior
+    values:
+      - match: [""]
+        status: translated
+        reason: Empty, the upstream default (no topic creation groups).
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit's Kafka destination creates topics with the broker's defaults; partition count, replication factor and cleanup.policy can differ.
+        fix: Create the topics ahead of time with the settings Kafka Connect would have used.
   - key: {prefix: topic.creation.}
     status: unsupported
     blocking: true

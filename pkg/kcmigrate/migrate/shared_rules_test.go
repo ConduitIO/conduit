@@ -180,3 +180,11 @@ func checkPipeline(t *testing.T, content string) {
 		}
 	}
 }
+
+func TestSharedRules_ConverterPluginVersion(t *testing.T) {
+	is := is.New(t)
+	res := runOneWith(t, sharedEngine(t), Request{Inputs: []kcmigrate.Input{in("c.properties", sharedBase+"value.converter.plugin.version=3.0\n")}})
+	e := entryFor(res.Report.Connectors[0], "value.converter.plugin.version")
+	is.True(strings.Contains(e.Reason, "pins plugin versions"))
+	is.True(!e.Blocking)
+}

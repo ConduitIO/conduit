@@ -20,8 +20,11 @@ keys:
   - {key: tasks.max, default: "1"}
   - {key: tasks.max.enforce, default: "true"}
   - {key: key.converter}
+  - {key: key.converter.plugin.version}
   - {key: value.converter}
+  - {key: value.converter.plugin.version}
   - {key: header.converter, default: org.apache.kafka.connect.storage.SimpleHeaderConverter}
+  - {key: header.converter.plugin.version}
   - {key: config.action.reload, default: restart}
   - {key: transforms, default: ""}
   - {key: predicates, default: ""}
@@ -37,7 +40,7 @@ keys:
   - {key: errors.deadletterqueue.topic.replication.factor, default: "3"}
   - {key: errors.deadletterqueue.context.headers.enable, default: "false"}
   # Source connectors.
-  - {key: topic.creation.groups}
+  - {key: topic.creation.groups, default: ""}  # List.of(), SourceConnectorConfig.java:133
   - {key: exactly.once.support, default: requested}
   - {key: transaction.boundary, default: poll}
   - {key: transaction.boundary.interval.ms}
