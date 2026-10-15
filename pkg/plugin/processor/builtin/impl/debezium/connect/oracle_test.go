@@ -181,7 +181,8 @@ func runOracle(t *testing.T, path string) {
 				}
 				v = cv
 			case "DEFAULTS":
-				cv, err := FromGo(s, map[string]any{"arr": []any{int32(1), nil}})
+				// Every field present, nulls explicit (FromGo refuses absent fields).
+				cv, err := FromGo(s, map[string]any{"a": nil, "n": nil, "arr": []any{int32(1), nil}, "e": nil})
 				if err != nil {
 					t.Fatalf("DEFAULTS FromGo: %v", err)
 				}
@@ -196,6 +197,19 @@ func runOracle(t *testing.T, path string) {
 			case "TOPNULL":
 				v = nil
 			}
+		case "HT":
+			kindRaw := strings.SplitN(in, ",", 2)
+			n, _ := strconv.ParseInt(kindRaw[1], 10, 64)
+			one := 1
+			names := map[string]struct {
+				name string
+				typ  Type
+			}{"TS": {LogicalTimestamp, TypeInt64}, "DATE": {LogicalDate, TypeInt32}, "TIME": {LogicalTime, TypeInt32}}
+			ts := &Schema{Type: names[kindRaw[0]].typ, Name: names[kindRaw[0]].name, Version: &one}
+			check(row, "header", oracleHex(hc.Marshal(ts, n)), c[2])
+			st := &Schema{Type: TypeStruct, Fields: []Field{{Name: "k", Schema: ts}}}
+			check(row, "header-embedded", oracleHex(hc.Marshal(st, &Struct{Schema: st, Values: []any{n}})), c[3])
+			continue
 		case "DEPTH":
 			depth, _ := strconv.Atoi(in)
 			s = &Schema{Type: TypeInt32}
@@ -226,7 +240,7 @@ func runOracle(t *testing.T, path string) {
 	if err := sc.Err(); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"D", "F", "L", "S", "N", "STRUCT", "DEFAULTS", "TOPNULL", "DEPTH", "EMPTYPARAMS"} {
+	for _, k := range []string{"D", "F", "L", "S", "N", "STRUCT", "DEFAULTS", "TOPNULL", "DEPTH", "EMPTYPARAMS", "HT"} {
 		if kinds[k] == 0 {
 			t.Errorf("oracle has no %s rows", k)
 		}

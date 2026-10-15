@@ -21,8 +21,10 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
 
@@ -87,6 +89,13 @@ func appendValuesString(sb *strings.Builder, s *Schema, v any, embedded bool, pa
 			return wrong()
 		}
 		sb.WriteString(javaBigDecimalString(d))
+		return nil
+	}
+	if ms, ok, err := connectTemporalMillis(s, v); ok || err != nil {
+		if err != nil {
+			return mismatch(path, err.Error())
+		}
+		sb.WriteString(javaDateString(ms))
 		return nil
 	}
 	switch s.Type {
@@ -230,4 +239,44 @@ func javaBigDecimalString(d Decimal) string {
 		out = "-" + out
 	}
 	return out
+}
+
+// connectTemporalMillis returns the java.util.Date millisecond value of a
+// Connect Timestamp (int64 ms), Date (int32 days) or Time (int32 ms). ok is
+// false for any other schema. Debezium uses these types for keys under
+// time.precision.mode=connect.
+func connectTemporalMillis(s *Schema, v any) (int64, bool, error) {
+	switch s.Name {
+	case LogicalTimestamp, LogicalDate, LogicalTime:
+	default:
+		return 0, false, nil
+	}
+	n, ok := v.(int64)
+	if !ok {
+		return 0, true, cerrors.Errorf("%s value must be int64, got %T", s.Name, v)
+	}
+	if s.Name == LogicalDate {
+		return n * millisPerDay, true, nil
+	}
+	return n, true, nil
+}
+
+const millisPerDay = 86400000
+
+// javaDateString is how Values.append writes a java.util.Date (oracle rows
+// HT): the format is chosen by the value, not by the logical type. Below one
+// day after the epoch (including every instant before 1970) it is the time of
+// day, HH:mm:ss.SSS'Z'; at an exact UTC midnight it is yyyy-MM-dd; otherwise
+// yyyy-MM-dd'T'HH:mm:ss.SSS'Z'. All in UTC, unquoted, even when embedded. So a
+// Date of 1970-01-01 is written 00:00:00.000Z, as Kafka writes it.
+func javaDateString(ms int64) string {
+	t := time.UnixMilli(ms).UTC()
+	timeOfDay := fmt.Sprintf("%02d:%02d:%02d.%03dZ", t.Hour(), t.Minute(), t.Second(), t.Nanosecond()/1e6)
+	switch {
+	case ms < millisPerDay:
+		return timeOfDay
+	case ms%millisPerDay == 0:
+		return fmt.Sprintf("%04d-%02d-%02d", t.Year(), int(t.Month()), t.Day())
+	}
+	return fmt.Sprintf("%04d-%02d-%02dT%s", t.Year(), int(t.Month()), t.Day(), timeOfDay)
 }

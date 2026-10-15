@@ -73,10 +73,14 @@ func (d Decimal) String() string {
 //   - array: []any or a typed slice of accepted element types.
 //   - map: []MapEntry only. A Go map has no order, and the converter output
 //     of a Connect map is ordered.
-//   - struct: map[string]any (field names are looked up in schema order, so
-//     map iteration order never matters), or a *Struct built against s.
+//   - struct: map[string]any holding every field of the schema (nil for a
+//     null, never absent) and no other key; field names are looked up in
+//     schema order, so map iteration order never matters. Or a *Struct
+//     built against s.
 //
-// nil is accepted for an optional schema and refused for a required one.
+// nil is accepted for an optional schema, and for a required schema with a
+// default (the converter then writes the default or fails, as Kafka does); it
+// is refused for any other required schema.
 func FromGo(s *Schema, v any) (any, error) {
 	return fromGo(s, v, "$")
 }
@@ -84,7 +88,11 @@ func FromGo(s *Schema, v any) (any, error) {
 //nolint:gocyclo // one branch per Connect type; splitting it hides the mapping
 func fromGo(s *Schema, v any, path string) (any, error) {
 	if v == nil {
-		if s.Optional {
+		// A null in a required field with a default is what Kafka Connect
+		// accepts too: the converter writes the default when
+		// replace.null.with.default is on and fails the record when it is
+		// off (oracle probe C8), so the decision is the converter's.
+		if s.Optional || (s.HasDefault && s.Default != nil) {
 			return nil, nil
 		}
 		return nil, mismatch(path, "null value for required field")
@@ -209,12 +217,15 @@ func structValue(s *Schema, v any, path string) (*Struct, error) {
 	matched := 0
 	for i, f := range s.Fields {
 		fv, present := m[f.Name]
-		if present {
-			matched++
+		// Invariant 6: every field must be present, null or not. An absent
+		// field would become null here, and with replace.null.with.default
+		// the converter would write the column default: a value the row
+		// never had (#3076 re-review). A Debezium-mode source sends every
+		// column; a processor that removes one fails the record.
+		if !present {
+			return nil, mismatch(path+"."+f.Name, "field missing (send null for a NULL column)")
 		}
-		if !present && !f.Schema.Optional {
-			return nil, mismatch(path+"."+f.Name, "required field missing")
-		}
+		matched++
 		cv, err := fromGo(f.Schema, fv, path+"."+f.Name)
 		if err != nil {
 			return nil, err
@@ -222,8 +233,8 @@ func structValue(s *Schema, v any, path string) (*Struct, error) {
 		out.Values[i] = cv
 	}
 	// Invariant 6: a field the schema does not know is never dropped silently.
-	// Every key of m must name a field; counting the matched keys is not
-	// enough, because an absent optional field makes room for an unknown one.
+	// Every key of m must name a field. With every field present, the count
+	// tells; the scan names the culprit.
 	if matched != len(m) {
 		for k := range m {
 			if _, idx := s.Field(k); idx < 0 {
@@ -531,8 +542,14 @@ func jsonToConnect(s *Schema, v any) (any, error) {
 		var f float64
 		switch n := v.(type) {
 		case json.Number:
+			// Parse at the schema's width: rounding the text to float64 and
+			// then to float32 can differ from rounding it to float32 once.
+			bits := 64
+			if s.Type == TypeFloat32 {
+				bits = 32
+			}
 			var err error
-			if f, err = n.Float64(); err != nil {
+			if f, err = strconv.ParseFloat(n.String(), bits); err != nil {
 				return nil, err
 			}
 		case string:

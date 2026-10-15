@@ -29,6 +29,12 @@ public class Oracle {
   static void out(String kind, String in, Schema s, Object v) {
     System.out.println(kind + "\t" + in + "\t" + enc(js, s, v) + "\t" + enc(jn, s, v) + "\t" + hdr(s, v));
   }
+  // HT rows: the header converter for a temporal logical value, written at
+  // the top level and embedded in a struct.
+  static void hdrTemporal(String kind, String raw, Schema s, java.util.Date v) {
+    Schema st = SchemaBuilder.struct().field("k", s).build();
+    System.out.println("HT\t" + kind + "," + raw + "\t" + hdr(s, v) + "\t" + hdr(st, new Struct(st).put("k", v)));
+  }
   public static void main(String[] a) {
     Random r = new Random(42);
     List<Double> ds = new ArrayList<>(List.of(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -0.0, 0.0, Double.MIN_VALUE, -Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_NORMAL, 1e7, 9999999.999999998, 1e-3, 0.0009999999999999998, 1e21, 1e22, 1e23, 9007199254740993.0, 2e-323, 1.0E-5, 123456789.0, 5e-324, 1e-300, 4.35, 2.0E-3, 100.0, 1.0E10));
@@ -78,6 +84,14 @@ public class Oracle {
       for (int i = 0; i < depth; i++) { s = SchemaBuilder.array(s).build(); v = List.of(v); }
       System.out.println("DEPTH\t" + depth + "\t" + enc(jn, s, v).length() + ":" + enc(jn, s, v).substring(0, Math.min(40, enc(jn, s, v).length())) + "\t" + enc(js, s, v).startsWith("ERR"));
     }
+    // header converter: Connect temporal logical types (time.precision.mode=connect keys)
+    long[] tsMillis = {0L, 1L, -1L, 86399999L, 86400000L, 86400001L, 1700000000123L, 1700006400000L, -86400000L, -86400001L,
+        -62135596800000L, 253402300799999L, 253402300800000L, 4102444800000L, 1000L * 86400000L + 1L};
+    for (long ms : tsMillis) hdrTemporal("TS", Long.toString(ms), Timestamp.SCHEMA, new java.util.Date(ms));
+    int[] days = {0, 1, -1, 19000, 2932896, 2932897, -719162};
+    for (int d : days) hdrTemporal("DATE", Integer.toString(d), org.apache.kafka.connect.data.Date.SCHEMA, new java.util.Date(d * 86400000L));
+    int[] times = {0, 1, 3723004, 86399999};
+    for (int ms : times) hdrTemporal("TIME", Integer.toString(ms), Time.SCHEMA, new java.util.Date(ms));
     // empty parameters map
     Schema ep = SchemaBuilder.string().parameters(new HashMap<>()).build();
     System.out.println("EMPTYPARAMS\t-\t" + enc(js, ep, "x"));

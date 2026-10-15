@@ -84,11 +84,6 @@ func genValue(t *rapid.T, s *connect.Schema, label string) any {
 func genRow(t *rapid.T, tb table, id int64, label string) opencdc.StructuredData {
 	row := opencdc.StructuredData{"id": id}
 	for _, c := range tb.cols[1:] {
-		// An optional field may be absent, not only null: that is the case
-		// in which an unknown field could take its place unnoticed.
-		if c.Schema.Optional && rapid.Bool().Draw(t, label+c.Name+"-absent") {
-			continue
-		}
 		row[c.Name] = genValue(t, c.Schema, label+c.Name)
 	}
 	return row
@@ -218,18 +213,28 @@ func TestPropPlanShape(t *testing.T) {
 	})
 }
 
-// A row field the descriptor does not know, or a source-block key the compat
-// level does not have, fails the record; it is never dropped (invariant 6).
+// A row field the descriptor does not know, a descriptor field the row does
+// not have (absent, not null), or a source-block key the compat level does
+// not have fails the record; nothing is dropped or invented (invariant 6).
 func TestPropUnknownFieldsRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		tb := genTable().Draw(t, "table")
 		b := newTestBuilder(t, true)
 		row := genRow(t, tb, 1, "after")
 		md := sourceMD(opencdc.Metadata{MetaTopic: "p.s.t", MetaDescriptor: tb.text, MetaOp: "c"})
-		if rapid.Bool().Draw(t, "extraSourceKey") {
+		switch rapid.IntRange(0, 2).Draw(t, "case") {
+		case 0:
 			md[MetaSourcePfx+"unknown_"+rapid.StringMatching(`[a-z]{1,5}`).Draw(t, "k")] = "x"
-		} else {
+		case 1:
 			row["zz_"+rapid.StringMatching(`[a-z]{1,5}`).Draw(t, "f")] = "x"
+		case 2:
+			// Drop any one column, optional ones included: an absent
+			// optional column would otherwise be written as its default.
+			col := rapid.SampledFrom(tb.cols).Draw(t, "dropped")
+			delete(row, col.Name)
+			if rapid.Bool().Draw(t, "replaceWithUnknown") {
+				row["zz_unknown"] = "x" // same key count, as in the first review's case
+			}
 		}
 		_, err := b.Plan(opencdc.Record{Key: opencdc.StructuredData{"id": int64(1)}, Metadata: md, Payload: opencdc.Change{After: row}})
 		ce, ok := conduiterr.Get(err)
@@ -241,8 +246,11 @@ func TestPropUnknownFieldsRejected(t *testing.T) {
 
 func TestPlanErrors(t *testing.T) {
 	tbDesc, err := MarshalDescriptor(&Descriptor{
-		Key:   &connect.Schema{Type: connect.TypeStruct, Name: "p.s.t.Key", Fields: []connect.Field{{Name: "id", Schema: &connect.Schema{Type: connect.TypeInt64}}}},
-		Value: &connect.Schema{Type: connect.TypeStruct, Optional: true, Name: "p.s.t.Value", Fields: []connect.Field{{Name: "id", Schema: &connect.Schema{Type: connect.TypeInt64}}}},
+		Key: &connect.Schema{Type: connect.TypeStruct, Name: "p.s.t.Key", Fields: []connect.Field{{Name: "id", Schema: &connect.Schema{Type: connect.TypeInt64}}}},
+		Value: &connect.Schema{Type: connect.TypeStruct, Optional: true, Name: "p.s.t.Value", Fields: []connect.Field{
+			{Name: "id", Schema: &connect.Schema{Type: connect.TypeInt64}},
+			{Name: "note", Schema: &connect.Schema{Type: connect.TypeString, Optional: true, Default: "dflt", HasDefault: true}},
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +259,7 @@ func TestPlanErrors(t *testing.T) {
 		return opencdc.Record{
 			Key:      opencdc.StructuredData{"id": int64(1)},
 			Metadata: sourceMD(opencdc.Metadata{MetaTopic: "p.s.t", MetaDescriptor: string(tbDesc), MetaOp: "c"}),
-			Payload:  opencdc.Change{After: opencdc.StructuredData{"id": int64(1)}},
+			Payload:  opencdc.Change{After: opencdc.StructuredData{"id": int64(1), "note": nil}},
 		}
 	}
 	for _, tc := range []struct {
@@ -277,6 +285,18 @@ func TestPlanErrors(t *testing.T) {
 		{"old key not JSON", func(r *opencdc.Record) {
 			r.Metadata[MetaOp] = "u"
 			r.Metadata[MetaOldKey] = "{"
+		}, connect.CodeRecordSchemaMismatch},
+		// #3076 re-review: an absent column would be written as its default
+		// ("dflt"), a value the row never had.
+		{"row without an optional column", func(r *opencdc.Record) {
+			r.Payload.After = opencdc.StructuredData{"id": int64(1)}
+		}, connect.CodeRecordSchemaMismatch},
+		// #3076 re-review: a lenient old-key parser would pick the last of two
+		// ids and delete the wrong key.
+		{"old key with a duplicate member", func(r *opencdc.Record) {
+			r.Metadata[MetaOp] = "u"
+			r.Metadata[MetaOldKey] = `{"id":2,"id":3}`
+			r.Payload.Before = opencdc.StructuredData{"id": int64(2), "note": nil}
 		}, connect.CodeRecordSchemaMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

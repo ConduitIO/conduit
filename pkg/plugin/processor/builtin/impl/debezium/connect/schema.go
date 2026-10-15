@@ -60,7 +60,13 @@ func (t Type) valid() bool {
 const (
 	LogicalDecimal              = "org.apache.kafka.connect.data.Decimal"
 	LogicalVariableScaleDecimal = "io.debezium.data.VariableScaleDecimal"
-	ParamDecimalScale           = "scale"
+	// The Connect temporal logical types, used by Debezium under
+	// time.precision.mode=connect. Their JSON form is the plain number; only
+	// the header converter formats them.
+	LogicalTimestamp  = "org.apache.kafka.connect.data.Timestamp"
+	LogicalDate       = "org.apache.kafka.connect.data.Date"
+	LogicalTime       = "org.apache.kafka.connect.data.Time"
+	ParamDecimalScale = "scale"
 )
 
 // Param is one schema parameter. Parameters are a list, not a map, because the

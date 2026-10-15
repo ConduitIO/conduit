@@ -214,7 +214,9 @@ func (b *Builder) Plan(rec opencdc.Record) ([]Message, error) {
 // primaryKeyChange is RelationalChangeRecordEmitter.emitUpdateAsPrimaryKeyChangeRecord.
 // The old key arrives in debezium.old_key as the key's schemaless JSON
 // payload with decimals as JSON numbers (decimal.format=NUMERIC), which keeps
-// a numeric key's scale exactly ("1.50" stays 1.50).
+// a numeric key's scale exactly ("1.50" stays 1.50). It is parsed strictly
+// (ParsePayloadJSON): a duplicate member or an altered character would make
+// the delete target a key that is not the old one (invariant 6).
 //
 // a delete for the old key with header newkey, its tombstone with the same
 // header, then a create for the new key with header oldkey. The delete's
