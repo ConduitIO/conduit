@@ -25,6 +25,7 @@ const (
 	labelPipelineName = "pipeline_name"
 	labelType         = "type"
 	labelPlugin       = "plugin"
+	labelOutcome      = "outcome"
 	// labelComponentID is the ID of the pipeline component (connector or
 	// processor) a metric belongs to. It uses the same ID space as the
 	// topology nodes and as the existing conduit_inspector_sessions /
@@ -61,6 +62,17 @@ var (
 		"conduit_pipeline_status_persist_failures_total",
 		"Number of pipeline status writes that failed to reach the pipeline store (by pipeline name).",
 		[]string{labelPipelineName},
+	)
+	// AmbientCredentialsCounter counts built-in connector decisions about the
+	// host's ambient cloud credentials, by plugin and outcome (used,
+	// denied_disabled, denied_endpoint, denied_redirect, denied_link_local,
+	// denied_resource, denied_proxy). Outcome values are
+	// conduit-commons/hostpolicy Outcome constants. See
+	// docs/operations/ambient-credentials.md.
+	AmbientCredentialsCounter = metrics.NewLabeledCounter(
+		"conduit_connector_ambient_credentials_total",
+		"Number of built-in connector decisions about ambient cloud credentials (by plugin and outcome).",
+		[]string{labelPlugin, labelOutcome},
 	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
