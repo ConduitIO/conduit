@@ -67,6 +67,12 @@ type Request struct {
 	// CLI and the MCP tool pass the `pipelines validate` engine, which lives
 	// under cmd/conduit and so cannot be imported here.
 	ValidatePipeline func(name string, content []byte) error
+	// RequiredSettings lists the settings a plugin requires, from its
+	// specification. It is required: a setting no Kafka Connect key provides
+	// is written as a variable with a blocking kc.setting_required note, so
+	// a pipeline never silently lacks it. The CLI passes the built-in
+	// connectors' specifications.
+	RequiredSettings emit.Required
 }
 
 // File is an output file, with a path relative to the output directory.
@@ -106,8 +112,8 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	if err := kcmigrate.CheckLimits(all); err != nil {
 		return Result{}, err
 	}
-	if req.ValidatePipeline == nil {
-		return Result{}, conduiterr.New(conduiterr.CodeInternal, "migrate.Run needs a pipeline validator")
+	if req.ValidatePipeline == nil || req.RequiredSettings == nil {
+		return Result{}, conduiterr.New(conduiterr.CodeInternal, "migrate.Run needs a pipeline validator and the plugins' required settings")
 	}
 	if len(req.Inputs) == 0 {
 		ce := conduiterr.New(kcmigrate.CodeInputUnrecognized, "no connector config to migrate")
@@ -116,7 +122,6 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 	}
 
 	rep := kcmigrate.NewReport(req.ConduitVersion)
-	rep.Generator.Rules = engine.Rules()
 	var workerDs []rules.Decision
 	if req.Worker != nil {
 		w, err := kcmigrate.ParseWorker(*req.Worker)
@@ -133,6 +138,11 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 		return Result{}, err
 	}
 	workerBlocks := recordWorkerDowngrades(rep, runs, req.Worker != nil)
+	var classes []string
+	for _, r := range runs {
+		classes = append(classes, r.rc.Class)
+	}
+	rep.Generator.Rules = engine.RulesUsed(classes, req.Worker != nil)
 	first := len(rep.Connectors)
 	for _, r := range runs {
 		rep.Connectors = append(rep.Connectors, r.rc)
@@ -208,7 +218,7 @@ func migrateInputs(ctx context.Context, engine *rules.Engine, req Request, worke
 		if err := checkName(c, names); err != nil {
 			return nil, err
 		}
-		run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs)
+		run, err := migrateConnector(engine.Classify(c), c.State, workerDs, envs, req.RequiredSettings)
 		if err == nil && run.plan != nil {
 			run.rc.Notes = append(run.rc.Notes, engine.DefaultNotes(c, keysOf(workerDs))...)
 		}
@@ -238,7 +248,7 @@ type connectorRun struct {
 	workerEntries []kcmigrate.Entry
 }
 
-func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decision, envs *emit.EnvNames) (connectorRun, error) {
+func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decision, envs *emit.EnvNames, required emit.Required) (connectorRun, error) {
 	run := connectorRun{rc: cl.Connector, state: state}
 	if cl.Rules == nil {
 		return run, nil
@@ -255,6 +265,23 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 		return run, err
 	}
 	run.workerEntries = applied
+	kvs := make([]kcmigrate.KV, 0, len(cl.Decisions))
+	for _, d := range cl.Decisions {
+		kvs = append(kvs, d.KV)
+	}
+	plan.SetConfig(kvs)
+	finished, err := emit.Finish(plan, cl.Rules.Finish)
+	if err != nil {
+		return run, err
+	}
+	for _, n := range cl.Rules.Notes {
+		run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
+			Code: n.Code, Reason: n.Reason, Fix: n.Fix, Blocking: n.Blocking,
+			Rule: strings.TrimSuffix(cl.Rules.Name(), ".yaml") + "/notes/" + n.Code,
+		})
+	}
+	run.rc.Notes = append(run.rc.Notes, finished...)
+	run.rc.Notes = append(run.rc.Notes, emit.RequireSettings(plan, required)...)
 	run.plan = plan
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
 	run.rc.Pipeline = plan.File

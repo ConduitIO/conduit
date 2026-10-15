@@ -51,7 +51,10 @@ type Plan struct {
 	File       string
 	connectors []connectorDef
 	dlq        *dlqDef
-	owner      map[string]string // config path -> key that set it
+	owner      map[string]owner  // config path -> key and layer that set it
+	superseded map[string]string // key -> the higher-layer key that replaced its value
+	layer      int               // layer of the action being applied
+	config     map[string]string // the connector's values, for finishers
 	secrets    []Secret
 	envs       *EnvNames
 }
@@ -142,7 +145,7 @@ func (n *EnvNames) claim(name, owner string) string {
 // rule file emits: one source and one destination. envs is the run's
 // variable registry.
 func NewPlan(name string, emits []rules.Emit, envs *EnvNames) (*Plan, error) {
-	p := &Plan{ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", owner: map[string]string{}, envs: envs}
+	p := &Plan{ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", owner: map[string]owner{}, superseded: map[string]string{}, envs: envs}
 	for _, side := range []string{SideSource, SideDestination} {
 		var plugin string
 		for _, e := range emits {
@@ -234,48 +237,75 @@ func (p *Plan) sides(side string) ([]int, error) {
 	return out, nil
 }
 
-// Set writes setting on every connector of side for key and returns the
-// JSON pointer to the first. It fails with *ConflictError if another key
-// owns the setting on any of them (nothing is written then), with ErrNoSide
-// when the side does not exist in this pipeline, and with an error for an
-// unknown side.
-func (p *Plan) Set(side, setting, value, key string) (string, error) {
+// owner records which key wrote a setting, and at which layer.
+type owner struct {
+	key   string
+	layer int
+}
+
+// Layers order the sources Kafka Connect merges into one client or
+// connector config, lowest first (Worker.baseProducerConfigs and
+// baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-874 and 911-942):
+// worker keys, then the worker's producer./consumer.-prefixed keys, then the
+// connector's own keys. A rule's emit action can add an offset of 0-9 within
+// its base (layer: N), for connectors that merge their own prefixes, such as
+// MirrorMaker's source.cluster. < consumer. < source.consumer..
+const (
+	LayerFallback  = 5
+	LayerWorker    = 10
+	LayerConnector = 30
+)
+
+// Set writes setting on every connector of side for key, at the layer of the
+// action being applied, and returns the JSON pointer to the first. A higher
+// layer replaces a lower one, as in Kafka Connect, and the replaced key is
+// recorded (Superseded). If a higher layer already set it, nothing is
+// written and overriddenBy names that key. Two keys at the same layer fail
+// with *ConflictError. ErrNoSide when the side does not exist in this
+// pipeline; an error for an unknown side.
+func (p *Plan) Set(side, setting, value, key string) (path, overriddenBy string, err error) {
 	idx, err := p.sides(side)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	paths := make([]string, len(idx))
-	for j, i := range idx {
-		paths[j] = fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", i, escapePointer(setting))
-		if owner, ok := p.owner[paths[j]]; ok && owner != key {
-			return "", &ConflictError{Setting: setting, Owner: owner}
+	// Each connector of the side is decided on its own: a worker
+	// bootstrap.servers for every Kafka connector may lose on the source
+	// (a connector key set it) and win on the destination.
+	var write []int
+	var paths []string
+	for _, i := range idx {
+		path := fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", i, escapePointer(setting))
+		o, ok := p.owner[path]
+		switch {
+		case !ok || o.key == key || o.layer < p.layer:
+			write = append(write, i)
+			paths = append(paths, path)
+		case o.layer > p.layer:
+			overriddenBy = o.key
+		default:
+			return "", "", &ConflictError{Setting: setting, Owner: o.key}
 		}
 	}
-	for j, i := range idx {
+	if len(write) == 0 {
+		return fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", idx[0], escapePointer(setting)), overriddenBy, nil
+	}
+	for j, i := range write {
+		if o, ok := p.owner[paths[j]]; ok && o.key != key {
+			p.superseded[o.key] = key
+		}
 		c := &p.connectors[i]
 		if c.Settings == nil {
 			c.Settings = map[string]string{}
 		}
 		c.Settings[setting] = value
-		p.owner[paths[j]] = key
+		p.owner[paths[j]] = owner{key: key, layer: p.layer}
 	}
-	return paths[0], nil
+	return paths[0], "", nil
 }
 
-// Has reports whether setting is written on every connector of side. A
-// side the pipeline lacks counts as written, so defaults skip it.
-func (p *Plan) Has(side, setting string) bool {
-	idx, err := p.sides(side)
-	if err != nil {
-		return true
-	}
-	for _, i := range idx {
-		if _, ok := p.connectors[i].Settings[setting]; !ok {
-			return false
-		}
-	}
-	return true
-}
+// Superseded maps each key whose value a higher layer replaced to the key
+// that replaced it.
+func (p *Plan) Superseded() map[string]string { return p.superseded }
 
 // Secrets returns the environment variables the pipeline references.
 func (p *Plan) Secrets() []Secret { return p.secrets }

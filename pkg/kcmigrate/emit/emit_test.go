@@ -73,20 +73,21 @@ func TestPlan(t *testing.T) {
 	p, err := NewPlan("my connector/1", []rules.Emit{{Plugin: "builtin:a", Role: "source"}, {Plugin: "builtin:b", Role: "destination"}}, NewEnvNames())
 	is.NoErr(err)
 	is.Equal(p.File, "pipelines/my_connector_1.yaml")
-	path, err := p.Set(SideDestination, "a/b", "1", "k1")
+	p.layer = LayerConnector
+	path, _, err := p.Set(SideDestination, "a/b", "1", "k1")
 	is.NoErr(err)
 	is.Equal(path, "/pipelines/0/connectors/1/settings/a~1b")
-	_, err = p.Set(SideDestination, "a/b", "1", "k1") // the same key may set it again
+	_, _, err = p.Set(SideDestination, "a/b", "1", "k1") // the same key may set it again
 	is.NoErr(err)
-	_, err = p.Set(SideDestination, "a/b", "2", "k2")
+	_, _, err = p.Set(SideDestination, "a/b", "2", "k2")
 	var conflict *ConflictError
 	is.True(err != nil && strings.Contains(err.Error(), "already set by k1"))
 	is.True(asConflict(err, &conflict))
-	_, err = p.Set("middle", "x", "1", "k")
+	_, _, err = p.Set("middle", "x", "1", "k")
 	is.True(err != nil)
 
 	for _, k := range []string{"z", "m", "a"} {
-		_, err := p.Set(SideSource, k, k, k)
+		_, _, err := p.Set(SideSource, k, k, k)
 		is.NoErr(err)
 	}
 	first, err := p.YAML("running", "d")
@@ -101,4 +102,72 @@ func TestPlan(t *testing.T) {
 
 func asConflict(err error, target **ConflictError) bool {
 	return cerrors.As(err, target)
+}
+
+// A higher layer replaces a lower one in either order, and the replaced key
+// is recorded; the same layer is a conflict.
+func TestPlan_Layers(t *testing.T) {
+	is := is.New(t)
+	p, err := NewPlan("p", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+	is.NoErr(err)
+
+	p.layer = LayerWorker
+	_, by, err := p.Set(SideSource, "servers", "w:9092", "bootstrap.servers")
+	is.NoErr(err)
+	is.Equal(by, "")
+	p.layer = LayerConnector
+	_, by, err = p.Set(SideSource, "servers", "c:9092", "source.cluster.bootstrap.servers")
+	is.NoErr(err)
+	is.Equal(by, "")
+	is.Equal(p.Superseded()["bootstrap.servers"], "source.cluster.bootstrap.servers")
+
+	p.layer = LayerConnector + 2
+	_, _, err = p.Set(SideSource, "saslMechanism", "SCRAM-SHA-512", "source.consumer.sasl.mechanism")
+	is.NoErr(err)
+	p.layer = LayerConnector
+	_, by, err = p.Set(SideSource, "saslMechanism", "PLAIN", "source.cluster.sasl.mechanism")
+	is.NoErr(err)
+	is.Equal(by, "source.consumer.sasl.mechanism") // lower layer arriving later is skipped
+
+	p.layer = LayerConnector
+	_, _, err = p.Set(SideSource, "servers", "d:9092", "other.key")
+	is.True(err != nil) // same layer, different key
+
+	y, err := p.YAML("running", "")
+	is.NoErr(err)
+	is.True(strings.Contains(string(y), "servers: c:9092"))
+	is.True(strings.Contains(string(y), "saslMechanism: SCRAM-SHA-512"))
+}
+
+func TestFinish_MM2Topic(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  map[string]string
+		want string
+	}{
+		{"defaults", nil, `source.{{ index .Metadata "opencdc.collection" }}`},
+		{"alias and separator", map[string]string{"source.cluster.alias": "us-east", "replication.policy.separator": "_"}, `us-east_{{ index .Metadata "opencdc.collection" }}`},
+		{"identity", map[string]string{"replication.policy.class": "org.apache.kafka.connect.mirror.IdentityReplicationPolicy", "source.cluster.alias": "x"}, `{{ index .Metadata "opencdc.collection" }}`},
+		{"custom policy", map[string]string{"replication.policy.class": "com.example.Policy"}, ""},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			p, err := NewPlan("mm", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+			is.NoErr(err)
+			p.config = tt.cfg
+			notes, err := Finish(p, []rules.Action{{Kind: FinishMM2Topic}})
+			is.NoErr(err)
+			is.Equal(len(notes), 0)
+			is.Equal(p.connector(SideDestination).Settings["topic"], tt.want)
+		})
+	}
+	is := is.New(t)
+	p, _ := NewPlan("mm", []rules.Emit{{Plugin: "builtin:kafka", Role: "source"}, {Plugin: "builtin:kafka", Role: "destination"}}, NewEnvNames())
+	p.config = map[string]string{"source.cluster.alias": "a{{b"}
+	notes, err := Finish(p, []rules.Action{{Kind: FinishMM2Topic}})
+	is.NoErr(err)
+	is.True(len(notes) == 1 && notes[0].Blocking)
+	_, err = Finish(p, []rules.Action{{Kind: "nope"}})
+	is.True(err != nil)
 }

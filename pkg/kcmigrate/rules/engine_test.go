@@ -269,6 +269,8 @@ func TestLoad_Rejects(t *testing.T) {
 		{"dangling coveredBy", head + "defaults:\n  - key: a\n    coveredBy: kc.default_differs\n", "not the code of a note"},
 		{"unregistered note code", head + "defaults:\n  - key: a\n    note: {code: kc.made_up, reason: r}\n", "registered kc.* code"},
 		{"blocking note without fix", head + "defaults:\n  - key: a\n    note: {code: kc.default_differs, reason: r, blocking: true}\n", "a fix when blocking"},
+		{"class note without reason", head + "notes:\n  - {code: kc.output_shape_differs}\n", "a note needs"},
+		{"finish without kind", head + "finish:\n  - {name: x}\n", "finish action needs a kind"},
 		{"overlapping regexes", head + "  - key: {regex: '^a\\.'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n  - key: {regex: '^a\\.b'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n", "more than one regex"},
 	}
 	for _, tt := range tests {
@@ -290,4 +292,14 @@ func TestLoad_RejectsTwoFilesForOneScope(t *testing.T) {
 	class := []byte("rulesVersion: 1\nscope: sink\nclass: C\nupstream: {name: u, version: \"1\"}\n")
 	_, err = Load(fstest.MapFS{"a.yaml": {Data: class}, "b.yaml": {Data: class}})
 	is.True(err != nil && strings.Contains(err.Error(), "both have class C"))
+}
+
+func TestEngine_RulesUsed(t *testing.T) {
+	is := is.New(t)
+	e := loadValid(t)
+	is.Equal(len(e.RulesUsed([]string{"com.example.Nope"}, false)), 0) // an unknown class uses no rule file
+	got := e.RulesUsed([]string{exampleClass, "com.example.Nope"}, true)
+	is.Equal(len(got), 3)
+	is.Equal(got[0].Class, "(shared)")
+	is.Equal(len(e.RulesUsed(nil, true)), 1)
 }

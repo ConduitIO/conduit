@@ -119,7 +119,7 @@ keys:
   - key: producer.bootstrap.servers
     status: translated
     reason: The worker's producer.-prefixed settings override bootstrap.servers for every connector's producer.
-    emit: {kind: setting, side: producer, name: servers, layer: client}
+    emit: {kind: setting, side: producer, name: servers, layer: "1"}
     diff: identity
   - key: producer.security.protocol
     diff: identity
@@ -127,7 +127,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: producer, layer: client}
+        emit: {kind: tls-from-protocol, side: producer, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -139,7 +139,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: producer, name: saslMechanism, layer: client}
+        emit: {kind: setting, side: producer, name: saslMechanism, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -148,7 +148,7 @@ keys:
         fix: Use a supported mechanism, or keep the connectors that use this producer on Kafka Connect.
   - key: producer.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: producer, layer: client}
+    emit: {kind: sasl-jaas, side: producer, layer: "1"}
     secret: true
     diff: secret
   - key: {prefix: producer.ssl.}
@@ -166,12 +166,12 @@ keys:
     diff: identity
   - key: producer.client.id
     status: translated
-    emit: {kind: setting, side: producer, name: clientID, layer: client}
+    emit: {kind: setting, side: producer, name: clientID, layer: "1"}
     diff: tuning
   - key: consumer.bootstrap.servers
     status: translated
     reason: The worker's consumer.-prefixed settings override bootstrap.servers for every connector's consumer.
-    emit: {kind: setting, side: consumer, name: servers, layer: client}
+    emit: {kind: setting, side: consumer, name: servers, layer: "1"}
     diff: identity
   - key: consumer.security.protocol
     diff: identity
@@ -179,7 +179,7 @@ keys:
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: consumer, layer: client}
+        emit: {kind: tls-from-protocol, side: consumer, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -191,7 +191,7 @@ keys:
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: consumer, name: saslMechanism, layer: client}
+        emit: {kind: setting, side: consumer, name: saslMechanism, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -200,7 +200,7 @@ keys:
         fix: Use a supported mechanism, or keep the connectors that use this consumer on Kafka Connect.
   - key: consumer.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: consumer, layer: client}
+    emit: {kind: sasl-jaas, side: consumer, layer: "1"}
     secret: true
     diff: secret
   - key: {prefix: consumer.ssl.}
@@ -218,20 +218,20 @@ keys:
     diff: identity
   - key: consumer.client.id
     status: translated
-    emit: {kind: setting, side: consumer, name: clientID, layer: client}
+    emit: {kind: setting, side: consumer, name: clientID, layer: "1"}
     diff: tuning
   - key: producer.acks
     diff: behavior
     values:
       - match: [all, "-1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: all, layer: client}
+        emit: {kind: setting, side: producer, name: acks, value: all, layer: "1"}
       - match: ["1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: one, layer: client}
+        emit: {kind: setting, side: producer, name: acks, value: one, layer: "1"}
       - match: ["0"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: none, layer: client}
+        emit: {kind: setting, side: producer, name: acks, value: none, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -243,7 +243,7 @@ keys:
     values:
       - match: [none, gzip, snappy, lz4, zstd]
         status: translated
-        emit: {kind: setting, side: producer, name: compression, layer: client}
+        emit: {kind: setting, side: producer, name: compression, layer: "1"}
       - otherwise: true
         status: unsupported
         blocking: true

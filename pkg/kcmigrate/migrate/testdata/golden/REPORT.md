@@ -4,13 +4,16 @@
 
 ## connect-distributed.properties
 
-Role worker. No pipeline written.
+- Role: worker
+- Pipeline: none written
 
 2 of 2 keys translated with no remark.
 
 ## clean
 
-Class `com.example.ExampleSource`, role source. Pipeline `pipelines/clean.yaml`, written stopped.
+- Class: `com.example.ExampleSource`
+- Role: source
+- Pipeline: `pipelines/clean.yaml`, written stopped
 
 5 of 7 keys translated with no remark.
 
@@ -21,7 +24,9 @@ Class `com.example.ExampleSource`, role source. Pipeline `pipelines/clean.yaml`,
 
 ## blocking
 
-Class `com.example.Unknown`, role unknown. No pipeline written.
+- Class: `com.example.Unknown`
+- Role: unknown
+- Pipeline: none written
 
 0 of 2 keys translated with no remark.
 

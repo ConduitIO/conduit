@@ -35,15 +35,16 @@ func RenderMarkdown(rep *kcmigrate.Report) string {
 
 	for _, c := range rep.Connectors {
 		fmt.Fprintf(&b, "\n## %s\n\n", mdText(c.Name))
+		// One fact per line, so long class and file names stay within the
+		// line length markdownlint enforces.
 		if c.Class != "" {
-			fmt.Fprintf(&b, "Class `%s`, role %s. ", mdCode(c.Class), c.Role)
-		} else {
-			fmt.Fprintf(&b, "Role %s. ", c.Role)
+			fmt.Fprintf(&b, "- Class: `%s`\n", mdCode(c.Class))
 		}
+		fmt.Fprintf(&b, "- Role: %s\n", c.Role)
 		if c.Pipeline != "" {
-			fmt.Fprintf(&b, "Pipeline `%s`, written %s.\n", mdCode(c.Pipeline), c.PipelineStatus)
+			fmt.Fprintf(&b, "- Pipeline: `%s`, written %s\n", mdCode(c.Pipeline), c.PipelineStatus)
 		} else {
-			fmt.Fprintf(&b, "No pipeline written.\n")
+			fmt.Fprintf(&b, "- Pipeline: none written\n")
 		}
 
 		var rows []kcmigrate.Entry
@@ -65,24 +66,33 @@ func RenderMarkdown(rep *kcmigrate.Report) string {
 		}
 	}
 
-	b.WriteString("\n## Before you deploy\n\n")
-	notes := 0
+	b.WriteString("\n## Before you deploy\n")
+	// A table, like the entries above: notes are long, and markdownlint
+	// exempts tables from the line length.
+	var rows []string
 	for _, c := range rep.Connectors {
 		for _, n := range c.Notes {
-			notes++
-			fmt.Fprintf(&b, "- %s %s: `%s` %s %s\n", mark("", n.Blocking), mdText(c.Name), n.Code, mdText(n.Reason), mdText(n.Fix))
+			kind := "note"
+			if n.Blocking {
+				kind = "blocking"
+			}
+			rows = append(rows, fmt.Sprintf("| %s | %s | `%s` | %s | %s |", kind, mdText(c.Name), n.Code, mdText(n.Reason), mdText(n.Fix)))
 		}
 	}
 	for _, g := range rep.AcceptedGaps {
-		notes++
 		what := "a connector-level note"
 		if g.Key != "" {
 			what = "`" + mdCode(g.Key) + "`"
 		}
-		fmt.Fprintf(&b, "- Accepted with --accept-gaps: %s, %s (`%s`). The pipeline runs with this difference.\n", mdText(g.Connector), what, g.Code)
+		rows = append(rows, fmt.Sprintf("| accepted | %s | `%s` | Accepted with --accept-gaps: %s. The pipeline runs with this difference. | - |", mdText(g.Connector), g.Code, what))
 	}
-	if notes == 0 {
-		b.WriteString("Nothing beyond the entries above.\n")
+	if len(rows) == 0 {
+		b.WriteString("\nNothing beyond the entries above.\n")
+		return b.String()
+	}
+	b.WriteString("\n| | Connector | Code | Difference | Fix |\n| --- | --- | --- | --- | --- |\n")
+	for _, r := range rows {
+		b.WriteString(r + "\n")
 	}
 	return b.String()
 }

@@ -4,7 +4,9 @@
 
 ## jdbc-sink
 
-Class `io.debezium.connector.jdbc.JdbcSinkConnector`, role unknown. No pipeline written.
+- Class: `io.debezium.connector.jdbc.JdbcSinkConnector`
+- Role: unknown
+- Pipeline: none written
 
 0 of 11 keys translated with no remark.
 

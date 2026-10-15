@@ -58,6 +58,14 @@ type File struct {
 	// key has no entry to carry the difference (mapping design, "Absent keys
 	// are evaluated mechanically").
 	Defaults []Default `yaml:"defaults"`
+	// Notes are connector-level notes every connector of the class carries,
+	// for differences that hold whatever the config says (an output shape
+	// Conduit does not reproduce, for example).
+	Notes []NoteSpec `yaml:"notes"`
+	// Finish lists emit actions run once per pipeline after every key and
+	// worker setting, for settings that depend on several keys and their
+	// upstream defaults together (a topic naming policy, for example).
+	Finish []Action `yaml:"finish"`
 
 	name     string // file name, for errors
 	exact    map[string]*Rule
@@ -261,6 +269,16 @@ func (f *File) validateDefaults() []error {
 	fail := func(format string, args ...any) {
 		errs = append(errs, cerrors.Errorf("%s: "+format, append([]any{f.name}, args...)...))
 	}
+	for _, n := range f.Notes {
+		if !n.valid() {
+			fail("note %s: a note needs a registered kc.* code, a reason, and a fix when blocking", n.Code)
+		}
+	}
+	for _, a := range f.Finish {
+		if a.Kind == "" {
+			fail("a finish action needs a kind")
+		}
+	}
 	noteCodes := map[string]bool{}
 	for _, d := range f.Defaults {
 		if d.Note != nil {
@@ -276,7 +294,7 @@ func (f *File) validateDefaults() []error {
 			fail("default %s: coveredBy %q is not the code of a note in this file", d.Key, d.CoveredBy)
 		}
 		if n := d.Note; n != nil {
-			if _, ok := conduiterr.LookupCode(n.Code); !ok || !strings.HasPrefix(n.Code, "kc.") || n.Reason == "" || (n.Blocking && n.Fix == "") {
+			if !n.valid() {
 				fail("default %s: a note needs a registered kc.* code, a reason, and a fix when blocking", d.Key)
 			}
 		}
@@ -399,3 +417,11 @@ func (f *File) info() kcmigrate.RulesInfo {
 }
 
 func (f *File) String() string { return fmt.Sprintf("%s (%s)", f.name, f.Scope) }
+
+// Name is the rule file's name.
+func (f *File) Name() string { return f.name }
+
+func (n NoteSpec) valid() bool {
+	_, ok := conduiterr.LookupCode(n.Code)
+	return ok && strings.HasPrefix(n.Code, "kc.") && n.Reason != "" && (!n.Blocking || n.Fix != "")
+}

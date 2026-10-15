@@ -378,6 +378,11 @@ func entryFor(rc kcmigrate.ReportConnector, key string) kcmigrate.Entry {
 // validation as its required validator. The CLI passes the full
 // `pipelines validate` engine, which this package cannot import.
 func withValidator(req Request) Request {
+	if req.RequiredSettings == nil {
+		// Most tests exercise one mechanism at a time; the required-settings
+		// tests pass BuiltinRequired explicitly.
+		req.RequiredSettings = func(string, string) []string { return nil }
+	}
 	if req.ValidatePipeline == nil {
 		req.ValidatePipeline = func(_ string, content []byte) error {
 			ps, err := provyaml.NewParser(log.Nop()).Parse(context.Background(), bytes.NewReader(content))
@@ -434,4 +439,35 @@ func TestRun_GeneratedEnvAvoidsReferencedNames(t *testing.T) {
 			is.True(entryFor(a, "example.password").Target.Env != "KC_A_EXAMPLE_PASSWORD")
 		})
 	}
+}
+
+// A setting the plugin requires that no key provides becomes a variable and
+// a blocking kc.setting_required note, so the pipeline validates and never
+// silently lacks it.
+func TestRun_RequiredSettings(t *testing.T) {
+	is := is.New(t)
+	res := runOne(t, Request{RequiredSettings: BuiltinRequired, Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
+	var notes []string
+	for _, n := range res.Report.Connectors[0].Notes {
+		if n.Code == "kc.setting_required" {
+			notes = append(notes, n.Rule)
+			is.True(n.Blocking)
+		}
+	}
+	is.Equal(notes, []string{"required/destination/servers"}) // builtin:kafka destination
+	is.True(strings.Contains(file(res, "pipelines/clean.yaml"), "servers: ${KC_CLEAN_DESTINATION_SERVERS}"))
+	is.True(strings.Contains(file(res, SecretsTemplateFile), "\nKC_CLEAN_DESTINATION_SERVERS=\n"))
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineStopped)
+
+	worker := in("w.properties", "bootstrap.servers=k:9092\n")
+	res = runOne(t, Request{RequiredSettings: BuiltinRequired, Worker: &worker, Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
+	for _, n := range res.Report.Connectors[1].Notes {
+		is.True(n.Code != "kc.setting_required")
+	}
+
+	_, err := Run(context.Background(), testEngine(t), Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}, ValidatePipeline: func(string, []byte) error { return nil }})
+	is.True(err != nil) // RequiredSettings is required
+
+	is.Equal(BuiltinRequired("builtin:kafka", "source"), []string{"servers", "topics"})
+	is.Equal(len(BuiltinRequired("mysql", "source")), 0)
 }
