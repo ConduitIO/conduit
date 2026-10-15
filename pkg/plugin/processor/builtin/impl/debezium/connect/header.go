@@ -267,7 +267,7 @@ const millisPerDay = 86400000
 // HT): the format is chosen by the value, not by the logical type. Below one
 // day after the epoch (including every instant before 1970) it is the time of
 // day, HH:mm:ss.SSS'Z'; at an exact UTC midnight it is yyyy-MM-dd; otherwise
-// yyyy-MM-dd'T'HH:mm:ss.SSS'Z'. All in UTC, unquoted, even when embedded. So a
+// yyyy-MM-dd'T'HH:mm:ss.SSS'Z'. All in UTC, unquoted, even when embedded (design D21). So a
 // Date of 1970-01-01 is written 00:00:00.000Z, as Kafka writes it.
 func javaDateString(ms int64) string {
 	t := time.UnixMilli(ms).UTC()
