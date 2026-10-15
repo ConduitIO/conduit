@@ -305,31 +305,36 @@ func TestTemplateGalleryE2E_Integration_PostgresS3(t *testing.T) {
 	}
 
 	// --- assert the seeded rows landed in the bucket ---
-	var listOut *s3.ListObjectsV2Output
+	// The destination can write the rows across more than one object, so
+	// poll until every seeded row is found rather than stopping at the
+	// first object.
+	foundNames := map[string]bool{}
+	var listErr error
 	deadline := time.Now().Add(30 * time.Second)
-	for {
-		listOut, err = s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: &bucket})
-		if err == nil && len(listOut.Contents) > 0 {
+	for len(foundNames) < 3 {
+		listOut, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: &bucket})
+		listErr = err
+		if err == nil {
+			for _, obj := range listOut.Contents {
+				getOut, err := s3Client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: obj.Key})
+				is.NoErr(err)
+				body, err := io.ReadAll(getOut.Body)
+				getOut.Body.Close()
+				is.NoErr(err)
+				for _, name := range []string{"alice", "bob", "carol"} {
+					if strings.Contains(string(body), name) {
+						foundNames[name] = true
+					}
+				}
+			}
+		}
+		if len(foundNames) == 3 {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no objects landed in bucket %q within the deadline (last err: %v)", bucket, err)
+			t.Fatalf("only %d of 3 seeded rows landed in bucket %q within the deadline (found %v, last err: %v)", len(foundNames), bucket, foundNames, listErr)
 		}
 		time.Sleep(200 * time.Millisecond)
-	}
-
-	foundNames := map[string]bool{}
-	for _, obj := range listOut.Contents {
-		getOut, err := s3Client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: obj.Key})
-		is.NoErr(err)
-		body, err := io.ReadAll(getOut.Body)
-		getOut.Body.Close()
-		is.NoErr(err)
-		for _, name := range []string{"alice", "bob", "carol"} {
-			if strings.Contains(string(body), name) {
-				foundNames[name] = true
-			}
-		}
 	}
 	is.Equal(len(foundNames), 3) // all three seeded rows landed in S3
 
