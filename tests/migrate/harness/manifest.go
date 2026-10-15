@@ -40,7 +40,7 @@ const FamilyDebeziumPostgres = "debezium-postgres"
 // Families are the corpus families of the design, in its order.
 var Families = []string{
 	FamilyDebeziumPostgres, "debezium-mysql", "jdbc-source", "jdbc-sink",
-	"s3-sink", "elasticsearch-sink", "kafka-mirror", FamilyCommon,
+	"s3-sink", "elasticsearch-sink", FamilyKafkaMirror, FamilyCommon,
 }
 
 // AllowedLicenses are the SPDX ids a corpus input may be taken under. All

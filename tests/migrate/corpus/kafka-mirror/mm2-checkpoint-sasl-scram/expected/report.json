@@ -1,0 +1,330 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "org.apache.kafka.connect.mirror.MirrorCheckpointConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 23,
+    "translated": 0,
+    "approximated": 0,
+    "unsupported": 23,
+    "blocking": 23
+  },
+  "connectors": [
+    {
+      "name": "mm2-cpc",
+      "class": "org.apache.kafka.connect.mirror.MirrorCheckpointConnector",
+      "role": "source",
+      "entries": [
+        {
+          "key": "name",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/name"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/connector.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "clusters",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/clusters"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.alias",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/source.cluster.alias"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "target.cluster.alias",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/target.cluster.alias"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "target.cluster.bootstrap.servers",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/target.cluster.bootstrap.servers"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.bootstrap.servers",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/source.cluster.bootstrap.servers"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.security.protocol",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/source.cluster.security.protocol"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.sasl.mechanism",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/source.cluster.sasl.mechanism"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "source.cluster.sasl.jaas.config",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/source.cluster.sasl.jaas.config"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true,
+          "secret": true
+        },
+        {
+          "key": "target.cluster.security.protocol",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/target.cluster.security.protocol"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "target.cluster.sasl.mechanism",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/target.cluster.sasl.mechanism"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "target.cluster.sasl.jaas.config",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/target.cluster.sasl.jaas.config"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true,
+          "secret": true
+        },
+        {
+          "key": "replication.policy.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/replication.policy.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/tasks.max"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "key.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/key.converter"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "value.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/value.converter"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/replication.factor"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "checkpoints.topic.replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/checkpoints.topic.replication.factor"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "emit.checkpoints.interval.seconds",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/emit.checkpoints.interval.seconds"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "emit.checkpoints.enabled",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/emit.checkpoints.enabled"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "sync.group.offsets.enabled",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/sync.group.offsets.enabled"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        },
+        {
+          "key": "sync.group.offsets.interval.seconds",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-cpc.json",
+            "pointer": "/sync.group.offsets.interval.seconds"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorCheckpointConnector translates consumer-group offsets between clusters, which has no equivalent in this version, so no pipeline is written for it. Consumers that fail over to the target cluster would start from their reset policy instead of their translated offsets.",
+          "fix": "Keep this MirrorMaker flow (source and checkpoint connectors) on Kafka Connect if consumers fail over between clusters; otherwise remove the checkpoint connector from the migration.",
+          "blocking": true
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. No pipeline is written for this connector, but the input file itself contains the secret.",
+          "fix": "Replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

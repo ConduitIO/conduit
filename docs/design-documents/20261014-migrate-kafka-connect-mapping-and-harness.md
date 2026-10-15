@@ -172,6 +172,11 @@ Consequences, all enforced by tests:
   gate (_Harness corpus_, rule 4). It is declared in data and cross-checked by a test against the plugins that
   `emit` kinds can actually produce.
 - Docs: the per-connector guide's mapping table is generated from the same files.
+- A class that produces no pipeline (MirrorMaker's checkpoint and heartbeat connectors) declares
+  `pipeline: none` and one `every` outcome, unsupported, which every key of the connector gets, shared keys
+  included; it has no `keys`, `defaults`, `emits` or `finish`. Its class notes still apply. Its corpus cases
+  belong to the family whose connectors it runs with (`harness.FamilyAuxClasses`). It has no upstream key
+  snapshot: no key changes its outcome, so key drift cannot change the report (added 2026-10-15).
 
 ### Mapping conventions
 
@@ -624,8 +629,10 @@ group; the target selector is owned by #3007. Until the destination's spec lists
 fails and the connector carries the blocking note `kc.output_shape_differs` ("partition numbers, headers and
 timestamps are not preserved"). `MirrorCheckpointConnector` produces no pipeline (offset translation has no
 equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connector_class_unsupported`.
-`MirrorHeartbeatConnector` produces no pipeline either, non-blocking. A dedicated-mode `mm2.properties` file
-(`clusters`, `A->B.*`) is not an input format in v1 (D4).
+`MirrorHeartbeatConnector` produces no pipeline either, non-blocking: it writes heartbeat records for
+monitoring and copies no data. Both are `pipeline: none` rule files (`mirror-checkpoint.yaml`,
+`mirror-heartbeat.yaml`). A literal secret in either still carries `kc.secret_plaintext`. A dedicated-mode
+`mm2.properties` file (`clusters`, `A->B.*`) is not an input format in v1 (D4).
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |

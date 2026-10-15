@@ -1,0 +1,294 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 20,
+    "translated": 0,
+    "approximated": 0,
+    "unsupported": 20,
+    "blocking": 0
+  },
+  "connectors": [
+    {
+      "name": "mm2-hbc",
+      "class": "org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+      "role": "source",
+      "entries": [
+        {
+          "key": "name",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/name"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/connector.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "replication.policy.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/replication.policy.class"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "clusters",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/clusters"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.alias",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/source.cluster.alias"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.alias",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/target.cluster.alias"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.bootstrap.servers",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/target.cluster.bootstrap.servers"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.bootstrap.servers",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/source.cluster.bootstrap.servers"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.security.protocol",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/source.cluster.security.protocol"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.sasl.mechanism",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/source.cluster.sasl.mechanism"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.sasl.jaas.config",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/source.cluster.sasl.jaas.config"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "target.cluster.security.protocol",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/target.cluster.security.protocol"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.sasl.mechanism",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/target.cluster.sasl.mechanism"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.sasl.jaas.config",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/target.cluster.sasl.jaas.config"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/tasks.max"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/key.converter"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "value.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/value.converter"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/replication.factor"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "heartbeats.topic.replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/heartbeats.topic.replication.factor"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        },
+        {
+          "key": "emit.heartbeats.interval.seconds",
+          "status": "unsupported",
+          "origin": {
+            "file": "mm2-hbc.json",
+            "pointer": "/emit.heartbeats.interval.seconds"
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.",
+          "fix": "None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.",
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. No pipeline is written for this connector, but the input file itself contains the secret.",
+          "fix": "Replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}
