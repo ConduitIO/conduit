@@ -220,7 +220,10 @@ func forwardErrors(ctx context.Context, done <-chan struct{}, external <-chan er
 
 // fetchMessages continuously calls fetch and hands the result to msgChan or
 // internalErrChan until fetch fails or done is closed. Every hand-over selects
-// on done so the goroutine can't leak once nobody receives anymore (#2969).
+// on done so the goroutine can't leak once nobody receives anymore (#2969),
+// and done is checked again before every fetch, so a fetcher that keeps
+// returning empty batches can't keep the goroutine spinning after the node
+// stopped (#2976).
 func fetchMessages(
 	ctx context.Context,
 	done <-chan struct{},
@@ -229,6 +232,14 @@ func fetchMessages(
 	internalErrChan chan<- error,
 ) {
 	for {
+		// Invariants 1 and 3: stopping here drops nothing. A record is acked
+		// only after it was handed over and processed downstream, so anything
+		// a fetch would still read is replayed on the next run.
+		select {
+		case <-done:
+			return
+		default:
+		}
 		msgs, err := fetch(ctx)
 		if err != nil {
 			if !cerrors.Is(err, context.Canceled) {

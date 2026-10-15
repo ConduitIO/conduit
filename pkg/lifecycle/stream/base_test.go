@@ -17,6 +17,7 @@ package stream
 import (
 	"context"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -645,4 +646,40 @@ func TestPubNodeBase_NoGoroutineLeakAfterError(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	is.True(runtime.NumGoroutine() <= before) // goroutines leaked
+}
+
+// TestFetchMessages_StopsOnDoneWithEmptyBatches is the regression test for
+// #2976: a fetcher that keeps returning empty batches (no messages, no error)
+// never reaches a hand-over, so fetchMessages must check done before fetching
+// again. Before the fix the goroutine kept calling fetch until ctx was
+// canceled.
+func TestFetchMessages_StopsOnDoneWithEmptyBatches(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // releases the goroutine if the fix regresses
+
+	done := make(chan struct{})
+	var calls atomic.Int64
+	fetch := func(ctx context.Context) ([]*Message, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if calls.Add(1) == 3 {
+			close(done) // the node stops while the source is idle
+		}
+		return nil, nil
+	}
+
+	exited := make(chan struct{})
+	go func() {
+		defer close(exited)
+		fetchMessages(ctx, done, fetch, make(chan *Message), make(chan error))
+	}()
+
+	select {
+	case <-exited:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("fetchMessages still running after done was closed (%d fetch calls)", calls.Load())
+	}
+	is.Equal(calls.Load(), int64(3)) // no fetch after done was closed
 }
