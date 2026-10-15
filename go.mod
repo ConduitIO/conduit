@@ -27,7 +27,7 @@ require (
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gammazero/deque v1.2.1
+	github.com/gammazero/deque v1.2.2
 	github.com/goccy/go-json v0.11.2
 	github.com/gofrs/flock v0.13.1
 	github.com/google/go-cmp v0.7.0
