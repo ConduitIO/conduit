@@ -4,7 +4,7 @@ go 1.26.9
 
 require (
 	github.com/conduitio/conduit v0.0.0
-	github.com/conduitio/conduit-commons v0.7.0
+	github.com/conduitio/conduit-commons v0.7.1
 	github.com/matryer/is v1.4.1
 	github.com/rs/zerolog v1.35.1
 )
