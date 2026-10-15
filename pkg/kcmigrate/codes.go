@@ -86,6 +86,10 @@ var (
 	// topic naming cannot be written as the destination's topic template.
 	// Blocking: the destination topic must be set by hand.
 	CodeTopicNameUnsupported = conduiterr.Register("kc.topic_name_unsupported", codes.InvalidArgument)
+	// CodeKeyRequired: a connector-level note for a key the upstream
+	// connector requires (it has no default) that the config does not set.
+	// Kafka Connect rejects such a config. Blocking.
+	CodeKeyRequired = conduiterr.Register("kc.key_required", codes.InvalidArgument)
 	// CodeOffsetsNotMigrated: a connector-level note that the connector
 	// resumes from offsets Kafka Connect stored, which migrate does not carry
 	// over; the note says where the pipeline starts instead. Blocking:
