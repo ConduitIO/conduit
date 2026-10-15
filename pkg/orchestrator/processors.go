@@ -35,6 +35,8 @@ func (p *ProcessorOrchestrator) Create(
 	cfg processor.Config,
 	cond string,
 ) (*processor.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -56,10 +58,18 @@ func (p *ProcessorOrchestrator) Create(
 		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("cannot add a processor to the pipeline %q", pl.ID))
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the processor is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
+	}
+
+	// Nothing is stored yet, so "***" (the API's redaction placeholder) has
+	// no value to keep; storing it literally would break the setting (#2913).
+	if err := RefuseRedactedSettings(cfg.Settings, "/config/settings"); err != nil {
+		return nil, err
 	}
 
 	// create processor and add to pipeline or connector
@@ -145,6 +155,8 @@ func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.
 }
 
 func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error) {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -174,10 +186,19 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 		return nil, err
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return nil, pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the processor is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return nil, err
+	}
+
+	// "***" (the API's redaction placeholder) keeps the stored value, so a
+	// redacted GET -> UPDATE round trip does not overwrite credentials (#2913).
+	cfg.Settings, err = restoreRedactedSettingsForPlugin(oldPlugin, plugin, oldConfig.Settings, cfg.Settings, "/config/settings")
+	if err != nil {
+		return nil, err
 	}
 
 	proc, err = p.processors.Update(ctx, id, plugin, cfg)
@@ -200,6 +221,8 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin st
 }
 
 func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
+	var mark mutationMark
+	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -226,10 +249,12 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if pl.GetStatus() == pipeline.StatusRunning {
-		// Invariant: errors.Is(err, ErrPipelineRunning) still holds — sentinel
-		// wrapped, ConduitError adds the code.
-		return pipelineRunningErr(pipeline.ErrPipelineRunning.Error())
+	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
+	// starting or recovering run counts.
+	// #2961: the check and the mark are one step under the lifecycle's
+	// admission lock; Start is refused until the delete is written.
+	if err := mark.acquire(p.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
+		return err
 	}
 
 	err = p.processors.Delete(ctx, id)

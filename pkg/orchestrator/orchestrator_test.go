@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -209,4 +210,22 @@ func TestPipelineSimple(t *testing.T) {
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Fatal(diff)
 	}
+}
+
+// expectMutation expects exactly one TryLockForMutation(id). When it is
+// granted, the test also requires exactly one unlock by the time it ends:
+// a leaked mark would make the pipeline unstartable (#2961).
+func expectMutation(t *testing.T, lm *mock.LifecycleService, id any, granted bool) {
+	t.Helper()
+	if !granted {
+		lm.EXPECT().TryLockForMutation(id).Return(nil, false).Times(1)
+		return
+	}
+	var unlocks atomic.Int32
+	lm.EXPECT().TryLockForMutation(id).Return(func() { unlocks.Add(1) }, true).Times(1)
+	t.Cleanup(func() {
+		if got := unlocks.Load(); got != 1 {
+			t.Errorf("mutation mark released %d times, want exactly 1", got)
+		}
+	})
 }

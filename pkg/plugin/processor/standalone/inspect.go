@@ -57,7 +57,10 @@ func InspectSpecification(ctx context.Context, logger log.CtxLogger, path string
 	// Use the package-level newRuntime hook so this honors the interpreter
 	// runtime tests swap in (standalone_test.go's TestMain), and the compiler
 	// runtime in production — exactly as NewRegistry does.
-	rt := newRuntime(ctx)
+	// Close-on-context-done is on here (and only here, besides tests): this
+	// runtime runs an untrusted artifact once, so a guest that never returns must
+	// be killable, and throughput is irrelevant.
+	rt := newRuntime(ctx, true)
 	defer func() { _ = rt.Close(ctx) }()
 
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {

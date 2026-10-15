@@ -17,7 +17,7 @@ builds:
     ldflags:
       - "-s -w -X 'github.com/conduitio/conduit/pkg/conduit.version={{ .Tag }}'"
 archives:
-  - builds:
+  - ids:
       - conduit
     name_template: >-
       {{ .ProjectName }}_
@@ -28,7 +28,8 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 checksum:
   name_template: 'checksums.txt'
 snapshot:

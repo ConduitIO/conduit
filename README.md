@@ -144,7 +144,7 @@ rpm -i conduit_<version>_Linux_<arch>.rpm
 
 Requirements:
 
-- [Go](https://golang.org/)
+- [Go](https://go.dev/) 1.26 or newer
 - [Make](https://www.gnu.org/software/make/)
 
 ```shell
@@ -162,6 +162,27 @@ Conduit version, you should run the following command:
 ```sh
 docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
+
+### Docker Compose quickstart
+
+[`deploy/docker-compose`](deploy/docker-compose) runs a pinned, signed release image
+with a pipeline already running (a generator writing to a file), Conduit's state on
+a named volume, a readiness health check and a graceful stop period:
+
+```sh
+git clone https://github.com/ConduitIO/conduit.git
+cd conduit/deploy/docker-compose
+docker compose up -d --wait
+docker compose exec conduit tail -n 3 /data/records.ndjson
+docker compose down            # add -v to delete the state volume
+```
+
+The API and UI are on <http://localhost:8080>, published on loopback only because the
+API is unauthenticated. Swap `pipelines/quickstart.yaml` for your own pipeline to go
+further. CI runs this stack end to end (`deploy-quickstart`).
+
+[`deploy/`](deploy) also has systemd, ECS and Nomad examples. They are examples, not
+supported products.
 
 ## Preflight checks
 
@@ -272,6 +293,11 @@ Conduit loads standalone connectors at startup. The connector binaries need to
 be placed in the `connectors` directory relative to the Conduit binary so
 Conduit can find them. Alternatively, the path to the standalone connectors can
 be adjusted using the CLI flag `-connectors.path`.
+
+Standalone connectors run as separate processes and receive Conduit's
+environment variables. Conduit logs one warning at startup that lists the names
+of credential-like variables being passed; see
+[standalone plugin environment](docs/operations/standalone-plugin-environment.md).
 
 Conduit ships with a number of built-in connectors:
 
@@ -396,6 +422,8 @@ try it out.
 You can run a full Conduit engine in-process, inside your own Go application, and
 drive its lifecycle with ordinary function calls — no subprocess, no socket. The
 engine that powers the CLI is the one you embed.
+
+Embedding requires Go 1.26 or newer.
 
 ```sh
 go get github.com/conduitio/conduit

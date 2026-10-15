@@ -139,6 +139,22 @@ func (d *debouncer) run(ctx context.Context) {
 
 		case <-done:
 			applying = false
+			// A trigger sent while the apply was in flight may still be sitting
+			// in triggerCh: select picks uniformly among ready cases, so when
+			// done and triggerCh are both ready run can observe done first.
+			// Without this drain that trigger would be handled by the
+			// "not applying" branch above and replace the follow-up window
+			// requested just below with a second one (two After calls for one
+			// follow-up, scheduling-dependent). It arrived during the apply, so
+			// it is the queued follow-up, not a fresh burst. Draining makes the
+			// outcome independent of select's choice: exactly one follow-up
+			// window, always. No apply is ever dropped either way; this only
+			// removes the redundant window. (#2981)
+			select {
+			case <-d.triggerCh:
+				queued = true
+			default:
+			}
 			if queued {
 				queued = false
 				// One more debounce window, not an immediate re-apply: a

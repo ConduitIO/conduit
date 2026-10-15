@@ -18,12 +18,14 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/http/api/fromproto"
 	"github.com/conduitio/conduit/pkg/http/api/status"
 	"github.com/conduitio/conduit/pkg/http/api/toproto"
+	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -321,10 +323,44 @@ func (p *PipelineAPIv1) ApplyPipeline(
 // (and the same DLQ-default-filling, connector/processor enrichment) a
 // `conduit pipelines deploy` file-based caller would, never a partially
 // -defaulted config reaching provisioning.Service.
+//
+// It also refuses any setting whose value is exactly "***", the placeholder
+// API responses use for redacted values (#2913). A document describes the
+// whole desired pipeline, so there is no stored value for "***" to keep, and
+// applying it would store "***" literally. PlanPipeline refuses it too, so a
+// plan never previews a document that apply would reject.
 func enrichAndValidate(in *apiv1.PipelineDocument) (config.Pipeline, error) {
-	desired := config.Enrich(fromproto.PipelineDocument(in))
+	doc := fromproto.PipelineDocument(in)
+	// Checked before Enrich, so the indexes in the error's config path match
+	// the request document.
+	if err := refuseRedactedInDocument(doc); err != nil {
+		return config.Pipeline{}, err
+	}
+	desired := config.Enrich(doc)
 	if err := config.Validate(desired); err != nil {
 		return config.Pipeline{}, err
 	}
 	return desired, nil
+}
+
+// refuseRedactedInDocument returns the first "***" setting in a pipeline
+// document as an orchestrator.CodeRedactedSettingWithoutStoredValue error,
+// with a JSON-pointer config path into the document.
+func refuseRedactedInDocument(p config.Pipeline) error {
+	for i, conn := range p.Connectors {
+		if err := orchestrator.RefuseRedactedSettings(conn.Settings, fmt.Sprintf("/connectors/%d/settings", i)); err != nil {
+			return err
+		}
+		for j, proc := range conn.Processors {
+			if err := orchestrator.RefuseRedactedSettings(proc.Settings, fmt.Sprintf("/connectors/%d/processors/%d/settings", i, j)); err != nil {
+				return err
+			}
+		}
+	}
+	for i, proc := range p.Processors {
+		if err := orchestrator.RefuseRedactedSettings(proc.Settings, fmt.Sprintf("/processors/%d/settings", i)); err != nil {
+			return err
+		}
+	}
+	return orchestrator.RefuseRedactedSettings(p.DLQ.Settings, "/dlq/settings")
 }

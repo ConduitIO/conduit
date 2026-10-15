@@ -1,0 +1,52 @@
+name: deploy-quickstart
+
+# Runs the docker-compose quickstart in deploy/docker-compose end to end: pulls
+# the pinned release image, brings it up, waits for a running pipeline and
+# records at the destination, restarts, and checks the pipeline resumes.
+#
+# Path-filtered on purpose: it exercises only deploy/, and it must never be a
+# required context (a path-filtered workflow never reports on unrelated PRs and
+# would block every merge; see chaos.yml for the always-report pattern).
+#
+# The other deploy/ examples (systemd, ECS, Nomad) are syntax-checked here, not
+# run: they need infrastructure CI does not have.
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/deploy-quickstart.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/deploy-quickstart.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart:
+    name: deploy-quickstart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compose quickstart end to end
+        run: deploy/docker-compose/test.sh
+
+      - name: Validate the other examples
+        run: |
+          set -euo pipefail
+          python3 -m json.tool deploy/ecs/task-definition.json >/dev/null
+          docker run --rm -v "$PWD/deploy/systemd:/u:ro" debian:12-slim sh -c '
+            apt-get update -qq >/dev/null && apt-get install -y -qq systemd >/dev/null
+            cp /u/conduit.service /etc/systemd/system/
+            mkdir -p /usr/local/bin /etc/conduit && touch /usr/local/bin/conduit /etc/conduit/conduit.env
+            chmod +x /usr/local/bin/conduit
+            out="$(systemd-analyze verify /etc/systemd/system/conduit.service 2>&1)" || true
+            echo "$out"
+            ! echo "$out" | grep -q "conduit.service"'
+          docker run --rm -v "$PWD/deploy/nomad:/n:ro" hashicorp/nomad:1.10 job run -output /n/conduit.nomad.hcl >/dev/null

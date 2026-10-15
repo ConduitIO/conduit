@@ -1,0 +1,112 @@
+# Stack for capturing golden output from real Debezium Postgres.
+#
+# Always start it through capture.sh, which sets an explicit compose project
+# name and the pinned Debezium image. Every port is published on an ephemeral
+# host port; nothing binds a fixed host port.
+#
+# The Postgres server deliberately runs with a non-UTC TimeZone and a non-ISO
+# DateStyle (design: Failure modes, "Timezone handling"), so the goldens show
+# Debezium's decoded values, not values that only happen to match under the
+# server defaults.
+name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME through capture.sh}
+
+services:
+  postgres:
+    image: postgres:14@sha256:14bfab572eec6abf65892e1db7c3ba8d41b2a2855c1b143664907d6e146eb6e1
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: golden
+      POSTGRES_DB: golden
+      TZ: America/Los_Angeles
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+      - -c
+      - timezone=America/Los_Angeles
+      - -c
+      - datestyle=SQL, DMY
+    ports:
+      - "127.0.0.1::5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d golden"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  kafka:
+    image: confluentinc/cp-kafka:7.9.1@sha256:632e5f09affa3fe2a044da044ec4b40542a7aea5c48ac6eb13d42bc78ec9c9b5
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      # The external listener must advertise the port the host sees, so
+      # capture.sh picks a free host port and passes it in.
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://127.0.0.1:${KAFKA_HOST_PORT:?}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "127.0.0.1:${KAFKA_HOST_PORT:?}:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.9.1@sha256:c02aa3d6409caea9ee707c7dfc98990460f7ee5e9c5535942a3279d8264fe0d1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:29092
+    ports:
+      - "127.0.0.1::8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  connect:
+    build:
+      context: ./connect
+      args:
+        DEBEZIUM_IMAGE: ${DEBEZIUM_IMAGE:?}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: golden-capture
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      # The JVM runs in a zone different from the server's, so a value that
+      # depends on the JVM default zone shows up as a golden difference.
+      TZ: Asia/Kolkata
+    ports:
+      - "127.0.0.1::8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
