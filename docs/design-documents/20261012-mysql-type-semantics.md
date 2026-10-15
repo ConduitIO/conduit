@@ -28,8 +28,9 @@ In short:
   server in `strict`. In `legacy` it warns in N and refuses from N+1. A row image that skipped columns
   already halts at runtime in every mode (mysql#211).
 
-This is a payload contract change and Tier 1. All open questions are decided (see Decisions recorded), and the
-implementation PRs still need DeVaris's sign-off.
+This is a payload contract change and Tier 1. **Signed off by DeVaris on 2026-10-15** (revision 6, with the Avro
+`decimal` logical type cut from N; see Decisions recorded, 9 to 11). The implementation PRs still need a
+fresh-context review and DeVaris's sign-off each.
 
 ## Status and recommendations (revision 6, 2026-10-15)
 
@@ -89,7 +90,7 @@ Code names (revision 5 -> revision 6):
 4. **Define N as the connector release that ships PR C**, cut on the Conduit v0.21 train; N+1 and N+2 are
    the next two monthly connector minors. The removal date is written into the warning when N is cut, as
    decided.
-5. **Decision needed: is the MySQL source Certified in v0.21 only if `strict` ships?** Recommended: yes. Today
+5. **Decided (11): the MySQL source is Certified in v0.21 only if `strict` ships.** Today
    the only mode is `legacy`, which emits `NULL` as `0` and rounds `DECIMAL`; a Certified listing on top of
    that contradicts invariant 6 even with the gaps documented. With PR C merged the registry entry can say
    "Certified in `strict`; `legacy` deprecated, removed in N+2". If PR C misses the v0.21 cut, the source stays
@@ -1043,6 +1044,17 @@ original question numbers (3 was decided earlier and is recorded under Legacy li
    Revision 6: fixed for all modes by mysql#206 (see Keys and snapshot positions). The `legacy` snapshot-phase
    decision (row 4) stands on its remaining reason.
 8. **The implementation lives in `ConduitIO/conduit-connector-mysql`** (certification decision 7).
+
+Decided by DeVaris, 2026-10-15, on revision 6:
+
+9. **Design signed off.** Implementation as PR C (Tier 1) after mysql#226; PR B (warnings only) is optional.
+10. **The Avro `decimal` logical type is cut from N.** N ships `types.decimal` in {`string`, `double`} and
+    `types.bigintUnsigned` in {`long`, `string`}. `decimal` for either setting is a configuration error in N
+    naming the setting; it can be added later as a new value without a format change.
+11. **Certification requires `strict`.** The MySQL source is not Certified in v0.21 without it. The certified
+    configuration is `types.mode=strict` (with the defaults `types.decimal=string`,
+    `types.bigintUnsigned=long`); the acceptance suite and the chaos harness run in that configuration, and the
+    docs and registry entry state that `legacy` is not covered by the certification.
 
 ## Open questions
 
