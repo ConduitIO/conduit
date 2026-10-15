@@ -15,8 +15,10 @@ This document covers two steps:
    not change. In Conduit the failed record is nacked with the stable code
    `plugin.integer_not_representable`, so the pipeline's DLQ policy applies: by default it halts, and
    with a configured DLQ the record goes to the DLQ. Nack-under-DLQ on the destination side depends on
-   three engine changes designed below. If they cannot land in v0.21, the destination side halts
-   unconditionally instead. Plugins built against older commons still round on the plugin-to-Conduit
+   two engine changes designed below (the arch-v1 ordered nack and the arch-v2 batch split). If they
+   cannot land in v0.21, the destination side halts unconditionally instead. Processor-side
+   attribution depends on a fix in the processor SDK, which must ship in the same release as its
+   commons bump. Plugins built against older commons still round on the plugin-to-Conduit
    leg, and so do two callers that do not use commons' `ToProto`. This design names them instead of
    hiding them.
 2. **Later (after v0.21): a lossless encoding.** The recommendation is a new structured value message
@@ -154,13 +156,13 @@ them off the `Struct` path. The exactness rule is recorded under _Alternatives_.
 | `int8`, `int16`, `int32`, `uint8`, `uint16`, `uint32` | always in range; unchanged |
 | `int`, `uint` | checked (64 bits on 64-bit platforms, including `wasip1/wasm`; always in range on `386`) |
 | `int64`, `uint64` | checked |
-| `json.Number` | parsed exactly (`big.Rat.SetString`). If the value is an integer, in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), the range rule applies. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
+| `json.Number` | classified from the literal with string arithmetic, without `big.Rat`. Strip the sign, leading zeros and the decimal point to get the significant digits `d` and the effective decimal exponent `e`, then drop trailing zeros from `d` (raising `e`). If `e < 0` the value is not an integer. Otherwise it is an integer with `len(d)+e` digits: more than 16 digits is out of range and is rejected at once, and 16 or fewer are compared exactly through `strconv.ParseInt`. So the range rule applies to integers in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), and a huge literal such as `1e999999` costs one scan of the string, not a `big.Rat` expansion. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
 | `float32`, `float64` | unchanged; they are already doubles |
 | `*big.Int`, `time.Time`, other types | unchanged: `structpb` already rejects them with `invalid type` |
 
 `json.Number` in exponent form is included because `"9007199254740993e0"` is an integer, and today it
-rounds silently just like the plain literal. Parsing with `big.Rat` decides integrality exactly. The
-parse cost is paid only for `json.Number`, which few sources produce.
+rounds silently just like the plain literal. The classification is exact and linear in the literal's
+length, and it runs only for `json.Number`, which few sources produce.
 
 Decimals (`json.Number("0.1")`, or a decimal with more than 17 significant digits) also lose precision in
 a double. They are not covered here, because a decimal source value is often approximate already and
@@ -238,18 +240,36 @@ The record is **nacked**, so the pipeline's DLQ policy decides what happens next
   succeeds, and the pipeline continues. That is the operator's declared policy (invariant 6: "follow the
   configured policy"). The DLQ record's `conduit.dlq.nack.error` metadata carries the code and the path.
 
-On the destination side, nack-under-DLQ is safe only with the three engine changes below (arch-v1 ordered
-nack, arch-v2 batch split, WASM guest per-index errors). **If any of them cannot land in v0.21, the
-fallback is to halt unconditionally on the destination side.** The node returns the coded error, as any
-`Write` error does today, and the refused record is nacked on the stop path, not on the node goroutine
-(see failure mode S2). The halt fallback is less useful but cannot misattribute or deadlock.
+On the destination side, nack-under-DLQ is safe only with the two engine changes below (the arch-v1
+ordered nack and the arch-v2 validate-then-split). **If either cannot land in v0.21, the fallback is to
+halt unconditionally on the destination side.** The fallback is specified precisely, because the
+obvious version hangs:
+
+- **arch-v1:** the node passes the refused message to `DestinationAckerNode` **exactly as in the
+  primary design** (marked refused, not sent, `lastPosition` not advanced), and then returns the coded
+  error. The acker nacks it in queue order while it drains during teardown. Returning without nacking
+  or passing the message on would leave it open, and `SourceNode`'s `openMsgTracker.Wait()` on stop
+  (`pkg/lifecycle/stream/source.go:123`) would hang. Nacking it synchronously before returning would
+  hit the S2 deadlock. With the default DLQ the nack fails the threshold, and nothing is acked. With a
+  tolerant DLQ the record is in the DLQ before the pipeline stops.
+- **arch-v2:** `Do` runs `ValidateProto` as in the primary design and, on a refusal, returns the coded
+  error before `Write`. A task error makes `Worker.doTask` return at once (`worker.go`, the
+  `task %s: %w` return), without acting on any batch flags. Nothing in the batch is acked or nacked, so
+  it is all redelivered on restart (invariants 1 and 3), and no DLQ is involved.
+
+The halt fallback is less useful, but it cannot misattribute, deadlock or hang on stop.
+
+The processor side has no fallback switch. The host-side per-index fix lives in Conduit. The guest-side
+fix lives in `conduit-processor-sdk`, and the constraint is a release rule: **the processor SDK must not
+ship its commons bump without the per-index fix.** Otherwise a rebuilt guest would refuse wide integers
+with a whole-command error, and the funnel would nack index 0.
 
 Per call site:
 
 | Call site | v0.21 behavior |
 | --- | --- |
-| arch-v1 `DestinationNode.Run` (`pkg/lifecycle/stream/destination.go`) | Today any `Write` error calls `msg.Nack` on the node goroutine and returns. For this error class, a synchronous nack on the node goroutine can **deadlock** with destination batching, as follows. `SourceAckerNode`'s nack handler acquires the ordering semaphore (`source_acker.go:137-156`) and waits until every earlier message is acked. Those earlier messages sit in the plugin's batch, which flushes on `sdk.batch.size` when `sdk.batch.delay` is 0. That flush needs more records, but the node is the goroutine that would write them. **Design:** the node does not nack. It marks the message refused (with the coded error) and passes it to `DestinationAckerNode` like a written message, without sending it to the plugin. When the acker worker reaches a refused message at the head of its queue, it nacks it instead of reading a plugin ack. Ordering is kept (invariant 4): it is nacked after every earlier message is acked, and the node never blocks, so writes continue and batches fill. Other `Write` errors are unchanged. |
-| arch-v2 `DestinationTask.Do` (`pkg/lifecycle-poc/funnel/destination.go`) | Not "nack and write the rest". `Batch.Nack` does not remove a record from `ActiveRecords()` (`batch.go:603-617`). A sub-slice with a hole in it would also break the index mapping in `markBatchRecords` (`destination.go:115`, `:163-168`): an ack error for record 2 would nack index 1 and treat record 2 as acked, which breaks invariants 1 and 3. **Design:** before `Write`, call `ValidateProto` on every active record. If any fail, `Nack` the failing indexes, mark every other active record `Retry`, skip `Write`, and return. The worker's existing tainted-batch split (`worker.go:636-660`) then sends the nacked runs to the DLQ and re-runs each contiguous `Retry` run as its own sub-batch. Those sub-batches contain no refused record and have no holes, so `markBatchRecords` sees contiguous indexes. The retried runs make progress, so the retry bounds (`maxRetryAttempts`, `maxRetryStall`) are not consumed. A test pins that. |
+| arch-v1 `DestinationNode.Run` (`pkg/lifecycle/stream/destination.go`) | **Precedent:** filtered messages already take this route. The node sends them straight on, and the acker acks them without a plugin ack (the `msg.filtered` branch in `destination_acker.go`). The refused branch sits beside it, and like it, **before** the `len(acks) == 0` fetch from the plugin, so a refused message at the head of the queue never waits for a plugin ack that will not come. The node **never advances `lastPosition`** for a refused message, the same as on the filtered path. The SDK destination's `Stop` waits until it has seen `req.LastPosition` (`conduit-connector-sdk/destination.go:257-264`). A position the plugin never received would make it wait out `stopTimeout` and then flush with a warning on every stop. Today any `Write` error calls `msg.Nack` on the node goroutine and returns. For this error class, a synchronous nack on the node goroutine can **deadlock** with destination batching, as follows. `SourceAckerNode`'s nack handler acquires the ordering semaphore (`source_acker.go:137-156`) and waits until every earlier message is acked. Those earlier messages sit in the plugin's batch, which flushes on `sdk.batch.size` when `sdk.batch.delay` is 0. That flush needs more records, but the node is the goroutine that would write them. **Design:** the node does not nack. It marks the message refused (with the coded error) and passes it to `DestinationAckerNode` like a written message, without sending it to the plugin. When the acker worker reaches a refused message at the head of its queue, it nacks it instead of reading a plugin ack. Ordering is kept (invariant 4): it is nacked after every earlier message is acked, and the node never blocks, so writes continue and batches fill. Other `Write` errors are unchanged. |
+| arch-v2 `DestinationTask.Do` (`pkg/lifecycle-poc/funnel/destination.go`) | Not "nack and write the rest". `Batch.Nack` does not remove a record from `ActiveRecords()` (`batch.go:603-617`). A sub-slice with a hole in it would also break the index mapping in `markBatchRecords` (`destination.go:115`, `:163-168`): an ack error for record 2 would nack index 1 and treat record 2 as acked, which breaks invariants 1 and 3. **Design:** before `Write`, call `ValidateProto` on every active record. If any fail, `Nack` the failing indexes, mark every other active record `Retry`, skip `Write`, and return. The worker's existing tainted-batch split (`worker.go:636-660`) then sends the nacked runs to the DLQ and re-runs each contiguous `Retry` run as its own sub-batch. Those sub-batches contain no refused record and have no holes, so `markBatchRecords` sees contiguous indexes. The retried runs make progress, so the retry bounds (`maxRetryAttempts`, `maxRetryStall`) are not consumed. A test pins that. This is the first destination-side use of `RecordFlagRetry`. The `CodeRetryNotConverging` doc comment (`funnel/codes.go:93`) and the message text in `worker.go` (`:740`, `:763`) say "processor". The code PR makes both task-neutral, so a stuck destination retry would not be reported as a processor fault. |
 | `wasmProcessor.Process` (`pkg/plugin/processor/standalone/processor.go`) | Today a host-side conversion error returns one `ErrorRecord` for the whole batch. In arch-v2 the funnel then nacks **index 0** and retries the tail (`funnel/processor.go:111-115`), which is the wrong record when the bad one is later in the batch. This is **live today** for types `structpb` already rejects, for example a `time.Time` (#3127); step 1 makes it reachable for integers too. **Fix:** validate each record. If index `i` fails, send `records[:i]` to the guest (or nothing, when `i` is 0), append an `ErrorRecord` for `i`, and return. The tail is retried, as the funnel already does for a short output. arch-v1 sends one record per call, so it is correct either way. This fix also closes #3127. |
 | WASM guest output (`conduit-processor-sdk/run.go:300`, `:333`) | Today one output that fails `ToProto` fails the whole command. `processedRecords` returns an error, the guest replies with `CommandResponse_Error`, and the host's `executeCommand` path (`processor.go:354-356`) makes **one** `ErrorRecord`. In arch-v2 the funnel then nacks index 0, which is the same misattribution as above. **Fix in the processor SDK:** when output `i` (a `SingleRecord`, or any record of a `MultiRecord`) fails conversion, `processedRecords` emits `Process_ErrorRecord` at index `i` with that error, and converts the others normally. The command no longer fails. The host maps `ErrorRecord` per index as it already does. The code is attached on the host side by matching the sentinel text, as is already done for destination ack errors, which cross the protocol as strings. The fix takes effect only in guests rebuilt with the new processor SDK. Old guests keep the one-error behavior and, until rebuilt, the rounding. |
 | Standalone source (SDK `runRead`) | With new commons, `stream.Send` fails for the batch, `Run` returns the error, and the source stops. There is no DLQ for a record that never entered Conduit, so this always halts. Nothing was acked, so a restart reads the record again (invariant 1). Conduit matches the sentinel text in the source's stream error to attach the code. The SDK should add the record position to the error. That is an SDK change shipped with the commons bump. |
@@ -300,8 +320,9 @@ Invariant comments go at each enforcement site, for example
 - **Halt unconditionally on the destination side.** It is simpler in both engines and cannot deadlock or
   misattribute. It is not the recommendation, because the nack path is the declared policy mechanism,
   processors already report bad records through it, and an operator who configured a tolerant DLQ asked
-  for exactly this record to go there. **It is the fallback** if the arch-v1 ordered nack, the arch-v2
-  batch split or the guest per-index fix cannot land in v0.21.
+  for exactly this record to go there. **It is the fallback** if the arch-v1 ordered nack or the arch-v2
+  batch split cannot land in v0.21. It still hands the refused message to the acker (see _How Conduit
+  surfaces it_).
 
 ## Step 2: a lossless encoding (recommendation; needs an ADR and a versioning discussion)
 
@@ -371,6 +392,8 @@ place afterwards: when a peer negotiates only v2, refusing is still the correct 
 | --- | --- | --- | --- |
 | A pipeline that rounded silently before the upgrade now halts, including ones whose values happened to be exact (high-bit masks, round numbers) | intended; the pipeline is degraded and the same record halts it again after each restart | pipeline status with `plugin.integer_not_representable` and the field path | release note; the fix text points to schema encoding or raw JSON. A string conversion (`field.convert`) is safe only if the destination parses strings into its integer type exactly; MySQL does not |
 | arch-v1: refused record nacked synchronously while earlier records wait in a plugin batch (`sdk.batch.delay` 0) | deadlock: the nack waits on the ordering semaphore for acks that need more writes | stuck pipeline, no progress, no error | the refused message goes through the destination acker and is nacked in queue order; the node never blocks. The S2 test (below) pins this for both nack-and-continue and the halt fallback |
+| arch-v1: `lastPosition` advanced to a refused record's position | the SDK destination's `Stop` waits out `stopTimeout` for a position it never received, then flushes with a warning, on every stop | slow stops; the "did not encounter expected last position" warning | the node never advances `lastPosition` for a refused message, as on the filtered path; pinned by a test |
+| Halt fallback returns without handing the refused message on | the message stays open, and `openMsgTracker.Wait()` in the source node hangs on stop | a pipeline that never finishes stopping | the fallback passes the message to the acker exactly as the primary design does, then returns; pinned by a test |
 | arch-v2: refused record nacked in place and the rest written as one slice | `markBatchRecords` maps acks onto the wrong indexes, so a failed record is acked upstream (invariants 1 and 3) | the ack-error-after-hole test (below) | never write a slice with holes: nack the refused records, `Retry` the rest, and let the tainted-batch split re-run contiguous sub-batches |
 | WASM host or guest conversion fails for one record of a batch | arch-v2 nacks index 0 instead of the bad record (#3127, live today for `time.Time`) | the batch attribution tests (below) | host sends `records[:i]` and returns `ErrorRecord` at `i`; guest SDK emits `ErrorRecord` at the failing output index |
 | Tolerant DLQ: a delete for key K goes to the DLQ, then later writes for K are delivered | the destination differs from the source for K until the record is replayed | DLQ record and DLQ metrics | the operator chose this policy; documented |
@@ -380,7 +403,7 @@ place afterwards: when a peer negotiates only v2, refusing is still the correct 
 | Standalone source halts | the record never enters Conduit, so no DLQ is possible and the pipeline stays halted until the source is reconfigured | source error with the code (matched by sentinel text) | same fix text; the SDK adds the record position |
 | A record value leaks into logs or status | none: the error carries only the path and the Go type | review of the error type | the type has no value field by design |
 | Inspector stream | before: it ends on the first wide integer. After: the value is shown exactly, as a string, including for records the destination then refuses | inspector output | the display helper copies, never mutates; documented |
-| CPU cost of the walk | two comparisons per integer scalar, folded into the same pass that builds the `Struct`; a `big.Rat` parse per `json.Number` | benchi | no number is claimed. The benchi regression gate is not live, so the code PR runs benchi on a structured-payload pipeline with a standalone destination and reports medians with variance |
+| CPU cost of the walk | two comparisons per integer scalar, folded into the same pass that builds the `Struct`; one linear scan per `json.Number` literal | benchi | no number is claimed. The benchi regression gate is not live, so the code PR runs benchi on a structured-payload pipeline with a standalone destination and reports medians with variance |
 | Crash during any of this | nothing new is persisted; no position, state or wire format changes | n/a | n/a |
 
 Concurrency: the check is a pure function of its input, with no shared state. The engine changes touch
@@ -415,8 +438,9 @@ Each regression test is shown to fail on current `main` before it is shown to pa
    - `int64`: 2^53−1 and -(2^53−1) are ok. 2^53, 2^53+1, -(2^53), 10^18, `MaxInt64` and `MinInt64` fail.
    - `uint64`: 2^53−1 is ok. 2^53 and 1<<63 fail.
    - `int`: 2^53 fails on 64-bit (not reachable on 386).
-   - `json.Number`: `"9007199254740993"`, `"9007199254740993e0"` and `"1e20"` fail. `"1.5"` and
-     `"9007199254740991"` are ok.
+   - `json.Number`: `"9007199254740993"`, `"9007199254740993e0"`, `"1e20"` and `"1e999999"` fail, the
+     last one under a tight time and allocation budget. `"1.5"`, `"12345678901234567.5"` (non-integer,
+     unchanged), `"90071992547409.91e2"` and `"9007199254740991"` are ok.
    - Structure: a nested map, a `[]any` element, and a key versus `payload.before`/`payload.after`. The
      path is relative from `StructuredData.ToProto` and from the record root from `Record.ToProto`.
    - Errors: `errors.Is` with the sentinel, `errors.As` for the path, and an assertion that the error
@@ -454,6 +478,13 @@ Each regression test is shown to fail on current `main` before it is shown to pa
      Write two good records, then a refused one, then one more good record. The pipeline must neither hang
      nor reorder, under a deadline and the race detector. Run it for nack-and-continue and for the halt
      fallback.
+   - **Halt fallback stops cleanly:** a refused record with the fallback on. The pipeline reaches a
+     stopped or degraded state within a deadline. `openMsgTracker.Wait()` in the source node returns, and
+     the refused record is nacked, not acked.
+   - **`lastPosition` is not advanced:** a refused record is the last one before stop. `Stop` receives
+     the last _written_ position, and the SDK destination's `Stop` returns without waiting out
+     `stopTimeout` (assert on elapsed time and on the absence of the "did not encounter expected last
+     position" warning).
 6. **Destination task, arch-v2** (`pkg/lifecycle-poc/funnel`):
    - A batch of five with index 1 refused: index 1 is nacked, and 0 and 2–4 are delivered in order as
      contiguous sub-batches.
@@ -491,8 +522,9 @@ Each regression test is shown to fail on current `main` before it is shown to pa
 
 1. The range rule ±(2^53−1) (recommended), or the exactness rule.
 2. Nack under the DLQ policy on the destination side (recommended), but only together with the arch-v1
-   ordered nack, the arch-v2 validate-then-split and the guest per-index fix. Otherwise, halt
-   unconditionally on the destination side for v0.21.
+   ordered nack and the arch-v2 validate-then-split. Otherwise, use the halt fallback on the destination
+   side for v0.21. Separately, as a release rule: `conduit-processor-sdk` must not ship its commons bump
+   without the guest per-index fix.
 3. Version the commons release as v0.9.0 (recommended; #290 already requires a minor bump), with Conduit
    v0.21 taking #290 in the same bump.
 4. Open the step 2 ADR and a protocol versioning issue now, and implement after v0.21 (recommended).
