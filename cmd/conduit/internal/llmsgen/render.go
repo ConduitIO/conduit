@@ -101,6 +101,16 @@ func renderLLMSTxt(d generatedData) string {
 		"examples, not supported products. Set the stop timeout above 30 s so SIGTERM can drain; probes are " +
 		"`/healthz` (liveness) and `/readyz` (readiness); the API is unauthenticated.\n\n")
 
+	// Static, like Deployment: the suite lives in conduit-connector-sdk, not in
+	// this module, so there is nothing here to derive it from.
+	b.WriteString("## Building connectors\n")
+	b.WriteString("- [Acceptance suite v2](https://conduitdata.io/docs/developing/connectors/acceptance-suite-v2): " +
+		"`sdk.AcceptanceTestV2` (conduit-connector-sdk v0.16.0+, suite revision 2.0.0) is the bar for Conduit " +
+		"Certified. Claims go in `AcceptanceCapabilities`; `CONDUIT_ACCEPTANCE_REPORT=<path>` writes a JSON report. " +
+		"The report is evidence, not proof: until the registry re-runs the suite, Certified rests on maintainer " +
+		"review and the registry check runs in warning mode. Throughput cases record records/s and fail only on a " +
+		"stall or rejected record; they are not benchmarks.\n\n")
+
 	b.WriteString("## Full detail\n")
 	b.WriteString("- [llms-full.txt](llms-full.txt)\n")
 
