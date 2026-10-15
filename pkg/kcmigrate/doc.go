@@ -41,5 +41,32 @@
 //     [Report.Validate] enforces this for producers.
 //   - Determinism: [MarshalReport] depends only on the report's content.
 //
+// # What counts as an input key (pinned for the migration harness, #3071)
+//
+// An input key is one occurrence of a connector config key: a key of a
+// .properties file, a member of "config" in the REST form
+// ({"name": ..., "config": {...}}), a member of a bare config map, or a
+// member of "info.config" in a REST export. Each gets exactly one entry.
+//
+// The members around the config are not config keys and get no entry: the
+// REST form's top-level "name", "type", "tasks" and "initial_state", and a
+// REST export's map key, "info.name", "info.type", "info.tasks" and
+// "status". They set the connector's name and state, which the report shows
+// as connectors[].name and in pipelineStatus. They are still accounted for:
+// a wrapper member the parser does not know fails the input
+// (migrate.input_unrecognized), and so does a top-level name that differs
+// from the config's "name", as Kafka Connect itself rejects it.
+//
+// Differences with no input key are connector-level notes, outside the
+// multiset. kc.converter_unknown is such a note: when neither the connector
+// nor the --worker file sets key.converter or value.converter, the wire
+// format is unknown, so the note is blocking (one note per missing
+// converter), with the fix "pass --worker or set the converter on the
+// connector".
+//
+// The MCP tool kc_migrate returns this report as "result" of the same
+// envelope the CLI prints, and the generated files as "files" next to it, at
+// the top level, so "result" is the same document as report.json.
+//
 // This package does no I/O: no file system, network or database access.
 package kcmigrate

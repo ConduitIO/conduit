@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conduit.io/schemas/kc-report/v1.json",
   "title": "Kafka Connect migration compatibility report, version 1",
-  "description": "The report `conduit migrate kafka-connect` writes to report.json and returns as the `result` of its --json envelope (the envelope's `summary` is this document's `summary`). Contract: docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md, 'The compatibility report as a contract'. Hand-written, not reflected from Go types, so a struct change cannot silently change the contract. Adding a field, a code or an enum member is additive and keeps reportVersion 1; removing or renaming a field, or changing what status or blocking mean, bumps it. Consumers must ignore fields they do not know.",
+  "description": "The report `conduit migrate kafka-connect` writes to report.json and returns as the `result` of its --json envelope (the envelope's `summary` is this document's `summary`). Contract: docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md, 'The compatibility report as a contract'. Hand-written, not reflected from Go types, so a struct change cannot silently change the contract. Adding a field, a code or an enum member is additive and keeps reportVersion 1; removing or renaming a field, or changing what status or blocking mean, bumps it. Consumers must ignore fields they do not know. The kc_migrate MCP tool returns this document as `result` and its generated files as a top-level `files` array beside it, never inside `result`.",
   "type": "object",
   "required": ["reportVersion", "generator", "summary", "connectors", "acceptedGaps"],
   "additionalProperties": false,
@@ -39,7 +39,7 @@
       }
     },
     "summary": {
-      "description": "keys equals the number of entries, which equals the number of input key occurrences across all inputs; translated, approximated and unsupported partition keys; blocking counts blocking entries and blocking notes. The run is ok when blocking is 0.",
+      "description": "keys equals the number of entries, which equals the number of input key occurrences across all inputs (see entries for what an input key is); translated, approximated and unsupported partition keys; blocking counts blocking entries and blocking notes. The run is ok when blocking is 0.",
       "type": "object",
       "required": ["connectors", "keys", "translated", "approximated", "unsupported", "blocking"],
       "additionalProperties": false,
@@ -116,12 +116,12 @@
           }
         },
         "entries": {
-          "description": "One per input key occurrence, in origin order. The earlier of two duplicate keys has code kc.key_duplicate.",
+          "description": "One per input key occurrence, in origin order. An input key is a connector config key: a .properties key, a member of config in the REST form, a member of a bare config map, or a member of info.config in a REST export. The wrapper members (the REST form's top-level name, type, tasks and initial_state; an export's map key, info.name, info.type, info.tasks and status) are not config keys and have no entry; they set connectors[].name and the pipeline status. The earlier of two duplicate keys has code kc.key_duplicate.",
           "type": "array",
           "items": {"$ref": "#/$defs/entry"}
         },
         "notes": {
-          "description": "Differences with no input key (absent-key defaults, output shape, delivery semantics, required settings). Not part of the completeness multiset.",
+          "description": "Differences with no input key (absent-key defaults, output shape, delivery semantics, required settings, and kc.converter_unknown when neither the connector nor the worker file sets key.converter or value.converter, blocking, one note per missing converter). Not part of the completeness multiset.",
           "type": "array",
           "items": {"$ref": "#/$defs/note"}
         },
