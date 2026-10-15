@@ -157,7 +157,8 @@ func TestFinish_MM2Topic(t *testing.T) {
 		cfg  map[string]string
 		want string
 	}{
-		{"defaults", nil, `source.{{ index .Metadata "opencdc.collection" }}`},
+		{"no alias", nil, ""}, // required upstream; require-key blocks, no prefix is guessed
+		{"alias", map[string]string{"source.cluster.alias": "source"}, `source.{{ index .Metadata "opencdc.collection" }}`},
 		{"alias and separator", map[string]string{"source.cluster.alias": "us-east", "replication.policy.separator": "_"}, `us-east_{{ index .Metadata "opencdc.collection" }}`},
 		{"identity", map[string]string{"replication.policy.class": "org.apache.kafka.connect.mirror.IdentityReplicationPolicy", "source.cluster.alias": "x"}, `{{ index .Metadata "opencdc.collection" }}`},
 		{"custom policy", map[string]string{"replication.policy.class": "com.example.Policy"}, ""},
