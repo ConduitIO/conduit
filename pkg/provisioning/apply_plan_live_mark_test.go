@@ -139,6 +139,7 @@ func TestApplyPlanLive_Mark_NotRunning_StartRefusedInsideImport(t *testing.T) {
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	old, desired := settingsUpdateFixture()
 	expectExport(pipSrv, connSrv, procSrv, old)
+	expectActive(ml.LifecycleService, "p1", false)
 
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		DoAndReturn(func(context.Context, string, string, connector.Config) (*connector.Instance, error) {
@@ -158,16 +159,17 @@ func TestApplyPlanLive_Mark_NotRunning_StartRefusedInsideImport(t *testing.T) {
 	is.Equal(ml.events, []string{"mark", "unmark"})
 }
 
-// A pipeline with a run that the status has not caught up with: the mark is
+// A run is admitted between the running check and the mark: the mark is
 // refused, so ApplyPlanLive takes the running branch, which without the
 // operator flag refuses and changes nothing.
-func TestApplyPlanLive_Mark_NotRunningByStatus_RunExists_TakesRunningBranch(t *testing.T) {
+func TestApplyPlanLive_Mark_NotActive_RunAdmittedBeforeMark_TakesRunningBranch(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
-	ml.running = true
+	ml.running = true // TryLockForMutation refuses: a run exists by then
 	old, desired := settingsUpdateFixture()
-	expectExport(pipSrv, connSrv, procSrv, old) // status says not running; no import expectation: it must not run
+	expectExport(pipSrv, connSrv, procSrv, old)    // no import expectation: it must not run
+	expectActive(ml.LifecycleService, "p1", false) // no run yet at the checks
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
@@ -187,7 +189,7 @@ func TestApplyPlanLive_Mark_Running_StartRefusedInsideImport_OwnStartSucceeds(t 
 	ctx := context.Background()
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		DoAndReturn(func(context.Context, string, string, connector.Config) (*connector.Instance, error) {
@@ -215,7 +217,7 @@ func TestApplyPlanLive_Mark_Running_RunAdmittedAfterStopAndWait_NothingChanged(t
 	ctx := context.Background()
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	// No Update/Create/Delete expectation: the import must not run, or gomock fails.
 	ml.running = true
 
@@ -241,7 +243,7 @@ func TestApplyPlanLive_Mark_LiveEligibleFallback_RunAdmitted_DoesNotClaimNothing
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	ml.runningAfterStop = true
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	// applyInPlace's import commits once; the restart path's import must not run.
 	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		Return(&processor.Instance{ID: "p1:proc:1"}, nil).Times(1)
@@ -271,7 +273,7 @@ func TestApplyPlanLive_Mark_Running_ExternalStartBeatsOwnStart_IsSuccess(t *test
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	ml.startRunning = true
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		Return(&connector.Instance{ID: "p1:conn:src"}, nil)
 
@@ -347,7 +349,7 @@ func TestApplyPlanLive_Mark_Running_ImportFails_MarkReleased(t *testing.T) {
 	ctx := context.Background()
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		Return(nil, cerrors.New("injected: store write failed"))
 	// the import's own rollback restores the old settings
@@ -370,7 +372,7 @@ func TestApplyPlanLive_Mark_Running_OwnStartRetriesConfigChanging(t *testing.T) 
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	ml.startsRefusedBeforeOK = 2
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		Return(&connector.Instance{ID: "p1:conn:src"}, nil)
 
@@ -389,7 +391,7 @@ func TestApplyPlanLive_Mark_Running_OwnStartGivesUpAfterRetries(t *testing.T) {
 	srv, pipSrv, connSrv, procSrv, ml := newMarkService(t)
 	ml.startsRefusedBeforeOK = 1000
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, ml.LifecycleService, old)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
 		Return(&connector.Instance{ID: "p1:conn:src"}, nil)
 

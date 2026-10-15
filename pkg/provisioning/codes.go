@@ -43,8 +43,8 @@ var CodePipelineIDDuplicate = conduiterr.Register("provisioning.pipeline_id_dupl
 var CodePlanStale = conduiterr.Register("provisioning.plan_stale", codes.FailedPrecondition)
 
 // CodePipelineRunning is raised by ApplyPlan when it refuses to mutate a
-// pipeline that is currently running (Invariant 7 — see plan.go's
-// isRunningStatus and the design doc's AC-13). The fix is on the caller's
+// pipeline that currently has a run (Invariant 7 — see plan.go's isActive
+// and the design doc's AC-13). The fix is on the caller's
 // side (stop the pipeline first), matching FailedPrecondition's exit-code-2
 // classification (pkg/conduit/exitcode), not an environment failure.
 var CodePipelineRunning = conduiterr.Register("provisioning.pipeline_running", codes.FailedPrecondition)

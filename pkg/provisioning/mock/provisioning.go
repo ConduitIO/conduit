@@ -1033,6 +1033,44 @@ func (m *LifecycleService) EXPECT() *LifecycleServiceMockRecorder {
 	return m.recorder
 }
 
+// IsActive mocks base method.
+func (m *LifecycleService) IsActive(pipelineID string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsActive", pipelineID)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsActive indicates an expected call of IsActive.
+func (mr *LifecycleServiceMockRecorder) IsActive(pipelineID any) *LifecycleServiceIsActiveCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActive", reflect.TypeOf((*LifecycleService)(nil).IsActive), pipelineID)
+	return &LifecycleServiceIsActiveCall{Call: call}
+}
+
+// LifecycleServiceIsActiveCall wrap *gomock.Call
+type LifecycleServiceIsActiveCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *LifecycleServiceIsActiveCall) Return(arg0 bool) *LifecycleServiceIsActiveCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *LifecycleServiceIsActiveCall) Do(f func(string) bool) *LifecycleServiceIsActiveCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *LifecycleServiceIsActiveCall) DoAndReturn(f func(string) bool) *LifecycleServiceIsActiveCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // ReconfigureProcessor mocks base method.
 func (m *LifecycleService) ReconfigureProcessor(ctx context.Context, pipelineID, processorID string) error {
 	m.ctrl.T.Helper()

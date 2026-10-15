@@ -363,11 +363,10 @@ func (s *Service) ApplyPlan(ctx context.Context, desired config.Pipeline, hash s
 		return fresh, nil
 	}
 
-	running, err := s.isRunning(ctx, desired.ID)
-	if err != nil {
-		return fresh, err
-	}
-	if running {
+	// Invariant 7: refuse to mutate a pipeline with a run, including one
+	// that is still starting or finishing. Decided by run liveness, not by
+	// the status, which lags the run (#2965).
+	if s.isActive(desired.ID) {
 		ce := conduiterr.New(CodePipelineRunning, fmt.Sprintf(
 			"pipeline %q is running; apply refuses to mutate a live pipeline", desired.ID))
 		ce.Suggestion = fmt.Sprintf("stop the pipeline first (conduit pipelines stop %s), then re-run apply", desired.ID)
@@ -511,10 +510,8 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		return fresh, nil
 	}
 
-	running, err := s.isRunning(ctx, desired.ID)
-	if err != nil {
-		return fresh, err
-	}
+	// Invariant 7: decided by run liveness, not by the status (#2965).
+	running := s.isActive(desired.ID)
 
 	if !running {
 		// TOCTOU close (design doc's "Concurrent applies / apply-during-
@@ -529,15 +526,11 @@ func (s *Service) ApplyPlanLive(ctx context.Context, desired config.Pipeline, ha
 		// window, fall through to the running branch below (StopAndWait) —
 		// never let the !running path's plain transactionalImport run against
 		// a pipeline that is, right now, actually running.
-		running, err = s.isRunning(ctx, desired.ID)
-		if err != nil {
-			return fresh, err
-		}
+		running = s.isActive(desired.ID)
 	}
 
-	// #2961: the isRunning checks above read the pipeline's status, which
-	// lags the run, and an external Start can still land between them and the
-	// import. For a pipeline with no run, mark it as being mutated, which
+	// #2961: an external Start can still land between the isActive checks
+	// above and the import. For a pipeline with no run, mark it as being mutated, which
 	// refuses a Start until the import has committed. A refusal means a run
 	// exists after all, so fall through to the running branch. Held for the
 	// import only: never across StopAndWait or the final Start.
@@ -808,56 +801,22 @@ const (
 	startAfterApplyDelay    = 100 * time.Millisecond
 )
 
-// isRunning reports whether the pipeline identified by id currently has
-// live, in-process work per isRunningStatus. A not-yet-existing pipeline
-// (pipeline.ErrInstanceNotFound) is reported as not running: there is
-// nothing running to disrupt, matching Plan/ApplyPlan's existing tolerance
-// of a not-found pipeline elsewhere in this file.
-func (s *Service) isRunning(ctx context.Context, id string) (bool, error) {
-	current, err := s.pipelineService.Get(ctx, id)
-	if err != nil {
-		if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-			return false, nil
-		}
-		return false, cerrors.Errorf("could not check whether pipeline %v is running: %w", id, err)
-	}
-	return isRunningStatus(current.GetStatus()), nil
-}
-
-// isRunningStatus reports whether status represents a pipeline with live,
-// in-process work that apply must not silently disrupt. StatusRecovering and
-// StatusDegraded are included alongside StatusRunning: both mean at least
-// one connector/processor goroutine may still be active (recovering from,
-// or having partially failed into, an error), so the same invariant-7
-// concern applies — only a pipeline a human/system has actually stopped
-// (StatusUserStopped, StatusSystemStopped) is safe to mutate.
+// isActive reports whether the pipeline identified by id has a run: one that
+// is starting, live, finishing or waiting out a recovery backoff (see
+// lifecycle.Service.IsActive). Apply must not mutate such a pipeline's stored
+// config underneath it (Invariant 7).
 //
-// KNOWN GAP (pre-existing, not introduced by ApplyPlanLive, flagged during
-// its review): a pipeline that reached StatusDegraded via a fatal error (or
-// exhausted error-recovery retries) has, by the time that status is visible
-// here, already removed itself from lifecycle.Service's runningPipelines —
-// see Service.runPipeline's cleanup goroutine in pkg/lifecycle/service.go,
-// which calls UpdateStatus(StatusDegraded, ...) and runningPipelines.Delete
-// in the same terminal step. So isRunningStatus correctly reports "true"
-// (there was live work, and the pipeline needs an explicit decision before
-// being mutated) but StopAndWait/Stop then fails with
-// pipeline.ErrPipelineNotRunning against that same pipeline, since it is no
-// longer registered as running. ApplyPlan has the identical dead end today
-// (refuses with CodePipelineRunning, but the suggested fix — "stop the
-// pipeline first" — also fails for the same reason). Fixing this requires
-// either excluding StatusDegraded here or making Stop/StopAndWait tolerant of
-// an already-self-stopped Degraded pipeline; out of scope for this change,
-// surfaced for an explicit decision rather than silently left as a
-// non-obvious dead end.
-func isRunningStatus(status pipeline.Status) bool {
-	switch status {
-	case pipeline.StatusRunning, pipeline.StatusRecovering, pipeline.StatusDegraded:
-		return true
-	case pipeline.StatusSystemStopped, pipeline.StatusUserStopped:
-		return false
-	default:
-		return false
-	}
+// It deliberately does not read the pipeline's status (#2965). The status is
+// a report written after the fact and lags the run: a run that is starting
+// still shows the previous status, so a status check let an apply rewrite the
+// config a run was being built from; and a stale Running status with no run
+// behind it sent apply through a needless stop/start. A pipeline that ended
+// Degraded has no run, so it is applied to like any stopped pipeline, which
+// also removes the old dead end where apply refused it as running and the
+// suggested stop then failed with "pipeline not running". A pipeline that does
+// not exist has no run.
+func (s *Service) isActive(id string) bool {
+	return s.lifecycleService.IsActive(id)
 }
 
 // -----------------------------------------------------------------------

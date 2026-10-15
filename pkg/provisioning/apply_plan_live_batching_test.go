@@ -90,10 +90,10 @@ func TestApplyPlanLive_ArchV2_RefusesDestinationBatchingBeforeStopping(t *testin
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _ := newArchV2PreflightService(ctrl)
+	srv, pipSrv, connSrv, procSrv, lifecycleSrv := newArchV2PreflightService(ctrl)
 
 	old, desired := batchingApplyFixture()
-	instance := expectExportRunning(pipSrv, connSrv, procSrv, old)
+	instance := expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
@@ -119,7 +119,7 @@ func TestApplyPlanLive_NoPreflightOnDefaultEngine(t *testing.T) {
 	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := batchingApplyFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").Return(nil)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:out", "builtin:file", gomock.Any()).Return(&connector.Instance{ID: "p1:out"}, nil)
 	lifecycleSrv.EXPECT().Start(gomock.Any(), "p1").Return(nil)

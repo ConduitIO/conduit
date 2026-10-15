@@ -86,8 +86,10 @@ Pick one:
   flag broadly means _every_ apply against _any_ running pipeline on that server is now
   unattended-authorized until the process restarts.
 - **Only an empty diff is exempt.** The gate fires whenever the diff is non-empty against a pipeline
-  the server currently considers running (`Status.Running`/`Recovering`/`Degraded`; see
-  `provisioning.isRunningStatus`) — regardless of whether the changes are labeled `in_place` or
+  that currently has a run: one that is starting, running, finishing or waiting out a recovery
+  backoff (`LifecycleService.IsActive`; see `provisioning.isActive`). The pipeline's status is not
+  consulted, because it lags the run. A pipeline that ended `Degraded` has no run and applies like a
+  stopped one. The gate fires regardless of whether the changes are labeled `in_place` or
   `restart`. A no-op (empty) diff applies normally regardless of this flag because it restarts
   nothing.
 - **This flag does not, by itself, make an apply safe** — it only removes the "did a human decide

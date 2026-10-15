@@ -99,4 +99,9 @@ type LifecycleService interface {
 	// holds it across the import, and releases it before its own Start. See
 	// lifecycle.Service.TryLockForMutation.
 	TryLockForMutation(pipelineID string) (unlock func(), ok bool)
+	// IsActive reports whether the pipeline has a run that is starting, live,
+	// finishing or waiting out a recovery backoff. ApplyPlan and ApplyPlanLive
+	// decide whether a pipeline is running from it, never from its status
+	// (#2965). See lifecycle.Service.IsActive.
+	IsActive(pipelineID string) bool
 }

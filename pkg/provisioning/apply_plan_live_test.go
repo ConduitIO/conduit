@@ -40,7 +40,10 @@ import (
 // wins. Every ApplyPlanLive test against a running pipeline therefore needs
 // its own single Get registration, already running, serving both Plan's
 // Export call and ApplyPlanLive's own running-status check.
-func expectExportRunning(pipSrv *mock.PipelineService, connSrv *mock.ConnectorService, procSrv *mock.ProcessorService, cfg config.Pipeline) *pipeline.Instance {
+func expectExportRunning(pipSrv *mock.PipelineService, connSrv *mock.ConnectorService, procSrv *mock.ProcessorService, lifecycleSrv *mock.LifecycleService, cfg config.Pipeline) *pipeline.Instance {
+	// Apply decides "running" from run liveness (#2965); the status below is
+	// set too so tests that read it back still see a running pipeline.
+	expectActive(lifecycleSrv, cfg.ID, true)
 	connIDs := make([]string, len(cfg.Connectors))
 	for i, c := range cfg.Connectors {
 		connIDs[i] = c.ID
@@ -133,7 +136,7 @@ func TestApplyPlanLive_RunningPipeline_StopsAppliesRestarts(t *testing.T) {
 	expectMark(t, lifecycleSrv, &order)
 
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").DoAndReturn(func(context.Context, string) error {
 		order = append(order, "stop")
@@ -171,6 +174,7 @@ func TestApplyPlanLive_StoppedPipeline_NoLifecycleCalls(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, _, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 	expectMark(t, lifecycleSrv, nil)
+	expectActive(lifecycleSrv, "p1", false)
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 
@@ -196,10 +200,10 @@ func TestApplyPlanLive_Idempotent_NoOp(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	current := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
-	expectExportRunning(pipSrv, connSrv, procSrv, current)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, current)
 
 	diff, err := srv.Plan(ctx, current)
 	is.NoErr(err)
@@ -221,10 +225,10 @@ func TestApplyPlanLive_StaleHash_RefusedNoMutation_RunningPipeline(t *testing.T)
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
-	expectExportRunning(pipSrv, connSrv, procSrv, desired)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, desired)
 
 	_, err := srv.ApplyPlanLive(ctx, desired, "not-a-real-hash", false)
 	is.True(err != nil)
@@ -261,7 +265,7 @@ func TestApplyPlanLive_ImportFails_RunningPipeline_LeftStopped(t *testing.T) {
 	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").Return(nil)
 
@@ -300,7 +304,7 @@ func TestApplyPlanLive_RestartFails_LeftStoppedWithNewConfig(t *testing.T) {
 	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").Return(nil)
 	connSrv.EXPECT().Update(gomock.Any(), "p1:conn:src", "builtin:postgres", gomock.Any()).
@@ -352,10 +356,10 @@ func TestApplyPlanLive_RestartOnRunning_DeniedWithoutFlag(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := restartFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
@@ -383,10 +387,10 @@ func TestApplyPlanLive_InPlaceChangeOnRunning_DeniedWithoutFlag(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	diff, err := srv.Plan(ctx, desired)
 	is.NoErr(err)
@@ -415,7 +419,7 @@ func TestApplyPlanLive_RestartOnRunning_AllowedWithFlag(t *testing.T) {
 	expectMark(t, lifecycleSrv, &order)
 
 	old, desired := restartFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").DoAndReturn(func(context.Context, string) error {
 		order = append(order, "stop")
@@ -455,11 +459,9 @@ func TestApplyPlanLive_RestartOnRunning_GateSkippedWhenNotRunning(t *testing.T) 
 	ctrl := gomock.NewController(t)
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 	expectMark(t, lifecycleSrv, nil)
+	expectActive(lifecycleSrv, "p1", false) // no run: not running, whatever the status
 
 	old, desired := restartFixture()
-	// expectExport (unlike expectExportRunning) returns an instance with no
-	// status set, i.e. not running — isRunningStatus's default case reports
-	// false for it, same as an explicit StatusUserStopped/StatusSystemStopped.
 	expectExport(pipSrv, connSrv, procSrv, old)
 
 	diff, err := srv.Plan(ctx, desired)
@@ -492,7 +494,7 @@ func TestApplyPlanLive_StopAndWaitFails_NoMutation(t *testing.T) {
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := settingsUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	wantErr := conduiterr.New(CodePlanStale, "stand-in for a StopAndWait failure (e.g. lifecycle_v2.CodeStopAndWaitTimeout)")
 	lifecycleSrv.EXPECT().StopAndWait(gomock.Any(), "p1").Return(wantErr)
@@ -506,17 +508,17 @@ func TestApplyPlanLive_StopAndWaitFails_NoMutation(t *testing.T) {
 }
 
 // TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains is the
-// regression test for the TOCTOU fix in ApplyPlanLive: the pipeline is
-// STOPPED at the first running check (right after Plan/hash-verify), but has
-// become RUNNING by the time of the second, re-check immediately before the
-// mutating write — simulating an external Start (e.g. the Start RPC, called
-// directly against the lifecycle/pipeline service, which the per-pipeline
-// provisioning lock does not reach) racing in during Plan's own work.
-// ApplyPlanLive must notice the re-check's answer and take the StopAndWait
-// (running) branch — never call transactionalImport directly against a
-// pipeline that is, at that moment, actually running. No connSrv.Update
-// expectation is registered outside the StopAndWait/Start bracket, so gomock
-// fails the test if the plain (undrained) mutation path runs instead.
+// regression test for the TOCTOU fix in ApplyPlanLive: the pipeline has no
+// run at the first running check (right after Plan/hash-verify), but has one
+// by the time of the second, re-check immediately before the mutating write —
+// simulating an external Start (e.g. the Start RPC, called directly against
+// the lifecycle/pipeline service, which the per-pipeline provisioning lock
+// does not reach) racing in during Plan's own work. ApplyPlanLive must notice
+// the re-check's answer and take the StopAndWait (running) branch — never
+// call transactionalImport directly against a pipeline that is, at that
+// moment, actually running. No connSrv.Update expectation is registered
+// outside the StopAndWait/Start bracket, so gomock fails the test if the
+// plain (undrained) mutation path runs instead.
 func TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -525,21 +527,12 @@ func TestApplyPlanLive_TOCTOU_BecameRunningBetweenChecks_Drains(t *testing.T) {
 	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := settingsUpdateFixture()
+	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(pipelineInstanceFor(old, pipeline.StatusUserStopped), nil).AnyTimes()
 
-	stopped := pipelineInstanceFor(old, pipeline.StatusUserStopped)
-	running := pipelineInstanceFor(old, pipeline.StatusRunning)
-
-	// Call 1: Plan's own Export -> Get (stopped, so Plan computes a normal
-	// diff against existing state). Call 2: ApplyPlanLive's first isRunning
-	// check (still stopped). Call 3+: the TOCTOU re-check and any further
-	// lookups — now running, as if Start landed in between.
-	var calls int32
-	pipSrv.EXPECT().Get(gomock.Any(), "p1").DoAndReturn(func(context.Context, string) (*pipeline.Instance, error) {
-		if atomic.AddInt32(&calls, 1) <= 2 {
-			return stopped, nil
-		}
-		return running, nil
-	}).AnyTimes()
+	// First IsActive: no run. Every later one: a run, as if Start landed in
+	// between. gomock matches the first registration until it is exhausted.
+	lifecycleSrv.EXPECT().IsActive("p1").Return(false).Times(1)
+	lifecycleSrv.EXPECT().IsActive("p1").Return(true).AnyTimes()
 
 	for _, c := range old.Connectors {
 		connSrv.EXPECT().Get(gomock.Any(), c.ID).Return(&connector.Instance{
@@ -601,6 +594,12 @@ func pipelineInstanceFor(cfg config.Pipeline, status pipeline.Status) *pipeline.
 	}
 	instance.SetStatus(status)
 	return instance
+}
+
+// expectActive makes the lifecycle report whether pipeline id has a run, for
+// every IsActive call.
+func expectActive(lifecycleSrv *mock.LifecycleService, id string, active bool) {
+	lifecycleSrv.EXPECT().IsActive(id).Return(active).AnyTimes()
 }
 
 // expectMark expects exactly one TryLockForMutation, granted, and requires

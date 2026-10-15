@@ -61,7 +61,7 @@ func TestApplyPlanLive_ProcessorUpdate_AppliesInPlace_NoRestart(t *testing.T) {
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	procSrv.EXPECT().UpdateWhileRunning(gomock.Any(), "p1:proc:1", "builtin:field.set", gomock.Any()).
 		Return(&processor.Instance{ID: "p1:proc:1"}, nil)
@@ -89,7 +89,7 @@ func TestApplyPlanLive_ProcessorUpdate_InPlace_CompletesDespiteCallerCancel(t *t
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	// The forward import runs on the detached context; cancel the caller context
 	// as a side-effect to prove the rest of the apply proceeds regardless.
@@ -124,7 +124,7 @@ func TestApplyPlanLive_ProcessorUpdate_NotLiveReconfigurable_FallsBackToRestart(
 	expectMark(t, lifecycleSrv, nil)
 
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	// procSrv.Update is called by applyInPlace's import and again by the restart
 	// path's import (the stateless mock Export keeps returning old, so both
@@ -165,7 +165,7 @@ func TestApplyPlanLive_ProcessorUpdate_OpenFails_RollsBack(t *testing.T) {
 	srv, pipSrv, connSrv, procSrv, _, lifecycleSrv := newTestService(ctrl, log.Nop())
 
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, lifecycleSrv, old)
 
 	// Forward import commits the new config (one Update). The rollback then calls
 	// transactionalImport(old); against the stateless mock Export (which keeps

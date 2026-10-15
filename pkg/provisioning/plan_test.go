@@ -239,7 +239,8 @@ func TestApplyPlan_MatchingHash_Executes(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, _, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectActive(lifecycleSrv, "p1", false)
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 
@@ -271,7 +272,8 @@ func TestApplyPlan_WrapsImportInTransaction(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, _, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectActive(lifecycleSrv, "p1", false)
 
 	desired := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 	pipSrv.EXPECT().Get(gomock.Any(), "p1").Return(nil, pipeline.ErrInstanceNotFound).AnyTimes()
@@ -343,7 +345,8 @@ func TestApplyPlan_PartialFailure_RollsBackPrefix(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, _, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, connSrv, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectActive(lifecycleSrv, "p1", false)
 
 	desired := config.Pipeline{
 		ID:  "p1",
@@ -386,19 +389,20 @@ func TestApplyPlan_PartialFailure_RollsBackPrefix(t *testing.T) {
 // TestApplyPlan_RunningPipeline_Refused is the regression test for AC-13:
 // apply must never silently mutate a running pipeline. No Create/Update/
 // Delete expectation is set on any mock, so gomock fails the test if apply
-// attempts anything beyond the Get status check.
+// attempts anything beyond the running check.
 func TestApplyPlan_RunningPipeline_Refused(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	srv, pipSrv, _, _, _, _ := newTestService(ctrl, log.Nop())
+	srv, pipSrv, _, _, _, lifecycleSrv := newTestService(ctrl, log.Nop())
+	expectActive(lifecycleSrv, "p1", true)
 
 	current := config.Pipeline{ID: "p1", Name: "orders", DLQ: dlqFixture()}
 	desired := current
 	desired.Name = "orders-v2"
 
-	// Export (inside Plan) reads the pipeline once per call; ApplyPlan's own
-	// running-state check reads it again. Both must see the running status.
+	// Export (inside Plan) reads the pipeline; the running decision comes from
+	// IsActive above (#2965).
 	running := &pipeline.Instance{
 		ID:     "p1",
 		Config: pipeline.Config{Name: "orders"},

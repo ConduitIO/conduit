@@ -128,10 +128,13 @@ func TestApplyPlanLive_ArchV2_ProcessorUpdate_FallsBackToRestart(t *testing.T) {
 	connSrv := mock.NewConnectorService(ctrl)
 	procSrv := mock.NewProcessorService(ctrl)
 	connPlugSrv := mock.NewConnectorPluginService(ctrl)
-	srv := NewService(db, log.Nop(), pipSrv, connSrv, procSrv, connPlugSrv, v2Service, "")
+	// Apply decides "running" from IsActive (#2965). The pipeline was never
+	// Started on v2Service, so report a run to drive the running branch; the
+	// real StopAndWait below still refuses, as described above.
+	srv := NewService(db, log.Nop(), pipSrv, connSrv, procSrv, connPlugSrv, reportsActive{v2Service}, "")
 
 	old, desired := processorUpdateFixture()
-	expectExportRunning(pipSrv, connSrv, procSrv, old)
+	expectExportRunning(pipSrv, connSrv, procSrv, mock.NewLifecycleService(ctrl), old)
 
 	// applyInPlace commits the new processor config to the store BEFORE
 	// attempting the (here, always-refused) live swap - same expectation
@@ -153,3 +156,9 @@ func TestApplyPlanLive_ArchV2_ProcessorUpdate_FallsBackToRestart(t *testing.T) {
 	// in-place success) is what actually ran.
 	is.True(cerrors.Is(err, pipeline.ErrPipelineNotRunning))
 }
+
+// reportsActive wraps a real lifecycle service and reports every pipeline as
+// having a run.
+type reportsActive struct{ *lifecyclev2.Service }
+
+func (reportsActive) IsActive(string) bool { return true }

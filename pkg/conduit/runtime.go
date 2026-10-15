@@ -1474,8 +1474,8 @@ func (r *Runtime) InitProvisioningOnly(ctx context.Context) error {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
 
-	// Invariant 7 / Tier-1 safety (see plan.go's isRunningStatus and AC-13):
-	// pipelineService.Init converts any persisted StatusRunning to
+	// Invariant 7 / Tier-1 safety (see provisioning's plan.go isActive and
+	// AC-13): pipelineService.Init converts any persisted StatusRunning to
 	// StatusSystemStopped (it cannot know whether the process that set
 	// StatusRunning is still alive) — the *same* laundering conduit run
 	// itself relies on after a real restart. That means a status read
@@ -1625,25 +1625,9 @@ func (r *Runtime) startDevWatcher(ctx context.Context, t *tomb.Tomb) error {
 
 // devPipelineStatus is the dev.StatusFunc the watcher uses purely to label
 // an apply accurately (see dev.StatusFunc's doc) — it reports whether
-// pipelineID currently has live, in-process work, mirroring
-// provisioning.isRunningStatus's classification (pkg/provisioning/plan.go),
-// which is unexported and cannot be called from here. This duplicates a
-// three-case predicate, not engine behavior: keep it in sync with
-// provisioning's own definition if that classification ever changes.
-func (r *Runtime) devPipelineStatus(ctx context.Context, pipelineID string) (bool, error) {
-	inst, err := r.Orchestrator.Pipelines.Get(ctx, pipelineID)
-	if err != nil {
-		if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	switch inst.GetStatus() {
-	case pipeline.StatusRunning, pipeline.StatusRecovering, pipeline.StatusDegraded:
-		return true, nil
-	case pipeline.StatusSystemStopped, pipeline.StatusUserStopped:
-		return false, nil
-	default:
-		return false, nil
-	}
+// pipelineID currently has a run, the same question provisioning's ApplyPlan
+// and ApplyPlanLive ask (#2965). It reads run liveness from the lifecycle
+// service, never the pipeline's status, which lags the run.
+func (r *Runtime) devPipelineStatus(_ context.Context, pipelineID string) (bool, error) {
+	return r.lifecycleService.IsActive(pipelineID), nil
 }
