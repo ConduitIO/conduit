@@ -17,7 +17,6 @@ package funnel
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
@@ -49,9 +48,9 @@ type connectorErrorsTask interface {
 // Readers stop when ctx is done or stop is called. stop waits for every
 // reader to return, so after it returns nothing reads the channels. That is
 // safe: a connector whose error is not read keeps it and returns it from
-// Teardown (see connector.persistErrReporter). One goroutine per connector;
-// once stop returns, each of them has returned from its read and has nothing
-// left to do but exit.
+// Teardown (see connector.persistErrReporter). One goroutine per connector,
+// plus one that waits for them; once stop returns, each reader has returned
+// from its read and has nothing left to do but exit.
 func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (stop func()) {
 	stop, _ = w.watchConnectorErrors(ctx, fail)
 	return stop
@@ -63,48 +62,15 @@ func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (st
 // for done; tests use it to observe the ctx path, where nothing else signals
 // that the readers are gone (#3035).
 func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (stop func(), done <-chan struct{}) {
-	type reader struct {
-		taskID string
-		errs   <-chan error
-	}
-	var readers []reader
-	seen := make(map[*TaskNode]bool)
-	var walk func(*TaskNode)
-	walk = func(n *TaskNode) {
-		if seen[n] {
-			return
-		}
-		seen[n] = true
-		if t, ok := n.Task.(connectorErrorsTask); ok {
-			if errs := t.connectorErrors(); errs != nil {
-				readers = append(readers, reader{taskID: n.Task.ID(), errs: errs})
-			}
-		}
-		for _, next := range n.Next {
-			walk(next)
-		}
-	}
-	walk(w.FirstTask)
-
 	quit := make(chan struct{})
-	allDone := make(chan struct{})
 	var (
-		remaining atomic.Int64
-		once      sync.Once
+		wg      sync.WaitGroup
+		once    sync.Once
+		readers int
 	)
-	// remaining is set before any reader starts, so it cannot reach zero
-	// until the last of them returns.
-	remaining.Store(int64(len(readers)))
-	if len(readers) == 0 {
-		close(allDone)
-	}
 
 	read := func(taskID string, errs <-chan error) {
-		defer func() {
-			if remaining.Add(-1) == 0 {
-				close(allDone)
-			}
-		}()
+		defer wg.Done()
 		select {
 		case <-quit:
 		case <-ctx.Done():
@@ -117,8 +83,36 @@ func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (st
 			})
 		}
 	}
-	for _, r := range readers {
-		go read(r.taskID, r.errs)
+
+	seen := make(map[*TaskNode]bool)
+	var walk func(*TaskNode)
+	walk = func(n *TaskNode) {
+		if seen[n] {
+			return
+		}
+		seen[n] = true
+		if t, ok := n.Task.(connectorErrorsTask); ok {
+			if errs := t.connectorErrors(); errs != nil {
+				wg.Add(1)
+				readers++
+				go read(n.Task.ID(), errs)
+			}
+		}
+		for _, next := range n.Next {
+			walk(next)
+		}
+	}
+	walk(w.FirstTask)
+
+	// Every wg.Add has happened by now, so wg.Wait cannot return early.
+	allDone := make(chan struct{})
+	if readers == 0 {
+		close(allDone)
+	} else {
+		go func() {
+			wg.Wait()
+			close(allDone)
+		}()
 	}
 
 	var stopOnce sync.Once

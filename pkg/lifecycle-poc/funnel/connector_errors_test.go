@@ -17,6 +17,7 @@ package funnel
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -256,6 +257,64 @@ func TestWatchConnectorErrors_StopReleasesReaders(t *testing.T) {
 
 	assertUnread(t, src1)
 	assertUnread(t, dst)
+	is.Equal(calls.Load(), int64(0))
+}
+
+// TestWatchConnectorErrors_StopWaitsForReaderInFail: stop must not return,
+// and done must not close, while a reader is still inside fail. Reader A
+// takes an error and blocks in fail; reader B is parked and exits on quit.
+// Code that ends the watch one reader early (a WaitGroup Add too few, Done
+// before fail returns) lets stop return here. The 200ms window is negative
+// evidence only: a correct run cannot fail on timing, and a slow scheduler
+// only makes a broken run harder to catch (found in review of #3068).
+func TestWatchConnectorErrors_StopWaitsForReaderInFail(t *testing.T) {
+	w1, _, src1, _, _ := errorsTopology(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock) // a failing run must not leave reader A blocked
+	fail := func(error) {
+		close(entered)
+		<-release
+	}
+
+	stop, done := w1.watchConnectorErrors(context.Background(), fail)
+	send(t, src1, cerrors.New("boom"))
+	waitClosed(t, entered) // reader A is inside fail; reader B (dst) is parked
+
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		stop() // releases B through quit, then must wait for A
+	}()
+	select {
+	case <-returned:
+		t.Fatal("stop returned while a reader was still inside fail")
+	case <-done:
+		t.Fatal("done closed while a reader was still inside fail")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	unblock()
+	waitClosed(t, returned)
+	if !isClosed(done) {
+		t.Fatal("done open after stop returned")
+	}
+}
+
+// TestWatchConnectorErrors_ClosedErrorsChannel: a connector that closes its
+// Errors() channel ends its reader without calling fail. With both channels
+// closed the watch ends on its own, without stop or ctx.
+func TestWatchConnectorErrors_ClosedErrorsChannel(t *testing.T) {
+	is := is.New(t)
+	w1, _, src1, _, dst := errorsTopology(t)
+	fail, calls, _ := failRecorder()
+
+	stop, done := w1.watchConnectorErrors(context.Background(), fail)
+	close(src1)
+	close(dst)
+	waitClosed(t, done)
+	stop()
 	is.Equal(calls.Load(), int64(0))
 }
 
