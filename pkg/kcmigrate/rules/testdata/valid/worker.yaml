@@ -7,3 +7,7 @@ keys:
     emit: {kind: none}
     reason: Conduit has no worker cluster.
     diff: identity
+  - key: bootstrap.servers
+    status: translated
+    emit: {kind: setting, side: destination, name: servers}
+    diff: identity

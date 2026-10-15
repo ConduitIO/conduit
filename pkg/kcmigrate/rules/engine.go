@@ -93,50 +93,88 @@ func (e *Engine) Rules() []kcmigrate.RulesInfo {
 	return out
 }
 
-// Connector classifies every key occurrence of c, in input order. A class
+// Decision is the engine's verdict on one key occurrence: its report entry
+// and, when the key is translated or approximated into a setting, the emit
+// action. Emitters may refine Entry (targets, secrets), never drop it.
+type Decision struct {
+	Entry kcmigrate.Entry
+	KV    kcmigrate.KV
+	// Emit is nil when nothing is emitted: unsupported keys, overridden
+	// duplicates, unknown keys and unknown classes.
+	Emit *Action
+	// Secret is the rule's secret flag.
+	Secret bool
+}
+
+// Classified is a connector after classification.
+type Classified struct {
+	Connector kcmigrate.ReportConnector
+	Decisions []Decision // one per KV, in input order; Connector.Entries mirrors them
+	// Rules is the class's rule file, nil for an unknown class.
+	Rules *File
+}
+
+// Classify classifies every key occurrence of c, in input order. A class
 // with no rule file yields the role unknown and one blocking
 // kc.connector_class_unsupported entry per key. Otherwise each key is looked
 // up in the class's rules, then in the shared rules; a key no rule claims is
 // kc.key_unknown, blocking. Notes, transforms and pipeline targets are left
 // to the emitters.
-func (e *Engine) Connector(c kcmigrate.Connector) kcmigrate.ReportConnector {
+func (e *Engine) Classify(c kcmigrate.Connector) Classified {
 	rc := kcmigrate.ReportConnector{
-		Name: c.Name, Class: c.Class,
-		Entries: make([]kcmigrate.Entry, 0, len(c.Config)), Notes: []kcmigrate.Note{}, Transforms: []kcmigrate.Transform{},
+		Name: c.Name, Class: c.Class, Notes: []kcmigrate.Note{}, Transforms: []kcmigrate.Transform{},
 	}
 	f, ok := e.classes[c.Class]
-	if !ok {
-		rc.Role = kcmigrate.RoleUnknown
+	var ds []Decision
+	if ok {
+		rc.Role = kcmigrate.Role(f.Scope)
+		ds = classifyAll(c.Config, f, e.shared)
+	} else {
+		rc.Role, f = kcmigrate.RoleUnknown, nil
 		for _, kv := range c.Config {
-			rc.Entries = append(rc.Entries, classUnsupported(c.Class).entry(kv.Key, kv.Origin))
+			ds = append(ds, Decision{Entry: classUnsupported(c.Class).entry(kv.Key, kv.Origin), KV: kv})
 		}
-		return rc
 	}
-	rc.Role = kcmigrate.Role(f.Scope)
-	rc.Entries = e.classifyAll(c.Config, f, e.shared)
-	return rc
+	rc.Entries = Entries(ds)
+	return Classified{Connector: rc, Decisions: ds, Rules: f}
+}
+
+// Connector is Classify without the decisions.
+func (e *Engine) Connector(c kcmigrate.Connector) kcmigrate.ReportConnector {
+	return e.Classify(c).Connector
 }
 
 // Worker classifies a worker file's keys with the worker rules. The report
 // element's name is the file label.
-func (e *Engine) Worker(w kcmigrate.Worker) kcmigrate.ReportConnector {
-	return kcmigrate.ReportConnector{
+func (e *Engine) Worker(w kcmigrate.Worker) ([]Decision, kcmigrate.ReportConnector) {
+	ds := classifyAll(w.Props, e.worker, nil)
+	return ds, kcmigrate.ReportConnector{
 		Name: w.File, Role: kcmigrate.RoleWorker,
-		Entries: e.classifyAll(w.Props, e.worker, nil), Notes: []kcmigrate.Note{}, Transforms: []kcmigrate.Transform{},
+		Entries: Entries(ds), Notes: []kcmigrate.Note{}, Transforms: []kcmigrate.Transform{},
 	}
 }
 
+// Entries returns the entries of ds, in order. It always returns a non-nil
+// slice.
+func Entries(ds []Decision) []kcmigrate.Entry {
+	out := make([]kcmigrate.Entry, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, d.Entry)
+	}
+	return out
+}
+
 // classifyAll is where the completeness invariant is upheld: exactly one
-// entry per KV, in input order, whatever the rules say.
-func (e *Engine) classifyAll(kvs []kcmigrate.KV, primary, fallback *File) []kcmigrate.Entry {
+// decision per KV, in input order, whatever the rules say.
+func classifyAll(kvs []kcmigrate.KV, primary, fallback *File) []Decision {
 	last := map[string]int{}
 	for i, kv := range kvs {
 		last[kv.Key] = i
 	}
-	out := make([]kcmigrate.Entry, 0, len(kvs))
+	out := make([]Decision, 0, len(kvs))
 	for i, kv := range kvs {
 		if j := last[kv.Key]; j != i {
-			out = append(out, duplicate(kvs[j].Origin).entry(kv.Key, kv.Origin))
+			out = append(out, Decision{Entry: duplicate(kvs[j].Origin).entry(kv.Key, kv.Origin), KV: kv})
 			continue
 		}
 		out = append(out, classify(kv, primary, fallback))
@@ -144,7 +182,7 @@ func (e *Engine) classifyAll(kvs []kcmigrate.KV, primary, fallback *File) []kcmi
 	return out
 }
 
-func classify(kv kcmigrate.KV, primary, fallback *File) kcmigrate.Entry {
+func classify(kv kcmigrate.KV, primary, fallback *File) Decision {
 	home := primary
 	r := home.match(kv.Key)
 	if r == nil && fallback != nil {
@@ -152,51 +190,68 @@ func classify(kv kcmigrate.KV, primary, fallback *File) kcmigrate.Entry {
 		r = home.match(kv.Key)
 	}
 	if r == nil {
-		return unknownKey(kv.Key, primary).entry(kv.Key, kv.Origin)
+		return Decision{Entry: unknownKey(kv.Key, primary).entry(kv.Key, kv.Origin), KV: kv}
 	}
 	alias := r.AliasOf
 	if alias != "" {
 		r = home.exact[alias]
 	}
-	ent := r.outcomeFor(kv.Value).entry(kv.Key, kv.Origin)
+	o, act := r.outcomeFor(kv.Value)
+	d := Decision{Entry: o.entry(kv.Key, kv.Origin), KV: kv, Emit: act, Secret: r.Secret}
 	if alias != "" {
 		legacy := fmt.Sprintf("%s is the legacy name of %s and is handled as %s", kv.Key, alias, alias)
-		if ent.Status == kcmigrate.StatusTranslated {
-			ent.Status, ent.Code = kcmigrate.StatusApproximated, kcmigrate.CodeKeyDeprecated.Reason()
-			ent.Reason, ent.Fix = legacy+".", "Rename "+kv.Key+" to "+alias+"."
+		if d.Entry.Status == kcmigrate.StatusTranslated {
+			d.Entry.Status, d.Entry.Code = kcmigrate.StatusApproximated, kcmigrate.CodeKeyDeprecated.Reason()
+			d.Entry.Reason, d.Entry.Fix = legacy+".", "Rename "+kv.Key+" to "+alias+"."
 		} else {
-			ent.Reason += " (" + legacy + ".)"
+			d.Entry.Reason += " (" + legacy + ".)"
 		}
 	}
-	return ent
+	return d
 }
 
 // referencePattern is Kafka Connect's ConfigTransformer pattern for
 // config-provider references such as ${file:/path:key} and ${env:NAME}.
 var referencePattern = regexp.MustCompile(`\$\{([^}]*?):(([^}]*?):)?([^}]*?)\}`)
 
-func (r *Rule) outcomeFor(v kcmigrate.Value) Outcome {
+// IsReference reports whether v contains a config-provider reference.
+func IsReference(v string) bool { return referencePattern.MatchString(v) }
+
+// outcomeFor returns the outcome for value v and the action to emit, nil
+// for an unsupported outcome.
+func (r *Rule) outcomeFor(v kcmigrate.Value) (Outcome, *Action) {
 	if len(r.Values) == 0 {
-		return r.Outcome
+		return r.Outcome, actionFor(r.Outcome, r.Emit)
 	}
 	// Compared only, never copied into the outcome. Trimmed as Kafka
 	// Connect's ConfigDef.parseType trims every string-typed value.
 	raw := strings.TrimSpace(v.Reveal())
-	if referencePattern.MatchString(raw) {
+	if IsReference(raw) {
 		return Outcome{
 			Status: kcmigrate.StatusUnsupported, Blocking: true, Code: kcmigrate.CodeKeyUnsupported.Reason(),
 			Reason: "The value is a config-provider reference. How this key is migrated depends on its value, which migrate cannot read offline.",
 			Fix:    "Set the literal value in the Kafka Connect config, or resolve the reference and re-run.",
-		}
+		}, nil
 	}
 	for _, b := range r.Values[:len(r.Values)-1] {
 		for _, m := range b.Match {
 			if m == raw || (r.IgnoreCase && strings.EqualFold(m, raw)) {
-				return b.Outcome
+				emit := b.Emit
+				if emit == nil {
+					emit = r.Emit
+				}
+				return b.Outcome, actionFor(b.Outcome, emit)
 			}
 		}
 	}
-	return r.Values[len(r.Values)-1].Outcome
+	return r.Values[len(r.Values)-1].Outcome, nil
+}
+
+func actionFor(o Outcome, a *Action) *Action {
+	if o.Status == kcmigrate.StatusUnsupported {
+		return nil
+	}
+	return a
 }
 
 func classUnsupported(class string) Outcome {

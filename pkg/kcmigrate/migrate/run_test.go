@@ -23,10 +23,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
 	"github.com/conduitio/conduit/pkg/kcmigrate/rules"
 	"github.com/conduitio/conduit/pkg/kcmigrate/schema"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
+	provyaml "github.com/conduitio/conduit/pkg/provisioning/config/yaml"
 	"github.com/matryer/is"
 )
 
@@ -73,7 +77,7 @@ func TestRun_Verdicts(t *testing.T) {
 			is.NoErr(err)
 			is.Equal(res.OK, tt.wantOK)
 			is.Equal(len(res.Report.AcceptedGaps), tt.wantGaps)
-			is.Equal(len(res.Files), 2)
+			is.True(len(res.Files) >= 2)
 			is.Equal(res.Files[0].Path, ReportFile)
 			is.NoErr(schema.ValidateReport(res.Files[0].Content))
 		})
@@ -167,4 +171,136 @@ func TestRun_Canceled(t *testing.T) {
 	cancel()
 	_, err := Run(ctx, testEngine(t), Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector)}})
 	is.True(err != nil && strings.Contains(err.Error(), "canceled"))
+}
+
+func runOne(t *testing.T, req Request) Result {
+	t.Helper()
+	if req.ConduitVersion == "" {
+		req.ConduitVersion = "v"
+	}
+	res, err := Run(context.Background(), testEngine(t), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func file(res Result, path string) string {
+	for _, f := range res.Files {
+		if f.Path == path {
+			return string(f.Content)
+		}
+	}
+	return ""
+}
+
+// Every generated pipeline parses with the engine's own pipeline parser and
+// passes its config validation.
+func TestRun_PipelinesParseAndValidate(t *testing.T) {
+	is := is.New(t)
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("a.properties", cleanConnector), in("b.properties", approxConnector)}})
+	parser := provyaml.NewParser(log.Nop())
+	n := 0
+	for _, f := range res.Files {
+		if !strings.HasPrefix(f.Path, "pipelines/") {
+			continue
+		}
+		n++
+		ps, err := parser.Parse(context.Background(), bytes.NewReader(f.Content))
+		is.NoErr(err)
+		is.Equal(len(ps), 1)
+		is.NoErr(config.Validate(ps[0]))
+	}
+	is.Equal(n, 2)
+	is.Equal(res.Report.Connectors[0].Pipeline, "pipelines/clean.yaml")
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineRunning)
+	is.Equal(res.Report.Connectors[0].Entries[2].Target.ConfigPath, "/pipelines/0/connectors/0/settings/host")
+}
+
+func TestRun_Secrets(t *testing.T) {
+	is := is.New(t)
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{
+		in("lit.properties", "name=lit\nconnector.class=com.example.ExampleSource\nexample.password=CANARY-pw\n"),
+		in("env.properties", "name=env\nconnector.class=com.example.ExampleSource\nexample.password=${env:PG_PASSWORD}\n"),
+		in("file.properties", "name=file\nconnector.class=com.example.ExampleSource\nexample.password=${file:/etc/kc/db.properties:password}\n"),
+	}})
+	for _, f := range res.Files {
+		is.True(!strings.Contains(string(f.Content), "CANARY"))
+	}
+	is.True(strings.Contains(file(res, "pipelines/lit.yaml"), "password: ${KC_LIT_EXAMPLE_PASSWORD}"))
+	is.True(strings.Contains(file(res, "pipelines/env.yaml"), "password: ${PG_PASSWORD}"))
+	is.True(strings.Contains(file(res, "pipelines/file.yaml"), "password: ${KC_FILE_EXAMPLE_PASSWORD}"))
+
+	tmpl := file(res, SecretsTemplateFile)
+	is.True(strings.Contains(tmpl, "\nKC_LIT_EXAMPLE_PASSWORD=\n"))
+	is.True(strings.Contains(tmpl, "\nPG_PASSWORD=\n"))
+	is.True(strings.Contains(tmpl, "from ${file:/etc/kc/db.properties:password}"))
+
+	lit, env, fileC := res.Report.Connectors[0], res.Report.Connectors[1], res.Report.Connectors[2]
+	pw := lit.Entries[2]
+	is.True(pw.Secret)
+	is.Equal(pw.Target.Env, "KC_LIT_EXAMPLE_PASSWORD")
+	is.Equal(len(lit.Notes), 1)
+	is.Equal(lit.Notes[0].Code, "kc.secret_plaintext")
+	is.Equal(len(env.Notes), 0) // references are not plaintext
+	is.Equal(len(fileC.Notes), 0)
+	is.True(strings.Contains(fileC.Entries[2].Reason, "${file:/etc/kc/db.properties:password}"))
+}
+
+func TestRun_ConflictingKeysBlock(t *testing.T) {
+	is := is.New(t)
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("a.properties",
+		"name=a\nconnector.class=com.example.ExampleSource\nexample.host=h1\nexample.old.host=h2\n")}})
+	e := res.Report.Connectors[0].Entries[3]
+	is.Equal(e.Code, "kc.key_conflict")
+	is.True(e.Blocking)
+	is.True(strings.Contains(file(res, "pipelines/a.yaml"), "host: h1")) // the first owner stays, the pipeline is stopped
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineStopped)
+}
+
+func TestRun_WorkerDefaults(t *testing.T) {
+	is := is.New(t)
+	worker := in("w.properties", "bootstrap.servers=worker:9092\n")
+	res := runOne(t, Request{Worker: &worker, Inputs: []kcmigrate.Input{
+		in("a.properties", cleanConnector),
+		in("b.properties", "name=b\nconnector.class=com.example.ExampleSource\nexample.servers=own:9092\n"),
+	}})
+	is.True(strings.Contains(file(res, "pipelines/clean.yaml"), "servers: worker:9092")) // inherited
+	is.True(strings.Contains(file(res, "pipelines/b.yaml"), "servers: own:9092"))        // the connector wins
+	is.True(res.Report.Connectors[0].Entries[0].Target == nil)                           // worker entries have no single target
+}
+
+func TestRun_PipelineStatus(t *testing.T) {
+	is := is.New(t)
+	paused := `{"orders": {"info": {"name": "orders", "config": {"connector.class": "com.example.ExampleSource", "name": "orders"}}, "status": {"connector": {"state": "PAUSED"}}}}`
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("e.json", paused)}})
+	is.True(res.OK)
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineStopped) // paused in Kafka Connect
+
+	blocked := "name=x\nconnector.class=com.example.ExampleSource\nexample.mode=turbo\n"
+	res = runOne(t, Request{Inputs: []kcmigrate.Input{in("x.properties", blocked)}, AcceptGaps: true})
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineRunning) // --accept-gaps
+	is.True(strings.Contains(file(res, "pipelines/x.yaml"), "status: running"))
+}
+
+func TestRun_ValidatorFailureIsInternal(t *testing.T) {
+	is := is.New(t)
+	_, err := Run(context.Background(), testEngine(t), Request{
+		Inputs:           []kcmigrate.Input{in("a.properties", cleanConnector)},
+		ValidatePipeline: func(string, []byte) error { return cerrors.New("bad") },
+	})
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInternal)
+}
+
+func TestRun_PipelineFileCollision(t *testing.T) {
+	is := is.New(t)
+	_, err := Run(context.Background(), testEngine(t), Request{Inputs: []kcmigrate.Input{
+		in("a.properties", "name=a/b\nconnector.class=com.example.ExampleSource\n"),
+		in("b.properties", "name=a_b\nconnector.class=com.example.ExampleSource\n"),
+	}})
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeConnectorNameInvalid)
 }
