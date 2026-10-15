@@ -23,7 +23,16 @@ jobs:
           GOLANGCI_LINT_VERSION=$( go list -modfile=tools/go.mod -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2 )
           echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
 
+      # skip-cache (#3066): the action's lint cache is keyed on go.mod plus a
+      # 7-day bucket and falls back to any cache from the same bucket, and
+      # golangci-lint trims entries unused for 5 days. A run can therefore
+      # start from a partial cache, and on a partial cache `exhaustive`
+      # missed a cross-package enum and nolintlint failed an unrelated PR.
+      # Lint is a required check, so its result must depend only on the
+      # commit. Measured cost: about 20-35s per run (#3077). The Go build
+      # and module caches from setup-go are unaffected.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ steps.golangci-lint-version.outputs.v }}
+          skip-cache: true
