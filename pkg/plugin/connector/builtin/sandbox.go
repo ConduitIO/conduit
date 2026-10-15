@@ -79,7 +79,7 @@ func runSandbox[REQ any, RES any](
 		if v != nil {
 			err = v.(error)
 		}
-		return res, err
+		return res, convertPolicyError(err)
 	}
 }
 
