@@ -101,83 +101,137 @@ keys:
     lint: [kc.lint.kip1188_override_risk]
     diff: behavior
 
-  # Client security, inherited by every Kafka connector of the pipelines.
-  - key: security.protocol
+  # The worker's own clients. Its top-level security.protocol, sasl.* and
+  # ssl.* configure the clients the worker uses for its internal topics and
+  # group membership; they never reach a connector's producer or consumer,
+  # which get only bootstrap.servers and the producer.- or consumer.-prefixed
+  # keys below (Worker.baseProducerConfigs and baseConsumerConfigs, Apache
+  # Kafka 4.2.0, Worker.java:837-935). So they have no effect on a pipeline.
+  - key: {regex: '^(security\.protocol|sasl\..+|ssl\..+)$'}
+    status: translated
+    reason: Configures the worker's own Kafka clients, which Conduit does not have; connector clients take their security from the producer.- and consumer.-prefixed worker keys or their own overrides.
+    emit: {kind: none}
+    diff: tuning
+
+  # Client defaults for every connector's producer and consumer: the middle
+  # layer of a connector's client config, above bootstrap.servers and below
+  # the connector's own overrides.
+  - key: producer.bootstrap.servers
+    status: translated
+    reason: The worker's producer.-prefixed settings override bootstrap.servers for every connector's producer.
+    emit: {kind: setting, side: producer, name: servers, layer: client}
+    diff: identity
+  - key: producer.security.protocol
     diff: identity
     ignoreCase: true
     values:
       - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
         status: translated
-        emit: {kind: tls-from-protocol, side: kafka}
+        emit: {kind: tls-from-protocol, side: producer, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
         code: kc.key_unsupported
         reason: Not a Kafka security protocol.
         fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
-  - key: sasl.mechanism
+  - key: producer.sasl.mechanism
     diff: identity
     values:
       - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
         status: translated
-        emit: {kind: setting, side: kafka, name: saslMechanism}
+        emit: {kind: setting, side: producer, name: saslMechanism, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
         code: kc.key_unsupported
         reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
-        fix: Use a supported mechanism, or keep these connectors on Kafka Connect.
-  - key: sasl.jaas.config
+        fix: Use a supported mechanism, or keep the connectors that use this producer on Kafka Connect.
+  - key: producer.sasl.jaas.config
     status: translated
-    emit: {kind: sasl-jaas, side: kafka}
+    emit: {kind: sasl-jaas, side: producer, layer: client}
     secret: true
     diff: secret
-  - key: ssl.endpoint.identification.algorithm
-    diff: identity
-    values:
-      - match: [https]
-        status: translated
-        reason: Host name verification on, the Kafka connector's default.
-        emit: {kind: none}
-      - match: [""]
-        status: unsupported
-        blocking: true
-        code: kc.key_unsupported
-        reason: Host name verification is disabled on the worker. Conduit verifies by default; carrying the setting over would need insecureSkipVerify, which also stops certificate checks.
-        fix: Enable host name verification, or set insecureSkipVerify on the pipeline by hand if you accept the risk.
-      - otherwise: true
-        status: unsupported
-        blocking: true
-        code: kc.key_unsupported
-        reason: Kafka accepts https or an empty value.
-        fix: Set ssl.endpoint.identification.algorithm to https.
-  - key: {prefix: ssl.}
+  - key: {prefix: producer.ssl.}
     status: unsupported
     blocking: true
     code: kc.key_unsupported
     reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
     fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipelines by hand.
     diff: identity
-  - key: {prefix: sasl.}
+  - key: {prefix: producer.sasl.}
     status: unsupported
     code: kc.key_unsupported
     reason: A SASL setting with no Kafka connector equivalent (Kerberos, OAuth, login callbacks).
-    fix: None if the mechanism is PLAIN or SCRAM; otherwise keep these connectors on Kafka Connect.
+    fix: None if the mechanism is PLAIN or SCRAM; otherwise keep the connectors that use this producer on Kafka Connect.
     diff: identity
-
-  # Client defaults for every connector's producer and consumer.
+  - key: producer.client.id
+    status: translated
+    emit: {kind: setting, side: producer, name: clientID, layer: client}
+    diff: tuning
+  - key: consumer.bootstrap.servers
+    status: translated
+    reason: The worker's consumer.-prefixed settings override bootstrap.servers for every connector's consumer.
+    emit: {kind: setting, side: consumer, name: servers, layer: client}
+    diff: identity
+  - key: consumer.security.protocol
+    diff: identity
+    ignoreCase: true
+    values:
+      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+        status: translated
+        emit: {kind: tls-from-protocol, side: consumer, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a Kafka security protocol.
+        fix: Use PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  - key: consumer.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: consumer, name: saslMechanism, layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: The Kafka connector supports PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512 only (not GSSAPI or OAUTHBEARER).
+        fix: Use a supported mechanism, or keep the connectors that use this consumer on Kafka Connect.
+  - key: consumer.sasl.jaas.config
+    status: translated
+    emit: {kind: sasl-jaas, side: consumer, layer: client}
+    secret: true
+    diff: secret
+  - key: {prefix: consumer.ssl.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Kafka connector takes PEM certificates (caCert, clientCert, clientKey), not Java key stores, and has no cipher or protocol settings.
+    fix: Export the stores as PEM and set caCert, clientCert and clientKey on the pipelines by hand.
+    diff: identity
+  - key: {prefix: consumer.sasl.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: A SASL setting with no Kafka connector equivalent (Kerberos, OAuth, login callbacks).
+    fix: None if the mechanism is PLAIN or SCRAM; otherwise keep the connectors that use this consumer on Kafka Connect.
+    diff: identity
+  - key: consumer.client.id
+    status: translated
+    emit: {kind: setting, side: consumer, name: clientID, layer: client}
+    diff: tuning
   - key: producer.acks
     diff: behavior
     values:
       - match: [all, "-1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: all}
+        emit: {kind: setting, side: producer, name: acks, value: all, layer: client}
       - match: ["1"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: one}
+        emit: {kind: setting, side: producer, name: acks, value: one, layer: client}
       - match: ["0"]
         status: translated
-        emit: {kind: setting, side: producer, name: acks, value: none}
+        emit: {kind: setting, side: producer, name: acks, value: none, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
@@ -189,21 +243,13 @@ keys:
     values:
       - match: [none, gzip, snappy, lz4, zstd]
         status: translated
-        emit: {kind: setting, side: producer, name: compression}
+        emit: {kind: setting, side: producer, name: compression, layer: client}
       - otherwise: true
         status: unsupported
         blocking: true
         code: kc.key_unsupported
         reason: The Kafka destination supports none, gzip, snappy, lz4 and zstd.
         fix: Use one of the supported codecs.
-  - key: producer.client.id
-    status: translated
-    emit: {kind: setting, side: producer, name: clientID}
-    diff: tuning
-  - key: consumer.client.id
-    status: translated
-    emit: {kind: setting, side: consumer, name: clientID}
-    diff: tuning
   - key: {regex: '^(producer|consumer|admin)\..+$'}
     status: unsupported
     code: kc.key_unsupported

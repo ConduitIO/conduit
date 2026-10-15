@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/kcmigrate"
 	"github.com/conduitio/conduit/pkg/kcmigrate/rules"
 	"github.com/matryer/is"
 )
@@ -57,10 +58,10 @@ func TestIsSecretKey(t *testing.T) {
 		"basic.auth.user.info", "s3.sse.customer.key", "auth.token", "x.credentials", "Some.PASSWORD",
 	}
 	for _, k := range secret {
-		is.True(IsSecretKey(k))
+		is.True(kcmigrate.IsSecretKey(k))
 	}
 	for _, k := range []string{"key.converter", "message.key.columns", "database.hostname", "tasks.max"} {
-		is.True(!IsSecretKey(k))
+		is.True(!kcmigrate.IsSecretKey(k))
 	}
 }
 

@@ -188,7 +188,8 @@
           "code": "kc.connector_class_unsupported",
           "reason": "The connector class com.example.Unknown has no Conduit mapping in this version.",
           "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
-          "blocking": true
+          "blocking": true,
+          "secret": true
         }
       ],
       "notes": [],

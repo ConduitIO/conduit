@@ -52,7 +52,7 @@ func builtinParams(t *testing.T, plugin, role string) (map[string]bool, bool) {
 // settingsOf lists the settings an action writes.
 func settingsOf(a rules.Action) []string {
 	switch a.Kind {
-	case KindSetting:
+	case KindSetting, KindList:
 		return []string{a.Args["name"]}
 	case KindTLS:
 		return []string{"tls.enabled"}

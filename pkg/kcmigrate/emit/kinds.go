@@ -37,6 +37,7 @@ const (
 	KindTLS        = "tls-from-protocol"
 	KindSASLJAAS   = "sasl-jaas"
 	KindHaltOnFail = "dlq-halt"
+	KindList       = "list-setting"
 )
 
 var kinds = map[string]Kind{
@@ -45,6 +46,7 @@ var kinds = map[string]Kind{
 	KindTLS:        tlsFromProtocol,
 	KindSASLJAAS:   saslJAAS,
 	KindHaltOnFail: haltOnFailure,
+	KindList:       listSetting,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -74,14 +76,27 @@ func Apply(p *Plan, ds []rules.Decision) error {
 // returned, index-aligned with ds, so the caller can record a downgrade (a
 // worker value that cannot be emitted) on the worker's own entry. Dropping
 // the refined copy would let a pipeline run without the setting it needed.
+//
+// Kafka Connect layers a connector's client config as the worker's
+// bootstrap.servers, then the worker's producer.- or consumer.-prefixed keys,
+// then the connector's overrides (Worker.baseProducerConfigs and
+// baseConsumerConfigs, Apache Kafka 4.2.0). The connector's decisions are
+// applied first by Apply; here the actions marked layer: client (the
+// prefixed worker keys) are applied before the rest, so with "only where
+// unset" each layer wins over the one below it.
 func ApplyDefaults(p *Plan, ds []rules.Decision) ([]kcmigrate.Entry, error) {
 	out := make([]kcmigrate.Entry, len(ds))
-	for i := range ds {
-		d := ds[i]
-		if err := apply(p, &d, true); err != nil {
-			return nil, err
+	for _, clientLayer := range []bool{true, false} {
+		for i := range ds {
+			if (ds[i].Emit != nil && ds[i].Emit.Args["layer"] == "client") != clientLayer {
+				continue
+			}
+			d := ds[i]
+			if err := apply(p, &d, true); err != nil {
+				return nil, err
+			}
+			out[i] = d.Entry
 		}
-		out[i] = d.Entry
 	}
 	return out, nil
 }
@@ -94,8 +109,10 @@ func apply(p *Plan, d *rules.Decision, onlyUnset bool) error {
 	if !ok {
 		return cerrors.Errorf("key %s: rule names unknown emit kind %q", d.KV.Key, d.Emit.Kind)
 	}
-	if onlyUnset && d.Emit.Kind == KindSetting && p.Has(d.Emit.Args["side"], d.Emit.Args["name"]) {
-		return nil
+	if onlyUnset {
+		if name := firstSetting(*d.Emit); name != "" && p.Has(d.Emit.Args["side"], name) {
+			return nil
+		}
 	}
 	return k(p, d)
 }
@@ -112,8 +129,10 @@ func setting(p *Plan, d *rules.Decision) error {
 		value = v // a mapped value from rule data, for example acks=-1 -> all
 	} else {
 		value = d.KV.Value.Reveal() // the one place a raw value enters a pipeline
-		if d.Secret || IsSecretKey(d.KV.Key) || rules.IsReference(value) {
+		if d.Secret || kcmigrate.IsSecretKey(d.KV.Key) || rules.IsReference(value) {
 			value, env = p.secretRef(d)
+		} else {
+			value = strings.TrimSpace(value) // ConfigDef.parseType trims string values
 		}
 	}
 	return set(p, d, side, name, value, env)
@@ -188,28 +207,6 @@ func (p *Plan) secretRef(d *rules.Decision) (ref, env string) {
 	return "${" + s.Env + "}", s.Env
 }
 
-// secretSuffixes and secretKeys implement the conservative secret list of
-// the base design (Secrets, rule 1). A false positive only turns a value into
-// a variable; a false negative leaks, so the list errs wide.
-var (
-	secretSuffixes = []string{"password", "secret", "token", "key", "credentials", "jaas.config", "user.info"}
-	secretKeys     = map[string]bool{"aws.secret.access.key": true, "aws.access.key.id": true}
-)
-
-// IsSecretKey reports whether a key name marks its value as a secret.
-func IsSecretKey(key string) bool {
-	k := strings.ToLower(key)
-	if secretKeys[k] {
-		return true
-	}
-	for _, s := range secretSuffixes {
-		if strings.HasSuffix(k, s) {
-			return true
-		}
-	}
-	return false
-}
-
 // CheckActions returns an error naming every action that has no registered
 // kind or lacks the arguments its kind needs. Rule data is checked with it
 // in tests, so a bad action fails the build instead of a run.
@@ -222,14 +219,14 @@ func CheckActions(refs []rules.ActionRef) error {
 			continue
 		}
 		switch a.Kind {
-		case KindSetting, KindTLS, KindSASLJAAS:
+		case KindSetting, KindTLS, KindSASLJAAS, KindList:
 			switch a.Args["side"] {
 			case SideSource, SideDestination, SideKafka, SideProducer, SideConsumer:
 			default:
 				errs = append(errs, cerrors.Errorf("%s: key %s: %s needs side source, destination, kafka, producer or consumer", r.File, r.Key, a.Kind))
 			}
 		}
-		if a.Kind == KindSetting && a.Args["name"] == "" {
+		if (a.Kind == KindSetting || a.Kind == KindList) && a.Args["name"] == "" {
 			errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
 		}
 	}
@@ -240,41 +237,34 @@ func CheckActions(refs []rules.ActionRef) error {
 // SSL and SASL_SSL enable TLS; PLAINTEXT and SASL_PLAINTEXT write nothing
 // (TLS off is the connector default). Rule data restricts the values.
 func tlsFromProtocol(p *Plan, d *rules.Decision) error {
-	switch strings.ToUpper(d.KV.Value.Reveal()) {
+	switch strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal())) {
 	case "SSL", "SASL_SSL":
 		return set(p, d, d.Emit.Args["side"], "tls.enabled", "true", "")
 	default:
-		return nil
+		// Written explicitly, so a lower layer (a worker's
+		// producer.security.protocol=SSL) cannot turn TLS on under a
+		// connector's PLAINTEXT override.
+		return set(p, d, d.Emit.Args["side"], "tls.enabled", "false", "")
 	}
 }
 
-// jaasLogin matches the two JAAS login modules the Kafka connector can
-// express: PLAIN and SCRAM with a username and a password.
-var (
-	jaasModule   = regexp.MustCompile(`^\s*org\.apache\.kafka\.common\.security\.(plain\.PlainLoginModule|scram\.ScramLoginModule)\s+required\b`)
-	jaasUsername = regexp.MustCompile(`\busername\s*=\s*"([^"]*)"`)
-	jaasPassword = regexp.MustCompile(`\bpassword\s*=\s*"([^"]*)"`)
-)
-
 // saslJAAS splits sasl.jaas.config into saslUsername and saslPassword (the
-// password always as a ${VAR} reference). Argument: side. A module other
-// than PLAIN or SCRAM, a reference, or a config without both fields cannot
-// be split offline and is unsupported and blocking: authenticating
-// differently would fail, or succeed as someone else.
+// password always as a ${VAR} reference). Argument: side. Anything parseJAAS
+// refuses is unsupported and blocking: authenticating differently would
+// fail, or succeed as someone else.
 func saslJAAS(p *Plan, d *rules.Decision) error {
-	raw := d.KV.Value.Reveal() // parsed here; only the username is written as is
-	user, pass := jaasUsername.FindStringSubmatch(raw), jaasPassword.FindStringSubmatch(raw)
-	if !jaasModule.MatchString(raw) || user == nil || pass == nil {
+	login, ok := parseJAAS(d.KV.Value.Reveal()) // parsed here; only the username is written as is
+	if !ok {
 		d.Entry = kcmigrate.Entry{
 			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
 			Code:   kcmigrate.CodeKeyUnsupported.Reason(),
-			Reason: "sasl.jaas.config is not a PlainLoginModule or ScramLoginModule with a username and a password written in it, so it cannot be turned into saslUsername and saslPassword.",
-			Fix:    "Write the JAAS config literally with username and password (the password may stay a reference elsewhere), or set saslUsername and saslPassword on the migrated pipeline by hand.",
+			Reason: "sasl.jaas.config is not exactly one PlainLoginModule or ScramLoginModule, flag required, with only username and password options and no backslash escapes, so it cannot be turned into saslUsername and saslPassword without changing how the client authenticates.",
+			Fix:    "Set saslMechanism, saslUsername and saslPassword on the migrated pipeline by hand, or keep this connector on Kafka Connect.",
 		}
 		return nil
 	}
 	side := d.Emit.Args["side"]
-	if err := set(p, d, side, "saslUsername", user[1], ""); err != nil || d.Entry.Code != "" {
+	if err := set(p, d, side, "saslUsername", login.username, ""); err != nil || d.Entry.Code != "" {
 		return err
 	}
 	ref, env := p.secretRef(d)
@@ -291,4 +281,40 @@ func saslJAAS(p *Plan, d *rules.Decision) error {
 func haltOnFailure(p *Plan, d *rules.Decision) error {
 	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: p.HaltOnFailure()}
 	return nil
+}
+
+// listSetting writes a Kafka Connect LIST value (topics) as a comma list.
+// Kafka trims the value and splits on \s*,\s* (ConfigDef.parseType); an
+// empty element is kept by Kafka and refused here. Arguments: side, name.
+func listSetting(p *Plan, d *rules.Decision) error {
+	parts := listSplit.Split(strings.TrimSpace(d.KV.Value.Reveal()), -1)
+	for _, part := range parts {
+		if part == "" {
+			d.Entry = kcmigrate.Entry{
+				Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
+				Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+				Reason: d.KV.Key + " has an empty element; Kafka Connect keeps it as an empty name.",
+				Fix:    "Remove the empty element (a doubled or trailing comma) from " + d.KV.Key + ".",
+			}
+			return nil
+		}
+	}
+	return set(p, d, d.Emit.Args["side"], d.Emit.Args["name"], strings.Join(parts, ","), "")
+}
+
+var listSplit = regexp.MustCompile(`\s*,\s*`)
+
+// firstSetting is the setting an action writes first, used to decide
+// whether a lower layer's action still applies.
+func firstSetting(a rules.Action) string {
+	switch a.Kind {
+	case KindSetting, KindList:
+		return a.Args["name"]
+	case KindTLS:
+		return "tls.enabled"
+	case KindSASLJAAS:
+		return "saslUsername"
+	default:
+		return ""
+	}
 }

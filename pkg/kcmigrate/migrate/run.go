@@ -138,6 +138,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 		rep.Connectors = append(rep.Connectors, r.rc)
 	}
 
+	markSecrets(rep)
 	if req.AcceptGaps {
 		rep.AcceptedGaps = acceptedGaps(rep)
 	}
@@ -437,4 +438,20 @@ func converterNotes(connector, worker []rules.Decision) []kcmigrate.Note {
 		})
 	}
 	return notes
+}
+
+// markSecrets applies the base design's secret list (Secrets, rule 1) to
+// every entry, also under an unknown class or for an unsupported key, so the
+// report tells a reader which inputs held secrets. An entry's value is never
+// in the report either way; secret says the input itself must be handled as
+// one.
+func markSecrets(rep *kcmigrate.Report) {
+	for i := range rep.Connectors {
+		for j := range rep.Connectors[i].Entries {
+			e := &rep.Connectors[i].Entries[j]
+			if kcmigrate.IsSecretKey(e.Key) {
+				e.Secret = true
+			}
+		}
+	}
 }

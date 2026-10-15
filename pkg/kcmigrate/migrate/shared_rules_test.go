@@ -137,7 +137,7 @@ func TestSharedRules_JAAS(t *testing.T) {
 
 func TestSharedRules_WorkerInheritance(t *testing.T) {
 	is := is.New(t)
-	worker := in("connect.properties", "bootstrap.servers=k1.internal.example:9092\nsecurity.protocol=SSL\ngroup.id=connect\nkey.converter=org.apache.kafka.connect.converters.ByteArrayConverter\nvalue.converter=org.apache.kafka.connect.converters.ByteArrayConverter\nrest.port=8083\n")
+	worker := in("connect.properties", "bootstrap.servers=k1.internal.example:9092\nproducer.security.protocol=SSL\nsecurity.protocol=SASL_SSL\ngroup.id=connect\nkey.converter=org.apache.kafka.connect.converters.ByteArrayConverter\nvalue.converter=org.apache.kafka.connect.converters.ByteArrayConverter\nrest.port=8083\n")
 	res := runOneWith(t, sharedEngine(t), Request{Worker: &worker, Inputs: []kcmigrate.Input{in("c.properties", "name=c\nconnector.class=com.example.ExampleSource\n")}})
 	p := file(res, "pipelines/c.yaml")
 	is.True(strings.Contains(p, "servers: k1.internal.example:9092"))

@@ -2,7 +2,7 @@ version: "2.2"
 pipelines:
   - id: clean
     status: stopped
-    description: Migrated from Kafka Connect connector "clean" (com.example.ExampleSource) by conduit v0.21.0-test; report sha256:2440c1748a17d784ead68303d430e59026046f1653557674fd2a0b2d7d72b8e3
+    description: Migrated from Kafka Connect connector "clean" (com.example.ExampleSource) by conduit v0.21.0-test; report sha256:b27e11e30021a4d0960c6310b4380e5e59c9c9961062aac77a40fd640f97579b
     connectors:
       - id: source
         type: source

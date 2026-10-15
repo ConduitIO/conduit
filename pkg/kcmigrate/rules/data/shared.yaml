@@ -211,7 +211,8 @@ keys:
   # Topics.
   - key: topics
     status: translated
-    emit: {kind: setting, side: consumer, name: topics}
+    reason: Kafka Connect trims the list and splits it on commas with surrounding whitespace; written the same way.
+    emit: {kind: list-setting, side: consumer, name: topics}
     diff: identity
   - key: topics.regex
     status: unsupported
@@ -266,7 +267,19 @@ keys:
     fix: None; only the Debezium Postgres migration imports offsets in this version.
     diff: identity
 
-  # Client overrides.
+  # Client overrides. A connector's producer.override./consumer.override. keys
+  # are the top layer of its client config (Worker.baseProducerConfigs and
+  # baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-935).
+  - key: producer.override.bootstrap.servers
+    status: translated
+    reason: The connector's producer writes to these brokers instead of the worker's.
+    emit: {kind: setting, side: producer, name: servers}
+    diff: identity
+  - key: consumer.override.bootstrap.servers
+    status: translated
+    reason: The connector's consumer reads from these brokers instead of the worker's.
+    emit: {kind: setting, side: consumer, name: servers}
+    diff: identity
   - key: producer.override.acks
     diff: behavior
     values:
