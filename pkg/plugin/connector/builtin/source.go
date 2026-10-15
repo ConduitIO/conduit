@@ -20,6 +20,7 @@ import (
 	"io"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
@@ -40,6 +41,10 @@ type sourcePluginAdapter struct {
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
+	// schemaService is the owning runtime's connector schema service. It is
+	// attached to the context of each call to the plugin, see
+	// schema_scope.go. Nil when the adapter is used without a runtime.
+	schemaService pconnutils.SchemaService
 }
 
 var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
@@ -52,8 +57,12 @@ func newSourcePluginAdapter(impl pconnector.SourcePlugin, logger log.CtxLogger) 
 	}
 }
 
-func (s *sourcePluginAdapter) withLogger(ctx context.Context) context.Context {
-	return s.ctxLogger.WithContext(ctx)
+// pluginContext returns the context for a call into the plugin: it carries
+// the plugin logger and this runtime's schema service.
+func (s *sourcePluginAdapter) pluginContext(ctx context.Context) context.Context {
+	// Invariant 6: the connector resolves and registers schemas in its own
+	// runtime's registry, never in another runtime's in the same process.
+	return contextWithSchemaService(s.ctxLogger.WithContext(ctx), s.schemaService)
 }
 
 func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error) {
@@ -62,13 +71,13 @@ func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.Sourc
 	// metadata yet, so log.RedactAll redacts every value - see
 	// pkg/foundation/log/redact.go.
 	s.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling Configure") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
-	out, err := runSandbox(s.impl.Configure, s.withLogger(ctx), in.Clone(), s.logger, "Configure")
+	out, err := runSandbox(s.impl.Configure, s.pluginContext(ctx), in.Clone(), s.logger, "Configure")
 	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) Open(ctx context.Context, in pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Start")
-	out, err := runSandbox(s.impl.Open, s.withLogger(ctx), in.Clone(), s.logger, "Start")
+	out, err := runSandbox(s.impl.Open, s.pluginContext(ctx), in.Clone(), s.logger, "Start")
 	return out.Clone(), err
 }
 
@@ -85,7 +94,7 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceR
 
 	s.logger.Debug(ctx).Msg("calling Run")
 	go func() {
-		err := s.impl.Run(s.withLogger(ctx), stream)
+		err := s.impl.Run(s.pluginContext(ctx), stream)
 		if err != nil {
 			if !inmemStream.Close(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
@@ -101,20 +110,20 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceR
 
 func (s *sourcePluginAdapter) Stop(ctx context.Context, in pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Stop")
-	out, err := runSandbox(s.impl.Stop, s.withLogger(ctx), in.Clone(), s.logger, "Stop")
+	out, err := runSandbox(s.impl.Stop, s.pluginContext(ctx), in.Clone(), s.logger, "Stop")
 	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context, in pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Teardown")
-	out, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), in.Clone(), s.logger, "Teardown")
+	out, err := runSandbox(s.impl.Teardown, s.pluginContext(ctx), in.Clone(), s.logger, "Teardown")
 	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) LifecycleOnCreated(ctx context.Context, in pconnector.SourceLifecycleOnCreatedRequest) (pconnector.SourceLifecycleOnCreatedResponse, error) {
 	// See the redaction note in Configure above.
 	s.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling LifecycleOnCreated") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
-	out, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), in.Clone(), s.logger, "LifecycleOnCreated")
+	out, err := runSandbox(s.impl.LifecycleOnCreated, s.pluginContext(ctx), in.Clone(), s.logger, "LifecycleOnCreated")
 	return out.Clone(), err
 }
 
@@ -124,14 +133,14 @@ func (s *sourcePluginAdapter) LifecycleOnUpdated(ctx context.Context, in pconnec
 		Any("configBefore", log.RedactAll(in.ConfigBefore)). //nolint:forbidigo // in.ConfigBefore is wrapped in log.RedactAll before logging
 		Any("configAfter", log.RedactAll(in.ConfigAfter)).   //nolint:forbidigo // in.ConfigAfter is wrapped in log.RedactAll before logging
 		Msg("calling LifecycleOnUpdated")
-	out, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), in.Clone(), s.logger, "LifecycleOnUpdated")
+	out, err := runSandbox(s.impl.LifecycleOnUpdated, s.pluginContext(ctx), in.Clone(), s.logger, "LifecycleOnUpdated")
 	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, in pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error) {
 	// See the redaction note in Configure above.
 	s.logger.Debug(ctx).Any("config", log.RedactAll(in.Config)).Msg("calling LifecycleOnDeleted") //nolint:forbidigo // in.Config is wrapped in log.RedactAll before logging
-	out, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), in.Clone(), s.logger, "LifecycleOnDeleted")
+	out, err := runSandbox(s.impl.LifecycleOnDeleted, s.pluginContext(ctx), in.Clone(), s.logger, "LifecycleOnDeleted")
 	return out.Clone(), err
 }
 
