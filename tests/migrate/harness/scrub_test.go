@@ -132,6 +132,14 @@ func TestScrubRaw_CatchesWhatParsingMisses(t *testing.T) {
 		"cctld host comment":        {"w.properties", "# replica prod-db.acme.ca\n"},
 		"xyz host raw":              {"c.json", `{"connector.class":"X","o":{"h":"kafka.acme.xyz"}}`},
 		"url query token raw":       {"w.properties", "# GET https://api.internal.example/v1?token=abc123\n"},
+		"multiline json member":     {"c.json", "{\"connector.class\": \"X\",\n  \"extra\": {\n    \"database.password\":\n      \"hunter2\"\n  }\n}\n"},
+		"multiline numeric secret":  {"c.json", "{\"connector.class\": \"X\",\n  \"sasl.password\":\n    12345678}\n"},
+		"escaped json config":       {"c.json", `{"connector.class":"X","embedded":"{\"database.password\":\"hunter2\"}"}`},
+		"escaped json numeric":      {"c.json", `{"connector.class":"X","embedded":"{\"api.token\": 42}"}`},
+		"mixed comment line":        {"w.properties", "# password=PLACEHOLDER_SECRET_DB token: hunter2\n"},
+		"topic name with port":      {"c.json", `{"connector.class":"X","bootstrap.servers":"prod.checkpoints.internal:9092"}`},
+		"topic name in jdbc url":    {"c.json", `{"connector.class":"X","connection.url":"jdbc:postgresql://mm2-offsets.prod.internal:5432/db"}`},
+		"topic name in value":       {"c.json", `{"connector.class":"X","database.hostname":"prod.checkpoints.internal"}`},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -154,6 +162,8 @@ func TestScrubRaw_Accepts(t *testing.T) {
 		"properties keys":     "group.id=connect-cluster\noffset.flush.interval.ms=10000\n",
 		"placeholder members": `{"o":{"database.password":"PLACEHOLDER_SECRET_DB_PASSWORD","sasl.password":"${env:SASL}"}}`,
 		"canary query token":  "# https://api.internal.example/v1?token=PLACEHOLDER_SECRET_API_TOKEN\n",
+		"escaped canary":      `{"embedded":"{\"database.password\":\"PLACEHOLDER_SECRET_DB\"}"}`,
+		"multiline canary":    "{\n  \"database.password\":\n    \"PLACEHOLDER_SECRET_DB\"\n}\n",
 	}
 	for name, in := range tests {
 		t.Run(name, func(t *testing.T) {

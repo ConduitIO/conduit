@@ -52,7 +52,11 @@ type RuleSet struct {
 }
 
 // LoadRuleSet reads the scope and class of every rule file under
-// repoRoot/RuleDataDir. A missing directory is an empty set.
+// repoRoot/RuleDataDir. A missing directory is an empty set. A class file
+// whose class is not one of FamilyClasses is an error, not an ignored file:
+// a typo (PostgresConector) would otherwise leave its family pending
+// forever while the rule file looks landed. A new family adds its class to
+// FamilyClasses in the PR that adds the rule file.
 func LoadRuleSet(repoRoot string) (RuleSet, error) {
 	rs := RuleSet{Classes: map[string]bool{}}
 	files, err := filepath.Glob(filepath.Join(repoRoot, filepath.FromSlash(RuleDataDir), "*.yaml"))
@@ -71,18 +75,40 @@ func LoadRuleSet(repoRoot string) (RuleSet, error) {
 		if err := yaml.NewDecoder(bytes.NewReader(b)).Decode(&head); err != nil {
 			return rs, cerrors.Errorf("%s: %w", filepath.Base(f), err)
 		}
+		base := filepath.Base(f)
 		switch head.Scope {
 		case "shared":
 			rs.Shared = true
 		case "worker":
 			rs.Worker = true
-		default:
-			if head.Class != "" {
-				rs.Classes[head.Class] = true
+		case roleSource, "sink":
+			if !knownClass(head.Class) {
+				return rs, cerrors.Errorf("%s: class %q is not a known corpus family class %v; fix the class or add the family to harness.FamilyClasses", base, head.Class, sortedClasses())
 			}
+			rs.Classes[head.Class] = true
+		default:
+			return rs, cerrors.Errorf("%s: scope %q is not source, sink, shared or worker", base, head.Scope)
 		}
 	}
 	return rs, nil
+}
+
+func knownClass(c string) bool {
+	for _, cl := range FamilyClasses {
+		if cl == c {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedClasses() []string {
+	out := make([]string, 0, len(FamilyClasses))
+	for _, cl := range FamilyClasses {
+		out = append(out, cl)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // CaseReady reports whether the rule data covers everything a case
