@@ -18,12 +18,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database/badger"
@@ -88,6 +90,17 @@ const (
 	envLCMinDelayMS = "CONDUIT_CHAOS_LC_MIN_DELAY_MS"
 	envLCMaxDelayMS = "CONDUIT_CHAOS_LC_MAX_DELAY_MS"
 	envLCGraceful   = "CONDUIT_CHAOS_LC_GRACEFUL"
+	// envLCEngine selects the lifecycle engine: "" (arch-v2,
+	// pkg/lifecycle-poc, what every scenario before #2977 uses) or
+	// lcEngineV1 (the default engine, pkg/lifecycle).
+	envLCEngine = "CONDUIT_CHAOS_LC_ENGINE"
+	// envLCSigterm selects the SIGTERM variant (see lcChildConfig.sigterm).
+	envLCSigterm = "CONDUIT_CHAOS_LC_SIGTERM"
+	// envLCHoldAcks makes the destination withhold acks until the source
+	// plugin's Stop is called (see lcChildConfig.holdAcksUntilStop).
+	envLCHoldAcks = "CONDUIT_CHAOS_LC_HOLD_ACKS"
+
+	lcEngineV1 = "v1"
 
 	lcSourceInstanceID = "lc-source"
 	lcDestInstanceID   = "lc-dest"
@@ -120,7 +133,26 @@ const (
 	// whole point is to bound the child's progress REGARDLESS of when the
 	// parent gets scheduled to look.
 	markerLCHeld = "LC_HELD"
+	// markerLCSourceFailed is printed by recoverySourcePlugin.produceLoop the
+	// moment it closes the stream with the injected failAt error.
+	markerLCSourceFailed = "LC_SOURCE_FAILED"
+	// markerLCSourceStopCalled is printed when the source plugin's Stop is
+	// called, i.e. a graceful stop reached the connector.
+	markerLCSourceStopCalled = "LC_SOURCE_STOP_CALLED"
+	// markerLCSigtermExit is printed by the SIGTERM variant once StopAll and
+	// Wait have returned and pending position writes are flushed.
+	markerLCSigtermExit = "LC_SIGTERM_EXIT"
 )
+
+// lcHoldAcksMax bounds how long a destination with holdAcksUntilStop waits
+// for the source's Stop, so a scenario whose stop never comes still ends.
+const lcHoldAcksMax = 20 * time.Second
+
+// lcHoldAcksSettle is how long the destination keeps withholding acks after
+// the source's Stop was called. It gives the stop time to reach the node's
+// control-message injection before the source node can finish (the #2969
+// window); see TestSIGTERM_SourceFailureRacingStop_ExitsAndReplays.
+const lcHoldAcksSettle = 200 * time.Millisecond
 
 // lcChildConfig is the parent-side (harness) counterpart to lcChildEnv,
 // mirroring childConfig's env-building role in harness.go.
@@ -165,6 +197,21 @@ type lcChildConfig struct {
 	// gracefully" variant used for the post-crash restart that proves the
 	// pipeline finishes end-to-end despite the earlier kill.
 	graceful bool
+
+	// engine is "" for arch-v2 (pkg/lifecycle-poc) or lcEngineV1 for the
+	// default engine (pkg/lifecycle).
+	engine string
+	// sigterm selects a third variant: start, wait for SIGTERM, then shut
+	// down exactly like the runtime does (StopAll with
+	// pipeline.ErrGracefulShutdown, then Wait), flush pending position writes,
+	// print markerLCSigtermExit and exit 0. v1 only.
+	sigterm bool
+	// holdAcksUntilStop makes the destination durably record every write but
+	// withhold its acks until the source plugin's Stop has been called (plus
+	// lcHoldAcksSettle), capped at lcHoldAcksMax. Records stay open in the
+	// pipeline, which keeps a failed source node from finishing until a stop
+	// arrives.
+	holdAcksUntilStop bool
 }
 
 func (c lcChildConfig) env() []string {
@@ -182,6 +229,9 @@ func (c lcChildConfig) env() []string {
 		envLCMinDelayMS + "=" + strconv.Itoa(c.minDelayMS),
 		envLCMaxDelayMS + "=" + strconv.Itoa(c.maxDelayMS),
 		envLCGraceful + "=" + strconv.FormatBool(c.graceful),
+		envLCEngine + "=" + c.engine,
+		envLCSigterm + "=" + strconv.FormatBool(c.sigterm),
+		envLCHoldAcks + "=" + strconv.FormatBool(c.holdAcksUntilStop),
 	}
 }
 
@@ -202,7 +252,10 @@ type lcChildEnv struct {
 	minDelayMS int
 	maxDelayMS int
 
-	graceful bool
+	graceful          bool
+	engine            string
+	sigterm           bool
+	holdAcksUntilStop bool
 }
 
 // parseLCChildEnv reads and validates this child's environment. Like
@@ -258,6 +311,7 @@ func parseLCChildEnv() lcChildEnv {
 	cfg.maxDelayMS = maxDelayMS
 
 	cfg.graceful = os.Getenv(envLCGraceful) == envValueTrue
+	parseLCEngineEnv(&cfg)
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.mainDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s and %s are required\n", markerFatal, envLCDBDir, envLCUpstream, envLCMainDir, envLCDLQDir)
@@ -276,6 +330,23 @@ func parseLCChildEnv() lcChildEnv {
 		os.Exit(exitBadArgs)
 	}
 	return cfg
+}
+
+// parseLCEngineEnv reads the engine and SIGTERM-variant settings (#2977),
+// exiting with exitBadArgs on a combination no scenario uses.
+func parseLCEngineEnv(cfg *lcChildEnv) {
+	cfg.engine = os.Getenv(envLCEngine)
+	cfg.sigterm = os.Getenv(envLCSigterm) == envValueTrue
+	cfg.holdAcksUntilStop = os.Getenv(envLCHoldAcks) == envValueTrue
+
+	if cfg.engine != "" && cfg.engine != lcEngineV1 {
+		fmt.Fprintf(os.Stderr, "%s: invalid %s %q\n", markerFatal, envLCEngine, cfg.engine)
+		os.Exit(exitBadArgs)
+	}
+	if cfg.sigterm && (cfg.graceful || cfg.engine != lcEngineV1) {
+		fmt.Fprintf(os.Stderr, "%s: %s needs %s=%s and is exclusive with %s\n", markerFatal, envLCSigterm, envLCEngine, lcEngineV1, envLCGraceful)
+		os.Exit(exitBadArgs)
+	}
 }
 
 // deliveryLog durably records every (sourceID, position) pair a destination
@@ -438,9 +509,15 @@ type recoverySourcePlugin struct {
 	paceMS int
 	failAt uint64 // 0 = never fail; otherwise inject a transient error just before producing this position
 	holdAt uint64 // 0 = no cap; otherwise stop producing for good once this position has been sent (see lcChildConfig.holdAt)
+	onStop func() // optional; called on every Stop (see lcChildConfig.holdAcksUntilStop)
 
 	mu         sync.Mutex
 	nextToRead uint64
+	// lastSent is the position of the last record handed to the stream. Stop
+	// returns it: pkg/lifecycle (v1) stops a source node once it has seen the
+	// record carrying the position Stop reported, so an empty one would never
+	// match. pkg/lifecycle-poc ignores it.
+	lastSent opencdc.Position
 }
 
 var _ pconnector.SourcePlugin = (*recoverySourcePlugin)(nil)
@@ -502,6 +579,7 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		next := pos + 1
 		if p.failAt > 0 && next == p.failAt {
 			inmemStream.Close(fmt.Errorf("chaos: injected transient recovery-test error at position %d", p.failAt))
+			printProgress(markerLCSourceFailed, p.failAt)
 			return
 		}
 		pos = next
@@ -510,6 +588,9 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		if err := server.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}}); err != nil {
 			return // stream closed (process exiting, or Teardown ran)
 		}
+		p.mu.Lock()
+		p.lastSent = rec.Position
+		p.mu.Unlock()
 		printProgress("READ", pos)
 
 		if p.total > 0 && pos >= p.total {
@@ -555,7 +636,13 @@ func (p *recoverySourcePlugin) ackLoop(server pconnector.SourceRunStreamServer) 
 }
 
 func (p *recoverySourcePlugin) Stop(context.Context, pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
-	return pconnector.SourceStopResponse{}, nil
+	fmt.Println(markerLCSourceStopCalled)
+	if p.onStop != nil {
+		p.onStop()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return pconnector.SourceStopResponse{LastPosition: p.lastSent}, nil
 }
 
 func (p *recoverySourcePlugin) Teardown(context.Context, pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
@@ -585,6 +672,9 @@ func (p *recoverySourcePlugin) NewStream() pconnector.SourceRunStream {
 // invariant-1 assertion structurally meaningful rather than a tautology.
 type recoveryDestinationPlugin struct {
 	log *deliveryLog
+	// holdAcks, when non-nil, delays every ack until it is closed (or
+	// lcHoldAcksMax passes). See lcChildConfig.holdAcksUntilStop.
+	holdAcks <-chan struct{}
 }
 
 var _ pconnector.DestinationPlugin = (*recoveryDestinationPlugin)(nil)
@@ -637,6 +727,13 @@ func (p *recoveryDestinationPlugin) loop(server pconnector.DestinationRunStreamS
 			}
 			acks = append(acks, pconnector.DestinationRunResponseAck{Position: r.Position})
 		}
+		// The records are durably delivered above; only their acks wait.
+		if p.holdAcks != nil {
+			select {
+			case <-p.holdAcks:
+			case <-time.After(lcHoldAcksMax):
+			}
+		}
 		if err := server.Send(pconnector.DestinationRunResponse{Acks: acks}); err != nil {
 			return // stream closed
 		}
@@ -682,6 +779,7 @@ type lcSourceDispenser struct {
 	paceMS int
 	failAt uint64
 	holdAt uint64
+	onStop func()
 
 	dispensed atomic.Int64
 }
@@ -699,7 +797,7 @@ func (d *lcSourceDispenser) DispenseSource() (connectorPlugin.SourcePlugin, erro
 	}
 	// holdAt, unlike failAt, applies to EVERY dispense: it is a ceiling on
 	// this process's total production, not a one-shot injected fault.
-	return &recoverySourcePlugin{store: d.store, total: d.total, paceMS: d.paceMS, failAt: failAt, holdAt: d.holdAt}, nil
+	return &recoverySourcePlugin{store: d.store, total: d.total, paceMS: d.paceMS, failAt: failAt, holdAt: d.holdAt, onStop: d.onStop}, nil
 }
 
 func (d *lcSourceDispenser) DispenseDestination() (connectorPlugin.DestinationPlugin, error) {
@@ -710,7 +808,8 @@ func (d *lcSourceDispenser) DispenseDestination() (connectorPlugin.DestinationPl
 // by a single, fixed deliveryLog - used for both the main destination and the
 // DLQ destination (each gets its own lcDestDispenser over its own log).
 type lcDestDispenser struct {
-	log *deliveryLog
+	log      *deliveryLog
+	holdAcks <-chan struct{}
 }
 
 var _ connectorPlugin.Dispenser = (*lcDestDispenser)(nil)
@@ -724,7 +823,7 @@ func (d *lcDestDispenser) DispenseSource() (connectorPlugin.SourcePlugin, error)
 }
 
 func (d *lcDestDispenser) DispenseDestination() (connectorPlugin.DestinationPlugin, error) {
-	return &recoveryDestinationPlugin{log: d.log}, nil
+	return &recoveryDestinationPlugin{log: d.log, holdAcks: d.holdAcks}, nil
 }
 
 // lcConnectorService fulfills pkg/lifecycle-poc.ConnectorService: a fixed,
@@ -777,6 +876,12 @@ func (lcProcessorService) Get(context.Context, string) (*processor.Instance, err
 }
 
 func (lcProcessorService) MakeRunnableProcessor(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
+	return nil, cerrors.New("lcProcessorService: not implemented")
+}
+
+// MakeRunnableProcessorForReconfigure completes pkg/lifecycle's (v1)
+// ProcessorService. Never called, like the two methods above.
+func (lcProcessorService) MakeRunnableProcessorForReconfigure(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
 	return nil, cerrors.New("lcProcessorService: not implemented")
 }
 
@@ -921,9 +1026,22 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 	}
 	pl.SetStatus(pipeline.StatusUserStopped) // Init's own required starting status, per pkg/lifecycle-poc.Service.Start
 
+	// holdAcksUntilStop: the source's Stop releases the destination's acks,
+	// lcHoldAcksSettle later. Both plugins live in this process, so a plain
+	// channel couples them.
+	var holdAcks chan struct{}
+	var onStop func()
+	if cfg.holdAcksUntilStop {
+		holdAcks = make(chan struct{})
+		var once sync.Once
+		onStop = func() {
+			once.Do(func() { time.AfterFunc(lcHoldAcksSettle, func() { close(holdAcks) }) })
+		}
+	}
+
 	plugins := staticFetcher{
-		sourceInstance.Plugin: &lcSourceDispenser{store: upstream, total: cfg.total, paceMS: cfg.paceMS, failAt: cfg.failAt, holdAt: cfg.holdAt},
-		destInstance.Plugin:   &lcDestDispenser{log: mainLog},
+		sourceInstance.Plugin: &lcSourceDispenser{store: upstream, total: cfg.total, paceMS: cfg.paceMS, failAt: cfg.failAt, holdAt: cfg.holdAt, onStop: onStop},
+		destInstance.Plugin:   &lcDestDispenser{log: mainLog, holdAcks: holdAcks},
 		dlqInstance.Plugin:    &lcDestDispenser{log: dlqLog},
 	}
 
@@ -969,6 +1087,14 @@ func waitForLCTotalAcked(instance *connector.Instance, total uint64, timeout tim
 	os.Exit(exitOpenOtherError)
 }
 
+// lcEngine is the part of the two lifecycle services (pkg/lifecycle and
+// pkg/lifecycle-poc) runChildLifecycle drives.
+type lcEngine interface {
+	Start(ctx context.Context, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
+	WaitPipeline(pipelineID string) error
+}
+
 // runChildLifecycle is this file's entire child-process program (see the
 // file doc comment). It never returns - it always calls os.Exit, either
 // immediately after blocking forever (the crashable variant, cfg.graceful ==
@@ -992,19 +1118,55 @@ func runChildLifecycle() {
 		MaxRetriesWindow: time.Minute,
 	}
 
-	ls := lifecycle.NewService(
-		built.logger,
-		errRecoveryCfg,
-		built.connectors,
-		lcProcessorService{},
-		built.connectorPlugins,
-		built.pipelines,
-		true, // metricsDisabled: no Prometheus registry in this child process
-	)
+	var ls lcEngine
+	if cfg.engine == lcEngineV1 {
+		ls = lifecyclev1.NewService(
+			built.logger,
+			errRecoveryCfg,
+			built.connectors,
+			lcProcessorService{},
+			built.connectorPlugins,
+			built.pipelines,
+		)
+	} else {
+		ls = lifecycle.NewService(
+			built.logger,
+			errRecoveryCfg,
+			built.connectors,
+			lcProcessorService{},
+			built.connectorPlugins,
+			built.pipelines,
+			true, // metricsDisabled: no Prometheus registry in this child process
+		)
+	}
+
+	// Registered before Start so a SIGTERM can never land unhandled.
+	var sigterm chan os.Signal
+	if cfg.sigterm {
+		sigterm = make(chan os.Signal, 1)
+		signal.Notify(sigterm, syscall.SIGTERM)
+	}
 
 	if err := ls.Start(ctx, built.pipelineID); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: start failed: %v\n", markerFatal, err)
 		os.Exit(exitOpenOtherError)
+	}
+
+	if cfg.sigterm {
+		<-sigterm
+		v1 := ls.(*lifecyclev1.Service)
+		// Exactly what pkg/conduit's registerCleanupV1 does on SIGTERM:
+		// StopAll with a context that has no deadline, then Wait. #2969 hung
+		// inside StopAll, so a regression shows up as this process never
+		// exiting, which the parent bounds.
+		v1.StopAll(ctx, pipeline.ErrGracefulShutdown)
+		if err := v1.Wait(30 * time.Second); err != nil {
+			// Expected: the run carries the injected source error.
+			fmt.Fprintf(os.Stderr, "pipelines stopped with error: %v\n", err)
+		}
+		built.persister.WaitPendingWrites()
+		fmt.Println(markerLCSigtermExit)
+		os.Exit(exitOK)
 	}
 
 	if !cfg.graceful {
