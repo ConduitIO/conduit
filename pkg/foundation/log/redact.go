@@ -15,6 +15,7 @@
 package log
 
 import (
+	"net/url"
 	"sort"
 	"strings"
 
@@ -146,4 +147,46 @@ var sensitiveKeyNeedles = []string{
 	"dsn",
 	"url",
 	"connection_string",
+}
+
+// minScrubLen is the shortest value ScrubSettingValues replaces. Shorter
+// values ("1", "on") would match unrelated text and mangle the message while
+// protecting nothing worth protecting.
+const minScrubLen = 4
+
+// ScrubSettingValues returns msg with the values of secret-looking settings
+// replaced by Redacted. It is for free-form text that may quote a
+// connector's own configuration, such as an error a plugin returned, before
+// that text is stored or shown through the API.
+//
+// A value is replaced when its key matches the same name heuristic
+// isSensitive uses (password, secret, token, url, dsn, ...). In addition,
+// the password of any setting value that parses as a URL with userinfo is
+// replaced on its own, since plugins often print a connection target without
+// the full URL. Values shorter than minScrubLen are left alone.
+//
+// Best effort: a secret the text contains that is not one of these settings'
+// values is not caught.
+func ScrubSettingValues(msg string, settings map[string]string) string {
+	var secrets []string
+	for k, v := range settings {
+		if isSensitive(nil, k) && len(v) >= minScrubLen {
+			secrets = append(secrets, v)
+		}
+		if u, err := url.Parse(strings.TrimSpace(v)); err == nil && u.User != nil {
+			if p, ok := u.User.Password(); ok && len(p) >= minScrubLen {
+				secrets = append(secrets, p)
+				if esc := url.QueryEscape(p); esc != p {
+					secrets = append(secrets, esc)
+				}
+			}
+		}
+	}
+	// Longest first, so a URL is replaced whole before its password would
+	// be replaced inside it.
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	for _, s := range secrets {
+		msg = strings.ReplaceAll(msg, s, Redacted)
+	}
+	return msg
 }

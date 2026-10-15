@@ -354,6 +354,20 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "force",
+            "description": "Delete the connector even if its delete hook fails. The hook still runs\nfirst; if it succeeds this is an ordinary delete. If it fails, the\nconnector is removed anyway, the response carries a\nconnector.orphaned_resources warning, and the possible orphan is\nrecorded for `conduit doctor` until acknowledged. Without force, a\nfailing hook fails the delete with connector.delete_hook_failed and the\nconnector is kept.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "acknowledgeOrphan",
+            "description": "Clear the orphan entry a forced delete recorded for this connector ID,\nafter its leftovers were cleaned up. Only valid when no connector with\nthis ID exists; nothing else is deleted.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -2133,7 +2147,17 @@
       "description": "Data is used to represent the record key and payload. It can be either raw\ndata (byte array) or structured data (struct)."
     },
     "v1DeleteConnectorResponse": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Warning"
+          },
+          "description": "Coded warnings about the delete. Empty unless force was set and the\ndelete hook failed."
+        }
+      }
     },
     "v1DeletePipelineResponse": {
       "type": "object"
@@ -2764,6 +2788,23 @@
     },
     "v1ValidateConnectorResponse": {
       "type": "object"
+    },
+    "v1Warning": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Stable code, e.g. \"connector.orphaned_resources\"."
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Suggested next step."
+        }
+      },
+      "description": "Warning is a coded, non-fatal finding returned next to a successful result."
     }
   }
 }

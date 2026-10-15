@@ -195,29 +195,117 @@ func (s *Service) Create(
 	return conn, nil
 }
 
-// Delete removes the connector.
+// Delete runs the connector's delete hook and then removes the connector.
+//
+// Invariant (#3058): the record is removed only after the hook succeeded.
+// The hook releases what the connector created outside Conduit (a Postgres
+// replication slot, for example); dropping the record first left nothing to
+// retry a failed hook with, and the resource was orphaned silently. When the
+// hook fails, or the plugin cannot be dispensed to run it, Delete returns
+// CodeConnectorDeleteHookFailed and changes nothing, so the caller (an
+// operator, or provisioning's next boot) can retry: hooks are idempotent by
+// contract. A connector that never started has no hook to run (see
+// Source.OnDelete) and is deleted directly.
+//
+// If the hook succeeds and the store delete then fails, the record is kept
+// and the store error returned; a retry runs the hook again.
 func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
-	// make sure instance exists
 	instance, err := s.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	err = s.store.Delete(ctx, id)
-	if err != nil {
-		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
+	if err := instance.Close(ctx, dispenserFetcher); err != nil {
+		hookErr := deleteHookError(instance, err)
+		instance.logger.Err(ctx, hookErr).Str(log.PipelineIDField, instance.PipelineID).
+			Msg("connector delete hook failed, keeping the connector so the delete can be retried")
+		return hookErr
 	}
-	delete(s.connectors, id)
 
-	err = instance.Close(ctx, dispenserFetcher)
+	return s.removeRecord(ctx, instance)
+}
+
+// ForceDelete is Delete for a connector whose delete hook cannot succeed:
+// it runs the hook, and if the hook succeeds it is an ordinary Delete and
+// returns a nil Orphan. If the hook fails, it records an Orphan entry and
+// removes the connector anyway, returning the Orphan so the caller can
+// report CodeConnectorOrphanedResources (Orphan.Warning).
+//
+// Invariant 5: the orphan entry and the record deletion are two writes, and
+// they are atomic only inside the caller's store transaction (the
+// orchestrator wraps every connector delete in one). The entry is written
+// first, so without a transaction a crash between the writes leaves an entry
+// next to a record that still exists, never a deleted record with no entry.
+func (s *Service) ForceDelete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) (*Orphan, error) {
+	instance, err := s.Get(ctx, id)
 	if err != nil {
-		// connector is already deleted, only log the error coming from the
-		// cleanup function, use the instance logger to attach connector ID
-		instance.logger.Err(ctx, err).Msg("could not close connector instance")
+		return nil, err
 	}
+
+	hookErr := instance.Close(ctx, dispenserFetcher)
+	if hookErr == nil {
+		return nil, s.removeRecord(ctx, instance)
+	}
+
+	orphan := &Orphan{
+		Version:     OrphanVersion,
+		ConnectorID: instance.ID,
+		Type:        strings.ToLower(instance.Type.String()),
+		PipelineID:  instance.PipelineID,
+		Plugin:      instance.Plugin,
+		HookError:   scrubbedHookError(instance, hookErr),
+		DeletedAt:   time.Now().UTC(),
+	}
+	if err := s.store.setOrphan(ctx, orphan); err != nil {
+		return nil, err
+	}
+	if err := s.removeRecord(ctx, instance); err != nil {
+		return nil, err
+	}
+	instance.logger.Warn(ctx).
+		Str(log.PipelineIDField, instance.PipelineID).
+		Str("code", CodeConnectorOrphanedResources.Reason()).
+		Msg(orphan.Warning().Message)
+	return orphan, nil
+}
+
+// removeRecord deletes instance's record from the store and then from the
+// in-memory map. The map is only touched once the store write succeeded, so
+// a failed write leaves the connector visible and deletable again.
+func (s *Service) removeRecord(ctx context.Context, instance *Instance) error {
+	if err := s.store.Delete(ctx, instance.ID); err != nil {
+		return cerrors.Errorf("could not delete connector instance %v from store: %w", instance.ID, err)
+	}
+	delete(s.connectors, instance.ID)
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
-
 	return nil
+}
+
+// Orphan returns the orphan entry recorded for connector id by ForceDelete,
+// or nil if there is none.
+func (s *Service) Orphan(ctx context.Context, id string) (*Orphan, error) {
+	return s.store.getOrphan(ctx, id)
+}
+
+// AcknowledgeOrphan removes the orphan entry for connector id, once the
+// operator has cleaned up what the connector left behind. It returns
+// CodeConnectorOrphanNotFound if there is no entry.
+func (s *Service) AcknowledgeOrphan(ctx context.Context, id string) error {
+	o, err := s.store.getOrphan(ctx, id)
+	if err != nil {
+		return err
+	}
+	if o == nil {
+		ce := conduiterr.New(CodeConnectorOrphanNotFound, fmt.Sprintf("connector %q has no orphan entry to acknowledge", id))
+		ce.Suggestion = "run 'conduit doctor --check connectors.orphaned_resources' to list the recorded orphans"
+		return ce
+	}
+	return s.store.deleteOrphan(ctx, id)
+}
+
+// ListOrphans returns every orphan entry, sorted by connector ID.
+func (s *Service) ListOrphans(ctx context.Context) ([]*Orphan, error) {
+	return ListOrphans(ctx, s.store.db)
 }
 
 // Update updates the connector config.

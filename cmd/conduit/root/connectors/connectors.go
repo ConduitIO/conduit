@@ -38,6 +38,7 @@ func (c *ConnectorsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
 		&DescribeCommand{},
+		&DeleteCommand{},
 		newNewCommand(),
 		&InstallCommand{},
 		&UninstallCommand{},

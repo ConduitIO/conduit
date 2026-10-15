@@ -28,6 +28,8 @@ type ConnectorService interface {
 	ListConnectors(ctx context.Context, in *apiv1.ListConnectorsRequest, opts ...grpc.CallOption) (*apiv1.ListConnectorsResponse, error)
 	GetConnector(ctx context.Context, in *apiv1.GetConnectorRequest, opts ...grpc.CallOption) (*apiv1.GetConnectorResponse, error)
 	ListConnectorPlugins(ctx context.Context, in *apiv1.ListConnectorPluginsRequest, opts ...grpc.CallOption) (*apiv1.ListConnectorPluginsResponse, error)
+	// DeleteConnector backs `conduit connectors delete` (#3058).
+	DeleteConnector(ctx context.Context, in *apiv1.DeleteConnectorRequest, opts ...grpc.CallOption) (*apiv1.DeleteConnectorResponse, error)
 }
 
 //go:generate mockgen -destination=mock/pipeline_service.go -package=mock . PipelineService
