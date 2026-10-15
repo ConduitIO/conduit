@@ -1,0 +1,35 @@
+schemaVersion: 1
+requestID: kafka-to-file-export
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:41:48.073742Z
+corpusPromptSHA256: 8d2e583a0a1d14ae06baf711e9968fd7a81a73f18e785f78e1d5ae900350e6f6
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: 8d2e583a0a1d14ae06baf711e9968fd7a81a73f18e785f78e1d5ae900350e6f6
+      tokensUsed: 5712
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: kafka-to-file-export
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:kafka"
+                settings:
+                  servers: "localhost:9092"
+                  topics: "my-topic"
+                  groupID: "conduit-kafka-to-file"
+                  readFromBeginning: "true"
+              - id: destination
+                type: destination
+                plugin: "builtin:file"
+                settings:
+                  path: "/tmp/kafka-export.txt"
+outcome:
+    validatePass: true
+    semanticMatch: true
