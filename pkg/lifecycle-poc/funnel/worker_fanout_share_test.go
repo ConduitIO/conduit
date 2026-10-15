@@ -309,6 +309,9 @@ func TestBatch_CloneSharingRecords(t *testing.T) {
 	}
 	if runA == nil || runB == nil {
 		t.Fatal("expected a split run on every clone")
+		// Unreachable, but staticcheck does not always prove t.Fatal
+		// terminates here and then reports SA5011 below (see #2771).
+		return
 	}
 	is.True(runA != runB)
 	is.True(runA != runBase)
