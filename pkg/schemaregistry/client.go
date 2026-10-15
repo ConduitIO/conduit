@@ -19,13 +19,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/twmb/go-cache/cache"
 )
@@ -68,7 +68,9 @@ func newSubjectDigest(subject string, s sr.Schema) subjectDigest {
 	var b bytes.Buffer
 	putInt := func(i int) {
 		var v [8]byte
-		binary.BigEndian.PutUint64(v[:], uint64(int64(i)))
+		// Two's-complement bit pattern of i on purpose: this is hashing framing,
+		// not arithmetic, and bounds would change the keys.
+		binary.BigEndian.PutUint64(v[:], uint64(int64(i))) //nolint:gosec // G115: intentional, see above
 		b.Write(v[:])
 	}
 	putStr := func(s string) {
