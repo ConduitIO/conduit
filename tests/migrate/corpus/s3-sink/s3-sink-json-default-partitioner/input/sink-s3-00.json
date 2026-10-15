@@ -1,0 +1,13 @@
+{
+          "connector.class"        : "io.confluent.connect.s3.S3SinkConnector",
+          "storage.class"          : "io.confluent.connect.s3.storage.S3Storage",
+          "s3.region"              : "us-west-2",
+          "s3.bucket.name"         : "example-smt-demo-bucket",
+          "topics"                 : "customers,transactions",
+          "tasks.max"              : "4",
+          "flush.size"             : "16",
+          "format.class"           : "io.confluent.connect.s3.format.json.JsonFormat",
+          "schema.generator.class" : "io.confluent.connect.storage.hive.schema.DefaultSchemaGenerator",
+          "schema.compatibility"   : "NONE",
+          "partitioner.class"      : "io.confluent.connect.storage.partitioner.DefaultPartitioner"
+        }
