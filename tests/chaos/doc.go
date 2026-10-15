@@ -177,4 +177,13 @@
 // crash scenarios above cannot: a position write that fails while the
 // process stays up. The acks for that write must be withheld, so a SIGKILL
 // and restart afterwards still finds no gap against a pruning upstream.
+//
+// Standalone SIGTERM (standalone_batch_sigterm_test.go, #3092): the one
+// scenario that runs the real cmd/conduit binary with a real standalone
+// plugin (testdata/standalonelog, the log connector built against this
+// module's connector SDK pin), because the bug it guards lived in the SDK's
+// destination adapter behind the plugin's Stop RPC. A drained pipeline with
+// SDK batching must exit promptly on SIGTERM with no stop error (invariant 7)
+// and with every record written (invariant 3). Bumping the SDK pin re-runs
+// it, since go.mod is on the chaos workflow's data-path list.
 package chaos
