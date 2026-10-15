@@ -16,91 +16,141 @@ package base64
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/recordgen"
-	"github.com/google/go-cmp/cmp"
 	"pgregory.net/rapid"
 )
 
+// The check count of every property here follows rapid: -rapid.checks or
+// RAPID_CHECKS (default 100). The nightly property job runs many more.
+
+func configured(t *rapid.T, field string, procs ...sdk.Processor) {
+	for _, p := range procs {
+		if err := p.Configure(context.Background(), config.Config{"field": field}); err != nil {
+			t.Fatalf("configure %s: %v", field, err)
+		}
+	}
+}
+
 // TestEncodeDecode_PropertyRoundTrip: base64.decode undoes base64.encode.
-// For any bytes at the configured field, encoding and decoding gives back
-// the same bytes, every record comes out, in order, and nothing else in the
-// record changes.
+// The batch mixes nil, raw and structured keys and payload sides; the
+// configured field holds bytes or nothing (nil, which both processors leave
+// alone). The same bytes come back, every record comes out in order, and
+// nothing else in the record changes.
 //
 // The bytes come back as the type base64.decode writes: raw data for a
 // whole key or payload side, a string for a field inside structured data or
 // metadata. A []byte field therefore comes back as a string with the same
 // bytes.
-//
-// The check count follows rapid: -rapid.checks or RAPID_CHECKS (default
-// 100). The nightly property job runs many more.
 func TestEncodeDecode_PropertyRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	rapid.Check(t, func(t *rapid.T) {
 		field := rapid.SampledFrom([]string{".Key", ".Payload.After", ".Payload.After.blob", ".Metadata.blob"}).Draw(t, "field")
-		raw := field == ".Key" || field == ".Payload.After"
-
-		gen := recordgen.StructuredData()
-		if raw {
-			gen = recordgen.RawData()
-		}
-		in := recordgen.Batch(gen).Draw(t, "records")
-		want := recordgen.Clone(in)
+		in := recordgen.Batch().Draw(t, "records")
+		want := make([]opencdc.Record, len(in))
 		for i := range in {
-			b := rapid.SliceOfN(rapid.Byte(), 0, 64).Draw(t, "bytes")
+			isNil := rapid.IntRange(0, 4).Draw(t, "nil target") == 0
+			b := recordgen.Bytes().Draw(t, "bytes")
 			switch field {
 			case ".Key":
-				in[i].Key, want[i].Key = opencdc.RawData(b), opencdc.RawData(b)
+				in[i].Key = opencdc.RawData(b)
+				if isNil {
+					in[i].Key = nil
+				}
 			case ".Payload.After":
-				in[i].Payload.After, want[i].Payload.After = opencdc.RawData(b), opencdc.RawData(b)
+				in[i].Payload.After = opencdc.RawData(b)
+				if isNil {
+					in[i].Payload.After = nil
+				}
 			case ".Payload.After.blob":
+				after := recordgen.EnsureStructured(in[i].Payload.After)
 				var v any = string(b)
-				if rapid.Bool().Draw(t, "as []byte") {
+				switch {
+				case isNil:
+					v = nil
+				case rapid.Bool().Draw(t, "as []byte"):
 					v = b
 				}
-				in[i].Payload.After.(opencdc.StructuredData)["blob"] = v
-				want[i].Payload.After.(opencdc.StructuredData)["blob"] = string(b)
+				after["blob"] = v
+				in[i].Payload.After = after
 			case ".Metadata.blob":
-				in[i].Metadata["blob"], want[i].Metadata["blob"] = string(b), string(b)
+				if in[i].Metadata == nil {
+					in[i].Metadata = opencdc.Metadata{}
+				}
+				in[i].Metadata["blob"] = string(b)
+			}
+			want[i] = recordgen.Clone(in[i : i+1])[0]
+			if field == ".Payload.After.blob" && !isNil {
+				want[i].Payload.After.(opencdc.StructuredData)["blob"] = string(b)
 			}
 		}
 
-		enc := NewEncodeProcessor(log.Nop())
-		dec := NewDecodeProcessor(log.Nop())
-		for _, p := range []sdk.Processor{enc, dec} {
-			if err := p.Configure(ctx, config.Config{"field": field}); err != nil {
-				t.Fatalf("configure %s: %v", field, err)
-			}
-		}
-
-		got := dec.Process(ctx, singleRecords(t, enc.Process(ctx, in)))
-		if len(got) != len(want) {
-			t.Fatalf("%d records in, %d out", len(want), len(got))
-		}
-		for i, rec := range singleRecords(t, got) {
-			if diff := cmp.Diff(want[i], rec, internal.CmpProcessedRecordOpts...); diff != "" {
-				t.Fatalf("record %d changed in an encode/decode round trip of %s (-want +got):\n%s", i, field, diff)
-			}
+		enc, dec := NewEncodeProcessor(log.Nop()), NewDecodeProcessor(log.Nop())
+		configured(t, field, enc, dec)
+		got := dec.Process(ctx, recordgen.Records(t, enc.Process(ctx, in)))
+		if err := recordgen.CheckOutput(got, want, -1); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
 
-// singleRecords unwraps processed records, failing on anything but a
-// SingleRecord.
-func singleRecords(t *rapid.T, processed []sdk.ProcessedRecord) []opencdc.Record {
-	out := make([]opencdc.Record, len(processed))
-	for i, p := range processed {
-		rec, ok := p.(sdk.SingleRecord)
-		if !ok {
-			t.Fatalf("record %d: got %#v, want a SingleRecord", i, p)
+// TestDecode_PropertyErrorAtBadRecord: a key that is not valid base64 fails
+// its record with an ErrorRecord, and the records before it are decoded.
+func TestDecode_PropertyErrorAtBadRecord(t *testing.T) {
+	ctx := context.Background()
+	rapid.Check(t, func(t *rapid.T) {
+		in := recordgen.Batch().Draw(t, "records")
+		failAt := recordgen.FailAt(t, len(in))
+		want := recordgen.Clone(in)
+		for i := range in {
+			if i == failAt {
+				// '*' is outside the base64 alphabet.
+				in[i].Key = opencdc.RawData(rapid.StringMatching(`[A-Za-z0-9+/]{0,8}\*[A-Za-z0-9+/=]{0,8}`).Draw(t, "not base64"))
+				continue
+			}
+			b := recordgen.Bytes().Draw(t, "bytes")
+			in[i].Key = opencdc.RawData(base64.StdEncoding.EncodeToString(b))
+			want[i].Key = opencdc.RawData(b)
 		}
-		out[i] = opencdc.Record(rec)
-	}
-	return out
+
+		dec := NewDecodeProcessor(log.Nop())
+		configured(t, ".Key", dec)
+		if err := recordgen.CheckOutput(dec.Process(ctx, in), want, failAt); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// TestEncode_PropertyErrorAtBadRecord: a payload that is structured data,
+// which base64.encode cannot encode, fails its record with an ErrorRecord
+// rather than being written in some other form, and the records before it
+// are encoded.
+func TestEncode_PropertyErrorAtBadRecord(t *testing.T) {
+	ctx := context.Background()
+	rapid.Check(t, func(t *rapid.T) {
+		in := recordgen.Batch().Draw(t, "records")
+		failAt := recordgen.FailAt(t, len(in))
+		want := recordgen.Clone(in)
+		for i := range in {
+			if i == failAt {
+				in[i].Payload.After = recordgen.StructuredData().Draw(t, "structured")
+				continue
+			}
+			b := recordgen.Bytes().Draw(t, "bytes")
+			in[i].Payload.After = opencdc.RawData(b)
+			want[i].Payload.After = opencdc.RawData(base64.StdEncoding.EncodeToString(b))
+		}
+
+		enc := NewEncodeProcessor(log.Nop())
+		configured(t, ".Payload.After", enc)
+		if err := recordgen.CheckOutput(enc.Process(ctx, in), want, failAt); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

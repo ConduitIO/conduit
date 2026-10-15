@@ -68,12 +68,12 @@ function that calls `rapid.Check`. Name it with `Property` in it (for example
 `TestEncodeDecode_PropertyRoundTrip`), because the nightly job selects property tests
 by that name.
 
-- Generators for OpenCDC records live in `pkg/plugin/processor/builtin/internal/recordgen`.
-  Generators for Avro schemas and values live in `conduit-commons/schema/avro/avrotest`.
+- Generators for OpenCDC records live in `pkg/plugin/processor/builtin/internal/recordgen`,
+  with `CheckOutput` for the record-by-record verdict, error records included.
 - `go test` runs each property 100 times. Set `RAPID_CHECKS=10000` to run more locally.
 - A failure prints a `-rapid.seed=...` flag that replays it, along with the shrunk case.
-- `.github/workflows/property-nightly.yml` runs every property at 20,000 checks and fuzzes
-  every `Fuzz*` target for 2 minutes.
+- `.github/workflows/property-nightly.yml` runs every test under `./pkg` whose name
+  contains `Property` at 20,000 checks, and fuzzes every `Fuzz*` target for 2 minutes.
 
 ## Adding a vendored pipeline template
 

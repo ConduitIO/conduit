@@ -44,7 +44,10 @@ jobs:
 
   fuzz:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 12 targets x 2m of fuzzing is 24m, plus one test build per target
+    # (about a minute each on a cold cache). 90m leaves room for that and
+    # for new targets before the budget needs a second look.
+    timeout-minutes: 90
     env:
       FUZZTIME: 2m
     steps:

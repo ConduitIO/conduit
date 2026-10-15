@@ -85,18 +85,23 @@ func drawObject(t *rapid.T, depth int) map[string]any {
 	return m
 }
 
-// Metadata returns a generator of record metadata: zero to three entries
-// with arbitrary keys and values.
+// Metadata returns a generator of record metadata: nil, or zero to three
+// entries with arbitrary keys and values.
 func Metadata() *rapid.Generator[opencdc.Metadata] {
 	return rapid.Custom(func(t *rapid.T) opencdc.Metadata {
+		if rapid.IntRange(0, 4).Draw(t, "nil metadata") == 0 {
+			return nil
+		}
 		return rapid.MapOfN(rapid.String(), rapid.String(), 0, 3).Draw(t, "metadata")
 	})
 }
 
-// Batch returns a generator of one to five records. Record i has position
-// "i", so a property can check that a processor kept every record, in
-// order. The key and both payload sides are drawn with data.
-func Batch(data *rapid.Generator[opencdc.Data]) *rapid.Generator[[]opencdc.Record] {
+// Batch returns a generator of one to five records, each with its key and
+// payload sides drawn from Data, so one batch mixes absent (nil), raw and
+// structured data, the way a source's deletes, tombstones and snapshots do.
+// Record i has position "i", so a property can check that a processor kept
+// every record, in order.
+func Batch() *rapid.Generator[[]opencdc.Record] {
 	return rapid.Custom(func(t *rapid.T) []opencdc.Record {
 		out := make([]opencdc.Record, rapid.IntRange(1, 5).Draw(t, "batch size"))
 		for i := range out {
@@ -104,15 +109,22 @@ func Batch(data *rapid.Generator[opencdc.Data]) *rapid.Generator[[]opencdc.Recor
 				Position:  opencdc.Position(strconv.Itoa(i)),
 				Operation: rapid.SampledFrom([]opencdc.Operation{opencdc.OperationCreate, opencdc.OperationUpdate, opencdc.OperationDelete, opencdc.OperationSnapshot}).Draw(t, "operation"),
 				Metadata:  Metadata().Draw(t, "metadata"),
-				Key:       data.Draw(t, "key"),
+				Key:       Data().Draw(t, "key"),
 				Payload: opencdc.Change{
-					Before: data.Draw(t, "before"),
-					After:  data.Draw(t, "after"),
+					Before: Data().Draw(t, "before"),
+					After:  Data().Draw(t, "after"),
 				},
 			}
 		}
 		return out
 	})
+}
+
+// Data returns a generator of a record's key or payload side: nil (absent,
+// as in a delete's After or a tombstone's key), raw data, or structured
+// data.
+func Data() *rapid.Generator[opencdc.Data] {
+	return rapid.OneOf(rapid.Just[opencdc.Data](nil), RawData(), StructuredData())
 }
 
 // StructuredData returns a generator of structured data drawn from
@@ -123,11 +135,24 @@ func StructuredData() *rapid.Generator[opencdc.Data] {
 	})
 }
 
-// RawData returns a generator of raw data: zero to 32 arbitrary bytes.
+// RawData returns a generator of raw data drawn from Bytes.
 func RawData() *rapid.Generator[opencdc.Data] {
 	return rapid.Custom(func(t *rapid.T) opencdc.Data {
-		return opencdc.RawData(rapid.SliceOfN(rapid.Byte(), 0, 32).Draw(t, "raw"))
+		return opencdc.RawData(Bytes().Draw(t, "raw"))
 	})
+}
+
+// Bytes returns a generator of byte slices whose lengths spread over three
+// bands: mostly 0 to 8 bytes, often up to 256, sometimes up to 4096. A
+// single SliceOfN range clusters near its minimum, so lengths that cross
+// encoding block boundaries (base64's 3-byte groups, buffer sizes) would be
+// rare.
+func Bytes() *rapid.Generator[[]byte] {
+	return rapid.OneOf(
+		rapid.SliceOfN(rapid.Byte(), 0, 8),
+		rapid.SliceOfN(rapid.Byte(), 9, 256),
+		rapid.SliceOfN(rapid.Byte(), 257, 4096),
+	)
 }
 
 // Clone deep-copies records and keeps every Go type as it is.

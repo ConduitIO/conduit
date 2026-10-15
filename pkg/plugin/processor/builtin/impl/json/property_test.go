@@ -16,68 +16,157 @@ package json
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/recordgen"
-	"github.com/google/go-cmp/cmp"
+	"github.com/goccy/go-json"
 	"pgregory.net/rapid"
 )
 
-// TestEncodeDecode_PropertyRoundTrip: json.decode undoes json.encode. For
-// any JSON-representable structured value at the configured field, encoding
-// it to JSON and decoding it again gives back every record exactly as it
-// was, in the same order, with nothing else in the record touched.
-//
-// The check count follows rapid: -rapid.checks or RAPID_CHECKS (default
-// 100). The nightly property job runs many more.
+// The check count of every property here follows rapid: -rapid.checks or
+// RAPID_CHECKS (default 100). The nightly property job runs many more.
+
+var jsonFields = []string{".Key", ".Payload.Before", ".Payload.After", ".Payload.After.nested"}
+
+// setTarget puts v at field in rec. A nested field needs a structured
+// .Payload.After, so one is made if the record has none.
+func setTarget(rec *opencdc.Record, field string, v any) {
+	switch field {
+	case ".Key":
+		rec.Key = toData(v)
+	case ".Payload.Before":
+		rec.Payload.Before = toData(v)
+	case ".Payload.After":
+		rec.Payload.After = toData(v)
+	default:
+		after := recordgen.EnsureStructured(rec.Payload.After)
+		after["nested"] = v
+		rec.Payload.After = after
+	}
+}
+
+func toData(v any) opencdc.Data {
+	switch v := v.(type) {
+	case nil:
+		return nil
+	case map[string]any:
+		return opencdc.StructuredData(v)
+	case []byte:
+		return opencdc.RawData(v)
+	}
+	panic("unexpected target value")
+}
+
+func configured(t *rapid.T, field string, procs ...sdk.Processor) {
+	for _, p := range procs {
+		if err := p.Configure(context.Background(), config.Config{"field": field}); err != nil {
+			t.Fatalf("configure %s: %v", field, err)
+		}
+	}
+}
+
+// TestEncodeDecode_PropertyRoundTrip: json.decode undoes json.encode. The
+// batch mixes nil, raw and structured keys and payload sides. The value at
+// the configured field is a JSON object (a whole key or payload side), any
+// JSON value (a nested field), or nil, which both processors leave alone.
+// Every record comes back exactly as it was, in the same order, with every
+// other part untouched.
 func TestEncodeDecode_PropertyRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	rapid.Check(t, func(t *rapid.T) {
-		field := rapid.SampledFrom([]string{".Key", ".Payload.Before", ".Payload.After", ".Payload.After.nested"}).Draw(t, "field")
-		in := recordgen.Batch(recordgen.StructuredData()).Draw(t, "records")
-		if field == ".Payload.After.nested" {
-			for i := range in {
-				// A nested field holds any JSON value, not only an object.
-				in[i].Payload.After.(opencdc.StructuredData)["nested"] = recordgen.JSONValue().Draw(t, "nested")
+		field := rapid.SampledFrom(jsonFields).Draw(t, "field")
+		in := recordgen.Batch().Draw(t, "records")
+		for i := range in {
+			var v any
+			switch {
+			case rapid.IntRange(0, 4).Draw(t, "nil target") == 0:
+				// a tombstone or delete side: left alone
+			case field == ".Payload.After.nested":
+				v = recordgen.JSONValue().Draw(t, "nested")
+			default:
+				v = recordgen.JSONObject().Draw(t, "object")
 			}
+			setTarget(&in[i], field, v)
 		}
+		want := recordgen.Clone(in)
 
-		enc := NewEncodeProcessor(log.Nop())
-		dec := NewDecodeProcessor(log.Nop())
-		for _, p := range []sdk.Processor{enc, dec} {
-			if err := p.Configure(ctx, config.Config{"field": field}); err != nil {
-				t.Fatalf("configure %s: %v", field, err)
-			}
-		}
-
-		encoded := enc.Process(ctx, recordgen.Clone(in))
-		got := dec.Process(ctx, singleRecords(t, encoded))
-		if len(got) != len(in) {
-			t.Fatalf("%d records in, %d out", len(in), len(got))
-		}
-		for i, rec := range singleRecords(t, got) {
-			if diff := cmp.Diff(in[i], rec, internal.CmpProcessedRecordOpts...); diff != "" {
-				t.Fatalf("record %d changed in an encode/decode round trip of %s (-want +got):\n%s", i, field, diff)
-			}
+		enc, dec := NewEncodeProcessor(log.Nop()), NewDecodeProcessor(log.Nop())
+		configured(t, field, enc, dec)
+		got := dec.Process(ctx, recordgen.Records(t, enc.Process(ctx, in)))
+		if err := recordgen.CheckOutput(got, want, -1); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
 
-// singleRecords unwraps processed records, failing on anything but a
-// SingleRecord.
-func singleRecords(t *rapid.T, processed []sdk.ProcessedRecord) []opencdc.Record {
-	out := make([]opencdc.Record, len(processed))
-	for i, p := range processed {
-		rec, ok := p.(sdk.SingleRecord)
-		if !ok {
-			t.Fatalf("record %d: got %#v, want a SingleRecord", i, p)
+// TestEncode_PropertyErrorAtBadRecord: a value JSON cannot represent (NaN,
+// ±Inf) fails its record with an ErrorRecord, never a SingleRecord with
+// something else written in its place, and the records before it are
+// encoded.
+func TestEncode_PropertyErrorAtBadRecord(t *testing.T) {
+	ctx := context.Background()
+	rapid.Check(t, func(t *rapid.T) {
+		in := recordgen.Batch().Draw(t, "records")
+		failAt := recordgen.FailAt(t, len(in))
+		want := make([]opencdc.Record, len(in))
+		for i := range in {
+			v := recordgen.JSONValue().Draw(t, "nested")
+			if i == failAt {
+				v = rapid.SampledFrom([]float64{math.NaN(), math.Inf(1), math.Inf(-1)}).Draw(t, "bad number")
+			}
+			setTarget(&in[i], ".Payload.After.nested", v)
+			want[i] = recordgen.Clone(in[i : i+1])[0]
+			if v != nil && i != failAt {
+				b, err := json.Marshal(v)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want[i].Payload.After.(opencdc.StructuredData)["nested"] = string(b)
+			}
 		}
-		out[i] = opencdc.Record(rec)
-	}
-	return out
+
+		enc := NewEncodeProcessor(log.Nop())
+		configured(t, ".Payload.After.nested", enc)
+		if err := recordgen.CheckOutput(enc.Process(ctx, in), want, failAt); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// TestDecode_PropertyErrorAtBadRecord: raw data that is not JSON fails its
+// record with an ErrorRecord, and the records before it are decoded.
+func TestDecode_PropertyErrorAtBadRecord(t *testing.T) {
+	ctx := context.Background()
+	rapid.Check(t, func(t *rapid.T) {
+		in := recordgen.Batch().Draw(t, "records")
+		failAt := recordgen.FailAt(t, len(in))
+		want := recordgen.Clone(in)
+		for i := range in {
+			if i == failAt {
+				bad := recordgen.Bytes().Filter(func(b []byte) bool {
+					return len(b) > 0 && !json.Valid(b)
+				}).Draw(t, "not JSON")
+				in[i].Key = opencdc.RawData(bad)
+				continue
+			}
+			obj := recordgen.JSONObject().Draw(t, "object")
+			b, err := json.Marshal(obj)
+			if err != nil {
+				t.Fatal(err)
+			}
+			in[i].Key = opencdc.RawData(b)
+			want[i].Key = opencdc.StructuredData(obj)
+		}
+
+		dec := NewDecodeProcessor(log.Nop())
+		configured(t, ".Key", dec)
+		if err := recordgen.CheckOutput(dec.Process(ctx, in), want, failAt); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
