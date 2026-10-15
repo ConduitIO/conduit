@@ -177,4 +177,13 @@
 // crash scenarios above cannot: a position write that fails while the
 // process stays up. The acks for that write must be withheld, so a SIGKILL
 // and restart afterwards still finds no gap against a pruning upstream.
+//
+// Source failure racing a graceful stop (sigterm_source_failure_test.go,
+// #2977): the lifecycle child from recovery_child.go, run on the default
+// engine (pkg/lifecycle) instead of arch-v2. Its source fails while the
+// destination still holds acks, so the failed source node is still draining
+// when SIGTERM arrives and runs the runtime's own shutdown (StopAll, then
+// Wait). The process must exit within a bound and a restart must replay what
+// was not acked (invariants 3 and 7). This is the end-to-end form of #2969,
+// which hung exactly there.
 package chaos
