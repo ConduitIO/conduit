@@ -1,0 +1,34 @@
+schemaVersion: 1
+id: s3-sink-time-partitioner
+family: s3-sink
+description: >-
+  S3 sink with TimeBasedPartitioner and Hive-style path.format. Every
+  partitioner key is blocking. partition.duration.ms is a JSON number.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/confluentinc/demo-scene/blob/d54801fd6439b8260ba69b22831bfaea492d54c8/rail-data-streaming-pipeline/data/egress/s3/00_create_sink_train_movements.sh
+  license: Apache-2.0
+  copyright: Confluent, Inc. and demo-scene contributors
+  modifications:
+    - "extracted the JSON body of the curl PUT to /connectors/sink-s3-train-movements-v00/config"
+    - "path.format shell quoting resolved to the value the script intends"
+    - "bucket name replaced with example-rail-streaming-bucket"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/sink-s3-train-movements-v00.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: partitioner.class, status: unsupported, blocking: true}
+    - {key: path.format, status: unsupported, blocking: true}
+    - {key: partition.duration.ms, status: unsupported, blocking: true}
+    - {key: timestamp.extractor, status: unsupported, blocking: true}
+    - {key: locale, status: unsupported, blocking: true}
+    - {key: timezone, status: unsupported, blocking: true}
+covers:
+  - class: io.confluent.connect.s3.S3SinkConnector
+    keys: [partitioner.class, path.format, partition.duration.ms, timestamp.extractor, locale, timezone]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:s3, role: destination}
+run: {tier: offline}

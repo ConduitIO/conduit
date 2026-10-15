@@ -1,0 +1,35 @@
+schemaVersion: 1
+id: jdbc-sink-pg-upsert-avro
+family: jdbc-sink
+description: >-
+  Confluent JDBC sink into Postgres from the Debezium end-to-end demo: Avro
+  converters, ExtractNewRecordState, upsert keyed on the record key, deletes
+  enabled, auto.create on. The password is embedded in the JDBC URL query.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/end-to-end-demo/jdbc-sink.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "JDBC URL host rewritten to postgres.internal.example"
+    - "password in the JDBC URL query replaced with a PLACEHOLDER_SECRET_ canary"
+    - "schema registry URLs rewritten to schema-registry.internal.example"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-jdbc: "10.9.9", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: auto.create, status: unsupported, blocking: true}
+    - {key: insert.mode, status: approximated, blocking: false}
+    - {key: pk.mode, status: translated}
+    - {key: pk.fields, status: approximated, blocking: false}
+    - {key: delete.enabled, status: translated}
+    - {key: topics, status: translated}
+covers:
+  - class: io.confluent.connect.jdbc.JdbcSinkConnector
+    keys: [connection.url, auto.create, insert.mode, delete.enabled, pk.fields, pk.mode, key.converter, value.converter]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:postgres, role: destination}
+run: {tier: offline}

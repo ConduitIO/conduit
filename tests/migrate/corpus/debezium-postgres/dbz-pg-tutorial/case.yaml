@@ -1,0 +1,35 @@
+schemaVersion: 1
+id: dbz-pg-tutorial
+family: debezium-postgres
+description: >-
+  The Debezium tutorial's Postgres connector. Schema-level selection with no
+  table list, defaults for plugin.name and snapshot.mode, no converters.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/tutorial/register-postgres.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to postgres.internal.example"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  # schema.include.list without a literal table list is U! (mapping table).
+  exitCode: 2
+  # plugin.name absent means decoderbufs: non-blocking default note.
+  notes: [kc.default_differs]
+  entries:
+    - {key: schema.include.list, status: unsupported, blocking: true}
+    - {key: database.password, status: translated, secret: true}
+    - {key: database.hostname, status: translated}
+    - {key: tasks.max, status: translated}
+    - {key: topic.prefix, status: translated}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [database.hostname, database.port, database.user, database.password, database.dbname, topic.prefix, schema.include.list]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

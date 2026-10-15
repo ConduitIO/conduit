@@ -1,0 +1,31 @@
+schemaVersion: 1
+id: s3-sink-json-default-partitioner
+family: s3-sink
+description: >-
+  S3 sink writing JsonFormat from two topics with four tasks. JsonFormat is
+  approximated and blocking: Conduit writes an OpenCDC-shaped line per record.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/confluentinc/demo-scene/blob/d54801fd6439b8260ba69b22831bfaea492d54c8/kafka-connect-single-message-transforms/day1.adoc
+  license: Apache-2.0
+  copyright: Confluent, Inc. and demo-scene contributors
+  modifications:
+    - "extracted the JSON body of the curl PUT to /connectors/sink-s3-00/config"
+    - "bucket name replaced with example-smt-demo-bucket"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/sink-s3-00.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: format.class, status: approximated, blocking: true}
+    - {key: tasks.max, status: approximated, blocking: false}
+    - {key: topics, status: translated}
+covers:
+  - class: io.confluent.connect.s3.S3SinkConnector
+    keys: [format.class, topics, s3.region, partitioner.class]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:s3, role: destination}
+run: {tier: offline}

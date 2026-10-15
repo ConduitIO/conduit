@@ -1,0 +1,37 @@
+schemaVersion: 1
+id: dbz-mysql-tutorial
+family: debezium-mysql
+description: >-
+  The Debezium tutorial's MySQL connector. Every Debezium MySQL to Kafka
+  migration in v0.21 carries the blocking kc.output_shape_differs note.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/tutorial/register-mysql.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to mysql.internal.example"
+    - "schema.history.internal.kafka.bootstrap.servers rewritten to kafka.internal.example:9092"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  # output shape (no Debezium envelope for MySQL in v0.21) and the absent
+  # database.ssl.mode (preferred), which would be a TLS downgrade.
+  notes: [kc.output_shape_differs, kc.default_differs]
+  entries:
+    - {key: database.include.list, status: translated}
+    - {key: database.server.id, status: unsupported, blocking: false}
+    - {key: topic.prefix, status: approximated, blocking: true}
+    - {key: schema.history.internal.kafka.bootstrap.servers, status: unsupported, blocking: false}
+    - {key: schema.history.internal.kafka.topic, status: unsupported, blocking: false}
+    - {key: database.password, status: translated, secret: true}
+covers:
+  - class: io.debezium.connector.mysql.MySqlConnector
+    keys: [database.hostname, database.port, database.user, database.password, database.server.id, topic.prefix, database.include.list]
+emits:
+  - {plugin: mysql, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

@@ -1,0 +1,31 @@
+schemaVersion: 1
+id: dbz-pg-failover-slots
+family: debezium-postgres
+description: >-
+  Bare config map (no connector name) behind pgbouncer with a failover slot and
+  snapshot.mode=when_needed. Both are blocking.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/postgres-failover-slots/inventory-source.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to pgbouncer.internal.example"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/inventory-source.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: slot.failover, status: unsupported, blocking: true}
+    - {key: snapshot.mode, status: unsupported, blocking: true}
+    - {key: schema.include.list, status: unsupported, blocking: true}
+    - {key: plugin.name, status: translated}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [slot.failover, snapshot.mode, plugin.name]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

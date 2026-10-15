@@ -1,0 +1,33 @@
+schemaVersion: 1
+id: jdbc-sink-mysql-autocreate
+family: jdbc-sink
+description: >-
+  Confluent JDBC sink into MySQL with four tasks and auto.create. The
+  connector name is the REST path segment; the body is a bare config map.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/confluentinc/demo-scene/blob/d54801fd6439b8260ba69b22831bfaea492d54c8/kafka-connect-single-message-transforms/day1.adoc
+  license: Apache-2.0
+  copyright: Confluent, Inc. and demo-scene contributors
+  modifications:
+    - "extracted the JSON body of the curl PUT to /connectors/sink-jdbc-mysql-00/config"
+    - "JDBC URL host rewritten to mysql.internal.example"
+    - "connection.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-jdbc: "10.9.9", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/sink-jdbc-mysql-00.json]}
+expect:
+  exitCode: 2
+  # delete.enabled absent: Kafka Connect ignored deletes, Conduit applies them.
+  notes: [kc.default_differs]
+  entries:
+    - {key: auto.create, status: unsupported, blocking: true}
+    - {key: tasks.max, status: approximated, blocking: false}
+    - {key: connection.password, status: translated, secret: true}
+covers:
+  - class: io.confluent.connect.jdbc.JdbcSinkConnector
+    keys: [connection.url, connection.user, connection.password, auto.create]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: mysql, role: destination}
+run: {tier: offline}

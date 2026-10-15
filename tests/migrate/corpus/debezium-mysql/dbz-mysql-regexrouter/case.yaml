@@ -1,0 +1,33 @@
+schemaVersion: 1
+id: dbz-mysql-regexrouter
+family: debezium-mysql
+description: >-
+  MySQL source with a RegexRouter SMT that keeps only the table name as the
+  topic. The regex is RE2-compatible, so the SMT is translated.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/unwrap-smt/source.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to mysql.internal.example"
+    - "schema.history.internal.kafka.bootstrap.servers rewritten to kafka.internal.example:9092"
+    - "database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: transforms, status: translated}
+    - {key: transforms.route.type, status: translated}
+    - {key: transforms.route.regex, status: translated}
+    - {key: transforms.route.replacement, status: translated}
+covers:
+  - class: io.debezium.connector.mysql.MySqlConnector
+    keys: [transforms, transforms.route.type, transforms.route.regex, transforms.route.replacement]
+emits:
+  - {plugin: mysql, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

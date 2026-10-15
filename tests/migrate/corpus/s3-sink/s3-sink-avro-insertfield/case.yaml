@@ -1,0 +1,36 @@
+schemaVersion: 1
+id: s3-sink-avro-insertfield
+family: s3-sink
+description: >-
+  S3 sink writing Avro with the default partitioner and an InsertField SMT
+  that adds offset and partition fields.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/confluentinc/demo-scene/blob/d54801fd6439b8260ba69b22831bfaea492d54c8/kafka-to-s3/README.adoc
+  license: Apache-2.0
+  copyright: Confluent, Inc. and demo-scene contributors
+  modifications:
+    - "extracted the JSON body of the curl PUT to /connectors/sink-s3-voluble/config"
+    - "bucket name replaced with example-voluble-bucket"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/sink-s3-voluble.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs, kc.delivery_semantics_differ, kc.setting_required]
+  entries:
+    - {key: format.class, status: unsupported, blocking: true}
+    - {key: transforms.AddMetadata.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: schema.generator.class, status: unsupported, blocking: true}
+    - {key: schema.compatibility, status: unsupported, blocking: true}
+    - {key: partitioner.class, status: approximated, blocking: true}
+    - {key: flush.size, status: approximated, blocking: false}
+    - {key: storage.class, status: translated}
+    - {key: s3.bucket.name, status: translated}
+covers:
+  - class: io.confluent.connect.s3.S3SinkConnector
+    keys: [s3.bucket.name, s3.region, flush.size, storage.class, format.class, schema.generator.class, schema.compatibility, partitioner.class]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:s3, role: destination}
+run: {tier: offline}

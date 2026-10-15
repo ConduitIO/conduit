@@ -1,0 +1,30 @@
+schemaVersion: 1
+id: dbz-mysql-config-provider
+family: debezium-mysql
+description: >-
+  Credentials as FileConfigProvider references. References pass through by
+  name; a reference value makes the key a secret.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/tutorial/register-mysql-ext-secrets.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "database.hostname rewritten to mysql.internal.example"
+    - "schema.history.internal.kafka.bootstrap.servers rewritten to kafka.internal.example:9092"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: database.user, status: translated, secret: true}
+    - {key: database.password, status: translated, secret: true}
+covers:
+  - class: io.debezium.connector.mysql.MySqlConnector
+    keys: [database.user, database.password]
+emits:
+  - {plugin: mysql, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

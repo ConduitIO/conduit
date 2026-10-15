@@ -1,0 +1,36 @@
+schemaVersion: 1
+id: worker-distributed-dbz-pg
+family: common
+description: >-
+  Apache Kafka's sample connect-distributed.properties as --worker, with the
+  Debezium tutorial Postgres connector. Worker keys become a worker connector
+  in the report; the worker's JsonConverter with schemas.enable=true is
+  inherited by the source.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/apache/kafka/blob/e2c58a0163c89d00cebc877fbdd81d4267be774f/config/connect-distributed.properties (https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/tutorial/register-postgres.json)
+  license: Apache-2.0
+  copyright: The Apache Software Foundation; Debezium Authors
+  modifications:
+    - "worker bootstrap.servers rewritten from localhost:9092 to kafka.internal.example:9092"
+    - "connector database.hostname rewritten to postgres.internal.example"
+    - "connector database.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, --worker, input/worker.properties, input/connector.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: bootstrap.servers, status: translated}
+    - {key: group.id, status: translated}
+    - {key: config.storage.topic, status: translated}
+    - {key: status.storage.topic, status: translated}
+    - {key: offset.flush.interval.ms, status: translated}
+    - {key: schema.include.list, status: unsupported, blocking: true}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [schema.include.list]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

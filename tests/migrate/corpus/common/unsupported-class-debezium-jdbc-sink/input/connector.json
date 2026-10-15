@@ -1,0 +1,16 @@
+{
+    "name": "jdbc-sink",
+    "config": {
+        "connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+        "tasks.max": "1",
+        "topics": "customers",
+        "connection.url": "jdbc:postgresql://postgres.internal.example:5432/inventory",
+	"connection.username": "postgresuser",
+        "connection.password": "PLACEHOLDER_SECRET_DB_PASSWORD",
+	"insert.mode": "upsert",
+        "delete.enabled": "true",
+        "primary.key.mode": "record_key",
+	"primary.key.fields": "id",
+	"schema.evolution": "basic"
+    }
+}
