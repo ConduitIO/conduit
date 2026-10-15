@@ -233,15 +233,17 @@ func (r *Rule) outcomeFor(v kcmigrate.Value) (Outcome, *Action) {
 			Fix:    "Set the literal value in the Kafka Connect config, or resolve the reference and re-run.",
 		}, nil
 	}
-	for _, b := range r.Values[:len(r.Values)-1] {
+	branches := r.Values[:len(r.Values)-1]
+	for _, b := range branches { // exact values first, then patterns
 		for _, m := range b.Match {
 			if m == raw || (r.IgnoreCase && strings.EqualFold(m, raw)) {
-				emit := b.Emit
-				if emit == nil {
-					emit = r.Emit
-				}
-				return b.Outcome, actionFor(b.Outcome, emit)
+				return b.Outcome, actionFor(b.Outcome, branchEmit(r, b))
 			}
+		}
+	}
+	for _, b := range branches {
+		if b.re != nil && b.re.MatchString(raw) {
+			return b.Outcome, actionFor(b.Outcome, branchEmit(r, b))
 		}
 	}
 	return r.Values[len(r.Values)-1].Outcome, nil
@@ -364,4 +366,11 @@ func (f *File) checkRegexOverlap() error {
 		}
 	}
 	return cerrors.Join(errs...)
+}
+
+func branchEmit(r *Rule, b ValueBranch) *Action {
+	if b.Emit != nil {
+		return b.Emit
+	}
+	return r.Emit
 }

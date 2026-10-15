@@ -110,10 +110,16 @@ type Outcome struct {
 
 // ValueBranch is the outcome for a set of values.
 type ValueBranch struct {
-	Match     []string `yaml:"match"`
-	Otherwise bool     `yaml:"otherwise"`
+	Match []string `yaml:"match"`
+	// Pattern matches values with an RE2 regex, for value classes an enum
+	// cannot list (a positive integer, a literal table list). It is anchored
+	// by the rule author; Match is tried before Pattern.
+	Pattern   string `yaml:"pattern"`
+	Otherwise bool   `yaml:"otherwise"`
 	Outcome   `yaml:",inline"`
 	Emit      *Action `yaml:"emit"`
+
+	re *regexp.Regexp
 }
 
 // Action is an emit kind and its arguments.
@@ -252,32 +258,43 @@ func (r *Rule) validateValues() []error {
 		errs = append(errs, cerrors.New("a rule with values sets its outcome per value"))
 	}
 	values := map[string]bool{}
-	for i, b := range r.Values {
-		last := i == len(r.Values)-1
-		switch {
-		case b.Otherwise && !last, !b.Otherwise && last:
-			errs = append(errs, cerrors.New("values must end with exactly one otherwise branch"))
-		case b.Otherwise && (b.Status != kcmigrate.StatusUnsupported || !b.Blocking || b.Code != kcmigrate.CodeKeyUnsupported.Reason()):
-			errs = append(errs, cerrors.New("the otherwise branch must be unsupported, blocking, kc.key_unsupported"))
-		case !b.Otherwise && len(b.Match) == 0:
-			errs = append(errs, cerrors.New("a value branch needs match"))
-		}
-		for _, v := range b.Match {
-			if r.IgnoreCase {
-				v = strings.ToLower(v)
-			}
-			if values[v] {
-				errs = append(errs, cerrors.Errorf("value %q is in two branches", v))
-			}
-			values[v] = true
-		}
-		emit := b.Emit
-		if emit == nil {
-			emit = r.Emit
-		}
-		errs = append(errs, b.Outcome.validate(emit)...)
+	for i := range r.Values {
+		errs = append(errs, r.validateBranch(i, values)...)
 	}
 	return errs
+}
+
+func (r *Rule) validateBranch(i int, values map[string]bool) []error {
+	var errs []error
+	b := r.Values[i]
+	last := i == len(r.Values)-1
+	switch {
+	case b.Otherwise && !last, !b.Otherwise && last:
+		errs = append(errs, cerrors.New("values must end with exactly one otherwise branch"))
+	case b.Otherwise && (b.Status != kcmigrate.StatusUnsupported || !b.Blocking || b.Code != kcmigrate.CodeKeyUnsupported.Reason()):
+		errs = append(errs, cerrors.New("the otherwise branch must be unsupported, blocking, kc.key_unsupported"))
+	case !b.Otherwise && len(b.Match) == 0 && b.Pattern == "":
+		errs = append(errs, cerrors.New("a value branch needs match or pattern"))
+	case b.Otherwise && (len(b.Match) > 0 || b.Pattern != ""):
+		errs = append(errs, cerrors.New("the otherwise branch matches everything else and takes no match or pattern"))
+	}
+	if b.Pattern != "" {
+		re, err := regexp.Compile(b.Pattern)
+		if err != nil {
+			errs = append(errs, cerrors.Errorf("pattern: %w", err))
+		}
+		r.Values[i].re = re
+	}
+	for _, v := range b.Match {
+		if r.IgnoreCase {
+			v = strings.ToLower(v)
+		}
+		if values[v] {
+			errs = append(errs, cerrors.Errorf("value %q is in two branches", v))
+		}
+		values[v] = true
+	}
+	return append(errs, b.Outcome.validate(branchEmit(r, b))...)
 }
 
 func (o Outcome) validate(emit *Action) []error {

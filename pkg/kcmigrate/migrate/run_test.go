@@ -50,8 +50,8 @@ func in(name, content string) kcmigrate.Input {
 }
 
 const (
-	cleanConnector    = "name=clean\nconnector.class=com.example.ExampleSource\nexample.host=db.internal.example\nexample.mode=fast\n"
-	approxConnector   = "name=approx\nconnector.class=com.example.ExampleSource\nexample.mode=slow\n"
+	cleanConnector    = "name=clean\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.host=db.internal.example\nexample.mode=fast\n"
+	approxConnector   = "name=approx\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.mode=slow\n"
 	blockingConnector = `{"name": "blocking", "config": {"connector.class": "com.example.Unknown", "secret.password": "CANARY-pw-1"}}`
 )
 
@@ -214,15 +214,15 @@ func TestRun_PipelinesParseAndValidate(t *testing.T) {
 	is.Equal(n, 2)
 	is.Equal(res.Report.Connectors[0].Pipeline, "pipelines/clean.yaml")
 	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineRunning)
-	is.Equal(res.Report.Connectors[0].Entries[2].Target.ConfigPath, "/pipelines/0/connectors/0/settings/host")
+	is.Equal(entryFor(res.Report.Connectors[0], "example.host").Target.ConfigPath, "/pipelines/0/connectors/0/settings/host")
 }
 
 func TestRun_Secrets(t *testing.T) {
 	is := is.New(t)
 	res := runOne(t, Request{Inputs: []kcmigrate.Input{
-		in("lit.properties", "name=lit\nconnector.class=com.example.ExampleSource\nexample.password=CANARY-pw\n"),
-		in("env.properties", "name=env\nconnector.class=com.example.ExampleSource\nexample.password=${env:PG_PASSWORD}\n"),
-		in("file.properties", "name=file\nconnector.class=com.example.ExampleSource\nexample.password=${file:/etc/kc/db.properties:password}\n"),
+		in("lit.properties", "name=lit\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.password=CANARY-pw\n"),
+		in("env.properties", "name=env\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.password=${env:PG_PASSWORD}\n"),
+		in("file.properties", "name=file\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.password=${file:/etc/kc/db.properties:password}\n"),
 	}})
 	for _, f := range res.Files {
 		is.True(!strings.Contains(string(f.Content), "CANARY"))
@@ -237,21 +237,21 @@ func TestRun_Secrets(t *testing.T) {
 	is.True(strings.Contains(tmpl, "from ${file:/etc/kc/db.properties:password}"))
 
 	lit, env, fileC := res.Report.Connectors[0], res.Report.Connectors[1], res.Report.Connectors[2]
-	pw := lit.Entries[2]
+	pw := entryFor(lit, "example.password")
 	is.True(pw.Secret)
 	is.Equal(pw.Target.Env, "KC_LIT_EXAMPLE_PASSWORD")
 	is.Equal(len(lit.Notes), 1)
 	is.Equal(lit.Notes[0].Code, "kc.secret_plaintext")
 	is.Equal(len(env.Notes), 0) // references are not plaintext
 	is.Equal(len(fileC.Notes), 0)
-	is.True(strings.Contains(fileC.Entries[2].Reason, "${file:/etc/kc/db.properties:password}"))
+	is.True(strings.Contains(entryFor(fileC, "example.password").Reason, "${file:/etc/kc/db.properties:password}"))
 }
 
 func TestRun_ConflictingKeysBlock(t *testing.T) {
 	is := is.New(t)
 	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("a.properties",
 		"name=a\nconnector.class=com.example.ExampleSource\nexample.host=h1\nexample.old.host=h2\n")}})
-	e := res.Report.Connectors[0].Entries[3]
+	e := entryFor(res.Report.Connectors[0], "example.old.host")
 	is.Equal(e.Code, "kc.key_conflict")
 	is.True(e.Blocking)
 	is.True(strings.Contains(file(res, "pipelines/a.yaml"), "host: h1")) // the first owner stays, the pipeline is stopped
@@ -272,12 +272,12 @@ func TestRun_WorkerDefaults(t *testing.T) {
 
 func TestRun_PipelineStatus(t *testing.T) {
 	is := is.New(t)
-	paused := `{"orders": {"info": {"name": "orders", "config": {"connector.class": "com.example.ExampleSource", "name": "orders"}}, "status": {"connector": {"state": "PAUSED"}}}}`
+	paused := `{"orders": {"info": {"name": "orders", "config": {"connector.class": "com.example.ExampleSource", "name": "orders", "key.converter": "b", "value.converter": "b"}}, "status": {"connector": {"state": "PAUSED"}}}}`
 	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("e.json", paused)}})
 	is.True(res.OK)
 	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineStopped) // paused in Kafka Connect
 
-	blocked := "name=x\nconnector.class=com.example.ExampleSource\nexample.mode=turbo\n"
+	blocked := "name=x\nconnector.class=com.example.ExampleSource\nkey.converter=b\nvalue.converter=b\nexample.mode=turbo\n"
 	res = runOne(t, Request{Inputs: []kcmigrate.Input{in("x.properties", blocked)}, AcceptGaps: true})
 	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineRunning) // --accept-gaps
 	is.True(strings.Contains(file(res, "pipelines/x.yaml"), "status: running"))
@@ -346,6 +346,25 @@ func TestRun_RequiresAValidator(t *testing.T) {
 	is.Equal(ce.Code, conduiterr.CodeInternal)
 }
 
+func TestRun_ConverterUnknownNotes(t *testing.T) {
+	is := is.New(t)
+	bare := "name=bare\nconnector.class=com.example.ExampleSource\n"
+	res := runOne(t, Request{Inputs: []kcmigrate.Input{in("a.properties", bare)}})
+	notes := res.Report.Connectors[0].Notes
+	is.Equal(len(notes), 2)
+	is.Equal(notes[0].Code, "kc.converter_unknown")
+	is.True(notes[0].Blocking)
+	is.Equal(notes[0].Rule, "shared/converters/key.converter")
+	is.True(!res.OK)
+	is.Equal(res.Report.Connectors[0].PipelineStatus, kcmigrate.PipelineStopped)
+
+	// A worker file that sets value.converter leaves only the key note.
+	worker := in("w.properties", "value.converter=b\n")
+	res = runOne(t, Request{Worker: &worker, Inputs: []kcmigrate.Input{in("a.properties", bare)}})
+	is.Equal(len(res.Report.Connectors[1].Notes), 1)
+	is.Equal(res.Report.Connectors[1].Notes[0].Rule, "shared/converters/key.converter")
+}
+
 func entryFor(rc kcmigrate.ReportConnector, key string) kcmigrate.Entry {
 	for _, e := range rc.Entries {
 		if e.Key == key {
@@ -374,4 +393,17 @@ func withValidator(req Request) Request {
 		}
 	}
 	return req
+}
+
+// REPORT.md depends only on the inputs and the rules: the Conduit version is
+// in report.json's generator (which the harness normalizes), never in the
+// Markdown, so a released binary and a dev build write the same file.
+func TestRenderMarkdown_VersionFree(t *testing.T) {
+	is := is.New(t)
+	rep := kcmigrate.NewReport("v0.20.2")
+	rep.Summarize()
+	a := RenderMarkdown(rep)
+	rep.Generator.Conduit = "(devel)"
+	is.Equal(RenderMarkdown(rep), a)
+	is.True(!strings.Contains(a, "v0.20.2"))
 }

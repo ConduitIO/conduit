@@ -13,3 +13,7 @@ keys:
     reason: Shadowed by the class rule in tests.
     fix: n/a
     diff: identity
+  - key: {regex: '^(key|value)\.converter$'}
+    status: translated
+    emit: {kind: none}
+    diff: identity

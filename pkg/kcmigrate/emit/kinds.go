@@ -32,13 +32,21 @@ type Kind func(p *Plan, d *rules.Decision) error
 
 // Kind names.
 const (
-	KindNone    = "none"
-	KindSetting = "setting"
+	KindNone       = "none"
+	KindSetting    = "setting"
+	KindTLS        = "tls-from-protocol"
+	KindSASLJAAS   = "sasl-jaas"
+	KindHaltOnFail = "dlq-halt"
+	KindList       = "list-setting"
 )
 
 var kinds = map[string]Kind{
-	KindNone:    func(*Plan, *rules.Decision) error { return nil },
-	KindSetting: setting,
+	KindNone:       func(*Plan, *rules.Decision) error { return nil },
+	KindSetting:    setting,
+	KindTLS:        tlsFromProtocol,
+	KindSASLJAAS:   saslJAAS,
+	KindHaltOnFail: haltOnFailure,
+	KindList:       listSetting,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -68,14 +76,27 @@ func Apply(p *Plan, ds []rules.Decision) error {
 // returned, index-aligned with ds, so the caller can record a downgrade (a
 // worker value that cannot be emitted) on the worker's own entry. Dropping
 // the refined copy would let a pipeline run without the setting it needed.
+//
+// Kafka Connect layers a connector's client config as the worker's
+// bootstrap.servers, then the worker's producer.- or consumer.-prefixed keys,
+// then the connector's overrides (Worker.baseProducerConfigs and
+// baseConsumerConfigs, Apache Kafka 4.2.0). The connector's decisions are
+// applied first by Apply; here the actions marked layer: client (the
+// prefixed worker keys) are applied before the rest, so with "only where
+// unset" each layer wins over the one below it.
 func ApplyDefaults(p *Plan, ds []rules.Decision) ([]kcmigrate.Entry, error) {
 	out := make([]kcmigrate.Entry, len(ds))
-	for i := range ds {
-		d := ds[i]
-		if err := apply(p, &d, true); err != nil {
-			return nil, err
+	for _, clientLayer := range []bool{true, false} {
+		for i := range ds {
+			if (ds[i].Emit != nil && ds[i].Emit.Args["layer"] == "client") != clientLayer {
+				continue
+			}
+			d := ds[i]
+			if err := apply(p, &d, true); err != nil {
+				return nil, err
+			}
+			out[i] = d.Entry
 		}
-		out[i] = d.Entry
 	}
 	return out, nil
 }
@@ -88,8 +109,10 @@ func apply(p *Plan, d *rules.Decision, onlyUnset bool) error {
 	if !ok {
 		return cerrors.Errorf("key %s: rule names unknown emit kind %q", d.KV.Key, d.Emit.Kind)
 	}
-	if onlyUnset && d.Emit.Kind == KindSetting && p.Has(d.Emit.Args["side"], d.Emit.Args["name"]) {
-		return nil
+	if onlyUnset {
+		if name := firstSetting(*d.Emit); name != "" && p.Has(d.Emit.Args["side"], name) {
+			return nil
+		}
 	}
 	return k(p, d)
 }
@@ -101,11 +124,23 @@ func setting(p *Plan, d *rules.Decision) error {
 	if name == "" {
 		return cerrors.Errorf("key %s: emit kind setting needs a name", d.KV.Key)
 	}
-	value := d.KV.Value.Reveal() // the one place a value enters a pipeline
-	var env string
-	if d.Secret || IsSecretKey(d.KV.Key) || rules.IsReference(value) {
-		value, env = p.secretRef(d)
+	var value, env string
+	if v, ok := d.Emit.Args["value"]; ok {
+		value = v // a mapped value from rule data, for example acks=-1 -> all
+	} else {
+		value = d.KV.Value.Reveal() // the one place a raw value enters a pipeline
+		if d.Secret || kcmigrate.IsSecretKey(d.KV.Key) || rules.IsReference(value) {
+			value, env = p.secretRef(d)
+		} else {
+			value = strings.TrimSpace(value) // ConfigDef.parseType trims string values
+		}
 	}
+	return set(p, d, side, name, value, env)
+}
+
+// set writes one setting for d and records the target, turning a conflict
+// into a blocking finding and a missing side into a non-blocking one.
+func set(p *Plan, d *rules.Decision, side, name, value, env string) error {
 	path, err := p.Set(side, name, value, d.KV.Key)
 	var conflict *ConflictError
 	switch {
@@ -117,8 +152,19 @@ func setting(p *Plan, d *rules.Decision) error {
 			Fix:    "Remove one of " + d.KV.Key + " and " + conflict.Owner + " from the Kafka Connect config, then re-run.",
 		}
 		return nil
+	case cerrors.Is(err, ErrNoSide):
+		d.Entry = kcmigrate.Entry{
+			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin,
+			Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+			Reason: d.KV.Key + " configures the Kafka " + side + ", which this pipeline does not have.",
+			Fix:    "Remove " + d.KV.Key + " from the Kafka Connect config; it does not apply to this connector.",
+		}
+		return nil
 	case err != nil:
 		return cerrors.Errorf("key %s: %w", d.KV.Key, err)
+	}
+	if d.Entry.Target != nil { // a kind that sets several settings points at the first
+		return nil
 	}
 	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: path, Env: env}
 	d.Entry.Secret = env != ""
@@ -161,28 +207,6 @@ func (p *Plan) secretRef(d *rules.Decision) (ref, env string) {
 	return "${" + s.Env + "}", s.Env
 }
 
-// secretSuffixes and secretKeys implement the conservative secret list of
-// the base design (Secrets, rule 1). A false positive only turns a value into
-// a variable; a false negative leaks, so the list errs wide.
-var (
-	secretSuffixes = []string{"password", "secret", "token", "key", "credentials", "jaas.config", "user.info"}
-	secretKeys     = map[string]bool{"aws.secret.access.key": true, "aws.access.key.id": true}
-)
-
-// IsSecretKey reports whether a key name marks its value as a secret.
-func IsSecretKey(key string) bool {
-	k := strings.ToLower(key)
-	if secretKeys[k] {
-		return true
-	}
-	for _, s := range secretSuffixes {
-		if strings.HasSuffix(k, s) {
-			return true
-		}
-	}
-	return false
-}
-
 // CheckActions returns an error naming every action that has no registered
 // kind or lacks the arguments its kind needs. Rule data is checked with it
 // in tests, so a bad action fails the build instead of a run.
@@ -194,14 +218,103 @@ func CheckActions(refs []rules.ActionRef) error {
 			errs = append(errs, cerrors.Errorf("%s: key %s: unknown emit kind %q", r.File, r.Key, a.Kind))
 			continue
 		}
-		if a.Kind == KindSetting {
-			if side := a.Args["side"]; side != SideSource && side != SideDestination {
-				errs = append(errs, cerrors.Errorf("%s: key %s: setting needs side source or destination", r.File, r.Key))
+		switch a.Kind {
+		case KindSetting, KindTLS, KindSASLJAAS, KindList:
+			switch a.Args["side"] {
+			case SideSource, SideDestination, SideKafka, SideProducer, SideConsumer:
+			default:
+				errs = append(errs, cerrors.Errorf("%s: key %s: %s needs side source, destination, kafka, producer or consumer", r.File, r.Key, a.Kind))
 			}
-			if a.Args["name"] == "" {
-				errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
-			}
+		}
+		if (a.Kind == KindSetting || a.Kind == KindList) && a.Args["name"] == "" {
+			errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
 		}
 	}
 	return cerrors.Join(errs...)
+}
+
+// tlsFromProtocol maps security.protocol onto tls.enabled. Argument: side.
+// SSL and SASL_SSL enable TLS; PLAINTEXT and SASL_PLAINTEXT write nothing
+// (TLS off is the connector default). Rule data restricts the values.
+func tlsFromProtocol(p *Plan, d *rules.Decision) error {
+	switch strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal())) {
+	case "SSL", "SASL_SSL":
+		return set(p, d, d.Emit.Args["side"], "tls.enabled", "true", "")
+	default:
+		// Written explicitly, so a lower layer (a worker's
+		// producer.security.protocol=SSL) cannot turn TLS on under a
+		// connector's PLAINTEXT override.
+		return set(p, d, d.Emit.Args["side"], "tls.enabled", "false", "")
+	}
+}
+
+// saslJAAS splits sasl.jaas.config into saslUsername and saslPassword (the
+// password always as a ${VAR} reference). Argument: side. Anything parseJAAS
+// refuses is unsupported and blocking: authenticating differently would
+// fail, or succeed as someone else.
+func saslJAAS(p *Plan, d *rules.Decision) error {
+	login, ok := parseJAAS(d.KV.Value.Reveal()) // parsed here; only the username is written as is
+	if !ok {
+		d.Entry = kcmigrate.Entry{
+			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
+			Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+			Reason: "sasl.jaas.config is not exactly one PlainLoginModule or ScramLoginModule, flag required, with only username and password options and no backslash escapes, so it cannot be turned into saslUsername and saslPassword without changing how the client authenticates.",
+			Fix:    "Set saslMechanism, saslUsername and saslPassword on the migrated pipeline by hand, or keep this connector on Kafka Connect.",
+		}
+		return nil
+	}
+	side := d.Emit.Args["side"]
+	if err := set(p, d, side, "saslUsername", login.username, ""); err != nil || d.Entry.Code != "" {
+		return err
+	}
+	ref, env := p.secretRef(d)
+	if err := set(p, d, side, "saslPassword", ref, env); err != nil {
+		return err
+	}
+	d.Entry.Secret = true
+	d.Entry.Target.Env = env
+	d.Entry.Reason = strings.TrimSpace(d.Entry.Reason + " The username is written to saslUsername; saslPassword is ${" + env + "}, to be filled with the password from this JAAS config.")
+	return nil
+}
+
+// haltOnFailure writes the halting dead-letter queue (errors.tolerance=none).
+func haltOnFailure(p *Plan, d *rules.Decision) error {
+	d.Entry.Target = &kcmigrate.EntryTarget{ConfigPath: p.HaltOnFailure()}
+	return nil
+}
+
+// listSetting writes a Kafka Connect LIST value (topics) as a comma list.
+// Kafka trims the value and splits on \s*,\s* (ConfigDef.parseType); an
+// empty element is kept by Kafka and refused here. Arguments: side, name.
+func listSetting(p *Plan, d *rules.Decision) error {
+	parts := listSplit.Split(strings.TrimSpace(d.KV.Value.Reveal()), -1)
+	for _, part := range parts {
+		if part == "" {
+			d.Entry = kcmigrate.Entry{
+				Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
+				Code:   kcmigrate.CodeKeyUnsupported.Reason(),
+				Reason: d.KV.Key + " has an empty element; Kafka Connect keeps it as an empty name.",
+				Fix:    "Remove the empty element (a doubled or trailing comma) from " + d.KV.Key + ".",
+			}
+			return nil
+		}
+	}
+	return set(p, d, d.Emit.Args["side"], d.Emit.Args["name"], strings.Join(parts, ","), "")
+}
+
+var listSplit = regexp.MustCompile(`\s*,\s*`)
+
+// firstSetting is the setting an action writes first, used to decide
+// whether a lower layer's action still applies.
+func firstSetting(a rules.Action) string {
+	switch a.Kind {
+	case KindSetting, KindList:
+		return a.Args["name"]
+	case KindTLS:
+		return "tls.enabled"
+	case KindSASLJAAS:
+		return "saslUsername"
+	default:
+		return ""
+	}
 }

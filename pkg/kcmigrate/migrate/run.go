@@ -138,6 +138,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 		rep.Connectors = append(rep.Connectors, r.rc)
 	}
 
+	markSecrets(rep)
 	if req.AcceptGaps {
 		rep.AcceptedGaps = acceptedGaps(rep)
 	}
@@ -241,6 +242,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
+	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)
 	for _, s := range plan.Secrets() {
 		if s.Literal {
 			run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
@@ -407,4 +409,49 @@ func recordWorkerDowngrades(rep *kcmigrate.Report, runs []connectorRun, hasWorke
 		}
 	}
 	return false
+}
+
+// Converter keys, read by converterNotes.
+const keyConverter, valueConverter = "key.converter", "value.converter"
+
+// converterNotes returns a blocking kc.converter_unknown note for each of
+// key.converter and value.converter that neither the connector nor the
+// worker file sets. Kafka Connect would use the worker's default, which
+// migrate cannot see, so the wire format is unknown: not assumed.
+func converterNotes(connector, worker []rules.Decision) []kcmigrate.Note {
+	set := map[string]bool{}
+	for _, d := range connector {
+		set[d.KV.Key] = true
+	}
+	for _, d := range worker {
+		set[d.KV.Key] = true
+	}
+	var notes []kcmigrate.Note
+	for _, key := range []string{keyConverter, valueConverter} {
+		if set[key] {
+			continue
+		}
+		notes = append(notes, kcmigrate.Note{
+			Code: kcmigrate.CodeConverterUnknown.Reason(), Blocking: true, Rule: "shared/converters/" + key,
+			Reason: "Neither the connector nor a worker file sets " + key + ", so the format Kafka Connect used is unknown.",
+			Fix:    "Pass the worker properties with --worker, or set " + key + " on the connector, then re-run.",
+		})
+	}
+	return notes
+}
+
+// markSecrets applies the base design's secret list (Secrets, rule 1) to
+// every entry, also under an unknown class or for an unsupported key, so the
+// report tells a reader which inputs held secrets. An entry's value is never
+// in the report either way; secret says the input itself must be handled as
+// one.
+func markSecrets(rep *kcmigrate.Report) {
+	for i := range rep.Connectors {
+		for j := range rep.Connectors[i].Entries {
+			e := &rep.Connectors[i].Entries[j]
+			if kcmigrate.IsSecretKey(e.Key) {
+				e.Secret = true
+			}
+		}
+	}
 }

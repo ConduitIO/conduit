@@ -1,0 +1,109 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "(worker)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 5,
+    "translated": 0,
+    "approximated": 0,
+    "unsupported": 5,
+    "blocking": 5
+  },
+  "connectors": [
+    {
+      "name": "local-file-source",
+      "class": "FileStreamSource",
+      "role": "unknown",
+      "entries": [
+        {
+          "key": "name",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-file-source.properties",
+            "line": 16,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class FileStreamSource has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-file-source.properties",
+            "line": 17,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class FileStreamSource has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-file-source.properties",
+            "line": 18,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class FileStreamSource has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "file",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-file-source.properties",
+            "line": 19,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class FileStreamSource has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        },
+        {
+          "key": "topic",
+          "status": "unsupported",
+          "origin": {
+            "file": "connect-file-source.properties",
+            "line": 20,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "The connector class FileStreamSource has no Conduit mapping in this version.",
+          "fix": "Keep this connector on Kafka Connect. `conduit migrate kafka-connect --help` lists the classes this version migrates.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}
