@@ -20,7 +20,7 @@ In short:
   unsigned corruption: it halts on overflow too.
 - Nothing infers a mode from "there is no position". A mode is either stamped in the position or set
   explicitly; a new pipeline that sets none gets a warning in N and is refused in N+1.
-- Snapshot keys are already exact in every mode (mysql#206, merged after revision 4); `strict` keeps that
+- Snapshot keys are already exact in every mode (mysql#206, merged after revision 5); `strict` keeps that
   format. The bind rule from the resume spike still applies: typed integer binds, never `CAST(? AS UNSIGNED)`
   over a prepared string.
 
@@ -31,26 +31,26 @@ In short:
 This is a payload contract change and Tier 1. All open questions are decided (see Decisions recorded), and the
 implementation PRs still need DeVaris's sign-off.
 
-## Status and recommendations (revision 5, 2026-10-15)
+## Status and recommendations (revision 6, 2026-10-15)
 
-Revision 5 reconciles the design with `ConduitIO/conduit-connector-mysql` `main` at `4676f45` and asks for
+Revision 6 reconciles the design with `ConduitIO/conduit-connector-mysql` `main` at `4676f45` and asks for
 sign-off on the implementation plan. Decisions 1 to 5 and 8 are unchanged. Line references elsewhere in this
 document are still to `22f8da3` unless they say otherwise; they were not all re-pointed.
 
-### What merged since revision 4, and what it changes here
+### What merged since revision 5, and what it changes here
 
 | Change on `main` | Effect on this design |
 | --- | --- |
-| mysql#206: snapshot keys are tagged and type-exact, each records its column type, snapshot envelopes are version 2 | Closes mysql#204 for every mode (decision 7). `strict` needs no key format of its own. The strict stamp moves to envelope **version 3**; `legacy` keeps writing today's envelopes (snapshot v2, CDC v1). One bind rule remains for the implementation (Keys and snapshot positions, revision 5 note) |
+| mysql#206: snapshot keys are tagged and type-exact, each records its column type, snapshot envelopes are version 2 | Closes mysql#204 for every mode (decision 7). `strict` needs no key format of its own. The strict stamp moves to envelope **version 3**; `legacy` keeps writing today's envelopes (snapshot v2, CDC v1). One bind rule remains for the implementation (Keys and snapshot positions, revision 6 note) |
 | mysql#211: go-mysql points at a ConduitIO fork exposing `canal.RowsEvent.SkippedColumns`; any skipped column halts with `mysql.cdc.row_image_skipped_columns` in every mode | The session-level row-image residual risk is closed (decision 6); the upstream issue is filed (go-mysql-org/go-mysql#1205, PR #1206). `mysql.types.null_in_not_null` stays as a cheap assertion for a nil in a `NOT NULL` column from any other cause |
 | mysql#214, #219: hamba/avro replaced by `iskorotkov/avro` v2.34.0; SDK v0.16.0, `conduit-commons` v0.8.0 | Re-spiked on these versions (in-memory SDK schema service, `commons` `Schema.Marshal`/`Unmarshal`): output identical to rounds 1 and 2. Canonical `String()` drops defaults and properties, `json.Marshal` keeps both; the registry returns the bytes unchanged and `mysql.type` survives parsing; nil and plain `T` go into `["null", T]` and come back as nil and plain `T`; Avro `int` decodes to Go `int`; decimal to `*big.Rat`; nil in a bare field and `uint64` in a `long` are encoder errors. `schema.Get` still does not apply the schema context prefix (SDK v0.16.0 `schema/schema.go`) |
 | mysql#215: error codes are `mysql.<area>.<reason>` | Every code in this document is renamed (table below). Codes are public API, so the names here are the ones to implement |
 | mysql#196, #203: the unsafe snapshot is gone, and a `sortingColumn` must be `NOT NULL` and unique | "A nullable `sortingColumn` stays bare `T`" (NULL section) can no longer happen; key columns are always `NOT NULL` |
 | mysql#226 (open, Tier 1): `BIGINT UNSIGNED` above 2^63-1 halts in both paths with `mysql.types.unsigned_overflow` | Ships the bug-fix half of decision 2 now, without `types.*` settings. Its remedy is "exclude the table or fix the rows" until `types.bigintUnsigned` exists; the per-phase remedy table under What `legacy` is applies from PR C below |
 
-Code names (revision 4 -> revision 5):
+Code names (revision 5 -> revision 6):
 
-| Revision 4 | Revision 5 |
+| Revision 5 | Revision 6 |
 | --- | --- |
 | `MYSQL_UNSIGNED_OVERFLOW` | `mysql.types.unsigned_overflow` |
 | `MYSQL_UNSIGNED_OVERFLOW_LEGACY_SNAPSHOT` | `mysql.types.unsigned_overflow_legacy_snapshot` |
@@ -64,7 +64,7 @@ Code names (revision 4 -> revision 5):
 
 ### Recommendations for sign-off
 
-1. **Sign off the semantics as decided.** Nothing found since revision 4 argues for changing decisions 1 to 5.
+1. **Sign off the semantics as decided.** Nothing found since revision 5 argues for changing decisions 1 to 5.
    The reconciliations above are mechanical except the envelope number.
 2. **Cut the Avro `decimal` logical type from N; ship it in N+1 if anyone asks.** N ships `types.decimal` in
    {`string`, `double`} and `types.bigintUnsigned` in {`long`, `string`}. The `decimal` value of both settings
@@ -303,7 +303,7 @@ simpler, but it sends the operator to a remedy the next `Open` refuses, and the 
 re-snapshot the message did not mention. A wrong remedy is worse than a restart hint.
 
 Why the snapshot phase gets a distinct error and no in-place switch, rather than allowing a switch at a key
-boundary (revision 5: the first reason below no longer holds since mysql#206 made snapshot keys type-exact;
+boundary (revision 6: the first reason below no longer holds since mysql#206 made snapshot keys type-exact;
 the second, two schemas inside one table scan, still does, and the decision stands): the `legacy` snapshot
 position stores the last key in the v1 form (`float64` or base64 after JSON;
 see Keys and snapshot positions), which already resumes incorrectly for the key types where this overflow is
@@ -343,7 +343,7 @@ a name made of the three values, `<mode>/<decimal>/<bigintUnsigned>` (for exampl
 - `strict` writes envelope version 3 on every snapshot and CDC position. `ParseSDKPosition` raises
   `CurrentPositionVersion` to 3 (`common/position.go` at `4676f45`); N-1 refuses a v3 position with
   `ErrPositionVersionUnsupported`. That is the one-way door, and only pipelines that opted into `strict`
-  cross it. (Revisions before 5 said version 2; #206 took that number for type-exact snapshot keys.)
+  cross it. (Revisions before 6 said version 2; #206 took that number for type-exact snapshot keys.)
 - Because the stamp rides on every position, the switch point between two configurations is exactly one
   record: the first one emitted under the new configuration.
 - The position constructors (`common/position.go:71,169`) take the stamp as an argument; the two call
@@ -473,8 +473,8 @@ real.
 - **Runtime net.** In `strict`, a nil for a `NOT NULL` column halts with `mysql.types.null_in_not_null` (table,
   column, config path `binlog_row_image`, fix text), instead of being passed through. That catches the
   primary key and every other `NOT NULL` column when a writer session overrides the image.
-- **Residual risk: closed (revision 5).** `binlog_row_image` is also a session variable, so a writer session
-  that sets `MINIMAL` while the global stays `FULL` passes the Open check (observed). Revision 4 stated that a
+- **Residual risk: closed (revision 6).** `binlog_row_image` is also a session variable, so a writer session
+  that sets `MINIMAL` while the global stays `FULL` passes the Open check (observed). Revision 5 stated that a
   skipped nullable column was indistinguishable from `NULL`. mysql#211 closed this: the connector now reads
   `canal.RowsEvent.SkippedColumns` from a ConduitIO fork of go-mysql and halts on any skipped column with
   `mysql.cdc.row_image_skipped_columns`, in every mode, before any record of the event is built. `strict`
@@ -591,7 +591,7 @@ log-and-return-unconverted branches.
 
 ### Keys and snapshot positions
 
-> **Revision 5: superseded in part.** mysql#206 (merged 2026-10-14) fixed the defect below for every mode:
+> **Revision 6: superseded in part.** mysql#206 (merged 2026-10-14) fixed the defect below for every mode:
 > snapshot keys are written as tagged, type-exact values (`common/keyvalue.go`), each key records its column
 > type (`key_type`), and snapshot envelopes are version 2. mysql#204 is closed. `strict` therefore needs no key
 > format of its own and keeps #206's. What still applies from this section is the bind rule: a resume must
@@ -1034,12 +1034,12 @@ original question numbers (3 was decided earlier and is recorded under Legacy li
 5. **`legacy` warns per column and nothing more.** It keeps `NULL` as zero and `DECIMAL` as `double` for N and
    N+1, with one warning per affected column. It does not refuse tables with nullable or decimal columns.
 6. **Session-level row-image residual risk: ship documented, and open the upstream `canal` change.** Done
-   differently and better (revision 5): mysql#211 points go-mysql at a ConduitIO fork that exposes
+   differently and better (revision 6): mysql#211 points go-mysql at a ConduitIO fork that exposes
    `canal.RowsEvent.SkippedColumns`, and the CDC handler halts on any skipped column with
    `mysql.cdc.row_image_skipped_columns`, in every mode. Upstream: go-mysql-org/go-mysql#1205 (issue) and #1206
    (PR), both open on 2026-10-15. The residual risk is closed; the appendix is obsolete.
 7. **mysql#204 is tracked separately** as its own sev-0 item, with the `legacy` fix designed on its own.
-   Revision 5: fixed for all modes by mysql#206 (see Keys and snapshot positions). The `legacy` snapshot-phase
+   Revision 6: fixed for all modes by mysql#206 (see Keys and snapshot positions). The `legacy` snapshot-phase
    decision (row 4) stands on its remaining reason.
 8. **The implementation lives in `ConduitIO/conduit-connector-mysql`** (certification decision 7).
 
@@ -1049,7 +1049,7 @@ None.
 
 ## Appendix: upstream canal change (obsolete)
 
-Revisions 1 to 4 drafted an upstream issue asking `canal` to expose `RowsEvent.SkippedColumns`. It was filed
+Revisions 1 to 5 drafted an upstream issue asking `canal` to expose `RowsEvent.SkippedColumns`. It was filed
 as go-mysql-org/go-mysql#1205 with PR #1206, and mysql#211 uses a ConduitIO fork with that change until a
 release contains it (see the `replace` in the connector's `go.mod`). The draft text is in the history of this
 file.
