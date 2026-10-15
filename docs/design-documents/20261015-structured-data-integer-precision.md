@@ -156,7 +156,7 @@ them off the `Struct` path. The exactness rule is recorded under _Alternatives_.
 | `int8`, `int16`, `int32`, `uint8`, `uint16`, `uint32` | always in range; unchanged |
 | `int`, `uint` | checked (64 bits on 64-bit platforms, including `wasip1/wasm`; always in range on `386`) |
 | `int64`, `uint64` | checked |
-| `json.Number` | classified from the literal with string arithmetic, without `big.Rat`. Strip the sign, leading zeros and the decimal point to get the significant digits `d` and the effective decimal exponent `e`, then drop trailing zeros from `d` (raising `e`). If `e < 0` the value is not an integer. Otherwise it is an integer with `len(d)+e` digits: more than 16 digits is out of range and is rejected at once, and 16 or fewer are compared exactly through `strconv.ParseInt`. So the range rule applies to integers in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), and a huge literal such as `1e999999` costs one scan of the string, not a `big.Rat` expansion. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
+| `json.Number` | **validated against the JSON number grammar first** (RFC 8259: `-?(0\|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`). A literal outside it is an error (`ErrInvalidNumber`, path and type only), and it never falls back to `Float64()`. Today `strconv.ParseFloat` accepts hex floats, a leading `+`, and `Inf`/`Infinity`/`NaN`, so `json.Number("0x20000000000001p0")` silently becomes 9007199254740992, and so do `"+9007199254740993"` and `"Infinity"` (which becomes +Inf). After validation, the literal is classified with string arithmetic, without `big.Rat`. Strip the sign, leading zeros and the decimal point to get the significant digits `d` and the effective decimal exponent `e`, then drop trailing zeros from `d` (raising `e`). **Zero mantissa:** if `d` is empty (`0`, `-0`, `0.000`, `0e99999999999999999999`) the value is the integer 0 and passes. This case is handled before any `ParseInt("")`. **Exponent overflow:** the written exponent is parsed with a saturating parser, not `strconv.Atoi`. A huge positive exponent with a nonzero mantissa is out of range. A huge negative exponent makes the value a non-integer. `len(d)+e` is computed only after `e` is clamped to ±10^6, so it cannot overflow. If `e < 0` the value is not an integer. Otherwise it is an integer with `len(d)+e` digits: more than 16 digits is out of range and is rejected at once, and 16 or fewer are compared exactly through `strconv.ParseInt`. So the range rule applies to integers in any notation (`9007199254740993`, `9007199254740993e0`, `1e20`), and a huge literal such as `1e999999` costs one scan of the string, not a `big.Rat` expansion. A non-integer value (`1.5`) is unchanged: it still goes through `Float64()`. Decimal precision is out of scope (see below) |
 | `float32`, `float64` | unchanged; they are already doubles |
 | `*big.Int`, `time.Time`, other types | unchanged: `structpb` already rejects them with `invalid type` |
 
@@ -192,6 +192,11 @@ New exported API in `opencdc`:
 // ToProto refuses rather than rounding: see invariant 6.
 var ErrIntegerNotRepresentable = errors.New("integer not representable as a protobuf number")
 
+// ErrInvalidNumber is returned (wrapped) by ToProto for a json.Number whose
+// literal is not a JSON number (RFC 8259), e.g. a hex float or "Infinity".
+// It is never parsed leniently.
+var ErrInvalidNumber = errors.New("invalid number")
+
 // IntegerNotRepresentableError carries where the value was and its Go type.
 // It deliberately does not carry the value.
 type IntegerNotRepresentableError struct {
@@ -222,7 +227,9 @@ would be rounded`.
 
 ### How Conduit surfaces it
 
-Conduit registers `plugin.integer_not_representable` (`codes.InvalidArgument`) in `pkg/plugin`. Each
+Conduit registers `plugin.integer_not_representable` and `plugin.number_invalid` (both
+`codes.InvalidArgument`) in `pkg/plugin`. `plugin.number_invalid` covers `ErrInvalidNumber` and takes the
+same path as the rest of this section. Each
 Conduit-side call site wraps a matching error (`errors.Is(err, opencdc.ErrIntegerNotRepresentable)`) with
 `conduiterr.Wrap`. The wrapped error keeps the field path and adds this suggested fix:
 
@@ -232,13 +239,25 @@ Conduit-side call site wraps a matching error (`errors.Is(err, opencdc.ErrIntege
 
 The record is **nacked**, so the pipeline's DLQ policy decides what happens next:
 
-- **Default DLQ** (`builtin:log`, window 1, threshold 0): the nack exceeds the threshold, and the
-  pipeline stops and becomes degraded, with the code in its status. The record is not acked, so after a
-  restart it is read again and halts the pipeline again until the operator acts. That is loud and loses
-  nothing (invariants 1 and 3).
+- **Default DLQ** (`builtin:log`, window 1, threshold 0): the pipeline stops and becomes **degraded**,
+  with the code in its status. **This needs one more piece:** with threshold 0, both DLQ handlers return
+  the nack reason as a plain error (`pkg/lifecycle/stream/dlq.go:155-163`,
+  `pkg/lifecycle-poc/funnel/dlq.go:108-118`). They wrap it in `cerrors.FatalError` only when the
+  threshold is above 0. A plain error goes to pipeline recovery, which by default retries forever
+  (`pkg/conduit/config.go:393`, `InfiniteRetriesErrRecovery`). The result would be an endless restart
+  loop that re-reads the same record and never shows Degraded. That loses nothing, but it is not loud.
+  **Fix:** Conduit wraps the coded refusal in `cerrors.FatalError` at its boundary. That covers the nack
+  reason given to the DLQ handler, the arch-v1 node's returned error, the arch-v2 `Do` error, and the
+  host-side `ErrorRecord`. The refusal is deterministic, so a restart cannot cure it, which is the same
+  reasoning as the existing fatal DLQ-write failure (`funnel/dlq.go:99`). The record is not acked, so
+  after a manual restart it is read again and halts again until the operator acts (invariants 1 and 3).
+  In arch-v1 the node's error and the acker's DLQ error can race. Both are wrapped as fatal and both
+  carry the code, so either one wins with the same outcome.
 - **Configured, tolerant DLQ**: the record is written to the DLQ, its position is acked once that write
   succeeds, and the pipeline continues. That is the operator's declared policy (invariant 6: "follow the
   configured policy"). The DLQ record's `conduit.dlq.nack.error` metadata carries the code and the path.
+  The fatal wrap does not change this case: a tolerant DLQ absorbs the nack and stores only the
+  reason's text, so nothing fatal propagates.
 
 On the destination side, nack-under-DLQ is safe only with the two engine changes below (the arch-v1
 ordered nack and the arch-v2 validate-then-split). **If either cannot land in v0.21, the fallback is to
@@ -250,12 +269,18 @@ obvious version hangs:
   error. The acker nacks it in queue order while it drains during teardown. Returning without nacking
   or passing the message on would leave it open, and `SourceNode`'s `openMsgTracker.Wait()` on stop
   (`pkg/lifecycle/stream/source.go:123`) would hang. Nacking it synchronously before returning would
-  hit the S2 deadlock. With the default DLQ the nack fails the threshold, and nothing is acked. With a
-  tolerant DLQ the record is in the DLQ before the pipeline stops.
+  hit the S2 deadlock. With the default DLQ nothing is acked, and the fatal wrap makes the pipeline
+  degraded. With a tolerant DLQ, the record either reaches the DLQ before the pipeline stops or is
+  redelivered on restart, depending on whether the acker drains it before teardown. Either way it is
+  not lost.
 - **arch-v2:** `Do` runs `ValidateProto` as in the primary design and, on a refusal, returns the coded
   error before `Write`. A task error makes `Worker.doTask` return at once (`worker.go`, the
   `task %s: %w` return), without acting on any batch flags. Nothing in the batch is acked or nacked, so
-  it is all redelivered on restart (invariants 1 and 3), and no DLQ is involved.
+  it is all redelivered on restart (invariants 1 and 3), and no DLQ is involved. The error is
+  fatal-wrapped, as above. If the destination is shared, the error also marks it poisoned
+  (`worker.go:501`). That is conservative, because the refusal happened before `Write` and the ack
+  stream is still in sync. It is harmless, because the pipeline is stopping anyway and a restart builds
+  a fresh destination.
 
 The halt fallback is less useful, but it cannot misattribute, deadlock or hang on stop.
 
@@ -392,6 +417,8 @@ place afterwards: when a peer negotiates only v2, refusing is still the correct 
 | --- | --- | --- | --- |
 | A pipeline that rounded silently before the upgrade now halts, including ones whose values happened to be exact (high-bit masks, round numbers) | intended; the pipeline is degraded and the same record halts it again after each restart | pipeline status with `plugin.integer_not_representable` and the field path | release note; the fix text points to schema encoding or raw JSON. A string conversion (`field.convert`) is safe only if the destination parses strings into its integer type exactly; MySQL does not |
 | arch-v1: refused record nacked synchronously while earlier records wait in a plugin batch (`sdk.batch.delay` 0) | deadlock: the nack waits on the ordering semaphore for acks that need more writes | stuck pipeline, no progress, no error | the refused message goes through the destination acker and is nacked in queue order; the node never blocks. The S2 test (below) pins this for both nack-and-continue and the halt fallback |
+| Refusal returned as a plain (non-fatal) error under the default DLQ | infinite recovery loop that re-reads the same record; never Degraded (no loss) | restart counter climbing; repeated identical errors | wrap the coded refusal in `cerrors.FatalError` at the Conduit boundary; pinned by test 7 |
+| `json.Number` outside the JSON grammar (hex float, `+`, `Infinity`) | today: silently rounded or turned into ±Inf | n/a today | grammar validation first; `ErrInvalidNumber`, never `Float64()` |
 | arch-v1: `lastPosition` advanced to a refused record's position | the SDK destination's `Stop` waits out `stopTimeout` for a position it never received, then flushes with a warning, on every stop | slow stops; the "did not encounter expected last position" warning | the node never advances `lastPosition` for a refused message, as on the filtered path; pinned by a test |
 | Halt fallback returns without handing the refused message on | the message stays open, and `openMsgTracker.Wait()` in the source node hangs on stop | a pipeline that never finishes stopping | the fallback passes the message to the acker exactly as the primary design does, then returns; pinned by a test |
 | arch-v2: refused record nacked in place and the rest written as one slice | `markBatchRecords` maps acks onto the wrong indexes, so a failed record is acked upstream (invariants 1 and 3) | the ack-error-after-hole test (below) | never write a slice with holes: nack the refused records, `Retry` the rest, and let the tainted-batch split re-run contiguous sub-batches |
@@ -441,6 +468,11 @@ Each regression test is shown to fail on current `main` before it is shown to pa
    - `json.Number`: `"9007199254740993"`, `"9007199254740993e0"`, `"1e20"` and `"1e999999"` fail, the
      last one under a tight time and allocation budget. `"1.5"`, `"12345678901234567.5"` (non-integer,
      unchanged), `"90071992547409.91e2"` and `"9007199254740991"` are ok.
+   - `json.Number` grammar: `"0x20000000000001p0"`, `"+9007199254740993"`, `"Infinity"`, `"NaN"`,
+     `"1_000"`, `"01"`, `"1."`, `".5"` and `""` fail with `ErrInvalidNumber`, never through `Float64()`.
+   - `json.Number` edge cases: `"0"`, `"-0"`, `"0.000"` and `"0e99999999999999999999"` are ok (zero).
+     `"1e99999999999999999999"` is out of range. `"1e-99999999999999999999"` is a non-integer and is
+     unchanged. None of them panics or overflows.
    - Structure: a nested map, a `[]any` element, and a key versus `payload.before`/`payload.after`. The
      path is relative from `StructuredData.ToProto` and from the record root from `Record.ToProto`.
    - Errors: `errors.Is` with the sentinel, `errors.As` for the path, and an assertion that the error
@@ -493,8 +525,9 @@ Each regression test is shown to fail on current `main` before it is shown to pa
    - The retry-bound counters are not exhausted by the retried runs.
 7. **Pipeline level, both engines**: a mock source with a wide-int record, then a standalone passthrough
    processor, then a built-in destination.
-   - Default DLQ: the pipeline is degraded with the code, the record is not acked, and restarting with the
-     same source halts again.
+   - Default DLQ: the pipeline reaches **Degraded** (not a recovery loop) with the code, within a
+     deadline. The source reads the record once, not repeatedly, and the record is not acked. A manual
+     restart with the same source halts again. This test fails without the `FatalError` wrap.
    - DLQ window 2, threshold 1: the record is in the DLQ with the code in its metadata, the pipeline keeps
      running, and the next record (`id = 1<<53-1`) reaches the destination exactly.
 8. **Inspector**: `InspectProcessorIn` on a wide-int record does not end the stream, and it shows
@@ -523,7 +556,9 @@ Each regression test is shown to fail on current `main` before it is shown to pa
 1. The range rule ±(2^53−1) (recommended), or the exactness rule.
 2. Nack under the DLQ policy on the destination side (recommended), but only together with the arch-v1
    ordered nack and the arch-v2 validate-then-split. Otherwise, use the halt fallback on the destination
-   side for v0.21. Separately, as a release rule: `conduit-processor-sdk` must not ship its commons bump
+   side for v0.21. Both options depend on Conduit wrapping the coded refusal in `cerrors.FatalError`.
+   Without it, the default DLQ turns the refusal into an endless recovery loop instead of a degraded
+   pipeline. Separately, as a release rule: `conduit-processor-sdk` must not ship its commons bump
    without the guest per-index fix.
 3. Version the commons release as v0.9.0 (recommended; #290 already requires a minor bump), with Conduit
    v0.21 taking #290 in the same bump.
