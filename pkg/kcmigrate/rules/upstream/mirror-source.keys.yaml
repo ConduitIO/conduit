@@ -16,9 +16,19 @@ sources:
   - https://github.com/apache/kafka/blob/4.2.0/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorConnectorConfig.java
   - https://github.com/apache/kafka/blob/4.2.0/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorSourceConfig.java
   - https://github.com/apache/kafka/blob/4.2.0/connect/mirror-client/src/main/java/org/apache/kafka/connect/mirror/MirrorClientConfig.java
+# Checked nightly against the generated MirrorMaker pages of 4.2 and of the
+# newest documented version (cmd/conduit/internal/kcdrift).
+check:
+  site: kafka
+  pages: [mirror_connector_config, mirror_source_config]
+  ignore:
+    - snapshot: shared
+      reason: The connector-level keys every connector has; the shared snapshot tracks them.
+    - pattern: '^(sasl\.|ssl\.|security\.protocol$|metric\.reporters$|config\.providers$)'
+      reason: MirrorMaker's top-level client keys; the rules cover the cluster-prefixed forms (source.cluster.*, target.cluster.*), which is where connector-form configs set them.
 keys:
   - {key: enabled, default: "true"}
-  - {key: source.cluster.alias}
+  - {key: source.cluster.alias, required: true}
   - {key: target.cluster.alias, default: target}
   - {key: replication.policy.class, default: org.apache.kafka.connect.mirror.DefaultReplicationPolicy}
   - {key: replication.policy.separator, default: "."}
@@ -43,5 +53,5 @@ keys:
   - {key: offset-syncs.topic.replication.factor, default: "3"}
   - {key: offset.lag.max, default: "100"}
   - {key: heartbeats.replication.enabled, default: "true"}
-  - {key: source.cluster.bootstrap.servers}
-  - {key: target.cluster.bootstrap.servers}
+  - {key: source.cluster.bootstrap.servers, undocumented: true}
+  - {key: target.cluster.bootstrap.servers, undocumented: true}
