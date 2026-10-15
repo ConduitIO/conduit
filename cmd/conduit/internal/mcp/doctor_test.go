@@ -16,12 +16,16 @@ package mcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/doctor/doctorcheck"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/check"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	json "github.com/goccy/go-json"
 	"github.com/matryer/is"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -86,4 +90,80 @@ func TestDoctor_UnknownCheckName_RejectedWithSuggestion(t *testing.T) {
 	is.True(env.Error != nil)
 	is.True(env.Error.Code != "")
 	is.True(env.Error.Suggestion != "")
+}
+
+// TestDoctor_StandaloneEnv_NamesNotReturned asserts the MCP result (which
+// reaches the client and the model provider behind it) carries a count for
+// plugins.standalone_env but never the variable names or values. The
+// environment is a fixed fake; the first and last flagged names in sorted order
+// are both present so a leak of either is caught.
+func TestDoctor_StandaloneEnv_NamesNotReturned(t *testing.T) {
+	is := is.New(t)
+	fake := []string{
+		"AAA_FIRST_TOKEN=VALUE-MUST-NOT-APPEAR-1",
+		"SENTINEL_API_TOKEN=VALUE-MUST-NOT-APPEAR-2",
+		"SENTINEL_ONLY_NAME_PASSWORD=VALUE-MUST-NOT-APPEAR-3",
+		"zzz_last_password=VALUE-MUST-NOT-APPEAR-4",
+		"PATH=VALUE-MUST-NOT-APPEAR-5",
+	}
+
+	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
+	cfg.Connectors.Path = t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+
+	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg, environ: func() []string { return fake }}))
+	res, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+		Name:      ToolDoctor,
+		Arguments: map[string]any{"checks": []string{doctorcheck.NamePluginsStandaloneEnv}},
+	})
+	is.NoErr(err)
+
+	env := decodeStructuredContent[Result[DoctorResult]](t, res)
+	is.Equal(len(env.Result.Checks), 1)
+	got := env.Result.Checks[0]
+	is.Equal(string(got.Status), "warn")
+	is.Equal(got.Code, "plugin.standalone_env_passed")
+	is.True(strings.Contains(got.Message, "withheld"))
+	is.True(strings.Contains(got.Message, "4 host environment variable(s)"))
+
+	// Everything the client can see: structured content and text content.
+	raw, err := json.Marshal(res)
+	is.NoErr(err)
+	for _, kv := range fake {
+		name, value, _ := strings.Cut(kv, "=")
+		is.True(!strings.Contains(string(raw), value))
+		if name != "PATH" {
+			is.True(!strings.Contains(string(raw), name))
+		}
+	}
+}
+
+// TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment pins the
+// production default for the MCP tool: with no injected environment it
+// classifies the process environment. The result withholds names, so the
+// assertion is that the finding is a warning (an empty environment passes) and
+// that neither the sentinel name nor its fake value is returned.
+func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
+	is := is.New(t)
+	const name, value = "SENTINEL_DEFAULT_SEAM_TOKEN", "FAKE-VALUE-MUST-NOT-APPEAR-DEFAULT"
+	t.Setenv(name, value)
+
+	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
+	cfg.Connectors.Path = t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
+
+	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg}))
+	res, err := cs.CallTool(context.Background(), &sdkmcp.CallToolParams{
+		Name:      ToolDoctor,
+		Arguments: map[string]any{"checks": []string{doctorcheck.NamePluginsStandaloneEnv}},
+	})
+	is.NoErr(err)
+	env := decodeStructuredContent[Result[DoctorResult]](t, res)
+	is.Equal(len(env.Result.Checks), 1)
+	is.Equal(string(env.Result.Checks[0].Status), "warn")
+
+	raw, err := json.Marshal(res)
+	is.NoErr(err)
+	is.True(!strings.Contains(string(raw), name))
+	is.True(!strings.Contains(string(raw), value))
 }

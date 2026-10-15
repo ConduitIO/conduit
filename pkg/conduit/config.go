@@ -141,6 +141,16 @@ type Config struct {
 
 		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
 		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
+
+		Standalone struct {
+			// EnvWarning controls the one-time startup warning (and the
+			// plugins.standalone_env doctor finding) listing the names of
+			// sensitive host environment variables that standalone connector
+			// plugin processes inherit. Advisory only: it does not change the
+			// environment plugins receive. Operators who have reviewed the list
+			// can set it to false. See docs/operations/standalone-plugin-environment.md.
+			EnvWarning bool `long:"connectors.standalone.env-warning" mapstructure:"env-warning" usage:"warn at startup about sensitive host environment variables passed to standalone connector plugins"`
+		}
 	}
 
 	Install struct {
@@ -364,6 +374,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
 	cfg.Connectors.MaxReceiveRecordSize = server.DefaultMaxReceiveRecordSize
+	cfg.Connectors.Standalone.EnvWarning = true
 
 	cfg.Install.AllowUnsigned = false
 	cfg.Install.MaxStaleness = index.DefaultMaxStaleness
