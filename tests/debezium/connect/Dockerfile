@@ -3,8 +3,8 @@
 # Apache Kafka) but not the Confluent AvroConverter, which most production
 # Debezium deployments use, so the golden capture adds it here.
 #
-# The converter is downloaded at build time and verified by checksum. It is
-# never redistributed from this repository.
+# The converter (Apache-2.0, see doc/LICENSE-Apache in the archive) is
+# downloaded at build time and verified by checksum; it is not vendored here.
 ARG DEBEZIUM_IMAGE
 FROM ${DEBEZIUM_IMAGE}
 

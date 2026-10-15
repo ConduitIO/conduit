@@ -251,13 +251,21 @@ func captureSchemas(ctx context.Context, url string, events []Event, path string
 	}
 
 	ids := map[int]bool{}
+	// Avro wire-format bytes are often valid UTF-8 (short keys always are),
+	// so they can be stored in either form; read both.
 	collect := func(b *Bytes) error {
-		if b == nil || b.Base64 == nil {
+		if b == nil {
 			return nil
 		}
-		raw, err := base64.StdEncoding.DecodeString(*b.Base64)
-		if err != nil {
-			return err
+		var raw []byte
+		switch {
+		case b.Text != nil:
+			raw = []byte(*b.Text)
+		case b.Base64 != nil:
+			var err error
+			if raw, err = base64.StdEncoding.DecodeString(*b.Base64); err != nil {
+				return err
+			}
 		}
 		if len(raw) >= 5 && raw[0] == 0 {
 			ids[int(binary.BigEndian.Uint32(raw[1:5]))] = true

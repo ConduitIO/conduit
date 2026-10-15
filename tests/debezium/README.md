@@ -13,14 +13,15 @@ same bytes, and every intentional difference has to be listed against a field he
 | 2.7.4.Final | `quay.io/debezium/connect@sha256:5a62d0fb…` | `2.6` (2.6.0.Beta1 to 3.0.4) |
 | 3.7.0.Final | `quay.io/debezium/connect@sha256:65a33b21…` | `3.5` (3.5 and later) |
 
-Each version is captured with four converter settings:
+Each version is captured with five settings:
 
 | Directory | Key and value converter |
 | --- | --- |
 | `json` | `JsonConverter`, `schemas.enable=true` |
 | `json-numeric` | the same with `decimal.format=NUMERIC` |
+| `json-txmeta` | `json` plus the connector's `provide.transaction.metadata=true` (fills the envelope's `transaction` block and writes the `dbz.transaction` topic) |
 | `json-noschema` | `JsonConverter`, `schemas.enable=false` |
-| `avro` | Confluent `AvroConverter` 7.9.1 with Schema Registry 7.9.1; `schemas.json` holds every subject version and schema ID |
+| `avro` | Confluent `AvroConverter` 7.9.1 (Apache-2.0, fetched at image build) with Schema Registry 7.9.1; `schemas.json` holds every subject version and every schema ID a key or value references |
 
 Everything else is a Debezium default. The connector settings are in `capture.sh`.
 
@@ -59,19 +60,29 @@ tests/debezium/capture.sh 3.7.0 json      # one version and converter
 
 Each run starts its own compose project on ephemeral host ports, waits for the
 snapshot, runs the stream workload, reads every topic as raw bytes
-(`cmd/capture`) and tears the stack down. A full refresh is the eight
-combinations of `2.7.4`/`3.7.0` and `json`/`json-numeric`/`json-noschema`/`avro`.
+(`cmd/capture`) and tears the stack down. A full refresh is the ten
+combinations of `2.7.4`/`3.7.0` and the five settings above.
 Do not edit `capture.sh` while it runs; bash reads scripts incrementally.
 
-`cmd/goldendiff <committed> <fresh>` compares two captures. The wall-clock fields
-(envelope and source `ts_ms`, `ts_us`, `ts_ns`), the per-run
-`__debezium.context.runId` header and the partition of null-key messages (sticky
-partitioner) may differ. Across hosts, the absolute WAL positions (`source.lsn`,
-`source.sequence`) and transaction IDs (`txId`) also differ, by what initdb wrote
-before the workload, so those are blanked too. Two fresh stacks on one host agree
-on them. Offsets, schema IDs, keys, headers and every other byte must match. The
-`debezium goldens` workflow re-captures weekly and on changes here, and fails when
-the committed files are no longer reproducible.
+`cmd/goldendiff <committed> <fresh>` compares two captures. JSON messages are
+compared as bytes: the volatile values are masked in the original text with
+regular expressions and nothing is decoded, so a change in key order, escaping,
+number formatting or whitespace is a difference. Avro messages are compared by
+their wire header (schema ID) byte for byte and by decoded value, and
+`schemas.json` byte for byte. The volatile values are:
+
+- the wall clock: envelope and source `ts_ms`, `ts_us`, `ts_ns`;
+- absolute WAL positions and transaction IDs (`source.lsn`, `source.sequence`,
+  `source.txId`, the transaction block's `id`), which depend on what initdb wrote
+  before the workload and differ across hosts (two fresh stacks on one host
+  agree on them);
+- the per-run `__debezium.context.runId` header;
+- the partition of a null-key message (sticky partitioner).
+
+Offsets, keys, headers, schema IDs and every other byte must match. The
+`debezium goldens` workflow re-captures weekly and on changes here, fails when
+the committed files no longer reproduce, attaches the fresh capture, and opens
+(or comments on) an issue when the weekly run fails.
 
 ## What the goldens established
 
@@ -89,8 +100,9 @@ left an item to the harness (**(V)** in the design):
    with a literal default is written as the default (`d_text` NULL becomes
    `"dflt"`, `d_int` NULL becomes `42`). A NULL in a column whose default is
    `now()` is written as `1970-01-01T00:00:00.000000Z`. Consumers of Debezium JSON
-   never see these NULLs. This is Kafka Connect behaviour, not Debezium's, and it
-   is an invariant 6 question for Conduit (see the encoder PR).
+   never see these NULLs. This is Kafka Connect converter behaviour, not
+   Debezium's. Conduit mirrors it by default (design D20, decided 2026-10-15) and
+   exposes it as an explicit setting.
 4. **Deletes under `REPLICA IDENTITY DEFAULT`** fill required non-key columns in
    `before`: `label` becomes `""`, and `qty`, which has `DEFAULT 7`, becomes 7. A
    primary-key change does the same in its delete event. This is the design's D15,
@@ -124,3 +136,11 @@ left an item to the harness (**(V)** in the design):
     jsonb, a one-element list for `text[]`, and the placeholder's bytes for
     `bytea`.
 11. **Truncate produces nothing** with the default `skipped.operations=t`.
+12. **Transaction metadata** (`json-txmeta`): the envelope's `transaction` block is
+    `{"id":"<txId>:<lsn>","total_order":n,"data_collection_order":n}` where the LSN
+    is **each event's own** LSN, not the transaction's: the four events of one
+    transaction carry four different ids (`769:25304640`, `769:25304808`, ...),
+    and the `BEGIN` record on `dbz.transaction` uses the first event's LSN, `END`
+    the commit's. `total_order` is the event's 1-based position in the transaction
+    and `data_collection_order` its position among that table's events. Logical
+    decoding messages get a transaction block too (3.7.0).

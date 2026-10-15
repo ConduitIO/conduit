@@ -5,7 +5,8 @@
 #
 # <debezium-version> is one of the versions in image_for below; <converter> is one of
 # json (JsonConverter, schemas.enable=true), json-numeric (the same with
-# decimal.format=NUMERIC), json-noschema (schemas.enable=false) or avro (Confluent AvroConverter with Schema
+# decimal.format=NUMERIC), json-txmeta (the same as json with the connector's
+# provide.transaction.metadata=true), json-noschema (schemas.enable=false) or avro (Confluent AvroConverter with Schema
 # Registry). The result lands in testdata/golden/<version>/<converter>/.
 #
 # Every run uses its own compose project and ephemeral host ports, and tears
@@ -20,8 +21,8 @@ image_for() {
   esac
 }
 
-version=${1:?usage: capture.sh <debezium-version> <json|json-numeric|json-noschema|avro>}
-converter=${2:?usage: capture.sh <debezium-version> <json|json-numeric|json-noschema|avro>}
+version=${1:?usage: capture.sh <debezium-version> <json|json-numeric|json-txmeta|json-noschema|avro>}
+converter=${2:?usage: capture.sh <debezium-version> <json|json-numeric|json-txmeta|json-noschema|avro>}
 image=$(image_for "$version")
 if [[ -z $image ]]; then
   echo "unknown Debezium version $version; known: 2.7.4 3.7.0" >&2
@@ -44,7 +45,7 @@ KAFKA_HOST_PORT=$(free_port)
 compose() { docker compose -p "$project" -f "$here/compose.yaml" "$@"; }
 
 cleanup() {
-  compose down -v --remove-orphans >/dev/null 2>&1 || true
+  compose down -v --remove-orphans --rmi local >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -72,6 +73,13 @@ case $converter in
           "value.converter": "org.apache.kafka.connect.json.JsonConverter",
           "value.converter.schemas.enable": "true",
           "value.converter.decimal.format": "NUMERIC",'
+    registry_flag=() ;;
+  json-txmeta)
+    conv='"key.converter": "org.apache.kafka.connect.json.JsonConverter",
+          "key.converter.schemas.enable": "true",
+          "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+          "value.converter.schemas.enable": "true",
+          "provide.transaction.metadata": "true",'
     registry_flag=() ;;
   json-noschema)
     conv='"key.converter": "org.apache.kafka.connect.json.JsonConverter",

@@ -14,12 +14,18 @@ name: debezium goldens
 
 on:
   schedule:
-    - cron: '20 5 * * 1'
+    # Monday 07:10 UTC, clear of govulncheck (05:15), the release-branch job
+    # (06:30) and the link check (06:40).
+    - cron: '10 7 * * 1'
   workflow_dispatch:
   pull_request:
     paths:
       - 'tests/debezium/**'
       - '.github/workflows/debezium-golden.yml'
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   reproduce:
@@ -43,7 +49,7 @@ jobs:
 
       - name: Capture
         run: |
-          for converter in json json-numeric json-noschema avro; do
+          for converter in json json-numeric json-txmeta json-noschema avro; do
             timeout 900 tests/debezium/capture.sh "${{ matrix.version }}" "$converter"
           done
 
@@ -61,3 +67,45 @@ jobs:
         with:
           name: debezium-goldens-${{ matrix.version }}
           path: tests/debezium/testdata/golden/${{ matrix.version }}
+
+      - name: File an issue on failure
+        if: failure() && github.event_name != 'pull_request'
+        uses: actions/github-script@v8
+        env:
+          VERSION: ${{ matrix.version }}
+        with:
+          script: |
+            const title = `Debezium goldens no longer reproduce (${process.env.VERSION})`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The weekly re-capture of the Debezium ${process.env.VERSION} goldens failed: ${runUrl}`,
+              '',
+              'The run log lists every differing event, and the fresh capture is attached',
+              'as an artifact. A real difference means the pinned image or the stack',
+              'changed behaviour; the goldens are the specification for the',
+              'Debezium-compatible output mode (#3032), so do not re-capture over them',
+              'without finding out why.',
+            ].join('\n');
+            // Dedupe on title rather than a label, as link-check.yml does.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.find((i) => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }

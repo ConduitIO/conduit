@@ -13,52 +13,96 @@
 // limitations under the License.
 
 // Command goldendiff checks that a fresh capture reproduces the committed
-// golden files. Two captures of the same Debezium version differ in the
-// wall-clock fields, the per-run context header and, across hosts, the
-// absolute WAL positions (source.lsn, source.sequence) and transaction IDs,
-// which depend on what initdb and the image wrote before the workload ran.
-// Those are blanked before comparing; every other byte must match. On one
-// host, two fresh stacks also agree on LSNs and transaction IDs.
+// golden files.
 //
 //	goldendiff <committed-dir> <fresh-dir>
 //
 // Both directories are testdata/golden roots (<version>/<converter>/...).
-// Avro values carry timestamps inside binary records, so for Avro only the
-// event layout (topic, partition, offset, key bytes, headers) and the
-// registry schemas are compared.
+//
+// JSON-converter messages are compared as bytes. Before comparing, the
+// volatile values are masked in the original text with regular expressions
+// (see volatileJSON); nothing is decoded and re-encoded, so a change in key
+// order, escaping, number formatting or whitespace is a difference.
+//
+// Avro messages are compared by schema ID (the wire header, byte for byte)
+// and by decoded value with the volatile fields blanked (see avro.go); the
+// registry state (schemas.json) is compared byte for byte.
+//
+// What may differ between two captures, and why:
+//   - ts_ms, ts_us, ts_ns (envelope and source): wall clock.
+//   - lsn, sequence, txId, and the transaction id "<txId>:<lsn>": absolute
+//     WAL positions and transaction IDs depend on what initdb and the image
+//     wrote before the workload, which differs across hosts.
+//   - the __debezium.context.runId header: generated per connector start.
+//   - the partition of a null-key message: the sticky partitioner picks it.
+//
+// Every other byte must match.
 package main
 
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/goccy/go-json"
 )
 
-var (
-	volatileTop    = []string{"ts_ms", "ts_us", "ts_ns"}
-	volatileSource = []string{"ts_ms", "ts_us", "ts_ns", "lsn", "sequence", "txId", "xmin"}
-)
+// volatileJSON masks volatile values in JsonConverter output. Each pattern
+// matches a payload member only ("ts_ms":<digits>), never the schema's
+// "field":"ts_ms".
+var volatileJSON = []*regexp.Regexp{
+	regexp.MustCompile(`"(ts_ms|ts_us|ts_ns|lsn|txId)":-?[0-9]+`),
+	regexp.MustCompile(`"sequence":"\[[^\]]*\]"`),
+	regexp.MustCompile(`"id":"[0-9]+:[0-9]+"`),
+}
+
+func maskJSON(b []byte) []byte {
+	for _, re := range volatileJSON {
+		b = re.ReplaceAllFunc(b, func(m []byte) []byte {
+			name, _, _ := bytes.Cut(m, []byte(":"))
+			return append(append([]byte{}, name...), []byte(`:"<volatile>"`)...)
+		})
+	}
+	return b
+}
+
+type blob struct {
+	Text   *string `json:"text"`
+	Base64 *string `json:"base64"`
+}
+
+func (b *blob) raw() ([]byte, error) {
+	if b == nil {
+		return nil, nil
+	}
+	if b.Text != nil {
+		return []byte(*b.Text), nil
+	}
+	if b.Base64 != nil {
+		return base64.StdEncoding.DecodeString(*b.Base64)
+	}
+	return []byte{}, nil
+}
 
 type event struct {
-	Topic     string          `json:"topic"`
-	Partition int32           `json:"partition"`
-	Offset    int64           `json:"offset"`
-	Key       json.RawMessage `json:"key"`
-	Value     *struct {
-		Text   *string `json:"text"`
-		Base64 *string `json:"base64"`
-	} `json:"value"`
-	Headers []struct {
-		Key   string          `json:"key"`
-		Value json.RawMessage `json:"value"`
+	Topic     string `json:"topic"`
+	Partition int32  `json:"partition"`
+	Offset    int64  `json:"offset"`
+	Key       *blob  `json:"key"`
+	Value     *blob  `json:"value"`
+	Headers   []struct {
+		Key   string `json:"key"`
+		Value *blob  `json:"value"`
 	} `json:"headers"`
 }
+
+func (e event) id() string { return fmt.Sprintf("%s[%d]@%d", e.Topic, e.Partition, e.Offset) }
 
 func main() {
 	if len(os.Args) != 3 {
@@ -114,37 +158,113 @@ func compareDir(a, b string, avro bool) ([]string, error) {
 	if len(ea) != len(eb) {
 		diffs = append(diffs, fmt.Sprintf("event count %d != %d", len(ea), len(eb)))
 	}
-	for i := 0; i < min(len(ea), len(eb)); i++ {
-		na, err := normalize(ea[i], avro)
-		if err != nil {
-			return nil, err
-		}
-		nb, err := normalize(eb[i], avro)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(na, nb) {
-			diffs = append(diffs, fmt.Sprintf("event %d (%s[%d]@%d) differs:\n  committed: %s\n  fresh:     %s", i, ea[i].Topic, ea[i].Partition, ea[i].Offset, na, nb))
-		}
-	}
+	var regA, regB *registry
 	if avro {
-		sa, err := os.ReadFile(filepath.Join(a, "schemas.json")) //nolint:gosec // paths are the operator's own command-line arguments
-		if err != nil {
+		if regA, err = loadRegistry(filepath.Join(a, "schemas.json")); err != nil {
 			return nil, err
 		}
-		sb, err := os.ReadFile(filepath.Join(b, "schemas.json")) //nolint:gosec // paths are the operator's own command-line arguments
-		if err != nil {
+		if regB, err = loadRegistry(filepath.Join(b, "schemas.json")); err != nil {
 			return nil, err
 		}
+		sa, _ := os.ReadFile(filepath.Join(a, "schemas.json")) //nolint:gosec // operator-supplied paths
+		sb, _ := os.ReadFile(filepath.Join(b, "schemas.json")) //nolint:gosec // operator-supplied paths
 		if !bytes.Equal(sa, sb) {
 			diffs = append(diffs, "schemas.json differs")
+		}
+	}
+	for i := 0; i < min(len(ea), len(eb)); i++ {
+		if d := compareEvent(ea[i], eb[i], regA, regB); d != "" {
+			diffs = append(diffs, fmt.Sprintf("event %d (%s): %s", i, ea[i].id(), d))
 		}
 	}
 	return diffs, nil
 }
 
+// compareEvent returns "" when the two events match, otherwise a description
+// of the first difference. regA and regB are nil for JSON captures.
+func compareEvent(x, y event, regA, regB *registry) string {
+	if x.Topic != y.Topic || x.Offset != y.Offset {
+		return fmt.Sprintf("position %s vs %s", x.id(), y.id())
+	}
+	if x.Key != nil && x.Partition != y.Partition {
+		return fmt.Sprintf("partition %d vs %d", x.Partition, y.Partition)
+	}
+	if d := compareBlob("key", x.Key, y.Key, regA, regB); d != "" {
+		return d
+	}
+	if d := compareBlob("value", x.Value, y.Value, regA, regB); d != "" {
+		return d
+	}
+	if len(x.Headers) != len(y.Headers) {
+		return fmt.Sprintf("%d headers vs %d", len(x.Headers), len(y.Headers))
+	}
+	for i := range x.Headers {
+		hx, hy := x.Headers[i], y.Headers[i]
+		if hx.Key != hy.Key {
+			return fmt.Sprintf("header %d key %q vs %q", i, hx.Key, hy.Key)
+		}
+		if hx.Key == "__debezium.context.runId" {
+			continue
+		}
+		if d := compareBlob("header "+hx.Key, hx.Value, hy.Value, nil, nil); d != "" {
+			return d
+		}
+	}
+	return ""
+}
+
+func compareBlob(what string, x, y *blob, regA, regB *registry) string {
+	if (x == nil) != (y == nil) {
+		return fmt.Sprintf("%s: null in one capture only", what)
+	}
+	bx, err := x.raw()
+	if err != nil {
+		return fmt.Sprintf("%s: %v", what, err)
+	}
+	by, err := y.raw()
+	if err != nil {
+		return fmt.Sprintf("%s: %v", what, err)
+	}
+	if regA != nil && len(bx) >= 5 && bx[0] == 0 {
+		return compareAvro(what, bx, by, regA, regB)
+	}
+	mx, my := maskJSON(bx), maskJSON(by)
+	if !bytes.Equal(mx, my) {
+		return fmt.Sprintf("%s differs\n  committed: %s\n  fresh:     %s", what, excerpt(mx, my), excerpt(my, mx))
+	}
+	return ""
+}
+
+func compareAvro(what string, bx, by []byte, regA, regB *registry) string {
+	if len(by) < 5 || !bytes.Equal(bx[:5], by[:5]) {
+		return fmt.Sprintf("%s: Avro wire header (schema ID) differs", what)
+	}
+	vx, err := regA.decode(bx)
+	if err != nil {
+		return fmt.Sprintf("%s: committed: %v", what, err)
+	}
+	vy, err := regB.decode(by)
+	if err != nil {
+		return fmt.Sprintf("%s: fresh: %v", what, err)
+	}
+	if !bytes.Equal(vx, vy) {
+		return fmt.Sprintf("%s differs (decoded, volatile fields blanked)\n  committed: %s\n  fresh:     %s", what, excerpt(vx, vy), excerpt(vy, vx))
+	}
+	return ""
+}
+
+// excerpt returns a window of a around its first difference with b.
+func excerpt(a, b []byte) string {
+	i := 0
+	for i < len(a) && i < len(b) && a[i] == b[i] {
+		i++
+	}
+	lo, hi := max(0, i-80), min(len(a), i+80)
+	return "..." + string(a[lo:hi]) + "..."
+}
+
 func readEvents(path string) ([]event, error) {
-	f, err := os.Open(path) //nolint:gosec // paths are the operator's own command-line arguments
+	f, err := os.Open(path) //nolint:gosec // operator-supplied paths
 	if err != nil {
 		return nil, err
 	}
@@ -160,54 +280,4 @@ func readEvents(path string) ([]event, error) {
 		out = append(out, ev)
 	}
 	return out, sc.Err()
-}
-
-// normalize renders an event with its volatile fields blanked: the envelope's
-// ts_ms/ts_us/ts_ns, the source block's timestamps, WAL positions and
-// transaction IDs, the runId context header, and the
-// partition of a null-key message, which the producer's sticky partitioner
-// picks at random (design D7).
-func normalize(ev event, avro bool) ([]byte, error) {
-	if len(ev.Key) == 0 || string(ev.Key) == "null" {
-		ev.Partition = -1
-	}
-	for i := range ev.Headers {
-		if ev.Headers[i].Key == "__debezium.context.runId" {
-			ev.Headers[i].Value = json.RawMessage(`"<volatile>"`)
-		}
-	}
-	if ev.Value != nil && ev.Value.Text != nil && !avro {
-		var v map[string]any
-		dec := json.NewDecoder(strings.NewReader(*ev.Value.Text))
-		dec.UseNumber()
-		if err := dec.Decode(&v); err != nil {
-			return nil, err
-		}
-		payload := v
-		if p, ok := v["payload"].(map[string]any); ok {
-			payload = p
-		}
-		blank(payload, volatileTop)
-		if src, ok := payload["source"].(map[string]any); ok {
-			blank(src, volatileSource)
-		}
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		s := string(b)
-		ev.Value.Text = &s
-	}
-	if avro {
-		ev.Value = nil
-	}
-	return json.Marshal(ev)
-}
-
-func blank(m map[string]any, keys []string) {
-	for _, k := range keys {
-		if _, ok := m[k]; ok {
-			m[k] = "<volatile>"
-		}
-	}
 }
