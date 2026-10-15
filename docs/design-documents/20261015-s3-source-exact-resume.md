@@ -22,8 +22,7 @@ The CDC position carries:
   plus a 16-byte hash, so it can be pruned by time after a restart;
 - a **bounded set `R`** of multipart uploads still in progress whose initiation time is below the cut (AWS stamps
   the completed object with that time). When one completes, its version below `S` is delivered because of `R`.
-  When `R` is full, the oldest untracked upload holds the cut instead (proposal; DeVaris to decide, see
-  _Tracked uploads_).
+  When `R` is full, the oldest untracked upload holds the cut instead (see _Tracked uploads_).
 
 A restart lists from `S` and delivers every version above it that is not in `E`, plus the versions below it
 that match `R`. When the window holds more
@@ -33,10 +32,17 @@ The snapshot delivers only objects settled at its start, resumes after the last 
 over to CDC with an empty `E`.
 
 Roadmap item: v0.21: S3 sink parity (#3009), certification of `builtin:s3` as source and destination. Risk
-tier: **Tier 1** (position format, source data path, invariants 2 and 3). Implementation waits for DeVaris's
-sign-off. Revision 4 addresses the review of revision 3 and puts R3 (tracked uploads) up for decision. Revision 3
-addressed the re-review of revision 2 (R1 to R8), and revision 2 the first review (B1 to B4, S1 to S7, N1 to N5).
-The changes are listed under _Revision history_.
+tier: **Tier 1** (position format, source data path, invariants 2 and 3).
+
+**Status: decided 2026-10-15** (DeVaris). Accepted as written in revision 4, with these decisions:
+
+- R3: tracked uploads, option (b) (the bounded set `R`, `cdc.maxTrackedUploads`). Alternative (a), idle release
+  via `ListParts` with `cdc.maxUploadIdle`, is rejected, and so is the WARN `s3.source.idle_upload_ignored`.
+- The default early-set bound is 2048.
+- Certification runs on defaults: the hour-long certified acceptance run is nightly, and a 30s fast lane runs on
+  every PR.
+
+The review history is under _Revision history_.
 
 ## Context
 
@@ -141,7 +147,7 @@ from the versions listing became visible after `Tv` was produced, so by A1 its L
 `Tv - lookback`, which is at least `C`. Revision 2's claim that the gap between the two calls is "trivially below
 the lookback" was wrong for slow listings and is withdrawn.
 
-**Tracked uploads (R3, proposal; DeVaris to decide).** A multipart upload that runs longer than the lookback
+**Tracked uploads (R3, decided 2026-10-15: option (b)).** A multipart upload that runs longer than the lookback
 must neither be lost nor stop the pipeline. `R` is a bounded set, carried in the CDC position, of entries
 `(16-byte hash of the key, Initiated in unix ms)` for old uploads still in progress. With `R` the cut advances
 normally past a tracked upload. When the upload completes, its version lands below `S` (AWS stamps it with
@@ -168,8 +174,7 @@ entry of `R`, which have not.
 `cdc.maxUploadIdle` (1h) stopped holding the cut. That **can lose a live upload**: one slow part, a 5 GB part at
 1 MB/s for instance, uploads for about 85 minutes without producing a new part. The upload is released while it
 is still running, completes below `S`, and is skipped. It also costs one `ListParts` request per old upload per
-poll and needs a second permission. If (a) were chosen anyway, `Open` would probe `ListParts` with a fake upload
-id: `NoSuchUpload` means permitted, AccessDenied means denied, and denied fails `Open` as in R4.
+poll and needs a second permission. Rejected on 2026-10-15; the source makes no `ListParts` calls.
 
 The cut never moves backwards in the persisted state: `S` only advances (below).
 
@@ -548,17 +553,36 @@ metrics hook.
 
 ## Implementation plan
 
-One Tier 1 PR in `conduit-connector-s3` after sign-off. It supersedes #1052, which closes.
+Small Tier 1 PRs in `conduit-connector-s3`, merged in order. The connector is released only after the last one,
+so no released version mixes the formats. Each PR carries its own tests from _Testing_.
 
-1. `source/position`: v2 codec, CRC, terminator; v1 parsing kept for upgrade only; fuzz target.
-2. Snapshot: `C0` with the multipart hold, `If-Match` fetch, `StartAfter` resume, no look-ahead, no anchor pass
-   (s3#1041).
-3. CDC: uploads listing with prefix and the active/idle/stale rules, `T = min(Tu, Tv)`, cut, settled heap
-   bounded by bytes, `S`/`E` with time-delta entries and incremental encoding, versioned or `If-Match` plus
-   `Last-Modified` fetch, removal of the dedupe budget and shrink code.
-4. `Open` checks for unsupported stores and the multipart permissions; validation of `lookbackPeriod` and
-   `maxPendingUploadAge`.
-5. Tests as above; the driver claims `ExactResume` on defaults; #1050 turns green.
+1. **Position v2 codec** (`source/position`): encoding with CRC and terminator, a strict parser, v1 parsing kept
+   for the upgrade only, and a fuzz target. Not wired into the iterators yet.
+2. **Snapshot** (s3#1041):
+   - `C0 = min(Tu, Tl) - lookback` and `R0`;
+   - `StartAfter` resume;
+   - `If-Match` plus the `Last-Modified` fetch;
+   - no look-ahead, no anchor pass;
+   - the handoff to CDC.
+
+   It supersedes #1052, which closes.
+3. **CDC**:
+   - the uploads listing with prefix, `R`, and the stale and hold rules;
+   - `T = min(Tu, Tv)` and the cut;
+   - the settled heap bounded by bytes;
+   - `S`/`E`/`R` in the position, with incremental encoding;
+   - the versioned or `If-Match` plus `Last-Modified` fetch;
+   - removal of the dedupe budget and shrink code;
+   - the memory test.
+4. **`Open` and configuration**: the unsupported-store and permission probes, validation of `lookbackPeriod` and
+   `maxPendingUploadAge`, and the new settings in the spec.
+5. **Certification**:
+   - the acceptance driver with pre-settled snapshot batches, the settling run and the fast lane;
+   - `ExactResume`;
+   - the chaos source variant;
+   - README and changelog.
+
+   After it, #1050 is green.
 
 Docs: the connector README and a changelog entry. The README covers:
 
@@ -584,7 +608,7 @@ Revision 4 (2026-10-15), after the review of revision 3 (no blockers):
 - The memory test is stated as connector-side only; the gRPC copy and SDK/engine clones are measured in the chaos
   harness.
 - `Date` rounding and first-page latency are named as the reason the 1s to 29s lookbacks are deprecated.
-- **R3, for DeVaris's decision**: proposal (b), the bounded tracked-upload set `R` in the position, replaces
+- **R3, decided 2026-10-15 for (b)**: the bounded tracked-upload set `R` in the position, replaces
   revision 3's idle release (a), which can lose a live upload with one slow part. `cdc.maxUploadIdle` and the
   `ListParts` calls are gone; `cdc.maxTrackedUploads` (256) is new.
 
