@@ -486,7 +486,10 @@ func (s *Service) Init(
 	instances := s.pipelines.List(ctx)
 	for _, instance := range instances {
 		if instance.GetStatus() == pipeline.StatusSystemStopped {
-			err := s.Start(ctx, instance.ID)
+			// #2989: the boot path records a config refusal as the
+			// pipeline's status, so `pipelines list` shows why it is not
+			// running instead of a plain stopped pipeline.
+			err := s.StartOnBoot(ctx, instance.ID)
 			if err != nil {
 				// try to start remaining pipelines and gather errors
 				errs = append(errs, err)
@@ -508,12 +511,30 @@ func (s *Service) Start(
 	ctx context.Context,
 	pipelineID string,
 ) error {
-	return s.startRun(ctx, pipelineID, nil)
+	return s.startRun(ctx, pipelineID, nil, false)
+}
+
+// StartOnBoot is Start for the boot path: Init (pipelines left
+// StatusSystemStopped by the previous process) and provisioning at startup.
+// It differs from Start in one way. When the start is refused because the
+// pipeline's config can't run on this engine
+// (CodeArchV2DestinationBatchingUnsupported), the refusal is also written as
+// the pipeline's status: StatusDegraded, with the coded error as the pipeline
+// error (#2989). The error is still returned.
+//
+// Start, the API path, leaves the status untouched: its caller receives the
+// refusal directly. At boot nobody does, apart from a log line, and the stored
+// StatusSystemStopped would show the pipeline as stopped with no error.
+// Degraded is not auto-started on the next boot, so the same refusal is not
+// retried at every start-up; fixing the config and starting the pipeline
+// clears it.
+func (s *Service) StartOnBoot(ctx context.Context, pipelineID string) error {
+	return s.startRun(ctx, pipelineID, nil, true)
 }
 
 // startRun is Start, and the recovery restart when predecessor is the run
-// waiting out its backoff.
-func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *runnablePipeline) (err error) {
+// waiting out its backoff. boot is set by StartOnBoot.
+func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *runnablePipeline, boot bool) (err error) {
 	// Invariant 7: once shutdown has begun no new run starts (#2901). The
 	// authoritative check is runPipeline's admission; this one just avoids
 	// building a run that would be refused.
@@ -550,6 +571,11 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	// (docs/design-documents/20261017-funnel-destination-batching.md) — but the
 	// DLQ is not wired through that path and is still refused.
 	if err := s.checkDLQBatching(pl); err != nil {
+	// nothing from the source and acks nothing (invariants 1 and 3).
+	if err := s.checkDestinationBatching(ctx, pl); err != nil {
+		if boot && predecessor == nil && res.took == nil {
+			s.recordBootRefusal(ctx, pl.ID, res, err)
+		}
 		return err
 	}
 
@@ -2690,7 +2716,7 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 	// is granted only if rp is still the registered run and no Start took
 	// over in the meantime. This replaces an unlocked "am I still the live
 	// run" check that an external Start could race (#2899 item 2).
-	err := s.startRun(ctx, rp.pipeline.ID, rp)
+	err := s.startRun(ctx, rp.pipeline.ID, rp, false)
 	if cerrors.Is(err, pipeline.ErrShuttingDown) {
 		// Shutdown began between the check above and Start's admission
 		// (#2901): same outcome as a shutdown during the wait.
