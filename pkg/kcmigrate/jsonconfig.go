@@ -164,6 +164,12 @@ func connectorFromObject(file string, obj *jnode, base string) (Connector, error
 	}
 	c.fillNameClass()
 	if name != "" {
+		// The top-level name is not a config key and gets no report entry, so
+		// a config "name" that disagrees with it is refused here, as Kafka
+		// Connect refuses it, rather than letting either one win silently.
+		if c.Name != "" && c.Name != name {
+			return Connector{}, unrecognized(file, base+"/name", fmt.Sprintf("the top-level name %q differs from the config's name %q", name, c.Name))
+		}
 		c.Name = name
 	}
 	return c, nil
@@ -196,6 +202,9 @@ func connectorFromExport(file string, m jmember) (Connector, error) {
 	}
 	if st := member(member(member(m.val, "status"), "connector"), "state"); st != nil && st.kind == 's' {
 		c.State = st.lit
+	}
+	if c.Name != "" && c.Name != m.key {
+		return Connector{}, unrecognized(file, base, fmt.Sprintf("export entry %q describes a connector named %q", m.key, c.Name))
 	}
 	c.Name = m.key
 	return c, nil

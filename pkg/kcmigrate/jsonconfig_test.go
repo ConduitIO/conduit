@@ -73,12 +73,19 @@ func TestParseConnectors_JSONConnectorForm(t *testing.T) {
 	})
 }
 
-func TestParseConnectors_TopLevelNameWins(t *testing.T) {
+// The wrapper members are not config keys (doc.go, "What counts as an input
+// key"): the top-level name and initial_state set Name and State and produce
+// no KV; the config's own "name" stays an input key.
+func TestParseConnectors_WrapperMembers(t *testing.T) {
 	is := is.New(t)
-	cs := mustParse(t, "c.json", `{"name": "top", "config": {"name": "inner", "connector.class": "X"}, "initial_state": "STOPPED"}`, FormatJSON)
+	cs := mustParse(t, "c.json", `{"name": "top", "config": {"name": "top", "connector.class": "X"}, "initial_state": "STOPPED"}`, FormatJSON)
 	is.Equal(cs[0].Name, "top")
 	is.Equal(cs[0].State, "STOPPED")
-	is.Equal(len(cs[0].Config), 2) // the inner name is still an input key
+	is.Equal(configOf(cs[0]), []cfgWant{{"name", "top", "/config/name"}, {"connector.class", "X", "/config/connector.class"}})
+
+	cs = mustParse(t, "c.json", `{"name": "only-top", "config": {"connector.class": "X"}}`, FormatJSON)
+	is.Equal(cs[0].Name, "only-top")
+	is.Equal(len(cs[0].Config), 1)
 }
 
 func TestParseConnectors_BareMap(t *testing.T) {
@@ -135,6 +142,9 @@ func TestParseConnectors_Errors(t *testing.T) {
 		{"name not a string", `{"name": 1, "config": {}}`, "", CodeInputUnrecognized, "#/name"},
 		{"export without info", `{"x": {"status": {"connector": {"state": "RUNNING"}}}}`, "", CodeInputUnrecognized, "#/x"},
 		{"export unknown member", `{"x": {"info": {"config": {}}, "extra": {}}}`, "", CodeInputUnrecognized, "#/x/extra"},
+		{"top-level name differs from config name", `{"name": "a", "config": {"name": "b"}}`, "", CodeInputUnrecognized, "#/name"},
+		{"export key differs from info name", `{"x": {"info": {"name": "y", "config": {}}}}`, "", CodeInputUnrecognized, "#/x"},
+		{"export key differs from config name", `{"x": {"info": {"config": {"name": "y"}}}}`, "", CodeInputUnrecognized, "#/x"},
 		{"connector form as rest-export", `{"name": "n", "config": {}}`, FormatRESTExport, CodeInputUnrecognized, "c.json"},
 		{"too deep", strings.Repeat(`{"a":`, MaxJSONDepth+2) + `"b"` + strings.Repeat(`}`, MaxJSONDepth+2), "", CodeInputTooLarge, ""},
 		{"unknown format", `a=b`, "xml", CodeInputUnrecognized, ""},
