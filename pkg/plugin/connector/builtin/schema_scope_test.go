@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
@@ -126,6 +127,6 @@ func TestDispenser_AdaptersCarrySchemaService(t *testing.T) {
 // instead of returning the coded error.
 func TestNewDispenserFactory_NilServiceIsUnscoped(t *testing.T) {
 	is := is.New(t)
-	d := newDispenserFactory(DefaultBuiltinConnectors["github.com/conduitio/conduit-connector-log"], nil)("", pconnector.PluginConfig{}, log.Nop())
+	d := newDispenserFactory(DefaultBuiltinConnectors["github.com/conduitio/conduit-connector-log"], nil)("", pconnector.PluginConfig{}, log.Nop(), hostpolicy.Policy{})
 	is.True(d.(*Dispenser).schemaService == nil)
 }
