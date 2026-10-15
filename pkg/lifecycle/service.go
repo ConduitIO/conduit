@@ -291,6 +291,11 @@ type PipelineService interface {
 // OnFailure registers a handler for a lifecycle.FailureEvent.
 // Only errors which happen after a pipeline has been started
 // are being sent.
+//
+// Handlers run synchronously inside the failed run's cleanup, before the run
+// exits. A handler must not call WaitPipeline or StopAndWait for the pipeline
+// it is notified about: those wait for the run to exit, so the call deadlocks.
+// Hand the work to another goroutine instead.
 func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
@@ -754,7 +759,10 @@ func (s *Service) waitInternal() error {
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped, and
-// returns the pipeline's terminal error (nil on a graceful stop).
+// returns the pipeline's terminal error (nil on a graceful stop). It returns
+// only once the run has fully exited, including its OnFailure handlers, so it
+// must not be called from one of those handlers for the same pipeline (see
+// OnFailure).
 //
 // It is safe to call before, during, or after the pipeline's own cleanup: while
 // the pipeline is running it waits on the tomb; if the pipeline has already
