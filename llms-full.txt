@@ -988,10 +988,11 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (139)
+## 3. Error codes (140)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
+| `cli.invalid_usage` | InvalidArgument | CodeInvalidUsage is raised when a command is invoked wrongly, before it does any work: an unknown or malformed flag, a missing or extra positional argument, a required flag left out, or flag values that fail to parse. It is distinct from common.invalid_argument because the fix is always to change the command line (see the command's --help), not the input it reads. InvalidArgument puts it in the validation exit bucket (exit 2, pkg/conduit/exitcode). |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |
