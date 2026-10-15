@@ -1,0 +1,197 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "v0.21.0",
+    "rules": [
+      {
+        "class": "io.debezium.connector.postgresql.PostgresConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "debezium",
+          "version": "3.7.0.Final"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 3,
+    "keys": 6,
+    "translated": 3,
+    "approximated": 1,
+    "unsupported": 2,
+    "blocking": 3
+  },
+  "connectors": [
+    {
+      "name": "connect-distributed.properties",
+      "class": "",
+      "role": "worker",
+      "entries": [
+        {
+          "key": "group.id",
+          "status": "translated",
+          "origin": {
+            "file": "connect-distributed.properties",
+            "line": 2,
+            "column": 1
+          },
+          "reason": "Conduit has no worker cluster.",
+          "blocking": false
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    },
+    {
+      "name": "orders-cdc",
+      "class": "io.debezium.connector.postgresql.PostgresConnector",
+      "role": "source",
+      "pipeline": "pipelines/orders-cdc.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:postgres",
+        "destination": "builtin:kafka",
+        "certification": {
+          "builtin:kafka": "tested",
+          "builtin:postgres": "certified"
+        }
+      },
+      "entries": [
+        {
+          "key": "database.password",
+          "status": "translated",
+          "origin": {
+            "file": "orders.json",
+            "pointer": "/config/database.password"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url",
+            "env": "KC_ORDERS_CDC_DATABASE_PASSWORD"
+          },
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "slot.name",
+          "status": "approximated",
+          "origin": {
+            "file": "orders.json",
+            "pointer": "/config/slot.name"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/logrepl.slotName"
+          },
+          "code": "kc.key_approximated",
+          "reason": "Conduit uses its own slot \"conduit_orders_cdc\" so rollback stays possible.",
+          "blocking": false
+        },
+        {
+          "key": "decimal.handling.mode",
+          "status": "unsupported",
+          "origin": {
+            "file": "orders.json",
+            "pointer": "/config/decimal.handling.mode"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "\"double\" is not an encoding Debezium-compatible output mode supports.",
+          "fix": "Use \"precise\" or \"string\", or keep this connector on Kafka Connect.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.route.type",
+          "status": "translated",
+          "origin": {
+            "file": "orders.json",
+            "pointer": "/config/transforms.route.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/0"
+          },
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.default_differs",
+          "reason": "plugin.name is absent, so Debezium uses decoderbufs; decoder differences are not emulated.",
+          "fix": "Set plugin.name=pgoutput in the Kafka Connect config, or accept the difference.",
+          "blocking": true,
+          "rule": "debezium-postgres/defaults/plugin.name"
+        }
+      ],
+      "transforms": [
+        {
+          "alias": "route",
+          "class": "org.apache.kafka.connect.transforms.RegexRouter",
+          "status": "translated",
+          "processor": "field.set"
+        }
+      ],
+      "resume": {
+        "strategy": "fresh",
+        "snapshot": "skipped",
+        "import": {
+          "setting": "logrepl.import.debeziumOffset",
+          "source": "topic",
+          "topic": "connect-offsets",
+          "key": "[\"orders-cdc\",{\"server\":\"orders\"}]"
+        },
+        "preflights": "pending",
+        "notes": [
+          "The no-re-snapshot claim holds only if the connector preflights pass."
+        ]
+      },
+      "outputCompat": {
+        "mode": "debezium",
+        "compat": "3.7",
+        "converters": {
+          "key": "io.confluent.connect.avro.AvroConverter",
+          "value": "io.confluent.connect.avro.AvroConverter",
+          "header": "org.apache.kafka.connect.storage.SimpleHeaderConverter"
+        },
+        "subjectStrategy": "TopicNameStrategy",
+        "differences": [
+          "D1",
+          "D2"
+        ]
+      }
+    },
+    {
+      "name": "custom",
+      "class": "com.example.CustomConnector",
+      "role": "unknown",
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "custom.properties",
+            "line": 1,
+            "column": 1
+          },
+          "code": "kc.connector_class_unsupported",
+          "reason": "com.example.CustomConnector has no Conduit mapping.",
+          "fix": "Keep this connector on Kafka Connect.",
+          "blocking": true
+        }
+      ],
+      "notes": [],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": [
+    {
+      "connector": "orders-cdc",
+      "code": "kc.key_unsupported",
+      "key": "decimal.handling.mode",
+      "origin": {
+        "file": "orders.json",
+        "pointer": "/config/decimal.handling.mode"
+      }
+    },
+    {
+      "connector": "orders-cdc",
+      "code": "kc.default_differs"
+    }
+  ]
+}
