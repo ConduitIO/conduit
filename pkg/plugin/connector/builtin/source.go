@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -45,24 +46,32 @@ type sourcePluginAdapter struct {
 	// attached to the context of each call to the plugin, see
 	// schema_scope.go. Nil when the adapter is used without a runtime.
 	schemaService pconnutils.SchemaService
+	// policy is the operator's ambient-credentials policy, attached to the
+	// context of each call to the plugin.
+	policy hostpolicy.Policy
 }
 
 var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
 
-func newSourcePluginAdapter(impl pconnector.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
+func newSourcePluginAdapter(impl pconnector.SourcePlugin, logger log.CtxLogger, policy hostpolicy.Policy) *sourcePluginAdapter {
 	return &sourcePluginAdapter{
 		impl:      impl,
 		logger:    logger.WithComponent("builtin.sourcePluginAdapter"),
 		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent(),
+		policy:    policy,
 	}
 }
 
 // pluginContext returns the context for a call into the plugin: it carries
-// the plugin logger and this runtime's schema service.
+// the plugin logger, this runtime's schema service and the operator's
+// ambient-credentials policy.
 func (s *sourcePluginAdapter) pluginContext(ctx context.Context) context.Context {
 	// Invariant 6: the connector resolves and registers schemas in its own
 	// runtime's registry, never in another runtime's in the same process.
-	return contextWithSchemaService(s.ctxLogger.WithContext(ctx), s.schemaService)
+	// Invariant (ambient credentials): this is the only place the policy
+	// enters a built-in connector, and it comes from the engine, never from
+	// the request.
+	return hostpolicy.WithPolicy(contextWithSchemaService(s.ctxLogger.WithContext(ctx), s.schemaService), s.policy)
 }
 
 func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error) {
@@ -96,7 +105,7 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceR
 	go func() {
 		err := s.impl.Run(s.pluginContext(ctx), stream)
 		if err != nil {
-			if !inmemStream.Close(err) {
+			if !inmemStream.Close(convertPolicyError(err)) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {

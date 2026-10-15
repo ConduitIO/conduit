@@ -37,6 +37,9 @@ const (
 	NameEngineReachable         = "engine.reachable"
 	NamePluginsStandaloneCompat = "plugins.standalone_compat"
 	NamePluginsStandaloneEnv    = "plugins.standalone_env"
+	// NameConnectorsAmbientCredentials shows the effective
+	// connectors.ambient-credentials.* policy.
+	NameConnectorsAmbientCredentials = "connectors.ambient_credentials" //nolint:gosec // G101 false positive: a check name
 )
 
 // Categories doctor's own checks use for human-output grouping (see
@@ -108,6 +111,7 @@ func CheckNames() []string {
 		NameEngineReachable,
 		NamePluginsStandaloneCompat,
 		NamePluginsStandaloneEnv,
+		NameConnectorsAmbientCredentials,
 	}
 }
 
@@ -123,6 +127,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 	checks := []check.Check{
 		configResolveCheck{cfg: cfg},
 		configValidateCheck{cfg: cfg},
+		ambientCredentialsCheck{cfg: cfg, environ: opts.Environ},
 		storeReachableCheck{cfg: cfg, logger: logger},
 	}
 

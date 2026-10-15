@@ -99,7 +99,11 @@ func renderLLMSTxt(d generatedData) string {
 		"`docker compose up -d --wait` starts a pinned, signed image with a running pipeline; state on a named volume.\n")
 	b.WriteString("- [systemd, ECS and Nomad examples](https://github.com/ConduitIO/conduit/tree/main/deploy): " +
 		"examples, not supported products. Set the stop timeout above 30 s so SIGTERM can drain; probes are " +
-		"`/healthz` (liveness) and `/readyz` (readiness); the API is unauthenticated.\n\n")
+		"`/healthz` (liveness) and `/readyz` (readiness); the API is unauthenticated.\n")
+	b.WriteString("- [Ambient cloud credentials](https://github.com/ConduitIO/conduit/blob/main/docs/operations/ambient-credentials.md): " +
+		"built-in connectors use the host's identity (for example the AWS default chain) only when the operator sets " +
+		"`connectors.ambient-credentials.enabled=true` with exact `allow-resources`; a pipeline must name `builtin:s3`. " +
+		"Off by default.\n\n")
 
 	b.WriteString("## Full detail\n")
 	b.WriteString("- [llms-full.txt](llms-full.txt)\n")

@@ -988,24 +988,33 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (139)
+## 3. Error codes (148)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |
+| `config.ambient_proxy_env` | FailedPrecondition | CodeAmbientProxyEnv is a startup error: ambient credentials are enabled while an HTTP proxy variable is set and allow-proxy is false. |
+| `config.ambient_resource_wildcard` | InvalidArgument | CodeAmbientResourceWildcard is a startup error: an entry of connectors.ambient-credentials.allow-resources contains '*'. Bucket names are globally registrable, so a pattern would admit buckets anyone can create. |
 | `config.field_invalid` | InvalidArgument | config: field invalid |
 | `config.field_renamed` | InvalidArgument | CodeFieldRenamed is the stable code carried by a lint warning for a deprecated field that was mechanically renamed (the old key's value moves unchanged to a new key) — see pkg/provisioning/config/yaml/internal.Change.RenamedTo and (*configLinter).newWarning. It is distinct from the generic validate.CodeLintWarning so cmd/conduit/internal/repair's fix-producer scan (design doc 20260712-repair-command.md §6, item #1) can find exactly these findings without pattern-matching warning text. |
 | `config.field_required` | InvalidArgument | config: field required |
 | `config.field_too_long` | InvalidArgument | config: field too long |
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
+| `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
+| `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
+| `connector.endpoint_link_local` | PermissionDenied | CodeEndpointLinkLocal is raised when an ambient-credential connection would go to a link-local or cloud metadata address. |
+| `connector.endpoint_not_allowed` | PermissionDenied | CodeEndpointNotAllowed is raised when, under ambient credentials, an endpoint is not https or not an exact allow-endpoints entry. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
 | `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
+| `connector.proxy_not_allowed` | PermissionDenied | CodeProxyNotAllowed is raised when a proxy variable is set and the operator has not set connectors.ambient-credentials.allow-proxy. |
+| `connector.redirect_refused` | PermissionDenied | CodeRedirectRefused is raised when a server redirects an ambient-credential request to another host or a non-https URL. |
+| `connector.resource_not_allowed` | PermissionDenied | CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an exact allow-resources entry, or is an ARN or alias form. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
