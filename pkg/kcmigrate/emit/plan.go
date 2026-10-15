@@ -299,6 +299,20 @@ const (
 // with *ConflictError. ErrNoSide when the side does not exist in this
 // pipeline; an error for an unknown side.
 func (p *Plan) Set(side, setting, value, key string) (path, overriddenBy string, err error) {
+	return p.put(side, setting, &value, key)
+}
+
+// claim takes setting for key, like Set, but leaves it unset: the key is
+// blocked, and its value, which Kafka Connect would use, cannot be written.
+// A lower layer's value is removed and a later lower layer cannot fill it.
+func (p *Plan) claim(side, setting, key string) {
+	if _, _, err := p.put(side, setting, nil, key); err != nil {
+		return // a conflict or a missing side leaves nothing to claim
+	}
+}
+
+// put writes value, or removes the setting when value is nil.
+func (p *Plan) put(side, setting string, value *string, key string) (path, overriddenBy string, err error) {
 	idx, err := p.sides(side)
 	if err != nil {
 		return "", "", err
@@ -334,10 +348,14 @@ func (p *Plan) Set(side, setting, value, key string) (path, overriddenBy string,
 			p.superseded[o.keyRef] = key
 		}
 		c := &p.connectors[i]
-		if c.Settings == nil {
-			c.Settings = map[string]string{}
+		switch {
+		case value == nil:
+			delete(c.Settings, setting)
+		case c.Settings == nil:
+			c.Settings = map[string]string{setting: *value}
+		default:
+			c.Settings[setting] = *value
 		}
-		c.Settings[setting] = value
 		p.owner[paths[j]] = owner{keyRef: me, layer: p.layer}
 	}
 	return paths[0], "", nil

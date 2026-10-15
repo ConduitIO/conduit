@@ -158,9 +158,49 @@ func (p *Plan) brokersOwner(side string) string {
 }
 
 func apply(p *Plan, d *rules.Decision, origin string, base int) error {
-	if d.Emit == nil {
-		return nil
+	if d.Emit != nil {
+		if err := applyKind(p, d, origin, base); err != nil {
+			return err
+		}
 	}
+	if d.Entry.Blocking {
+		claimAll(p, d, origin, base)
+	}
+	return nil
+}
+
+// claimAll makes a blocked key the owner of every setting its rule could
+// write, at the layer of each action, so that the pipeline does not run
+// with a lower layer's value Kafka Connect would not have used. The setting
+// stays unset; the blocking entry says why. Invariant: a value never reaches
+// a pipeline from a layer below a key Kafka Connect would apply.
+func claimAll(p *Plan, d *rules.Decision, origin string, base int) {
+	for _, a := range d.Claims {
+		offset, err := layerOffset(a)
+		if err != nil || isFallback(&a) {
+			continue // a fallback has no lower layer; a bad layer fails in applyKind and in tests
+		}
+		p.origin, p.layer = origin, base+offset
+		for _, name := range claimedSettings(a) {
+			p.claim(a.Args["side"], name, d.KV.Key)
+		}
+	}
+}
+
+// claimedSettings names the settings an action writes.
+func claimedSettings(a rules.Action) []string {
+	switch a.Kind {
+	case KindSetting, KindList:
+		return []string{a.Args["name"]}
+	case KindTLS:
+		return []string{"tls.enabled"}
+	case KindSASLJAAS:
+		return []string{"saslUsername", "saslPassword"}
+	}
+	return nil
+}
+
+func applyKind(p *Plan, d *rules.Decision, origin string, base int) error {
 	k, ok := kinds[d.Emit.Kind]
 	if !ok {
 		return cerrors.Errorf("key %s: rule names unknown emit kind %q", d.KV.Key, d.Emit.Kind)
@@ -282,6 +322,18 @@ var envReference = regexp.MustCompile(`^\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}$`)
 var wholeReference = regexp.MustCompile(`^\$\{[^}]*?:[^}]*\}$`)
 
 var envUnsafe = regexp.MustCompile(`[^A-Z0-9]+`)
+
+// IsLiteralSecret reports whether d holds a secret as a literal value in its
+// input: a secret key whose value is not exactly one config-provider
+// reference. The same test secretRef applies, so the report's plaintext note
+// and the variables agree.
+func IsLiteralSecret(d rules.Decision) bool {
+	raw := d.KV.Value.Reveal() // compared only
+	if !d.Secret && !kcmigrate.IsSecretKey(d.KV.Key) || strings.TrimSpace(raw) == "" {
+		return false
+	}
+	return envReference.FindStringSubmatch(raw) == nil && !wholeReference.MatchString(raw)
+}
 
 // secretRef returns the ${VAR} that replaces d's value and records the
 // variable. ${env:NAME} keeps its variable; any other value, literal or

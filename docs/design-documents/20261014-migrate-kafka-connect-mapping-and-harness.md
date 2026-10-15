@@ -352,8 +352,11 @@ keys. Rule files name layers (`client`, `cluster-client`, `override`, `fallback`
 `override` is above every other connector layer. A `fallback` cluster (MirrorMaker's `target.cluster.*`) is used
 as a whole or not at all: when any other layer names the side's brokers, none of its keys is written and each
 entry says so, so two clusters' settings never mix. Entries a higher layer replaced are marked after every layer
-is applied, and a variable whose setting was replaced is not listed in `secrets.env.template`. Found in review
-of #3117.
+is applied, and a variable whose setting was replaced is not listed in `secrets.env.template`. A blocked key still
+owns every setting its rule could write: Kafka Connect would use its value, so the setting stays unset (a required
+one gets its variable) and no lower layer fills it, also under `--accept-gaps`. `kc.secret_plaintext` follows the
+input, not the pipeline: a literal secret in a key that ends up unused is still noted, on the worker file's entry
+when it is in the worker file. Found in review of #3117.
 
 #### Debezium PostgreSQL
 

@@ -130,6 +130,9 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 		}
 		ds, rc := engine.Worker(w)
 		workerDs = ds
+		if hasLiteralSecret(ds) {
+			rc.Notes = append(rc.Notes, plaintextNote())
+		}
 		rep.Connectors = append(rep.Connectors, rc)
 	}
 
@@ -284,17 +287,34 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
 	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)
+	// From the input, not the plan: a literal in a key that ends up unused
+	// (overridden, an unused fallback cluster) is still in the input file.
+	// A worker literal the pipeline uses is noted here too.
+	literal := hasLiteralSecret(cl.Decisions)
 	for _, s := range plan.Secrets() {
-		if s.Literal {
-			run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
-				Code: kcmigrate.CodeSecretPlaintext.Reason(), Rule: "secrets",
-				Reason: "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
-				Fix:    "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
-			})
-			break
-		}
+		literal = literal || s.Literal
+	}
+	if literal {
+		run.rc.Notes = append(run.rc.Notes, plaintextNote())
 	}
 	return run, nil
+}
+
+func hasLiteralSecret(ds []rules.Decision) bool {
+	for _, d := range ds {
+		if emit.IsLiteralSecret(d) {
+			return true
+		}
+	}
+	return false
+}
+
+func plaintextNote() kcmigrate.Note {
+	return kcmigrate.Note{
+		Code: kcmigrate.CodeSecretPlaintext.Reason(), Rule: "secrets",
+		Reason: "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+		Fix:    "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+	}
 }
 
 // pipelineStatus is stopped when the connector, or the worker every

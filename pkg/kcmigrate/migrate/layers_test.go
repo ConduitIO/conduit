@@ -43,6 +43,18 @@ keys:
     status: translated
     emit: {kind: setting, side: destination, name: saslMechanism, layer: client}
     diff: identity
+  - key: x.sasl.mechanism
+    diff: identity
+    values:
+      - match: [PLAIN, SCRAM-SHA-512]
+        status: translated
+        emit: {kind: setting, side: destination, name: saslMechanism, layer: cluster-client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not supported.
+        fix: Change it.
   - key: source.cluster.bootstrap.servers
     status: translated
     emit: {kind: setting, side: source, name: servers}
@@ -206,4 +218,64 @@ func TestLayers_WorkerReachesOnlyConnectsOwnClient(t *testing.T) {
 	}
 	is.True(required)
 	is.Equal(connectorOf(res).PipelineStatus, kcmigrate.PipelineStopped)
+}
+
+// A blocked key still owns what it would have set: Kafka Connect uses its
+// value, so no lower layer may fill the setting in its place, even under
+// --accept-gaps. The setting stays unset and the blocking entry stands.
+func TestLayers_BlockedKeyOwnsItsSettings(t *testing.T) {
+	is := is.New(t)
+	login := `org.apache.kafka.common.security.plain.PlainLoginModule required username="worker" password="WPCANARY";`
+	res := clientRun(t, "bootstrap.servers=k:9092\nproducer.sasl.mechanism=PLAIN\nproducer.sasl.jaas.config="+login+"\n"+conv,
+		source+"producer.override.sasl.jaas.config=${env:MY_PW}\nproducer.override.sasl.mechanism=GSSAPI\n")
+	is.True(entryFor(res.Report.Connectors[1], "producer.override.sasl.jaas.config").Blocking)
+	is.True(entryFor(res.Report.Connectors[1], "producer.override.sasl.mechanism").Blocking)
+	dst := settings(t, res, "pipelines/c.yaml", "destination")
+	for _, k := range []string{"saslUsername", "saslPassword", "saslMechanism"} {
+		_, ok := dst[k]
+		is.True(!ok) // not the worker's login
+	}
+	is.True(!strings.Contains(file(res, SecretsTemplateFile), "_PRODUCER_SASL_JAAS_CONFIG="))
+
+	// A blocked key also removes what a lower layer of the same config
+	// wrote before it.
+	res = mirrorRun(t, "", "source.cluster.bootstrap.servers=s:9092\ntopics=t\nproducer.sasl.mechanism=PLAIN\nx.sasl.mechanism=GSSAPI\n")
+	_, ok := settings(t, res, "pipelines/c.yaml", "destination")["saslMechanism"]
+	is.True(!ok)
+	is.True(entryFor(connectorOf(res), "producer.sasl.mechanism").Target == nil)
+
+	// A required setting a blocked key claims still gets its variable, so
+	// the pipeline validates.
+	res = mirrorRun(t, "", "source.cluster.bootstrap.servers=s:9092\ntopics=a,,b\n")
+	is.True(entryFor(connectorOf(res), "topics").Blocking)
+	is.Equal(settings(t, res, "pipelines/c.yaml", "source")["topics"], "${KC_C_SOURCE_TOPICS}")
+}
+
+// The plaintext note follows the input, not the pipeline: a literal secret
+// in a key that ends up unused is still in the input file.
+func TestLayers_PlaintextNoteFollowsInput(t *testing.T) {
+	is := is.New(t)
+	hasNote := func(rc kcmigrate.ReportConnector) bool {
+		for _, n := range rc.Notes {
+			if n.Code == kcmigrate.CodeSecretPlaintext.Reason() {
+				return true
+			}
+		}
+		return false
+	}
+	jaas := `target.cluster.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="t" password="TCANARY";` + "\n"
+	res := mirrorRun(t, "bootstrap.servers=w:9092\n"+conv, "source.cluster.bootstrap.servers=s:9092\ntopics=t\n"+jaas)
+	is.True(entryFor(connectorOf(res), "target.cluster.sasl.jaas.config").Target == nil) // unused
+	is.True(hasNote(connectorOf(res)))
+
+	// A literal in the worker file is noted on the worker, also when every
+	// pipeline overrides it.
+	login := `org.apache.kafka.common.security.plain.PlainLoginModule required username="w" password="WCANARY";`
+	res = clientRun(t, "bootstrap.servers=k:9092\nproducer.sasl.jaas.config="+login+"\n"+conv,
+		source+`producer.override.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="c" password="${env:MY_PW}";`+"\n")
+	is.True(hasNote(res.Report.Connectors[0]))
+
+	res = clientRun(t, "bootstrap.servers=k:9092\n"+conv, source+"producer.override.sasl.jaas.config=${env:MY_PW}\n")
+	is.True(!hasNote(res.Report.Connectors[0]))
+	is.True(!hasNote(res.Report.Connectors[1])) // a reference is not a literal
 }

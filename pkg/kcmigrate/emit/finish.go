@@ -128,6 +128,8 @@ func requiredFix(p *Plan, side, name, env string) string {
 	return fix + "."
 }
 
+const layerRequired = 100
+
 func valueOr(cfg map[string]string, key, def string) string {
 	if v, ok := cfg[key]; ok {
 		return v
@@ -157,7 +159,10 @@ func RequireSettings(p *Plan, required Required) []kcmigrate.Note {
 				continue
 			}
 			env := p.envs.claim(strings.Trim(envUnsafe.ReplaceAllString("KC_"+strings.ToUpper(p.ID+"_"+side+"_"+name), "_"), "_"), p.ID+"\x00required "+side+" "+name)
-			p.origin, p.layer = OriginConnector, LayerConnector
+			// Above every layer, so a setting a blocked key claims (and
+			// left unset) still gets its variable; it writes only unset
+			// settings, so it never replaces a value.
+			p.origin, p.layer = OriginConnector, layerRequired
 			if _, _, err := p.Set(side, name, "${"+env+"}", "(required "+side+" "+name+")"); err != nil {
 				continue // cannot happen: the setting is unset
 			}
