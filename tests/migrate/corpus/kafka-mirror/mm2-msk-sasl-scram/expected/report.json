@@ -8,7 +8,7 @@
         "rulesVersion": 1,
         "upstream": {
           "name": "kafka",
-          "version": "4.2"
+          "version": "4.3"
         }
       },
       {
@@ -16,7 +16,7 @@
         "rulesVersion": 1,
         "upstream": {
           "name": "kafka",
-          "version": "4.2"
+          "version": "4.3"
         }
       }
     ]
@@ -81,7 +81,7 @@
             "pointer": "/clusters"
           },
           "code": "kc.key_unknown",
-          "reason": "No rule in the org.apache.kafka.connect.mirror.MirrorSourceConnector rules (written against kafka 4.2) knows clusters.",
+          "reason": "No rule in the org.apache.kafka.connect.mirror.MirrorSourceConnector rules (written against kafka 4.3) knows clusters.",
           "fix": "Check the key for a typo. If it is a key of a newer upstream version, keep this connector on Kafka Connect until migrate's rules cover it.",
           "blocking": true
         },

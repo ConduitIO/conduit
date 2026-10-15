@@ -1,7 +1,7 @@
 # Upstream key snapshot for rules/data/mirror-source.yaml: the
-# MirrorSourceConnector keys of Apache Kafka 4.2.0 with their defaults.
+# MirrorSourceConnector keys of Apache Kafka 4.3.1 with their defaults.
 #
-# Transcribed by hand from the 4.2.0 sources: MirrorConnectorConfig.java
+# Transcribed by hand from the 4.2.0 sources, moved to 4.3.1: MirrorConnectorConfig.java
 # (base keys), MirrorSourceConfig.java, MirrorClientConfig.java,
 # DefaultTopicFilter.java, DefaultConfigPropertyFilter.java and
 # DefaultReplicationPolicy.java (connect/mirror and connect/mirror-client).
@@ -11,12 +11,12 @@
 # covered by prefix rules, not listed here.
 scope: source
 class: org.apache.kafka.connect.mirror.MirrorSourceConnector
-upstream: {name: kafka, version: "4.2"}
+upstream: {name: kafka, version: "4.3"}
 sources:
-  - https://github.com/apache/kafka/blob/4.2.0/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorConnectorConfig.java
-  - https://github.com/apache/kafka/blob/4.2.0/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorSourceConfig.java
-  - https://github.com/apache/kafka/blob/4.2.0/connect/mirror-client/src/main/java/org/apache/kafka/connect/mirror/MirrorClientConfig.java
-# Checked nightly against the generated MirrorMaker pages of 4.2 and of the
+  - https://github.com/apache/kafka/blob/4.3.1/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorConnectorConfig.java
+  - https://github.com/apache/kafka/blob/4.3.1/connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorSourceConfig.java
+  - https://github.com/apache/kafka/blob/4.3.1/connect/mirror-client/src/main/java/org/apache/kafka/connect/mirror/MirrorClientConfig.java
+# Checked nightly against the generated MirrorMaker pages of 4.3 and of the
 # newest documented version (cmd/conduit/internal/kcdrift).
 check:
   site: kafka
@@ -28,7 +28,7 @@ check:
       reason: MirrorMaker's top-level client keys; the rules cover the cluster-prefixed forms (source.cluster.*, target.cluster.*), which is where connector-form configs set them.
 keys:
   - {key: enabled, default: "true"}
-  - {key: source.cluster.alias}
+  - {key: source.cluster.alias, required: true}
   - {key: target.cluster.alias, default: target}
   - {key: replication.policy.class, default: org.apache.kafka.connect.mirror.DefaultReplicationPolicy}
   - {key: replication.policy.separator, default: "."}
@@ -40,7 +40,8 @@ keys:
   - {key: emit.offset-syncs.enabled, default: "true"}
   - {key: topics, default: ".*"}
   - {key: topics.exclude, default: 'mm2.*\.internal, .*\.replica, __.*'}
-  - {key: config.properties.exclude, default: 'follower\.replication\.throttled\.replicas, leader\.replication\.throttled\.replicas, message\.timestamp\.difference\.max\.ms, message\.timestamp\.type, unclean\.leader\.election\.enable, min\.insync\.replicas'}
+  - {key: config.properties.exclude, default: 'follower.replication.throttled.replicas, leader.replication.throttled.replicas, message.timestamp.difference.max.ms, log.message.timestamp.before.max.ms, log.message.timestamp.after.max.ms, message.timestamp.type, unclean.leader.election.enable, min.insync.replicas'}
+  - {key: metric.names.formats, default: legacy}
   - {key: config.property.filter.class, default: org.apache.kafka.connect.mirror.DefaultConfigPropertyFilter}
   - {key: consumer.poll.timeout.ms, default: "1000"}
   - {key: refresh.topics.enabled, default: "true"}

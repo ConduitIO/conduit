@@ -2,7 +2,7 @@
 # to builtin:kafka source (the source cluster) and builtin:kafka destination.
 # Mapping design 20261014-migrate-kafka-connect-mapping-and-harness.md,
 # "MirrorMaker-style Kafka to Kafka", with two corrections from the Apache
-# Kafka 4.2.0 sources:
+# Kafka 4.3.1 sources:
 #   - MirrorSourceTask reads the source cluster with its own consumer:
 #     source.cluster.* (client keys only), then the connector's consumer.*,
 #     then source.consumer.* (MirrorConnectorConfig.sourceConsumerConfig).
@@ -19,18 +19,18 @@
 rulesVersion: 1
 scope: source
 class: org.apache.kafka.connect.mirror.MirrorSourceConnector
-upstream: {name: kafka, version: "4.2"}
+upstream: {name: kafka, version: "4.3"}
 emits:
   - {plugin: builtin:kafka, role: source}
   - {plugin: builtin:kafka, role: destination}
 finish:
-  # No default in 4.2 (MirrorConnectorConfig.java:270-273): Kafka Connect
+  # No default (MirrorConnectorConfig.java:274-278, 4.3.1): Kafka Connect
   # rejects a config without it.
   - {kind: require-key, key: source.cluster.alias}
   - {kind: mm2-topic}
   # MirrorMaker reads a partition with no stored offset from the beginning
   # (sourceConsumerConfig puts auto.offset.reset=earliest if absent,
-  # MirrorConnectorConfig.java:184); the Kafka source starts at the end.
+  # MirrorConnectorConfig.java:189, 4.3.1); the Kafka source starts at the end.
   - {kind: default-setting, side: source, name: readFromBeginning, value: "true"}
   # Says where the pipeline starts; after default-setting.
   - {kind: mm2-offsets}
@@ -523,6 +523,11 @@ keys:
     reason: Only matters while sync.topic.configs.enabled is true, which is reported on its own.
     emit: {kind: none}
     diff: tuning
+  - key: metric.names.formats
+    status: translated
+    reason: Names MirrorMaker's own JMX metrics (legacy, new, or both; deprecated in 4.3, removed in 5.0), which describe no record. It has no effect on the pipeline, which reports Conduit's metrics.
+    emit: {kind: none}
+    diff: tuning
   - key: config.properties.exclude
     status: unsupported
     code: kc.key_unsupported
@@ -776,7 +781,7 @@ defaults:
       reason: sync.topic.configs.enabled is absent (true), so MirrorMaker syncs topic configs to the destination; the pipeline does not.
       fix: Create the destination topics ahead of time with the source topics' configs, or set sync.topic.configs.enabled=false if they already match.
   - key: config.properties.exclude
-    default: 'follower\.replication\.throttled\.replicas, leader\.replication\.throttled\.replicas, message\.timestamp\.difference\.max\.ms, message\.timestamp\.type, unclean\.leader\.election\.enable, min\.insync\.replicas'
+    default: 'follower.replication.throttled.replicas, leader.replication.throttled.replicas, message.timestamp.difference.max.ms, log.message.timestamp.before.max.ms, log.message.timestamp.after.max.ms, message.timestamp.type, unclean.leader.election.enable, min.insync.replicas'
     coveredBy: kc.default_differs
   - key: config.property.filter.class
     default: org.apache.kafka.connect.mirror.DefaultConfigPropertyFilter

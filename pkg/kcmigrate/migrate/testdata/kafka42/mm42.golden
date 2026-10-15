@@ -1,0 +1,69 @@
+## pipelines/mm42.yaml
+version: "2.2"
+pipelines:
+  - id: mm42
+    status: stopped
+    description: Migrated from Kafka Connect connector "mm42" (org.apache.kafka.connect.mirror.MirrorSourceConnector) by conduit v; report sha256:<hash>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          readFromBeginning: "false"
+          saslMechanism: SCRAM-SHA-512
+          saslPassword: ${KC_MM42_SOURCE_CLUSTER_SASL_JAAS_CONFIG}
+          saslUsername: u
+          servers: east.internal.example:9096
+          tls.enabled: "true"
+          topics: orders,payments
+      - id: destination
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          acks: all
+          compression: zstd
+          servers: west.internal.example:9096
+          tls.enabled: "true"
+          topic: east_{{ index .Metadata "opencdc.collection" }}
+## secrets.env.template
+# Environment variables the migrated pipelines reference. migrate never writes their values.
+
+# mm42: source.cluster.sasl.jaas.config (mm42.properties:11:1)
+KC_MM42_SOURCE_CLUSTER_SASL_JAAS_CONFIG=
+## worker.properties (worker) pipeline= status=
+entry bootstrap.servers translated  blocking=false secret=false target=
+entry producer.security.protocol translated  blocking=false secret=false target=
+## mm42 (source) pipeline=pipelines/mm42.yaml status=stopped
+entry name translated  blocking=false secret=false target=
+entry connector.class translated  blocking=false secret=false target=
+entry key.converter translated  blocking=false secret=false target=
+entry value.converter translated  blocking=false secret=false target=
+entry source.cluster.alias translated  blocking=false secret=false target=
+entry target.cluster.alias translated  blocking=false secret=false target=
+entry replication.policy.separator translated  blocking=false secret=false target=
+entry source.cluster.bootstrap.servers translated  blocking=false secret=false target=/pipelines/0/connectors/0/settings/servers 
+entry source.cluster.security.protocol translated  blocking=false secret=false target=/pipelines/0/connectors/0/settings/tls.enabled 
+entry source.cluster.sasl.mechanism translated  blocking=false secret=false target=/pipelines/0/connectors/0/settings/saslMechanism 
+entry source.cluster.sasl.jaas.config translated  blocking=false secret=true target=/pipelines/0/connectors/0/settings/saslUsername KC_MM42_SOURCE_CLUSTER_SASL_JAAS_CONFIG
+entry target.cluster.bootstrap.servers translated  blocking=false secret=false target=
+entry target.cluster.security.protocol translated  blocking=false secret=false target=
+entry consumer.auto.offset.reset translated  blocking=false secret=false target=/pipelines/0/connectors/0/settings/readFromBeginning 
+entry consumer.isolation.level translated  blocking=false secret=false target=
+entry source.consumer.max.poll.records unsupported kc.key_unsupported blocking=false secret=false target=
+entry producer.override.compression.type translated  blocking=false secret=false target=/pipelines/0/connectors/1/settings/compression 
+entry producer.override.acks translated  blocking=false secret=false target=/pipelines/0/connectors/1/settings/acks 
+entry topics translated  blocking=false secret=false target=/pipelines/0/connectors/0/settings/topics 
+entry refresh.topics.enabled translated  blocking=false secret=false target=
+entry sync.topic.configs.enabled translated  blocking=false secret=false target=
+entry sync.topic.acls.enabled translated  blocking=false secret=false target=
+entry emit.offset-syncs.enabled translated  blocking=false secret=false target=
+entry heartbeats.replication.enabled translated  blocking=false secret=false target=
+entry config.properties.exclude unsupported kc.key_unsupported blocking=false secret=false target=
+entry replication.factor unsupported kc.key_unsupported blocking=false secret=false target=
+entry offset.lag.max unsupported kc.key_unsupported blocking=false secret=false target=
+entry tasks.max approximated kc.key_approximated blocking=false secret=false target=
+note kc.output_shape_differs blocking=true rule=mirror-source/notes/kc.output_shape_differs
+note kc.offsets_not_migrated blocking=true rule=mm2-offsets
+note kc.secret_plaintext blocking=false rule=secrets
+note kc.default_differs blocking=false rule=shared/defaults/errors.retry.timeout
+note kc.default_differs blocking=false rule=shared/defaults/header.converter

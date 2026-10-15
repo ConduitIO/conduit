@@ -689,6 +689,14 @@ owns the setting, so the Kafka source's default, the end, applies) skip the reco
 starts. Under `--accept-gaps` the report's
 `acceptedGaps` names the note. Found in review of #3118.
 
+**Kafka 4.3 (pinned 2026-10-15).** The shared, worker and MirrorMaker rules and snapshots moved from 4.2 to 4.3,
+the newest version with published config pages (4.4.0 is released; its pages are not). The upstream-drift check
+found the two differences: 4.3 adds `metric.names.formats` (MirrorMaker's own JMX naming, deprecated: T with
+no effect, emit `none`), and the default of `config.properties.exclude` gains two timestamp properties and drops its regex
+escaping. Neither touches the data path, and a test pins that a 4.2-era MirrorMaker config migrates exactly as it
+did under the 4.2 pin. The `MirrorConnectorConfig.java` line numbers cited above are 4.2.0's; in
+4.3.1 they are 5 higher. `Worker.java` is unchanged.
+
 #### Legacy and alias handling
 
 A rule may declare `aliasOf: <key>`. An aliased key is translated exactly as its modern name and additionally

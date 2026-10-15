@@ -4,7 +4,7 @@
 # Source: Apache Kafka 4.2 generated connect_config.
 rulesVersion: 1
 scope: worker
-upstream: {name: kafka, version: "4.2"}
+upstream: {name: kafka, version: "4.3"}
 keys:
   - key: bootstrap.servers
     status: translated
@@ -106,7 +106,7 @@ keys:
   # group membership; they never reach a connector's producer or consumer,
   # which get only bootstrap.servers and the producer.- or consumer.-prefixed
   # keys below (Worker.baseProducerConfigs and baseConsumerConfigs, Apache
-  # Kafka 4.2.0, Worker.java:837-874 and 911-942). So they have no effect on a pipeline.
+  # Kafka 4.3.1, Worker.java:837-874 and 911-942; unchanged since 4.2.0). So they have no effect on a pipeline.
   - key: {regex: '^(security\.protocol|sasl\..+|ssl\..+)$'}
     status: translated
     reason: Configures the worker's own Kafka clients, which Conduit does not have; connector clients take their security from the producer.- and consumer.-prefixed worker keys or their own overrides.

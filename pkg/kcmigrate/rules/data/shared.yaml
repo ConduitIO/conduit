@@ -9,7 +9,7 @@
 # here, so a migration that needs them stops instead of running differently.
 rulesVersion: 1
 scope: shared
-upstream: {name: kafka, version: "4.2"}
+upstream: {name: kafka, version: "4.3"}
 keys:
   - key: name
     status: translated
@@ -325,7 +325,8 @@ keys:
   # Client overrides. A connector's producer.override./consumer.override. keys
   # are the top layer of its client config (layer override, above every
   # other layer of the connector's own keys) (Worker.baseProducerConfigs and
-  # baseConsumerConfigs, Apache Kafka 4.2.0, Worker.java:837-874 and 911-942).
+  # baseConsumerConfigs, Apache Kafka 4.3.1, Worker.java:837-874 and 911-942;
+  # unchanged since 4.2.0).
   - key: producer.override.bootstrap.servers
     status: translated
     reason: The connector's producer writes to these brokers instead of the worker's.
