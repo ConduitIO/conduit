@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (124)
+## 3. Error codes (127)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1026,9 +1026,12 @@ Author: Meroxa, Inc.
 | `kc.key_unsupported` | InvalidArgument | CodeKeyUnsupported: a known key with no Conduit equivalent for its value. |
 | `lifecycle_v2.partial_graceful_stop_escalated` | Aborted | CodePartialGracefulStopEscalated is returned by Stop/StopAndWait for an N-source pipeline (slice 3b of the arch-v2 multi-connector epic) when a graceful stop arms some sources within the deadline but not others. See stopRunnablePipeline's doc and the adversarial-review finding this closes (H1, docs/design-documents/20260801-archv2-multiconnector-nsource.md).  Leaving that state unresolved would strand the pipeline reporting StatusRunning indefinitely: the still-unarmed worker(s) keep reading, workersWg never drains, and runPipeline's cleanup goroutine (the only thing that ever writes a terminal status) never runs - invisible to an operator except as an error return that may go to a disconnected caller. Instead the pipeline's tomb is force-killed with this code so every still-unarmed worker's next context check observes cancellation and unwinds, guaranteeing the pipeline reaches a terminal (Degraded) status instead of a silent, half-stopped one. At-least-once is preserved: this never acks anything, so an interrupted worker's in-flight, unacked batch simply replays on the pipeline's next start (invariant 3). |
 | `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |
+| `migrate.connector_name_invalid` | InvalidArgument | CodeConnectorNameInvalid is raised when a connector has no name, or two connectors of one run share a name. Each connector becomes one pipeline named after it, so either case would leave a pipeline unnamed or written over another. |
 | `migrate.input_too_large` | InvalidArgument | CodeInputTooLarge is raised when the inputs exceed [MaxInputBytes] in total, [MaxInputs] in number, or [MaxJSONDepth] in JSON nesting. |
 | `migrate.input_unreadable` | InvalidArgument | CodeInputUnreadable is raised when an input cannot be parsed in the format it was detected or declared as: a properties syntax error, a JSON syntax error, or JSON that is not valid UTF-8. ConfigPath carries the location. |
 | `migrate.input_unrecognized` | InvalidArgument | CodeInputUnrecognized is raised when an input parses but is not a shape this package reads: format detection failed, a JSON config value is not a scalar, or the input is a MirrorMaker dedicated-mode mm2.properties. |
+| `migrate.output_exists` | AlreadyExists | CodeOutputExists is raised when the output directory is not empty and overwriting was not requested. |
+| `migrate.output_unwritable` | Unavailable | CodeOutputUnwritable is raised when the output directory or a file in it cannot be written. |
 | `orchestrator.connector_has_processors_attached` | FailedPrecondition | CodeConnectorHasProcessorsAttached is raised when a connector cannot be deleted because it still has processors attached. |
 | `orchestrator.immutable_provisioned_by_config` | FailedPrecondition | CodeImmutableProvisionedByConfig is raised when a pipeline, connector, or processor provisioned by a config file is mutated through the API instead of the config file. |
 | `orchestrator.invalid_processor_parent_type` | InvalidArgument | CodeInvalidProcessorParentType is raised when a processor's parent is neither a pipeline nor a connector. |
