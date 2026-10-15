@@ -113,10 +113,9 @@ func TestSettingRefs_StoredKeyPinned(t *testing.T) {
 	}
 }
 
-// TestSettingRefs_NoRefsEncodesAsV020 keeps records without references
-// byte-for-byte what v0.20 wrote, so nothing changes for API-created
-// connectors and for configs without ${VAR}.
-func TestSettingRefs_NoRefsEncodesAsV020(t *testing.T) {
+// TestSettingRefs_NoRefsOmitsKey: a record without references has no
+// SettingRefs key, so its shape is v0.20's (the golden tests pin the rest).
+func TestSettingRefs_NoRefsOmitsKey(t *testing.T) {
 	for _, refs := range []map[string]string{nil, {}} {
 		is := is.New(t)
 		inst := v021DestinationInstance()

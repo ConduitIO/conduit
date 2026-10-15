@@ -16,6 +16,7 @@ package secretref
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"strconv"
@@ -50,9 +51,11 @@ type Unset struct {
 }
 
 // Resolved is a settings map with every reference resolved. It exists only
-// for the duration of a plugin call (Invariant R1). Printing it with fmt, a
-// logger or json.Marshal yields "***" for every value; the plugin boundary
-// converts it explicitly with map[string]string(r).
+// for the duration of a plugin call (Invariant R1). Printing or encoding it
+// with fmt, json, yaml, slog or zerolog yields "***" for every value, except
+// when it sits in an unexported struct field, which fmt prints raw (never
+// store it in one, R1b). The plugin boundary converts it explicitly with
+// map[string]string(r).
 type Resolved map[string]string
 
 // Resolve returns settings merged with every reference in refs resolved from
@@ -111,6 +114,10 @@ func resolve(settings, refs map[string]string, lookup func(string) (string, bool
 // it accepts the same grammar os.ExpandEnv did in v0.20: $VAR, ${VAR}, and
 // Go's shell-special names such as $1 or $$. Text with a "$" that os.Expand
 // does not treat as a name (a trailing "$", "${}") is not a reference.
+//
+// A non-reference is not necessarily unchanged by os.Expand ("x${}y" expands
+// to "xy"). Callers that store non-references must store os.ExpandEnv(s), as
+// v0.20 did, to keep the meaning of existing configs (see the package doc).
 func IsReference(s string) bool {
 	if !strings.Contains(s, "$") {
 		return false
@@ -125,9 +132,11 @@ func IsReference(s string) bool {
 
 // NewUnsetError builds the coded error (CodeEnvUnset) for unset variables.
 // entity names the owner for a human, for example `connector "pg-source"`.
-// The config path is the settings key of the first entry; the message lists
-// every entry. The returned error is always a *conduiterr.ConduitError. It
-// panics if unset is empty, which is a caller bug.
+// The message lists every entry. ConfigPath is "settings.<key>" of the first
+// entry, relative to the entity: a caller that knows where the entity sits in
+// the pipeline config must prefix it (for example "connectors.pg-source.").
+// The returned error is always a *conduiterr.ConduitError. It panics if unset
+// is empty, which is a caller bug.
 func NewUnsetError(entity string, unset []Unset) error {
 	if len(unset) == 0 {
 		panic("secretref: NewUnsetError called without unset variables")
@@ -218,7 +227,33 @@ func (r Resolved) MarshalJSON() ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-var _ zerolog.LogObjectMarshaler = Resolved{}
+// MarshalYAML implements the conduitio/yaml (yaml.v3) Marshaler: every value
+// is "***".
+func (r Resolved) MarshalYAML() (any, error) {
+	if r == nil {
+		return nil, nil
+	}
+	out := make(map[string]string, len(r))
+	for k := range r {
+		out[k] = redacted
+	}
+	return out, nil
+}
+
+// LogValue implements slog.LogValuer: a group with every value "***".
+func (r Resolved) LogValue() slog.Value {
+	keys := r.sortedKeys()
+	attrs := make([]slog.Attr, len(keys))
+	for i, k := range keys {
+		attrs[i] = slog.String(k, redacted)
+	}
+	return slog.GroupValue(attrs...)
+}
+
+var (
+	_ zerolog.LogObjectMarshaler = Resolved{}
+	_ slog.LogValuer             = Resolved{}
+)
 
 // MarshalZerologObject writes every key with the value "***", so
 // logger.Object("settings", r) is as safe as logger.Interface.

@@ -31,13 +31,17 @@
 //   - Resolve merges Settings with resolved SettingRefs and reports every
 //     variable that was unset. It does not decide what an unset variable
 //     means: the caller warns or fails (design section 5).
-//   - Resolved is the result. Its String, GoString, Format and MarshalJSON
-//     print "***" for every value, so passing it to a logger, an error
-//     message or json.Marshal cannot leak a secret. The plugin boundary
-//     converts it with an explicit map[string]string(...).
+//   - Resolved is the result. Its String, GoString, Format, MarshalJSON,
+//     MarshalYAML, LogValue (slog) and MarshalZerologObject print "***" for
+//     every value. That covers fmt, goccy/go-json, encoding/json,
+//     conduitio/yaml, slog and zerolog when they are handed the Resolved
+//     value itself, an exported field holding it, or a pointer to either.
+//     It does not cover a Resolved held in an unexported struct field: fmt
+//     cannot call methods there and prints the raw map. Hence rule R1b
+//     below. The plugin boundary converts with an explicit
+//     map[string]string(...).
 //   - IsReference is the grammar: a value is a reference exactly when
-//     os.Expand would call its mapping function for it. This keeps every
-//     existing config meaning what it meant in v0.20.
+//     os.Expand would call its mapping function for it.
 //   - CodeEnvUnset and NewUnsetError are the coded error for an unset
 //     variable. They name the variable, the entity and the settings key,
 //     never a value.
@@ -49,10 +53,24 @@
 //     a logger field or an error. The connector persister re-encodes
 //     Instance.Config on every position flush, so one such assignment would
 //     write the secret to disk within seconds.
+//   - R1b: never hold a Resolved in an unexported struct field, and never
+//     convert it back to map[string]string except in the plugin request
+//     itself. Both bypass the redaction above.
 //   - Nothing in this package logs, and no error it returns contains a
 //     resolved value or a template.
 //   - With every referenced variable set, Resolve produces exactly what
 //     os.ExpandEnv produced for the same text in v0.20 (FuzzResolve).
+//
+// # Contract for the config parser (implementation PR 2)
+//
+// os.Expand rewrites some text without calling its mapper: "x${}y" becomes
+// "xy" and "x${ay" becomes "xay", and IsReference is false for both. So
+// "every config means what it meant in v0.20" holds only if the parser keeps
+// two rules: a value for which IsReference is true is stored verbatim in
+// SettingRefs; any other value is stored in Settings as os.ExpandEnv(value),
+// exactly as v0.20 stored it, never as the raw text. Under those rules,
+// storing then resolving any value equals os.ExpandEnv of it
+// (FuzzStoreThenResolve).
 //
 // # Relationships
 //

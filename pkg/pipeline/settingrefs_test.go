@@ -85,7 +85,7 @@ func TestSettingRefs_StoredKeyPinned(t *testing.T) {
 	}
 }
 
-func TestSettingRefs_NoRefsEncodesAsV020(t *testing.T) {
+func TestSettingRefs_NoRefsOmitsKey(t *testing.T) {
 	is := is.New(t)
 	inst := v021PipelineInstance()
 	inst.DLQ.SettingRefs = nil

@@ -18,11 +18,13 @@ import (
 	"bytes"
 	stdjson "encoding/json" //nolint:depguard // the leak test must cover the standard library encoder too
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/yaml/v3"
 	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -188,6 +190,18 @@ func TestResolved_NeverPrintsValues(t *testing.T) {
 	}
 	type wrapper struct{ Settings Resolved }
 
+	yamlDirect, err := yaml.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yamlNested, err := yaml.Marshal(wrapper{r})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var slogText, slogJSON bytes.Buffer
+	slog.New(slog.NewTextHandler(&slogText, nil)).Info("m", "direct", r, "nested", wrapper{r})
+	slog.New(slog.NewJSONHandler(&slogJSON, nil)).Info("m", "direct", r, "nested", wrapper{r})
+
 	outputs := map[string]string{
 		"String":            r.String(),
 		"GoString":          r.GoString(),
@@ -208,6 +222,10 @@ func TestResolved_NeverPrintsValues(t *testing.T) {
 		"errorf %v":         fmt.Errorf("configure: %v", r).Error(),
 		"zerolog":           zbuf.String(),
 		"goccy json nested": mustJSON(t, wrapper{r}),
+		"yaml":              string(yamlDirect),
+		"yaml nested":       string(yamlNested),
+		"slog text":         slogText.String(),
+		"slog json":         slogJSON.String(),
 	}
 	for name, out := range outputs {
 		if strings.Contains(out, canary) {
@@ -221,6 +239,18 @@ func TestResolved_NeverPrintsValues(t *testing.T) {
 	// The explicit conversion at the plugin boundary is the only way out.
 	if map[string]string(r)["password"] != canary {
 		t.Fatal("explicit conversion must keep the value")
+	}
+}
+
+// TestResolved_UnexportedFieldIsNotProtected pins the documented limit of
+// the redaction: fmt cannot call methods on a value in an unexported field,
+// so it prints the raw map. If this test starts failing because fmt got
+// smarter, narrow rule R1b in doc.go; until then, R1b is what protects it.
+func TestResolved_UnexportedFieldIsNotProtected(t *testing.T) {
+	type holder struct{ settings Resolved }
+	out := fmt.Sprintf("%+v", holder{Resolved{"password": canary}})
+	if !strings.Contains(out, canary) {
+		t.Fatalf("fmt now redacts unexported fields (%s); update rule R1b in doc.go", out)
 	}
 }
 
@@ -342,6 +372,40 @@ func FuzzResolve(f *testing.F) {
 		}
 		if got := mustJSON(t, r); got != `{"k":"***"}` {
 			t.Fatalf("json = %q", got)
+		}
+	})
+}
+
+// FuzzStoreThenResolve is the contract the config parser must keep (package
+// doc, PR 2): store a reference verbatim in SettingRefs and anything else as
+// os.ExpandEnv(v) in Settings, then resolve. The result must equal
+// os.ExpandEnv(v), which is what v0.20 stored, for every v. It also shows
+// why storing a non-reference raw would be wrong: "x${}y" is not a
+// reference but expands to "xy".
+func FuzzStoreThenResolve(f *testing.F) {
+	for _, seed := range []string{
+		"", "plain", "x${}y", "x${ay", "trailing$", "$A", "${A}b", "a$ b", "$$",
+		"postgres://u:${PW}@h/db",
+	} {
+		f.Add(seed, "val")
+	}
+	f.Fuzz(func(t *testing.T, v, value string) {
+		env := map[string]string{}
+		os.Expand(v, func(n string) string { env[n] = value + n; return "" })
+		expand := func(s string) string { return os.Expand(s, func(n string) string { return env[n] }) }
+
+		var settings, refs map[string]string
+		if IsReference(v) {
+			refs = map[string]string{"k": v}
+		} else {
+			settings = map[string]string{"k": expand(v)}
+		}
+		got, unset := resolve(settings, refs, fakeEnv(env))
+		if got["k"] != expand(v) {
+			t.Fatalf("store-then-resolve(%q) = %q, os.ExpandEnv = %q", v, got["k"], expand(v))
+		}
+		if len(unset) != 0 {
+			t.Fatalf("unexpected unset %v", unset)
 		}
 	})
 }
