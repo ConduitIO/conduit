@@ -224,7 +224,7 @@ SDK's destination plugin adapter, not by the connector, and a connector has no w
 mutant connector would therefore pass DST-02 for the same reason a correct one does. The case guards the SDK's
 ack path against a deadlock under slow acks. An SDK change that broke that path would be caught there, which is
 mutation testing of the SDK, not of connectors. This is the one exception to "each new case can fail" (the DoD
-of `ConduitIO/conduit#3011`), and DeVaris accepted it.
+of `ConduitIO/conduit#3011`). DeVaris accepted it on 2026-10-15 (Decisions, item 6).
 
 **The throughput smoke checks are stall checks, not benchmarks.** DST-11 and SRC-09 record records/s
 (`destination_throughput`, `source_throughput`) in the report and never compare them to a threshold. They fail
@@ -232,7 +232,7 @@ only if records stop flowing within the timeout or a record is rejected. A desti
 fails DST-11. A source that does not deliver all 2000 records, a failed ack or a failed shutdown fails SRC-09. The
 mutants are `dest_nacks_under_load` and `source_stalls`. "Sanity floor" in the roadmap item means this
 liveness floor, not a rate. The numbers are not a performance claim, and the docs say so. Claims need benchi
-(see Constraints). DeVaris accepted these semantics.
+(see Constraints). DeVaris accepted these semantics on 2026-10-15 (Decisions, item 7).
 
 **Policy for duplicates (SRC-02).** At-least-once allows a duplicate after a failure. Without a failure a
 duplicate is a defect: v1's `Read_Success` asserted unique positions, and a source that delivers its newest
@@ -572,6 +572,14 @@ Decided by DeVaris:
 5. **The process death hook.** `AcceptanceProcessDeathDriver` stays, flagged and counted in the report
    (`exceptions: ["process_death_hook"]`, `process_death_hook_calls`). For any connector that uses it, the attested
    kill -9 test is mandatory for Certified. Subprocess plus SIGKILL (`conduit-connector-sdk#403`) is the real fix.
+6. **DST-02 has no failing reference connector (2026-10-15).** Accepted. The acks DST-02 slows down are sent by the
+   SDK's destination adapter, so no connector mutant can fail it; the case guards the adapter's ack path against a
+   deadlock. It is the one exception to "each new case can fail" in `ConduitIO/conduit#3011`. A future SDK change
+   to that path is caught by DST-02 itself, not by a connector mutant.
+7. **DST-11 and SRC-09 record a rate and enforce no minimum (2026-10-15).** Accepted. Both cases record records/s
+   in the report and fail only on a stall: records stop flowing within the timeout, a record is rejected (DST-11),
+   or not all 2000 records arrive, an ack fails or shutdown fails (SRC-09). Certified sets no throughput floor.
+   A rate floor, if one is ever wanted, needs benchi results on reference hardware first and a new case revision.
 
 Still open:
 
