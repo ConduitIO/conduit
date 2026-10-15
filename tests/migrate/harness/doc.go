@@ -32,6 +32,16 @@
 //     domains, no IP outside the documentation ranges.
 //   - LoadCertification reads certification.yaml (rule 4).
 //
+// What it does with a migrator (CLI, MCP, or an in-process adapter that
+// implements Migrator):
+//
+//   - CheckOutput checks one run against the report contract, the
+//     never-silently-drop property, the case's expectations and leaks.
+//   - CompareRuns (determinism), CompareGoldens (rule 1), ValidateSchema
+//     (envelope and report schemas) and CLI.ValidatePipelines.
+//   - A surface that does not exist yet returns an error wrapping
+//     ErrPending, which callers report as pending, not as a pass.
+//
 // Invariant: the input-key multiset this package computes is the reference
 // side of the never-silently-drop property. Every key occurrence in an input
 // file is counted, including duplicates and keys whose value is not a string,
