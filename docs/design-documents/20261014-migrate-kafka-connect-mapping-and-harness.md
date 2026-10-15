@@ -330,7 +330,7 @@ Connector config keys common to all classes, and worker properties (`--worker`).
 
 **How Kafka Connect layers a connector's client config (corrected 2026-10-15).** Apache Kafka 4.2.0,
 `connect/runtime/src/main/java/org/apache/kafka/connect/runtime/Worker.java`: `baseProducerConfigs` (lines
-837-876) and `baseConsumerConfigs` (lines 911-940) start from the worker's `bootstrap.servers` and Connect's own
+837-874) and `baseConsumerConfigs` (lines 911-942) start from the worker's `bootstrap.servers` and Connect's own
 client defaults, then add `config.originalsWithPrefix("producer.")` (line 862) or `("consumer.")` (line 931),
 then the connector's `producer.override.`/`consumer.override.` keys. The worker's top-level `security.protocol`,
 `sasl.*` and `ssl.*` are not in that chain; they configure only the worker's own clients. The first version of
