@@ -17,8 +17,8 @@ The CDC position carries:
 
 - a **settled cut `S`**: every object version at or below it, in the order (LastModified, key, version id), has
   been delivered. Under the assumptions below, no new version can still appear below it. The cut follows the
-  store's clock, minus the lookback, and is **held back by every multipart upload still in progress**, because
-  S3 stamps such an object with its initiation time;
+  store's clock, minus the lookback, and is **held back by the oldest multipart upload still actively in
+  progress**, because S3 stamps such an object with its initiation time;
 - a **bounded set `E`** of the versions above `S` already delivered early, each stored as a LastModified delta
   plus a 16-byte hash, so it can be pruned by time after a restart.
 
@@ -30,8 +30,8 @@ over to CDC with an empty `E`.
 
 Roadmap item: v0.21: S3 sink parity (#3009), certification of `builtin:s3` as source and destination. Risk
 tier: **Tier 1** (position format, source data path, invariants 2 and 3). Implementation waits for DeVaris's
-sign-off. Revision 2 addresses the adversarial review of revision 1: B1 to B4, S1 to S7 and N1 to N5. The
-changes are listed under _Revision history_.
+sign-off. Revision 3 addresses the re-review of revision 2 (R1 to R8 and its NITs). Revision 2 addressed the
+first review (B1 to B4, S1 to S7, N1 to N5). The changes are listed under _Revision history_.
 
 ## Context
 
@@ -61,12 +61,18 @@ that today's floor (which advances only with newer writes) does not. This design
   - **clock skew between store nodes** (distributed MinIO stamps with the receiving node's clock), which must
     stay below `lookbackPeriod`.
 - **A2 (multipart).** An object written by a multipart upload, which AWS stamps with the upload's **initiation**
-  time, is listed by `ListMultipartUploads` from initiation until completion. MinIO (pgsty
-  RELEASE.2026-08-04, checked 2026-10-15) stamps a multipart object with its **completion** time instead, so
-  for MinIO A1 applies. MinIO also returns nothing for a prefix that is a directory (`dir/`), only for a key or
-  no prefix. The source therefore lists uploads bucket-wide and filters by prefix itself.
-- **A3 (clock).** The `Date` header of a listing response is the store's clock. It has one-second resolution
-  and is truncated, so it is never later than the true time.
+  time, is listed by `ListMultipartUploads` (with the source's prefix) from initiation until completion.
+  MinIO (pgsty RELEASE.2026-08-04, checked 2026-10-15) differs in two ways:
+  - it stamps a multipart object with its **completion** time, so for MinIO A1 applies and the hold is not
+    needed;
+  - it returns no uploads for a prefix that is a directory (`dir/`), only for an exact key or no prefix.
+
+  The source still always sends its prefix (R4: least privilege, and cost on buckets with many unrelated
+  uploads). On MinIO with a directory prefix the hold therefore sees nothing, which is harmless given the
+  completion stamp. The README states both MinIO differences.
+- **A3 (clock).** The `Date` header of a listing response is the clock of the store node that produced the
+  response, at one-second resolution and rounded down, so `Date` is never later than that node's time when it
+  answered. Skew between store nodes is part of A1.
 
 Objects outside these assumptions can be missed, as today. The connector documentation lists them; bucket event
 notifications are the lossless alternative (see _Alternatives_).
@@ -95,18 +101,50 @@ unversioned bucket. LastModified is taken from the listing at the store's resolu
 
 At each poll, in this order:
 
-1. `ListMultipartUploads` over the whole bucket (all pages), keeping uploads whose key is under the prefix.
-   Uploads initiated more than `cdc.maxPendingUploadAge` ago (default 24h) are ignored with a rate-limited WARN
-   `s3.source.stale_upload_ignored` (key, upload id, initiated); such an object, if it ever completes, can be
-   missed. The fix is an `AbortIncompleteMultipartUpload` lifecycle rule shorter than that age. If the call is
-   denied (`s3:ListBucketMultipartUploads` missing), the source WARNs `s3.source.multipart_listing_denied` once
-   per `Open`, continues without the hold, and documents that multipart uploads longer than the lookback can then
-   be missed.
-2. `ListObjectVersions`, all pages. `T` = the `Date` header of the **first** page (B4), capped at the host
-   clock. A missing or unparseable header falls back to the host clock with a WARN. A version that becomes
-   visible after the first page was requested is stamped no earlier than `T - lookback` (A1) or is an upload
-   from step 1 (A2), so the cut below stays correct for a listing that takes many pages.
-3. The cut: `C = min(T - lookbackPeriod, (oldest relevant upload's Initiated) - 1s)`.
+1. **Uploads.** `ListMultipartUploads` with `Prefix` = the source prefix, all pages. `Tu` is the `Date` header
+   of its **first** page. For each upload, from the oldest `Initiated`, it is decided whether it holds the cut:
+   - **Too old.** An upload initiated more than `cdc.maxPendingUploadAge` (default 24h) before `Tu` (store
+     clock, not host clock) does not hold the cut. It gets a rate-limited WARN `s3.source.stale_upload_ignored`
+     with the key, upload id and initiated time.
+   - **Idle.** Otherwise `ListParts` gives the newest part's `LastModified`. An upload with no part newer than
+     `cdc.maxUploadIdle` (default 1h) before `Tu`, and no part at all after initiation plus `maxUploadIdle`, is
+     idle and does not hold the cut either. It gets a rate-limited WARN `s3.source.idle_upload_ignored`.
+   - **Active.** The first active upload found is the hold. Older uploads were released above, newer ones do
+     not matter, so `ListParts` runs at most until the first active upload. That costs one request per released
+     upload plus one per poll; the README says so.
+
+   A released upload that later completes is stamped with its initiation time and can land below `S`, so it can
+   be missed. The README's setup section therefore requires an `AbortIncompleteMultipartUpload` lifecycle rule
+   with `DaysAfterInitiation` at most `maxPendingUploadAge`. It also tells writers that pause an upload for longer
+   than `maxUploadIdle` to raise it.
+
+   **Permission denied (R4).** If `s3:ListBucketMultipartUploads` (or `s3:ListMultipartUploadParts`) is denied,
+   `Open` **fails** with `s3.source.multipart_listing_denied`. The error names both fixes: grant the
+   permission, or set `cdc.multipartHold: false`. The opt-out runs without the hold. It is documented as lossy
+   for multipart uploads longer than the lookback, logs a WARN at `Open`, and is never the configuration
+   `ExactResume` is claimed for.
+2. **Versions.** `ListObjectVersions`, all pages. `Tv` is the `Date` header of its **first** page (B4).
+3. **The cut (R1).**
+   - `T = min(Tu, Tv)`, capped at the host clock. A missing or unparseable header falls back to the host clock
+     with a WARN.
+   - `C = min(T - lookbackPeriod, (Initiated of the hold) - 1s)`.
+
+**Why `Tu` and not only `Tv` (R1).** Revision 2 took `T` from the versions listing alone. An upload initiated
+**during** a slow step-1 listing, under a key step 1 had already paged past, is in neither listing. If step 1
+took longer than the lookback, `Tv - lookback` is already later than that upload's initiation. The cut then
+passes it, and when it completes (AWS stamps the initiation time) it lands below `S` and is skipped. With `Tu`,
+every upload not seen by step 1 was initiated at or after `Tu` (rounded down). That is above `Tu - lookback` and
+so above `C`, and the next poll's step 1 sees it if it is still in progress. A non-multipart version missing
+from the versions listing became visible after `Tv` was produced, so by A1 its LastModified is later than
+`Tv - lookback`, which is at least `C`. Revision 2's claim that the gap between the two calls is "trivially below
+the lookback" was wrong for slow listings and is withdrawn.
+
+**Hold older than the lookback (R3).** When the hold's `Initiated` is more than `lookbackPeriod` before `T`, the
+cut is held back further than the lookback alone would. Settling stops at that point, early objects fill `E`, and
+latency grows. A rate-limited WARN `s3.source.cut_held` gives the upload's key, upload id, initiated time, the age
+and the number of objects waiting, so an operator can see which upload is holding the pipeline. The bound on that
+delay is `maxUploadIdle` for an upload that stops making progress, and `maxPendingUploadAge` for one that keeps
+uploading parts.
 
 The cut never moves backwards in the persisted state: `S` only advances (below).
 
@@ -135,8 +173,11 @@ filled `E` permanently.
 The candidates are the visible versions with tuple `> S` and hash not in `E`, including delete markers (as
 today). Only the latest version of each key is a candidate (see _Collapsing_).
 
-1. **Settled candidates** (`LastModified <= C`), smallest tuples first. The poll keeps at most
-   `M = cdc.maxSettledPerPoll` of them (default 10,000) in a bounded heap that holds the M smallest tuples (B2).
+1. **Settled candidates** (`LastModified <= C`), smallest tuples first. The poll keeps the smallest tuples in a
+   heap bounded by **bytes**, `cdc.maxSettledBytesPerPoll` (default 64 MiB, R7), not by count, because keys
+   can be up to 1 KiB. At about 200 bytes per candidate (a typical key, version id and ETag) that is about
+   330,000 settled deliveries per poll. That is the catch-up rate ceiling: about 330,000 objects per
+   `pollingPeriod` plus listing time. The budget only limits memory; a catch-up never loses anything (B2).
    Each is delivered with `S := its tuple`, and pruning follows. Settled versions never enter `E`, so a catch-up
    over any number of old objects never touches the early bound.
 2. **Only if no settled candidate was left out of the heap**, `S := (C, +inf)` and `E` is pruned. If some were
@@ -161,11 +202,14 @@ Each emitted record's position is `(S, E)` as of that record.
 The resume rule delivers the visible versions `> S` that are not in `E`, which are precisely the ones not yet
 delivered.
 
-**Fetching the listed version (S3).** `GetObject` is called with the listed `VersionId` (versioned buckets) or
-with `If-Match: <listed ETag>` (unversioned). A 412 or 404 means the version was overwritten or deleted after the
-listing. It is skipped without being recorded in `E`, and the newer version or delete marker is a later
-candidate (its tuple is larger). Today `GetObject` fetches whatever is current, which can deliver a body under
-another version's identity.
+**Fetching the listed version (S3, R8).** In a versioned bucket `GetObject` is called with the listed
+`VersionId`, which is exact. In an unversioned bucket it is called with `If-Match: <listed ETag>`, and the
+response's `Last-Modified` is compared with the listed LastModified, both rounded down to the second. The
+`Last-Modified` check catches an overwrite with the same content, which keeps the ETag but not the time. A 412,
+a 404 or a `Last-Modified` mismatch means the version was overwritten or deleted after the listing. It is
+skipped without being recorded in `E` or `S`. The newer version or delete marker is a later candidate, because
+its tuple is larger. A same-content overwrite within the same second remains indistinguishable (N2). Today
+`GetObject` fetches whatever is current, which can deliver a body under another version's identity (s3#1056).
 
 ### Collapsing (S7)
 
@@ -173,23 +217,41 @@ Only the latest version of each key at poll time is delivered. Versions written 
 polls, or while a key waits to settle, are collapsed into the latest one. A versioned bucket's history is not
 replayed. This is today's behavior, now stated.
 
-### Overflow and latency (S1)
+### Overflow, latency and memory (S1, R6)
 
 `E` limits early delivery to about `cdc.maxEarlyObjects / lookbackPeriod` objects per second sustained. Beyond
-that, the excess is delivered when it settles, up to `lookbackPeriod` plus one poll later, and longer while a
-multipart upload holds the cut (bounded by `cdc.maxPendingUploadAge`). Nothing is lost, and the window is not
+that, the excess is delivered once it settles: at most `lookbackPeriod` plus one poll later, and longer while a
+multipart upload holds the cut (see _Hold older than the lookback_). Nothing is lost, and the window is not
 shrunk.
 
-| `cdc.maxEarlyObjects` | sustained early rate at 5m | worst-case position size |
+| `cdc.maxEarlyObjects` | sustained early rate at 5m | position size with `E` full |
 | --- | --- | --- |
-| 512 (revision 1) | 1.7 objects/s | about 10 KiB |
-| **4096 (default)** | 13.7 objects/s | about 78 KiB |
-| 10000 (maximum) | 33 objects/s | about 190 KiB |
+| 512 | 1.7 objects/s | about 11 KiB |
+| **2048 (default)** | 6.8 objects/s | about 41 KiB |
+| 4096 (revision 2) | 13.7 objects/s | about 82 KiB |
+| 10000 (maximum) | 33 objects/s | about 200 KiB |
 
-The default is raised to **4096**. Memory is the position size times the records in flight, but only while the
-window is full. At 4096 entries and 1,000 records in flight that is about 78 MiB; with a quiet window, a few
-bytes. A bucket written faster than the rate above is better served by a smaller lookback (with its
-loss trade-off, see S5) or by bucket notifications. The README says this plainly.
+The entry size is about 20 bytes (a uvarint delta plus a 16-byte hash), plus about 80 bytes of header and the
+key at `S` (up to 1 KiB).
+
+**Memory bound.** Let `N` be the number of records the source has emitted that Conduit has not acked yet. With
+`K = cdc.maxEarlyObjects`, the positions take at most `N x (80 + |S.key| + 20 x K)` bytes. `N` is not set by
+one connector setting. It is the SDK's read batch (`sdk.batch.size`, default 1 when unset) times the number of
+batches the engine holds between source and destination, plus the destination's batch (`sdk.batch.size` of the
+destination). The README states the formula with that breakdown. With `K = 2048` and the worst case of a full
+`E` on every in-flight record, 10,000 records in flight is about 410 MiB, and 1,000 is about 41 MiB.
+
+The default comes down from revision 2's 4096 to **2048**, which halves the worst case. The rate a busy bucket
+gets early delivery for also halves (6.8 objects/s at 5m). Above that rate latency rises, and correctness is
+unaffected.
+
+**Encoding (R6).** `E` is kept in insertion order, and the encoded entries are kept as a byte slice that grows
+by one entry per early delivery and is compacted when `S` advances. A position is that slice plus a fresh
+header and trailer, a copy of `O(|E|)` bytes per record with no re-sorting or re-hashing. The parser accepts any
+order and rejects duplicates.
+
+A memory test emits 10,000 records with `E` full and none acked, and checks the heap against the formula
+(within 10%). It runs in CI as a test, not as a benchmark, and makes no performance claim.
 
 ### Snapshot
 
@@ -209,6 +271,10 @@ the first page, with the same rule as `C`: uploads first, then
   where today's handoff error paths come from.
 - Exact by construction: the snapshot delivers exactly the visible versions `<= C0` (latest per key), and the
   CDC starts strictly above. #1052's seed is no longer needed.
+- **Behavior change for recent objects.** Objects modified within `lookbackPeriod` before the snapshot starts
+  (or held above `C0` by a pending upload) are no longer snapshot records. They arrive as `create` records from
+  the CDC after the snapshot ends. A consumer that treats `snapshot` and `create` differently sees the
+  difference. The README and the release notes say so.
 
 ### Position format v2 (S4)
 
@@ -219,7 +285,7 @@ byte 2          's' or 'c'
 payload         uvarint-length-prefixed fields
   snapshot:     C0 (unix ms, zigzag varint), k
   cdc:          S.time (unix ms), S.inf flag, S.key, S.versionID, n (uvarint),
-                n x (uvarint delta ms, 16-byte hash), sorted by (delta, hash)
+                n x (uvarint delta ms, 16-byte hash), in insertion order
 4 bytes         CRC-32C over bytes 0 .. end of payload
 1 byte          0x00            fixed terminator
 ```
@@ -229,7 +295,7 @@ the byte after it. A binary position that happens to end in `_` (about 1 in 256 
 make the old parser index past the end and panic. With the terminator it fails with "invalid position format".
 The CRC rejects truncated or bit-flipped positions.
 
-The parser is strict: bad marker, version, type, CRC, terminator, trailing bytes, an unsorted or oversized `E`,
+The parser is strict: bad marker, version, type, CRC, terminator, trailing bytes, a duplicate entry or oversized `E`,
 or an out-of-range time fails `Open` with `s3.source.position_invalid`, the length and the fix (reset the
 position). It never silently starts over. It is fuzzed.
 
@@ -239,9 +305,10 @@ position). It never silently starts over. It is fuzzed.
 | --- | --- | --- |
 | none | new snapshot | as today |
 | v1 snapshot `<key>_s<sec>` | restart the snapshot; WARN `s3.source.position_upgraded` | the redelivery v1 does on every snapshot restart, once |
-| v1 CDC `<key>_c<sec>` | CDC with `S = (sec - lookbackPeriod, +inf)`, `E = {}` | redelivers the lookback window once, as v1 does on every restart; exact afterwards |
+| v1 CDC `<key>_c<sec>` | CDC with `S = (min(sec - lookbackPeriod, hold - 1s), +inf)`, `E = {}`, where hold is the `Initiated` of the oldest upload that holds the cut at the first poll | redelivers the lookback window once, as v1 does on every restart; exact afterwards |
 
-Nothing is skipped by the upgrade: v1 promised nothing above `sec - lookback`.
+Nothing is skipped by the upgrade: v1 promised nothing above `sec - lookback`. Taking the minimum with the
+oldest held upload also covers an upload that v1 had already passed with its newest-seen floor.
 
 **Rollback**: v0.9.x fails `Open` on a v2 position with "invalid position format": loud, no panic (see the
 terminator), nothing skipped. Rolling back needs a position reset, which is a re-snapshot. This goes in the
@@ -259,12 +326,15 @@ release notes. There is no v1-writing compatibility mode.
 Stores that implement the APIs with different semantics cannot be detected; the README lists AWS S3 and MinIO as
 the tested stores.
 
-### `lookbackPeriod` (S5)
+### `lookbackPeriod` (S5, R5)
 
-- `0` stays accepted but is documented as lossy: no tolerance for late visibility beyond the multipart hold. An
-  `Open` WARN says so. The acceptance driver never uses it, and `ExactResume` is claimed only for values `>= 30s`.
-- Values between `0` and `30s` are rejected at configuration time. They give almost no tolerance while looking
-  safe.
+- **`>= 30s`**: the supported range. `ExactResume` is claimed only here.
+- **`1s` to `29s`**: accepted, with an `Open` WARN `s3.source.lookback_short`. It gives almost no tolerance for
+  late visibility while looking safe, and it is not a configuration `ExactResume` is claimed for. Following the
+  deprecation policy (announce, warn, remove; at least two minor versions), it is announced in this release and
+  rejected two minor releases later. Rejecting it now would break pipelines that run with such a value today.
+- **`0`**: accepted, documented as lossy (no tolerance for late visibility beyond the multipart hold), with an
+  `Open` WARN. Never used by the acceptance driver.
 - The README's old advice ("lower lookbackPeriod to avoid this" in the dedupe-shrink warning) goes away with the
   shrink path. The new advice states the trade-off: a smaller lookback lowers latency on overflow and raises the
   chance of missing late objects.
@@ -282,10 +352,12 @@ Correctness holds because the cut uses the first page's `Date` (B4), but latency
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `lookbackPeriod` (existing) | `5m` | late-visibility tolerance; `0` (lossy) or `>= 30s` |
-| `cdc.maxEarlyObjects` (new) | `4096` | bound of `E`; `0` = settled-only delivery |
-| `cdc.maxPendingUploadAge` (new) | `24h` | multipart uploads older than this do not hold the cut |
-| `cdc.maxSettledPerPoll` (new) | `10000` | settled deliveries per poll (memory bound of the heap) |
+| `lookbackPeriod` (existing) | `5m` | late-visibility tolerance; `>= 30s` supported, `1s`-`29s` deprecated, `0` lossy |
+| `cdc.maxEarlyObjects` (new) | `2048` | bound of `E`; `0` = settled-only delivery |
+| `cdc.maxSettledBytesPerPoll` (new) | `64MiB` | memory bound of the settled heap per poll |
+| `cdc.multipartHold` (new) | `true` | hold the cut below active multipart uploads; `false` is lossy for long uploads |
+| `cdc.maxUploadIdle` (new) | `1h` | an upload with no new part for this long does not hold the cut |
+| `cdc.maxPendingUploadAge` (new) | `24h` | an upload older than this does not hold the cut; must be `>= lookbackPeriod` and `>= maxUploadIdle` (validated) |
 
 Removed: the in-memory dedupe budget and its shrink and overflow paths (`s3.source.dedupe_window_shrunk`,
 `s3.source.dedupe_window_overflow`).
@@ -321,14 +393,17 @@ Removed: the in-memory dedupe budget and its shrink and overflow paths (`s3.sour
 | SIGKILL during the snapshot | resume after the last acked key, same `C0` | SRC-03 snapshot cycles; chaos test |
 | SIGKILL at the boundary | resume from the last snapshot position, listing exhausted, CDC from `(C0, +inf)` | SRC-03 boundary cycle |
 | SIGKILL during CDC | resume from `(S, E)` | SRC-03 CDC cycles; chaos test |
-| Multipart upload longer than the lookback (AWS stamps initiation) | cut held below its initiation; delivered when it completes | debug log of the hold; latency |
-| Abandoned upload older than `maxPendingUploadAge` | ignored; if it completes later it can be missed | WARN `s3.source.stale_upload_ignored` |
-| `ListMultipartUploads` denied | no hold; long multipart uploads can be missed | WARN `s3.source.multipart_listing_denied` |
+| Multipart upload longer than the lookback (AWS stamps initiation) | cut held below its initiation; delivered when it completes | WARN `s3.source.cut_held` once the hold is older than the lookback |
+| Upload initiated during a slow uploads listing, under a key already paged past (R1) | above `Tu - lookback`, so above `C`; seen by the next poll | property test |
+| Upload with no new part for `maxUploadIdle` | released; if it completes later it can be missed | WARN `s3.source.idle_upload_ignored`; README lifecycle rule |
+| Upload older than `maxPendingUploadAge` | released; if it completes later it can be missed | WARN `s3.source.stale_upload_ignored`; README lifecycle rule |
+| `ListMultipartUploads` or `ListParts` denied | `Open` fails with the fix; opt-out `cdc.multipartHold: false` is lossy for long uploads | error `s3.source.multipart_listing_denied` |
+| Same-content overwrite between listing and `GetObject` (R8) | `If-Match` passes, the `Last-Modified` check fails; skipped, the new version comes later | debug log |
 | Replication lag, slow single PUT, or store node skew above the lookback | can be missed (A1) | documented requirement |
 | More settled candidates than the per-poll heap | `S` advances only through what was delivered; the rest come next poll | debug log |
 | Window busier than `E` | the excess waits until it settles | WARN `s3.source.early_window_full` |
 | Version overwritten or deleted between listing and `GetObject` | 412/404, skipped, the newer version or marker comes later | debug log |
-| Metadata-only overwrite in the same second, unversioned bucket (N2) | same ETag, LastModified and version `"null"`, so it is identical to the delivered one and not redelivered | documented; versioned buckets distinguish it |
+| Metadata-only or same-content overwrite in the same second, unversioned bucket (N2) | same ETag, LastModified (to the second on AWS) and version `"null"`: identical to the delivered one, not redelivered, and the `Last-Modified` check cannot tell either | documented; versioned buckets distinguish it |
 | Poll slower than the lookback | correct (first-page `Date`); latency | WARN `s3.source.poll_slow` |
 | Store `Date` ahead of the host | capped at the host: conservative | none |
 | `Date` missing or garbage | host clock, WARN | WARN |
@@ -344,38 +419,70 @@ drops a version that is not provably delivered. Invariant 4: unchanged, no order
 
 ## Testing
 
-- **Model store** (in-process, behaves like AWS): initiation-stamped multipart uploads listed by
-  `ListMultipartUploads` while in progress, a `Date` header, visibility delays below and above the lookback,
-  overwrites, delete markers, same-millisecond versions, 412 on a stale `If-Match`, and paging. A MinIO mode stamps
-  at completion and does not match directory prefixes in `ListMultipartUploads`.
+- **Model store** (in-process, behaves like AWS):
+  - initiation-stamped multipart uploads, listed by `ListMultipartUploads` (prefix honored, paged) while in
+    progress, with `ListParts` times;
+  - a `Date` header per response that advances while a listing pages;
+  - visibility delays below and above the lookback;
+  - overwrites (including same-content overwrites), delete markers and same-millisecond versions;
+  - 412 on a stale `If-Match`, and paging.
+
+  A MinIO mode stamps at completion and returns no uploads for directory prefixes.
 - **Seeded random property tests** (`rapid` is not in the tree, so table tests plus a seeded generator): kill at
-  a random record, resume from its position, repeat; exactly once within the assumptions, and missed only where an
-  assumption is broken on purpose. Run with `cdc.maxSettledPerPoll = 1` and `cdc.maxEarlyObjects = 1` (B2), with
-  a long multipart upload on an idle bucket (B1), with restarts across pruning (B3), and with a version written
-  while a multi-page listing runs (B4).
-- **Position codec**: round trip; strict rejection; a fuzz target; the v0.9.5 parser fed v2 positions must not
+  a random record, resume from its position, repeat. Check exactly once within the assumptions, and missing only
+  where an assumption is broken on purpose. Named cases:
+  - settled heap budget of one entry, and `cdc.maxEarlyObjects = 1` (B2);
+  - a long multipart upload on an idle bucket (B1);
+  - **an upload initiated during a slow uploads listing, under a key already paged past (R1)**;
+  - an idle upload that is released and one that stays active (R3);
+  - restarts across pruning (B3);
+  - a version written while a multi-page versions listing runs (B4);
+  - a same-content overwrite between listing and fetch (R8).
+- **Position codec**: round trip, strict rejection, a fuzz target, and the v0.9.5 parser fed v2 positions must not
   panic.
-- **Upgrade and rollback**: v1 snapshot and CDC positions, constructed and taken from a real v0.9.5 run. In the
-  chaos harness, run released v0.9.5, SIGKILL, swap in the new build, resume, check no loss; then the reverse,
-  where the old build must fail `Open` cleanly.
-- **Chaos** (`test/chaos`, extends s3#1055): S3 source → `builtin:file` in a real Conduit. SIGKILL during the
-  snapshot (more than one page), at the boundary, and during CDC with concurrent writes and a multipart upload
-  spanning a kill. Invariants 1 to 3 checked after each restart, redeliveries counted. Conduit's end-to-end
-  at-least-once can still duplicate; source exactness is SRC-03's job.
-- **MinIO**: the existing `TestMinIO_*` suite, adjusted where it asserts today's redelivery bounds; a multipart
-  test that records the stamp semantics, so a MinIO change is noticed.
-- **Acceptance suite v2, certified on defaults (S2).** The driver uses default source settings with
-  `ReadTimeout` raised to 40s, so that SRC-02's 10,000 objects fit: about 4,096 are delivered early and the rest
-  settle within 5 minutes plus a poll. The suite's limit is `10 x ReadTimeout + 2ms x n` = 420s. The CI job
-  timeout rises to 60m. A separate fast lane runs every PR with `lookbackPeriod: 30s`; it is not the certified
-  configuration and says so in its job name. If the defaults cannot pass SRC-02, the default bound is raised
-  rather than the certified config changed.
+- **Memory** (R6): 10,000 records in flight with `E` full; the heap stays within the formula plus 10%.
+- **Upgrade and rollback**: v1 snapshot and CDC positions, constructed and taken from a real v0.9.5 run, including
+  a v1 CDC position with an upload pending (NIT: the min with the hold). In the chaos harness, run released
+  v0.9.5, SIGKILL, swap in the new build, resume, and check nothing is lost. Then the reverse: the old build must
+  fail `Open` cleanly.
+- **Chaos** (`test/chaos`, extends s3#1055): S3 source → `builtin:file` in a real Conduit.
+  - The snapshot data set is **pre-settled** before the first start (R2): the harness waits until the store's
+    `Date` minus the lookback is past the newest object's LastModified, so the snapshot delivers it as
+    snapshot records and the snapshot kills hit a real snapshot. Otherwise every object would sit above `C0` and
+    the "snapshot" kills would test the CDC.
+  - SIGKILL during the snapshot (more than one page), at the boundary, and during CDC with concurrent writes and
+    a multipart upload spanning a kill.
+  - Invariants 1 to 3 are checked after each restart, and redeliveries are counted. Conduit's end-to-end
+    at-least-once can still duplicate; source exactness is SRC-03's job.
+- **MinIO**: the existing `TestMinIO_*` suite, adjusted where it asserts today's redelivery bounds, plus a
+  multipart test that records the stamp and prefix semantics, so a MinIO change is noticed.
+- **Acceptance suite v2, certified on defaults (S2, R2).**
+  - **Pre-settled snapshot batches.** For records the suite writes as `snapshot` operations, the driver's
+    `WriteToSource` returns only once the store's `Date` minus `lookbackPeriod` is past the newest written
+    object's LastModified (it polls a cheap `HeadBucket` or `ListObjectsV2` with `MaxKeys=1` for the `Date`).
+    Without this, objects written just before `Open` sit above `C0`. The snapshot would deliver none of them,
+    and SRC-03's "snapshot cycles" would exercise CDC resume three times, as revision 2 did by mistake. With
+    the default 5m lookback each snapshot batch waits about 5 minutes. The suite writes about eight snapshot
+    batches, so the certified run takes about an hour, and its CI job runs nightly and on demand with a 120m
+    timeout. `ReadTimeout` is 40s, so SRC-02's 10,000 CDC objects fit the suite's limit
+    (`10 x ReadTimeout + 2ms x n` = 420s): about 2,048 are delivered early, and the rest settle within 5 minutes
+    plus a poll.
+  - **Settling run.** A second, uncertified test (`TestAcceptanceV2_Settling`, `lookbackPeriod: 30s`) also
+    makes `WriteToSource` for `create` batches wait until they have settled. In SRC-03, records then settle
+    between kills, so restarts exercise `S` advancing, `E` pruning and positions with an empty `E`, which the
+    certified run, where CDC records are still early at each kill, does not.
+  - **Fast lane.** Every PR runs the suite with `lookbackPeriod: 30s` and pre-settling (about 5 minutes). It is
+    not the certified configuration, and its job name says so.
+  - If the defaults cannot pass SRC-02, the default bound is raised rather than the certified config changed.
+  - The suite itself does not check that pre-`Open` records arrive as snapshot operations. That is filed as
+    `ConduitIO/conduit-connector-sdk#415`, a capability-gated assertion for a minor revision.
 
 ## Observability
 
-WARN codes: `s3.source.early_window_full`, `s3.source.stale_upload_ignored`,
-`s3.source.multipart_listing_denied`, `s3.source.poll_slow`, `s3.source.position_upgraded`. Error codes:
-`s3.source.position_invalid`, `s3.source.store_unsupported`. Debug per poll: `S`, `|E|`, `C`, the hold (oldest
+WARN codes: `s3.source.early_window_full`, `s3.source.cut_held`, `s3.source.idle_upload_ignored`,
+`s3.source.stale_upload_ignored`, `s3.source.poll_slow`, `s3.source.lookback_short`,
+`s3.source.position_upgraded`. Error codes: `s3.source.position_invalid`, `s3.source.store_unsupported`,
+`s3.source.multipart_listing_denied`. Debug per poll: `S`, `|E|`, `C`, the hold (oldest
 upload), settled, early and waiting counts, pages, duration. No new metrics: the SDK has no per-connector custom
 metrics hook.
 
@@ -386,16 +493,46 @@ One Tier 1 PR in `conduit-connector-s3` after sign-off. It supersedes #1052, whi
 1. `source/position`: v2 codec, CRC, terminator; v1 parsing kept for upgrade only; fuzz target.
 2. Snapshot: `C0` with the multipart hold, `If-Match` fetch, `StartAfter` resume, no look-ahead, no anchor pass
    (s3#1041).
-3. CDC: uploads listing, first-page `Date`, cut, bounded settled heap, `S`/`E` with time-delta entries,
-   versioned/`If-Match` fetch, removal of the dedupe budget and shrink code.
-4. `Open` checks for unsupported stores; `lookbackPeriod` validation.
+3. CDC: uploads listing with prefix and the active/idle/stale rules, `T = min(Tu, Tv)`, cut, settled heap
+   bounded by bytes, `S`/`E` with time-delta entries and incremental encoding, versioned or `If-Match` plus
+   `Last-Modified` fetch, removal of the dedupe budget and shrink code.
+4. `Open` checks for unsupported stores and the multipart permissions; validation of `lookbackPeriod` and
+   `maxPendingUploadAge`.
 5. Tests as above; the driver claims `ExactResume` on defaults; #1050 turns green.
 
-Docs: the connector README (assumptions A1 to A3, permissions including `s3:ListBucketMultipartUploads`, the
-settings, listing cost, upgrade and rollback) and a changelog entry. The `conduit.io` page and `llms.txt` are
+Docs: the connector README and a changelog entry. The README covers:
+
+- assumptions A1 to A3;
+- the permissions, including `s3:ListBucketMultipartUploads` and `s3:ListMultipartUploadParts`;
+- a setup section with the `AbortIncompleteMultipartUpload` lifecycle rule;
+- the settings and the memory formula;
+- the listing cost;
+- the behavior change for recent objects;
+- upgrade and rollback. The `conduit.io` page and `llms.txt` are
 updated with the release that bumps the built-in.
 
 ## Revision history
+
+Revision 3 (2026-10-15), after the re-review of revision 2 (B2, B3 and S4 held):
+
+- **R1 (blocker)**: `T = min(Date of the first uploads page, Date of the first versions page)`, so an upload
+  initiated during a slow uploads listing cannot fall below the cut. The property test has this case. The "gap is
+  trivially below the lookback" reasoning is withdrawn.
+- **R2 (blocker)**: the acceptance driver and the chaos test pre-settle snapshot data, so the snapshot cycles
+  exercise the snapshot. There is a settling SRC-03 run in which records settle between kills, and SDK issue
+  `ConduitIO/conduit-connector-sdk#415`.
+- **R3**: WARN `s3.source.cut_held`; the active-upload rule (`ListParts`, `cdc.maxUploadIdle`, 1h); a lifecycle
+  rule in the README setup.
+- **R4**: always send `Prefix`. A denied listing fails `Open` by default; the `cdc.multipartHold: false` opt-out
+  never claims `ExactResume`.
+- **R5**: `lookbackPeriod` 1s to 29s accepted with a WARN, deprecated, removed two minors later.
+- **R6**: memory bound stated as a function of in-flight records and batch settings; a memory test at 10,000 in
+  flight; incremental encoding; default bound 2048.
+- **R7**: settled heap bounded by bytes (64 MiB) with the rate ceiling stated.
+- **R8**: `Last-Modified` compared as well as `If-Match`.
+- **NITs**: A3 wording; `maxPendingUploadAge` measured on the store clock and validated `>= lookbackPeriod`; v1
+  upgrade takes the min with the oldest held upload; the line-167 reasoning; the behavior change for recent
+  pre-existing objects.
 
 Revision 2 (2026-10-15), after the adversarial review of revision 1:
 
