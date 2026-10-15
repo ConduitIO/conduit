@@ -163,3 +163,73 @@ func TestLoadCertification_Rejects(t *testing.T) {
 		})
 	}
 }
+
+func TestCaseReady(t *testing.T) {
+	pg := ClassDebeziumPostgres
+	mk := func(family string, args []string, classes ...string) (Case, []InputFile) {
+		var keys []KeyOccurrence
+		for _, cl := range classes {
+			keys = append(keys, KeyOccurrence{Key: "connector.class", Value: cl})
+		}
+		return Case{Manifest: Manifest{Family: family, Command: Command{Args: args}}}, []InputFile{{Keys: keys}}
+	}
+	plain := []string{"migrate", "kafka-connect", "input/c.json"}
+	worker := []string{"migrate", "kafka-connect", "--worker", "input/w.properties", "input/c.json"}
+	none := RuleSet{Classes: map[string]bool{}}
+	shared := RuleSet{Classes: map[string]bool{}, Shared: true}
+	withPG := RuleSet{Classes: map[string]bool{pg: true}, Shared: true}
+	all := RuleSet{Classes: map[string]bool{pg: true}, Shared: true, Worker: true}
+
+	type readyCase struct {
+		name  string
+		c     Case
+		in    []InputFile
+		rs    RuleSet
+		ready bool
+	}
+	var tests []readyCase
+	add := func(name string, rs RuleSet, ready bool, c Case, in []InputFile) {
+		tests = append(tests, readyCase{name, c, in, rs, ready})
+	}
+	c, in := mk("debezium-postgres", plain, pg)
+	add("command landed, no rule files: pending", none, false, c, in)
+	add("shared only: family still pending", shared, false, c, in)
+	add("family file: required", withPG, true, c, in)
+	c, in = mk("common", plain, "FileStreamSource")
+	add("unsupported class without shared file: pending", none, false, c, in)
+	add("unsupported class with shared file: required", shared, true, c, in)
+	c, in = mk("common", worker, pg)
+	add("worker case without worker file: pending", withPG, false, c, in)
+	add("worker case with worker file: required", all, true, c, in)
+	c, in = mk("kafka-mirror", plain)
+	add("rejected input uses the family class", shared, false, c, in)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ready, why := CaseReady(tt.c, tt.in, tt.rs)
+			if ready != tt.ready {
+				t.Fatalf("ready = %v (%s), want %v", ready, why, tt.ready)
+			}
+			if !ready && why == "" {
+				t.Fatal("a pending case must say what is missing")
+			}
+		})
+	}
+}
+
+func TestLoadRuleSet(t *testing.T) {
+	is := is.New(t)
+	root := t.TempDir()
+	rs, err := LoadRuleSet(root)
+	is.NoErr(err)
+	is.Equal(len(rs.Classes), 0) // no directory: nothing ready
+	dir := filepath.Join(root, filepath.FromSlash(RuleDataDir))
+	is.NoErr(os.MkdirAll(dir, 0o755))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "README.md"), []byte("# rules"), 0o600))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "shared.yaml"), []byte("rulesVersion: 1\nscope: shared\nkeys: []\n"), 0o600))
+	is.NoErr(os.WriteFile(filepath.Join(dir, "debezium-postgres.yaml"), []byte("rulesVersion: 1\nscope: source\nclass: io.debezium.connector.postgresql.PostgresConnector\n"), 0o600))
+	rs, err = LoadRuleSet(root)
+	is.NoErr(err)
+	is.True(rs.Shared)
+	is.True(!rs.Worker)
+	is.True(rs.Classes[ClassDebeziumPostgres])
+}

@@ -19,10 +19,12 @@
 // docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md
 // ("Harness corpus format"); README.md says how to add a case.
 //
-// The tests in this package run in the ordinary `go test ./...` and are
-// hermetic: they need no docker, no network and no migrate command. They
-// check that the corpus itself is sound (manifests, provenance, licenses,
-// scrub-v1, certification and coverage declarations). The reader and the
-// checks live in package harness so that the offline runner in
-// pkg/kcmigrate can reuse them.
+// The corpus tests (corpus_test.go) are hermetic and run in the ordinary
+// `go test ./...`: manifests, provenance, licenses, scrub-v1, certification
+// and coverage declarations. The runner tests (run_test.go) run every case
+// through the conduit binary named by CONDUIT_BIN and through its kc_migrate
+// MCP tool; without it, or before the command exists, they are reported
+// pending, never passing. README.md lists what each run checks and when
+// pending turns into failure. The reader and the checks live in package
+// harness so that an in-process runner in pkg/kcmigrate can reuse them.
 package migrate
