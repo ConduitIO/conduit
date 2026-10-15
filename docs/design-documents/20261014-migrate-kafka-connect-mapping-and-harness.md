@@ -341,6 +341,23 @@ tuning, which would have written to the wrong cluster. Found in review of #3080.
 `connect-<name>`) are absent-key defaults of this layer and are tracked separately (they must be modelled before
 a sink family ships).
 
+**Which pipeline connector the worker reaches (corrected 2026-10-15).** The chain above builds Kafka Connect's own
+client of a connector: the producer of a source connector, the consumer of a sink. In the pipeline that is the
+`builtin:kafka` destination of a source, or the `builtin:kafka` source of a sink, and only that connector gets
+worker keys. A pipeline's other Kafka connector is the connector's own client (MirrorMaker's consumer of the
+source cluster): no worker key reaches it, not `bootstrap.servers` and not `consumer.*`, and a missing source
+cluster is a blocking `kc.setting_required`, never the worker's cluster. Ownership of a setting is decided by
+origin (worker or connector), key and layer, so a worker key and a connector key of the same name are different
+keys. Rule files name layers (`client`, `cluster-client`, `override`, `fallback`) instead of numbers, and
+`override` is above every other connector layer. A `fallback` cluster (MirrorMaker's `target.cluster.*`) is used
+as a whole or not at all: when any other layer names the side's brokers, none of its keys is written and each
+entry says so, so two clusters' settings never mix. Entries a higher layer replaced are marked after every layer
+is applied, and a variable whose setting was replaced is not listed in `secrets.env.template`. A blocked key still
+owns every setting its rule could write: Kafka Connect would use its value, so the setting stays unset (a required
+one gets its variable) and no lower layer fills it, also under `--accept-gaps`. `kc.secret_plaintext` follows the
+input, not the pipeline: a literal secret in a key that ends up unused is still noted, on the worker file's entry
+when it is in the worker file. Found in review of #3117.
+
 #### Debezium PostgreSQL
 
 `io.debezium.connector.postgresql.PostgresConnector` to `builtin:postgres` source (v0.15.0) and `builtin:kafka`
@@ -717,7 +734,8 @@ by connector, with a "before you deploy" section (secrets, `kc.secret_stored_exp
 
 **Error codes.** New in this document, in addition to the base table: `kc.key_deprecated` (A), `kc.key_duplicate`
 (T, no-op), `kc.default_differs`, `kc.output_shape_differs`, `kc.delivery_semantics_differ`,
-`kc.setting_required` (notes), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
+`kc.setting_required` (notes), `kc.topic_name_unsupported` (note: a topic naming the destination's topic
+template cannot express), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
 diff codes below. All are registered through `conduiterr.Register`; the registry-completeness test in
 `pkg/conduit/exitcode` already fails a registered code with no exit bucket. Every code has a `fix` text. A table
 test fails if a code is emitted by a rule file but not registered, or registered but never emitted by any rule,

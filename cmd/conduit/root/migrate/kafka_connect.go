@@ -150,6 +150,7 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 		Strict: c.flags.Strict, AcceptGaps: c.flags.AcceptGaps,
 		ConduitVersion:   conduit.Version(false),
 		ValidatePipeline: ValidatePipeline(ctx),
+		RequiredSettings: migrate.BuiltinRequired,
 	})
 	if err != nil {
 		return cecdysis.Outcome{}, err

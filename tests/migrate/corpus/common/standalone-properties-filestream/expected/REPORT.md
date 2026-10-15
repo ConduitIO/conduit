@@ -4,7 +4,9 @@
 
 ## local-file-source
 
-Class `FileStreamSource`, role unknown. No pipeline written.
+- Class: `FileStreamSource`
+- Role: unknown
+- Pipeline: none written
 
 0 of 5 keys translated with no remark.
 

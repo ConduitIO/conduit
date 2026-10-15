@@ -75,6 +75,17 @@ var (
 	// CodeDefaultDiffers: a connector-level note for an absent key whose
 	// Kafka Connect default differs from Conduit's behavior.
 	CodeDefaultDiffers = conduiterr.Register("kc.default_differs", codes.InvalidArgument)
+	// CodeSettingRequired: a connector-level note for a setting the Conduit
+	// plugin requires that no Kafka Connect key provides; it is written as an
+	// environment variable to fill. Blocking: the pipeline cannot run as is.
+	CodeSettingRequired = conduiterr.Register("kc.setting_required", codes.InvalidArgument)
+	// CodeOutputShapeDiffers: a connector-level note that records, objects or
+	// topics differ in shape or layout from the original connector's.
+	CodeOutputShapeDiffers = conduiterr.Register("kc.output_shape_differs", codes.InvalidArgument)
+	// CodeTopicNameUnsupported: a connector-level note that the connector's
+	// topic naming cannot be written as the destination's topic template.
+	// Blocking: the destination topic must be set by hand.
+	CodeTopicNameUnsupported = conduiterr.Register("kc.topic_name_unsupported", codes.InvalidArgument)
 	// CodeSecretPlaintext: a connector-level note that the input holds a
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.

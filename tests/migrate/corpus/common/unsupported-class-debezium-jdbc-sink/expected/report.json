@@ -2,24 +2,7 @@
   "reportVersion": 1,
   "generator": {
     "conduit": "<VERSION>",
-    "rules": [
-      {
-        "class": "(shared)",
-        "rulesVersion": 1,
-        "upstream": {
-          "name": "kafka",
-          "version": "4.2"
-        }
-      },
-      {
-        "class": "(worker)",
-        "rulesVersion": 1,
-        "upstream": {
-          "name": "kafka",
-          "version": "4.2"
-        }
-      }
-    ]
+    "rules": []
   },
   "summary": {
     "connectors": 1,

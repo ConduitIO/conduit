@@ -104,6 +104,10 @@ type Decision struct {
 	Emit *Action
 	// Secret is the rule's secret flag.
 	Secret bool
+	// Claims are the actions of every outcome of the key's rule. A blocked
+	// key still owns the settings they name: Kafka Connect uses its value,
+	// so no lower layer may fill them in its place.
+	Claims []Action
 }
 
 // Classified is a connector after classification.
@@ -183,11 +187,14 @@ func classifyAll(kvs []kcmigrate.KV, primary, fallback *File) []Decision {
 }
 
 func classify(kv kcmigrate.KV, primary, fallback *File) Decision {
+	// The more specific of the class's and the shared rule wins (exact over
+	// prefix over regex, the longer prefix over the shorter), and the class
+	// on a tie, so a class prefix such as MirrorMaker's producer. does not
+	// shadow a shared exact rule such as producer.override.acks.
 	home := primary
 	r := home.match(kv.Key)
-	if r == nil && fallback != nil {
-		home = fallback
-		r = home.match(kv.Key)
+	if fr := fallback.match(kv.Key); fr != nil && specificity(fr) > specificity(r) {
+		home, r = fallback, fr
 	}
 	if r == nil {
 		return Decision{Entry: unknownKey(kv.Key, primary).entry(kv.Key, kv.Origin), KV: kv}
@@ -197,7 +204,7 @@ func classify(kv kcmigrate.KV, primary, fallback *File) Decision {
 		r = home.exact[alias]
 	}
 	o, act := r.outcomeFor(kv.Value)
-	d := Decision{Entry: o.entry(kv.Key, kv.Origin), KV: kv, Emit: act, Secret: r.Secret}
+	d := Decision{Entry: o.entry(kv.Key, kv.Origin), KV: kv, Emit: act, Secret: r.Secret, Claims: r.claims()}
 	if alias != "" {
 		legacy := fmt.Sprintf("%s is the legacy name of %s and is handled as %s", kv.Key, alias, alias)
 		if d.Entry.Status == kcmigrate.StatusTranslated {
@@ -368,6 +375,20 @@ func (f *File) checkRegexOverlap() error {
 	return cerrors.Join(errs...)
 }
 
+// claims returns the emit actions of every outcome of r.
+func (r *Rule) claims() []Action {
+	var out []Action
+	if r.Emit != nil {
+		out = append(out, *r.Emit)
+	}
+	for _, b := range r.Values {
+		if b.Emit != nil {
+			out = append(out, *b.Emit)
+		}
+	}
+	return out
+}
+
 func branchEmit(r *Rule, b ValueBranch) *Action {
 	if b.Emit != nil {
 		return b.Emit
@@ -404,4 +425,45 @@ func (e *Engine) DefaultNotes(c kcmigrate.Connector, workerKeys map[string]bool)
 		}
 	}
 	return notes
+}
+
+// specificity ranks a matched rule: an exact key, then prefixes by length,
+// then a regex; zero for no rule.
+func specificity(r *Rule) int {
+	switch {
+	case r == nil:
+		return 0
+	case r.Key.Prefix != "":
+		return 2 + len(r.Key.Prefix)
+	case r.re != nil:
+		return 1
+	default:
+		return 1 << 20
+	}
+}
+
+// RulesUsed describes the rule files a run consulted: the class file of
+// every class with rules, the shared file when at least one such class is
+// present, and the worker file for a run with a worker. Listing only these
+// keeps a report independent of rule files added for other classes.
+func (e *Engine) RulesUsed(classes []string, worker bool) []kcmigrate.RulesInfo {
+	used := map[*File]bool{}
+	for _, c := range classes {
+		if f, ok := e.classes[c]; ok {
+			used[f] = true
+			if e.shared != nil {
+				used[e.shared] = true
+			}
+		}
+	}
+	if worker && e.worker != nil {
+		used[e.worker] = true
+	}
+	out := []kcmigrate.RulesInfo{}
+	for _, f := range e.files { // e.files is sorted
+		if used[f] {
+			out = append(out, f.info())
+		}
+	}
+	return out
 }
