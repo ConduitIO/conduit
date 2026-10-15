@@ -283,3 +283,22 @@ func TestCheckTopology_NamesOnlyAffectedEncoders(t *testing.T) {
 	is.True(!strings.Contains(ce.Message, `"ok-enc"`))
 	is.True(strings.Contains(ce.Message, `processor "w" on source connector "pg2"`))
 }
+
+// TestCheckTopology_ProcessorChangeWording: for a live change the refusal says
+// the change was not applied and that the whole stored path was checked; the
+// offender can be a processor other than the changed one.
+func TestCheckTopology_ProcessorChangeWording(t *testing.T) {
+	is := is.New(t)
+	topo := Topology{
+		PipelineID:       pl,
+		ChangedProcessor: pl + ":b",
+		Sources:          []Connector{src("pg", proc(pl+":pg:w", wasm))},
+		Processors:       []Processor{proc(pl+":b", builtin), proc(pl+":enc", encode)},
+		Destinations:     []Connector{dst("kafka")},
+	}
+	ce := requireRefusal(t, CheckTopology(topo, resolverFor(wasm)))
+	is.True(strings.HasPrefix(ce.Message, `can't apply processor change to "b" in running pipeline pl`))
+	is.True(strings.Contains(ce.Message, "the whole stored path"))
+	is.True(strings.Contains(ce.Message, `processor "w" on source connector "pg"`))
+	is.True(!strings.Contains(ce.Message, "can't start"))
+}
