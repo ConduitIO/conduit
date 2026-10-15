@@ -1026,6 +1026,7 @@ Author: Meroxa, Inc.
 | `kc.key_conflict` | InvalidArgument | CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since either value could be the one Kafka Connect used. |
 | `kc.key_deprecated` | InvalidArgument | CodeKeyDeprecated: a legacy key name, handled as its current name. |
 | `kc.key_duplicate` | InvalidArgument | CodeKeyDuplicate: an earlier occurrence of a key that appears again later in the same connector config; the last value wins. |
+| `kc.key_required` | InvalidArgument | CodeKeyRequired: a connector-level note for a key the upstream connector requires (it has no default) that the config does not set. Kafka Connect rejects such a config. Blocking. |
 | `kc.key_unknown` | InvalidArgument | CodeKeyUnknown: no rule claims the key. Always blocking: an unknown key may change behavior, and the safe direction is to stop. |
 | `kc.key_unsupported` | InvalidArgument | CodeKeyUnsupported: a known key with no Conduit equivalent for its value. |
 | `kc.offsets_not_migrated` | InvalidArgument | CodeOffsetsNotMigrated: a connector-level note that the connector resumes from offsets Kafka Connect stored, which migrate does not carry over; the note says where the pipeline starts instead. Blocking: records are copied again or skipped. |

@@ -46,8 +46,18 @@ func TestMain(m *testing.M) {
 		}
 		runChild() // never returns; always os.Exit's
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	for _, f := range afterTests {
+		f()
+	}
+	os.Exit(code)
 }
+
+// afterTests runs once after every test in the binary has finished, for
+// resources shared across tests that t.Cleanup would remove too early (for
+// example the binaries standalone_batch_sigterm_test.go builds once per test
+// binary). Append only from test code, never from a child invocation.
+var afterTests []func()
 
 // sigkillCase drives a single SIGKILL scenario. Every case brackets its kill
 // point with one observed LOWER bound and one STRUCTURAL upper bound (the

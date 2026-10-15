@@ -40,12 +40,35 @@ const (
 	// FinishMM2Offsets names the finisher of MirrorMaker's
 	// kc.offsets_not_migrated note, which says where the pipeline starts.
 	FinishMM2Offsets = "mm2-offsets"
+	// FinishRequireKey blocks when the connector config lacks a key the
+	// upstream connector requires (no default). Argument: key.
+	FinishRequireKey = "require-key"
 )
 
 var finishers = map[string]Finisher{
 	FinishMM2Topic:   mm2Topic,
 	FinishDefault:    defaultSetting,
 	FinishMM2Offsets: mm2Offsets,
+	FinishRequireKey: requireKey,
+}
+
+// requireKey returns a blocking kc.key_required note when the config does
+// not set the key: the upstream connector has no default for it, so Kafka
+// Connect rejects the config, and nothing migrate writes could stand for
+// the value the running connector uses.
+func requireKey(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
+	key := a.Args["key"]
+	if key == "" {
+		return nil, cerrors.Errorf(FinishRequireKey + " needs a key")
+	}
+	if _, ok := p.config[key]; ok {
+		return nil, nil
+	}
+	return []kcmigrate.Note{{
+		Code: kcmigrate.CodeKeyRequired.Reason(), Blocking: true, Rule: FinishRequireKey + "/" + key,
+		Reason: "The connector requires " + key + ", which has no upstream default, and the config does not set it; Kafka Connect rejects this config, so it is not the one the running connector uses.",
+		Fix:    "Set " + key + " to the value of the running connector (GET /connectors/<name>/config), then re-run.",
+	}}, nil
 }
 
 // mm2Offsets returns the blocking kc.offsets_not_migrated note. MirrorMaker
@@ -141,7 +164,6 @@ const collectionTemplate = `{{ index .Metadata "opencdc.collection" }}`
 const (
 	mm2DefaultPolicy  = "org.apache.kafka.connect.mirror.DefaultReplicationPolicy"
 	mm2IdentityPolicy = "org.apache.kafka.connect.mirror.IdentityReplicationPolicy"
-	mm2DefaultAlias   = "source"
 	mm2DefaultSep     = "."
 )
 
@@ -158,7 +180,11 @@ func mm2Topic(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	case mm2IdentityPolicy, "IdentityReplicationPolicy":
 		tmpl = collectionTemplate
 	case mm2DefaultPolicy, "DefaultReplicationPolicy":
-		prefix := valueOr(p.config, "source.cluster.alias", mm2DefaultAlias) + valueOr(p.config, "replication.policy.separator", mm2DefaultSep)
+		alias, ok := p.config["source.cluster.alias"]
+		if !ok {
+			return nil, nil // required, no default: the require-key note blocks; no prefix is guessed
+		}
+		prefix := alias + valueOr(p.config, "replication.policy.separator", mm2DefaultSep)
 		if strings.ContainsAny(prefix, "{}") {
 			return []kcmigrate.Note{{
 				Code: kcmigrate.CodeTopicNameUnsupported.Reason(), Blocking: true, Rule: FinishMM2Topic,
