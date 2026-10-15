@@ -13,6 +13,11 @@ sources:
   - https://kafka.apache.org/42/generated/connect_config.html
   - https://kafka.apache.org/42/generated/source_connector_config.html
   - https://kafka.apache.org/42/generated/sink_connector_config.html
+# Checked nightly against the source and sink connector pages of 4.2 and of
+# the newest documented version (cmd/conduit/internal/kcdrift).
+check:
+  site: kafka
+  pages: [source_connector_config, sink_connector_config]
 keys:
   - {key: name}
   - {key: connector.class}
@@ -23,7 +28,9 @@ keys:
   - {key: key.converter.plugin.version}
   - {key: value.converter}
   - {key: value.converter.plugin.version}
-  - {key: header.converter, default: org.apache.kafka.connect.storage.SimpleHeaderConverter}
+  # The connector page documents null: an absent key inherits the worker's
+  # header.converter, whose default is SimpleHeaderConverter.
+  - {key: header.converter, default: org.apache.kafka.connect.storage.SimpleHeaderConverter, documented: "null"}
   - {key: header.converter.plugin.version}
   - {key: config.action.reload, default: restart}
   - {key: transforms, default: ""}
