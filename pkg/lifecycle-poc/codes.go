@@ -95,4 +95,13 @@ var (
 // A pipeline created through the API has no config document, so for it the
 // error carries no ConfigPath and no Fix; the message still names the
 // connector id and name and the setting.
+//
+// Where the refusal is recorded depends on who started the pipeline. A Start
+// through the API returns it to the caller and leaves the pipeline's status
+// untouched. At boot (resuming a pipeline the previous process left running,
+// or provisioning a config pipeline whose status is running) the pipeline is
+// set to Degraded with the refusal, code and suggestion included, as its
+// error, so it shows in `conduit pipelines list` and the API (#2989). A
+// recovery restart refused this way also ends Degraded. A Degraded pipeline is
+// not resumed at the next boot; fix the config and start it again.
 var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)
