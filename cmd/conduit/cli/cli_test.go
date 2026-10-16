@@ -15,13 +15,13 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/matryer/is"
@@ -45,7 +45,7 @@ func TestWrapConfigParseError(t *testing.T) {
 	is.True(rawErr != nil)
 
 	var pe viper.ConfigParseError
-	is.True(errors.As(rawErr, &pe)) // the parser really returns a ConfigParseError
+	is.True(cerrors.As(rawErr, &pe)) // the parser really returns a ConfigParseError
 
 	cfg := conduit.DefaultConfig()
 	cfg.ConduitCfg.Path = cfgPath
@@ -54,7 +54,7 @@ func TestWrapConfigParseError(t *testing.T) {
 	is.True(wrapped != rawErr) // it was wrapped, not returned as-is
 
 	var ce *conduiterr.ConduitError
-	is.True(errors.As(wrapped, &ce))
+	is.True(cerrors.As(wrapped, &ce))
 	is.Equal(ce.Code, config.CodeParseError)
 	is.True(ce.Suggestion != "")
 	is.Equal(exitcode.ExitCode(wrapped), exitcode.Validation)
@@ -64,6 +64,6 @@ func TestWrapConfigParseError(t *testing.T) {
 // unchanged, so error classification for every other failure path is untouched.
 func TestWrapConfigParseError_Passthrough(t *testing.T) {
 	is := is.New(t)
-	err := errors.New("some other error")
+	err := cerrors.New("some other error")
 	is.Equal(wrapConfigParseError(conduit.DefaultConfig(), err), err)
 }

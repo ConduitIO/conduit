@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/ecdysis"
@@ -81,7 +81,7 @@ func Run(cfg conduit.Config) {
 // carries the line and column of the offending token.
 func wrapConfigParseError(cfg conduit.Config, err error) error {
 	var pe viper.ConfigParseError
-	if !errors.As(err, &pe) {
+	if !cerrors.As(err, &pe) {
 		return err
 	}
 	ce := conduiterr.Wrap(
