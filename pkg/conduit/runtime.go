@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package conduit wires up everything under the hood of a Conduit instance
-// including metrics, telemetry, logging, and server construction.
-// It should only ever interact with the Orchestrator, never individual
-// services. All of that responsibility should be left to the Orchestrator.
 package conduit
 
 import (
