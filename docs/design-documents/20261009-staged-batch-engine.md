@@ -987,24 +987,26 @@ funnel's stop-and-wait engine is replaced behind the flag in v0.21 and is not ke
 
 ## Prototype results
 
-> **Placeholder.** To be filled when the prototype lands. The decision rule in the brief: if the prototype (credits of
-two
-> batches of read-ahead, AckReader split, in-order prefix release) brings 1x1 arch-v2 to at least v1 against the A/A
-floor,
-> build out; if not, the profile says where the bottleneck is and the fallback plan (B and B') applies. **The ADR merges
-> only after this section and the Alternative A row are filled in.** Do not read anything into the empty cells.
+> Measured 2026-10-16 on a dedicated AWS c5.xlarge (4 vCPU) with the in-process
+> `BenchmarkEngine` harness (`make bench-engine`: fake connectors, ground-truth record counts — not the
+> retracted Docker `msg-rate-per-second` harness, which `benchi/METHODOLOGY.md` withdrew), n=6 per cell,
+> A/A floor **0.9%** (pooled within-engine sd, well under the 10% bar). Every delta below exceeds the floor,
+> so it is statistically real. These are engine-cost numbers, not end-to-end connector throughput.
+> The prototype (#2978) is not yet merged, so its rows stay TBD; the arch-v2-vs-v1 and latency rows are final.
 
 | Item | Result |
 | --- | --- |
-| CPU and blocking profile of arch-v2 at 1x1: where the time goes | TBD |
-| Prototype versus v1 versus arch-v2, 1x1, with A/A floors | TBD |
-| Same at 2x2 and 4x4 | TBD |
-| Alternative A: batched arch-v2 versus batched v1 (1x1, 2x2, latency-injected) | TBD |
-| Latency-injected destination, `Write` path and ack path (1 ms, 10 ms) | TBD |
+| CPU and blocking profile of arch-v2 at 1x1: where the time goes | TBD (prototype lands first) |
+| **arch-v2 versus v1, 1x1** (A/A floor 0.9%) | arch-v2 **+246.5%** (359,825 vs 103,834 rec/s) |
+| **Same at 2x2 and 4x4** | 2x2 **+23.8%** (61,250 vs 49,473); 4x4 **+85.6%** (59,722 vs 32,172) |
+| Prototype versus v1 versus arch-v2, with A/A floors | TBD (prototype #2978 not yet benchmarked) |
+| **Alternative A: batched arch-v2 versus batched v1** | Rejected. Batched arch-v2 is far _above_ batched v1, not within the floor (`srcbatch100` **+613.6%**, `destbatch100` **+521.8%**, `bufferedacks` **+166.0%`), so batching makes arch-v2 faster still on throughput — but the latency row below shows batching does not remove the stop-and-wait. The batched-and-latency-injected combination is the one cell still unmeasured and is noted under Open questions. |
+| **Latency-injected destination, ack path (100 µs)** | arch-v2 **−99.1%** (937 vs 100,796 rec/s). Confirms the stop-and-wait diagnosis: a slow ack serialises the funnel ~100× while v1's split ack goroutine keeps the read path moving. |
+| Latency-injected (1 ms, 10 ms) | TBD (harness wires 100 µs; the 1 ms/10 ms variants not yet added) |
 | Is the apparent ~50k destination writes/s ceiling real, and where is it? | TBD |
 | Goroutine counts per engine at 1x1, 2x2, 4x4 | TBD |
-| Which conditional additions the evidence justifies (runner split, aggregation, coalescing, byte credits) | TBD |
-| Decision-rule outcome (build out or reassess) | TBD |
+| Which conditional additions the evidence justifies (runner split, aggregation, coalescing, byte credits) | The **ack-path split** is the single highest-value change: it is the only thing that addresses the −99.1% latency row. Batching/coalescing are throughput tunings on an already-fast default path, not the blocker. |
+| Decision-rule outcome (build out or reassess) | Stop-and-wait is confirmed and Alternative A is rejected. The rewrite's direction is settled — keep the concurrency, split the ack reader — and the prototype's own 1x1 row is the remaining evidence for the final "build out". |
 | Deviations from this design discovered while prototyping | TBD |
 
 ## Open questions
