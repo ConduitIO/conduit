@@ -53,7 +53,7 @@ func TestArchV2BatchingFindings(t *testing.T) {
 
 	var got []Finding
 	for _, f := range fs.Findings {
-		if f.Code == "pipeline.archv2_destination_batching_unsupported" {
+		if f.Code == codeArchV2DestinationBatchingUnsupported {
 			got = append(got, f)
 		}
 	}
@@ -88,7 +88,7 @@ func TestArchV2BatchingFindings_Off(t *testing.T) {
 	report := RunBytes(ctx, "p.yaml", []byte(archV2Pipeline), Options{})
 	is.Equal(len(report.Files), 1)
 	for _, f := range report.Files[0].Findings {
-		is.True(f.Code != "pipeline.archv2_destination_batching_unsupported")
+		is.True(f.Code != codeArchV2DestinationBatchingUnsupported)
 	}
 }
 
@@ -123,7 +123,7 @@ pipelines:
 
 			report := RunBytes(ctx, "p.yaml", []byte(src), Options{ArchV2: true})
 			for _, f := range report.Files[0].Findings {
-				is.True(f.Code != "pipeline.archv2_destination_batching_unsupported")
+				is.True(f.Code != codeArchV2DestinationBatchingUnsupported)
 			}
 		})
 	}

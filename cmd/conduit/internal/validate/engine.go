@@ -310,6 +310,12 @@ func builtinRefFinding(pluginRef, id, configPath, code, kind string, builtins ma
 	}, true
 }
 
+// codeArchV2DestinationBatchingUnsupported is the runtime engine's error code
+// for a batched destination/DLQ under arch-v2 (lifecycle.CodeArchV2DestinationBatchingUnsupported).
+// It is a literal here so the offline engine does not import pkg/lifecycle-poc;
+// keep it in sync with that registration.
+const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_batching_unsupported"
+
 // archV2BatchingFindings is the --preview.pipeline-arch-v2 check: arch-v2's
 // stop-and-wait destination task waits for every ack before the next read, so
 // a destination (or the dead-letter queue) with sdk.batch.size above 1 is
@@ -323,7 +329,7 @@ func archV2BatchingFindings(p config.Pipeline) []Finding {
 	add := func(findings []Finding, configPath, msg string) []Finding {
 		return append(findings, Finding{
 			Severity:   SeverityError,
-			Code:       "pipeline.archv2_destination_batching_unsupported",
+			Code:       codeArchV2DestinationBatchingUnsupported,
 			Message:    fmt.Sprintf("architecture v2 does not support %s", msg),
 			ConfigPath: configPath,
 			Suggestion: "set sdk.batch.size to 1 or remove it, or run the pipeline without architecture v2",
