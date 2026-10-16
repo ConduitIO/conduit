@@ -799,6 +799,77 @@ func TestSource_DeferredAck_PersistentSendFailure_EscalatesViaErrs(t *testing.T)
 	is.NoErr(src.Teardown(ctx))
 }
 
+// TestSource_Read_ReturnsOnContextCancel checks that an idle Read honours
+// its context: cancelling the caller's context unblocks Read promptly, even
+// though the plugin stream itself is still open (#2949).
+func TestSource_Read_ReturnsOnContextCancel(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).
+		Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+
+	readCtx, cancel := context.WithCancel(ctx)
+	readErr := make(chan error, 1)
+	go func() {
+		_, err := src.Read(readCtx)
+		readErr <- err
+	}()
+
+	// give Read a chance to block on the (idle) stream before cancelling
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-readErr:
+		is.True(cerrors.Is(err, context.Canceled))
+	case <-time.After(time.Second):
+		t.Fatal("Read did not return after its context was cancelled")
+	}
+
+	is.NoErr(src.Teardown(ctx))
+}
+
+// TestSource_Read_CancelDoesNotDropRecords checks that records the plugin
+// sends after a Read was cancelled are returned by the next Read instead of
+// being lost.
+func TestSource_Read_CancelDoesNotDropRecords(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), gomock.Any()).
+		Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).
+		Return(pconnector.SourceTeardownResponse{}, nil)
+
+	is.NoErr(src.Open(ctx))
+
+	readCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := src.Read(readCtx)
+	is.True(cerrors.Is(err, context.Canceled))
+
+	want := opencdc.Record{Position: opencdc.Position("pos-1")}
+	is.NoErr(stream.Server().Send(pconnector.SourceRunResponse{Records: []opencdc.Record{want}}))
+
+	got, err := src.Read(ctx)
+	is.NoErr(err)
+	is.Equal(len(got), 1)
+	is.Equal(got[0].Position, want.Position)
+
+	is.NoErr(src.Teardown(ctx))
+}
+
 func newTestSource(ctx context.Context, t testing.TB, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
