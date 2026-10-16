@@ -375,9 +375,41 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.14.4)
+### postgres (v0.15.0)
 
 Conduit connector for PostgreSQL
+
+**Connection and SCRAM authentication**
+
+Source and destination connect with the `url` setting. Over TLS with SCRAM
+authentication, the connector does not use channel binding unless you ask for it:
+`channel_binding=prefer`, the default of the pgx driver since 5.9, is mapped to
+`disable`, which is how the driver behaved in earlier releases. Channel binding
+(SCRAM-SHA-256-PLUS) fails against a server with an Ed25519 certificate and behind
+a proxy that terminates TLS and passes the SCRAM exchange through. Add
+`channel_binding=require` to the URL, or set `PGCHANNELBINDING=require` in the
+environment of the Conduit process, to require it. The driver reads
+`PGCHANNELBINDING` when the URL has no `channel_binding`. An explicit `prefer`,
+in the URL or in the environment, is also mapped to `disable`; `require` and
+`disable` are kept.
+
+```
+postgres://user:pass@host:5432/db?sslmode=require&channel_binding=require
+```
+
+**Upgrading from v0.14.x: connection string parsing**
+
+This version uses pgx 5.11, which parses connection strings like libpq does.
+Most URLs are unaffected. Check yours if it relies on one of these (the full
+list is in the pgx 5.11.0 changelog):
+
+- `+` in a query value is literal, no longer a space; encode a space as `%20`.
+- If a query parameter is repeated, the last one wins (the first used to).
+- An IPv6 host in a URL needs brackets: `postgres://[::1]/db`.
+- In a `key=value` connection string a backslash escapes the next character,
+  so a Windows path must be written `sslcert=C:\\path\\to\\cert`.
+- Default locations of the client certificate, key and `.pgpass` file are
+  resolved from `$HOME` instead of the OS account's home directory.
 
 **Source**
 
@@ -455,77 +487,6 @@ downstream. The source refuses to open on such a table with the error code
 `postgres.replica_identity.excludes_key`. Fix it with
 `ALTER TABLE <table> REPLICA IDENTITY FULL`, or use a unique index that includes the
 primary key.
-
-**Numeric Columns**
-
-A `numeric` column with a precision and scale, `numeric(p,s)`, is an Avro
-`decimal(p,s)` and its values are `big.Rat`.
-
-A `numeric` column **without** a precision and scale can hold any value Postgres
-can store, which no Avro `decimal` can. With `logrepl.withAvroSchema: true` (the
-default) it is an Avro `string` holding the exact text of the value, with its
-scale (`1.50` stays `1.50`), and `NaN`, `Infinity` and
-`-Infinity` as those three words: **a consumer of such a column must handle
-them**, a plain decimal parser will reject them. Earlier versions used `decimal(65535, 65531)`, which could not encode a
-value of 10000 or more and stopped the pipeline. The first record after an
-upgrade registers a new schema version for the table; consumers must read the
-field as a string. This connector's destination writes the string to a `numeric`
-column exactly.
-
-**Known issue:** a zero with a display scale reads as `0` in the snapshot and as
-`0.000` (its stored text) in change data capture. The values are numerically
-equal; only the text differs. Tracked in
-[#391](https://github.com/ConduitIO/conduit-connector-postgres/issues/391).
-
-So the Go type of an unconstrained `numeric` depends on the setting: a `string`
-with `logrepl.withAvroSchema: true`, a `big.Rat` with `false`.
-
-Without an Avro schema, a `numeric` is a `big.Rat`; `NaN`, `Infinity` and
-`-Infinity` are the strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and the same
-applies to the elements of `numeric[]` (finite elements are unchanged). A `NULL`
-stays `NULL`.
-
-`NaN` in a `numeric(p,s)` column (the infinities cannot be stored there) cannot
-be an Avro decimal, and the connector never replaces it with `NULL` or a number:
-the source stops with the error code `postgres.source.numeric_not_representable`,
-which names the table, the column, the value and the row's key. To continue:
-
-- **Change data capture:** restart once with `logrepl.withAvroSchema: false`
-  from the same position. The value is delivered as a string. **Then set it
-  back to `true` as soon as that record has been delivered.** Without an Avro
-  schema a finite `numeric` is a `big.Rat`, which a standalone connector
-  cannot send to Conduit (#378): the next finite numeric would stop the
-  pipeline. Built-in pipelines are not affected.
-  On a standalone connector the SDK also fails the whole read batch on the
-  first record it cannot send, so if the NaN/Infinity record or its batch
-  contains any finite numeric, it is never delivered with Avro off and this
-  workaround does not help (#378 is the fix). While Avro is off,
-  JSON-serializing destinations receive a finite numeric as the string `"3/2"`.
-- **Snapshot:** `UPDATE` the row to a finite value (or `NULL`) and restart.
-- Removing the row, or adding a `CHECK` constraint, does not help for a change
-  that is already in the WAL: it is read again after every restart. Do not drop
-  the replication slot to get past it, that loses the position. A constraint
-  only keeps new bad values out.
-
-**Infinite Dates and Timestamps**
-
-`date`, `timestamp` and `timestamptz` columns can hold `infinity` and
-`-infinity`. The Avro date and timestamp types cannot represent them. Earlier
-versions wrote them as `1970-01-02` and `1969-12-31` (dates) without any error.
-
-- With `logrepl.withAvroSchema: true` (the default), the source stops with the
-  error code `postgres.source.temporal_not_representable`, which names the
-  table, the column and the value. Removing the row does not help once the
-  change is in the WAL: set `logrepl.withAvroSchema` to `false`.
-- With `logrepl.withAvroSchema: false`, the values are emitted as the strings
-  `"infinity"` and `"-infinity"`.
-
-The same applies per element of `date[]`, `timestamp[]`, `timestamptz[]` and
-`numeric[]` (for `numeric[]`, `NaN`, `Infinity` and `-Infinity` elements are
-emitted as strings; finite elements are unchanged). The connector has no Avro
-mapping for array columns, so with the default `logrepl.withAvroSchema: true`
-a table with an array column already stops with a schema error before any
-record is emitted.
 
 **Before Image of Updates and Deletes**
 
@@ -664,12 +625,86 @@ What this means for your destination:
   row image carries every column, and this connector backfills unchanged TOASTed
   values from it so the payload is always complete.
 
-With the default `logrepl.withAvroSchema: true` and the default
-`REPLICA IDENTITY`, an update that leaves a TOASTed column unchanged still stops the
-source: the field is omitted, but the Avro payload schema requires it, so the record
-cannot be encoded
-([#383](https://github.com/ConduitIO/conduit-connector-postgres/issues/383)). Set
-`REPLICA IDENTITY FULL` on such tables.
+**Value Representation**
+
+Values do not depend on the time zone of the machine running the connector or on the
+version of the Postgres driver. The same row gives the same record everywhere, for
+snapshot and CDC.
+
+| Postgres type | Without an Avro schema | With an Avro schema (`logrepl.withAvroSchema`, the default) |
+| --- | --- | --- |
+| `timestamp` | The wall clock stored in Postgres, as a time with no offset information (`2024-01-02T03:04:05Z` for `2024-01-02 03:04:05`). | `local-timestamp-micros` of the same wall clock. |
+| `timestamptz` | The instant, in UTC (`Z`). | `timestamp-micros`. |
+| `date` | Midnight UTC of the date. | `date`. |
+| `tsvector` | Postgres text form, `'a':1 'cat':3A,4B`. | `string`, same text. |
+| `infinity`, `-infinity` | The strings `infinity` and `-infinity`. | The source halts with error code `postgres.source.temporal_not_representable`. |
+| Years before 1 BC or after 9999 AD | Postgres text, for example `0044-03-15 12:00:00 BC`. | As above, up to what 64-bit microseconds hold; beyond that the same error. |
+| Arrays, ranges, multiranges of these | Element and bound values as above. | Not supported by the Avro schema. |
+
+A range or multirange is a JSON object `{"Lower":...,"Upper":...,"LowerType":105,
+"UpperType":101,"Valid":true}`, and a multirange is an array of them. `LowerType` and
+`UpperType` are the ASCII codes of the bound kind: `105` (`i`) inclusive, `101` (`e`)
+exclusive, `85` (`U`) unbounded (the bound is `null`), `69` (`E`) empty range. Bounds
+follow the rules above. Arrays of `tsmultirange`, `tstzmultirange` and `datemultirange`
+are emitted as the Postgres text of the array.
+
+If the source halts with `postgres.source.temporal_not_representable`, set
+`logrepl.withAvroSchema` to `false`. Removing the row does not help a change that is
+already in the WAL, because it is read again after every restart.
+
+**Numeric Columns**
+
+A `numeric` column with a precision and scale, `numeric(p,s)`, is an Avro
+`decimal(p,s)` and its values are `big.Rat`.
+
+A `numeric` column **without** a precision and scale can hold any value Postgres
+can store, which no Avro `decimal` can. With `logrepl.withAvroSchema: true` (the
+default) it is an Avro `string` holding the exact text of the value, with its
+scale (`1.50` stays `1.50`), and `NaN`, `Infinity` and
+`-Infinity` as those three words: **a consumer of such a column must handle
+them**, a plain decimal parser will reject them. Earlier versions used `decimal(65535, 65531)`, which could not encode a
+value of 10000 or more and stopped the pipeline. The first record after an
+upgrade registers a new schema version for the table; consumers must read the
+field as a string. This connector's destination writes the string to a `numeric`
+column exactly.
+
+**Known issue:** a zero with a display scale reads as `0` in the snapshot and as
+`0.000` (its stored text) in change data capture. The values are numerically
+equal; only the text differs. Tracked in
+[#391](https://github.com/ConduitIO/conduit-connector-postgres/issues/391).
+
+So the Go type of an unconstrained `numeric` depends on the setting: a `string`
+with `logrepl.withAvroSchema: true`, a `big.Rat` with `false`. Changing a column
+between `text`/`varchar` and an unconstrained numeric is accepted by the
+`evolve` schema-drift policy only when `withAvroSchema` is `true` (the Avro
+shape does not change); with `false` the value's type changes, so it halts.
+
+Without an Avro schema, a `numeric` is a `big.Rat`; `NaN`, `Infinity` and
+`-Infinity` are the strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and the same
+applies to the elements of `numeric[]` (finite elements are unchanged). A `NULL`
+stays `NULL`.
+
+`NaN` in a `numeric(p,s)` column (the infinities cannot be stored there) cannot
+be an Avro decimal, and the connector never replaces it with `NULL` or a number:
+the source stops with the error code `postgres.source.numeric_not_representable`,
+which names the table, the column, the value and the row's key. To continue:
+
+- **Change data capture:** restart once with `logrepl.withAvroSchema: false`
+  from the same position. The value is delivered as a string. **Then set it
+  back to `true` as soon as that record has been delivered.** Without an Avro
+  schema a finite `numeric` is a `big.Rat`, which a standalone connector
+  cannot send to Conduit (#378): the next finite numeric would stop the
+  pipeline. Built-in pipelines are not affected.
+  On a standalone connector the SDK also fails the whole read batch on the
+  first record it cannot send, so if the NaN/Infinity record or its batch
+  contains any finite numeric, it is never delivered with Avro off and this
+  workaround does not help (#378 is the fix). While Avro is off,
+  JSON-serializing destinations receive a finite numeric as the string `"3/2"`.
+- **Snapshot:** `UPDATE` the row to a finite value (or `NULL`) and restart.
+- Removing the row, or adding a `CHECK` constraint, does not help for a change
+  that is already in the WAL: it is read again after every restart. Do not drop
+  the replication slot to get past it, that loses the position. A constraint
+  only keeps new bad values out.
 
 **Limitations**
 
@@ -708,6 +743,42 @@ If the target table does not contain a record with the same key as a record bein
 deleted, the record will be ignored.
 
 If there is no key, the record will be simply appended.
+
+**Keys, columns and acknowledgements**
+
+- **Upsert key.** With a structured record key (or a raw key that is a JSON object),
+  a create, update or snapshot record is `INSERT ... ON CONFLICT (<key columns>) DO
+  UPDATE SET` every other field of the record. The key columns must carry a primary
+  key or unique constraint, otherwise Postgres rejects the statement. When a record has
+  no field besides its key columns (a table whose columns are all key columns), the
+  statement is `ON CONFLICT DO NOTHING`, so a redelivery is a no-op.
+- **Columns.** Each record is written with exactly its own fields. A field the table has
+  no column for fails the write; the destination does not create or alter tables. A
+  field the record lacks is not written: an insert gets the column default, an existing
+  row keeps its value. A create, update or snapshot record without fields fails with
+  `postgres.destination.payload_empty`.
+- **Key values** must be one non-null scalar per key column, for upserts and deletes. A
+  null value fails with `postgres.destination.key_column_missing` (a delete would match
+  every row with a NULL there, an upsert would append a new row on every redelivery), and
+  a list or object fails with `postgres.destination.key_value_not_scalar` (a delete would
+  match several rows or none).
+- **Deletes** need a key and delete the rows matching every key column.
+- **Raw JSON** keys and payloads are decoded without going through `float64`: an integer
+  literal is an `int64` (or `uint64`), and any other number keeps its literal, so
+  `numeric`, `text` and `json`/`jsonb` columns store it exactly. Integer columns take a
+  whole value in any form (`1e3`, `7.0`) and reject a fraction; `real` and `float8`
+  columns store the nearest float. Structured data that arrives over the plugin protocol
+  has already passed through a double (ConduitIO/conduit#3100), so integers above 2^53
+  sent that way are rounded before the destination sees them.
+- **Names** of the table and columns are quoted as Postgres identifiers, so reserved
+  words, upper case and double quotes work. A name with a NUL byte or longer than 63 bytes
+  fails with `postgres.destination.invalid_identifier`, because Postgres would address a
+  different table or column. The table name is one identifier: a dot is part of the name,
+  not a schema separator.
+- **Acknowledgements.** A write is one implicit transaction. If any statement or the
+  commit fails, nothing from that write is stored and no record of it is acknowledged;
+  the records are redelivered (at-least-once). Keyed upserts make redelivery
+  idempotent; keyless inserts append again.
 
 **Numeric columns**
 
@@ -759,7 +830,6 @@ Postgres 17.5:
 Every accepted conversion to a non-numeric type is a silent coercion if the
 schema maps a numeric field to the wrong column, so check the mapping.
 
-
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -768,7 +838,9 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `cdcMode` | string | auto | no | CDCMode determines how the connector should listen to changes. | inclusion(auto,logrepl) |
 | `logrepl.autoCleanup` | bool | true | no | LogreplAutoCleanup determines if the replication slot and publication should be removed when the connector is deleted. |  |
+| `logrepl.import.debeziumOffset` | string |  | no | LogreplImportDebeziumOffset starts the pipeline from a Debezium Postgres connector's committed offset instead of a snapshot. It is written by `conduit migrate kafka-connect --cutover`, not by hand. It applies only while the pipeline has no position: the first acknowledged record writes an ordinary position and the setting is ignored from then on (remove it once the import is complete). Requires snapshotMode "never" and cdcMode "logrepl", and an existing slot and publication, which import mode never creates. Requires Conduit v0.19.0 or later, which acks a record only after its position is persisted. |  |
 | `logrepl.publicationName` | string | conduitpub | no | LogreplPublicationName determines the publication name in case the connector uses logical replication to listen to changes (see CDCMode). |  |
+| `logrepl.schemaDrift.policy` | string | halt | no | LogreplSchemaDriftPolicy determines how the connector handles schema drift (a DDL that changes a table's shape during CDC; DBZ-3 B1):   - "halt" (default): emit a drift marker record, checkpoint before it,     and stop with a terminal error until the pipeline is restarted to     approve the change.   - "evolve": accept additive changes silently; incompatible (narrowing)     changes still halt. "dlq" is reserved for a future version and rejected at validation. |  |
 | `logrepl.slotName` | string | conduitslot | no | LogreplSlotName determines the replication slot name in case the connector uses logical replication to listen to changes (see CDCMode). Can only contain lower-case letters, numbers, and the underscore character. | regex(^[a-z0-9_]+$) |
 | `logrepl.withAvroSchema` | bool | true | no | WithAvroSchema determines whether the connector should attach an avro schema on each record. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -783,7 +855,7 @@ Author: Meroxa, Inc.
 | `snapshot.fetchSize` | int | 50000 | no | Snapshot fetcher size determines the number of rows to retrieve at a time. |  |
 | `snapshotMode` | string | initial | no | SnapshotMode is whether the plugin will take a snapshot of the entire table before starting cdc mode. | inclusion(initial,never) |
 | `tables` | string |  | yes | Tables is a List of table names to read from, separated by a comma, e.g.:"table1,table2". Use "*" if you'd like to listen to all tables. | required |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
 
 #### Destination parameters
 
@@ -798,9 +870,9 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
 
-### s3 (v0.9.5)
+### s3 (v0.10.0)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -935,12 +1007,128 @@ configurations, using `aws.bucket`, `aws.accessKeyId`,`aws.secretAccessKey` and
 `aws.region`. If the permissions fail, the connector will not be ready for
 writing to S3.
 
-**Writer**
+**Writes and delivery**
 
-The S3 destination writer has a buffer with the size of `bufferSize`, for each
-time `Write` is called, a new record is added to the buffer. When the buffer is
-full, all the records from it will be written to the S3 bucket, and an ack
-function will be called for each record after being written.
+Every batch the SDK hands to the destination (`sdk.batch.size` records, or
+fewer after `sdk.batch.delay`; one record per batch by default) is written
+with one `PutObject` per object, and the records are acknowledged only after
+`PutObject` succeeded. Delivery is at-least-once: a batch that is retried
+after a failure or a restart is written again as a new object, so a reader
+can see a record twice, never zero times. Object names are
+`<UnixNano>.<ext>`, not deterministic.
+
+**Formats**
+
+- `json`: one JSON object per line with `Operation`, `Position`, `Payload`,
+  `Key` and `Metadata`; payload and key are JSON strings. A record whose key,
+  payload, position or metadata is not valid UTF-8 is refused with the error
+  `s3.destination.invalid_utf8` instead of being stored with replaced bytes.
+- `parquet`: the same fields as string columns.
+- `bytearray`: the payload bytes of every record, unchanged, each followed
+  by `format.bytearray.separator` (default a newline). Structured payloads
+  are written as their JSON encoding. A record without a payload (a delete,
+  a Kafka tombstone) or with an empty one is refused with the error
+  `s3.destination.null_value`; drop such records with a `filter` processor
+  if they are expected. A Kafka tombstone arrives as an empty value, so an
+  empty Kafka value cannot be told apart from it and is refused too. The
+  separator is not escaped inside payloads: a payload that contains it
+  cannot be split back unambiguously (as with Kafka Connect's
+  `ByteArrayFormat`).
+
+`compression` is `none` or `gzip` for `json` and `bytearray` (gzip appends
+`.gz` to the extension and sets the content type to `application/gzip`), and
+`none`, `gzip` (default) or `snappy` for `parquet`, where it is the column
+codec.
+
+When a record is refused, the records before it in the batch are written as
+one object and acked, the refused record and the ones after it are nacked
+(to the DLQ, if one is configured).
+
+**Coming from the Kafka Connect S3 sink**
+
+- `ByteArrayFormat` is `format: bytearray`; `format.bytearray.separator` and
+  `format.bytearray.extension` have the same meaning (Kafka Connect's
+  extension default is `.bin` as well).
+- `JsonFormat` for topics with JSON values is `format: bytearray` with
+  `format.bytearray.extension: .json`: the stored bytes are the record
+  values. Kafka Connect re-serializes values through its converter, so
+  whitespace and key order can differ, and `schemas.enable=true` envelopes
+  are not produced.
+- `s3.compression.type: gzip` is `compression: gzip`; `parquet.codec` is
+  `compression` with `format: parquet` (Kafka Connect defaults to snappy,
+  this connector to gzip).
+- `behavior.on.null.values` other than `fail` has no counterpart.
+
+**Server-side encryption**
+
+By default the destination sends no server-side encryption header, so the
+bucket's default encryption applies. On AWS every bucket encrypts new
+objects with SSE-S3 unless it is configured otherwise, and a bucket whose
+default is SSE-KMS gets SSE-KMS objects. An S3-compatible store without a
+default encryption configuration stores objects unencrypted. When
+`aws.serverSideEncryption` is empty, `Open` reads the bucket's default
+encryption (`GetBucketEncryption`, permission
+`s3:GetEncryptionConfiguration`) and logs a warning with the code
+`s3.destination.bucket_unencrypted` if there is none. It never refuses to
+start; without the permission the check is skipped (debug log).
+
+Set `aws.serverSideEncryption` to `AES256`, `aws:kms` or `aws:kms:dsse` to
+request a mode explicitly, and `aws.sseKmsKeyId` to pick the KMS key for the
+two KMS modes. An explicit mode overrides the bucket default.
+
+Upgrading from v0.9.5 or earlier: those versions sent `AES256` on every
+write, whatever the bucket default was, so an SSE-KMS bucket default was
+silently replaced by SSE-S3 (#1047). To keep the old behavior, set
+`aws.serverSideEncryption: AES256`.
+
+**Partitioning (Kafka Connect S3 sink layout)**
+
+`partitioner` selects the directory layout under `prefix`:
+
+| `partitioner` | Object key |
+| --- | --- |
+| `none` (default) | `<prefix>/<UnixNano>.<ext>` |
+| `default` | `<prefix>/<collection>/partition=<kafka.partition>/<UnixNano>.<ext>` |
+| `field` | `<prefix>/<collection>/<field>=<value>/.../<UnixNano>.<ext>` |
+| `time`, `hourly`, `daily` | `<prefix>/<collection>/<time formatted with partitioner.pathFormat>/<UnixNano>.<ext>` |
+
+`<collection>` is the `opencdc.collection` metadata, which `builtin:kafka`
+sets to the topic, so with `prefix: topics` the directories are the ones the
+Kafka Connect S3 sink writes, and tables or partition projections defined
+over them keep working. `partitioner.pathFormat` takes Kafka Connect's
+`path.format` syntax (numeric fields only), for example
+`'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH`. `hourly` and `daily` are Kafka
+Connect's `HourlyPartitioner` and `DailyPartitioner`. Partition values are
+escaped the way Hive escapes path names (`/` becomes `%2F`).
+
+A batch is split into one object per directory. If one of those writes
+fails, the records before the first record of the failed object are
+acknowledged and the rest are nacked with the error: the pipeline stops,
+or, with a dead-letter queue configured, those records go to it. Nothing is
+acknowledged that is not stored. A restart delivers the nacked records
+again, and records of objects that were already written can then be stored
+twice (at-least-once). A record without the value its partitioner needs
+(no collection, no `kafka.partition`, no `opencdc.createdAt`, a missing or
+null field) is never written under an empty partition: it fails with the
+error code `s3.destination.partition_value`.
+
+Differences from Kafka Connect's `FieldPartitioner` that a reader of the
+layout can notice:
+
+- a null field fails the record (`s3.destination.partition_value`); Kafka
+  Connect writes it under `field=null`;
+- values are escaped as Hive escapes path names (`/` becomes `%2F`, `=`
+  becomes `%3D`, and so on); Kafka Connect writes them unescaped, so a
+  value with `/` there becomes extra directory levels;
+- numbers keep the text they have in a raw JSON payload (`5`, `5.0`,
+  `1e3` stay as written), and a number in structured data is written in its
+  shortest form (`5` for 5.0). Kafka Connect writes the Java string of the
+  converted value (`5.0` for a double, `1000.0` for `1e3`), so a double
+  field with a whole value can land in `field=5` here and `field=5.0`
+  there.
+
+`builtin:kafka` does not set `kafka.partition` yet, so `partitioner: default`
+needs it set by a processor until it does.
 
 Author: Meroxa, Inc.
 
@@ -977,7 +1165,19 @@ Author: Meroxa, Inc.
 | `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
 | `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
-| `format` | string |  | yes | the destination format, either "json" or "parquet". | required, inclusion(parquet,json) |
+| `aws.serverSideEncryption` | string |  | no | Server-side encryption to request for every object written: AES256 (SSE-S3), aws:kms (SSE-KMS) or aws:kms:dsse (DSSE-KMS). Leave empty to send no encryption header, so the bucket's default encryption applies (on AWS every bucket encrypts with SSE-S3 by default; an S3-compatible store may store the object unencrypted). An explicit value overrides the bucket default: setting AES256 on a bucket whose default is SSE-KMS stores objects with SSE-S3 instead. |  |
+| `aws.sseKmsKeyId` | string |  | no | The KMS key ID, key ARN, alias name or alias ARN to encrypt objects with. Only valid when aws.serverSideEncryption is aws:kms or aws:kms:dsse; when empty with those modes, S3 uses the bucket's default KMS key, or the AWS managed key aws/s3. |  |
+| `compression` | string |  | no | Compression of the objects: none or gzip for json and bytearray (gzip appends .gz to the extension), none, gzip or snappy (the column codec) for parquet. Empty means the format's default: none for json and bytearray, gzip for parquet. |  |
+| `format` | string |  | yes | The destination format: "json" (one OpenCDC-shaped JSON object per line), "parquet", or "bytearray" (the payload bytes of every record followed by format.bytearray.separator; Kafka Connect's ByteArrayFormat, and with format.bytearray.extension set to .json the bytes Kafka Connect's JsonFormat writes for JSON values). bytearray fails a record without a payload (a delete or a Kafka tombstone) or with an empty one (indistinguishable from a tombstone) with the error s3.destination.null_value; json fails a record that is not valid UTF-8 with s3.destination.invalid_utf8. | required, inclusion(parquet,json,bytearray) |
+| `format.bytearray.extension` | string | .bin | no | File extension of objects written by format bytearray, with or without the leading dot. |  |
+| `format.bytearray.separator` | string | \n | no | Written after every record by format bytearray. The escapes \n, \r, \t and \\ are resolved. The separator is not escaped inside payloads, so a payload that contains it cannot be split back unambiguously (as with Kafka Connect's ByteArrayFormat); pick a separator the data cannot contain, or use json or parquet. |  |
+| `partitioner` | string | none | no | The directory layout under the prefix. "none" writes every batch to <prefix>/<UnixNano>.<ext>, as earlier versions do. The others reproduce the directories of the Kafka Connect S3 sink's partitioners, under <prefix>/<collection>/ (the collection is the opencdc.collection metadata, the topic for records from builtin:kafka): "default" adds partition=<kafka.partition metadata>, "field" adds <field>=<value> per field in partitioner.fields, "time" adds the record time formatted with partitioner.pathFormat, "hourly" and "daily" are "time" with Kafka Connect's hourly and daily patterns. A batch is split into one object per directory. A record that lacks the value its partitioner needs is not written: it fails with the error code s3.destination.partition_value. | inclusion(none,default,field,time,hourly,daily) |
+| `partitioner.duration` | duration |  | no | The width of a time partition for partitioner "time", at least 1s (Kafka Connect: partition.duration.ms). The record time is floored to a multiple of it in partitioner.timezone. |  |
+| `partitioner.fields` | string |  | no | Comma-separated payload fields for partitioner "field", dots for nested fields (Kafka Connect: partition.field.name). The payload must be structured data or a raw JSON object. |  |
+| `partitioner.pathFormat` | string |  | no | The directory pattern for partitioner "time", in Kafka Connect's path.format syntax: yyyy or YYYY, MM, dd, HH, mm, ss, and quoted literal text, for example 'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH. Text fields (MMM) are not supported. |  |
+| `partitioner.timestampExtractor` | string | record | no | Where the time partitioners take the time from: "record" (the opencdc.createdAt metadata, the Kafka record timestamp for builtin:kafka), "recordField" (the payload field in partitioner.timestampField: epoch milliseconds, an RFC 3339 string or a time) or "wallclock" (the time of the write; a redelivered record can land in a later directory). | inclusion(record,recordField,wallclock) |
+| `partitioner.timestampField` | string |  | no | The payload field for timestampExtractor "recordField", dots for nested fields (Kafka Connect: timestamp.field). |  |
+| `partitioner.timezone` | string | UTC | no | The IANA time zone the time partitioners floor and format in. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is written to the destination. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
