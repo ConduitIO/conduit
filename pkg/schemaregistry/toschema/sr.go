@@ -47,7 +47,7 @@ func SrSchemaType(t sr.SchemaType) schema.Type {
 	case sr.TypeAvro:
 		return schema.TypeAvro
 	case sr.TypeProtobuf:
-		return 0 // not supported yet
+		return schema.TypeProtobuf
 	case sr.TypeJSON:
 		return 0 // not supported yet
 	default:
