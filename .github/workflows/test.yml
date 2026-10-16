@@ -28,6 +28,11 @@ jobs:
         # surfaced (pkg/foundation/log and
         # pkg/plugin/processor/builtin/internal/diff/difftest) were fixed;
         # both are now hermetic and this can gate merges.
+        #
+        # RAPID_CHECKS: property tests (pgregory.net/rapid) run a small, fixed
+        # number of cases here; property-nightly.yml runs many more.
+        env:
+          RAPID_CHECKS: "100"
         run: make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"
 
       - name: Storage downgrade gate (tests/upgrade/storecompat/downgrade)
