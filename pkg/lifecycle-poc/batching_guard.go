@@ -17,8 +17,6 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -27,10 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
-
-// sdkBatchSizeSetting is the destination setting the conduit-connector-sdk
-// reads to buffer writes. See CodeArchV2DestinationBatchingUnsupported.
-const sdkBatchSizeSetting = "sdk.batch.size"
 
 // batchingDest is one destination connector as the guard sees it, whichever
 // source it came from (the engine's stored instances at Start, or a desired
@@ -48,36 +42,6 @@ type batchingOffender struct {
 	label      string // human description: destination connector "x" / the dead letter queue
 	configPath string // JSON pointer into the pipeline config document
 	value      string // the offending value, trimmed
-}
-
-// sdkBatchSizeAboveOne reports whether settings carry an sdk.batch.size the SDK
-// would read as larger than 1, returning the key as written and the trimmed
-// value.
-//
-// It mirrors how conduit-connector-sdk reads the setting: config.Sanitize trims
-// every key and value, so " sdk.batch.size" is the same setting (keys are
-// otherwise case-sensitive). Validation then parses the value with
-// strconv.Atoi, so the guard does the same. (Decoding then uses base 0, so
-// "0144" is validated as 144 but decoded as octal 100; the octal reading is
-// never larger than the decimal one, so Atoi alone decides.)
-// A value Atoi rejects never reaches the batcher (the plugin fails its own
-// config validation), so it is left to the plugin. Unset, empty, 0, 1 and
-// negative values are not refused.
-func sdkBatchSizeAboveOne(settings map[string]string) (key, value string, ok bool) {
-	var keys []string
-	for k := range settings {
-		if strings.TrimSpace(k) == sdkBatchSizeSetting {
-			keys = append(keys, k)
-		}
-	}
-	sort.Strings(keys) // deterministic when a map carries both padded and plain keys
-	for _, k := range keys {
-		v := strings.TrimSpace(settings[k])
-		if n, err := strconv.Atoi(v); err == nil && n > 1 {
-			return k, v, true
-		}
-	}
-	return "", "", false
 }
 
 // jsonPointerEscape escapes a reference token per RFC 6901.
@@ -101,7 +65,7 @@ func dlqSettingPointer(key string) string {
 func batchingOffenders(dests []batchingDest, dlq map[string]string) []batchingOffender {
 	var offenders []batchingOffender
 	for _, d := range dests {
-		key, value, bad := sdkBatchSizeAboveOne(d.settings)
+		key, value, bad := config.SDKBatchSizeAboveOne(d.settings)
 		if !bad {
 			continue
 		}
@@ -116,7 +80,7 @@ func batchingOffenders(dests []batchingDest, dlq map[string]string) []batchingOf
 		})
 	}
 	// The DLQ is a destination too and runs through the same stop-and-wait task.
-	if key, value, bad := sdkBatchSizeAboveOne(dlq); bad {
+	if key, value, bad := config.SDKBatchSizeAboveOne(dlq); bad {
 		offenders = append(offenders, batchingOffender{
 			label:      "the dead letter queue",
 			configPath: dlqSettingPointer(key),
@@ -209,9 +173,9 @@ func errDestinationBatchingUnsupported(pipelineID string, offenders []batchingOf
 	parts := make([]string, len(offenders))
 	for i, o := range offenders {
 		if withDocument {
-			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, sdkBatchSizeSetting, o.value, o.configPath)
+			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, config.SDKBatchSizeSetting, o.value, o.configPath)
 		} else {
-			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, sdkBatchSizeSetting, o.value)
+			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, config.SDKBatchSizeSetting, o.value)
 		}
 	}
 	ce := conduiterr.New(
