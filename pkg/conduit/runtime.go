@@ -189,6 +189,14 @@ func WithLogger(logger log.CtxLogger) RuntimeOption {
 	return func(o *runtimeOptions) { o.logger = &logger }
 }
 
+// defaultContextLoggerOnce bounds the process-global
+// zerolog.DefaultContextLogger assignment to at most once per process (#3111).
+// NewRuntime can be called concurrently by embedders, and a second assignment
+// would race with the first runtime's goroutines reading the global (and
+// misroute ambient logs between runtimes). The first runtime to need a
+// fallback wins; embedders that want per-runtime isolation pass WithLogger.
+var defaultContextLoggerOnce sync.Once
+
 // WithMetricsRegisterer supplies a Prometheus registerer that receives this
 // Runtime's metric families instead of the package-level configureMetrics()
 // path (which registers into promclient.DefaultRegisterer behind a
@@ -397,8 +405,12 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		Hook(ctxutil.FilepathLogCtxHook{})
 	if ro.logger == nil {
 		// CLI path only (AC-5.3): an embed-supplied logger must never become
-		// the ambient global fallback — see WithLogger's doc.
-		zerolog.DefaultContextLogger = &logger.Logger
+		// the ambient global fallback — see WithLogger's doc. Assigned at most
+		// once per process so concurrent NewRuntime calls don't race on the
+		// process-wide global or misroute ambient logs between runtimes (#3111).
+		defaultContextLoggerOnce.Do(func() {
+			zerolog.DefaultContextLogger = &logger.Logger
+		})
 	}
 
 	// Warn as soon as there is a logger to warn with. This is the ENTIRE
