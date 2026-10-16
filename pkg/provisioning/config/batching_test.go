@@ -20,6 +20,11 @@ import (
 	"github.com/matryer/is"
 )
 
+// paddedBatchKey is "sdk.batch.size" with a leading space. The predicate trims
+// keys before comparing, so a padded key is the same setting; the leading space
+// also makes it sort before the plain key, which the determinism test relies on.
+const paddedBatchKey = " sdk.batch.size"
+
 // TestSDKBatchSizeAboveOne pins the predicate the engine guard and the offline
 // validate finding share: it mirrors how the SDK reads sdk.batch.size (key and
 // value trimmed; value parsed with Atoi; above 1 refused), and leaves an
@@ -40,7 +45,7 @@ func TestSDKBatchSizeAboveOne(t *testing.T) {
 		{"empty", map[string]string{"sdk.batch.size": ""}, "", "", false},
 		{"unset", map[string]string{}, "", "", false},
 		{"unparsable", map[string]string{"sdk.batch.size": "lots"}, "", "", false},
-		{"padded key", map[string]string{" sdk.batch.size": "3"}, " sdk.batch.size", "3", true},
+		{"padded key", map[string]string{paddedBatchKey: "3"}, paddedBatchKey, "3", true},
 		{"padded value", map[string]string{"sdk.batch.size": " 4 "}, "sdk.batch.size", "4", true},
 		{"unrelated setting", map[string]string{"sdk.batch.delay": "9"}, "", "", false},
 	} {
@@ -61,11 +66,11 @@ func TestSDKBatchSizeAboveOne_PaddedAndPlainIsDeterministic(t *testing.T) {
 	is := is.New(t)
 	for i := 0; i < 20; i++ {
 		key, value, ok := SDKBatchSizeAboveOne(map[string]string{
-			"sdk.batch.size":  "2",
-			" sdk.batch.size": "3",
+			"sdk.batch.size": "2",
+			paddedBatchKey:   "3",
 		})
 		is.True(ok)
-		is.Equal(key, " sdk.batch.size") // leading space sorts before 's'
+		is.Equal(key, paddedBatchKey) // leading space sorts before 's'
 		is.Equal(value, "3")
 	}
 }
