@@ -110,10 +110,15 @@ var nondeterministicTokenPatterns = []*regexp.Regexp{
 
 // documentedLiteralExamples are fixed example values that a built-in
 // connector's own documentation prints (the Postgres destination's NUMERIC
-// coercion table, v0.14.4). They are the same on every run, so they are
-// removed before matching. Anything else that looks like a timestamp, such
-// as a generation time, still fails.
-var documentedLiteralExamples = []string{"2026-10-12 00:00:00"}
+// coercion table and the Postgres source's type-semantics table). They are the
+// same on every run, so they are removed before matching. Anything else that
+// looks like a timestamp, such as a generation time, still fails.
+var documentedLiteralExamples = []string{
+	"2026-10-12 00:00:00",  // Postgres destination NUMERIC coercion (v0.14.4)
+	"2024-01-02T03:04:05Z", // Postgres source timestamp type semantics (v0.15.0)
+	"2024-01-02 03:04:05",  // Postgres source timestamp type semantics (v0.15.0)
+	"0044-03-15 12:00:00",  // Postgres "infinity" timestamp example (v0.15.0)
+}
 
 // TestNoNondeterministicTokens is AC-7: neither committed file may contain
 // a timestamp, absolute path, hostname, Go version, or BuildInfo-derived
