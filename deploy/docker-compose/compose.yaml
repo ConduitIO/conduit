@@ -12,7 +12,7 @@ services:
   conduit:
     # Pinned by version. Override with CONDUIT_IMAGE to test another build.
     # Verify the signature first: docs/releases.md.
-    image: ${CONDUIT_IMAGE:-ghcr.io/conduitio/conduit:v0.20.2}
+    image: ${CONDUIT_IMAGE:-ghcr.io/conduitio/conduit:v0.20.3}
     # Published on loopback only: the API is unauthenticated.
     ports:
       - "127.0.0.1:${CONDUIT_HTTP_PORT:-8080}:8080"
