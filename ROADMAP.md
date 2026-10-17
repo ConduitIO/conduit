@@ -358,6 +358,8 @@ re-snapshot;** offset import for them is v0.22.
 
 - [ ] **Default engine flip and v1 engine deletion**: the single engine from v0.21 becomes the
       default, and the v1 engine is removed after the flip, against a gate fixed in advance
+- [ ] **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in v0.21; protocol
+      v2 is removed no earlier than v0.24
 - [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
       `connect-offsets`, so they resume without a re-snapshot as Postgres does from v0.21
 - [ ] Postgres offset import by reusing the Debezium replication slot (v0.21 ships the fresh-slot
@@ -439,6 +441,8 @@ re-snapshot;** offset import for them is v0.22.
       source/destination pair
 - [ ] Community publishing to the registry (GitHub Action + signing) and private registries
 - [ ] **Partition-claims protocol** shipped in the connector protocol
+- [ ] **Protocol v2 removed**, no earlier than this release (announce v0.21 → warn v0.22 → remove
+      v0.24)
 - [ ] **Replay and backfill as first-class verbs**: `conduit pipeline replay --from <position>`,
       snapshot re-runs, offset inspection and reset in CLI and UI
 - [ ] `conduit connector generate --from-openapi <spec>` — connector scaffolding from API specs
