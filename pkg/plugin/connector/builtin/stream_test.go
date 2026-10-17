@@ -75,3 +75,58 @@ func TestInMemoryDestinationRunStream_ClientSendClonesRequest(t *testing.T) {
 	is.Equal(sent[0].Payload.After, opencdc.RawData("after"))
 	is.Equal(sent[0].Metadata, opencdc.Metadata{"k": "v"})
 }
+
+// TestInMemorySourceRunStream_ServerSendTransfersOwnership pins the missing
+// clone in inMemoryStreamServer.Send for the SOURCE stream. A built-in source
+// hands ownership of its records to the engine (the SDK Source.ReadN contract
+// transfers the records to the SDK, and the SDK passes them to the stream
+// without reusing them — it only reads the last record's Position afterwards).
+// The engine then mutates what it received (connector.Source.sanitizeRecord
+// writes Metadata and RawData placeholders), which must NOT require a per-record
+// deep clone: the clone would double the Position bytes, Metadata map and
+// Key/Payload StructuredData of every record on the source→engine boundary,
+// the hottest path in the process.
+//
+// Re-adding resp.Clone() in inMemoryStreamServer.Send for the source stream
+// makes this test fail.
+func TestInMemorySourceRunStream_ServerSendTransfersOwnership(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	var stream InMemorySourceRunStream
+	stream.Init(ctx)
+
+	sent := []opencdc.Record{{
+		Position: opencdc.Position("p1"),
+		Key:      opencdc.RawData("key"),
+		Metadata: opencdc.Metadata{"k": "v"},
+		Payload: opencdc.Change{
+			Before: opencdc.RawData("before"),
+			After:  opencdc.RawData("after"),
+		},
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp, err := stream.Client().Recv()
+		if err != nil {
+			t.Errorf("client recv: %v", err)
+			return
+		}
+		// The edits the engine's connector.Source.sanitizeRecord is allowed to
+		// make to a record it received from a built-in source.
+		resp.Records[0].Key = opencdc.RawData("engine-key")
+		resp.Records[0].Metadata["k"] = "engine-edit"
+		resp.Records[0].Metadata["added"] = "by-engine"
+	}()
+
+	err := stream.Server().Send(pconnector.SourceRunResponse{Records: sent})
+	is.NoErr(err)
+	<-done
+
+	// The server's record is the SAME object the client received (no clone):
+	// the engine's edits are visible on it.
+	is.Equal(sent[0].Key, opencdc.RawData("engine-key"))
+	is.Equal(sent[0].Metadata, opencdc.Metadata{"k": "engine-edit", "added": "by-engine"})
+}
