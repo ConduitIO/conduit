@@ -16,11 +16,11 @@ package processor
 
 import (
 	"context"
-	"maps"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
@@ -51,10 +51,13 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 	// its declared parameters does not reject the operator's egress opt-in as an
 	// "unrecognized parameter". The guest must never see host-reserved config
 	// (design: 20260726-wasm-host-egress-capability.md).
-	settings := maps.Clone(p.Config.Settings)
+	settings, err := env.ResolveSettings(p.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve processor settings: %w", err)
+	}
 	egress.StripReservedKeys(settings)
 
-	err := p.proc.Configure(ctx, settings)
+	err = p.proc.Configure(ctx, settings)
 	if err != nil {
 		return cerrors.Errorf("failed configuring processor: %w", err)
 	}

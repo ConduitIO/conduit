@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -1100,7 +1101,11 @@ func (s *Source) state() SourceState {
 
 func (s *Source) configure(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
-	_, err := s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: s.Instance.Config.Settings})
+	settings, err := env.ResolveSettings(s.Instance.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve source connector settings: %w", err)
+	}
+	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure source connector plugin: %w", err)
 	}

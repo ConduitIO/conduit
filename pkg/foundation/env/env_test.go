@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package env
 
 import (
 	"testing"
@@ -26,19 +26,19 @@ func TestResolveEnv(t *testing.T) {
 	t.Setenv("SET_VAR", "value")
 	t.Setenv("EMPTY_VAR", "")
 
-	got, err := resolveEnv("prefix/${SET_VAR}/suffix")
+	got, err := ResolveEnv("prefix/${SET_VAR}/suffix")
 	is.NoErr(err)
 	is.Equal(got, "prefix/value/suffix")
 
 	// an unset variable fails loudly with the stable code
-	_, err = resolveEnv("${MISSING_VAR}")
+	_, err = ResolveEnv("${MISSING_VAR}")
 	is.True(err != nil)
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, CodeEnvVarMissing)
 
 	// an empty variable resolves to the empty string, not an error
-	got, err = resolveEnv("[${EMPTY_VAR}]")
+	got, err = ResolveEnv("[${EMPTY_VAR}]")
 	is.NoErr(err)
 	is.Equal(got, "[]")
 }
@@ -47,7 +47,7 @@ func TestResolveSettings(t *testing.T) {
 	is := is.New(t)
 	t.Setenv("AWS_SECRET", "s3cr3t")
 
-	got, err := resolveSettings(map[string]string{
+	got, err := ResolveSettings(map[string]string{
 		"aws.secret": "${AWS_SECRET}",
 		"plain":      "no-env",
 	})
@@ -55,7 +55,7 @@ func TestResolveSettings(t *testing.T) {
 	is.Equal(got, map[string]string{"aws.secret": "s3cr3t", "plain": "no-env"})
 
 	// a missing variable fails and names the setting
-	_, err = resolveSettings(map[string]string{"aws.key": "${MISSING}"})
+	_, err = ResolveSettings(map[string]string{"aws.key": "${MISSING}"})
 	is.True(err != nil)
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
