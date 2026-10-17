@@ -15,8 +15,15 @@ apt-get update -y
 apt-get install -y --no-install-recommends \
   ca-certificates curl git rsync jq wget gnupg lsb-release
 
-# Docker (docker.io + compose plugin is the simplest reproducible path).
-apt-get install -y --no-install-recommends docker.io docker-compose-v2
+# Docker from the official repo, NOT ubuntu's docker.io (which lags; its older
+# Compose plugin mishandles benchi's `external: true` network that the harness
+# creates via the Docker API).
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+apt-get update -y
+apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
 
 # Go (the loader + conduit image build use it).
