@@ -95,6 +95,20 @@ func TestParseConnectors_BareMap(t *testing.T) {
 	is.Equal(configOf(cs[0]), []cfgWant{{"connector.class", "X", "/connector.class"}, {"name", "n", "/name"}, {"x", "1.50", "/x"}})
 }
 
+func TestParseConnectors_BareMapDerivesName(t *testing.T) {
+	is := is.New(t)
+	// A bare config map is the body of PUT /connectors/{name}/config: the
+	// name lives in the URL path, which the file name stands in for.
+	cs := mustParse(t, "sink-s3-voluble.json", `{"connector.class": "io.confluent.connect.s3.S3SinkConnector"}`, "")
+	is.Equal(cs[0].Name, "sink-s3-voluble")
+	// A config "name" key wins over the file name.
+	cs = mustParse(t, "ignored.json", `{"connector.class": "X", "name": "explicit"}`, "")
+	is.Equal(cs[0].Name, "explicit")
+	// No extension: the whole base name is the connector name.
+	cs = mustParse(t, "my-connector", `{"connector.class": "X"}`, "")
+	is.Equal(cs[0].Name, "my-connector")
+}
+
 func TestParseConnectors_RESTExport(t *testing.T) {
 	is := is.New(t)
 	content, err := os.ReadFile("testdata/parse/rest-export.json")

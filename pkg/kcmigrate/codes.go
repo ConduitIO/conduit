@@ -82,6 +82,10 @@ var (
 	// CodeOutputShapeDiffers: a connector-level note that records, objects or
 	// topics differ in shape or layout from the original connector's.
 	CodeOutputShapeDiffers = conduiterr.Register("kc.output_shape_differs", codes.InvalidArgument)
+	// CodeDeliverySemanticsDiffer: a connector-level note that a Kafka
+	// Connect delivery guarantee is not reproduced, for example the S3 sink's
+	// deterministic object names, which give exactly-once object keys.
+	CodeDeliverySemanticsDiffer = conduiterr.Register("kc.delivery_semantics_differ", codes.InvalidArgument)
 	// CodeTopicNameUnsupported: a connector-level note that the connector's
 	// topic naming cannot be written as the destination's topic template.
 	// Blocking: the destination topic must be set by hand.

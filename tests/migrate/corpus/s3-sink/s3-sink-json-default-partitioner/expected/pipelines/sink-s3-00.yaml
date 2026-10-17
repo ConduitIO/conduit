@@ -1,0 +1,22 @@
+version: "2.2"
+pipelines:
+  - id: sink-s3-00
+    status: stopped
+    description: Migrated from Kafka Connect connector "sink-s3-00" (io.confluent.connect.s3.S3SinkConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          servers: ${KC_SINK_S3_00_SOURCE_SERVERS}
+          topics: customers,transactions
+      - id: destination
+        type: destination
+        plugin: builtin:s3
+        settings:
+          aws.accessKeyId: ${KC_SINK_S3_00_DESTINATION_AWS_ACCESSKEYID}
+          aws.bucket: example-smt-demo-bucket
+          aws.region: us-west-2
+          aws.secretAccessKey: ${KC_SINK_S3_00_DESTINATION_AWS_SECRETACCESSKEY}
+          format: ${KC_SINK_S3_00_DESTINATION_FORMAT}
+          sdk.batch.size: "16"
