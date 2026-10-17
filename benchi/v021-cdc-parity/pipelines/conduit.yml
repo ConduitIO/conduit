@@ -1,0 +1,42 @@
+# Conduit arm: builtin:postgres CDC source -> builtin:file sink.
+#
+# Ground truth is the file the sink writes: builtin:file appends exactly one
+# line per record (record.Bytes() + '\n'), so `wc -l /sink/out.txt` is the
+# number of CDC events actually delivered. No Conduit metric is read.
+#
+# Equivalence notes (see ../README.md for the full list):
+#   - snapshotMode: never — no initial snapshot, matching Debezium
+#     snapshot.mode=never and Redpanda stream_snapshot:false; the loader's
+#     steady-state stream is the only thing captured.
+#   - logrepl.withAvroSchema: false — raw JSON payload, matching Debezium's
+#     default (no schema registry) and Redpanda's JSON message. The default
+#     (true) attaches an Avro schema to every record, which is extra per-record
+#     overhead the other two systems do not pay.
+#   - cdcMode: logrepl — pgoutput logical replication, the same wire protocol
+#     Debezium (plugin.name=pgoutput) and Redpanda (postgres_cdc) use.
+version: "2.2"
+pipelines:
+  - id: cdc-parity
+    status: running
+    name: cdc-parity
+    description: >
+      Postgres CDC source (builtin:postgres, pgoutput/logrepl) -> file sink.
+      Ground truth = lines written to /sink/out.txt.
+    connectors:
+      - id: cdc-parity:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_slot"
+          logrepl.publicationName: "conduit_pub"
+          logrepl.autoCleanup: "false"
+          logrepl.withAvroSchema: "false"
+      - id: cdc-parity:file-dest
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/out.txt

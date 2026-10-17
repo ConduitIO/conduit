@@ -1,0 +1,14 @@
+# Built binaries and run output are not committed.
+/loader/loader
+/loader/loader-linux-amd64
+/results/
+/results-aws/
+*.csv
+
+# Terraform local state and the throwaway SSH key are never committed.
+.ssh/
+*.pem
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfstate.*

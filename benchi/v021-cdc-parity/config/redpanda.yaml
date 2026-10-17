@@ -1,0 +1,32 @@
+# Redpanda Connect arm: postgres_cdc input -> file output.
+#
+# postgres_cdc streams changes from bench_source over pgoutput logical
+# replication (the same wire protocol as Conduit's logrepl and Debezium's
+# plugin.name=pgoutput). stream_snapshot: false means no initial snapshot,
+# matching Conduit snapshotMode: never and Debezium snapshot.mode: never.
+#
+# The file output writes one line per message to /sink/out.txt — the SAME
+# ground-truth sink file, on the SAME volume, counted by the SAME `wc -l` as
+# the other arms. The message body differs per system (OpenCDC JSON vs Debezium
+# envelope JSON vs Redpanda JSON), but the count of lines is engine-independent.
+input:
+  postgres_cdc:
+    dsn: postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable
+    schema: public
+    tables:
+      - bench_source
+    slot_name: redpanda_slot
+    stream_snapshot: false
+    temporary_slot: false
+    checkpoint_limit: 1024
+
+output:
+  file:
+    path: /sink/out.txt
+    codec: lines
+
+http:
+  enabled: false
+
+logger:
+  level: ERROR
