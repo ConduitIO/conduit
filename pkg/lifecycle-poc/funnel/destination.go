@@ -98,6 +98,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	start := time.Now()
 	err := t.destination.Write(ctx, records)
 	if err != nil {
+		t.metrics.ObserveError()
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
@@ -105,10 +106,12 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	for range len(positions) {
 		acks, err := t.destination.Ack(ctx)
 		if err != nil {
+			t.metrics.ObserveError()
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
 
 		if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
+			t.metrics.ObserveError()
 			return cerrors.Errorf("failed to validate acks: %w", err)
 		}
 		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)

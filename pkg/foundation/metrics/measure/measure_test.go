@@ -174,3 +174,70 @@ func TestProcessorExecutionDurationTimer_ComponentIDLabel(t *testing.T) {
 	is.True(m != nil) // expected a conduit_processor_execution_duration_seconds series with all 3 labels, including component_id
 	is.Equal(m.GetHistogram().GetSampleCount(), uint64(1))
 }
+
+// TestConnectorRecordsCounter_Labels asserts that conduit_connector_records_total
+// carries the same pipeline_name/plugin/type/component_id label set as
+// conduit_connector_bytes and conduit_connector_execution_duration_seconds, and
+// increments by the number of records observed (connector observability #3013).
+func TestConnectorRecordsCounter_Labels(t *testing.T) {
+	is := is.New(t)
+
+	const (
+		pipelineName = "test-pipeline-connector-records"
+		plugin       = "test-plugin"
+		connType     = "source"
+		componentID  = "test-connector-instance-id"
+	)
+
+	promReg := registerFreshBackend(is)
+
+	c := measure.ConnectorRecordsCounter.WithValues(pipelineName, plugin, connType, componentID)
+	c.Inc(3)
+
+	families, err := promReg.Gather()
+	is.NoErr(err)
+	family := findFamily(families, "conduit_connector_records_total")
+	is.True(family != nil) // conduit_connector_records_total family must be present
+
+	m := findMetric(family, map[string]string{
+		"pipeline_name": pipelineName,
+		"plugin":        plugin,
+		"type":          connType,
+		"component_id":  componentID,
+	})
+	is.True(m != nil) // expected a conduit_connector_records_total series with all 4 labels
+	is.Equal(m.GetCounter().GetValue(), float64(3))
+}
+
+// TestConnectorErrorsCounter_Labels asserts that conduit_connector_errors_total
+// carries the same 4-label set and counts errors without any error-detail label
+// (bounded cardinality).
+func TestConnectorErrorsCounter_Labels(t *testing.T) {
+	is := is.New(t)
+
+	const (
+		pipelineName = "test-pipeline-connector-errors"
+		plugin       = "test-plugin"
+		connType     = "destination"
+		componentID  = "test-connector-instance-id-2"
+	)
+
+	promReg := registerFreshBackend(is)
+
+	c := measure.ConnectorErrorsCounter.WithValues(pipelineName, plugin, connType, componentID)
+	c.Inc()
+
+	families, err := promReg.Gather()
+	is.NoErr(err)
+	family := findFamily(families, "conduit_connector_errors_total")
+	is.True(family != nil) // conduit_connector_errors_total family must be present
+
+	m := findMetric(family, map[string]string{
+		"pipeline_name": pipelineName,
+		"plugin":        plugin,
+		"type":          connType,
+		"component_id":  componentID,
+	})
+	is.True(m != nil) // expected a conduit_connector_errors_total series with all 4 labels
+	is.Equal(m.GetCounter().GetValue(), float64(1))
+}
