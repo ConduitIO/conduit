@@ -1,0 +1,9 @@
+git 62ebf5138811034c1f94eb6de06200ea5a8d6e80 62ebf51
+benchi benchi v0.4.1
+docker 29.9.1 arch=x86_64
+arms conduit conduit-aa connect
+rounds 3
+loader_rate 20000
+tables 1
+conduit_batch_size 1000
+conduit_batch_delay 100ms

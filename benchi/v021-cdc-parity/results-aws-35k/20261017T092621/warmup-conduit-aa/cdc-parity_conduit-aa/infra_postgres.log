@@ -1,0 +1,115 @@
+ Container cdcparity-counter Creating 
+ Container cdcparity-postgres Creating 
+ Container cdcparity-counter Created 
+ Container cdcparity-postgres Created 
+ Container cdcparity-loader Creating 
+ Container cdcparity-loader Created 
+Attaching to cdcparity-counter, cdcparity-loader, cdcparity-postgres
+ Container cdcparity-postgres Starting 
+ Container cdcparity-counter Starting 
+ Container cdcparity-postgres Started 
+ Container cdcparity-postgres Waiting 
+cdcparity-postgres  | The files belonging to this database system will be owned by user "postgres".
+cdcparity-postgres  | This user must also own the server process.
+cdcparity-postgres  | 
+cdcparity-postgres  | The database cluster will be initialized with locale "en_US.utf8".
+cdcparity-postgres  | The default database encoding has accordingly been set to "UTF8".
+cdcparity-postgres  | The default text search configuration will be set to "english".
+cdcparity-postgres  | 
+cdcparity-postgres  | Data page checksums are disabled.
+cdcparity-postgres  | 
+cdcparity-postgres  | fixing permissions on existing directory /var/lib/postgresql/data ... ok
+cdcparity-postgres  | creating subdirectories ... ok
+cdcparity-postgres  | selecting dynamic shared memory implementation ... posix
+cdcparity-postgres  | selecting default "max_connections" ... 100
+cdcparity-postgres  | selecting default "shared_buffers" ... 128MB
+cdcparity-postgres  | selecting default time zone ... Etc/UTC
+cdcparity-postgres  | creating configuration files ... ok
+ Container cdcparity-counter Started 
+cdcparity-postgres  | running bootstrap script ... ok
+cdcparity-postgres  | performing post-bootstrap initialization ... ok
+cdcparity-postgres  | syncing data to disk ... ok
+cdcparity-postgres  | 
+cdcparity-postgres  | 
+cdcparity-postgres  | Success. You can now start the database server using:
+cdcparity-postgres  | 
+cdcparity-postgres  |     pg_ctl -D /var/lib/postgresql/data -l logfile start
+cdcparity-postgres  | 
+cdcparity-postgres  | initdb: warning: enabling "trust" authentication for local connections
+cdcparity-postgres  | initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+cdcparity-postgres  | waiting for server to start....2026-10-17 09:30:32.411 UTC [49] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+cdcparity-postgres  | 2026-10-17 09:30:32.414 UTC [49] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+cdcparity-postgres  | 2026-10-17 09:30:32.416 UTC [52] LOG:  database system was shut down at 2026-10-17 09:30:32 UTC
+cdcparity-postgres  | 2026-10-17 09:30:32.418 UTC [49] LOG:  database system is ready to accept connections
+cdcparity-postgres  |  done
+cdcparity-postgres  | server started
+cdcparity-postgres  | CREATE DATABASE
+cdcparity-postgres  | 
+cdcparity-postgres  | 
+cdcparity-postgres  | /usr/local/bin/docker-entrypoint.sh: running /docker-entrypoint-initdb.d/init.sql
+cdcparity-postgres  | CREATE TABLE
+cdcparity-postgres  | 
+cdcparity-postgres  | 
+cdcparity-postgres  | waiting for server to shut down...2026-10-17 09:30:32.595 UTC [49] LOG:  received fast shutdown request
+cdcparity-postgres  | .2026-10-17 09:30:32.595 UTC [49] LOG:  aborting any active transactions
+cdcparity-postgres  | 2026-10-17 09:30:32.596 UTC [49] LOG:  background worker "logical replication launcher" (PID 55) exited with exit code 1
+cdcparity-postgres  | 2026-10-17 09:30:32.596 UTC [50] LOG:  shutting down
+cdcparity-postgres  | 2026-10-17 09:30:32.596 UTC [50] LOG:  checkpoint starting: shutdown immediate
+cdcparity-postgres  | 2026-10-17 09:30:32.601 UTC [50] LOG:  checkpoint complete: wrote 927 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.005 s, sync=0.001 s, total=0.005 s; sync files=305, longest=0.001 s, average=0.000 s; distance=4278 kB, estimate=4278 kB; lsn=0/191D238, redo lsn=0/191D238
+cdcparity-postgres  | 2026-10-17 09:30:32.604 UTC [49] LOG:  database system is shut down
+cdcparity-postgres  |  done
+cdcparity-postgres  | server stopped
+cdcparity-postgres  | 
+cdcparity-postgres  | PostgreSQL init process complete; ready for start up.
+cdcparity-postgres  | 
+cdcparity-postgres  | 2026-10-17 09:30:32.709 UTC [1] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+cdcparity-postgres  | 2026-10-17 09:30:32.709 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+cdcparity-postgres  | 2026-10-17 09:30:32.709 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+cdcparity-postgres  | 2026-10-17 09:30:32.712 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+cdcparity-postgres  | 2026-10-17 09:30:32.714 UTC [67] LOG:  database system was shut down at 2026-10-17 09:30:32 UTC
+cdcparity-postgres  | 2026-10-17 09:30:32.716 UTC [1] LOG:  database system is ready to accept connections
+ Container cdcparity-postgres Healthy 
+ Container cdcparity-loader Starting 
+cdcparity-loader    | 2026/10/17 09:30:33 loader: rate=20000 ops/s window=10000 payload=64 bytes batch=1000 insert=70% update=20% delete=10%
+ Container cdcparity-loader Started 
+cdcparity-loader    | 2026/10/17 09:30:33 loader: filled window of 10000 rows in 67ms
+cdcparity-postgres  | 2026-10-17 09:30:34.046 UTC [81] LOG:  logical decoding found consistent point at 0/1C6C1D8
+cdcparity-postgres  | 2026-10-17 09:30:34.046 UTC [81] DETAIL:  There are no running transactions.
+cdcparity-postgres  | 2026-10-17 09:30:34.046 UTC [81] STATEMENT:  CREATE_REPLICATION_SLOT conduit_slot  LOGICAL pgoutput EXPORT_SNAPSHOT
+cdcparity-postgres  | 2026-10-17 09:30:34.046 UTC [81] LOG:  exported logical decoding snapshot: "00000071-00000002-1" with 0 transaction IDs
+cdcparity-postgres  | 2026-10-17 09:30:34.046 UTC [81] STATEMENT:  CREATE_REPLICATION_SLOT conduit_slot  LOGICAL pgoutput EXPORT_SNAPSHOT
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] LOG:  0/1C6C1D8 has been already streamed, forwarding to 0/1C6C210
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] STATEMENT:  START_REPLICATION SLOT conduit_slot LOGICAL 0/1C6C1D8 ("proto_version" '1', "publication_names" 'conduit_pub')
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] LOG:  starting logical decoding for slot "conduit_slot"
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] DETAIL:  Streaming transactions committing after 0/1C6C210, reading WAL from 0/1C6C1D8.
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] STATEMENT:  START_REPLICATION SLOT conduit_slot LOGICAL 0/1C6C1D8 ("proto_version" '1', "publication_names" 'conduit_pub')
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] LOG:  logical decoding found consistent point at 0/1C6C1D8
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] DETAIL:  There are no running transactions.
+cdcparity-postgres  | 2026-10-17 09:30:34.050 UTC [88] STATEMENT:  START_REPLICATION SLOT conduit_slot LOGICAL 0/1C6C1D8 ("proto_version" '1', "publication_names" 'conduit_pub')
+cdcparity-loader    | 2026/10/17 09:30:38 loader: 19749 ops/s (target 20000), window [9935,79252), total 99000
+cdcparity-loader    | 2026/10/17 09:30:43 loader: 19743 ops/s (target 20000), window [19979,148396), total 198000
+cdcparity-loader    | 2026/10/17 09:30:48 loader: 19762 ops/s (target 20000), window [29880,217689), total 297000
+cdcparity-loader    | 2026/10/17 09:30:53 loader: 19759 ops/s (target 20000), window [39700,287001), total 396000
+cdcparity-loader    | 2026/10/17 09:30:58 loader: 19740 ops/s (target 20000), window [49766,356205), total 495000
+cdcparity-loader    | 2026/10/17 09:31:03 loader: 19745 ops/s (target 20000), window [59671,425233), total 594000
+cdcparity-loader    | 2026/10/17 09:31:08 loader: 19766 ops/s (target 20000), window [69705,494437), total 693000
+cdcparity-loader    | 2026/10/17 09:31:13 loader: 19764 ops/s (target 20000), window [79716,563673), total 792000
+cdcparity-loader    | 2026/10/17 09:31:18 loader: 19774 ops/s (target 20000), window [89678,633055), total 891000
+cdcparity-loader    | 2026/10/17 09:31:23 loader: 19757 ops/s (target 20000), window [99474,702273), total 990000
+cdcparity-loader    | 2026/10/17 09:31:28 loader: 19760 ops/s (target 20000), window [109402,771358), total 1089000
+cdcparity-loader    | 2026/10/17 09:31:33 loader: 19764 ops/s (target 20000), window [119341,840695), total 1188000
+cdcparity-loader    | 2026/10/17 09:31:38 loader: 19763 ops/s (target 20000), window [129398,909823), total 1287000
+cdcparity-loader    | 2026/10/17 09:31:43 loader: 19765 ops/s (target 20000), window [139200,979251), total 1386000
+cdcparity-loader    | 2026/10/17 09:31:48 loader: 19747 ops/s (target 20000), window [149092,1048537), total 1485000
+cdcparity-loader    | 2026/10/17 09:31:53 loader: 19782 ops/s (target 20000), window [159071,1118083), total 1584000
+cdcparity-loader    | 2026/10/17 09:31:56 loader: stopping after 1632000 total ops (window [163846,1151677))
+[Kcdcparity-loader exited with code 0
+cdcparity-postgres  | 2026-10-17 09:31:56.327 UTC [1] LOG:  received fast shutdown request
+cdcparity-postgres  | 2026-10-17 09:31:56.327 UTC [1] LOG:  aborting any active transactions
+cdcparity-postgres  | 2026-10-17 09:31:56.328 UTC [1] LOG:  background worker "logical replication launcher" (PID 70) exited with exit code 1
+cdcparity-postgres  | 2026-10-17 09:31:56.330 UTC [65] LOG:  shutting down
+cdcparity-postgres  | 2026-10-17 09:31:56.330 UTC [65] LOG:  checkpoint starting: shutdown immediate
+cdcparity-postgres  | 2026-10-17 09:31:56.371 UTC [65] LOG:  checkpoint complete: wrote 16061 buffers (98.0%); 0 WAL file(s) added, 0 removed, 17 recycled; write=0.041 s, sync=0.001 s, total=0.041 s; sync files=32, longest=0.001 s, average=0.001 s; distance=301098 kB, estimate=301098 kB; lsn=0/13F27A68, redo lsn=0/13F27A68
+cdcparity-postgres  | 2026-10-17 09:31:56.387 UTC [1] LOG:  database system is shut down
+[Kcdcparity-postgres exited with code 0
+[Kcdcparity-counter exited with code 137

@@ -1,0 +1,9 @@
+ Container cdcparity-conduit Creating 
+ Container cdcparity-conduit Created 
+Attaching to cdcparity-conduit
+ Container cdcparity-conduit Starting 
+ Container cdcparity-conduit Started 
+cdcparity-conduit  | {"level":"error","pipeline_id":"cdc-parity","node_id":"cdc-parity:cdc-parity:pg-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","time":1792229987807,"message":"stopping source connector"}
+cdcparity-conduit  | {"level":"error","pipeline_id":"cdc-parity","node_id":"cdc-parity:cdc-parity:pg-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","record_position":"{\"version\":2,\"type\":2,\"last_lsn\":\"0/1389DC68\",\"schema_history\":{\"public.bench_source\":[{\"hash\":\"aa3655a4af7d63091b00b07d0b4f0c3b47ada3e518dfbd148f78f436d3205164\",\"first_seen_lsn\":\"0/1C3F348\"}]},\"tx_commit_lsn\":\"0/138C1968\",\"tx_seq\":215}","time":1792229987807,"message":"stopping source node"}
+cdcparity-conduit  | {"level":"error","connector_id":"cdc-parity:cdc-parity:pg-src","plugin_type":"source","plugin_name":"builtin:postgres","component":"plugin","stack":null,"error":"failed to receive message: timeout: context already done: context canceled","time":1792229987808,"message":"replication exited with an error"}
+[Kcdcparity-conduit exited with code 0

@@ -1,0 +1,4 @@
+ Container cdcparity-kafka Creating 
+ service:kafka:1 Error response from daemon: No such image: apache/kafka:4.0.0 
+ Container cdcparity-connect Creating 
+Error response from daemon: No such image: apache/kafka:4.0.0

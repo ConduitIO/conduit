@@ -1,0 +1,85 @@
+# Shared infrastructure for every arm, brought up fresh by benchi on each run.
+#
+#   postgres  — the source DB. wal_level=logical is required by all three CDC
+#               systems; data lives on tmpfs so each arm starts from a clean
+#               table and no volume is left behind (same rationale as
+#               conduit-connector-postgres/benchi/destination-exec-mode).
+#   loader    — the SAME record generator for every arm: it writes a fixed-rate
+#               INSERT/UPDATE/DELETE mix into bench_source (see ../loader).
+#   counter   — holds the shared ground-truth sink volume mounted at /sink, so
+#               the pre/post-test hooks can run `wc -l` on the sink file the
+#               tool under test is writing. It is NOT part of the measured
+#               pipeline; it only counts what the sink actually wrote.
+#
+# The sink volume cdcparity-sink is a Docker named volume created once by
+# run.sh (docker volume create cdcparity-sink). It is shared by the infra
+# (counter) and by every tool compose, so all three arms write to the SAME
+# place and are counted by the SAME `wc -l`.
+services:
+  postgres:
+    image: postgres:17
+    container_name: cdcparity-postgres
+    environment:
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: bench
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bench", "-d", "bench"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    networks:
+      - benchi
+
+  loader:
+    image: alpine:3.20
+    container_name: cdcparity-loader
+    command:
+      - /loader/loader
+      - -url
+      - postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable
+      - -rate
+      - "${LOADER_RATE:-20000}"
+      - -tables
+      - "${TABLES:-1}"
+    volumes:
+      # Static binary built by run.sh (CGO_ENABLED=0 GOOS=linux).
+      - ../loader/loader:/loader/loader:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - benchi
+
+  counter:
+    image: alpine:3.20
+    container_name: cdcparity-counter
+    # TABLES is exposed so the connect-arm registration hook (bench.yml
+    # post-tool) can loop over the same N tables from inside this container.
+    environment:
+      - TABLES=${TABLES:-1}
+    command: ["sleep", "infinity"]
+    volumes:
+      - cdcparity-sink:/sink
+    networks:
+      - benchi
+
+volumes:
+  cdcparity-sink:
+    external: true
+
+networks:
+  benchi:
+    external: true

@@ -1,0 +1,9 @@
+ Container cdcparity-conduit-aa Creating 
+ Container cdcparity-conduit-aa Created 
+Attaching to cdcparity-conduit-aa
+ Container cdcparity-conduit-aa Starting 
+ Container cdcparity-conduit-aa Started 
+cdcparity-conduit-aa  | {"level":"error","pipeline_id":"cdc-parity-0","node_id":"cdc-parity-0:cdc-parity-0:pg-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","time":1792238462308,"message":"stopping source connector"}
+cdcparity-conduit-aa  | {"level":"error","connector_id":"cdc-parity-0:cdc-parity-0:pg-src","plugin_type":"source","plugin_name":"builtin:postgres","component":"plugin","stack":null,"error":"failed to receive message: timeout: context already done: context canceled","time":1792238462322,"message":"replication exited with an error"}
+cdcparity-conduit-aa  | {"level":"error","pipeline_id":"cdc-parity-0","node_id":"cdc-parity-0:cdc-parity-0:pg-src","stack":[{"func":"github.com/conduitio/conduit/pkg/pipeline.init","file":"/app/pkg/pipeline/errors.go","line":20}],"error":"graceful shutdown","component":"SourceNode","record_position":"{\"version\":2,\"type\":2,\"last_lsn\":\"0/3A2E2178\",\"schema_history\":{\"public.bench_source_0\":[{\"hash\":\"aa3655a4af7d63091b00b07d0b4f0c3b47ada3e518dfbd148f78f436d3205164\",\"first_seen_lsn\":\"0/1F95FB8\"}]},\"tx_commit_lsn\":\"0/3A2F6968\",\"tx_seq\":592}","time":1792238462352,"message":"stopping source node"}
+[Kcdcparity-conduit-aa exited with code 0
