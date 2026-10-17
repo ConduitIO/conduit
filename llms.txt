@@ -21,9 +21,9 @@
 - 152 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 
 ## MCP tools
-- Read: deploy, doctor, dry_run, inspect, lint, repair, validate
+- Read: deploy, doctor, dry_run, inspect, kc_migrate, lint, repair, validate
 - Write (require --allow-mutations): apply, repair_apply, scaffold_connector, scaffold_processor, start, stop
-(13 tools; full schemas in llms-full.txt)
+(14 tools; full schemas in llms-full.txt)
 
 ## Deployment
 - [docker-compose quickstart](https://github.com/ConduitIO/conduit/tree/main/deploy/docker-compose): `docker compose up -d --wait` starts a pinned, signed image with a running pipeline; state on a named volume.
