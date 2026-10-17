@@ -18,7 +18,7 @@
 (6 built-in connectors; full parameters in llms-full.txt)
 
 ## Error codes
-- 159 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
+- 157 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 
 ## MCP tools
 - Read: deploy, doctor, dry_run, inspect, kc_migrate, lint, repair, validate
