@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -417,6 +418,102 @@ func TestRunnableProcessor_Process_Batch(t *testing.T) {
 	defer underTest.Close()
 
 	is.Equal(wantRecs, gotRecs)
+}
+
+// batchTestProcessor is a sdk.Processor that also implements sdk.BatchProcessor,
+// so the batch wiring in RunnableProcessor.process can be exercised directly.
+type batchTestProcessor struct {
+	sdk.UnimplementedProcessor
+
+	processBatchCalls int
+	processCalls      int
+	// wrongLength makes ProcessBatch return one result regardless of the input
+	// length, violating the 1:1 index contract.
+	wrongLength bool
+}
+
+func (b *batchTestProcessor) Specification() (sdk.Specification, error) {
+	return sdk.Specification{Name: "batch-test", Stateless: true}, nil
+}
+
+func (b *batchTestProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	b.processCalls++
+	out := make([]sdk.ProcessedRecord, len(records))
+	for i, r := range records {
+		out[i] = sdk.SingleRecord(r)
+	}
+	return out
+}
+
+func (b *batchTestProcessor) ProcessBatch(_ context.Context, records []opencdc.Record) ([]sdk.ProcessedRecord, error) {
+	b.processBatchCalls++
+	if b.wrongLength {
+		return []sdk.ProcessedRecord{sdk.SingleRecord(records[0])}, nil
+	}
+	out := make([]sdk.ProcessedRecord, len(records))
+	for i, r := range records {
+		out[i] = sdk.SingleRecord(r)
+	}
+	return out, nil
+}
+
+func TestRunnableProcessor_Process_TakesBatchSurface(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{Key: opencdc.RawData("a")},
+		{Key: opencdc.RawData("b")},
+	}
+
+	proc := &batchTestProcessor{}
+	underTest := newRunnableProcessor(proc, nil, inst)
+
+	out := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal(1, proc.processBatchCalls)
+	is.Equal(0, proc.processCalls) // ProcessBatch was taken, Process was not
+	is.Equal(2, len(out))
+	_, ok := out[0].(sdk.SingleRecord)
+	is.True(ok)
+}
+
+func TestRunnableProcessor_Process_WrongLengthRejectsBatch(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{Key: opencdc.RawData("a")},
+		{Key: opencdc.RawData("b")},
+	}
+
+	proc := &batchTestProcessor{wrongLength: true}
+	underTest := newRunnableProcessor(proc, nil, inst)
+
+	out := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	// Invariant 3: the whole batch is rejected without committing — one
+	// ErrorRecord per input record, so nothing is dropped or half-applied.
+	is.Equal(2, len(out))
+	for _, r := range out {
+		er, ok := r.(sdk.ErrorRecord)
+		is.True(ok)
+		is.True(strings.Contains(er.Error.Error(), "returned 1 results for 2 records"))
+	}
+}
+
+func TestRunnableProcessor_Stateless(t *testing.T) {
+	is := is.New(t)
+	inst := newTestInstance()
+
+	proc := &batchTestProcessor{} // Specification() declares Stateless: true
+	underTest := newRunnableProcessor(proc, nil, inst)
+	defer underTest.Close()
+
+	is.True(underTest.Stateless())
+	is.True(underTest.Stateless()) // cached, does not re-fetch
 }
 
 func newTestInstance() *Instance {

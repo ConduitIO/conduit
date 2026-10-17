@@ -17,6 +17,7 @@ package processor
 import (
 	"context"
 	"maps"
+	"sync"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -30,6 +31,11 @@ type RunnableProcessor struct {
 	*Instance
 	proc sdk.Processor
 	cond *processorCondition
+
+	// stateless resolves and caches the processor's Specification.Stateless
+	// declaration, which decides whether the stage may run concurrently.
+	statelessOnce sync.Once
+	stateless     bool
 }
 
 func newRunnableProcessor(
@@ -72,7 +78,7 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 
 	var outRecs []sdk.ProcessedRecord
 	if p.cond == nil {
-		outRecs = p.proc.Process(ctx, records)
+		outRecs = p.process(ctx, records)
 	} else {
 		// We need to first evaluate condition for each record.
 
@@ -148,6 +154,48 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 	p.outInsp.Send(ctx, inspectorRecs)
 
 	return outRecs
+}
+
+// process invokes the processor, taking the batch surface when the processor
+// implements it and otherwise falling back to Process per record, so every
+// existing processor runs unchanged. A whole-batch error — or a wrong-length
+// result from ProcessBatch, which violates the 1:1 index contract — rejects the
+// batch without committing it (invariant 3: nothing is dropped, nothing is
+// half-applied): one ErrorRecord per input record, so every record is nacked
+// and reprocessed under the existing error-recovery path.
+func (p *RunnableProcessor) process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	out, err := sdk.ProcessBatchOrProcess(ctx, p.proc, records)
+	if err == nil {
+		return out
+	}
+
+	// Reject the whole batch: surface the error on every input record.
+	out = make([]sdk.ProcessedRecord, len(records))
+	for i := range out {
+		out[i] = sdk.ErrorRecord{Error: err}
+	}
+	return out
+}
+
+// Stateless reports whether the processor's specification declares that it
+// keeps no state between calls, which makes its stage eligible for concurrent
+// execution (the single engine may run it concurrently and reorder which
+// instance handles which record). The declaration is an assertion the processor
+// author makes; a processor that declares Stateless but keeps state is a bug the
+// conformance kit catches. A processor that does not declare Stateless — or one
+// whose specification cannot be read — is treated as stateful and run serially.
+func (p *RunnableProcessor) Stateless() bool {
+	p.statelessOnce.Do(func() {
+		spec, err := p.proc.Specification()
+		if err != nil {
+			// The safe default: without a successful specification read the
+			// processor is treated as stateful.
+			p.stateless = false
+			return
+		}
+		p.stateless = spec.Stateless
+	})
+	return p.stateless
 }
 
 func (p *RunnableProcessor) Teardown(ctx context.Context) error {
