@@ -19,9 +19,6 @@ services:
   kafka:
     image: apache/kafka:4.0.0
     container_name: cdcparity-kafka
-    # All arm images are either built locally or pre-pulled once; never pull
-    # mid-benchmark (a fresh `latest` could silently change the measured code).
-    pull_policy: never
     environment:
       CLUSTER_ID: "cdcparity-kafka-cluster"
       KAFKA_NODE_ID: "1"
