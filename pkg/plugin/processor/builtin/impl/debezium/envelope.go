@@ -157,8 +157,8 @@ func sourcePayload(md opencdc.Metadata) (map[string]any, error) {
 		srcTxID:      parseInt64(md[metaSourcePfx+srcTxID]),
 		srcLSN:       parseInt64(md[metaSourcePfx+srcLSN]),
 		srcXmin:      nil,
-		srcOrigin:    nil,
-		srcOriginLSN: nil,
+		srcOrigin:    optionalString(md[metaSourcePfx+srcOrigin]),
+		srcOriginLSN: parseInt64(md[metaSourcePfx+srcOriginLSN]),
 	}
 	for _, f := range []string{srcVersion, srcConnector, srcName, srcDB, srcSchema, srcTable} {
 		if s, ok := out[f].(string); !ok || s == "" {
@@ -184,6 +184,15 @@ func parseInt64(s string) any {
 		return nil
 	}
 	return n
+}
+
+// optionalString returns s, or nil when it is empty, so an optional source
+// field (origin) stays null unless the source emitted it.
+func optionalString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // transactionPayload reads the debezium.tx.* metadata, or returns nil when
