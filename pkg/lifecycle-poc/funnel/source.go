@@ -86,6 +86,7 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 
 	recs, err := t.source.Read(ctx)
 	if err != nil {
+		t.metrics.ObserveError()
 		return cerrors.Errorf("failed to read from source: %w", err)
 	}
 
