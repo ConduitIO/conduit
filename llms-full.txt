@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.9)
+### file (v0.10.10)
 
 A file source and destination plugin for Conduit.
 
@@ -375,7 +375,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.15.0)
+### postgres (v0.16.0)
 
 Conduit connector for PostgreSQL
 
@@ -780,6 +780,56 @@ If there is no key, the record will be simply appended.
   the records are redelivered (at-least-once). Keyed upserts make redelivery
   idempotent; keyless inserts append again.
 
+**Schema-drift markers**
+
+When the Postgres source halts on schema drift it emits a drift marker: a create
+record with no key and no payload, with the metadata `postgres.schema.drift=true`.
+The destination skips and acknowledges a marker without writing a row, but only
+when the record's position proves the Postgres source produced it as a marker for
+the table named in `postgres.schema.drift.table`. The metadata alone is not proof,
+because any processor or upstream system can set it.
+
+- A record that carries the metadata but not a marker's position, and has a key
+  or a payload, is written as an ordinary record. One WARN per batch reports it.
+- A record shaped like a marker (no key, no payload) without a marker's position
+  stops the pipeline with `postgres.destination.drift_marker_unverified`. Nothing
+  in that batch is written or acknowledged.
+- A proven marker that a processor added a key or fields to is still skipped as
+  a marker, with a WARN that names the added fields.
+
+A marker loses its position when it passes through another system, such as Kafka
+or a file, because records read from there carry that system's position. In a
+Postgres to Kafka to Postgres setup, drop drift markers before the hop with a
+filter processor on the `postgres.schema.drift` metadata.
+
+The proof relies on the engine not letting processors change a record's
+position. Conduit's classic engine refuses that; the arch-v2 engine lets a
+processor rewrite positions, so there a processor could forge a marker. The
+forged record would be skipped, which a processor with that power could do to
+any record anyway.
+**Column type changes on a running pipeline**
+
+The destination describes every statement before it runs it (pgx's
+`describe_exec` query mode), so after `ALTER TABLE ... ALTER COLUMN ... TYPE`
+the next write is typed for the new column. A value the new type cannot hold
+fails the write instead of being converted.
+
+This costs throughput. On one dedicated machine (benchi
+`destination-exec-mode`: keyed upserts into a two-column table) the
+destination wrote 35% fewer rows per second than with cached statements at
+`sdk.batch.size: 1`, the default, and 16% fewer at 1000. If the tables a
+pipeline writes never change type while it runs, add
+`default_query_exec_mode=cache_statement` to the `url` to reuse prepared
+statements as before; the same benchmark measured no difference from the
+previous release with it. **Risk:** with `cache_statement` (or
+`cache_describe`) a statement keeps the parameter types it was prepared with,
+so after an `ALTER COLUMN ... TYPE` Postgres converts values into the new
+type without an error, for example 5/2 into an integer column stored as 3,
+until the destination restarts. The destination logs a warning at start when
+the URL selects a cache mode. `exec` and `simple_protocol`, which never cache
+parameter types (PgBouncer in transaction mode needs one of them), are kept
+when the URL sets them.
+
 **Numeric columns**
 
 Decimal values (`big.Rat`) are sent to Postgres as exact decimal strings, and
@@ -806,10 +856,10 @@ Postgres converts the string, and the examples below were checked on
 Postgres 17.5:
 
 - `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
-  value is rejected, except on a destination that was already running when the
-  column was changed to an integer type: the cached prepared statement still
-  types the parameter as `numeric`, so 5/2 is silently rounded to 3
-  (see #367).
+  value is rejected, also on a destination that was already running when the
+  column was changed to an integer type (see "Column type changes on a running
+  pipeline"). With `default_query_exec_mode=cache_statement` in the URL, such a
+  destination rounds 5/2 to 3 instead (#367).
 - `real`, `float8`: stored as the nearest binary float.
 - `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
 - `oid`: stored if the value is a whole number (7 is stored as `7`).
@@ -870,7 +920,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes each statement before it runs it, so a column type change on a running pipeline is seen by the next write. Add `default_query_exec_mode=cache_statement` to reuse prepared statements for speed, at the risk that after an ALTER COLUMN ... TYPE values are converted into the new type without an error until a restart (#367). | required |
 
 ### s3 (v0.10.0)
 
