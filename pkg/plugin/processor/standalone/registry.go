@@ -79,6 +79,11 @@ type blueprint struct {
 	specification sdk.Specification
 	path          string
 	module        wazero.CompiledModule
+	// structuredValuesV2 is the guest's declared capability, read from its
+	// Specify.Response at load time. It is carried on the blueprint (rather than
+	// re-read from every new instance) so the processing instance knows which
+	// record shape to use without an extra Specify round-trip.
+	structuredValuesV2 bool
 	// TODO store hash of plugin binary and compare before running the binary to
 	// ensure someone can't switch the plugin after we registered it
 }
@@ -174,6 +179,12 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create a new WASM processor: %w", err)
 	}
+
+	// The capability was read from the guest's Specify.Response when the plugin
+	// was loaded (loadBlueprint). Carry it onto the processing instance; the
+	// engine never re-issues Specify on this instance, so this is the only way
+	// Process learns which record shape to use.
+	p.structuredValuesV2 = bp.structuredValuesV2
 
 	return p, nil
 }
@@ -311,10 +322,11 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 	}
 
 	return blueprint{
-		fullName:      plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version),
-		specification: specs,
-		path:          path,
-		module:        module,
+		fullName:           plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version),
+		specification:      specs,
+		path:               path,
+		module:             module,
+		structuredValuesV2: p.structuredValuesV2,
 	}, nil
 }
 
