@@ -471,6 +471,8 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] **Catalog:** log-based SQL Server CDC begins (v0.25 or later)
 - [ ] Java SDK begins, informed by the labs Java SDK proof of concept: gRPC connectors and gRPC
       processors, including the state API (completes in v0.26)
+- [ ] TypeScript connectors over gRPC, with `conduit connector new --lang ts` (full tier — pulled
+      forward from v0.26 so full-tier TS and enterprise-tier Java land in the same release)
 
 ### v0.26 — Curate
 
@@ -481,7 +483,6 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] Curated Iceberg output with OpenLineage
 - [ ] **Catalog:** Databricks/Delta Lake
 - [ ] Templates such as "unify customers from Postgres, Salesforce and events"
-- [ ] TypeScript connectors over gRPC, with `conduit connector new --lang ts`
 - [ ] Pipelines-as-code builders in Python and TypeScript
 - [ ] One-call local mode for non-Go embedded clients
 - [ ] Java SDK complete (connectors, processors, state API), with `conduit connector new --lang java`
