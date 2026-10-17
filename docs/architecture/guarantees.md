@@ -87,7 +87,7 @@ This is a promise v1 does not make and v2 makes by construction.
 | With a destination that withholds acks, at most one batch is in flight | v2 | Enforced | `TestMemoryBound_RecordsInFlightWithWithheldAcks` |
 | The engine bounds records in flight | v1 | **Does not hold** | With every ack withheld the source node kept reading until the probe stopped it, at both batch size 1 and 100; nothing in the engine pushed back. (The probe was a throwaway; the committed test pins only the v2 bound.) Back-pressure is left to the plugin boundary (channels for built-ins, gRPC flow control for standalone connectors), [#211](https://github.com/ConduitIO/conduit/issues/211). The test is skipped with that link. |
 | Memory per record does not grow over a long run | v1, v2 | Not yet enforced | No soak test is live; the 24 h soak is targeted for Phase 2 in the process-maturity table |
-| Allocations per record on the data path | v1, v2 | Partly enforced | `BenchmarkStreamOld` and `BenchmarkStreamNew` report them; nothing fails on a regression. `make bench-engine` and the per-PR comment are indicative only |
+| Allocations per record on the data path | v1, v2 | Partly enforced | `BenchmarkStreamOld` and `BenchmarkStreamNew` report them; nothing fails on a regression. `make bench-engine` and the per-PR comment show the numbers; the `bench-engine (gate)` check fails a >10% throughput regression beyond the A/A floor |
 
 v2 buys its bound with throughput: one batch in flight is also why it stalls behind a destination that
 buffers (see [Life of a record](life-of-a-record.md#where-the-engines-differ-in-behaviour)). The
@@ -140,5 +140,5 @@ When a PR changes engine behaviour, it updates the row it touches in the same PR
 that would have caught it). When a guarantee turns out not to hold, the row says **Does not hold** and
 links the issue; it does not get reworded to fit.
 
-The coverage floor and the benchi regression gate are not live (see the process-maturity table in
-`CLAUDE.md`). Nothing on this page should be read as saying either is.
+The coverage floor is live as a ratchet and the benchi regression gate is live and blocking (see the
+process-maturity table in `CLAUDE.md` for what each enforces and what is still not required).

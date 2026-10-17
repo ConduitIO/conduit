@@ -343,7 +343,10 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] Registry web UI with search, verified badges and download stats (built; deployment pending)
 - [ ] docker-compose quickstart, and `deploy/` examples: docker-compose, systemd, ECS task
       definition, Nomad job spec (examples, not supported products)
-- [ ] Coverage floor and benchmark-regression gates in CI
+- [x] Coverage floor and benchmark-regression gates in CI — coverage ratchet (`.github/workflows/coverage.yml`) and
+      the benchi regression gate (`.github/workflows/bench-engine.yml`: >10% throughput regression beyond the A/A
+      floor fails the build). Both are live and blocking; see the Process-maturity table in `CLAUDE.md` for what is
+      and is not yet a required context
 - [ ] An engine section in `CONTRIBUTING.md`
 - [ ] Reliability follow-ups: standalone WASM processor timeout and CPU-loop containment (#2998,
       #3001), serialized config writes (#2992), bounded status writes on badger (#2964), and
