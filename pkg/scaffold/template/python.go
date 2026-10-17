@@ -65,7 +65,7 @@ func ExtractPython(destDir string) error {
 
 		target := filepath.Join(destDir, filepath.FromSlash(path))
 		if d.IsDir() {
-			if mkErr := os.MkdirAll(target, 0o755); mkErr != nil {
+			if mkErr := os.MkdirAll(target, 0o700); mkErr != nil {
 				return cerrors.Errorf("template: creating directory %q: %w", target, mkErr)
 			}
 			return nil
@@ -75,10 +75,10 @@ func ExtractPython(destDir string) error {
 		if readErr != nil {
 			return cerrors.Errorf("template: reading %q from python snapshot: %w", path, readErr)
 		}
-		if mkErr := os.MkdirAll(filepath.Dir(target), 0o755); mkErr != nil {
+		if mkErr := os.MkdirAll(filepath.Dir(target), 0o700); mkErr != nil {
 			return cerrors.Errorf("template: creating directory %q: %w", filepath.Dir(target), mkErr)
 		}
-		if writeErr := os.WriteFile(target, data, 0o644); writeErr != nil {
+		if writeErr := os.WriteFile(target, data, 0o600); writeErr != nil {
 			return cerrors.Errorf("template: writing %q: %w", target, writeErr)
 		}
 		return nil

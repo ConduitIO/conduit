@@ -77,14 +77,9 @@ func Generate(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	parent := filepath.Dir(req.Path)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return Result{}, conduiterr.Wrap(CodeWriteFailed, fmt.Sprintf("creating parent directory %q", parent), err)
-	}
-
-	stagingDir, err := os.MkdirTemp(parent, ".conduit-scaffold-*")
+	stagingDir, err := stageDirectory(req.Path)
 	if err != nil {
-		return Result{}, conduiterr.Wrap(CodeWriteFailed, "creating staging directory", err)
+		return Result{}, err
 	}
 	// Removed on any hard failure below; renamed away (not removed) on
 	// success — see the rename at the end of this function.
@@ -95,61 +90,19 @@ func Generate(ctx context.Context, req Request) (Result, error) {
 		}
 	}()
 
-	if err := run(StepExtractTemplate, func() error {
-		if req.Language == LanguagePython {
-			return template.ExtractPython(stagingDir)
-		}
-		return template.Extract(req.Kind, stagingDir)
-	}); err != nil {
-		return Result{}, conduiterr.Wrap(CodeWriteFailed, "extracting template snapshot", err)
-	}
-
-	if err := run(StepRewriteModule, func() error {
-		if req.Language == LanguagePython {
-			return template.RewritePython(stagingDir, req.Name)
-		}
-		return template.Rewrite(stagingDir, req.Module, req.Name, req.Kind)
-	}); err != nil {
-		return Result{}, conduiterr.Wrap(CodeWriteFailed, "rewriting module path and name", err)
+	if err := runTemplateSteps(stagingDir, req, run); err != nil {
+		return Result{}, err
 	}
 
 	// --sdk-version and the install/codegen steps are Go-only: a Python
 	// scaffold has no Go module to `go get` and no code-gen tool to install
 	// (its pyproject.toml pins the `conduitio` distribution directly).
-	if req.Language == LanguageGo {
-		if req.SDKVersion != "" {
-			if err := run(StepSDKVersion, func() error {
-				return applySDKVersion(ctx, stagingDir, req.Kind, req.SDKVersion)
-			}); err != nil {
-				return Result{}, conduiterr.Wrap(CodeBuildFailed, fmt.Sprintf("setting SDK version %q", req.SDKVersion), err)
-			}
-		}
-
-		if !req.SkipGenerate {
-			if err := run(StepInstallTools, func() error {
-				return steps.InstallTool(ctx, stagingDir, req.Kind)
-			}); err != nil {
-				return Result{}, conduiterr.Wrap(CodeGenerateFailed, "installing code-gen tool", err)
-			}
-
-			if err := run(StepGenerate, func() error {
-				return steps.Generate(ctx, stagingDir, req.Kind)
-			}); err != nil {
-				return Result{}, conduiterr.Wrap(CodeGenerateFailed, "running code generation", err)
-			}
-		}
+	if err := runGoSteps(ctx, stagingDir, req, run); err != nil {
+		return Result{}, err
 	}
 
-	if err := run(StepBuild, func() error {
-		if req.Language == LanguagePython {
-			return steps.BuildPython(ctx, stagingDir)
-		}
-		return steps.Build(ctx, stagingDir)
-	}); err != nil {
-		if req.Language == LanguagePython {
-			return Result{}, conduiterr.Wrap(CodeBuildFailed, "python syntax check failed", err)
-		}
-		return Result{}, conduiterr.Wrap(CodeBuildFailed, "go build ./... failed", err)
+	if err := runBuildStep(ctx, stagingDir, req, run); err != nil {
+		return Result{}, err
 	}
 
 	if req.Git {
@@ -179,6 +132,94 @@ func Generate(ctx context.Context, req Request) (Result, error) {
 		ElapsedMS:   time.Since(start).Milliseconds(),
 		NextSteps:   nextSteps(req),
 	}, nil
+}
+
+// stageDirectory creates the parent directory of reqPath and a hidden
+// staging directory as a sibling of reqPath (same parent, so the final
+// os.Rename in finalize is same-filesystem and near-instant). The returned
+// staging directory is removed on failure by Generate and renamed away on
+// success.
+func stageDirectory(reqPath string) (string, error) {
+	parent := filepath.Dir(reqPath)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", conduiterr.Wrap(CodeWriteFailed, fmt.Sprintf("creating parent directory %q", parent), err)
+	}
+	stagingDir, err := os.MkdirTemp(parent, ".conduit-scaffold-*")
+	if err != nil {
+		return "", conduiterr.Wrap(CodeWriteFailed, "creating staging directory", err)
+	}
+	return stagingDir, nil
+}
+
+// runTemplateSteps extracts the language's template snapshot into stagingDir
+// and rewrites its module path and name, recording each as a step.
+func runTemplateSteps(stagingDir string, req Request, run func(string, func() error) error) error {
+	if err := run(StepExtractTemplate, func() error {
+		if req.Language == LanguagePython {
+			return template.ExtractPython(stagingDir)
+		}
+		return template.Extract(req.Kind, stagingDir)
+	}); err != nil {
+		return conduiterr.Wrap(CodeWriteFailed, "extracting template snapshot", err)
+	}
+
+	if err := run(StepRewriteModule, func() error {
+		if req.Language == LanguagePython {
+			return template.RewritePython(stagingDir, req.Name)
+		}
+		return template.Rewrite(stagingDir, req.Module, req.Name, req.Kind)
+	}); err != nil {
+		return conduiterr.Wrap(CodeWriteFailed, "rewriting module path and name", err)
+	}
+	return nil
+}
+
+// runGoSteps applies the Go-only steps: the optional SDK version pin and, when
+// not skipped, the code-gen tool install and generation. A Python scaffold has
+// no Go module to `go get` and no code-gen tool to install, so it runs no
+// steps here.
+func runGoSteps(ctx context.Context, stagingDir string, req Request, run func(string, func() error) error) error {
+	if req.Language != LanguageGo {
+		return nil
+	}
+	if req.SDKVersion != "" {
+		if err := run(StepSDKVersion, func() error {
+			return applySDKVersion(ctx, stagingDir, req.Kind, req.SDKVersion)
+		}); err != nil {
+			return conduiterr.Wrap(CodeBuildFailed, fmt.Sprintf("setting SDK version %q", req.SDKVersion), err)
+		}
+	}
+	if req.SkipGenerate {
+		return nil
+	}
+	if err := run(StepInstallTools, func() error {
+		return steps.InstallTool(ctx, stagingDir, req.Kind)
+	}); err != nil {
+		return conduiterr.Wrap(CodeGenerateFailed, "installing code-gen tool", err)
+	}
+	if err := run(StepGenerate, func() error {
+		return steps.Generate(ctx, stagingDir, req.Kind)
+	}); err != nil {
+		return conduiterr.Wrap(CodeGenerateFailed, "running code generation", err)
+	}
+	return nil
+}
+
+// runBuildStep verifies the staged scaffold builds, using the language's build
+// or syntax check.
+func runBuildStep(ctx context.Context, stagingDir string, req Request, run func(string, func() error) error) error {
+	if err := run(StepBuild, func() error {
+		if req.Language == LanguagePython {
+			return steps.BuildPython(ctx, stagingDir)
+		}
+		return steps.Build(ctx, stagingDir)
+	}); err != nil {
+		if req.Language == LanguagePython {
+			return conduiterr.Wrap(CodeBuildFailed, "python syntax check failed", err)
+		}
+		return conduiterr.Wrap(CodeBuildFailed, "go build ./... failed", err)
+	}
+	return nil
 }
 
 // finalize moves stagingDir into req.Path. When req.Force is set and
