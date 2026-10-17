@@ -14,7 +14,10 @@
 #   ARM ...       subset of arms to run (default all four).
 #                 conduit conduit-aa connect redpanda-connect
 #
-# Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE.
+# Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
+# TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
+# CONDUIT_BATCH_SIZE (sdk.batch.size, default 1000), CONDUIT_BATCH_DELAY
+# (sdk.batch.delay, default 100ms).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,6 +27,22 @@ ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
   ARMS=(conduit conduit-aa connect redpanda-connect)
 fi
+
+# Number of source tables (and source+destination pairs). The workload is
+# SPLIT, not multiplied: the loader's fixed rate is divided round-robin across
+# TABLES tables, and each arm gets TABLES sources + TABLES sinks. Exported so
+# docker compose `${TABLES:-1}` interpolation (loader --tables, counter env for
+# the connect registration hook) sees it. Default 1.
+export TABLES=${TABLES:-1}
+# Conduit source batching (sdk.batch.size / sdk.batch.delay), baked into the
+# generated pipeline by scripts/generate.sh. Debezium's max.batch.size defaults
+# to 2048; Conduit's batch-of-one default is the known gap this surfaces.
+export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-1000}
+export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
+
+# Regenerate the N-dependent artifacts (pipelines/conduit.yml, infra/init.sql)
+# for the TABLES / CONDUIT_BATCH_SIZE above.
+bash scripts/generate.sh
 
 BENCHI=${BENCHI:-benchi}
 OUT=${OUT:-results/$(date +%Y%m%dT%H%M%S)}
@@ -67,6 +86,9 @@ echo "==> recording environment"
   echo "arms ${ARMS[*]}"
   echo "rounds $ROUNDS"
   echo "loader_rate ${LOADER_RATE:-20000}"
+  echo "tables $TABLES"
+  echo "conduit_batch_size $CONDUIT_BATCH_SIZE"
+  echo "conduit_batch_delay $CONDUIT_BATCH_DELAY"
 } > "$OUT/environment.txt"
 
 run() { # tool label

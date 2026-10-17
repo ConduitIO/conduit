@@ -52,6 +52,8 @@ services:
       - postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable
       - -rate
       - "${LOADER_RATE:-20000}"
+      - -tables
+      - "${TABLES:-1}"
     volumes:
       # Static binary built by run.sh (CGO_ENABLED=0 GOOS=linux).
       - ../loader/loader:/loader/loader:ro
@@ -64,6 +66,10 @@ services:
   counter:
     image: alpine:3.20
     container_name: cdcparity-counter
+    # TABLES is exposed so the connect-arm registration hook (bench.yml
+    # post-tool) can loop over the same N tables from inside this container.
+    environment:
+      - TABLES=${TABLES:-1}
     command: ["sleep", "infinity"]
     volumes:
       - cdcparity-sink:/sink

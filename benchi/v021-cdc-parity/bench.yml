@@ -5,10 +5,12 @@
 # THE METRIC IS GROUND TRUTH, NOT ENGINE METRICS. No Conduit/Kafka/Redpanda
 # metric is read for the comparison (benchi/METHODOLOGY.md: the retracted
 # msg-rate-per-second measured instrumentation, not throughput). Instead, every
-# arm writes one line per CDC event to the SAME file /sink/out.txt on a shared
-# volume, and the pre-test/post-test hooks run `wc -l` on it in the counter
-# container. Throughput = (lines after - lines before) / test duration. See
-# README.md and run.sh.
+# arm writes one line per CDC event to its sink file(s) on a shared volume, and
+# the pre-test/post-test hooks run `wc -l` on the SUM of lines across those
+# files in the counter container. With TABLES=N the Conduit and Connect arms
+# write N files (/sink/out_0.txt .. /sink/out_{N-1}.txt); Redpanda is a single
+# table and writes /sink/out.txt. Throughput = (lines after - lines before) /
+# test duration. See README.md and run.sh.
 #
 # A/A CONTROL: `conduit-aa` is byte-for-byte the same image and pipeline as
 # `conduit` (only the container name differs). The spread between them is the
@@ -17,8 +19,12 @@
 # single best run.
 #
 # Loader: the SAME record generator (infra/loader, a fixed-rate
-# INSERT/UPDATE/DELETE mix into bench_source) runs for every arm, so the
-# workload is identical by construction. See infra/compose.yml and loader/.
+# INSERT/UPDATE/DELETE mix split across bench_source_0 .. bench_source_{N-1})
+# runs for every arm, so the workload is identical by construction. See
+# infra/compose.yml and loader/. TABLES (default 1) is exported by run.sh and
+# reaches the loader (`--tables`) and the connect registration hook via
+# docker compose env substitution; scripts/generate.sh regenerates
+# pipelines/conduit.yml and infra/init.sql for the same TABLES.
 
 infrastructure:
   postgres:
@@ -59,18 +65,21 @@ tests:
         # is safe here for exactly that reason. chmod 777 lets the Debezium
         # connect container (which runs as the non-root `kafka` user) write the
         # sink file; the Conduit and Redpanda containers run as root and write
-        # regardless.
+        # regardless. out.txt is the Redpanda single-table sink; out_0.txt ..
+        # out_{N-1}.txt are the N-way Conduit and Connect sinks.
         - name: reset-sink
           container: cdcparity-counter
-          run: chmod 777 /sink && rm -f /sink/out.txt
+          run: chmod 777 /sink && rm -f /sink/out.txt /sink/out_*.txt
 
       post-tool:
-        # Kafka Connect + Debezium only: register the Debezium Postgres source
-        # and the FileStreamSinkConnector over the Connect REST API, then wait
-        # until the sink is actually writing so pipeline startup stays out of
-        # the measured window (the pre-test hook re-waits too).
+        # Kafka Connect + Debezium only: register N Debezium Postgres source
+        # connectors and N FileStreamSinkConnectors over the Connect REST API
+        # (one per table -> topic -> sink), then wait until the sink is
+        # actually writing so pipeline startup stays out of the measured window
+        # (the pre-test hook re-waits too). Runs inside the counter container
+        # (alpine), which carries TABLES from infra/compose.yml.
         - name: register-connect-connectors
-          image: alpine:3.20
+          container: cdcparity-counter
           tools:
             - connect
           run: |
@@ -81,36 +90,42 @@ tests:
               sleep 1
             done
 
-            cat > /tmp/debezium-source.json <<'JSON'
-            {"name":"debezium-postgres","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparity","table.include.list":"public.bench_source","plugin.name":"pgoutput","slot.name":"debezium_slot","publication.name":"debezium_pub","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              cat > /tmp/debezium-source.json <<JSON
+            {"name":"debezium-postgres-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparity","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_slot_${i}","publication.name":"debezium_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
             JSON
-
-            cat > /tmp/file-sink.json <<'JSON'
-            {"name":"file-sink","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSinkConnector","topics":"cdcparity.public.bench_source","file":"/sink/out.txt","tasks.max":"1","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+              cat > /tmp/file-sink.json <<JSON
+            {"name":"file-sink-${i}","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSinkConnector","topics":"cdcparity.public.${t}","file":"/sink/out_${i}.txt","tasks.max":"1","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
             JSON
-
-            wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source.json http://cdcparity-connect:8083/connectors
-            wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/file-sink.json http://cdcparity-connect:8083/connectors
-            echo "connect connectors registered"
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source.json http://cdcparity-connect:8083/connectors
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/file-sink.json http://cdcparity-connect:8083/connectors
+            done
+            echo "connect connectors registered (N=$N)"
 
       pre-test:
-        # Wait until the CDC pipeline is streaming (sink has >0 lines, up to
-        # 180s), warm up 15s, then count. Startup and warmup fall outside the
-        # measured window for every arm.
+        # Wait until the CDC pipeline is streaming (sum of sink lines > 0, up
+        # to 180s), warm up 15s, then count. Startup and warmup fall outside
+        # the measured window for every arm. Ground truth is the SUM of line
+        # counts across all sink files: out.txt for the single-table Redpanda
+        # arm, out_0.txt .. out_{N-1}.txt for the N-way Conduit and Connect
+        # arms. Summing a glob makes the metric arm- and N-independent.
         - name: wait-and-count-before
           container: cdcparity-counter
           run: |
+            sum() { cat /sink/out*.txt 2>/dev/null | wc -l | tr -d ' '; }
             n=0
             while [ "$n" -lt 180 ]; do
-              if [ -f /sink/out.txt ] && [ "$(wc -l < /sink/out.txt 2>/dev/null)" -gt 0 ]; then break; fi
+              if [ "$(sum)" -gt 0 ]; then break; fi
               n=$((n+1))
               sleep 1
             done
             sleep 15
-            echo "ROWS_BEFORE=$(wc -l < /sink/out.txt 2>/dev/null || echo 0)"
+            echo "ROWS_BEFORE=$(sum)"
 
       post-test:
         - name: count-after
           container: cdcparity-counter
           run: |
-            echo "ROWS_AFTER=$(wc -l < /sink/out.txt 2>/dev/null || echo 0)"
+            echo "ROWS_AFTER=$(cat /sink/out*.txt 2>/dev/null | wc -l | tr -d ' ')"
