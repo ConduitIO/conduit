@@ -32,11 +32,11 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/cohere"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/debezium"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/protobuf"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
@@ -54,7 +54,6 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"cohere.embed":        Constructor(cohere.NewEmbedProcessor),
 	"cohere.rerank":       Constructor(cohere.NewRerankProcessor),
 	"custom.javascript":   Constructor(custom.NewJavascriptProcessor),
-	"debezium.encode":     Constructor(debezium.NewProcessor),
 	"error":               Constructor(impl.NewErrorProcessor),
 	"filter":              Constructor(impl.NewFilterProcessor),
 	"field.convert":       Constructor(field.NewConvertProcessor),
@@ -65,6 +64,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"json.encode":         Constructor(json.NewEncodeProcessor),
 	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
 	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
+	"protobuf.decode":     Constructor(protobuf.NewDecodeProcessor),
 	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
 	"split":               Constructor(impl.NewSplitProcessor),
 	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),

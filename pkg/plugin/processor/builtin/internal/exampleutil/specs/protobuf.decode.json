@@ -1,0 +1,77 @@
+{
+  "specification": {
+    "name": "protobuf.decode",
+    "summary": "Decodes a field's raw data in the Confluent Protobuf format.",
+    "description": "The processor takes raw data (bytes or a string) in the specified field and decodes\nit from the [Confluent Protobuf wire format](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format)\ninto structured data. It extracts the schema ID from the data, downloads the associated schema from the\n[schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html),\nresolves the schema's references and decodes the payload. The schema is cached locally after it's first compiled.\n\nIf the processor encounters structured data or the data can't be decoded it returns an error.\n\nThis processor is the counterpart to the Protobuf encode capability, mirroring the schema handling of `avro.decode`.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "The field that will be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduitdata.io/docs/using/processors/referencing-fields).",
+        "type": "string",
+        "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Decode a record field in Confluent Protobuf format",
+      "description": "This example shows the usage of the `protobuf.decode` processor.\nThe processor decodes the record's`.Key` field using the schema that is downloaded from the\nschema registry and needs to exist under the subject`example-decode`. In this example we use\nthe following schema:\n\n```proto\nsyntax = \"proto3\";\nmessage record {\n  string myString = 1;\n  int32 myInt = 2;\n}\n```",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "\u0000\u0000\u0000\u0000\u0001\u0000\n\u0003bar\u0010\u0001",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": {
+          "myInt": 1,
+          "myString": "bar"
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    }
+  ]
+}
