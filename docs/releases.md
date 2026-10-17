@@ -15,7 +15,7 @@ latest Docker image which is not a nightly is tagged with `latest`.
 ## Release notes
 
 The human-readable release notes for each release live in `docs/releases/vX.Y.Z.md` (for example
-`docs/releases/v0.21.0.md`). They are mirrored on the [conduit.io changelog](https://conduitdata.io/changelog)
+`docs/releases/v0.21.0.md`). They are mirrored on the [Conduit.io changelog](https://conduitdata.io/changelog)
 and in the GitHub release body. The GitHub release's changelog is generated from conventional commits; the notes
 file is the curated summary a human would actually want to read.
 
