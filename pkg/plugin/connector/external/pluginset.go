@@ -21,6 +21,8 @@ import (
 	clientv1 "github.com/conduitio/conduit-connector-protocol/pconnector/v1/client" //nolint:staticcheck // v1 is used for backwards compatibility
 	v2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2"
 	clientv2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2/client"
+	v3 "github.com/conduitio/conduit-connector-protocol/pconnector/v3"
+	clientv3 "github.com/conduitio/conduit-connector-protocol/pconnector/v3/client"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
@@ -47,13 +49,19 @@ type ProtocolVersion int
 const (
 	// ProtocolVersionV1 hard-codes the pconnector v1 gRPC stub set.
 	ProtocolVersionV1 ProtocolVersion = ProtocolVersion(v1.Version)
-	// ProtocolVersionV2 hard-codes the pconnector v2 gRPC stub set. This is
-	// the default a Dispenser uses unless overridden with WithProtocolVersion.
+	// ProtocolVersionV2 hard-codes the pconnector v2 gRPC stub set.
 	ProtocolVersionV2 ProtocolVersion = ProtocolVersion(v2.Version)
+	// ProtocolVersionV3 hard-codes the pconnector v3 gRPC stub set. This is
+	// the default a Dispenser uses unless overridden with WithProtocolVersion.
+	// It carries opencdc.v2 records (lossless int64/uint64/bytes/decimal), so
+	// it is the version inline_source/inline_destination servers should speak;
+	// an external connector that only implements v2 must be dispensed with
+	// WithProtocolVersion(ProtocolVersionV2).
+	ProtocolVersionV3 ProtocolVersion = ProtocolVersion(v3.Version)
 )
 
 // pluginSet returns the goplugin.PluginSet for the given hard-coded protocol
-// version, built from conduit-connector-protocol's exported v1/v2 client
+// version, built from conduit-connector-protocol's exported v1/v2/v3 client
 // constructors (clientv1.NewSpecifierPluginClient and friends) - the same
 // constructors pconnector/client.New uses for the spawn path. The
 // plugin.Plugin/plugin.GRPCPlugin wiring below (grpcPlugin) is duplicated
@@ -74,6 +82,12 @@ func pluginSet(v ProtocolVersion) (goplugin.PluginSet, error) {
 			"specifier":   newGRPCPlugin(clientv2.NewSpecifierPluginClient),
 			"source":      newGRPCPlugin(clientv2.NewSourcePluginClient),
 			"destination": newGRPCPlugin(clientv2.NewDestinationPluginClient),
+		}, nil
+	case ProtocolVersionV3:
+		return goplugin.PluginSet{
+			"specifier":   newGRPCPlugin(clientv3.NewSpecifierPluginClient),
+			"source":      newGRPCPlugin(clientv3.NewSourcePluginClient),
+			"destination": newGRPCPlugin(clientv3.NewDestinationPluginClient),
 		}, nil
 	default:
 		return nil, cerrors.Errorf("unsupported pconnector protocol version %d", v)

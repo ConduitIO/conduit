@@ -58,10 +58,12 @@ type Option func(*Dispenser)
 
 // WithProtocolVersion hard-codes which pconnector wire-protocol version the
 // Dispenser expects the dialed server to speak. Defaults to
-// ProtocolVersionV2 (latest). go-plugin's Reattach path performs no version
+// ProtocolVersionV3 (latest). go-plugin's Reattach path performs no version
 // negotiation (see ProtocolVersion's doc), so this choice is final for a
 // given Dispenser; Validate confirms it against the live server via a
-// Specify round trip rather than trusting it silently.
+// Specify round trip rather than trusting it silently. An external connector
+// that only implements v2 (an old plugin) must be dispensed with
+// WithProtocolVersion(ProtocolVersionV2).
 func WithProtocolVersion(v ProtocolVersion) Option {
 	return func(d *Dispenser) { d.proto = v }
 }
@@ -94,7 +96,7 @@ func NewDispenser(logger zerolog.Logger, addr net.Addr, opts ...Option) (*Dispen
 	d := &Dispenser{
 		logger: logger,
 		addr:   addr,
-		proto:  ProtocolVersionV2,
+		proto:  ProtocolVersionV3,
 	}
 	for _, opt := range opts {
 		opt(d)
