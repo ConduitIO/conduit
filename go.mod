@@ -230,3 +230,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
+
+replace github.com/conduitio/conduit-processor-sdk => github.com/conduitio/conduit-processor-sdk v0.8.2-0.20261017075902-45b60f3e0df1

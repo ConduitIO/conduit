@@ -20,12 +20,19 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
+	opencdcv2 "github.com/conduitio/conduit-commons/proto/opencdc/v2"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 )
 
 // protoConverter converts between the SDK and protobuf types.
+//
+// The request direction (records → proto) is chosen by the guest's
+// structured_values_v2 capability: recordsV2 for a capable guest, records for
+// an old one. The response direction is self-describing: the guest's oneof
+// carries either the v1 or the v2 record variant, so processedRecord accepts
+// both.
 type protoConverter struct{}
 
 func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.Specification, error) {
@@ -45,6 +52,11 @@ func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.S
 	}, nil
 }
 
+// records converts records to their opencdc.v1 representation. It is the v1
+// (lossy) wire shape, used for a guest that did not declare structured_values_v2.
+// conduit-commons' ToProto refuses an integer outside ±(2^53−1) instead of
+// rounding it, so a wide integer surfaces here as an error — the guest is never
+// sent a rounded value.
 func (c protoConverter) records(in []opencdc.Record) ([]*opencdcv1.Record, error) {
 	if in == nil {
 		return nil, nil
@@ -54,6 +66,26 @@ func (c protoConverter) records(in []opencdc.Record) ([]*opencdcv1.Record, error
 	for i, r := range in {
 		out[i] = &opencdcv1.Record{}
 		err := r.ToProto(out[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// recordsV2 converts records to their opencdc.v2 representation, the lossless
+// wire shape used for a guest that declared structured_values_v2. int64,
+// uint64, bytes and decimal values cross exactly as they are.
+func (c protoConverter) recordsV2(in []opencdc.Record) ([]*opencdcv2.Record, error) {
+	if in == nil {
+		return nil, nil
+	}
+
+	out := make([]*opencdcv2.Record, len(in))
+	for i, r := range in {
+		out[i] = &opencdcv2.Record{}
+		err := r.ToProtoV2(out[i])
 		if err != nil {
 			return nil, err
 		}
@@ -89,6 +121,10 @@ func (c protoConverter) processedRecord(in *processorv1.Process_ProcessedRecord)
 		return c.singleRecord(v)
 	case *processorv1.Process_ProcessedRecord_MultiRecord:
 		return c.multiRecord(v)
+	case *processorv1.Process_ProcessedRecord_SingleRecordV2:
+		return c.singleRecordV2(v)
+	case *processorv1.Process_ProcessedRecord_MultiRecordV2:
+		return c.multiRecordV2(v)
 	case *processorv1.Process_ProcessedRecord_FilterRecord:
 		return c.filterRecord(v)
 	case *processorv1.Process_ProcessedRecord_ErrorRecord:
@@ -133,6 +169,40 @@ func (c protoConverter) multiRecord(in *processorv1.Process_ProcessedRecord_Mult
 	recs := make([]opencdc.Record, len(in.MultiRecord.Records))
 	for i, r := range in.MultiRecord.Records {
 		if err := recs[i].FromProto(r); err != nil {
+			return nil, fmt.Errorf("failed to convert multi-record entry %d: %w", i, err)
+		}
+	}
+	return sdk.MultiRecord(recs), nil
+}
+
+// singleRecordV2 converts a guest's opencdc.v2 SingleRecordV2 response back
+// into a record. FromProtoV2 is lossless, so int64, uint64, bytes and decimal
+// values are read back exactly as the guest sent them.
+func (c protoConverter) singleRecordV2(in *processorv1.Process_ProcessedRecord_SingleRecordV2) (sdk.SingleRecord, error) {
+	if in == nil {
+		return sdk.SingleRecord{}, nil
+	}
+
+	var rec opencdc.Record
+	err := rec.FromProtoV2(in.SingleRecordV2)
+	if err != nil {
+		return sdk.SingleRecord{}, err
+	}
+
+	return sdk.SingleRecord(rec), nil
+}
+
+// multiRecordV2 converts a guest's opencdc.v2 MultiRecordV2 fan-out response
+// back into an sdk.MultiRecord, mirroring multiRecord's nil/empty handling for
+// the v2 shape.
+func (c protoConverter) multiRecordV2(in *processorv1.Process_ProcessedRecord_MultiRecordV2) (sdk.MultiRecord, error) {
+	if in == nil || in.MultiRecordV2 == nil {
+		return sdk.MultiRecord{}, nil
+	}
+
+	recs := make([]opencdc.Record, len(in.MultiRecordV2.Records))
+	for i, r := range in.MultiRecordV2.Records {
+		if err := recs[i].FromProtoV2(r); err != nil {
 			return nil, fmt.Errorf("failed to convert multi-record entry %d: %w", i, err)
 		}
 	}
