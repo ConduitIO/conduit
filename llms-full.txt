@@ -1345,7 +1345,7 @@ Author: Meroxa, Inc.
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 | `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error. With a DLQ enabled (threshold above 0) it is routed to the dead-letter queue; otherwise the pipeline is degraded (classic engine, avro.decode and processor paths) or recovering (classic engine destination path, and architecture v2), and a recovering pipeline re-reads the same record. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit. |
 
-## 4. MCP tool catalog (13)
+## 4. MCP tool catalog (14)
 
 | Name | Class | Description |
 | --- | --- | --- |
@@ -1354,6 +1354,7 @@ Author: Meroxa, Inc.
 | `doctor` | read | Checks whether the local machine and configuration are ready for `conduit run` — offline, non-destructive. Same engine as `conduit doctor`. |
 | `dry_run` | read | Everything validate checks, plus the fully-enriched pipeline graph `conduit run` would load and a builtin-plugin existence check. Same engine as `conduit pipelines dry-run`. |
 | `inspect` | read | Reports a running pipeline's live status, per-stage connector summary, and DLQ. Requires a running Conduit (conduit mcp --api-address). Same engine as `conduit pipelines inspect`. |
+| `kc_migrate` | read | Translates Kafka Connect connector configs (content-in, never a server path) into Conduit pipelines plus a compatibility report, and returns the files content-out. Mutates nothing. Same engine as `conduit migrate kafka-connect`. |
 | `lint` | read | Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/unknown fields, version fallback). Same engine as `conduit pipelines lint`. |
 | `repair` | read | Scans a pipeline configuration for findings that carry a structured, machine-appliable fix (a deprecated/renamed field, an unambiguous invalid status value, a negative processor workers count, an over-long description), classifies each fix's safety (safe / restart / data_path), and returns a plan hash. Mutates nothing. Same engine as `conduit pipelines repair`. |
 | `repair_apply` | write (requires --allow-mutations) | Applies the plan computed by repair — safe fixes only, unless select names others — only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). A data-path-adjacent fix (connector settings, a connector's own plugin/type, DLQ config, any id field) is NEVER applied by this tool, even if selected explicitly — it comes back in the result as a skipped fix; only the CLI's --escalate flag (human-only) can apply one. Same engine as `conduit pipelines repair --apply`. |

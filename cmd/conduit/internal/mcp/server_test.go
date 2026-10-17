@@ -26,7 +26,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var readToolNames = []string{ToolValidate, ToolLint, ToolDryRun, ToolDoctor, ToolDeploy, ToolInspect, ToolRepair}
+var readToolNames = []string{ToolValidate, ToolLint, ToolDryRun, ToolDoctor, ToolDeploy, ToolInspect, ToolRepair, ToolKCMigrate}
 
 var writeToolNames = []string{ToolApply, ToolStart, ToolStop, ToolScaffoldConnector, ToolScaffoldProcessor, ToolRepairApply}
 
