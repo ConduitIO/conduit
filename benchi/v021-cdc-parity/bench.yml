@@ -1,6 +1,6 @@
 # benchi config for the v0.21 close-out benchmark:
-# Conduit vs Kafka Connect (Debezium Postgres) vs Redpanda Connect on an
-# equivalent Postgres CDC workload.
+# Conduit vs Kafka Connect (Debezium Postgres) vs Debezium Server (standalone)
+# vs Redpanda Connect on an equivalent Postgres CDC workload.
 #
 # THE METRIC IS GROUND TRUTH, NOT ENGINE METRICS. No Conduit/Kafka/Redpanda
 # metric is read for the comparison (benchi/METHODOLOGY.md: the retracted
@@ -9,8 +9,10 @@
 # the pre-test/post-test hooks run `wc -l` on the SUM of lines across those
 # files in the counter container. With TABLES=N the Conduit and Connect arms
 # write N files (/sink/out_0.txt .. /sink/out_{N-1}.txt); Redpanda is a single
-# table and writes /sink/out.txt. Throughput = (lines after - lines before) /
-# test duration. See README.md and run.sh.
+# table and writes /sink/out.txt; Debezium Server (standalone) captures all N
+# tables in one engine and its HTTP sink posts each event to a tiny counter
+# that writes one line per event to /sink/out.txt. Throughput = (lines after -
+# lines before) / test duration. See README.md and run.sh.
 #
 # A/A CONTROL: `conduit-aa` is byte-for-byte the same image and pipeline as
 # `conduit` (only the container name differs). The spread between them is the
@@ -37,6 +39,8 @@ tools:
     compose: ./tools/compose-conduit-aa.yml
   connect:
     compose: ./tools/compose-connect.yml
+  debezium-server:
+    compose: ./tools/compose-debezium-server.yml
   redpanda-connect:
     compose: ./tools/compose-redpanda.yml
 
@@ -65,8 +69,9 @@ tests:
         # is safe here for exactly that reason. chmod 777 lets the Debezium
         # connect container (which runs as the non-root `kafka` user) write the
         # sink file; the Conduit and Redpanda containers run as root and write
-        # regardless. out.txt is the Redpanda single-table sink; out_0.txt ..
-        # out_{N-1}.txt are the N-way Conduit and Connect sinks.
+        # regardless. out.txt is the Redpanda single-table sink and the
+        # Debezium Server counter's sink; out_0.txt .. out_{N-1}.txt are the
+        # N-way Conduit and Connect sinks.
         - name: reset-sink
           container: cdcparity-counter
           run: chmod 777 /sink && rm -f /sink/out.txt /sink/out_*.txt
@@ -109,8 +114,9 @@ tests:
         # to 180s), warm up 15s, then count. Startup and warmup fall outside
         # the measured window for every arm. Ground truth is the SUM of line
         # counts across all sink files: out.txt for the single-table Redpanda
-        # arm, out_0.txt .. out_{N-1}.txt for the N-way Conduit and Connect
-        # arms. Summing a glob makes the metric arm- and N-independent.
+        # arm and the Debezium Server counter, out_0.txt .. out_{N-1}.txt for
+        # the N-way Conduit and Connect arms. Summing a glob makes the metric
+        # arm- and N-independent.
         - name: wait-and-count-before
           container: cdcparity-counter
           run: |

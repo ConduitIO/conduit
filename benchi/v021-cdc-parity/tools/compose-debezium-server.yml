@@ -1,0 +1,61 @@
+# Debezium Server (standalone) arm: the Debezium Engine as a single JVM process
+# — no Kafka Connect worker, no Kafka broker. This is the apples-to-apples arm
+# against Conduit's built-in CDC (both are single-process CDC pipelines).
+#
+#   debezium-server — the official debezium/server image running the Debezium
+#                     Engine configured for the SAME Postgres source
+#                     (bench_source_0 .. bench_source_{TABLES-1}, pgoutput,
+#                     snapshot disabled) as every other arm. Config lives in
+#                     ../config/debezium-server.properties (generated for the
+#                     TABLES it was asked to run, like the Conduit pipeline).
+#                     Pinned to 3.4 (not 3.2 like the connect arm) because the
+#                     Debezium Server HTTP sink in <=3.3 has a header-duplication
+#                     bug that 431s the counter (see ../README.md).
+#   counter         — a tiny stdlib HTTP server. Debezium Server's built-in HTTP
+#                     sink POSTs each change event (one request per event) to
+#                     it; it appends one line per event to /sink/out.txt on the
+#                     shared ground-truth volume, so `wc -l` stays the metric.
+#
+# The counter is NOT the measured pipeline's business logic — it is the counting
+# side of the sink, the same way FileStreamSinkConnector writes one line per
+# record for the connect arm. It exists only because Debezium Server has no
+# file sink adapter of its own (its built-ins are HTTP/Redis/Kinesis/PubSub).
+services:
+  debezium-server:
+    image: quay.io/debezium/server:3.4
+    container_name: cdcparity-debezium-server
+    # Pre-pulled once; never pull mid-benchmark.
+    pull_policy: never
+    volumes:
+      - ../config/debezium-server.properties:/debezium/config/application.properties:ro
+    depends_on:
+      counter:
+        condition: service_healthy
+    networks:
+      - benchi
+
+  counter:
+    image: python:3.12-alpine
+    container_name: cdcparity-debezium-counter
+    # Pre-pulled once; never pull mid-benchmark.
+    pull_policy: never
+    command: ["python", "/counter.py"]
+    volumes:
+      - ../tools/counter.py:/counter.py:ro
+      - cdcparity-sink:/sink
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=2)"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - benchi
+
+volumes:
+  cdcparity-sink:
+    external: true
+
+networks:
+  benchi:
+    external: true

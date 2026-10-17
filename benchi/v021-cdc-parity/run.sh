@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the v0.21 CDC parity benchmark: Conduit vs Kafka Connect (Debezium
-# Postgres) vs Redpanda Connect, on an equivalent Postgres CDC workload, with
-# an A/A control (conduit vs conduit-aa).
+# Postgres) vs Debezium Server (standalone) vs Redpanda Connect, on an
+# equivalent Postgres CDC workload, with an A/A control (conduit vs conduit-aa).
 #
 # Each benchi invocation runs ONE arm, with fresh infrastructure, for a 60s
 # measured window. The ground-truth metric is the number of lines the sink file
@@ -11,8 +11,10 @@
 # Usage: benchi/v021-cdc-parity/run.sh [ROUNDS] [ARM ...]
 #   ROUNDS        number of full rounds (default 3). One warmup round is
 #                 discarded first.
-#   ARM ...       subset of arms to run (default all four).
-#                 conduit conduit-aa connect redpanda-connect
+#   ARM ...       subset of arms to run (default: the four runnable arms).
+#                 conduit conduit-aa connect debezium-server
+#                 (redpanda-connect is also an arm but is blocked by licensing;
+#                 see README.md)
 #
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
 # TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
@@ -25,7 +27,7 @@ ROUNDS=${1:-3}
 shift || true
 ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
-  ARMS=(conduit conduit-aa connect redpanda-connect)
+  ARMS=(conduit conduit-aa connect debezium-server)
 fi
 
 # Number of source tables (and source+destination pairs). The workload is

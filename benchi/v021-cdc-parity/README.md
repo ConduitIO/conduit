@@ -1,6 +1,6 @@
-# v0.21 close-out: Conduit vs Kafka Connect (Debezium) vs Redpanda Connect on Postgres CDC
+# v0.21 close-out: Conduit vs Kafka Connect (Debezium) vs Debezium Server (standalone) vs Redpanda Connect on Postgres CDC
 
-A reproducible, ground-truth comparison of three CDC pipelines on one
+A reproducible, ground-truth comparison of four CDC pipelines on one
 equivalent workload: one or more Postgres tables (`TABLES`, default 1)
 receiving a steady, fixed-rate stream of INSERT/UPDATE/DELETE, captured by each
 system and delivered to one sink file per table, whose summed row count is the
@@ -11,9 +11,9 @@ The method follows `benchi/METHODOLOGY.md`: the metric is **ground truth**
 to establish the noise floor, and results are **medians with variance**, never
 a single best run.
 
-## The three pipelines
+## The pipelines
 
-All three capture the SAME set of tables (`bench_source_0` ..
+All four capture the SAME set of tables (`bench_source_0` ..
 `bench_source_{TABLES-1}`, each `(id bigint PRIMARY KEY, payload text)`,
 `REPLICA IDENTITY DEFAULT`) over the SAME pgoutput logical-replication wire
 protocol, with the snapshot disabled so only the loader's steady-state stream
@@ -21,13 +21,16 @@ is captured. Each arm writes one line per CDC event to one sink file per table
 on a shared volume. Ground truth = the SUM of `wc -l` across the sink files,
 measured before and after each 60 s window by the same hook in the same counter
 container (the Conduit and Connect arms write `/sink/out_0.txt` ..
-`/sink/out_{TABLES-1}.txt`; Redpanda is single-table and writes `/sink/out.txt`).
+`/sink/out_{TABLES-1}.txt`; Redpanda is single-table and writes `/sink/out.txt`,
+and so does Debezium Server, whose HTTP sink posts each event to a tiny counter
+that writes one line per event to `/sink/out.txt`).
 
 | arm | pipeline | config |
 | --- | --- | --- |
 | `conduit` | `TABLES` pipelines, each a `builtin:postgres` source (`cdcMode: logrepl`, `snapshotMode: never`, `withAvroSchema: false`, `sdk.batch.size: CONDUIT_BATCH_SIZE`) → `builtin:file` sink | `pipelines/conduit.yml` (generated), `tools/compose-conduit.yml` |
 | `conduit-aa` | byte-for-byte the same as `conduit` (the A/A control; only the container name differs) | `tools/compose-conduit-aa.yml` |
 | `connect` | `TABLES` Debezium Postgres source connectors (`plugin.name: pgoutput`, `snapshot.mode: never`, `tombstones.on.delete: false`) → Kafka broker → `TABLES` `FileStreamSinkConnector`s | `tools/compose-connect.yml`, `tools/connect.Dockerfile`, registration loop in `bench.yml` |
+| `debezium-server` | one Debezium Engine as a standalone JVM (no Kafka broker, no Connect worker): `TABLES` tables over one pgoutput slot/publication (`snapshot.mode: no_data`) → built-in HTTP sink → counter writing one line per event to `/sink/out.txt` | `config/debezium-server.properties` (generated), `tools/compose-debezium-server.yml`, `tools/counter.py` |
 | `redpanda-connect` | `postgres_cdc` input (`stream_snapshot: false`) → `file` output (`codec: lines`); single-table, blocked by licensing | `config/redpanda.yaml`, `tools/compose-redpanda.yml` |
 
 The workload generator (`loader/`) is the SAME container for every arm: a Go
@@ -46,11 +49,16 @@ program writing a 70/20/10 INSERT/UPDATE/DELETE mix at a fixed `-rate` (default
 - **N-way split**: for a given `TABLES`, the Conduit arm runs `TABLES`
   independent pipelines (one source + one file sink each) and the Connect arm
   runs `TABLES` Debezium sources + `TABLES` FileStreamSinkConnectors (one per
-  table → topic → sink), so both systems are measured at the same fan-out.
-- **Wire protocol**: all three use Postgres `pgoutput` logical replication.
-- **Snapshot**: disabled in all three (`snapshotMode: never` /
-  `snapshot.mode: never` / `stream_snapshot: false`), so the number reflects
-  steady-state CDC, not a one-time table dump.
+  table → topic → sink), so both systems are measured at the same fan-out. The
+  Debezium Server arm is one engine capturing all `TABLES` tables over one
+  slot/publication — the same single-process shape as Conduit, but one
+  connector task rather than `TABLES`.
+- **Wire protocol**: all four use Postgres `pgoutput` logical replication.
+- **Snapshot**: disabled in all four (`snapshotMode: never` / Connect's
+  `snapshot.mode: never` / Debezium Server's `snapshot.mode: no_data` — the
+  same "stream only, no snapshot" mode, renamed in Debezium 3.4 /
+  `stream_snapshot: false`), so the number reflects steady-state CDC, not a
+  one-time table dump.
 - **Sink + metric**: each arm writes one line per event to its sink file(s),
   and the SUM of `wc -l` across them is the metric. No engine metric is read
   anywhere (`msg-rate-per-second` is the retracted metric; it is not used).
@@ -62,6 +70,24 @@ program writing a 70/20/10 INSERT/UPDATE/DELETE mix at a fixed `-rate` (default
   Conduit and Redpanda Connect are broker-neutral single processes. The extra
   hop is part of what "Kafka Connect + Debezium" is, so it is measured, but a
   reader should not attribute the whole difference to CDC capture efficiency.
+- **Debezium Server removes the broker hop, but adds an HTTP hop and a version
+  gap.** The `debezium-server` arm runs the Debezium Engine as a single JVM —
+  no Kafka broker, no Connect worker, no FileStreamSinkConnector — which is the
+  apples-to-apples shape against Conduit's single process. What remains
+  non-equivalent: (1) it is still a JVM with Debezium's GC and heap defaults,
+  against Conduit's Go runtime; (2) Debezium Server has no file sink adapter
+  (its built-ins are HTTP/Redis/Kinesis/PubSub), so each event crosses a local
+  HTTP hop (engine → counter service) before it is counted — cheap but real,
+  and the counter is a few lines of stdlib Python, not a framework; and (3) it
+  is pinned to Debezium Server **3.4** while the `connect` arm is Debezium
+  **3.2**, because the HTTP sink in Debezium Server ≤3.3 duplicates request
+  headers on every message and eventually 431s the counter (the fix landed in
+  3.4). The 3.2→3.4 engine delta is small but real, so a `connect`-vs-
+  `debezium-server` comparison carries it alongside the mode difference. Note
+  too that the one-POST-per-event HTTP hop through the stdlib Python counter
+  bounds this arm's throughput (measured at a few thousand events/s against the
+  loader's default 20 000 ops/s), so it measures the engine→counter path, not
+  Debezium's raw capture ceiling — read the arm's numbers accordingly.
 - **Batching defaults differ.** Conduit's source now runs with
   `sdk.batch.size: 1000` (tunable via `CONDUIT_BATCH_SIZE`, plus a
   `sdk.batch.delay` of `100ms` so a partial batch still flushes), where the
@@ -72,16 +98,15 @@ program writing a 70/20/10 INSERT/UPDATE/DELETE mix at a fixed `-rate` (default
   surface.
 - **Record bytes differ.** Conduit writes the OpenCDC record, Debezium the
   Debezium envelope, Redpanda its message. `wc -l` counts lines, so byte size
-  is irrelevant to the metric — but the three sinks do not emit identical
-  content.
+  is irrelevant to the metric — but the sinks do not emit identical content.
 - **Delivery semantics differ.** Conduit is at-least-once with end-to-end ack
   propagation; Debezium/Kafka Connect and Redpanda have their own at-least-once
   paths and (in the case of Kafka) an acknowledged broker write between capture
   and sink. This benchmark measures throughput, not delivery guarantees or
   crash recovery.
 - **Resource limits are not normalized.** Each system gets the machine's
-  resources with its own defaults (JVM heap for Connect, GOMAXPROCS for
-  Conduit/Redpanda). No cgroup limits are applied.
+  resources with its own defaults (JVM heap for Connect and Debezium Server,
+  GOMAXPROCS for Conduit/Redpanda). No cgroup limits are applied.
 
 ## The A/A floor rule
 
@@ -112,8 +137,9 @@ run the arm; on the free edition it is documented as blocked, not faked.
 
 Ground truth is lines written to the sink files, not any system's metrics:
 `ROWS_BEFORE` and `ROWS_AFTER` are the SUM of `wc -l` across `/sink/out*.txt`
-(the Conduit and Connect arms write one file per table, Redpanda one file), so
-the number is the total CDC events delivered regardless of `TABLES`.
+(the Conduit and Connect arms write one file per table; Redpanda and Debezium
+Server write a single `out.txt`), so the number is the total CDC events
+delivered regardless of `TABLES`.
 
 ```
 throughput = (ROWS_AFTER - ROWS_BEFORE) / test_duration
@@ -130,30 +156,34 @@ with variance over the rounds.
 ```bash
 # local
 cd benchi/v021-cdc-parity
-./run.sh 3 conduit conduit-aa connect           # 3 rounds, A/A + 2 real arms
+./run.sh 3 conduit conduit-aa connect debezium-server   # 3 rounds, A/A + 3 real arms
 
 # N-way (2 tables): 2 sources + 2 sinks per arm, summed ground truth
-TABLES=2 ./run.sh 3 conduit conduit-aa connect
+TABLES=2 ./run.sh 3 conduit conduit-aa connect debezium-server
 
 # sweep Conduit source batching
 CONDUIT_BATCH_SIZE=2048 ./run.sh 3 conduit
 
 # dedicated AWS instance (see run-aws.sh)
-TABLES=2 ./run-aws.sh 3 conduit conduit-aa connect
+TABLES=2 ./run-aws.sh 3 conduit conduit-aa connect debezium-server
 ```
 
 `TABLES` (default 1; sweep 1, 2, 4), `CONDUIT_BATCH_SIZE` (default 1000) and
 `CONDUIT_BATCH_DELAY` (default 100ms) are read by `run.sh`, which runs
-`scripts/generate.sh` to regenerate `pipelines/conduit.yml` and
-`infra/init.sql` for the given `TABLES`, then exports `TABLES` to docker
-compose (the loader's `--tables` flag, and the counter container's env for the
-connect registration loop in `bench.yml`).
+`scripts/generate.sh` to regenerate `pipelines/conduit.yml`, `infra/init.sql`
+and `config/debezium-server.properties` for the given `TABLES`, then exports
+`TABLES` to docker compose (the loader's `--tables` flag, and the counter
+container's env for the connect registration loop in `bench.yml`).
 
 Prerequisites: Docker, `go` (for the loader), `benchi` (v0.4.1+), and the
 images `postgres:17`, `alpine:3.20`, `apache/kafka:4.0.0`,
-`quay.io/debezium/connect:3.2`, and
+`quay.io/debezium/connect:3.2`, `quay.io/debezium/server:3.4`,
+`python:3.12-alpine`, and
 `docker.redpanda.com/redpandadata/connect:latest`. `run.sh` builds the Conduit
-image from the working tree and the Connect image from `tools/connect.Dockerfile`.
+image from the working tree and the Connect image from `tools/connect.Dockerfile`
+(the Debezium Server arm uses the stock `quay.io/debezium/server:3.4` image —
+no Dockerfile needed; it already bundles the Postgres connector and the HTTP
+sink).
 
 ## Results
 

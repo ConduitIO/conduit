@@ -4,10 +4,10 @@
 #   benchi/v021-cdc-parity/run-aws.sh [ROUNDS] [ARM ...] [--keep]
 #
 #   ROUNDS   number of full rounds (default 3); one warmup round is discarded.
-#   ARM ...  subset of arms: conduit conduit-aa connect
-#            (default: all three). redpanda-connect is NOT run by default —
-#            its postgres_cdc input is Redpanda Connect ENTERPRISE, so a stock
-#            build refuses to start; see README.md.
+#   ARM ...  subset of arms: conduit conduit-aa connect debezium-server
+#            (default: the four runnable arms). redpanda-connect is NOT run by
+#            default — its postgres_cdc input is Redpanda Connect ENTERPRISE,
+#            so a stock build refuses to start; see README.md.
 #   --keep   keep the instance running after the run (default: destroy it).
 #
 # End to end:
@@ -43,7 +43,7 @@ while [ $# -gt 0 ]; do
 done
 ROUNDS=${ARGS[0]:-3}
 REST=("${ARGS[@]:1}")
-if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect); fi
+if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect debezium-server); fi
 
 SSH_KEY=.ssh/conduit-bench.pem
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
