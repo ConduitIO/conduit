@@ -42,6 +42,7 @@ func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.S
 		Version:     resp.Version,
 		Author:      resp.Author,
 		Parameters:  params,
+		Stateless:   resp.Stateless,
 	}, nil
 }
 

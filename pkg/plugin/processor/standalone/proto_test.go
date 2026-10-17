@@ -91,3 +91,24 @@ func TestProtoConverter_ProcessedRecord_MultiRecord_Empty(t *testing.T) {
 	is.True(multi != nil)
 	is.Equal(len(multi), 0)
 }
+
+// TestProtoConverter_Specification_Stateless proves the stateless declaration
+// survives the WASM boundary: the guest's Specify.Response.stateless field is
+// read back into sdk.Specification.Stateless host-side, so the engine can see it
+// (RunnableProcessor.Stateless).
+func TestProtoConverter_Specification_Stateless(t *testing.T) {
+	is := is.New(t)
+	c := protoConverter{}
+
+	got, err := c.specification(&processorv1.Specify_Response{
+		Name:      "stateless-proc",
+		Stateless: true,
+	})
+	is.NoErr(err)
+	is.True(got.Stateless)
+
+	// A stateful (default) response leaves the flag unset.
+	got, err = c.specification(&processorv1.Specify_Response{Name: "stateful-proc"})
+	is.NoErr(err)
+	is.True(!got.Stateless)
+}
