@@ -103,4 +103,14 @@ var (
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.
 	CodeSecretPlaintext = conduiterr.Register("kc.secret_plaintext", codes.InvalidArgument)
+	// CodeTargetCapabilityMissing: a key maps to a Conduit setting the target
+	// plugin does not provide yet (a requires-gate param or capability the
+	// connector lane has not shipped). Blocking: writing nothing would drop
+	// the setting, so the migration stops until the lane lands.
+	CodeTargetCapabilityMissing = conduiterr.Register("kc.target_capability_missing", codes.InvalidArgument)
+	// CodeResumeUnavailable: a key needs the Debezium offset import (or
+	// another cutover mechanism) to resume where the original connector
+	// stopped, and that mechanism was not requested or is not available.
+	// Blocking: starting fresh would skip or replay records.
+	CodeResumeUnavailable = conduiterr.Register("kc.resume_unavailable", codes.InvalidArgument)
 )

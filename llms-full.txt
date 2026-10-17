@@ -1188,7 +1188,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (149)
+## 3. Error codes (152)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1242,9 +1242,11 @@ Author: Meroxa, Inc.
 | `kc.key_unsupported` | InvalidArgument | CodeKeyUnsupported: a known key with no Conduit equivalent for its value. |
 | `kc.offsets_not_migrated` | InvalidArgument | CodeOffsetsNotMigrated: a connector-level note that the connector resumes from offsets Kafka Connect stored, which migrate does not carry over; the note says where the pipeline starts instead. Blocking: records are copied again or skipped. |
 | `kc.output_shape_differs` | InvalidArgument | CodeOutputShapeDiffers: a connector-level note that records, objects or topics differ in shape or layout from the original connector's. |
+| `kc.resume_unavailable` | InvalidArgument | CodeResumeUnavailable: a key needs the Debezium offset import (or another cutover mechanism) to resume where the original connector stopped, and that mechanism was not requested or is not available. Blocking: starting fresh would skip or replay records. |
 | `kc.secret_plaintext` | InvalidArgument | CodeSecretPlaintext: a connector-level note that the input holds a secret as a literal value. The value is not copied anywhere, but the input file is itself a leak. |
 | `kc.setting_required` | InvalidArgument | CodeSettingRequired: a connector-level note for a setting the Conduit plugin requires that no Kafka Connect key provides; it is written as an environment variable to fill. Blocking: the pipeline cannot run as is. |
 | `kc.smt_unsupported` | InvalidArgument | CodeSMTUnsupported: a single message transform or predicate outside the subset migrate translates exactly. Blocking: transforms change data. |
+| `kc.target_capability_missing` | InvalidArgument | CodeTargetCapabilityMissing: a key maps to a Conduit setting the target plugin does not provide yet (a requires-gate param or capability the connector lane has not shipped). Blocking: writing nothing would drop the setting, so the migration stops until the lane lands. |
 | `kc.topic_name_unsupported` | InvalidArgument | CodeTopicNameUnsupported: a connector-level note that the connector's topic naming cannot be written as the destination's topic template. Blocking: the destination topic must be set by hand. |
 | `lifecycle_v2.partial_graceful_stop_escalated` | Aborted | CodePartialGracefulStopEscalated is returned by Stop/StopAndWait for an N-source pipeline (slice 3b of the arch-v2 multi-connector epic) when a graceful stop arms some sources within the deadline but not others. See stopRunnablePipeline's doc and the adversarial-review finding this closes (H1, docs/design-documents/20260801-archv2-multiconnector-nsource.md).  Leaving that state unresolved would strand the pipeline reporting StatusRunning indefinitely: the still-unarmed worker(s) keep reading, workersWg never drains, and runPipeline's cleanup goroutine (the only thing that ever writes a terminal status) never runs - invisible to an operator except as an error return that may go to a disconnected caller. Instead the pipeline's tomb is force-killed with this code so every still-unarmed worker's next context check observes cancellation and unwinds, guaranteeing the pipeline reaches a terminal (Degraded) status instead of a silent, half-stopped one. At-least-once is preserved: this never acks anything, so an interrupted worker's in-flight, unacked batch simply replays on the pipeline's next start (invariant 3). |
 | `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |

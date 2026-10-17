@@ -18,14 +18,16 @@ command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
   # schema.include.list without a literal table list is U! (mapping table).
   exitCode: 2
-  # plugin.name absent means decoderbufs: non-blocking default note.
-  notes: [kc.default_differs, kc.converter_unknown]
+  # plugin.name absent means decoderbufs: non-blocking default note; the
+  # Debezium output mode is not wired, so every migration carries the
+  # blocking kc.output_shape_differs note.
+  notes: [kc.default_differs, kc.converter_unknown, kc.output_shape_differs]
   entries:
     - {key: schema.include.list, status: unsupported, blocking: true}
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: database.password, status: translated, secret: true}
     - {key: database.hostname, status: translated}
     - {key: tasks.max, status: translated}
-    - {key: topic.prefix, status: translated}
 covers:
   - class: io.debezium.connector.postgresql.PostgresConnector
     keys: [database.hostname, database.port, database.user, database.password, database.dbname, topic.prefix, schema.include.list]
