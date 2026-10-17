@@ -1,0 +1,150 @@
+# Confluent S3 sink (io.confluent.connect.s3.S3SinkConnector) to builtin:kafka
+# source and builtin:s3 destination. Mapping design
+# docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "S3 sink". Written against the Confluent S3 sink 12.1.5 docs and the
+# builtin:s3 v0.10.0 spec.
+#
+# Every S3 migration carries the blocking note kc.output_shape_differs (object
+# layout and naming, and for JsonFormat the line shape) and the non-blocking
+# note kc.delivery_semantics_differ (object names are not deterministic, so
+# there is no exactly-once). The static AWS keys the Confluent sink takes from
+# the default credential chain are required by builtin:s3, so their absence is
+# reported by the required-settings check as kc.setting_required.
+rulesVersion: 1
+scope: sink
+class: io.confluent.connect.s3.S3SinkConnector
+upstream: {name: confluent, version: "12.1.5"}
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:s3, role: destination}
+notes:
+  - code: kc.output_shape_differs
+    blocking: true
+    reason: Conduit writes one object per batch as <prefix>/<UnixNano>.<ext>; the Kafka Connect S3 sink names and lays out objects by its partitioner, and its JsonFormat writes the bare record value where Conduit's json format writes one OpenCDC-shaped object per line. Consumers of the exact object keys or line shape break.
+    fix: Keep this connector on Kafka Connect if consumers read the object keys or the bare-value JSON lines, or accept the difference with --accept-gaps.
+  - code: kc.delivery_semantics_differ
+    reason: Object names are not deterministic, so a batch that is retried after a failure or a restart is written again as a new object. A reader can see a record twice, never zero times; Kafka Connect's deterministic naming gives exactly-once object keys.
+    fix: None needed; consumers should tolerate duplicate objects.
+keys:
+  - key: s3.bucket.name
+    status: translated
+    reason: The bucket objects are written to.
+    emit: {kind: setting, side: destination, name: aws.bucket}
+    diff: identity
+  - key: s3.region
+    status: translated
+    reason: The bucket region.
+    emit: {kind: setting, side: destination, name: aws.region}
+    diff: identity
+  - key: flush.size
+    status: approximated
+    code: kc.key_approximated
+    reason: Kafka Connect rotates a file after flush.size records; Conduit writes one object per batch, so sdk.batch.size bounds the records per object instead.
+    emit: {kind: setting, side: destination, name: sdk.batch.size}
+    diff: tuning
+  - key: storage.class
+    diff: identity
+    values:
+      - match: [io.confluent.connect.s3.storage.S3Storage]
+        status: translated
+        reason: The S3 object store.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A storage backend Conduit does not write to.
+        fix: Keep this connector on Kafka Connect if it writes to anything other than S3.
+  - key: format.class
+    diff: behavior
+    values:
+      - match: [io.confluent.connect.s3.format.json.JsonFormat]
+        status: approximated
+        blocking: true
+        code: kc.key_approximated
+        reason: Conduit's json format writes one OpenCDC-shaped object per line (Operation, Position, Payload, Key, Metadata); Kafka Connect's JsonFormat writes the bare record value.
+        fix: Keep this connector on Kafka Connect if consumers read the bare-value JSON lines, or accept the difference with --accept-gaps.
+        emit: {kind: setting, side: destination, name: format, value: json}
+      - match: [io.confluent.connect.s3.format.parquet.ParquetFormat]
+        status: approximated
+        blocking: true
+        code: kc.key_approximated
+        reason: Conduit's parquet format writes the OpenCDC fields as fixed string columns, GZIP only; Kafka Connect's ParquetFormat writes the record value's own schema.
+        fix: Keep this connector on Kafka Connect if consumers read the Parquet schema, or accept the difference with --accept-gaps.
+        emit: {kind: setting, side: destination, name: format, value: parquet}
+      - match: [io.confluent.connect.s3.format.avro.AvroFormat, io.confluent.connect.s3.format.bytearray.ByteArrayFormat]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit has no Avro object format; AvroFormat stores an Avro container file.
+        fix: Use JsonFormat or ParquetFormat, or keep this connector on Kafka Connect.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: An object format Conduit does not write.
+        fix: Use JsonFormat or ParquetFormat, or keep this connector on Kafka Connect.
+  - key: schema.generator.class
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The Hive schema generator names the object schema; Conduit has no schema generator.
+    fix: Keep this connector on Kafka Connect if a Hive metastore reads the schema, or accept the difference with --accept-gaps.
+    diff: behavior
+  - key: schema.compatibility
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Conduit has no schema compatibility mode.
+    fix: Keep this connector on Kafka Connect if a schema registry or Hive metastore enforces compatibility.
+    diff: behavior
+  - key: partitioner.class
+    diff: behavior
+    values:
+      - match: [io.confluent.connect.storage.partitioner.DefaultPartitioner]
+        status: approximated
+        blocking: true
+        code: kc.key_approximated
+        reason: Kafka Connect writes objects under topics/<topic>/partition=<n>/; Conduit writes them under <prefix>/<UnixNano>.<ext>, so the object layout differs.
+        fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys, or accept the difference with --accept-gaps.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A partitioner whose directory layout Conduit does not reproduce.
+        fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys, or use the default partitioner and accept the layout difference.
+  - key: path.format
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A time-partitioner path pattern; Conduit has no partitioner path format.
+    fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys.
+    diff: behavior
+  - key: timestamp.extractor
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A time-partitioner timestamp source; Conduit has no partitioner timestamp extractor.
+    fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys.
+    diff: behavior
+  - key: partition.duration.ms
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The time-partitioner width; Conduit has no partitioner.
+    fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys.
+    diff: behavior
+  - key: locale
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A partitioner locale; Conduit has no partitioner.
+    fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys.
+    diff: tuning
+  - key: timezone
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A partitioner timezone; Conduit has no partitioner.
+    fix: Keep this connector on Kafka Connect if consumers read the partitioned object keys.
+    diff: behavior
