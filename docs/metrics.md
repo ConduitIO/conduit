@@ -65,7 +65,7 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
   `records` is incremented at the connector boundary — once per record read
   from a source, once per record a destination acknowledged — and therefore
   matches the bytes/latency metrics' existing semantics. `errors` is incremented
-  once per read/write/ack failure the connector returns; it records only *that*
+  once per read/write/ack failure the connector returns; it records only _that_
   an error occurred (never the message or code), so the metric's cardinality
   stays bounded. To get the error detail, read the pipeline error from the API
   or logs. The DLQ variants (`conduit_dlq_records_total`,
