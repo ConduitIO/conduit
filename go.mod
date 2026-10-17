@@ -40,7 +40,7 @@ require (
 	github.com/iskorotkov/avro/v2 v2.34.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jpillora/backoff v1.0.0
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.3
 	github.com/matryer/is v1.4.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -61,7 +61,7 @@ require (
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/stretchr/testify v1.12.1
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/twmb/franz-go v1.21.6
+	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/sr v1.8.0
 	github.com/twmb/go-cache v1.4.0
 	go.uber.org/mock v0.6.0
@@ -176,7 +176,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/petermattis/goid v0.0.0-20250319124200-ccd6737f222a // indirect
-	github.com/pierrec/lz4/v4 v4.1.26 // indirect
+	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -204,7 +204,7 @@ require (
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20211228015320-b4f792c43cd0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
