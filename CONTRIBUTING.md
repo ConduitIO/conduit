@@ -227,10 +227,11 @@ In this order, cheapest first:
    bench-engine` runs: drift between invocations shows up as a significant delta on identical code. `make
    bench-engine` alone gives one snapshot. The benchmark runs seven reference shapes (1x1, 2x2, 4x4, source batch
    100, ack latency, buffered acks, destination batching) on both engines; one pass is about 15 s, so
-   `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR a CI job posts the same comparison
-   as a comment, with a noise floor measured on unchanged code. Both are indicative: they drive fakes, so they show
-   engine overhead and say nothing about connector throughput. A throughput claim needs a benchi run with committed
-   configs and an environment spec.
+   `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR the `bench-engine (gate)` CI
+   check runs the same interleaved comparison and **fails the build when a benchmark is more than 10% slower than
+   base beyond twice the A/A noise floor**, citing the floor in the step summary and a PR comment. These drive
+   fakes in-process, so they show engine overhead and say nothing about connector throughput. A throughput claim
+   needs a benchi run with committed configs and an environment spec.
 5. **Update the docs.** The matching row in `docs/architecture/guarantees.md`, the flow in
    `docs/architecture/life-of-a-record.md` if the behaviour changed, and `llms.txt` if anything user-facing did.
 
