@@ -81,7 +81,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},
 			Payload: opencdc.Change{
-				After: opencdc.RawData([]byte{0, 0, 0, 0, 1, 102, 102, 102, 102, 102, 102, 2, 64, 2, 154, 153, 153, 153, 153, 153, 1, 64, 1, 6, 98, 97, 114, 0, 2}),
+				After: opencdc.RawData([]byte{0, 0, 0, 0, 1, 102, 102, 102, 102, 102, 102, 2, 64, 2, 3, 38, 6, 98, 97, 114, 2, 154, 153, 153, 153, 153, 153, 1, 64, 6, 102, 111, 111, 0, 1, 0, 6, 98, 97, 114, 0, 2}),
 			},
 		},
 	})
@@ -113,7 +113,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 	// -        "foo": 1
 	// -      }
 	// -    }
-	// +    "after": "\u0000\u0000\u0000\u0000\u0001ffffff\u0002@\u0002\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0001@\u0001\u0006bar\u0000\u0002"
+	// +    "after": "\u0000\u0000\u0000\u0000\u0001ffffff\u0002@\u0002\u0003\u0026\u0006bar\u0002\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0001@\u0006foo\u0000\u0001\u0000\u0006bar\u0000\u0002"
 	//    }
 	//  }
 }
