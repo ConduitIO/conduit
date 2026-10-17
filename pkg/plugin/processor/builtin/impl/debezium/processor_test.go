@@ -17,13 +17,13 @@ package debezium
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 

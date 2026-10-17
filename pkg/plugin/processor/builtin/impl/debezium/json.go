@@ -17,7 +17,6 @@ package debezium
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -27,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/goccy/go-json"
 )
 
 // appendJSONString writes s with the same escaping the Confluent JsonConverter
@@ -140,104 +140,127 @@ func writeValue(b *bytes.Buffer, s *schema, v any, decimalFormat string) error {
 	}
 	switch s.Type {
 	case typeStruct:
-		if s.Name == nameVariableScaleDecimal {
-			return writeVariableScaleDecimal(b, v)
-		}
-		m, err := asMap(v)
-		if err != nil {
-			return newCoded(CodeRecordSchemaMismatch, "struct field is not an object: "+err.Error(), "")
-		}
-		b.WriteByte('{')
-		for i, f := range s.Fields {
-			if i > 0 {
-				b.WriteByte(',')
-			}
-			writeJSONString(b, f.Name)
-			b.WriteByte(':')
-			if err := writeValue(b, f.Schema, m[f.Name], decimalFormat); err != nil {
-				return err
-			}
-		}
-		b.WriteByte('}')
-		return nil
+		return writeStructValue(b, s, v, decimalFormat)
 	case typeArray:
-		arr, ok := v.([]any)
-		if !ok {
-			return newCoded(CodeRecordSchemaMismatch, "array field is not a list", "")
-		}
-		b.WriteByte('[')
-		for i, e := range arr {
-			if i > 0 {
-				b.WriteByte(',')
-			}
-			if err := writeValue(b, s.Items, e, decimalFormat); err != nil {
-				return err
-			}
-		}
-		b.WriteByte(']')
-		return nil
+		return writeArrayValue(b, s, v, decimalFormat)
 	case typeMap:
-		m, err := asMap(v)
-		if err != nil {
-			return newCoded(CodeRecordSchemaMismatch, "map field is not an object: "+err.Error(), "")
-		}
-		b.WriteByte('{')
-		first := true
-		for k, mv := range m {
-			if !first {
-				b.WriteByte(',')
-			}
-			first = false
-			writeJSONString(b, k)
-			b.WriteByte(':')
-			// hstore map mode is MAP<STRING,STRING>.
-			writeJSONString(b, fmt.Sprint(mv))
-		}
-		b.WriteByte('}')
-		return nil
+		return writeMapValue(b, v)
 	case typeBytes:
-		if s.Name == nameDecimal {
-			return writeDecimal(b, v, s, decimalFormat)
-		}
-		bs, ok := v.([]byte)
-		if !ok {
-			return newCoded(CodeRecordSchemaMismatch, "bytes field is not bytes", "")
-		}
-		b.WriteString(strconv.Quote(base64.StdEncoding.EncodeToString(bs)))
-		return nil
+		return writeBytesValue(b, s, v, decimalFormat)
 	case typeInt16, typeInt32, typeInt64:
 		return writeInt(b, v)
 	case typeFloat:
-		f, err := asFloat(v, 32)
-		if err != nil {
-			return newCoded(CodeRecordSchemaMismatch, err.Error(), "")
-		}
-		appendFloat(b, f, 32)
-		return nil
+		return writeFloatValue(b, v, 32)
 	case typeDouble:
-		f, err := asFloat(v, 64)
-		if err != nil {
-			return newCoded(CodeRecordSchemaMismatch, err.Error(), "")
-		}
-		appendFloat(b, f, 64)
-		return nil
+		return writeFloatValue(b, v, 64)
 	case typeBoolean:
-		bl, ok := v.(bool)
-		if !ok {
-			return newCoded(CodeRecordSchemaMismatch, "boolean field is not a bool", "")
-		}
-		b.WriteString(strconv.FormatBool(bl))
-		return nil
+		return writeBoolValue(b, v)
 	case typeString:
-		str, ok := v.(string)
-		if !ok {
-			return newCoded(CodeRecordSchemaMismatch, "string field is not a string", "")
-		}
-		writeJSONString(b, str)
-		return nil
+		return writeStringValue(b, v)
 	default:
 		return newCoded(CodeUnsupportedType, fmt.Sprintf("Connect type %q is not supported", s.Type), "")
 	}
+}
+
+func writeStructValue(b *bytes.Buffer, s *schema, v any, decimalFormat string) error {
+	if s.Name == nameVariableScaleDecimal {
+		return writeVariableScaleDecimal(b, v)
+	}
+	m, err := asMap(v)
+	if err != nil {
+		return newCoded(CodeRecordSchemaMismatch, "struct field is not an object: "+err.Error(), "")
+	}
+	b.WriteByte('{')
+	for i, f := range s.Fields {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		writeJSONString(b, f.Name)
+		b.WriteByte(':')
+		if err := writeValue(b, f.Schema, m[f.Name], decimalFormat); err != nil {
+			return err
+		}
+	}
+	b.WriteByte('}')
+	return nil
+}
+
+func writeArrayValue(b *bytes.Buffer, s *schema, v any, decimalFormat string) error {
+	arr, ok := v.([]any)
+	if !ok {
+		return newCoded(CodeRecordSchemaMismatch, "array field is not a list", "")
+	}
+	b.WriteByte('[')
+	for i, e := range arr {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		if err := writeValue(b, s.Items, e, decimalFormat); err != nil {
+			return err
+		}
+	}
+	b.WriteByte(']')
+	return nil
+}
+
+func writeMapValue(b *bytes.Buffer, v any) error {
+	m, err := asMap(v)
+	if err != nil {
+		return newCoded(CodeRecordSchemaMismatch, "map field is not an object: "+err.Error(), "")
+	}
+	b.WriteByte('{')
+	first := true
+	for k, mv := range m {
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		writeJSONString(b, k)
+		b.WriteByte(':')
+		// hstore map mode is MAP<STRING,STRING>.
+		writeJSONString(b, fmt.Sprint(mv))
+	}
+	b.WriteByte('}')
+	return nil
+}
+
+func writeBytesValue(b *bytes.Buffer, s *schema, v any, decimalFormat string) error {
+	if s.Name == nameDecimal {
+		return writeDecimal(b, v, s, decimalFormat)
+	}
+	bs, ok := v.([]byte)
+	if !ok {
+		return newCoded(CodeRecordSchemaMismatch, "bytes field is not bytes", "")
+	}
+	b.WriteString(strconv.Quote(base64.StdEncoding.EncodeToString(bs)))
+	return nil
+}
+
+func writeFloatValue(b *bytes.Buffer, v any, bits int) error {
+	f, err := asFloat(v, bits)
+	if err != nil {
+		return newCoded(CodeRecordSchemaMismatch, err.Error(), "")
+	}
+	appendFloat(b, f, bits)
+	return nil
+}
+
+func writeBoolValue(b *bytes.Buffer, v any) error {
+	bl, ok := v.(bool)
+	if !ok {
+		return newCoded(CodeRecordSchemaMismatch, "boolean field is not a bool", "")
+	}
+	b.WriteString(strconv.FormatBool(bl))
+	return nil
+}
+
+func writeStringValue(b *bytes.Buffer, v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return newCoded(CodeRecordSchemaMismatch, "string field is not a string", "")
+	}
+	writeJSONString(b, str)
+	return nil
 }
 
 // asMap accepts the map shapes record data uses.

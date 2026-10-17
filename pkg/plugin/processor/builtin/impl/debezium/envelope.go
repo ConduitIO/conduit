@@ -16,11 +16,11 @@ package debezium
 
 import (
 	"bytes"
-	"encoding/json"
 	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/goccy/go-json"
 )
 
 // The Debezium source and transaction block names, fixed for every table.

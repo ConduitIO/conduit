@@ -62,8 +62,9 @@ const (
 )
 
 // newCoded builds a coded error with a suggestion, keeping the construction
-// to conduiterr.New as required.
-func newCoded(code conduiterr.Code, msg, suggestion string) *conduiterr.ConduitError {
+// to conduiterr.New as required. It returns the error interface so callers
+// (and the forbidigo rule) never name the ConduitError type directly.
+func newCoded(code conduiterr.Code, msg, suggestion string) error {
 	e := conduiterr.New(code, msg)
 	e.Suggestion = suggestion
 	return e

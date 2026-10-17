@@ -17,11 +17,11 @@ package debezium
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/goccy/go-json"
 )
 
 // frame is the message-plan payload the encoder writes into Payload.After

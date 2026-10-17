@@ -16,9 +16,10 @@ package debezium
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strconv"
+
+	"github.com/goccy/go-json"
 )
 
 // Connect schema type names, as the JsonConverter writes them.
@@ -178,57 +179,64 @@ func parseSchemaObject(dec *json.Decoder) (*schema, error) {
 		if err != nil {
 			return nil, err
 		}
-		key := keyTok.(string)
-		switch key {
-		case "type":
-			if s.Type, err = decodeString(dec); err != nil {
-				return nil, err
-			}
-		case "items":
-			if s.Items, err = parseSchemaObject(dec); err != nil {
-				return nil, err
-			}
-		case "fields":
-			if s.Fields, err = parseFields(dec); err != nil {
-				return nil, err
-			}
-		case "optional":
-			if s.Optional, err = decodeBool(dec); err != nil {
-				return nil, err
-			}
-		case "name":
-			if s.Name, err = decodeString(dec); err != nil {
-				return nil, err
-			}
-		case "version":
-			if s.Version, err = decodeInt(dec); err != nil {
-				return nil, err
-			}
-		case "doc":
-			if s.Doc, err = decodeString(dec); err != nil {
-				return nil, err
-			}
-		case "parameters":
-			if s.Params, err = parseParameters(dec); err != nil {
-				return nil, err
-			}
-		case "default":
-			if err := dec.Decode(&s.Default); err != nil {
-				return nil, err
-			}
-		case "field":
-			if s.Field, err = decodeString(dec); err != nil {
-				return nil, err
-			}
-		default:
-			var skip json.RawMessage
-			_ = dec.Decode(&skip)
+		if err := s.decodeField(dec, keyTok.(string)); err != nil {
+			return nil, err
 		}
 	}
 	if _, err := dec.Token(); err != nil { // consume '}'
 		return nil, err
 	}
 	return s, nil
+}
+
+// decodeField decodes one schema-object key into s. Each key's decoder is a
+// separate branch so parseSchemaObject stays below the gocyclo threshold; the
+// unknown-key branch skips the value the same way parseDescriptor does.
+func (s *schema) decodeField(dec *json.Decoder, key string) error {
+	switch key {
+	case "type":
+		v, err := decodeString(dec)
+		s.Type = v
+		return err
+	case "items":
+		v, err := parseSchemaObject(dec)
+		s.Items = v
+		return err
+	case "fields":
+		v, err := parseFields(dec)
+		s.Fields = v
+		return err
+	case "optional":
+		v, err := decodeBool(dec)
+		s.Optional = v
+		return err
+	case "name":
+		v, err := decodeString(dec)
+		s.Name = v
+		return err
+	case "version":
+		v, err := decodeInt(dec)
+		s.Version = v
+		return err
+	case "doc":
+		v, err := decodeString(dec)
+		s.Doc = v
+		return err
+	case "parameters":
+		v, err := parseParameters(dec)
+		s.Params = v
+		return err
+	case "default":
+		return dec.Decode(&s.Default)
+	case "field":
+		v, err := decodeString(dec)
+		s.Field = v
+		return err
+	default:
+		var skip json.RawMessage
+		_ = dec.Decode(&skip)
+		return nil
+	}
 }
 
 func parseFields(dec *json.Decoder) ([]field, error) {
