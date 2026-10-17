@@ -60,3 +60,11 @@ var CodePipelineRunning = conduiterr.Register("provisioning.pipeline_running", c
 // pkg/http/api/pipeline_v1.go's ApplyPipeline handler, the only caller that
 // can set allowRestartOnRunning to true.
 var CodeLiveApplyUnauthorized = conduiterr.Register("provisioning.live_apply_unauthorized", codes.FailedPrecondition)
+
+// CodeEnvVarMissing is raised when a ${VAR} reference in a pipeline config
+// cannot be resolved at provision time because the environment variable is not
+// set. The fix is to set the variable and re-provision. This is the runtime
+// resolution half of the secrets-at-rest design (20261016-secrets-at-rest.md):
+// the parser stores the reference, the provisioner resolves it and fails
+// loudly here instead of silently reusing a stale or empty value.
+var CodeEnvVarMissing = conduiterr.Register("config.env_var_missing", codes.InvalidArgument)

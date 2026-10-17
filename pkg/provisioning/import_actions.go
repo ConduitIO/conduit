@@ -83,9 +83,13 @@ func (a createPipelineAction) Do(ctx context.Context) error {
 	if err != nil {
 		return cerrors.Errorf("failed to create pipeline: %w", err)
 	}
+	dlqSettings, err := resolveSettings(a.cfg.DLQ.Settings)
+	if err != nil {
+		return cerrors.Errorf("failed to resolve DLQ settings: %w", err)
+	}
 	_, err = a.pipelineService.UpdateDLQ(ctx, a.cfg.ID, pipeline.DLQ{
 		Plugin:              a.cfg.DLQ.Plugin,
-		Settings:            a.cfg.DLQ.Settings,
+		Settings:            dlqSettings,
 		WindowSize:          *a.cfg.DLQ.WindowSize,
 		WindowNackThreshold: *a.cfg.DLQ.WindowNackThreshold,
 	})
@@ -148,7 +152,11 @@ func (a createConnectorAction) Describe() Change {
 }
 
 func (a createConnectorAction) Do(ctx context.Context) error {
-	_, err := a.connectorService.Create(
+	settings, err := resolveSettings(a.cfg.Settings)
+	if err != nil {
+		return cerrors.Errorf("failed to resolve connector settings: %w", err)
+	}
+	_, err = a.connectorService.Create(
 		ctx,
 		a.cfg.ID,
 		a.connectorType(a.cfg.Type),
@@ -156,7 +164,7 @@ func (a createConnectorAction) Do(ctx context.Context) error {
 		a.pipelineID,
 		connector.Config{
 			Name:     a.cfg.Name,
-			Settings: a.cfg.Settings,
+			Settings: settings,
 		},
 		connector.ProvisionTypeConfig,
 	)
@@ -221,13 +229,17 @@ func (a createProcessorAction) Describe() Change {
 }
 
 func (a createProcessorAction) Do(ctx context.Context) error {
-	_, err := a.processorService.Create(
+	settings, err := resolveSettings(a.cfg.Settings)
+	if err != nil {
+		return cerrors.Errorf("failed to resolve processor settings: %w", err)
+	}
+	_, err = a.processorService.Create(
 		ctx,
 		a.cfg.ID,
 		a.cfg.Plugin,
 		a.parent,
 		processor.Config{
-			Settings: a.cfg.Settings,
+			Settings: settings,
 			Workers:  a.cfg.Workers,
 		},
 		processor.ProvisionTypeConfig,
