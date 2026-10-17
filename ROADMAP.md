@@ -292,7 +292,7 @@ re-snapshot;** offset import for them is v0.22.
 
 - [ ] arch-v2 grows into the single engine (design #2971, under revision). The default flip and
       deletion of the v1 engine are v0.22
-- [ ] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
+- [x] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
 - [ ] Adaptive batching by default. No throughput claim without a committed benchi run
 - [ ] Destination ack reader
 - [ ] Bounded retries (#2997) and bounded stop (#2990)
@@ -324,7 +324,7 @@ re-snapshot;** offset import for them is v0.22.
       is in the Kafka→Kafka item above)
 - [ ] List every labs connector that passes the acceptance suite in the registry as Community tier
       with license metadata (from 6 listed connectors to roughly 30)
-- [ ] Quality tiers (Certified / Verified / Adapter / Community) and a public parity scorecard
+- [x] Quality tiers (Certified / Verified / Adapter / Community) and a public parity scorecard
       seeded from the inventory
 - [ ] Consolidate embeddings on `ai.embed`: deprecate the built-in OpenAI and Cohere embedding
       processors (#2957; removed in v0.23)
