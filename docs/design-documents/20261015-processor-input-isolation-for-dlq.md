@@ -52,7 +52,7 @@ serialized, which is a copy by construction.
 
 ### Related and out of scope
 
-- conduit-commons#338 landed in released v0.9.x: `opencdc.Record.Clone` / `StructuredData.Clone` is now
+- `conduit-commons`#338 landed in released v0.9.x: `opencdc.Record.Clone` / `StructuredData.Clone` is now
   a correct, type-preserving deep copy (maps, `[]any`, typed slices, `RawData`, `[]byte`). This is the
   isolation mechanism; no new copier is written in this repo.
 - `custom.javascript` runtime pooling and global state (`TestAudit_JSGlobalsPerPooledRuntime`) is a
@@ -168,7 +168,7 @@ a processor.
 
 The open question this doc settles is **where** to clone. The answer is the single choke point through
 which every processor in both engines is invoked, not inside any one processor (B), not gated on DLQ
-configuration (A), and not a lazy COW layer (C). The mechanism is `record.Clone()` from conduit-commons
+configuration (A), and not a lazy COW layer (C). The mechanism is `record.Clone()` from `conduit-commons`
 v0.9.x — a correct deep, type-preserving copy — so no copier is written in this repo.
 
 The built-ins with partial-edit paths (`field.exclude`, `field.rename`) are fixed by the same change and
@@ -288,6 +288,6 @@ human sign-off, and a fresh-context review of the implementation PR. This PR is 
 ## Related
 
 - #3153 (this issue), #3152 / #3154 (split nested fields, the sibling finding)
-- conduit-commons#338 (`Clone` deep, type-preserving; released v0.9.x), #336 / #339 (Clone semantics)
+- `conduit-commons`#338 (`Clone` deep, type-preserving; released v0.9.x), #336 / #339 (Clone semantics)
 - `docs/design-documents/20260723-source-ack-persist-ordering-fix.md` (ack-correctness context)
 - `benchi/METHODOLOGY.md`
