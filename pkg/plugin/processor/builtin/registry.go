@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/cohere"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/debezium"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
@@ -53,6 +54,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"cohere.embed":        Constructor(cohere.NewEmbedProcessor),
 	"cohere.rerank":       Constructor(cohere.NewRerankProcessor),
 	"custom.javascript":   Constructor(custom.NewJavascriptProcessor),
+	"debezium.encode":     Constructor(debezium.NewProcessor),
 	"error":               Constructor(impl.NewErrorProcessor),
 	"filter":              Constructor(impl.NewFilterProcessor),
 	"field.convert":       Constructor(field.NewConvertProcessor),
