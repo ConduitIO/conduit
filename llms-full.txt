@@ -1188,7 +1188,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (148)
+## 3. Error codes (149)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1197,6 +1197,7 @@ Author: Meroxa, Inc.
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |
 | `config.ambient_proxy_env` | FailedPrecondition | CodeAmbientProxyEnv is a startup error: ambient credentials are enabled while an HTTP proxy variable is set and allow-proxy is false. |
 | `config.ambient_resource_wildcard` | InvalidArgument | CodeAmbientResourceWildcard is a startup error: an entry of connectors.ambient-credentials.allow-resources contains '*'. Bucket names are globally registrable, so a pattern would admit buckets anyone can create. |
+| `config.env_var_missing` | InvalidArgument | CodeEnvVarMissing is raised when a ${VAR} reference cannot be resolved because the environment variable is not set. The fix is to set the variable and restart the pipeline. |
 | `config.field_invalid` | InvalidArgument | config: field invalid |
 | `config.field_renamed` | InvalidArgument | CodeFieldRenamed is the stable code carried by a lint warning for a deprecated field that was mechanically renamed (the old key's value moves unchanged to a new key) — see pkg/provisioning/config/yaml/internal.Change.RenamedTo and (*configLinter).newWarning. It is distinct from the generic validate.CodeLintWarning so cmd/conduit/internal/repair's fix-producer scan (design doc 20260712-repair-command.md §6, item #1) can find exactly these findings without pattern-matching warning text. |
 | `config.field_required` | InvalidArgument | config: field required |
