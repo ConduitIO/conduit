@@ -16,9 +16,10 @@ package standalone
 
 import (
 	"context"
-	"github.com/goccy/go-json"
 	"strings"
 	"testing"
+
+	"github.com/goccy/go-json"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
