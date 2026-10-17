@@ -19,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.11.0
 	github.com/conduitio/conduit-connector-s3 v0.10.0
 	github.com/conduitio/conduit-connector-sdk v0.16.1
-	github.com/conduitio/conduit-processor-sdk v0.8.0
+	github.com/conduitio/conduit-processor-sdk v0.9.0
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -230,5 +230,3 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
-
-replace github.com/conduitio/conduit-processor-sdk => github.com/conduitio/conduit-processor-sdk v0.8.2-0.20261017075902-45b60f3e0df1
