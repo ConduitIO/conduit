@@ -45,16 +45,21 @@ func (c *NewCommand) Usage() string { return "new [name]" }
 
 func (c *NewCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Scaffold a new Go connector",
+		Short: "Scaffold a new connector (Go or Python)",
 		Long: `Scaffold a full connector repository — SDK wiring, tests, CI, release
-workflow, and the acceptance test harness — from ConduitIO/conduit-connector-template,
-ready to build with no edits.
+workflow, and the acceptance test harness — ready to build with no edits.
 
-The command orchestrates the canonical template rather than reimplementing it: it
+--lang go orchestrates the canonical ConduitIO/conduit-connector-template: it
 renames the module path and package name, installs conn-sdk-cli, runs code
 generation (connector.yaml + README), verifies "go build ./..." succeeds, and
-initializes git. Only --lang go is available today; Python is blocked on a
-connector SDK that does not exist yet (see the design doc).`,
+initializes git.
+
+--lang python scaffolds a connector that imports the merged distribution's
+conduit.connector namespace (PyPI name conduitio), wires it to the SDK
+acceptance suite, verifies the source compiles (python3 -m compileall), and
+initializes git. The scaffolded connector depends on the published conduitio
+distribution, so build/acceptance runs require that distribution to have been
+released first (see docs/design/20261016-python-ga-merged-distribution.md).`,
 		Example: scaffoldcmd.Example(scaffold.KindConnector, "s3"),
 	}
 }
