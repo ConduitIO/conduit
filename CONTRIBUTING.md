@@ -117,12 +117,27 @@ connector in the PR that certifies it.
 
 ## Changing a pipeline engine
 
-The engines are `pkg/lifecycle` (v1, default) and `pkg/lifecycle-poc` (arch-v2, behind
-`--preview.pipeline-arch-v2`), plus the layer under them: `pkg/connector` (source and destination
-wrappers, the position persister) and the plugin boundary in `pkg/plugin`. Read
-[Life of a record](docs/architecture/life-of-a-record.md) and
-[Guarantees](docs/architecture/guarantees.md) first. The second page says which promises a test enforces
-and which do not; a change that touches a promise updates its row in the same PR.
+The engine is the layer that moves records from source to destination. A map of its packages, in the
+order a record touches them:
+
+- `pkg/connector` — `connector.Source` and `connector.Destination`, the wrappers both engines talk to,
+  and the position persister (`persister.go`). The persist-before-ack rule (invariant 1) and the
+  atomic position/state write (invariant 5) live here.
+- `pkg/lifecycle` + `pkg/lifecycle/stream` — the v1 engine (default): a graph of nodes, one message per
+  record, goroutines connected by channels.
+- `pkg/lifecycle-poc` + `pkg/lifecycle-poc/funnel` — the v2 engine (arch-v2, behind
+  `--preview.pipeline-arch-v2`): one worker per source, one batch at a time, fan-out voted by
+  `multiAckNacker`.
+- `pkg/processor` — `RunnableProcessor`, the single choke point every processor is invoked through;
+  condition evaluation and input cloning happen here.
+- `pkg/plugin` — the plugin boundary: `plugin/connector` (builtin, standalone, external) and
+  `plugin/processor` (builtin, standalone/WASM). Protocol-version and value negotiation live here.
+- `pkg/schemaregistry` — the built-in schema registry and the Avro codec limits.
+
+Where to start reading: [Life of a record](docs/architecture/life-of-a-record.md) and
+[Guarantees](docs/architecture/guarantees.md) first, then the `doc.go` files in the packages above, then
+[`docs/package_structure.md`](docs/package_structure.md). The guarantees page says which promises a test
+enforces and which do not; a change that touches a promise updates its guarantee in the same PR.
 
 > The tier guidance, the design-doc template and the proof steps below are **proposals**, distilled from
 > `CLAUDE.md` and the existing design docs. They are not yet agreed project policy.
