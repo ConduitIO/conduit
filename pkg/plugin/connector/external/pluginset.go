@@ -60,6 +60,16 @@ const (
 	ProtocolVersionV3 ProtocolVersion = ProtocolVersion(v3.Version)
 )
 
+// Plugin set keys used in the goplugin.PluginSet maps built by pluginSet and
+// in the client.Dispense calls in dispenser.go. They must stay in sync with
+// conduit-connector-protocol's pconnector/client.newPluginSet, which uses the
+// same keys for the spawn path.
+const (
+	pluginKeySpecifier   = "specifier"
+	pluginKeySource      = "source"
+	pluginKeyDestination = "destination"
+)
+
 // pluginSet returns the goplugin.PluginSet for the given hard-coded protocol
 // version, built from conduit-connector-protocol's exported v1/v2/v3 client
 // constructors (clientv1.NewSpecifierPluginClient and friends) - the same
@@ -73,21 +83,21 @@ func pluginSet(v ProtocolVersion) (goplugin.PluginSet, error) {
 	switch v {
 	case ProtocolVersionV1:
 		return goplugin.PluginSet{
-			"specifier":   newGRPCPlugin(clientv1.NewSpecifierPluginClient),
-			"source":      newGRPCPlugin(clientv1.NewSourcePluginClient),
-			"destination": newGRPCPlugin(clientv1.NewDestinationPluginClient),
+			pluginKeySpecifier:   newGRPCPlugin(clientv1.NewSpecifierPluginClient),
+			pluginKeySource:      newGRPCPlugin(clientv1.NewSourcePluginClient),
+			pluginKeyDestination: newGRPCPlugin(clientv1.NewDestinationPluginClient),
 		}, nil
 	case ProtocolVersionV2:
 		return goplugin.PluginSet{
-			"specifier":   newGRPCPlugin(clientv2.NewSpecifierPluginClient),
-			"source":      newGRPCPlugin(clientv2.NewSourcePluginClient),
-			"destination": newGRPCPlugin(clientv2.NewDestinationPluginClient),
+			pluginKeySpecifier:   newGRPCPlugin(clientv2.NewSpecifierPluginClient),
+			pluginKeySource:      newGRPCPlugin(clientv2.NewSourcePluginClient),
+			pluginKeyDestination: newGRPCPlugin(clientv2.NewDestinationPluginClient),
 		}, nil
 	case ProtocolVersionV3:
 		return goplugin.PluginSet{
-			"specifier":   newGRPCPlugin(clientv3.NewSpecifierPluginClient),
-			"source":      newGRPCPlugin(clientv3.NewSourcePluginClient),
-			"destination": newGRPCPlugin(clientv3.NewDestinationPluginClient),
+			pluginKeySpecifier:   newGRPCPlugin(clientv3.NewSpecifierPluginClient),
+			pluginKeySource:      newGRPCPlugin(clientv3.NewSourcePluginClient),
+			pluginKeyDestination: newGRPCPlugin(clientv3.NewDestinationPluginClient),
 		}, nil
 	default:
 		return nil, cerrors.Errorf("unsupported pconnector protocol version %d", v)

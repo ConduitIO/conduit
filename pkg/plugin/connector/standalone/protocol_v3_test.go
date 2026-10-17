@@ -17,8 +17,6 @@ package standalone
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -27,6 +25,8 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	v2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2"
 	v3 "github.com/conduitio/conduit-connector-protocol/pconnector/v3"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -168,7 +168,7 @@ func TestProtocolV2_WideIntRefused(t *testing.T) {
 			// The refusal happens here, on the v2 server's toproto conversion,
 			// before the record ever reaches the wire.
 			err := stream.Server().Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}})
-			is.True(errors.Is(err, opencdc.ErrIntegerNotRepresentable))
+			is.True(cerrors.Is(err, opencdc.ErrIntegerNotRepresentable))
 			return err
 		})
 

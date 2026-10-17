@@ -201,7 +201,7 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := rpcClient.Dispense("specifier")
+	raw, err := rpcClient.Dispense(pluginKeySpecifier)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := rpcClient.Dispense("source")
+	raw, err := rpcClient.Dispense(pluginKeySource)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := rpcClient.Dispense("destination")
+	raw, err := rpcClient.Dispense(pluginKeyDestination)
 	if err != nil {
 		return nil, err
 	}
