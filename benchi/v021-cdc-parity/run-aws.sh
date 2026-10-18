@@ -4,9 +4,9 @@
 #   benchi/v021-cdc-parity/run-aws.sh [ROUNDS] [ARM ...] [--keep]
 #
 #   ROUNDS   number of full rounds (default 3); one warmup round is discarded.
-#   ARM ...  subset of arms: conduit conduit-aa connect
-#            (default: all three). redpanda-connect is NOT run by default —
-#            its postgres_cdc input is Redpanda Connect ENTERPRISE, so a stock
+#   ARM ...  subset of arms: conduit conduit-aa connect conduit-pg connect-pg
+#            (default: all five). redpanda-connect is NOT run by default — its
+#            postgres_cdc input is Redpanda Connect ENTERPRISE, so a stock
 #            build refuses to start; see README.md.
 #   --keep   keep the instance running after the run (default: destroy it).
 #
@@ -23,7 +23,8 @@
 # Requires: aws CLI + terraform + go (loader cross-compile), AWS creds.
 #
 # Env: TABLES (default 1; sweep 1, 2, 4), CONDUIT_BATCH_SIZE (default 1000),
-# CONDUIT_BATCH_DELAY (default 100ms) — forwarded to run.sh on the instance.
+# CONDUIT_BATCH_DELAY (default 100ms), LOADER_DELAY (default 120s) — forwarded
+# to run.sh on the instance.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -31,6 +32,7 @@ CONDUIT_REF="${CONDUIT_REF:-main}"   # conduit commit/branch to build the image 
 export TABLES=${TABLES:-1}
 export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-1000}
 export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
+export LOADER_DELAY=${LOADER_DELAY:-120s}
 
 KEEP=0
 ARGS=()
@@ -43,7 +45,7 @@ while [ $# -gt 0 ]; do
 done
 ROUNDS=${ARGS[0]:-3}
 REST=("${ARGS[@]:1}")
-if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect); fi
+if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg); fi
 
 SSH_KEY=.ssh/conduit-bench.pem
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
@@ -88,7 +90,7 @@ rsync -az -e "ssh ${SSH_OPTS[*]}" \
 # 5. Put the linux loader in place and run.
 echo "==> running benchmark (rounds=$ROUNDS arms=${REST[*]} tables=$TABLES batch=$CONDUIT_BATCH_SIZE)"
 ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \
-  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY bash run.sh $ROUNDS ${REST[*]}"
+  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_DELAY=$LOADER_DELAY bash run.sh $ROUNDS ${REST[*]}"
 
 # 6. Collect results.
 echo "==> collecting results to ./results-aws/"

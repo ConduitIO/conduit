@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
 # Runs the v0.21 CDC parity benchmark: Conduit vs Kafka Connect (Debezium
 # Postgres) vs Redpanda Connect, on an equivalent Postgres CDC workload, with
-# an A/A control (conduit vs conduit-aa).
+# an A/A control (conduit vs conduit-aa) and a Postgres-destination parity pair
+# (conduit-pg vs connect-pg).
 #
 # Each benchi invocation runs ONE arm, with fresh infrastructure, for a 60s
-# measured window. The ground-truth metric is the number of lines the sink file
-# accumulated in that window (ROWS_AFTER - ROWS_BEFORE), divided by 60s. See
-# README.md and bench.yml.
+# measured window. The ground-truth metric is, per destination kind:
+#   - file-sink arms:  the number of lines the sink files accumulated in the
+#     window (wc -l on /sink/out*.txt),
+#   - Postgres-destination arms: the net rows the destination tables
+#     accumulated (SELECT count(*) on bench_dest_*).
+# Both are reported as ROWS_AFTER - ROWS_BEFORE, divided by 60s. See README.md
+# and bench.yml.
 #
 # Usage: benchi/v021-cdc-parity/run.sh [ROUNDS] [ARM ...]
 #   ROUNDS        number of full rounds (default 3). One warmup round is
 #                 discarded first.
-#   ARM ...       subset of arms to run (default all four).
-#                 conduit conduit-aa connect redpanda-connect
+#   ARM ...       subset of arms to run (default all six).
+#                 conduit conduit-aa connect redpanda-connect conduit-pg connect-pg
 #
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
 # TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
 # CONDUIT_BATCH_SIZE (sdk.batch.size, default 1000), CONDUIT_BATCH_DELAY
-# (sdk.batch.delay, default 100ms).
+# (sdk.batch.delay, default 100ms), LOADER_DELAY (default 120s, applied to the
+# Postgres-destination arms only — lets their snapshotMode=never source create
+# its replication slot before the loader writes).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -25,7 +32,7 @@ ROUNDS=${1:-3}
 shift || true
 ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
-  ARMS=(conduit conduit-aa connect redpanda-connect)
+  ARMS=(conduit conduit-aa connect redpanda-connect conduit-pg connect-pg)
 fi
 
 # Number of source tables (and source+destination pairs). The workload is
@@ -39,9 +46,14 @@ export TABLES=${TABLES:-1}
 # to 2048; Conduit's batch-of-one default is the known gap this surfaces.
 export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-1000}
 export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
+# Loader delay for the Postgres-destination arms only (see run() below): let the
+# snapshotMode=never CDC source create its replication slot before the loader
+# writes, so the destination's row count is clean steady state. File arms pass 0.
+export LOADER_DELAY=${LOADER_DELAY:-120s}
 
-# Regenerate the N-dependent artifacts (pipelines/conduit.yml, infra/init.sql)
-# for the TABLES / CONDUIT_BATCH_SIZE above.
+# Regenerate the N-dependent artifacts (pipelines/conduit.yml,
+# pipelines/conduit-pg.yml, infra/init.sql) for the TABLES /
+# CONDUIT_BATCH_SIZE above.
 bash scripts/generate.sh
 
 BENCHI=${BENCHI:-benchi}
@@ -72,8 +84,8 @@ echo "==> building loader (linux/$ARCH)"
 echo "==> building conduit image (conduit-bench:v021-cdc-parity) from the working tree"
 docker build -q -t conduit-bench:v021-cdc-parity -f ../../Dockerfile ../.. >/dev/null
 
-echo "==> building connect image (connect-debezium-file:3.2) — Debezium connect + FileStreamSink"
-docker build -q -t connect-debezium-file:3.2 -f tools/connect.Dockerfile tools/ >/dev/null
+echo "==> building connect image (connect-debezium-jdbc:3.2) — Debezium connect + FileStreamSink + JDBC sink"
+docker build -q -t connect-debezium-jdbc:3.2 -f tools/connect.Dockerfile tools/ >/dev/null
 
 echo "==> ensuring sink volume"
 docker volume create cdcparity-sink >/dev/null
@@ -89,6 +101,7 @@ echo "==> recording environment"
   echo "tables $TABLES"
   echo "conduit_batch_size $CONDUIT_BATCH_SIZE"
   echo "conduit_batch_delay $CONDUIT_BATCH_DELAY"
+  echo "loader_delay ${LOADER_DELAY:-120s} (Postgres-destination arms only)"
 } > "$OUT/environment.txt"
 
 run() { # tool label
@@ -96,9 +109,17 @@ run() { # tool label
   local dir="$OUT/$label"
   mkdir -p "$dir"
   cat /proc/loadavg > "$dir/load-before.txt" 2>/dev/null || uptime > "$dir/load-before.txt"
+  # Postgres-destination arms need the loader to wait for the CDC source's
+  # replication slot (snapshotMode never) before writing, so the destination's
+  # row count reflects only post-slot steady-state changes. File-sink arms count
+  # events, not net rows, so they write immediately (no delay).
+  local loader_delay=0
+  case "$tool" in
+    conduit-pg|connect-pg) loader_delay="${LOADER_DELAY:-120s}" ;;
+  esac
   # Bounded: a stuck arm cannot hold the machine (each arm has its own
   # registration/warmup waits, so 900s is generous).
-  LOADER_RATE="${LOADER_RATE:-20000}" \
+  LOADER_DELAY="$loader_delay" LOADER_RATE="${LOADER_RATE:-20000}" \
     with_tty timeout 900 "$BENCHI" -config bench.yml -tool "$tool" -out "$dir" < /dev/null > /dev/null 2>&1 ||
     echo "run $dir exited $?" >&2
   cat /proc/loadavg > "$dir/load-after.txt" 2>/dev/null || uptime > "$dir/load-after.txt"

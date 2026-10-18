@@ -37,6 +37,14 @@
 // 1000 fills a full batch in ~50 ms, so it reads 1000 records per ReadN
 // instead of one per Read (the batch-of-one gap this benchmark exists to
 // surface).
+//
+// -delay (default 0) makes the loader wait after connecting before it writes.
+// The Postgres-destination arms mirror the source's LIVE rows, so anything
+// written before the snapshotMode=never CDC source creates its replication slot
+// would never be captured, and updates to those phantom rows would inflate the
+// destination's row count by however long the tool took to start. Waiting until
+// the slot exists makes every write a clean steady-state change; the file-sink
+// arms count events (not net rows), so they pass no delay.
 package main
 
 import (
@@ -63,6 +71,7 @@ func main() {
 		batch      = flag.Int("batch", 1000, "statements per round trip")
 		insertFrac = flag.Float64("insert-frac", 0.70, "fraction of INSERT operations")
 		updateFrac = flag.Float64("update-frac", 0.20, "fraction of UPDATE operations")
+		delay      = flag.Duration("delay", 0, "wait this long after connecting before writing (gives a snapshotMode=never CDC source time to create its replication slot)")
 	)
 	flag.Parse()
 	if *url == "" {
@@ -84,8 +93,25 @@ func main() {
 	}
 	defer conn.Close(context.Background())
 
-	log.Printf("loader: rate=%d ops/s tables=%d window=%d/table payload=%d bytes batch=%d insert=%.0f%% update=%.0f%% delete=%.0f%%",
-		*rate, *tables, *window, *payload, *batch, *insertFrac*100, *updateFrac*100, (1-*insertFrac-*updateFrac)*100)
+	log.Printf("loader: rate=%d ops/s tables=%d window=%d/table payload=%d bytes batch=%d insert=%.0f%% update=%.0f%% delete=%.0f%% delay=%s",
+		*rate, *tables, *window, *payload, *batch, *insertFrac*100, *updateFrac*100, (1-*insertFrac-*updateFrac)*100, *delay)
+
+	// Wait for the CDC source to create its replication slot before writing.
+	// The Postgres-destination arms mirror the source's LIVE rows, so a row
+	// written before the slot exists would never be snapshotted: updates to it
+	// would then upsert-INSERT a phantom row and deletes of it would be a no-op,
+	// inflating the destination's row count by however long the tool took to
+	// start. Delaying the first write until after the slot exists makes every
+	// write a clean steady-state change. File-sink arms count events (not net
+	// rows), so they pass -delay 0 and are unaffected.
+	if *delay > 0 {
+		log.Printf("loader: waiting %s for the CDC source's replication slot", *delay)
+		select {
+		case <-time.After(*delay):
+		case <-ctx.Done():
+			return
+		}
+	}
 
 	tableNames := make([]string, *tables)
 	for t := 0; t < *tables; t++ {

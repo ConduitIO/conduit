@@ -8,8 +8,10 @@
 #               INSERT/UPDATE/DELETE mix into bench_source (see ../loader).
 #   counter   — holds the shared ground-truth sink volume mounted at /sink, so
 #               the pre/post-test hooks can run `wc -l` on the sink file the
-#               tool under test is writing. It is NOT part of the measured
-#               pipeline; it only counts what the sink actually wrote.
+#               tool under test is writing; it also carries psql so the
+#               Postgres-destination arms' hooks can run `SELECT count(*)`
+#               against bench_dest_*. It is NOT part of the measured pipeline;
+#               it only counts what the sink actually wrote.
 #
 # The sink volume cdcparity-sink is a Docker named volume created once by
 # run.sh (docker volume create cdcparity-sink). It is shared by the infra
@@ -54,6 +56,11 @@ services:
       - "${LOADER_RATE:-20000}"
       - -tables
       - "${TABLES:-1}"
+      # Postgres-destination arms only: wait for the CDC source's replication
+      # slot (snapshotMode never) before writing, so the destination's row count
+      # reflects only post-slot steady-state changes (see ../loader).
+      - -delay
+      - "${LOADER_DELAY:-0}"
     volumes:
       # Static binary built by run.sh (CGO_ENABLED=0 GOOS=linux).
       - ../loader/loader:/loader/loader:ro
@@ -66,11 +73,16 @@ services:
   counter:
     image: alpine:3.20
     container_name: cdcparity-counter
-    # TABLES is exposed so the connect-arm registration hook (bench.yml
+    # TABLES is exposed so the connect-arm registration hooks (bench.yml
     # post-tool) can loop over the same N tables from inside this container.
     environment:
       - TABLES=${TABLES:-1}
-    command: ["sleep", "infinity"]
+    # postgresql-client gives this container psql so the Postgres-destination
+    # arms' ground-truth hooks can run `SELECT count(*)` against bench_dest_*.
+    command:
+      - sh
+      - -c
+      - apk add --no-cache postgresql-client >/dev/null && sleep infinity
     volumes:
       - cdcparity-sink:/sink
     networks:
