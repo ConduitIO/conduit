@@ -986,7 +986,15 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
 		}
 
-		pipelinesStopped <- struct{}{}
+		// Signal the progress logger above to stop. This must be a close, not
+		// a send on an unbuffered channel: the logger's loop runs for exactly
+		// count*interval == exitTimeout, so when ls.Wait returns after the full
+		// exitTimeout (pipelines did not stop in time) the logger has already
+		// left its final select and returned, and a send here would block
+		// forever with no receiver — deadlocking Runtime.Run and hanging
+		// shutdown. Closing is idempotent with a missing receiver, so Run
+		// always returns.
+		close(pipelinesStopped)
 
 		t.Go(func() error {
 			r.connectorPersister.Wait()

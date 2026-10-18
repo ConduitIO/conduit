@@ -1188,7 +1188,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (157)
+## 3. Error codes (164)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1218,6 +1218,13 @@ Author: Meroxa, Inc.
 | `connector.resource_not_allowed` | PermissionDenied | CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an exact allow-resources entry, or is an ARN or alias form. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
+| `debezium.avro_unsupported` | Unimplemented | CodeAvroUnsupported is raised when key.converter or value.converter is "avro": the Confluent AvroConverter (AvroData port, subject naming, Confluent wire format) is not implemented yet. It fails at configure time, before any record is encoded, so a misconfigured pipeline never emits a half-encoded message. |
+| `debezium.config_invalid` | InvalidArgument | CodeConfigInvalid is raised when the processor settings are invalid. |
+| `debezium.descriptor_missing` | FailedPrecondition | CodeDescriptorMissing is raised when a record carries no debezium.descriptor, or a descriptor that does not match this format.version. |
+| `debezium.old_key_unavailable` | InvalidArgument | CodeOldKeyUnavailable is raised on a primary-key change whose debezium.old_key is missing or unparsable, so the delete and tombstone cannot be keyed. |
+| `debezium.record_schema_mismatch` | InvalidArgument | CodeRecordSchemaMismatch is raised when a record's key, before or after does not match the descriptor: a missing required field, an unknown field, or a value of the wrong type. It never coerces (invariant 6). |
+| `debezium.unsupported_type` | InvalidArgument | CodeUnsupportedType is raised when a descriptor names a Connect type this encoder cannot serialize. |
+| `debezium.value_out_of_range` | InvalidArgument | CodeValueOutOfRange is raised when a value does not fit its declared schema (a decimal wider than its scale, a timestamp outside the epoch microsecond range). |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |
