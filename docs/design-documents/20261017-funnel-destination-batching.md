@@ -5,7 +5,7 @@
 Teach the arch-v2 funnel (`pkg/lifecycle-poc/funnel`) to accumulate records destined for a
 destination connector into a bounded batch and flush them with a single multi-record `Write`, instead
 of writing one record per `Write` call whenever the source does not batch. Batching is enabled by the
-destination's existing `sdk.batch.size` / `sdk.batch.delay` settings, which arch-v2 today *refuses*
+destination's existing `sdk.batch.size` / `sdk.batch.delay` settings, which arch-v2 today _refuses_
 (`pipeline.archv2_destination_batching_unsupported`, #2979). Flushing always precedes acking
 (Invariant 1), per-partition order is preserved, and memory is bounded by a maximum batch size plus a
 flush on shutdown.
@@ -19,7 +19,7 @@ CPU. The file-sink buffering fix (`conduit-connector-file` v0.10.10, a 64 KiB `b
 once per `Write`) only amortizes the syscall when the sink's `Write` method is handed several records
 at once — it cannot help when it is handed one record per call.
 
-Arch-v2 does not hand the sink several records per call unless the *source* batches:
+Arch-v2 does not hand the sink several records per call unless the _source_ batches:
 
 - `funnel.DestinationTask.Do` calls `connector.Destination.Write(ctx, batch.ActiveRecords())` with
   exactly what the source read. With the source at its default (`sdk.batch.size=0`), each read returns
@@ -33,7 +33,7 @@ The classic engine overlaps reads, writes and acks on separate goroutines, so it
 the SDK's batching; arch-v2 cannot. This gap is the binding constraint behind the ~6% delta.
 
 The fix is to move destination batching into the funnel itself: the funnel accumulates records across
-source reads and flushes multi-record `Write` calls, and because *it* controls both the flush and the
+source reads and flushes multi-record `Write` calls, and because _it_ controls both the flush and the
 ack, it can uphold ack-only-after-durable-write without stalling.
 
 ## Constraints
@@ -63,7 +63,7 @@ the pipeline stops), the task flushes: one `Write` of all buffered records, then
 are accounted for, then each buffered source batch is acked/nacked in order. The source ack is
 therefore deferred until the flush that durably wrote the record.
 
-- **Pros:** engine-side, so it works for *any* destination (built-in, standalone, non-SDK); the
+- **Pros:** engine-side, so it works for _any_ destination (built-in, standalone, non-SDK); the
   flush/ack ordering is explicit and local; reuses the `sdk.batch.*` settings operators already know.
 - **Cons:** deferring the source ack across reads is a change to the funnel's stop-and-wait ack flow;
   the shared-destination (N-source) case must serialize buffer access and the flush.
@@ -89,7 +89,7 @@ the worker.
 - **Cons:** the flush would ack source records from a non-worker goroutine, concurrently with that
   worker's own `Source.Read`/`Ack`. The funnel's source ack path is deliberately single-goroutine
   (`Source.Read`/`Ack` are not designed for concurrent entry; see the deferred-ack goroutine in
-  `pkg/connector/source.go`, which only *sends* plugin acks, it never re-enters `Ack`). A ticker
+  `pkg/connector/source.go`, which only _sends_ plugin acks, it never re-enters `Ack`). A ticker
   goroutine calling `Worker.Ack` is a new concurrency surface on the hottest invariants. Rejected: the
   deadline is instead checked synchronously at each record arrival, which a continuously-streaming
   source drives frequently, and any trailing partial batch is flushed on shutdown (see Failure modes).
@@ -97,7 +97,7 @@ the worker.
 ## Decision
 
 Destination-write batching lives in `funnel.DestinationTask` (Alternative A), enabled by the
-destination's `sdk.batch.size` / `sdk.batch.delay` settings (read by the service and *stripped* from
+destination's `sdk.batch.size` / `sdk.batch.delay` settings (read by the service and _stripped_ from
 the settings handed to the SDK plugin, so the SDK does not also batch and re-introduce the stall).
 
 - **Accumulation.** `doBuffered` appends each source read's active records to a buffer, paired with
@@ -114,7 +114,7 @@ the settings handed to the SDK plugin, so the SDK does not also batch and re-int
 - **Ordering.** Records are appended in source-read order and flushed in that same order inside one
   `Write`; the destination's `Write` processes the slice in order, so per-partition order holds.
   Cross-partition interleaving (multiple sources feeding one shared destination) is allowed — there is
-  no ordering requirement *between* partitions — and never reorders within one.
+  no ordering requirement _between_ partitions — and never reorders within one.
 - **Shutdown.** `DestinationTask.Close` flushes the trailing partial batch before `Teardown`, so
   buffered records are written durably rather than dropped. Because the shared sink is closed only
   after every worker has exited (and thus after each source is torn down), a trailing batch's *source
