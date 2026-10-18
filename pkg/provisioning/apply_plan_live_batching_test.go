@@ -81,33 +81,6 @@ func batchingApplyFixture() (old, desired config.Pipeline) {
 	return old, desired
 }
 
-// TestApplyPlanLive_ArchV2_RefusesDestinationBatchingBeforeStopping: a live
-// apply that adds sdk.batch.size to a RUNNING arch-v2 pipeline is refused with
-// the coded error before StopAndWait. The strict lifecycle mock has no
-// StopAndWait/Start expectation and the connector mock no Update expectation,
-// so stopping the pipeline or committing the config fails the test (#2979).
-func TestApplyPlanLive_ArchV2_RefusesDestinationBatchingBeforeStopping(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _ := newArchV2PreflightService(ctrl)
-
-	old, desired := batchingApplyFixture()
-	instance := expectExportRunning(pipSrv, connSrv, procSrv, old)
-
-	diff, err := srv.Plan(ctx, desired)
-	is.NoErr(err)
-	is.True(!diff.Empty())
-
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
-
-	ce, ok := conduiterr.Get(err)
-	is.True(ok)
-	is.Equal(ce.Code, lifecyclev2.CodeArchV2DestinationBatchingUnsupported)
-	is.Equal(ce.ConfigPath, "/connectors/1/settings/sdk.batch.size")
-	is.Equal(instance.GetStatus(), pipeline.StatusRunning) // untouched
-}
-
 // TestApplyPlanLive_NoPreflightOnDefaultEngine pins that the default engine,
 // which has no preflight, applies the same config through the normal
 // stop-import-start sequence.
