@@ -33,6 +33,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
@@ -516,8 +517,11 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	}()
 
 	// #2979: refuse before anything is built or opened, so a refused start reads
-	// nothing from the source and acks nothing (invariants 1 and 3).
-	if err := s.checkDestinationBatching(ctx, pl); err != nil {
+	// nothing from the source and acks nothing (invariants 1 and 3). Destinations
+	// are no longer refused — they batch in the engine itself
+	// (docs/design-documents/20261017-funnel-destination-batching.md) — but the
+	// DLQ is not wired through that path and is still refused.
+	if err := s.checkDLQBatching(pl); err != nil {
 		return err
 	}
 
@@ -1512,11 +1516,27 @@ func (s *Service) buildDestinationTasks(
 			return nil, err
 		}
 
-		destTask := funnel.NewDestinationTask(
+		// Destination-write batching (docs/design-documents/
+		// 20261017-funnel-destination-batching.md): the funnel batches writes
+		// itself using the destination's sdk.batch.size/sdk.batch.delay, so the
+		// SDK must not also batch (which would withhold acks and stall the
+		// stop-and-wait loop). Read the settings, mark the connector adapter to
+		// strip them, and hand them to the destination task.
+		instance.RLock()
+		destSettings := instance.Config.Settings
+		instance.RUnlock()
+		batchSize, batchDelay, batching := config.SDKBatchSettings(destSettings)
+		if batching {
+			dest.(*connector.Destination).SetEngineBatches()
+		}
+
+		destTask := funnel.NewBatchingDestinationTask(
 			instance.ID,
 			dest.(*connector.Destination),
 			logger,
 			s.newConnectorMetrics(pl.Config.Name, instance),
+			batchSize,
+			batchDelay,
 		)
 
 		// Add processor tasks

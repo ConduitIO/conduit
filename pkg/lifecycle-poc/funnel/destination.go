@@ -19,6 +19,7 @@ package funnel
 import (
 	"bytes"
 	"context"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -33,6 +34,17 @@ type DestinationTask struct {
 	logger      log.CtxLogger
 
 	metrics ConnectorMetrics
+
+	// Batching state (see destination_batch.go). Zero values mean batching is
+	// disabled and the task writes every batch immediately (the pre-batching
+	// behavior, still used by the DLQ).
+	batchSize  int
+	batchDelay time.Duration
+
+	mu            sync.Mutex
+	pending       []pendingBatch // buffered source batches awaiting flush
+	bufferedCount int            // number of active records currently buffered
+	flushDeadline time.Time      // zero when nothing is buffered
 }
 
 type Destination interface {
@@ -53,6 +65,34 @@ func NewDestinationTask(
 	logger log.CtxLogger,
 	metrics ConnectorMetrics,
 ) *DestinationTask {
+	return newDestinationTask(id, destination, logger, metrics, 0, 0)
+}
+
+// NewBatchingDestinationTask returns a destination task that buffers records
+// and flushes them in one multi-record Write when batchSize records are
+// pending or batchDelay has elapsed since the first buffered record (see
+// destination_batch.go). batchSize <= 1 and batchDelay <= 0 together disable
+// batching; a batchDelay > 0 without a batchSize uses defaultMaxBatchSize to
+// bound memory.
+func NewBatchingDestinationTask(
+	id string,
+	destination Destination,
+	logger log.CtxLogger,
+	metrics ConnectorMetrics,
+	batchSize int,
+	batchDelay time.Duration,
+) *DestinationTask {
+	return newDestinationTask(id, destination, logger, metrics, batchSize, batchDelay)
+}
+
+func newDestinationTask(
+	id string,
+	destination Destination,
+	logger log.CtxLogger,
+	metrics ConnectorMetrics,
+	batchSize int,
+	batchDelay time.Duration,
+) *DestinationTask {
 	logger = logger.WithComponent("task:destination")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &DestinationTask{
@@ -60,6 +100,8 @@ func NewDestinationTask(
 		destination: destination,
 		logger:      logger,
 		metrics:     metrics,
+		batchSize:   batchSize,
+		batchDelay:  batchDelay,
 	}
 }
 
@@ -82,6 +124,16 @@ func (t *DestinationTask) connectorErrors() <-chan error {
 }
 
 func (t *DestinationTask) Close(ctx context.Context) error {
+	// Invariant 7: flush any buffered records before tearing down the
+	// destination so a graceful stop writes them durably instead of dropping
+	// them. The shared sink is closed only after every worker has exited, so
+	// the source is already torn down here and the deferred source acks fail:
+	// the records were written durably but replay on restart — at-least-once,
+	// never a loss. A flush error is therefore logged, not returned, so
+	// teardown still runs.
+	if err := t.flush(ctx); err != nil {
+		t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+	}
 	return t.destination.Teardown(ctx)
 }
 
