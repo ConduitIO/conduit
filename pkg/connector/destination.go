@@ -56,6 +56,14 @@ type Destination struct {
 
 	// wg tracks the number of in flight calls to the connectorPlugin.
 	wg sync.WaitGroup
+
+	// engineBatches is set by the arch-v2 funnel when it will batch writes
+	// itself using the destination's sdk.batch.size/sdk.batch.delay settings.
+	// It strips those two settings before Configure so the connector SDK does
+	// not also buffer and withhold acks (which would stall the funnel's
+	// stop-and-wait loop). See pkg/lifecycle-poc/batching_guard.go and
+	// docs/design-documents/20261017-funnel-destination-batching.md.
+	engineBatches bool
 }
 
 type DestinationState struct {
@@ -69,6 +77,14 @@ type DestinationAck struct {
 
 func (d *Destination) ID() string {
 	return d.Instance.ID
+}
+
+// SetEngineBatches marks this destination as batched by the engine (arch-v2
+// funnel) rather than by the connector SDK. configure then strips
+// sdk.batch.size/sdk.batch.delay so the SDK destination writes synchronously
+// and does not withhold acks behind its own buffer.
+func (d *Destination) SetEngineBatches() {
+	d.engineBatches = true
 }
 
 func (d *Destination) Errors() <-chan error {
@@ -332,6 +348,13 @@ func (d *Destination) configure(ctx context.Context) error {
 	settings, err := env.ResolveSettings(d.Instance.Config.Settings)
 	if err != nil {
 		return cerrors.Errorf("could not resolve destination connector settings: %w", err)
+	}
+	if d.engineBatches {
+		// The engine (arch-v2 funnel) batches writes itself; make sure the SDK
+		// destination does not also buffer and withhold acks behind its own
+		// batch, which would stall the engine's stop-and-wait loop.
+		delete(settings, "sdk.batch.size")
+		delete(settings, "sdk.batch.delay")
 	}
 	_, err = d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: settings})
 	if err != nil {

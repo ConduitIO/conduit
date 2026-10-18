@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SDKBatchSizeSetting is the destination/DLQ setting the conduit-connector-sdk
@@ -55,4 +56,41 @@ func SDKBatchSizeAboveOne(settings map[string]string) (key, value string, ok boo
 		}
 	}
 	return "", "", false
+}
+
+// SDKBatchDelaySetting is the destination/DLQ setting the conduit-connector-sdk
+// reads to flush a partial batch by time. Like SDKBatchSizeSetting, it is read
+// by the arch-v2 engine so the funnel can batch writes itself, and it must be
+// stripped from the settings handed to the plugin so the SDK does not also
+// batch (see pkg/lifecycle-poc and docs/design-documents/
+// 20261017-funnel-destination-batching.md).
+const SDKBatchDelaySetting = "sdk.batch.delay"
+
+// SDKBatchSettings parses the destination/DLQ batching settings the connector
+// SDK would read, mirroring its decoding: sdk.batch.size via strconv.Atoi and
+// sdk.batch.delay via time.ParseDuration. It reports the effective (size, delay)
+// and whether batching is enabled (size > 1 or delay > 0, exactly the SDK's
+// configureWriteStrategy predicate). A value that does not parse is left to the
+// plugin's own validation and contributes nothing here.
+func SDKBatchSettings(settings map[string]string) (size int, delay time.Duration, enabled bool) {
+	size, _ = strconv.Atoi(strings.TrimSpace(settingValue(settings, SDKBatchSizeSetting)))
+	delay, _ = time.ParseDuration(strings.TrimSpace(settingValue(settings, SDKBatchDelaySetting)))
+	return size, delay, size > 1 || delay > 0
+}
+
+// settingValue returns the trimmed value of the first setting key that matches
+// target after trimming, mirroring how config.Sanitize trims keys. It is
+// deterministic even when a map carries both padded and plain keys.
+func settingValue(settings map[string]string, target string) string {
+	var keys []string
+	for k := range settings {
+		if strings.TrimSpace(k) == target {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		return strings.TrimSpace(settings[k])
+	}
+	return ""
 }
