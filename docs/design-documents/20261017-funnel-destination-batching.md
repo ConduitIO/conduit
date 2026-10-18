@@ -117,8 +117,8 @@ the settings handed to the SDK plugin, so the SDK does not also batch and re-int
   no ordering requirement _between_ partitions — and never reorders within one.
 - **Shutdown.** `DestinationTask.Close` flushes the trailing partial batch before `Teardown`, so
   buffered records are written durably rather than dropped. Because the shared sink is closed only
-  after every worker has exited (and thus after each source is torn down), a trailing batch's *source
-  ack* may fail against a torn-down source; that is surfaced as an error and is at-least-once safe
+  after every worker has exited (and thus after each source is torn down), a trailing batch's _source
+  ack_ may fail against a torn-down source; that is surfaced as an error and is at-least-once safe
   (the record replays on restart), not a loss. The flush deadline is deliberately checked
   synchronously on record arrival rather than by a ticker (Alternative C rejected above).
 

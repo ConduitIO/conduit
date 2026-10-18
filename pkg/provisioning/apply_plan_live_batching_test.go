@@ -21,11 +21,9 @@ import (
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	lifecyclev2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
-	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/matryer/is"
