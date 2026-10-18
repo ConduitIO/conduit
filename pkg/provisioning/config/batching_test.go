@@ -74,3 +74,35 @@ func TestSDKBatchSizeAboveOne_PaddedAndPlainIsDeterministic(t *testing.T) {
 		is.Equal(value, "3")
 	}
 }
+
+// TestSDKBatchSettings pins the parser the funnel uses to enable destination
+// batching: it mirrors the SDK's predicate (size > 1 or delay > 0) and leaves
+// unparsable values to the plugin's own validation.
+func TestSDKBatchSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		settings    map[string]string
+		wantSize    int
+		wantDelay   string
+		wantEnabled bool
+	}{
+		{"unset", map[string]string{}, 0, "0s", false},
+		{"size only", map[string]string{"sdk.batch.size": "100"}, 100, "0s", true},
+		{"delay only", map[string]string{"sdk.batch.delay": "10ms"}, 0, "10ms", true},
+		{"both", map[string]string{"sdk.batch.size": "100", "sdk.batch.delay": "10ms"}, 100, "10ms", true},
+		{"size one", map[string]string{"sdk.batch.size": "1"}, 1, "0s", false},
+		{"zero delay", map[string]string{"sdk.batch.size": "0", "sdk.batch.delay": "0"}, 0, "0s", false},
+		//nolint:gocritic // the padded keys/values are the point: trimming is under test
+		{"padded", map[string]string{" sdk.batch.size ": " 100 ", "sdk.batch.delay": " 5ms "}, 100, "5ms", true},
+		{"unparsable size ignored", map[string]string{"sdk.batch.size": "lots"}, 0, "0s", false},
+		{"unparsable delay ignored", map[string]string{"sdk.batch.delay": "soon"}, 0, "0s", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			size, delay, enabled := SDKBatchSettings(tc.settings)
+			is.Equal(size, tc.wantSize)
+			is.Equal(delay.String(), tc.wantDelay)
+			is.Equal(enabled, tc.wantEnabled)
+		})
+	}
+}

@@ -522,6 +522,22 @@ func (w *Worker) doTaskAttempt(
 		Bool("tainted", b.tainted).
 		Msg("executing task")
 
+	// Destination-write batching (see destination_batch.go): a batching
+	// destination task owns the write+ack cycle itself, so it is called here
+	// instead of t.Do. If it buffered the batch it defers the source ack
+	// (errBuffered) and the worker reads the next batch; if it flushed, the
+	// batch is already acked/nacked and there is nothing left to do here.
+	if dt, ok := t.(*DestinationTask); ok && dt.batchingEnabled() {
+		err := dt.doBuffered(ctx, b, acker)
+		if isBuffered(err) {
+			return nil // deferred: read the next source batch, do not ack
+		}
+		if err != nil {
+			return cerrors.Errorf("task %s: %w", t.ID(), err)
+		}
+		return nil // flushed and acked by the destination task
+	}
+
 	err := t.Do(ctx, b)
 
 	w.logger.Trace(ctx).
@@ -791,6 +807,10 @@ func (w *Worker) doTaskAttempt(
 // subBatchByFlag collects a sub-batch of records with the same status starting
 // from the given index. It returns nil if firstIndex is out of bounds.
 func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
+	return subBatchByFlag(b, firstIndex)
+}
+
+func subBatchByFlag(b *Batch, firstIndex int) *Batch {
 	if firstIndex >= len(b.recordStatuses) {
 		return nil
 	}

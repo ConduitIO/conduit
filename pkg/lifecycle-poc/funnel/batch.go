@@ -89,6 +89,20 @@ type Batch struct {
 	runs []*splitRun
 }
 
+// NewBatch creates a new batch that takes OWNERSHIP of the records it is
+// given: the records slice is cloned so the batch's in-place mutations
+// (SetRecords, SplitRecord) can never write into the caller's backing array.
+//
+// Invariant 6 (enforcement site): this ownership boundary matters at the
+// source. SourceTask.Do hands NewBatch the exact slice the source connector
+// returned, and the connector SDK's read goroutine still reads that slice
+// after sending it (sourcePluginAdapter.runRead stores the last record's
+// position from recs[len(recs)-1]). Sharing the array made SetRecords'
+// copy(b.records[i:], recs) race with that read - the RAG template e2e hit
+// exactly this as a data race, a torn read of the source's last-sent position
+// without the race detector. A shallow clone is sufficient because the funnel
+// only ever REPLACES whole record structs (copy/append) and never mutates a
+// record's fields in place (see TestNewBatch_OwnsRecords).
 func NewBatch(records []opencdc.Record) *Batch {
 	// Store positions separately, as we need the original positions when acking
 	// records in the source, in case a processor tries to change the position.
@@ -98,7 +112,7 @@ func NewBatch(records []opencdc.Record) *Batch {
 	}
 
 	return &Batch{
-		records:        records,
+		records:        slices.Clone(records),
 		recordStatuses: make([]RecordStatus, len(records)),
 		positions:      positions,
 		runs:           make([]*splitRun, len(records)),
@@ -164,9 +178,34 @@ func (b *Batch) Filter(i int, j ...int) {
 
 // SetRecords replaces the records in the batch starting at index i with the
 // provided records. If recs contains n records, indices i to i+n-1 are replaced.
+//
+// i is an index into the ACTIVE (non-filtered) view of the batch - the same
+// index space returned by ActiveRecords - never a raw index into b.records.
+// SetRecords REPLACES records in place; it deliberately does NOT grow the
+// batch (that is SplitRecord's job, which must also extend positions,
+// recordStatuses and runs to keep them in lockstep with records). A caller
+// that asks to replace past the end of the active view is therefore a bug:
+// without this guard the filtered path panicked with an opaque slice-bounds
+// error and the unfiltered path silently truncated recs via copy - data loss
+// (invariant 6). Reject the overrun loudly instead of mangling either way.
 func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
+
+	// activeCount is the size of the index space i addresses: the whole batch
+	// when nothing is filtered, or the active view when records are filtered.
+	activeCount := len(b.records)
+	if activeIndices != nil {
+		activeCount = len(activeIndices)
+	}
+	if i < 0 || i > activeCount || len(recs) > activeCount-i {
+		panic(fmt.Sprintf(
+			"(bug) SetRecords: cannot replace %d record(s) starting at active index %d in a batch with %d active record(s): "+
+				"the processor returned more records than it received (use MultiRecord to split a record instead of returning extra records)",
+			len(recs), i, activeCount,
+		))
+	}
+
 	if activeIndices == nil {
 		// No records are filtered, we can use the original indices.
 		copy(b.records[i:], recs)
