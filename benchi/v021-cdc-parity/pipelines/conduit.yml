@@ -48,3 +48,5 @@ pipelines:
         plugin: builtin:file
         settings:
           path: /sink/out_0.txt
+          sdk.batch.size: "1000"
+          sdk.batch.delay: "100ms"

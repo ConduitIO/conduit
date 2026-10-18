@@ -87,6 +87,8 @@ emit_pipeline() {
         plugin: builtin:file
         settings:
           path: /sink/out_${i}.txt
+          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
+          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
 EOF
 }
 
