@@ -17,50 +17,13 @@ package provisioning
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
-	lifecyclev2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
-	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
-
-// archV2Lifecycle is what runtime.go wires under --preview.pipeline-arch-v2:
-// the real lifecycle-poc service (which carries PreflightPipelineConfig),
-// except lifecycle calls go to a strict mock so the test sees every call.
-type archV2Lifecycle struct {
-	*mock.LifecycleService
-	v2 *lifecyclev2.Service
-}
-
-// Compile-time guard: if *lifecycle-poc.Service stops implementing the
-// preflight interface (a rename or signature drift), ApplyPlanLive's type
-// assertion would silently stop firing and the live-apply guard would vanish.
-var _ startConfigPreflighter = (*lifecyclev2.Service)(nil)
-
-func (l archV2Lifecycle) PreflightPipelineConfig(cfg config.Pipeline) error {
-	return l.v2.PreflightPipelineConfig(cfg)
-}
-
-func newArchV2PreflightService(ctrl *gomock.Controller) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.LifecycleService) {
-	v2 := lifecyclev2.NewService(log.Nop(), &lifecyclev1.ErrRecoveryCfg{
-		MinDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 2, MaxRetriesWindow: time.Minute,
-	}, noopV2ConnectorService{}, noopV2ProcessorService{}, noopV2ConnectorPluginService{}, noopV2PipelineService{}, true)
-
-	pipSrv := mock.NewPipelineService(ctrl)
-	connSrv := mock.NewConnectorService(ctrl)
-	procSrv := mock.NewProcessorService(ctrl)
-	connPlugSrv := mock.NewConnectorPluginService(ctrl)
-	lifecycleSrv := mock.NewLifecycleService(ctrl)
-	srv := NewService(&inmemory.DB{}, log.Nop(), pipSrv, connSrv, procSrv, connPlugSrv,
-		archV2Lifecycle{LifecycleService: lifecycleSrv, v2: v2}, "")
-	return srv, pipSrv, connSrv, procSrv, lifecycleSrv
-}
 
 func batchingApplyFixture() (old, desired config.Pipeline) {
 	old = config.Pipeline{
