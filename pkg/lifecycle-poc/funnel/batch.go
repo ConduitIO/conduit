@@ -30,6 +30,10 @@ type Batch struct {
 	// records holds all records in the batch, including filtered ones. Use
 	// ActiveRecords to get the records that are not filtered.
 	records []opencdc.Record
+	// recordsShared reports whether records still aliases the caller's backing
+	// array (the source connector's read slice). Mutators clone on first write
+	// so the common no-mutation path avoids the copy (see ensureOwnedRecords).
+	recordsShared bool
 	// recordStatuses holds the status of each record in the batch. The status
 	// is used to determine if the record was acked, nacked, filtered or marked
 	// for retrial.
@@ -112,12 +116,24 @@ func NewBatch(records []opencdc.Record) *Batch {
 	}
 
 	return &Batch{
-		records:        slices.Clone(records),
+		records:        records,
+		recordsShared:  true,
 		recordStatuses: make([]RecordStatus, len(records)),
 		positions:      positions,
 		runs:           make([]*splitRun, len(records)),
 		filterCount:    0,
 		tainted:        false,
+	}
+}
+
+// ensureOwnedRecords clones the records slice on first mutation so SetRecords
+// and SplitRecord can write in place without racing the source connector's
+// read goroutine (which still reads its slice after handing it to the funnel).
+// The common no-mutation path never clones, so it pays nothing (Invariant 6).
+func (b *Batch) ensureOwnedRecords() {
+	if b.recordsShared {
+		b.records = slices.Clone(b.records)
+		b.recordsShared = false
 	}
 }
 
@@ -189,6 +205,7 @@ func (b *Batch) Filter(i int, j ...int) {
 // error and the unfiltered path silently truncated recs via copy - data loss
 // (invariant 6). Reject the overrun loudly instead of mangling either way.
 func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
+	b.ensureOwnedRecords()
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
 
@@ -270,6 +287,7 @@ func (b *Batch) findTo(l, r int, check func(int) bool) int {
 // so the run was silently treated as a single ordinary record. Keying on
 // b.positions[i] here (which every consumer already used) closes that gap.
 func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
+	b.ensureOwnedRecords()
 	// TODO: we should not have to recalculate the active record indices every time.
 	activeIndices := b.activeRecordIndices()
 	if activeIndices != nil {
@@ -496,6 +514,7 @@ func (b *Batch) clone() *Batch {
 		records[i] = r.Clone()
 	}
 	c.records = records
+	c.recordsShared = false
 	return c
 }
 
@@ -533,6 +552,7 @@ func (b *Batch) cloneSharingRecords() *Batch {
 
 	return &Batch{
 		records:        slices.Clip(b.records),
+		recordsShared:  true,
 		recordStatuses: slices.Clone(b.recordStatuses),
 		positions:      slices.Clip(b.positions),
 		runs:           cloneRuns(b.runs),
