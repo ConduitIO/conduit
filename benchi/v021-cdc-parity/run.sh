@@ -136,7 +136,8 @@ run() { # tool label
   case "$tool" in
     conduit-pg|conduit-s3)     loader_slots=$(slot_list conduit_slot) ;;
     connect-pg)                loader_slots=$(slot_list debezium_pg_slot) ;;
-    connect-s3|connect-kafka)  loader_slots=$(slot_list debezium_slot) ;;
+    connect-s3)                loader_slots=$(slot_list debezium_slot) ;;
+    connect-kafka)             loader_slots=$(slot_list debezium_kafka_slot) ;;
     conduit-kafka)             loader_slots=$(slot_list conduit_kafka_slot) ;;
   esac
   # Bounded: a stuck arm cannot hold the machine (each arm has its own
