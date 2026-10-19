@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.9)
+### file (v0.10.10)
 
 A file source and destination plugin for Conduit.
 
@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.13.0)
+### kafka (v0.14.0)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -241,8 +241,26 @@ consumer's offset in Kafka. Internally, though, we're not saving the offset as
 the position: instead, we're saving the consumer group ID, since that's all
 which is needed for Kafka to find the offsets for our consumer.
 
-A source is getting associated with a consumer group ID the first time the
-`Read()` method is called.
+A source is associated with a consumer group ID when it is first opened. Set
+`groupID` to choose it; otherwise a random one is generated and kept in the
+position.
+
+**Headers**
+
+Each Kafka header is emitted as a metadata entry `kafka.header.<key>` holding
+the header value. Metadata is a string map, so a key that repeats in one
+record keeps its last value.
+
+A header whose key or value is not valid UTF-8 is emitted unchanged, but a
+record carrying it cannot be marshalled as an OpenCDC protobuf record: it
+fails wherever records cross a protobuf boundary (a standalone connector or
+processor, the API), and JSON encoders replace the invalid bytes with U+FFFD.
+The source logs `KAFKA_LEGACY_HEADER_NOT_UTF8` at WARN once per header key,
+with the key as base64 in `header_key_b64` (the value is never logged), and
+reports the count as `kafka_source_legacy_header_not_utf8_total` in the logs
+and at teardown. A future version will omit such entries by default, after
+the deprecation period
+([#319](https://github.com/ConduitIO/conduit-connector-kafka/issues/319)).
 
 **Destination**
 
@@ -268,6 +286,160 @@ Batching can also be configured using connector SDK provided options:
 - `sdk.batch.delay`: maximum delay before an incomplete batch is written to the
   destination (defaults to 0, no limit)
 
+**Delivery semantics**
+
+These are the guarantees that the connector's CI checks with the SDK
+acceptance suite v2 and a kill -9 test, and the conditions under which they
+hold.
+
+**Source guarantees**
+
+- **At-least-once.** The source commits a record's offset to its consumer group
+  only after Conduit acknowledged the record. It never commits an offset it
+  has not been acked for.
+- **Commits are batched**, so a restart after a crash re-delivers records:
+  offsets are committed after every `commitOffsetsSize` acks (default 1000),
+  every `commitOffsetsDelay` (default 5s), and when the pipeline stops
+  gracefully. After a crash (kill -9, power loss) the source re-delivers at
+  most the records acked since the last commit, fewer than `commitOffsetsSize`
+  when commits succeed. Setting `commitOffsetsSize` to 1 commits on every ack
+  and lowers throughput.
+- **Ordering:** records of one partition are delivered in offset order, so
+  records with the same key (which Kafka keeps in one partition) arrive in the
+  order they were written. Re-delivery after a restart repeats a suffix of each
+  partition, in order. There is no order between partitions.
+- **Resume uses the consumer group**, not the offset in the Conduit position.
+  If the group's committed offsets are gone (the group was deleted, or the
+  pipeline was stopped longer than the broker's `offsets.retention.minutes`,
+  7 days by default), the source starts where `readFromBeginning` says: from
+  the beginning of the topic (re-delivery), or from the end, which **skips the
+  records written while the pipeline was stopped**. Use
+  `readFromBeginning: true` where skipping is not acceptable.
+- **Restart after a crash can pause.** The crashed instance stays a member of
+  the consumer group until the broker's session timeout expires (45s by
+  default), and the partitions it held are not consumed until then.
+
+**Destination guarantees**
+
+- **At-least-once.** A record is acknowledged to Conduit only after the broker
+  confirmed it. With `acks: all` (the default) that means the in-sync replicas
+  have it. `acks: one` acknowledges after the leader alone has it, and a leader
+  failure can lose acknowledged records; `acks: none` acknowledges without any
+  confirmation. Only `acks: all` keeps the at-least-once guarantee.
+- **Not idempotent.** A record that is replayed after a crash is written again.
+  The idempotent producer (on with `acks: all`) removes duplicates from its own
+  retries of a produce request, not from a record sent twice.
+- **Ordering:** records with the same key go to the same partition (key hash)
+  in the order Conduit wrote them, as long as the partition count of the topic
+  does not change. One exception: if the broker rejects a record after it was
+  enqueued (for example `MESSAGE_TOO_LARGE`), the later records of the same
+  batch may already be written. Conduit is told the batch failed from that
+  record on, and when the records are replayed the rejected record is stored
+  after them, together with duplicates of them.
+- **Writes can wait for an unreachable broker without a bound** when
+  `deliveryTimeout` is 0 (the default). Cancelling the pipeline ends the wait
+  and nacks the records; nothing unconfirmed is acknowledged.
+- **Large records:** a record must fit in `batchBytes` (default 1000012 bytes)
+  and in the topic's `max.message.bytes`, after the output format is applied.
+  The default `opencdc/json` format base64-encodes raw payloads, which adds
+  about a third, so with the defaults the largest raw payload is about
+  730 KiB (roughly 750000 bytes, less the record's key and metadata). Larger
+  records need a higher `batchBytes` and a higher `max.message.bytes` on the
+  topic (and on the broker, if its `message.max.bytes` is lower). The
+  acceptance suite's 1 MiB records run with both set to 4 MiB.
+
+**Acceptance suite claims**
+
+The acceptance suite v2 run (revision 2.0.1) claims per-key ordering for the
+source, a redelivery bound of 1000 records after a restart, and a
+non-idempotent destination.
+
+- **Redelivery bound.** The suite's default bound is 10. The source's bound,
+  read from the code, is `commitOffsetsSize`: offsets are committed
+  synchronously once that many acks have accumulated, so at most
+  `commitOffsetsSize`-1 acked records are uncommitted when the process dies.
+  The suite's restart case and the kill -9 test did not exceed it, which
+  shows it is not violated in those runs; it is not a measured maximum. The
+  bound of 1000 holds only for `commitOffsetsSize` up to 1000 (the default).
+  A larger value raises the bound with it, and such a configuration is
+  outside what the certification covers.
+- **Destination per-key ordering is not claimed**, and the suite's ordering
+  case for the destination is skipped, because of the exception above: a
+  record the broker rejects after it was enqueued is stored after later
+  records of its batch when the batch is replayed.
+- **Killing a source in-process.** The suite kills a source inside the test
+  process, which leaves its consumer group membership alive. The test closes
+  the killed source's client without committing, which releases its
+  partitions. A real process death sends no LeaveGroup: the broker drops the
+  member only when its session times out (see "Restart after a crash can
+  pause" above). The kill -9 test covers a real process death.
+
+**Mirroring (Kafka→Kafka)**
+
+To copy a topic faithfully, preserving key, value, headers, timestamp and
+partition, set `emitMirrorMetadata: true` on the source and `mirror: true` on
+the destination:
+
+```yaml
+version: 2.2
+pipelines:
+  - id: mirror
+    status: running
+    connectors:
+      - id: source
+        plugin: "kafka"
+        type: source
+        settings:
+          servers: "localhost:9092"
+          topics: "orders"
+          readFromBeginning: "true"
+          emitMirrorMetadata: "true"
+      - id: destination
+        plugin: "kafka"
+        type: destination
+        settings:
+          servers: "localhost:9092"
+          topic: "orders.mirror"
+          mirror: "true"
+```
+
+`mirror` writes each record to the destination partition named by the source
+partition, so a consumer of the copy sees the same per-partition order as the
+source. Rules and caveats:
+
+- The destination topic must already exist (mirror mode does not auto-create
+  it) and have at least as many partitions as the source topic; otherwise the
+  first record fails with `KAFKA_PARTITION_COUNT_MISMATCH`, and a record whose
+  partition is missing fails with `KAFKA_PARTITION_OUT_OF_RANGE`. A
+  destination with more partitions is allowed: the extra partitions stay
+  empty, and key-hash locality is not preserved.
+- `mirror` requires `acks: all` and rejects `deliveryTimeout` and a user-set
+  `sdk.record.format`; it writes the record value bytes verbatim, bypassing
+  the output format.
+- Per-partition order is preserved until the first produce error after a
+  record is enqueued (for example the broker rejects it); after that the
+  partition may hold later records before an earlier one, and the connector
+  logs a WARN with `kafka_destination_post_enqueue_errors_total`. The remedy
+  is to re-seed the affected partition.
+- A mirror pipeline must keep the default error policy (a DLQ with
+  `window-size: 0` or a nack threshold above 0 turns a configuration error
+  into silent record loss).
+- Timestamp topic-config checks are not yet enforced: a destination topic
+  with `message.timestamp.type=LogAppendTime`, a short `retention.ms`, or
+  `message.timestamp.before/after.max.ms` bounds may rewrite, expire or
+  reject preserved timestamps. The connector preserves the timestamp but
+  does not yet fail on these topic configurations.
+
+**Redpanda**
+
+The kafka connector is the Redpanda profile: the retired labs `redpanda`
+connector is replaced by this connector pointed at a Redpanda cluster
+(`servers` set to the Redpanda Kafka API address). CI runs the integration,
+acceptance-v2 and kill -9 tests against both Apache Kafka and Redpanda. Mirror
+mode works on both brokers; Redpanda does not return or enforce the
+`message.timestamp.before/after.max.ms` bounds, so only the timestamp type and
+retention rules can differ from Apache Kafka.
+
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -280,6 +452,7 @@ Author: Meroxa, Inc.
 | `clientKey` | string |  | no | ClientKey is the Kafka client's private key. |  |
 | `commitOffsetsDelay` | duration | 5s | no | CommitOffsetsDelay defines how often consumed offsets should be committed. |  |
 | `commitOffsetsSize` | int | 1000 | no | CommitOffsetsSize defines the maximum number of consumed offsets to be committed at a time. | greater-than(-1) |
+| `emitMirrorMetadata` | bool |  | no | EmitMirrorMetadata, when true, additionally emits lossless mirror metadata on every record: kafka.partition, kafka.partitions, kafka.offset, kafka.timestamp, kafka.timestamp.type, kafka.headers, kafka.key.null and kafka.value.null. It is off by default because metadata is carried to every destination, and destinations that serialize it write different bytes for pipelines that never asked for mirroring. Enable it together with the destination's mirror option to preserve header, partition and timestamp across a Kafka-to-Kafka copy. |  |
 | `groupID` | string |  | no | GroupID defines the consumer group id. |  |
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `readFromBeginning` | bool |  | no | ReadFromBeginning determines from whence the consumer group should begin consuming when it finds a partition without a committed offset. If this options is set to true it will start with the first message in that partition. |  |
@@ -305,6 +478,7 @@ Author: Meroxa, Inc.
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
 | `acks` | string | all | no | Acks defines the number of acknowledges from partition replicas required before receiving a response to a produce request. None = fire and forget, one = wait for the leader to acknowledge the writes, all = wait for the full ISR to acknowledge the writes. | inclusion(none,one,all) |
+| `allowLossyHeaders` | bool |  | no | AllowLossyHeaders, valid only with mirror, writes headers rebuilt from kafka.header.<k> entries when kafka.headers is absent (repeated keys collapsed, order undefined). Without it, mirror mode fails a record whose kafka.headers is missing. |  |
 | `batchBytes` | int | 1000012 | no | BatchBytes limits the maximum size of a request in bytes before being sent to a partition. This mirrors Kafka's max.message.bytes. |  |
 | `caCert` | string |  | no | CACert is the Kafka broker's certificate. |  |
 | `clientCert` | string |  | no | ClientCert is the Kafka client's certificate. |  |
@@ -313,6 +487,8 @@ Author: Meroxa, Inc.
 | `compression` | string | snappy | no | Compression set the compression codec to be used to compress messages. | inclusion(none,gzip,snappy,lz4,zstd) |
 | `deliveryTimeout` | duration |  | no | DeliveryTimeout for write operation performed by the Writer. |  |
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
+| `mirror` | bool |  | no | Mirror enables Kafka-to-Kafka mirror mode: it writes the record's key, value, headers, timestamp and partition to Kafka verbatim from the mirror metadata the source emits when its emitMirrorMetadata option is on. It requires acks=all, rejects deliveryTimeout > 0 and a user-set sdk.record.format, and disables topic auto-creation. See the kafka mirror passthrough design in ConduitIO/conduit. |  |
+| `produceTimeout` | duration | 2m | no | ProduceTimeout is a connector-side bound on a Write in mirror mode, because deliveryTimeout must stay unset there. Minimum 30s, maximum 1h. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
@@ -375,7 +551,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.15.0)
+### postgres (v0.16.0)
 
 Conduit connector for PostgreSQL
 
@@ -780,6 +956,56 @@ If there is no key, the record will be simply appended.
   the records are redelivered (at-least-once). Keyed upserts make redelivery
   idempotent; keyless inserts append again.
 
+**Schema-drift markers**
+
+When the Postgres source halts on schema drift it emits a drift marker: a create
+record with no key and no payload, with the metadata `postgres.schema.drift=true`.
+The destination skips and acknowledges a marker without writing a row, but only
+when the record's position proves the Postgres source produced it as a marker for
+the table named in `postgres.schema.drift.table`. The metadata alone is not proof,
+because any processor or upstream system can set it.
+
+- A record that carries the metadata but not a marker's position, and has a key
+  or a payload, is written as an ordinary record. One WARN per batch reports it.
+- A record shaped like a marker (no key, no payload) without a marker's position
+  stops the pipeline with `postgres.destination.drift_marker_unverified`. Nothing
+  in that batch is written or acknowledged.
+- A proven marker that a processor added a key or fields to is still skipped as
+  a marker, with a WARN that names the added fields.
+
+A marker loses its position when it passes through another system, such as Kafka
+or a file, because records read from there carry that system's position. In a
+Postgres to Kafka to Postgres setup, drop drift markers before the hop with a
+filter processor on the `postgres.schema.drift` metadata.
+
+The proof relies on the engine not letting processors change a record's
+position. Conduit's classic engine refuses that; the arch-v2 engine lets a
+processor rewrite positions, so there a processor could forge a marker. The
+forged record would be skipped, which a processor with that power could do to
+any record anyway.
+**Column type changes on a running pipeline**
+
+The destination describes every statement before it runs it (pgx's
+`describe_exec` query mode), so after `ALTER TABLE ... ALTER COLUMN ... TYPE`
+the next write is typed for the new column. A value the new type cannot hold
+fails the write instead of being converted.
+
+This costs throughput. On one dedicated machine (benchi
+`destination-exec-mode`: keyed upserts into a two-column table) the
+destination wrote 35% fewer rows per second than with cached statements at
+`sdk.batch.size: 1`, the default, and 16% fewer at 1000. If the tables a
+pipeline writes never change type while it runs, add
+`default_query_exec_mode=cache_statement` to the `url` to reuse prepared
+statements as before; the same benchmark measured no difference from the
+previous release with it. **Risk:** with `cache_statement` (or
+`cache_describe`) a statement keeps the parameter types it was prepared with,
+so after an `ALTER COLUMN ... TYPE` Postgres converts values into the new
+type without an error, for example 5/2 into an integer column stored as 3,
+until the destination restarts. The destination logs a warning at start when
+the URL selects a cache mode. `exec` and `simple_protocol`, which never cache
+parameter types (PgBouncer in transaction mode needs one of them), are kept
+when the URL sets them.
+
 **Numeric columns**
 
 Decimal values (`big.Rat`) are sent to Postgres as exact decimal strings, and
@@ -806,10 +1032,10 @@ Postgres converts the string, and the examples below were checked on
 Postgres 17.5:
 
 - `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
-  value is rejected, except on a destination that was already running when the
-  column was changed to an integer type: the cached prepared statement still
-  types the parameter as `numeric`, so 5/2 is silently rounded to 3
-  (see #367).
+  value is rejected, also on a destination that was already running when the
+  column was changed to an integer type (see "Column type changes on a running
+  pipeline"). With `default_query_exec_mode=cache_statement` in the URL, such a
+  destination rounds 5/2 to 3 instead (#367).
 - `real`, `float8`: stored as the nearest binary float.
 - `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
 - `oid`: stored if the value is a whole number (7 is stored as `7`).
@@ -870,9 +1096,9 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes each statement before it runs it, so a column type change on a running pipeline is seen by the next write. Add `default_query_exec_mode=cache_statement` to reuse prepared statements for speed, at the risk that after an ALTER COLUMN ... TYPE values are converted into the new type without an error until a restart (#367). | required |
 
-### s3 (v0.10.0)
+### s3 (v0.11.0)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1015,7 +1241,29 @@ with one `PutObject` per object, and the records are acknowledged only after
 `PutObject` succeeded. Delivery is at-least-once: a batch that is retried
 after a failure or a restart is written again as a new object, so a reader
 can see a record twice, never zero times. Object names are
-`<UnixNano>.<ext>`, not deterministic.
+`<UnixNano>-<writer id>-<counter>.<ext>`: the write time in nanoseconds (so
+objects still sort by write time), a random 16-hex-character id per
+destination instance, and that instance's write counter. They are unique by
+construction, also across pipelines or Conduit instances writing to the same
+bucket and prefix in the same clock tick, and not deterministic (a retried
+batch gets a new name). With `conditionalWrites` (default true) every
+`PutObject` carries `If-None-Match: *`, so a store never replaces an existing
+object. The records of a refused write are not acknowledged:
+
+- `s3.destination.key_exists` (412): the key exists. Either another writer
+  used it, or the AWS SDK retried this writer's own `PutObject` after the
+  response to a successful first attempt was lost; in that case the records
+  are already stored, and redelivering them writes a duplicate under a new
+  key (at-least-once, nothing is lost).
+- `s3.destination.conditional_conflict` (409): a conflicting operation on
+  the key was in progress. Transient; a retry writes under a new key.
+- `s3.destination.conditional_writes_unsupported`: the store rejects the
+  header (501, or a 400/405 that names it). Set `conditionalWrites: false`;
+  keys stay unique by construction.
+
+A store that silently ignores `If-None-Match` writes unconditionally, with
+no warning; the protection then rests on the unique names alone. Tested on
+MinIO; AWS S3 documents support for conditional writes.
 
 **Formats**
 
@@ -1136,13 +1384,18 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
-| `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
+| `aws.accessKeyId` | string |  | no | AWS access key id. Optional, but must be set together with aws.secretAccessKey. When both are unset the connector uses the Conduit host's ambient AWS identity (the AWS SDK default credential chain: environment, shared config and SSO, web identity/IRSA, ECS and EC2 roles), but only if the Conduit operator enabled connectors.ambient-credentials and listed the bucket, and only as the built-in connector (builtin:s3). Otherwise the connector refuses with connector.ambient_credentials_disabled. |  |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
 | `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
 | `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
-| `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
-| `lookbackPeriod` | duration | 5m | no | How far back, from the newest object seen, every CDC poll looks for objects that became visible late. S3 stamps an object with the time its upload began (a multipart upload with the time it was initiated), not the time it completed, and lists in key order, so an object can show up after newer ones were already delivered. Each poll selects the objects modified since (newest LastModified seen - lookbackPeriod) that were not delivered yet. Listing based CDC is best effort and bounded by this value: an upload that completes later than this value after newer objects were seen can still be missed (see the connector description for the full list of known limits). Cost: memory for the objects modified within the window (limit about 256 MiB; beyond it the window is shortened with a warning s3.source.dedupe_window_shrunk, which lowers the tolerance for late-visible objects, so lower this value instead), and redelivery (at-least-once) of the objects modified within the window after a restart and when the snapshot hands over to CDC. Listing cost does not depend on it. Values above 1h log a warning, above 24h are rejected, and 0 disables the lookback. |  |
+| `aws.secretAccessKey` | string |  | no | AWS secret access key. Optional, but must be set together with aws.accessKeyId. See aws.accessKeyId for ambient credentials. |  |
+| `cdc.maxEarlyObjects` | int | 16384 | no | The largest number of new objects delivered before they settle (the early set kept in every position, about 20 bytes per object). A bucket written faster than cdc.maxEarlyObjects / lookbackPeriod gets the excess up to lookbackPeriod later. Memory: positions take up to records in flight x (80 + key length + 20 x this) bytes. 0 delivers everything only once settled. At most 16384. The default delivers a burst of the SDK acceptance suite's maximum batch (10000) at once instead of deferring it for lookbackPeriod. |  |
+| `cdc.maxPendingUploadAge` | duration | 24h | no | Multipart uploads initiated longer ago than this are not tracked (an abandoned upload would otherwise occupy a slot forever); if one still completes, its object can be missed. Add an AbortIncompleteMultipartUpload lifecycle rule with DaysAfterInitiation at most this. Must be at least lookbackPeriod. |  |
+| `cdc.maxSettledBytesPerPoll` | int | 67108864 | no | The memory budget, in bytes, for the settled objects one poll delivers (a catch-up after downtime continues on the next poll). |  |
+| `cdc.maxTrackedUploads` | int | 256 | no | The largest number of long-running multipart uploads tracked in a position. When more run at once, the oldest untracked one delays settling until a slot frees up. At most 10000. |  |
+| `cdc.multipartHold` | bool | true | no | Track in-progress multipart uploads, so that an upload running longer than lookbackPeriod is not missed (AWS stamps the completed object with the time the upload started). Needs s3:ListBucketMultipartUploads. false skips it and is lossy for such uploads. |  |
+| `lookbackPeriod` | duration | 5m | no | The late-visibility tolerance of change capture. An object is "settled" once it is older than this (by the store's clock); the source assumes that no object becomes visible in listings later than this after its LastModified (replication lag, a slow PUT and clock skew between store nodes must stay below it; multipart uploads are tracked separately). New objects are delivered at once while they fit cdc.maxEarlyObjects, the rest when they settle, so this is also the maximum extra latency on a busy bucket. Positions resume exactly whatever the value. 30s or more is supported; 1s to 29s is deprecated (a warning; rejected in a later release); 0 is accepted but lossy for late-visible objects; above 24h is rejected. |  |
 | `pollingPeriod` | duration | 1s | no | polling period for the CDC mode, formatted as a time.Duration string. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -1159,19 +1412,20 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
-| `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
+| `aws.accessKeyId` | string |  | no | AWS access key id. Optional, but must be set together with aws.secretAccessKey. When both are unset the connector uses the Conduit host's ambient AWS identity (the AWS SDK default credential chain: environment, shared config and SSO, web identity/IRSA, ECS and EC2 roles), but only if the Conduit operator enabled connectors.ambient-credentials and listed the bucket, and only as the built-in connector (builtin:s3). Otherwise the connector refuses with connector.ambient_credentials_disabled. |  |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
 | `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
 | `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
-| `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
+| `aws.secretAccessKey` | string |  | no | AWS secret access key. Optional, but must be set together with aws.accessKeyId. See aws.accessKeyId for ambient credentials. |  |
 | `aws.serverSideEncryption` | string |  | no | Server-side encryption to request for every object written: AES256 (SSE-S3), aws:kms (SSE-KMS) or aws:kms:dsse (DSSE-KMS). Leave empty to send no encryption header, so the bucket's default encryption applies (on AWS every bucket encrypts with SSE-S3 by default; an S3-compatible store may store the object unencrypted). An explicit value overrides the bucket default: setting AES256 on a bucket whose default is SSE-KMS stores objects with SSE-S3 instead. |  |
 | `aws.sseKmsKeyId` | string |  | no | The KMS key ID, key ARN, alias name or alias ARN to encrypt objects with. Only valid when aws.serverSideEncryption is aws:kms or aws:kms:dsse; when empty with those modes, S3 uses the bucket's default KMS key, or the AWS managed key aws/s3. |  |
 | `compression` | string |  | no | Compression of the objects: none or gzip for json and bytearray (gzip appends .gz to the extension), none, gzip or snappy (the column codec) for parquet. Empty means the format's default: none for json and bytearray, gzip for parquet. |  |
+| `conditionalWrites` | bool | true | no | Send If-None-Match: * with every PutObject, so that the store refuses to replace an existing object (error s3.destination.key_exists) instead of silently overwriting one whose records were already acknowledged. Object keys are unique by construction; this makes any collision fail loudly (a 412 can also be the AWS SDK retrying this writer's own write after a lost response: then the redelivered records are a duplicate, never a loss). Tested on MinIO; AWS S3 documents support. Set to false for a store that answers with s3.destination.conditional_writes_unsupported. A store that silently ignores the header writes unconditionally, without a warning. |  |
 | `format` | string |  | yes | The destination format: "json" (one OpenCDC-shaped JSON object per line), "parquet", or "bytearray" (the payload bytes of every record followed by format.bytearray.separator; Kafka Connect's ByteArrayFormat, and with format.bytearray.extension set to .json the bytes Kafka Connect's JsonFormat writes for JSON values). bytearray fails a record without a payload (a delete or a Kafka tombstone) or with an empty one (indistinguishable from a tombstone) with the error s3.destination.null_value; json fails a record that is not valid UTF-8 with s3.destination.invalid_utf8. | required, inclusion(parquet,json,bytearray) |
 | `format.bytearray.extension` | string | .bin | no | File extension of objects written by format bytearray, with or without the leading dot. |  |
 | `format.bytearray.separator` | string | \n | no | Written after every record by format bytearray. The escapes \n, \r, \t and \\ are resolved. The separator is not escaped inside payloads, so a payload that contains it cannot be split back unambiguously (as with Kafka Connect's ByteArrayFormat); pick a separator the data cannot contain, or use json or parquet. |  |
-| `partitioner` | string | none | no | The directory layout under the prefix. "none" writes every batch to <prefix>/<UnixNano>.<ext>, as earlier versions do. The others reproduce the directories of the Kafka Connect S3 sink's partitioners, under <prefix>/<collection>/ (the collection is the opencdc.collection metadata, the topic for records from builtin:kafka): "default" adds partition=<kafka.partition metadata>, "field" adds <field>=<value> per field in partitioner.fields, "time" adds the record time formatted with partitioner.pathFormat, "hourly" and "daily" are "time" with Kafka Connect's hourly and daily patterns. A batch is split into one object per directory. A record that lacks the value its partitioner needs is not written: it fails with the error code s3.destination.partition_value. | inclusion(none,default,field,time,hourly,daily) |
+| `partitioner` | string | none | no | The directory layout under the prefix (<name> is the object name, <UnixNano>-<writer id>-<counter>). "none" writes every batch to <prefix>/<name>.<ext>, as earlier versions do. The others reproduce the directories of the Kafka Connect S3 sink's partitioners, under <prefix>/<collection>/ (the collection is the opencdc.collection metadata, the topic for records from builtin:kafka): "default" adds partition=<kafka.partition metadata>, "field" adds <field>=<value> per field in partitioner.fields, "time" adds the record time formatted with partitioner.pathFormat, "hourly" and "daily" are "time" with Kafka Connect's hourly and daily patterns. A batch is split into one object per directory. A record that lacks the value its partitioner needs is not written: it fails with the error code s3.destination.partition_value. | inclusion(none,default,field,time,hourly,daily) |
 | `partitioner.duration` | duration |  | no | The width of a time partition for partitioner "time", at least 1s (Kafka Connect: partition.duration.ms). The record time is floored to a multiple of it in partitioner.timezone. |  |
 | `partitioner.fields` | string |  | no | Comma-separated payload fields for partitioner "field", dots for nested fields (Kafka Connect: partition.field.name). The payload must be structured data or a raw JSON object. |  |
 | `partitioner.pathFormat` | string |  | no | The directory pattern for partitioner "time", in Kafka Connect's path.format syntax: yyyy or YYYY, MM, dd, HH, mm, ss, and quoted literal text, for example 'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH. Text fields (MMM) are not supported. |  |

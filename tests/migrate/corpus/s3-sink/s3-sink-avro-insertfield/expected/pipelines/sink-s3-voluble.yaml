@@ -14,9 +14,7 @@ pipelines:
         type: destination
         plugin: builtin:s3
         settings:
-          aws.accessKeyId: ${KC_SINK_S3_VOLUBLE_DESTINATION_AWS_ACCESSKEYID}
           aws.bucket: example-voluble-bucket
           aws.region: us-east-1
-          aws.secretAccessKey: ${KC_SINK_S3_VOLUBLE_DESTINATION_AWS_SECRETACCESSKEY}
           format: ${KC_SINK_S3_VOLUBLE_DESTINATION_FORMAT}
           sdk.batch.size: "65536"
