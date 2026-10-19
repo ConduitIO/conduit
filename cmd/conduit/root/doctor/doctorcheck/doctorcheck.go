@@ -37,6 +37,9 @@ const (
 	NameEngineReachable         = "engine.reachable"
 	NamePluginsStandaloneCompat = "plugins.standalone_compat"
 	NamePluginsStandaloneEnv    = "plugins.standalone_env"
+	// NameConnectorsOrphanedResources reports connectors deleted with
+	// --force after their delete hook failed (#3058).
+	NameConnectorsOrphanedResources = "connectors.orphaned_resources"
 )
 
 // Categories doctor's own checks use for human-output grouping (see
@@ -108,6 +111,7 @@ func CheckNames() []string {
 		NameEngineReachable,
 		NamePluginsStandaloneCompat,
 		NamePluginsStandaloneEnv,
+		NameConnectorsOrphanedResources,
 	}
 }
 
@@ -124,6 +128,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		configResolveCheck{cfg: cfg},
 		configValidateCheck{cfg: cfg},
 		storeReachableCheck{cfg: cfg, logger: logger},
+		orphanedResourcesCheck{cfg: cfg, logger: logger},
 	}
 
 	if cfg.API.Enabled {

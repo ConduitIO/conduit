@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/http/api/fromproto"
 	"github.com/conduitio/conduit/pkg/http/api/status"
 	"github.com/conduitio/conduit/pkg/http/api/toproto"
@@ -39,6 +40,8 @@ type ConnectorOrchestrator interface {
 	List(ctx context.Context) map[string]*connector.Instance
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Delete(ctx context.Context, id string) error
+	ForceDelete(ctx context.Context, id string) (*connector.Orphan, error)
+	AcknowledgeOrphan(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error)
 	Validate(ctx context.Context, t connector.Type, plugin string, config connector.Config) error
 	Inspect(ctx context.Context, id string) (*inspector.Session, error)
@@ -173,13 +176,44 @@ func (c *ConnectorAPIv1) UpdateConnector(
 	return &apiv1.UpdateConnectorResponse{Connector: co}, nil
 }
 
+// DeleteConnector deletes a connector after its delete hook succeeded, or,
+// with force, regardless of the hook, returning a
+// connector.orphaned_resources warning when the hook failed (#3058). With
+// acknowledge_orphan it only clears the orphan entry of an already deleted
+// connector.
 func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteConnectorRequest) (*apiv1.DeleteConnectorResponse, error) {
-	err := c.connectorOrchestrator.Delete(ctx, req.Id)
+	if req.AcknowledgeOrphan {
+		if req.Force {
+			return nil, status.ConnectorError(conduiterr.New(conduiterr.CodeInvalidArgument,
+				"force and acknowledge_orphan can't be combined: acknowledge_orphan only clears the entry of a connector that is already deleted"))
+		}
+		if err := c.connectorOrchestrator.AcknowledgeOrphan(ctx, req.Id); err != nil {
+			return nil, status.ConnectorError(cerrors.Errorf("failed to acknowledge orphan: %w", err))
+		}
+		return &apiv1.DeleteConnectorResponse{}, nil
+	}
+
+	if !req.Force {
+		if err := c.connectorOrchestrator.Delete(ctx, req.Id); err != nil {
+			return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
+		}
+		return &apiv1.DeleteConnectorResponse{}, nil
+	}
+
+	orphan, err := c.connectorOrchestrator.ForceDelete(ctx, req.Id)
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
 	}
-
-	return &apiv1.DeleteConnectorResponse{}, nil
+	resp := &apiv1.DeleteConnectorResponse{}
+	if orphan != nil {
+		w := orphan.Warning()
+		resp.Warnings = append(resp.Warnings, &apiv1.Warning{
+			Code:       w.Code.Reason(),
+			Message:    w.Message,
+			Suggestion: w.Suggestion,
+		})
+	}
+	return resp, nil
 }
 
 // ValidateConnector validates whether the connector configurations are valid or not

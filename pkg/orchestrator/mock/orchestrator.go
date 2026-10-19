@@ -459,6 +459,44 @@ func (m *ConnectorService) EXPECT() *ConnectorServiceMockRecorder {
 	return m.recorder
 }
 
+// AcknowledgeOrphan mocks base method.
+func (m *ConnectorService) AcknowledgeOrphan(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AcknowledgeOrphan", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AcknowledgeOrphan indicates an expected call of AcknowledgeOrphan.
+func (mr *ConnectorServiceMockRecorder) AcknowledgeOrphan(ctx, id any) *ConnectorServiceAcknowledgeOrphanCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcknowledgeOrphan", reflect.TypeOf((*ConnectorService)(nil).AcknowledgeOrphan), ctx, id)
+	return &ConnectorServiceAcknowledgeOrphanCall{Call: call}
+}
+
+// ConnectorServiceAcknowledgeOrphanCall wrap *gomock.Call
+type ConnectorServiceAcknowledgeOrphanCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectorServiceAcknowledgeOrphanCall) Return(arg0 error) *ConnectorServiceAcknowledgeOrphanCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectorServiceAcknowledgeOrphanCall) Do(f func(context.Context, string) error) *ConnectorServiceAcknowledgeOrphanCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectorServiceAcknowledgeOrphanCall) DoAndReturn(f func(context.Context, string) error) *ConnectorServiceAcknowledgeOrphanCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // AddProcessor mocks base method.
 func (m *ConnectorService) AddProcessor(ctx context.Context, connectorID, processorID string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
@@ -571,6 +609,45 @@ func (c *ConnectorServiceDeleteCall) Do(f func(context.Context, string, connecto
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *ConnectorServiceDeleteCall) DoAndReturn(f func(context.Context, string, connector.PluginDispenserFetcher) error) *ConnectorServiceDeleteCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// ForceDelete mocks base method.
+func (m *ConnectorService) ForceDelete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) (*connector.Orphan, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceDelete", ctx, id, dispenserFetcher)
+	ret0, _ := ret[0].(*connector.Orphan)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceDelete indicates an expected call of ForceDelete.
+func (mr *ConnectorServiceMockRecorder) ForceDelete(ctx, id, dispenserFetcher any) *ConnectorServiceForceDeleteCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDelete", reflect.TypeOf((*ConnectorService)(nil).ForceDelete), ctx, id, dispenserFetcher)
+	return &ConnectorServiceForceDeleteCall{Call: call}
+}
+
+// ConnectorServiceForceDeleteCall wrap *gomock.Call
+type ConnectorServiceForceDeleteCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectorServiceForceDeleteCall) Return(arg0 *connector.Orphan, arg1 error) *ConnectorServiceForceDeleteCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectorServiceForceDeleteCall) Do(f func(context.Context, string, connector.PluginDispenserFetcher) (*connector.Orphan, error)) *ConnectorServiceForceDeleteCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectorServiceForceDeleteCall) DoAndReturn(f func(context.Context, string, connector.PluginDispenserFetcher) (*connector.Orphan, error)) *ConnectorServiceForceDeleteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

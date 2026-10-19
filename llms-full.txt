@@ -988,7 +988,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (139)
+## 3. Error codes (142)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1001,10 +1001,13 @@ Author: Meroxa, Inc.
 | `config.field_too_long` | InvalidArgument | config: field too long |
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
+| `connector.delete_hook_failed` | FailedPrecondition | CodeConnectorDeleteHookFailed is raised when a connector is deleted and its plugin's delete hook (the "deleted" lifecycle event, which releases what the connector created outside Conduit, such as a Postgres replication slot) fails or cannot be run. The connector record is kept, so the delete can be retried; the hook is idempotent by contract. The message names the connector, its plugin, and the plugin's own error, which is the only place the plugin can say what it failed to release (#3058). |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
 | `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
+| `connector.orphan_not_found` | NotFound | CodeConnectorOrphanNotFound is raised when an orphan is acknowledged for a connector ID that has no orphan entry. |
+| `connector.orphaned_resources` | FailedPrecondition | CodeConnectorOrphanedResources is a warning, never returned as an error: a connector was deleted with force after its delete hook failed, so resources it created outside Conduit may remain. It is carried by the DeleteConnector response, logged, and reported by the `conduit doctor` check connectors.orphaned_resources until the orphan is acknowledged (#3058). The gRPC category is unused; FailedPrecondition is what it would mean if it ever were returned. |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |

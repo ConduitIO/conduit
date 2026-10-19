@@ -123,46 +123,86 @@ func (c *ConnectorOrchestrator) Get(ctx context.Context, id string) (*connector.
 	return c.connectors.Get(ctx, id)
 }
 
+// Delete deletes an API-provisioned connector of a pipeline that has no run.
+// The connector's delete hook runs first and the connector is removed only
+// if it succeeds; otherwise Delete returns connector.CodeConnectorDeleteHookFailed
+// and nothing changes (see connector.Service.Delete, #3058).
 func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
+	_, err := c.delete(ctx, id, false)
+	return err
+}
+
+// ForceDelete is Delete for a connector whose delete hook cannot succeed. If
+// the hook fails, the connector is removed anyway and the returned Orphan
+// describes what may be left behind outside Conduit; its entry is written in
+// the same transaction as the deletion (invariant 5). A nil Orphan means the
+// hook succeeded and this was an ordinary delete.
+func (c *ConnectorOrchestrator) ForceDelete(ctx context.Context, id string) (*connector.Orphan, error) {
+	return c.delete(ctx, id, true)
+}
+
+// AcknowledgeOrphan clears the orphan entry ForceDelete recorded for a
+// connector, once its leftovers were cleaned up. It is refused while a
+// connector with that ID exists, because the entry describes a deleted one.
+func (c *ConnectorOrchestrator) AcknowledgeOrphan(ctx context.Context, id string) error {
+	if _, err := c.connectors.Get(ctx, id); err == nil {
+		ce := conduiterr.New(conduiterr.CodeInvalidArgument, fmt.Sprintf(
+			"connector %q exists; --acknowledge-orphan only clears the entry of a connector that was deleted with --force", id))
+		ce.Suggestion = "delete the connector first, or drop --acknowledge-orphan"
+		return ce
+	} else if !cerrors.Is(err, connector.ErrInstanceNotFound) {
+		return err
+	}
+	return c.connectors.AcknowledgeOrphan(ctx, id)
+}
+
+func (c *ConnectorOrchestrator) delete(ctx context.Context, id string, force bool) (*connector.Orphan, error) {
 	var mark mutationMark
 	defer mark.release()
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
 	if err != nil {
-		return cerrors.Errorf("could not create db transaction: %w", err)
+		return nil, cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	r.AppendPure(txn.Discard)
 	conn, err := c.connectors.Get(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
 		// Invariant: errors.Is(err, ErrImmutableProvisionedByConfig) still holds —
 		// sentinel wrapped, ConduitError adds the code.
-		return immutableProvisionedByConfigErr(fmt.Sprintf("connector %q cannot be deleted", conn.ID))
+		return nil, immutableProvisionedByConfigErr(fmt.Sprintf("connector %q cannot be deleted", conn.ID))
 	}
 	if len(conn.ProcessorIDs) != 0 {
 		// Invariant: errors.Is(err, ErrConnectorHasProcessorsAttached) still holds —
 		// sentinel wrapped, ConduitError adds the code.
 		err := conduiterr.Wrap(CodeConnectorHasProcessorsAttached, ErrConnectorHasProcessorsAttached.Error(), ErrConnectorHasProcessorsAttached)
 		err.Suggestion = "remove the connector's processors first, then delete the connector"
-		return err
+		return nil, err
 	}
 	pl, err := c.pipelines.Get(ctx, conn.PipelineID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Invariant 2: admitted by run liveness, not status (#2899 item 2): a
 	// starting or recovering run counts.
 	// #2961: the check and the mark are one step under the lifecycle's
 	// admission lock; Start is refused until the delete is written.
 	if err := mark.acquire(c.lifecycle, pl.ID, pipeline.ErrPipelineRunning.Error()); err != nil {
-		return err
+		return nil, err
 	}
-	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
+	var orphan *connector.Orphan
+	if force {
+		// Invariant 5: the orphan entry and the record deletion are written
+		// in txn, so a crash leaves both or neither.
+		orphan, err = c.connectors.ForceDelete(ctx, id, c.connectorPlugins)
+	} else {
+		err = c.connectors.Delete(ctx, id, c.connectorPlugins)
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	r.Append(func() error {
 		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
@@ -170,7 +210,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	r.Append(func() error {
 		_, err := c.pipelines.AddConnector(ctx, pl.ID, id)
@@ -178,10 +218,10 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	})
 	err = txn.Commit()
 	if err != nil {
-		return cerrors.Errorf("could not commit db transaction: %w", err)
+		return nil, cerrors.Errorf("could not commit db transaction: %w", err)
 	}
 	r.Skip()
-	return nil
+	return orphan, nil
 }
 
 func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error) {
