@@ -5,6 +5,12 @@ on:
     tags:
       - v*
 
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
 # Each job declares exactly what it needs. id-token: write lets a job mint a
 # GitHub OIDC token, which cosign exchanges for a short-lived Sigstore
 # certificate bound to this workflow and ref (keyless signing, no stored keys).
