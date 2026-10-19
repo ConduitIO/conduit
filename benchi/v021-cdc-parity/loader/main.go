@@ -38,13 +38,16 @@
 // instead of one per Read (the batch-of-one gap this benchmark exists to
 // surface).
 //
-// -delay (default 0) makes the loader wait after connecting before it writes.
-// The Postgres-destination arms mirror the source's LIVE rows, so anything
-// written before the snapshotMode=never CDC source creates its replication slot
-// would never be captured, and updates to those phantom rows would inflate the
-// destination's row count by however long the tool took to start. Waiting until
-// the slot exists makes every write a clean steady-state change; the file-sink
-// arms count events (not net rows), so they pass no delay.
+// -slots (default "") is a comma-separated list of replication slot names to
+// wait for before writing. The Postgres-destination arms mirror the source's
+// LIVE rows, so anything written before the snapshotMode=never CDC source
+// creates its replication slot would never be captured, and updates to those
+// phantom rows would upsert-INSERT rows the snapshot never created, inflating
+// the destination's count by however long the tool took to start. Instead of a
+// blind delay, the loader polls pg_replication_slots and starts writing only
+// once every named slot exists, bounded by -slot-timeout (default 10m) with a
+// clear failure message. The file-sink arms count events (not net rows) and
+// have no slot, so they pass no -slots and start writing immediately.
 package main
 
 import (
@@ -63,15 +66,16 @@ import (
 
 func main() {
 	var (
-		url        = flag.String("url", "", "Postgres connection URL (required)")
-		rate       = flag.Int("rate", 20000, "target operations per second (total, across all tables)")
-		tables     = flag.Int("tables", 1, "number of source tables (bench_source_0 .. bench_source_N-1); the workload is split, not multiplied")
-		window     = flag.Int("window", 10000, "initial number of live rows per table")
-		payload    = flag.Int("payload", 64, "payload size in bytes")
-		batch      = flag.Int("batch", 1000, "statements per round trip")
-		insertFrac = flag.Float64("insert-frac", 0.70, "fraction of INSERT operations")
-		updateFrac = flag.Float64("update-frac", 0.20, "fraction of UPDATE operations")
-		delay      = flag.Duration("delay", 0, "wait this long after connecting before writing (gives a snapshotMode=never CDC source time to create its replication slot)")
+		url         = flag.String("url", "", "Postgres connection URL (required)")
+		rate        = flag.Int("rate", 20000, "target operations per second (total, across all tables)")
+		tables      = flag.Int("tables", 1, "number of source tables (bench_source_0 .. bench_source_N-1); the workload is split, not multiplied")
+		window      = flag.Int("window", 10000, "initial number of live rows per table")
+		payload     = flag.Int("payload", 64, "payload size in bytes")
+		batch       = flag.Int("batch", 1000, "statements per round trip")
+		insertFrac  = flag.Float64("insert-frac", 0.70, "fraction of INSERT operations")
+		updateFrac  = flag.Float64("update-frac", 0.20, "fraction of UPDATE operations")
+		slots       = flag.String("slots", "", "comma-separated pg_replication_slots to wait for before writing (empty = start immediately)")
+		slotTimeout = flag.Duration("slot-timeout", 10*time.Minute, "how long to wait for the -slots to appear before failing")
 	)
 	flag.Parse()
 	if *url == "" {
@@ -93,24 +97,24 @@ func main() {
 	}
 	defer conn.Close(context.Background())
 
-	log.Printf("loader: rate=%d ops/s tables=%d window=%d/table payload=%d bytes batch=%d insert=%.0f%% update=%.0f%% delete=%.0f%% delay=%s",
-		*rate, *tables, *window, *payload, *batch, *insertFrac*100, *updateFrac*100, (1-*insertFrac-*updateFrac)*100, *delay)
+	log.Printf("loader: rate=%d ops/s tables=%d window=%d/table payload=%d bytes batch=%d insert=%.0f%% update=%.0f%% delete=%.0f%% slots=%q slot-timeout=%s",
+		*rate, *tables, *window, *payload, *batch, *insertFrac*100, *updateFrac*100, (1-*insertFrac-*updateFrac)*100, *slots, *slotTimeout)
 
 	// Wait for the CDC source to create its replication slot before writing.
 	// The Postgres-destination arms mirror the source's LIVE rows, so a row
 	// written before the slot exists would never be snapshotted: updates to it
 	// would then upsert-INSERT a phantom row and deletes of it would be a no-op,
 	// inflating the destination's row count by however long the tool took to
-	// start. Delaying the first write until after the slot exists makes every
-	// write a clean steady-state change. File-sink arms count events (not net
-	// rows), so they pass -delay 0 and are unaffected.
-	if *delay > 0 {
-		log.Printf("loader: waiting %s for the CDC source's replication slot", *delay)
-		select {
-		case <-time.After(*delay):
-		case <-ctx.Done():
-			return
+	// start. Polling pg_replication_slots (rather than sleeping a fixed delay)
+	// makes every write a clean steady-state change without depending on how
+	// long the tool's startup happens to take. File-sink arms count events (not
+	// net rows) and pass no -slots, so they are unaffected and start immediately.
+	if slotNames := splitSlots(*slots); len(slotNames) > 0 {
+		log.Printf("loader: waiting up to %s for replication slot(s) %s", *slotTimeout, strings.Join(slotNames, ", "))
+		if err := waitForSlots(ctx, conn, slotNames, *slotTimeout); err != nil {
+			log.Fatalf("loader: replication slot wait failed: %v", err)
 		}
+		log.Printf("loader: replication slot(s) present: %s", strings.Join(slotNames, ", "))
 	}
 
 	tableNames := make([]string, *tables)
@@ -250,4 +254,83 @@ func connect(ctx context.Context, url string) (*pgx.Conn, error) {
 		}
 		return nil, err
 	}
+}
+
+// splitSlots parses the -slots flag into a de-duplicated list of slot names in
+// first-seen order. Empty input yields nil, so the file-sink arms (which pass
+// no -slots) skip the wait entirely and start writing immediately.
+func splitSlots(s string) []string {
+	var out []string
+	seen := make(map[string]bool)
+	for _, part := range strings.Split(s, ",") {
+		name := strings.TrimSpace(part)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// waitForSlots polls pg_replication_slots until every named slot exists, or
+// until timeout or ctx cancellation. It returns nil once all slots are present
+// and a descriptive error on timeout/cancellation. This is the slot-aware
+// replacement for the old blind -delay: the loader must not write before the
+// snapshotMode=never CDC source has created its slot, or pre-slot rows become
+// phantom upsert-INSERTs that inflate a Postgres-destination arm's row count.
+func waitForSlots(ctx context.Context, conn *pgx.Conn, slots []string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	lastMissing := slots // if the first poll errors, report the whole wanted set
+	for {
+		present, err := replicationSlots(ctx, conn)
+		if err != nil {
+			// The poll itself is best-effort (e.g. a transient reconnect); the
+			// deadline, not the first error, decides failure.
+			log.Printf("loader: slot poll error (will retry): %v", err)
+		} else {
+			lastMissing = missingSlots(slots, present)
+			if len(lastMissing) == 0 {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for replication slot(s) %s: the snapshotMode=never CDC source never created them (is it stuck starting?)", timeout, strings.Join(lastMissing, ", "))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+// replicationSlots returns the set of slot names currently in
+// pg_replication_slots.
+func replicationSlots(ctx context.Context, conn *pgx.Conn) (map[string]bool, error) {
+	rows, err := conn.Query(ctx, "SELECT slot_name FROM pg_replication_slots")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	present := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		present[name] = true
+	}
+	return present, rows.Err()
+}
+
+// missingSlots returns the subset of want that is absent from present, in
+// want's order.
+func missingSlots(want []string, present map[string]bool) []string {
+	var missing []string
+	for _, s := range want {
+		if !present[s] {
+			missing = append(missing, s)
+		}
+	}
+	return missing
 }

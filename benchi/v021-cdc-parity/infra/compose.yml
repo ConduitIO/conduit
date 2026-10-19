@@ -62,11 +62,15 @@ services:
       - "${LOADER_RATE:-20000}"
       - -tables
       - "${TABLES:-1}"
-      # Postgres- and S3-destination arms: wait for the CDC source's replication
-      # slot (snapshotMode never) before writing, so the destination's count
-      # reflects only post-slot steady-state changes (see ../loader).
-      - -delay
-      - "${LOADER_DELAY:-0}"
+      # Slot-aware wait (see ../loader): the loader polls pg_replication_slots
+      # and only starts writing once every slot named in LOADER_SLOTS exists,
+      # bounded by LOADER_SLOT_TIMEOUT. The Postgres-/S3-/Kafka-destination
+      # arms pass their CDC source's slot name(s); the file-sink arms pass an
+      # empty LOADER_SLOTS (no slot) and start immediately.
+      - -slots
+      - "${LOADER_SLOTS:-}"
+      - -slot-timeout
+      - "${LOADER_SLOT_TIMEOUT:-600s}"
     volumes:
       # Static binary built by run.sh (CGO_ENABLED=0 GOOS=linux).
       - ../loader/loader:/loader/loader:ro

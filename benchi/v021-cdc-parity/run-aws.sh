@@ -23,8 +23,8 @@
 # Requires: aws CLI + terraform + go (loader cross-compile), AWS creds.
 #
 # Env: TABLES (default 1; sweep 1, 2, 4), CONDUIT_BATCH_SIZE (default 1000),
-# CONDUIT_BATCH_DELAY (default 100ms), LOADER_DELAY (default 120s) — forwarded
-# to run.sh on the instance.
+# CONDUIT_BATCH_DELAY (default 100ms), LOADER_SLOT_TIMEOUT (default 600s) —
+# forwarded to run.sh on the instance.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -32,7 +32,7 @@ CONDUIT_REF="${CONDUIT_REF:-main}"   # conduit commit/branch to build the image 
 export TABLES=${TABLES:-1}
 export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-1000}
 export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
-export LOADER_DELAY=${LOADER_DELAY:-120s}
+export LOADER_SLOT_TIMEOUT=${LOADER_SLOT_TIMEOUT:-600s}
 
 KEEP=0
 ARGS=()
@@ -90,7 +90,7 @@ rsync -az -e "ssh ${SSH_OPTS[*]}" \
 # 5. Put the linux loader in place and run.
 echo "==> running benchmark (rounds=$ROUNDS arms=${REST[*]} tables=$TABLES batch=$CONDUIT_BATCH_SIZE)"
 ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \
-  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_DELAY=$LOADER_DELAY bash run.sh $ROUNDS ${REST[*]}"
+  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_SLOT_TIMEOUT=$LOADER_SLOT_TIMEOUT bash run.sh $ROUNDS ${REST[*]}"
 
 # 6. Collect results.
 echo "==> collecting results to ./results-aws/"

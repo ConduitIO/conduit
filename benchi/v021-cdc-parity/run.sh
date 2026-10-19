@@ -25,9 +25,8 @@
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
 # TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
 # CONDUIT_BATCH_SIZE (sdk.batch.size, default 1000), CONDUIT_BATCH_DELAY
-# (sdk.batch.delay, default 100ms), LOADER_DELAY (default 120s, applied to the
-# Postgres- and S3-destination arms only — lets their snapshotMode=never source
-# create its replication slot before the loader writes).
+# (sdk.batch.delay, default 100ms), LOADER_SLOT_TIMEOUT (default 600s — how
+# long the loader waits for an arm's replication slot(s) before failing).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -49,15 +48,15 @@ export TABLES=${TABLES:-1}
 # to 2048; Conduit's batch-of-one default is the known gap this surfaces.
 export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-1000}
 export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
-# Loader delay for the Postgres- and S3-destination arms only (see run() below):
-# let the snapshotMode=never CDC source create its replication slot before the
-# loader writes, so the destination's count is clean steady state. File arms
-# pass 0.
-export LOADER_DELAY=${LOADER_DELAY:-120s}
+# How long the loader waits for an arm's replication slot(s) before failing
+# (see run() below). The slot names themselves are per-tool and computed in
+# run(); the file-sink arms have no slot and write immediately. 600s is generous
+# on purpose: a slow Kafka/Connect/JDBC startup on AWS must not trip it.
+export LOADER_SLOT_TIMEOUT=${LOADER_SLOT_TIMEOUT:-600s}
 
 # Regenerate the N-dependent artifacts (pipelines/conduit.yml,
-# pipelines/conduit-pg.yml, infra/init.sql) for the TABLES /
-# CONDUIT_BATCH_SIZE above.
+# pipelines/conduit-pg.yml, pipelines/conduit-s3.yml, pipelines/conduit-kafka.yml,
+# infra/init.sql) for the TABLES / CONDUIT_BATCH_SIZE above.
 bash scripts/generate.sh
 
 BENCHI=${BENCHI:-benchi}
@@ -105,29 +104,45 @@ echo "==> recording environment"
   echo "tables $TABLES"
   echo "conduit_batch_size $CONDUIT_BATCH_SIZE"
   echo "conduit_batch_delay $CONDUIT_BATCH_DELAY"
-  echo "loader_delay ${LOADER_DELAY:-120s} (Postgres- and S3-destination arms only)"
+  echo "loader_slot_timeout ${LOADER_SLOT_TIMEOUT:-600s}"
 } > "$OUT/environment.txt"
+
+# slot_list <base> — comma-separated replication slot names for TABLES tables,
+# e.g. "conduit_slot_0,conduit_slot_1". Each CDC source creates one slot per
+# table; the loader waits for all of them before writing.
+slot_list() {
+  local base=$1 out="" i
+  for ((i = 0; i < TABLES; i++)); do
+    out="${out}${out:+,}${base}_${i}"
+  done
+  echo "$out"
+}
 
 run() { # tool label
   local tool=$1 label=$2
   local dir="$OUT/$label"
   mkdir -p "$dir"
   cat /proc/loadavg > "$dir/load-before.txt" 2>/dev/null || uptime > "$dir/load-before.txt"
-  # Postgres-destination arms need the loader to wait for the CDC source's
-  # replication slot (snapshotMode never) before writing, so the destination's
-  # row count reflects only post-slot steady-state changes. S3-destination arms
-  # count events (not net rows), but they use the same snapshotMode=never source
-  # and are measured as a parity pair against the Postgres-destination arms, so
-  # they get the same delay: it makes the loader's initial fill happen after the
-  # slot exists, keeping the measured window clean steady state. File-sink arms
-  # count events and write immediately (no delay).
-  local loader_delay=0
+  # The loader waits for the arm's replication slot(s) before writing (the
+  # slot-aware replacement for the old blind LOADER_DELAY): a Postgres-destination
+  # arm's row count must reflect only post-slot steady-state changes, so the
+  # loader polls pg_replication_slots and starts writing once every named slot
+  # exists, bounded by LOADER_SLOT_TIMEOUT. The S3-/Kafka-destination arms use the
+  # same snapshotMode=never source and get their slot(s) too, so the loader's
+  # initial fill lands after the slot exists. The file-sink arms (and redpanda)
+  # count events, not net rows, have no slot to wait for, and pass an empty list,
+  # so the loader starts immediately — unchanged.
+  local loader_slots=""
   case "$tool" in
-    conduit-pg|connect-pg|conduit-s3|connect-s3|conduit-kafka|connect-kafka) loader_delay="${LOADER_DELAY:-120s}" ;;
+    conduit-pg|conduit-s3)     loader_slots=$(slot_list conduit_slot) ;;
+    connect-pg)                loader_slots=$(slot_list debezium_pg_slot) ;;
+    connect-s3|connect-kafka)  loader_slots=$(slot_list debezium_slot) ;;
+    conduit-kafka)             loader_slots=$(slot_list conduit_kafka_slot) ;;
   esac
   # Bounded: a stuck arm cannot hold the machine (each arm has its own
   # registration/warmup waits, so 900s is generous).
-  LOADER_DELAY="$loader_delay" LOADER_RATE="${LOADER_RATE:-20000}" \
+  LOADER_SLOTS="$loader_slots" LOADER_SLOT_TIMEOUT="${LOADER_SLOT_TIMEOUT:-600s}" \
+    LOADER_RATE="${LOADER_RATE:-20000}" \
     with_tty timeout 900 "$BENCHI" -config bench.yml -tool "$tool" -out "$dir" < /dev/null > /dev/null 2>&1 ||
     echo "run $dir exited $?" >&2
   cat /proc/loadavg > "$dir/load-after.txt" 2>/dev/null || uptime > "$dir/load-after.txt"

@@ -20,6 +20,9 @@
 #   pipelines/conduit-s3.yml  one pipeline per table: builtin:postgres source
 #                             (bench_source_i) -> builtin:s3 destination
 #                             (MinIO bucket "bench")
+#   pipelines/conduit-kafka.yml one pipeline per table: builtin:postgres source
+#                             (bench_source_i) -> builtin:kafka destination
+#                             (topic cdcparitykafka.public.bench_source_i)
 #   infra/init.sql            CREATE TABLE bench_source_0 .. bench_source_{N-1}
 #                             AND bench_dest_0 .. bench_dest_{N-1} (same shape)
 #
@@ -139,45 +142,6 @@ EOF
   echo 'version: "2.2"'
   echo "pipelines:"
   for ((i = 0; i < TABLES; i++)); do
-
-
-# -- pipelines/conduit-kafka.yml ----------------------------------------------
-emit_kafka_pipeline() {
-  local i=$1
-  cat <<EOF
-  - id: cdc-parity-kafka-${i}
-    status: running
-    name: cdc-parity-kafka-${i}
-    description: >
-      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> Kafka
-      destination (topic cdcparitykafka.public.bench_source_${i}). Ground truth =
-      records produced to the topic (summed across tables).
-    connectors:
-      - id: cdc-parity-kafka-${i}:pg-src
-        type: source
-        plugin: builtin:postgres
-        settings:
-          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
-          tables: "bench_source_${i}"
-          cdcMode: "logrepl"
-          snapshotMode: "never"
-          logrepl.slotName: "conduit_kafka_slot_${i}"
-          logrepl.publicationName: "conduit_kafka_pub_${i}"
-          logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
-          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
-          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
-      - id: cdc-parity-kafka-${i}:kafka-dest
-        type: destination
-        plugin: builtin:kafka
-        settings:
-          servers: "cdcparity-kafka:9092"
-          topic: "cdcparitykafka.public.bench_source_${i}"
-          acks: "all"
-          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
-          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
-EOF
-}
     emit_file_pipeline "$i"
   done
 } > pipelines/conduit.yml
@@ -314,8 +278,72 @@ EOF
   echo "pipelines:"
   for ((i = 0; i < TABLES; i++)); do
     emit_s3_pipeline "$i"
-    emit_kafka_pipeline "$i"
   done
 } > pipelines/conduit-s3.yml
+
+# -- pipelines/conduit-kafka.yml ----------------------------------------------
+emit_kafka_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-kafka-${i}
+    status: running
+    name: cdc-parity-kafka-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> Kafka
+      destination (topic cdcparitykafka.public.bench_source_${i}). Ground truth =
+      records produced to the topic (summed across tables).
+    connectors:
+      - id: cdc-parity-kafka-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_kafka_slot_${i}"
+          logrepl.publicationName: "conduit_kafka_pub_${i}"
+          logrepl.autoCleanup: "false"
+          logrepl.withAvroSchema: "false"
+          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
+          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
+      - id: cdc-parity-kafka-${i}:kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: "cdcparity-kafka:9092"
+          topic: "cdcparitykafka.public.bench_source_${i}"
+          acks: "all"
+          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
+          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
+EOF
+}
+
+{
+  echo "# Conduit Kafka-destination arm: one pipeline per table —"
+  echo "# builtin:postgres CDC source (bench_source_i) -> builtin:kafka destination"
+  echo "# (topic cdcparitykafka.public.bench_source_i)."
+  echo "#"
+  echo "# Ground truth is the topic's record count: each source record (one per"
+  echo "# INSERT/UPDATE/DELETE CDC event) becomes exactly one Kafka message, so the"
+  echo "# SUM of the topics' latest offsets (GetOffsetShell, one partition each) is"
+  echo "# the number of CDC events delivered. No Conduit metric is read."
+  echo "#"
+  echo "# Equivalence notes (see ../README.md for the full list):"
+  echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
+  echo "#     false — identical to the file-sink conduit arm and Debezium."
+  echo "#   - the Kafka destination batches produces (franz-go, plus sdk.batch.size/"
+  echo "#     sdk.batch.delay), so the SOURCE — not the sink — is what is measured;"
+  echo "#     a parity check, like conduit-pg. Debezium's producer batches the same"
+  echo "#     way on the connect-kafka side."
+  echo "#"
+  echo "# GENERATED by scripts/generate.sh from TABLES and CONDUIT_BATCH_SIZE"
+  echo "# (committed copy is the TABLES=1 default); run.sh regenerates it."
+  echo 'version: "2.2"'
+  echo "pipelines:"
+  for ((i = 0; i < TABLES; i++)); do
+    emit_kafka_pipeline "$i"
+  done
+} > pipelines/conduit-kafka.yml
 
 echo "generated: TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY"

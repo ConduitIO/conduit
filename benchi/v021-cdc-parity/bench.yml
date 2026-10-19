@@ -73,8 +73,6 @@ tools:
     compose: ./tools/compose-conduit-kafka.yml
   connect-kafka:
     compose: ./tools/compose-connect-kafka.yml
-  connect-kafka:
-    compose: ./tools/compose-connect-kafka.yml
 
 metrics:
   # CPU/memory of the DB only — a workload-invariance check, not the metric.
@@ -122,8 +120,8 @@ tests:
         # previous tool left behind. The counter installs aws-cli at container
         # start, which races this early hook, so wait for the binary first; MinIO
         # data is on tmpfs, so the bucket does not exist yet and mb creates it.
-        # This runs well before the sink writes (the loader waits LOADER_DELAY for
-        # the source's replication slot), so the bucket is always ready in time.
+        # This runs well before the sink writes (the loader waits for the source's
+        # replication slot before writing), so the bucket is always ready in time.
         - name: reset-s3
           container: cdcparity-counter
           tools:
