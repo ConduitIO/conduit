@@ -88,6 +88,11 @@ const (
 	envLCMinDelayMS = "CONDUIT_CHAOS_LC_MIN_DELAY_MS"
 	envLCMaxDelayMS = "CONDUIT_CHAOS_LC_MAX_DELAY_MS"
 	envLCGraceful   = "CONDUIT_CHAOS_LC_GRACEFUL"
+	// envLCDestBatchSize sets sdk.batch.size on the destination, which turns on
+	// the arch-v2 funnel's destination-write batching (and, for this single
+	// destination, read-ahead pipelining). 0 (the default every existing
+	// scenario uses) leaves the destination unbatched.
+	envLCDestBatchSize = "CONDUIT_CHAOS_LC_DEST_BATCH_SIZE"
 
 	lcSourceInstanceID = "lc-source"
 	lcDestInstanceID   = "lc-dest"
@@ -158,6 +163,11 @@ type lcChildConfig struct {
 	minDelayMS int
 	maxDelayMS int
 
+	// destBatchSize sets sdk.batch.size on the destination connector, enabling
+	// the funnel's destination-write batching and (this scenario has a single
+	// destination) read-ahead pipelining. 0 disables both.
+	destBatchSize int
+
 	// graceful selects the child's two variants (see runChildLifecycle):
 	// false is the crashable variant used by both of recovery_test.go's
 	// SIGKILL scenarios (start, then hang forever letting the parent kill it
@@ -181,6 +191,7 @@ func (c lcChildConfig) env() []string {
 		envLCHoldAt + "=" + strconv.FormatUint(c.holdAt, 10),
 		envLCMinDelayMS + "=" + strconv.Itoa(c.minDelayMS),
 		envLCMaxDelayMS + "=" + strconv.Itoa(c.maxDelayMS),
+		envLCDestBatchSize + "=" + strconv.Itoa(c.destBatchSize),
 		envLCGraceful + "=" + strconv.FormatBool(c.graceful),
 	}
 }
@@ -201,6 +212,8 @@ type lcChildEnv struct {
 
 	minDelayMS int
 	maxDelayMS int
+
+	destBatchSize int
 
 	graceful bool
 }
@@ -256,6 +269,17 @@ func parseLCChildEnv() lcChildEnv {
 		os.Exit(exitBadArgs)
 	}
 	cfg.maxDelayMS = maxDelayMS
+
+	// destBatchSize is optional: an empty value (e.g. an older child harness
+	// that predates it) means 0, i.e. the destination is not batched.
+	if v := os.Getenv(envLCDestBatchSize); v != "" {
+		destBatchSize, err := strconv.Atoi(v)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %v\n", markerFatal, envLCDestBatchSize, err)
+			os.Exit(exitBadArgs)
+		}
+		cfg.destBatchSize = destBatchSize
+	}
 
 	cfg.graceful = os.Getenv(envLCGraceful) == envValueTrue
 
@@ -893,12 +917,19 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 		return nil, err
 	}
 
+	destSettings := map[string]string{}
+	if cfg.destBatchSize > 1 {
+		// Turn on the funnel's destination-write batching (and, for this
+		// single-destination pipeline, read-ahead pipelining) so a SIGKILL
+		// lands while the flusher has a batch in flight.
+		destSettings["sdk.batch.size"] = strconv.Itoa(cfg.destBatchSize)
+	}
 	destInstance := &connector.Instance{
 		ID:            lcDestInstanceID,
 		Type:          connector.TypeDestination,
 		PipelineID:    lcPipelineID,
 		Plugin:        lcDestPlugin,
-		Config:        connector.Config{Name: lcDestInstanceID, Settings: map[string]string{}},
+		Config:        connector.Config{Name: lcDestInstanceID, Settings: destSettings},
 		ProvisionedBy: connector.ProvisionTypeAPI,
 	}
 	destInstance.Init(logger, persister)

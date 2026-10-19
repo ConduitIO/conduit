@@ -45,6 +45,30 @@ type DestinationTask struct {
 	pending       []pendingBatch // buffered source batches awaiting flush
 	bufferedCount int            // number of active records currently buffered
 	flushDeadline time.Time      // zero when nothing is buffered
+
+	// Pipelining state (see destination_batch.go). Zero values mean the
+	// flusher goroutine is not running (pipelining disabled, batching
+	// disabled, or Open not called yet).
+	//
+	// pipelined is set once, by SetPipelined, before Open; it is not mutated
+	// after Open and is therefore read without t.mu.
+	pipelined bool
+	// flushCh is the bounded hand-off from doBuffered to the flusher goroutine.
+	// Its capacity is the read-ahead credit (maxInFlightFlushes). A full channel
+	// blocks doBuffered, which is the backpressure when the destination is
+	// slower than the source.
+	flushCh chan []pendingBatch
+	// flushErr holds the first error the flusher hit; guarded by mu. It is
+	// surfaced by the next doBuffered (and by Close), which propagates it
+	// through the worker exactly like a synchronous flush error would.
+	flushErr error
+	// flusherDone is closed when the flusher goroutine exits (on a flush error,
+	// run-context cancellation, or Close draining the channel).
+	flusherDone chan struct{}
+	// closed is set by Close before it drains the flusher; guarded by mu.
+	// doBuffered refuses to buffer after it, so no batch can be appended behind
+	// the drain.
+	closed bool
 }
 
 type Destination interface {
@@ -109,11 +133,29 @@ func (t *DestinationTask) ID() string {
 	return t.id
 }
 
+// SetPipelined enables read-ahead pipelining (a dedicated flusher goroutine)
+// for this destination. It must be called before Open, and only for a
+// destination that is not part of a destination fan-out: with M>1 destinations,
+// M flushers would race on the single Worker's cross-batch source ack, so
+// fan-out keeps the synchronous flush (see
+// docs/design-documents/20261019-funnel-read-ahead-pipelining.md).
+func (t *DestinationTask) SetPipelined() {
+	t.pipelined = true
+}
+
 func (t *DestinationTask) Open(ctx context.Context) error {
 	t.logger.Debug(ctx).Msg("opening destination")
 	err := t.destination.Open(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to open destination connector: %w", err)
+	}
+	if t.pipelined && t.batchingEnabled() {
+		// Invariant 1/4 (enforcement site): start the flusher goroutine that
+		// owns the single-writer, position-ordered Write/Ack pairing on the
+		// destination's gRPC stream. doBuffered hands full buffers to it and
+		// keeps reading, so the source read overlaps the destination write
+		// while acks are still issued in enqueue (source) order.
+		t.startFlusher(ctx)
 	}
 	t.logger.Debug(ctx).Msg("destination open")
 	return nil
@@ -131,7 +173,15 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 	// the records were written durably but replay on restart — at-least-once,
 	// never a loss. A flush error is therefore logged, not returned, so
 	// teardown still runs.
-	if err := t.flush(ctx); err != nil {
+	//
+	// On the pipelined path this also drains the flusher goroutine: the
+	// trailing partial batch is enqueued, the channel is closed, and Close
+	// waits for the flusher to finish every in-flight flush before teardown.
+	if t.pipelined && t.flusherDone != nil {
+		if err := t.stopFlusher(ctx); err != nil {
+			t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+		}
+	} else if err := t.flush(ctx); err != nil {
 		t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
 	}
 	return t.destination.Teardown(ctx)

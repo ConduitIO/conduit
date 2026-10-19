@@ -84,7 +84,12 @@ type Worker struct {
 	FirstTask *TaskNode
 	DLQ       *DLQ
 
-	lastReadAt time.Time
+	// lastReadAt is the UnixNano timestamp of the most recent source read,
+	// used as the fallback readAt in updateTimer. It is atomic because the
+	// destination flusher goroutine calls updateTimer (via Worker.Ack) while
+	// the worker writes this on every source read (see
+	// docs/design-documents/20261019-funnel-read-ahead-pipelining.md).
+	lastReadAt atomic.Int64
 	timer      metrics.Timer
 
 	// processingLock is a lock in form of a channel with a buffer size of 1 to
@@ -629,7 +634,7 @@ func (w *Worker) doTaskAttempt(
 		//   the batch is being processed.
 		// - It checks if the source was torn down after receiving the batch and
 		//   before acquiring the lock.
-		w.lastReadAt = time.Now()
+		w.lastReadAt.Store(time.Now().UnixNano())
 
 		release, err := w.acquireProcessingLock(ctx)
 		if err != nil {
@@ -1101,7 +1106,7 @@ func (w *Worker) updateTimer(records []opencdc.Record) {
 		if err != nil {
 			// If the record metadata has changed and does not include ReadAt
 			// fallback to the time the worker received the record.
-			readAt = w.lastReadAt
+			readAt = time.Unix(0, w.lastReadAt.Load())
 		}
 		w.timer.UpdateSince(readAt)
 	}
