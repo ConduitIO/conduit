@@ -23,10 +23,18 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// defaultMaxBatchSize bounds the buffer when only sdk.batch.delay is set (no
-// explicit sdk.batch.size), so a fast source can never grow the pending buffer
-// without limit. See docs/design-documents/20261017-funnel-destination-batching.md.
-const defaultMaxBatchSize = 1000
+// defaultMaxBatchSize is the flush threshold used when a destination enables
+// batching via sdk.batch.delay but leaves sdk.batch.size unset (the SDK's
+// default). It bounds the pending buffer by record count, so a fast source can
+// never grow it without limit. 3000 matches Kafka Connect's JDBC sink default
+// (batch.size=3000), so a Conduit Postgres destination that does not configure
+// batching flushes the same number of rows per round-trip as the sink it is
+// benchmarked against in the v0.21 CDC-parity suite.
+//
+// It is a fallback, NOT a cap: effectiveBatchSize returns a larger explicit
+// sdk.batch.size verbatim, so a connector that asks for more than 3000 gets it.
+// See docs/design-documents/20261017-funnel-destination-batching.md.
+const defaultMaxBatchSize = 3000
 
 // errBuffered is a sentinel returned by DestinationTask.doBuffered to signal
 // that the batch was buffered but not yet flushed or acknowledged. The worker

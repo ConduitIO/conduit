@@ -270,6 +270,116 @@ func TestDestinationTask_BatchingDisabled(t *testing.T) {
 	is.True(!task.batchingEnabled())
 }
 
+// TestDestinationTask_EffectiveBatchSize pins the flush threshold the funnel
+// uses: an explicit sdk.batch.size is honored verbatim (never capped by
+// defaultMaxBatchSize), and a size-less task falls back to defaultMaxBatchSize.
+func TestDestinationTask_EffectiveBatchSize(t *testing.T) {
+	is := is.New(t)
+	for _, tc := range []struct {
+		name       string
+		batchSize  int
+		batchDelay time.Duration
+		want       int
+	}{
+		{"unset size uses default", 0, time.Second, defaultMaxBatchSize},
+		{"size one uses default", 1, time.Second, defaultMaxBatchSize},
+		{"explicit size at default", defaultMaxBatchSize, 0, defaultMaxBatchSize},
+		{"explicit size above default honored", 5000, 0, 5000},
+		{"explicit size far above default honored", 100_000, 0, 100_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			task := newBatchingTask(t, nil, tc.batchSize, tc.batchDelay)
+			is.Equal(task.effectiveBatchSize(), tc.want)
+		})
+	}
+}
+
+// TestDestinationTask_DoBuffered_ExplicitSizeAboveDefaultNotCapped proves a
+// connector requesting an sdk.batch.size above defaultMaxBatchSize gets its
+// full requested batch: records beyond the default are still buffered (not
+// flushed early), and the flush fires only at the requested size, in order.
+func TestDestinationTask_DoBuffered_ExplicitSizeAboveDefaultNotCapped(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := NewMockDestination(ctrl)
+
+	const requested = defaultMaxBatchSize + 1 // 3001: above both the old 1000 and the 3000 default
+	recs := randomRecords(requested)
+	task := newBatchingTask(t, dest, requested, 0)
+
+	// Everything short of the requested size is buffered — including the entire
+	// default-sized prefix — so no flush (and therefore no Write) happens.
+	for _, rec := range recs[:requested-1] {
+		is.True(isBuffered(task.doBuffered(ctx, NewBatch([]opencdc.Record{rec}), newRecordingAckNacker(&eventLog{}))))
+	}
+	is.Equal(task.bufferedCount, defaultMaxBatchSize) // held past the default without flushing
+
+	dest.EXPECT().Write(ctx, recs).DoAndReturn(func(_ context.Context, got []opencdc.Record) error {
+		is.Equal(len(got), requested)
+		for i := range got {
+			is.Equal(got[i].Position, recs[i].Position) // order preserved
+		}
+		return nil
+	})
+	dest.EXPECT().Ack(ctx).Return(toDestinationAcks(recs, nil), nil)
+
+	// The final record reaches the requested threshold and flushes the whole batch.
+	is.NoErr(task.doBuffered(ctx, NewBatch([]opencdc.Record{recs[requested-1]}), newRecordingAckNacker(&eventLog{})))
+	is.Equal(task.bufferedCount, 0)
+}
+
+// TestDestinationTask_DoBuffered_DefaultFlushesAt3000 proves the new default:
+// a destination that enables batching with sdk.batch.delay but no sdk.batch.size
+// flushes at defaultMaxBatchSize records in one Write, in source order, and the
+// buffer never grows past that bound (bounded memory).
+func TestDestinationTask_DoBuffered_DefaultFlushesAt3000(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	log := &eventLog{}
+	ctrl := gomock.NewController(t)
+	dest := NewMockDestination(ctrl)
+
+	recs := randomRecords(defaultMaxBatchSize)
+	// A delay far in the future means only the size threshold can trigger a
+	// flush, isolating the default size as the memory bound.
+	task := newBatchingTask(t, dest, 0, time.Hour)
+
+	// The first defaultMaxBatchSize-1 single-record reads buffer, bounded by
+	// the default: bufferedCount never exceeds defaultMaxBatchSize.
+	for i, rec := range recs[:defaultMaxBatchSize-1] {
+		is.True(isBuffered(task.doBuffered(ctx, NewBatch([]opencdc.Record{rec}), newRecordingAckNacker(log))))
+		is.Equal(task.bufferedCount, i+1)
+	}
+	is.Equal(len(log.snapshot()), 0) // nothing written, nothing acked while buffering
+
+	// The last record reaches the threshold and flushes: one Write of all
+	// records, then the destination ack, and only then the source acks.
+	dest.EXPECT().Write(ctx, recs).DoAndReturn(func(_ context.Context, got []opencdc.Record) error {
+		log.append("dest.write")
+		is.Equal(len(got), defaultMaxBatchSize)
+		for i := range got {
+			is.Equal(got[i].Position, recs[i].Position)
+		}
+		return nil
+	})
+	dest.EXPECT().Ack(ctx).DoAndReturn(func(context.Context) ([]connector.DestinationAck, error) {
+		log.append("dest.ack")
+		return toDestinationAcks(recs, nil), nil
+	})
+
+	is.NoErr(task.doBuffered(ctx, NewBatch([]opencdc.Record{recs[defaultMaxBatchSize-1]}), newRecordingAckNacker(log)))
+	is.Equal(task.bufferedCount, 0)
+
+	// Invariant 1: every source ack is strictly after the destination write+ack.
+	events := log.snapshot()
+	is.Equal(events[:2], []string{"dest.write", "dest.ack"})
+	for _, ev := range events[2:] {
+		is.Equal(ev, "acker.ack")
+	}
+	is.Equal(len(events), 2+defaultMaxBatchSize)
+}
+
 func BenchmarkDestinationTask_DoBuffered(b *testing.B) {
 	ctx := context.Background()
 	const batchSize = 100
