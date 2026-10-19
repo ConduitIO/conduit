@@ -1,4 +1,7 @@
 # benchi config for the v0.21 close-out benchmark:
+
+
+
 # Conduit vs Kafka Connect (Debezium Postgres) vs Redpanda Connect on an
 # equivalent Postgres CDC workload, with a file sink, a Postgres destination
 # and an S3 destination.
@@ -66,6 +69,12 @@ tools:
     compose: ./tools/compose-conduit-s3.yml
   connect-s3:
     compose: ./tools/compose-connect-s3.yml
+  conduit-kafka:
+    compose: ./tools/compose-conduit-kafka.yml
+  connect-kafka:
+    compose: ./tools/compose-connect-kafka.yml
+  connect-kafka:
+    compose: ./tools/compose-connect-kafka.yml
 
 metrics:
   # CPU/memory of the DB only — a workload-invariance check, not the metric.

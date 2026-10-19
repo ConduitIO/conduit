@@ -139,6 +139,45 @@ EOF
   echo 'version: "2.2"'
   echo "pipelines:"
   for ((i = 0; i < TABLES; i++)); do
+
+
+# -- pipelines/conduit-kafka.yml ----------------------------------------------
+emit_kafka_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-kafka-${i}
+    status: running
+    name: cdc-parity-kafka-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> Kafka
+      destination (topic cdcparitykafka.public.bench_source_${i}). Ground truth =
+      records produced to the topic (summed across tables).
+    connectors:
+      - id: cdc-parity-kafka-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_kafka_slot_${i}"
+          logrepl.publicationName: "conduit_kafka_pub_${i}"
+          logrepl.autoCleanup: "false"
+          logrepl.withAvroSchema: "false"
+          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
+          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
+      - id: cdc-parity-kafka-${i}:kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: "cdcparity-kafka:9092"
+          topic: "cdcparitykafka.public.bench_source_${i}"
+          acks: "all"
+          sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
+          sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
+EOF
+}
     emit_file_pipeline "$i"
   done
 } > pipelines/conduit.yml
@@ -275,6 +314,7 @@ EOF
   echo "pipelines:"
   for ((i = 0; i < TABLES; i++)); do
     emit_s3_pipeline "$i"
+    emit_kafka_pipeline "$i"
   done
 } > pipelines/conduit-s3.yml
 

@@ -35,7 +35,7 @@ ROUNDS=${1:-3}
 shift || true
 ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
-  ARMS=(conduit conduit-aa connect redpanda-connect conduit-pg connect-pg conduit-s3 connect-s3)
+  ARMS=(conduit conduit-aa connect redpanda-connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka)
 fi
 
 # Number of source tables (and source+destination pairs). The workload is
@@ -123,7 +123,7 @@ run() { # tool label
   # count events and write immediately (no delay).
   local loader_delay=0
   case "$tool" in
-    conduit-pg|connect-pg|conduit-s3|connect-s3) loader_delay="${LOADER_DELAY:-120s}" ;;
+    conduit-pg|connect-pg|conduit-s3|connect-s3|conduit-kafka|connect-kafka) loader_delay="${LOADER_DELAY:-120s}" ;;
   esac
   # Bounded: a stuck arm cannot hold the machine (each arm has its own
   # registration/warmup waits, so 900s is generous).

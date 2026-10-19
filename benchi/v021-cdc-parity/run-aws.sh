@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
 done
 ROUNDS=${ARGS[0]:-3}
 REST=("${ARGS[@]:1}")
-if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3); fi
+if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka); fi
 
 SSH_KEY=.ssh/conduit-bench.pem
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
