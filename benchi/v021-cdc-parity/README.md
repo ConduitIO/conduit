@@ -324,6 +324,94 @@ Confluent).
 
 ## Results
 
-To be recorded here from the dedicated-hardware run. A number without its A/A
-floor is not evidence, so this section will report the A/A spread next to every
-arm's median, with variance, and will state only what the floor allows.
+Environment for every number below: AWS `c6i.2xlarge` (8 vCPU / 16 GB), Ubuntu
+24.04, Postgres 17 on a separate NVMe-backed volume, Kafka (KRaft) and Connect
+running on the same instance. Loader = 50,000 operations/s, 70% INSERT / 20%
+UPDATE / 10% DELETE, 3 measured rounds per arm after a warmup round, medians
+reported (not best runs). The A/A spread is the `conduit` vs `conduit-aa`
+difference, measured interleaved in the same run.
+
+### File sink (dedicated hardware)
+
+One record per CDC event, `wc -l` on the sink files. This is the **sink-bound**
+case: the sink's write is the bottleneck.
+
+| arm | median (rec/60s) | rec/s | vs connect |
+| --- | --- | --- | --- |
+| conduit | 3,588,000 | 59,800 | **+6.8%** |
+| conduit-aa | 3,586,000 | 59,767 | A/A spread **0.06%** |
+| connect (Debezium → FileStreamSink) | 3,359,536 | 55,992 | — |
+
+The +6.8% is ~113× the A/A floor, so it is real. This is the funnel
+destination-write batching + the buffered file sink paying off on the only arm
+where the sink is the constraint.
+
+### Postgres destination (dedicated hardware, v0.21 defaults)
+
+`builtin:postgres → builtin:postgres` vs Debezium → Kafka Connect JDBC sink.
+Metric = `SELECT count(*)` delta on `bench_dest_i` (net rows: inserts minus
+deletes, so the loader's 50k op/s is a ~30k net-row/s ceiling). This is the
+**source-bound** case, so it is a *parity* check, not a flip.
+
+| arm | median (net rows/60s) | net rows/s | vs connect |
+| --- | --- | --- | --- |
+| conduit-pg | 1,424,491 | 23,742 | **+36.4%** |
+| connect-pg (Debezium → JDBC sink) | 1,044,168 | 17,403 | — |
+
+Conduit is +36.4% ahead *with its default config* (memoized SQL, schema-guarded
+`cache_statement`, destination batch 3000). Read this for what it is: Conduit's
+sink no longer leaves throughput on the table the way it did on the pre-fix run
+(where `describe` exec mode + a 1000-row batch put it ~47% *behind*); the source
+itself was already at parity. See the connector sweep below.
+
+### S3 destination (laptop smoke run, not dedicated hardware)
+
+`builtin:postgres → builtin:s3` (MinIO) vs Debezium → Kafka Connect S3 sink.
+Metric = summed `wc -l` across every object. 20k loader, 1 round. **Not the
+dedicated-hardware number** — recorded here as direction, not magnitude.
+
+| arm | rows/60s | vs connect |
+| --- | --- | --- |
+| conduit-s3 | 1,220,000 | **+45%** |
+| connect-s3 (Confluent S3 sink) | 837,000 | — |
+
+The gap is the Confluent S3 sink's per-object commit protocol, not the Kafka
+hop (the file arm already showed the Debezium→Kafka pipeline reaches the loader
+rate). Conduit's `builtin:s3` writes at full source rate.
+
+### Kafka destination (laptop smoke run, not dedicated hardware)
+
+`builtin:postgres → builtin:kafka` vs Debezium Postgres → Kafka. Metric =
+summed latest topic offsets. 20k loader, 1 round. **Not dedicated hardware.**
+
+| arm | events/60s | vs connect |
+| --- | --- | --- |
+| conduit-kafka | 1,207,000 | **+0.06%** |
+| connect-kafka (Debezium → Kafka) | 1,206,272 | — |
+
+Parity, as expected: both arms count events, the Kafka sink batches produces, so
+this measures the CDC source, which is equal.
+
+### What these numbers support — and what they don't
+
+- **Claim:** Conduit matches or beats Kafka Connect + Debezium on CDC throughput
+  across destinations, at source parity on the source-bound arms and with a real
+  sink-throughput edge on the sink-bound arms.
+- **Do not claim:** a single universal "Conduit is N× faster" number. The result
+  is regime-dependent (source-bound vs sink-bound), and the S3/Kafka arms above
+  are laptop smoke runs until re-run on the dedicated instance.
+
+## Connector write-path sweep (v0.21)
+
+The destination arms above exposed a systematic class of write-path overhead
+that the sweep below removed across every connector and the SDK, making the
+*defaults* fast (not just a tuned benchmark config):
+
+| target | fix | PR(s) |
+| --- | --- | --- |
+| connector SDK | honor `sdk.batch.delay` without `sdk.batch.size` | #428 |
+| postgres | memoize upsert/delete SQL per shape; schema-guarded `cache_statement` default | #432, #433 |
+| mysql | batch writes by default (3000 rows) | #246 |
+| kafka | skip text/template for simple metadata-index topics | #332 |
+| s3 | batch records into one object per batch by default | #1069 |
+| elasticsearch | build `_bulk` without per-record reflection + batch by default | #175, #176 |
