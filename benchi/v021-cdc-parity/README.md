@@ -3,7 +3,7 @@
 A reproducible, ground-truth comparison of CDC pipelines on one equivalent
 workload: one or more Postgres tables (`TABLES`, default 1) receiving a steady,
 fixed-rate stream of INSERT/UPDATE/DELETE, captured by each system and delivered
-to a sink whose accumulated count is the measured quantity. Two destination
+to a sink whose accumulated count is the measured quantity. Three destination
 kinds are measured:
 
 - **file sink** (`conduit`, `conduit-aa`, `connect`, `redpanda-connect`): one
@@ -11,6 +11,9 @@ kinds are measured:
 - **Postgres destination** (`conduit-pg`, `connect-pg`): one destination table
   (`bench_dest_i`) per source table, whose summed row count (`SELECT count(*)`)
   is the metric.
+- **S3 destination** (`conduit-s3`, `connect-s3`): CDC events written as JSON
+  objects to a local MinIO bucket, whose summed line count (`wc -l` across every
+  object) is the metric.
 
 The method follows `benchi/METHODOLOGY.md`: the metric is **ground truth**
 (what the sink actually wrote), every comparison carries an **A/A control** to
@@ -33,6 +36,8 @@ is captured.
 | `redpanda-connect` | `postgres_cdc` input (`stream_snapshot: false`) → `file` output (`codec: lines`); single-table, blocked by licensing | `config/redpanda.yaml`, `tools/compose-redpanda.yml` |
 | `conduit-pg` | `TABLES` pipelines, each a `builtin:postgres` source (same config as `conduit`) → `builtin:postgres` destination (`table: bench_dest_i`, `sdk.batch.size`/`sdk.batch.delay` on both source and destination) | `pipelines/conduit-pg.yml` (generated), `tools/compose-conduit-pg.yml` |
 | `connect-pg` | `TABLES` Debezium Postgres source connectors (`pgoutput`, `snapshot.mode: never`, `unwrap` transform) → Kafka broker → `TABLES` Confluent JDBC sink connectors (`insert.mode: upsert`, `pk.mode: record_key`, `delete.enabled`) writing `bench_dest_i` | `tools/compose-connect-pg.yml`, `tools/connect.Dockerfile`, registration loop in `bench.yml` |
+| `conduit-s3` | `TABLES` pipelines, each a `builtin:postgres` source (same config as `conduit`) → `builtin:s3` destination (`format: json`, `aws.endpoint`/`aws.pathStyle` pointing at the local MinIO, `sdk.batch.size`/`sdk.batch.delay` on both source and destination) | `pipelines/conduit-s3.yml` (generated), `tools/compose-conduit-s3.yml` |
+| `connect-s3` | `TABLES` Debezium Postgres source connectors (byte-for-byte the `connect` source, `pgoutput`, `snapshot.mode: never`, no unwrap) → Kafka broker → `TABLES` Confluent S3 sink connectors (`format.class: JsonFormat`, `flush.size: 1000`, `store.url`/`path.style.access.enabled` pointing at the local MinIO) writing the bucket `bench` | `tools/compose-connect-s3.yml`, `tools/connect.Dockerfile`, registration loop in `bench.yml` |
 
 The workload generator (`loader/`) is the SAME container for every arm: a Go
 program writing a 70/20/10 INSERT/UPDATE/DELETE mix at a fixed `-rate` (default
@@ -64,6 +69,13 @@ source tables; the destination tables are populated by the pipeline under test.
   same way (`insert.mode: upsert`, `pk.mode: record_key`, `delete.enabled`).
   So both destination tables converge to the same row count for the same
   captured stream.
+- **S3-destination write semantics**: `conduit-s3` and `connect-s3` both write
+  one JSON line per CDC event — the builtin:s3 `format: json` writes one
+  OpenCDC-shaped object per line, the S3 sink's `JsonFormat` writes one
+  bare-value Debezium envelope per line — so the line count across the bucket
+  is the event count for both. Both batch into objects (`sdk.batch.size` on the
+  Conduit side, `flush.size` on the Connect side), so the sink is not the
+  limiter.
 
 ## What is NOT equivalent
 
@@ -81,7 +93,15 @@ source tables; the destination tables are populated by the pipeline under test.
   count at the default 70/20/10 mix) — a LOWER number than the file arms'
   event count, and **not directly comparable to it**. The two Postgres-
   destination arms are comparable to *each other*; the two file-sink arms to
-  *each other*.
+  *each other*; and the two S3-destination arms to *each other* (and, as an
+  event count, to the file-sink arms' event count, though the S3 arms are run
+  with the loader delay and the file arms are not).
+- **S3 objects differ in layout and line content.** The Conduit `format: json`
+  writes one OpenCDC-shaped object per line to flat keys
+  (`<UnixNano>.json`); the Connect `JsonFormat` writes the bare Debezium
+  envelope to `topics/<topic>/partition=0/<name>.json`. The metrics are line
+  counts, which are insensitive to both, but a consumer of the exact object
+  keys or line shape would see a difference.
 - **Postgres sinks write differently under the hood.** The builtin:postgres
   destination builds per-record `INSERT … ON CONFLICT (id) DO UPDATE` /
   `DELETE` statements and batches via the engine's funnel batching
@@ -121,27 +141,41 @@ means nothing.** Every result below is reported next to the A/A spread, and the
 A/A control runs interleaved with the A/B arms (rotated order), not as a
 separate block.
 
-## The Postgres-destination arms are a parity check
+## The Postgres- and S3-destination arms are a parity check
 
 The two Postgres-destination arms exist to measure the real "CDC→Postgres"
 workload people index on: Conduit `builtin:postgres → builtin:postgres` vs
-Debezium Postgres → Kafka Connect JDBC sink. Because both sinks batch writes
-internally, the sink is not the limiter; the measured quantity is how fast the
-SOURCE captures CDC events. Both sources read the same pgoutput stream, so the
-expected result is **parity** — equal `rows_delta` per window — not a throughput
-flip. A systematic gap between `conduit-pg` and `connect-pg` would point at the
-source (logrepl vs Debezium) or the Kafka hop, and would need to be read
-against the A/A floor before it means anything.
+Debezium Postgres → Kafka Connect JDBC sink. The two S3-destination arms do the
+same for "CDC→object storage": Conduit `builtin:postgres → builtin:s3` vs
+Debezium Postgres → Kafka Connect S3 sink. Because both sinks batch writes
+internally (funnel batching / `batch.size` for Postgres, `sdk.batch.size` /
+`flush.size` for S3), the sink is not the limiter; the measured quantity is how
+fast the SOURCE captures CDC events. Both sources read the same pgoutput
+stream, so the expected result is **parity** — equal `rows_delta` per window —
+not a throughput flip. A systematic gap between `conduit-pg` and `connect-pg`,
+or between `conduit-s3` and `connect-s3`, would point at the source (logrepl vs
+Debezium) or the Kafka hop, and would need to be read against the A/A floor
+before it means anything.
 
-Because the destination mirrors the source's LIVE rows, the loader must not
-write before the `snapshotMode: never` source has created its replication slot:
-a row written before the slot exists would never be captured, and updates to
-those phantom rows would upsert-INSERT extra rows (while deletes of them would
-be no-ops), inflating `rows_delta` by however long the tool took to start.
+Because the Postgres destination mirrors the source's LIVE rows, the loader must
+not write before the `snapshotMode: never` source has created its replication
+slot: a row written before the slot exists would never be captured, and updates
+to those phantom rows would upsert-INSERT extra rows (while deletes of them
+would be no-ops), inflating `rows_delta` by however long the tool took to start.
 `run.sh` therefore passes `LOADER_DELAY` (default `120s`) to the loader on the
 two Postgres-destination arms only, so the loader waits for the slot before its
 first write. The file-sink arms count events, not net rows, so they need no
 delay and pass `0`.
+
+The S3-destination arms also get `LOADER_DELAY`, but for a different reason:
+they count *events*, so a pre-slot write cannot create a phantom-row artifact —
+it is simply never captured. The delay is applied anyway for methodological
+consistency with the other parity arms, so the loader's initial fill happens
+*after* the slot exists (a captured, clean steady-state stream) and both
+`conduit-s3` and `connect-s3` start their measured window from the same point.
+This is a documented non-equivalence only against the file-sink arms, which
+write immediately; it does not affect the `conduit-s3` vs `connect-s3` parity
+(they both get the same delay).
 
 ## Redpanda Connect: blocked by licensing (honest status)
 
@@ -169,6 +203,10 @@ kind:
 - **Postgres-destination arms**: `ROWS_BEFORE` / `ROWS_AFTER` are the SUM of
   `SELECT count(*)` across `bench_dest_0` .. `bench_dest_{TABLES-1}` — the live
   rows the destination holds, i.e. the *net* rows captured.
+- **S3-destination arms**: `ROWS_BEFORE` / `ROWS_AFTER` are the SUM of `wc -l`
+  across every object in the MinIO bucket `bench` (the counter container
+  downloads the bucket with `aws s3 cp --recursive` and cats the objects) — the
+  total CDC events delivered.
 
 ```
 throughput = (ROWS_AFTER - ROWS_BEFORE) / test_duration
@@ -179,7 +217,8 @@ for the sink to start accumulating (pipeline startup falls outside the window),
 warms up 15 s, then records `ROWS_BEFORE`; the `post-test` hook records
 `ROWS_AFTER`. `run.sh` computes the per-run rate and reports medians with
 variance over the rounds. The count hooks run in the `cdcparity-counter`
-container (`psql` is installed there), against the same Postgres the arm writes.
+container (`psql` and the AWS CLI are installed there), against the same
+Postgres / MinIO the arm writes.
 
 ## Reproducing
 
@@ -188,7 +227,8 @@ container (`psql` is installed there), against the same Postgres the arm writes.
 cd benchi/v021-cdc-parity
 ./run.sh 3 conduit conduit-aa connect                    # 3 rounds, A/A + file arms
 ./run.sh 3 conduit-pg connect-pg                         # 3 rounds, Postgres-destination parity pair
-./run.sh 3 conduit conduit-aa connect conduit-pg connect-pg   # both destination kinds
+./run.sh 3 conduit-s3 connect-s3                         # 3 rounds, S3-destination parity pair
+./run.sh 3 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3   # all destination kinds
 
 # N-way (2 tables): 2 sources + 2 sinks per arm, summed ground truth
 TABLES=2 ./run.sh 3 conduit-pg connect-pg
@@ -197,24 +237,29 @@ TABLES=2 ./run.sh 3 conduit-pg connect-pg
 CONDUIT_BATCH_SIZE=2048 ./run.sh 3 conduit-pg
 
 # dedicated AWS instance (see run-aws.sh)
-TABLES=2 ./run-aws.sh 3 conduit conduit-aa connect conduit-pg connect-pg
+TABLES=2 ./run-aws.sh 3 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3
 ```
 
 `TABLES` (default 1; sweep 1, 2, 4), `CONDUIT_BATCH_SIZE` (default 1000),
 `CONDUIT_BATCH_DELAY` (default 100ms) and `LOADER_DELAY` (default 120s,
-Postgres-destination arms only) are read by `run.sh`, which runs
+Postgres- and S3-destination arms only) are read by `run.sh`, which runs
 `scripts/generate.sh` to regenerate `pipelines/conduit.yml`,
-`pipelines/conduit-pg.yml` and `infra/init.sql` for the given `TABLES`, then
-exports `TABLES` to docker compose (the loader's `--tables` flag, and the
-counter container's env for the connect registration loops in `bench.yml`).
+`pipelines/conduit-pg.yml`, `pipelines/conduit-s3.yml` and `infra/init.sql` for
+the given `TABLES`, then exports `TABLES` to docker compose (the loader's
+`--tables` flag, and the counter container's env for the connect registration
+loops in `bench.yml`).
 
 Prerequisites: Docker, `go` (for the loader), `benchi` (v0.4.1+), and the
 images `postgres:17`, `alpine:3.20`, `apache/kafka:4.0.0`,
-`quay.io/debezium/connect:3.2`, and
-`docker.redpanda.com/redpandadata/connect:latest`. `run.sh` builds the Conduit
-image from the working tree and the Connect image from `tools/connect.Dockerfile`
-(which also downloads the Confluent JDBC sink connector and Postgres driver from
-Maven).
+`quay.io/debezium/connect:3.2`,
+`docker.redpanda.com/redpandadata/connect:latest`, and the MinIO build
+`pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372`
+(the S3-destination arms' object store; `minio/minio` was removed from Docker
+Hub, and `pgsty/minio` is the maintained community build the rest of the
+ecosystem pins). `run.sh` builds the Conduit image from the working tree and the
+Connect image from `tools/connect.Dockerfile` (which also downloads the Confluent
+JDBC sink connector + Postgres driver and the Confluent S3 sink connector from
+Confluent).
 
 ## Results
 

@@ -41,8 +41,9 @@ services:
     # Built by run.sh from tools/connect.Dockerfile: the Debezium connect image
     # plus the bundled connect-file JAR placed on the plugin path so
     # FileStreamSinkConnector is available as the counting sink, and the
-    # Confluent JDBC sink connector (used only by the connect-pg arm).
-    image: connect-debezium-jdbc:3.2
+    # Confluent JDBC sink connector (used only by the connect-pg arm) and the
+    # Confluent S3 sink connector (used only by the connect-s3 arm).
+    image: connect-debezium:3.2
     container_name: cdcparity-connect
     pull_policy: never
     environment:

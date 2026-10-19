@@ -6,17 +6,23 @@
 #               conduit-connector-postgres/benchi/destination-exec-mode).
 #   loader    — the SAME record generator for every arm: it writes a fixed-rate
 #               INSERT/UPDATE/DELETE mix into bench_source (see ../loader).
+#   minio     — the S3-compatible object store the S3-destination arms
+#               (conduit-s3, connect-s3) write into. Data lives on tmpfs so each
+#               arm starts from an empty bucket, matching the Postgres tmpfs
+#               rationale; the counter's reset-s3 hook creates the bucket.
 #   counter   — holds the shared ground-truth sink volume mounted at /sink, so
 #               the pre/post-test hooks can run `wc -l` on the sink file the
 #               tool under test is writing; it also carries psql so the
 #               Postgres-destination arms' hooks can run `SELECT count(*)`
-#               against bench_dest_*. It is NOT part of the measured pipeline;
-#               it only counts what the sink actually wrote.
+#               against bench_dest_*, and the AWS CLI so the S3-destination
+#               arms' hooks can count the records the sink wrote to MinIO. It is
+#               NOT part of the measured pipeline; it only counts what the sink
+#               actually wrote.
 #
 # The sink volume cdcparity-sink is a Docker named volume created once by
 # run.sh (docker volume create cdcparity-sink). It is shared by the infra
-# (counter) and by every tool compose, so all three arms write to the SAME
-# place and are counted by the SAME `wc -l`.
+# (counter) and by every file-sink tool compose, so all file arms write to the
+# SAME place and are counted by the SAME `wc -l`.
 services:
   postgres:
     image: postgres:17
@@ -56,8 +62,8 @@ services:
       - "${LOADER_RATE:-20000}"
       - -tables
       - "${TABLES:-1}"
-      # Postgres-destination arms only: wait for the CDC source's replication
-      # slot (snapshotMode never) before writing, so the destination's row count
+      # Postgres- and S3-destination arms: wait for the CDC source's replication
+      # slot (snapshotMode never) before writing, so the destination's count
       # reflects only post-slot steady-state changes (see ../loader).
       - -delay
       - "${LOADER_DELAY:-0}"
@@ -70,19 +76,57 @@ services:
     networks:
       - benchi
 
+  minio:
+    # The S3-compatible object store for the conduit-s3 / connect-s3 arms.
+    # MinIO stopped publishing images: minio/minio was removed from Docker Hub
+    # and quay.io/minio/minio requires authentication; pgsty/minio is a
+    # maintained community build of the same server (same entrypoint, env vars,
+    # health endpoint and bundled curl), pinned by multi-arch index digest —
+    # the same pin as ConduitIO/conduit test/compose-templates.yaml and
+    # conduit-connector-s3 test/docker-compose.yml.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    container_name: cdcparity-minio
+    environment:
+      MINIO_ROOT_USER: conduitminio
+      MINIO_ROOT_PASSWORD: conduitminiosecret
+      # KMS enables SSE-S3 server-side encryption, which the s3 destination can
+      # request; without it MinIO answers 501. Same dev key as the conduit and
+      # connector test compose files.
+      MINIO_KMS_SECRET_KEY: my-minio-key:OSMM+vkKUTCvQs9YL/CVMIMt43HFhkTiqZC7QkYYkYI=
+    command: server /data
+    # Data on tmpfs: each arm starts from an empty bucket and nothing is left
+    # behind (the S3-destination analog of the Postgres tmpfs).
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    networks:
+      - benchi
+
   counter:
     image: alpine:3.20
     container_name: cdcparity-counter
     # TABLES is exposed so the connect-arm registration hooks (bench.yml
     # post-tool) can loop over the same N tables from inside this container.
+    # AWS_* lets the AWS CLI count objects in MinIO (the S3-destination arms'
+    # ground truth) without a region prompt or an EC2 metadata lookup.
     environment:
       - TABLES=${TABLES:-1}
+      - AWS_ACCESS_KEY_ID=conduitminio
+      - AWS_SECRET_ACCESS_KEY=conduitminiosecret
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
     # postgresql-client gives this container psql so the Postgres-destination
-    # arms' ground-truth hooks can run `SELECT count(*)` against bench_dest_*.
+    # arms' ground-truth hooks can run `SELECT count(*)` against bench_dest_*;
+    # aws-cli lets the S3-destination arms' hooks count the records the sink
+    # wrote to MinIO.
     command:
       - sh
       - -c
-      - apk add --no-cache postgresql-client >/dev/null && sleep infinity
+      - apk add --no-cache postgresql-client aws-cli >/dev/null && sleep infinity
     volumes:
       - cdcparity-sink:/sink
     networks:

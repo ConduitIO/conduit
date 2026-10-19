@@ -40,9 +40,10 @@ services:
 
   connect:
     # Built by run.sh from tools/connect.Dockerfile: the Debezium connect image
-    # plus the bundled connect-file JAR (for the connect arm) and the Confluent
-    # JDBC sink connector + Postgres driver (for this arm).
-    image: connect-debezium-jdbc:3.2
+    # plus the bundled connect-file JAR (for the connect arm), the Confluent
+    # JDBC sink connector + Postgres driver (for this arm) and the Confluent S3
+    # sink connector (for the connect-s3 arm).
+    image: connect-debezium:3.2
     container_name: cdcparity-connect-pg
     pull_policy: never
     environment:

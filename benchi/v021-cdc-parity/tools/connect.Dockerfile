@@ -1,4 +1,5 @@
-# Kafka Connect worker for the Debezium arms (connect and connect-pg).
+# Kafka Connect worker for the Debezium arms (connect, connect-pg and
+# connect-s3).
 #
 # quay.io/debezium/connect:3.2 ships the Debezium source/sink connectors on its
 # plugin path (/kafka/connect) and Kafka 4.0.0's connect-file JAR on its
@@ -14,6 +15,16 @@
 # bench_dest_i. The connector JAR is fetched from Confluent's Maven repo; the
 # Postgres JDBC driver and the connector's re2j/jsqlparser runtime deps are
 # fetched from Maven Central, all pinned to exact versions.
+#
+# Finally it installs the Confluent S3 sink connector
+# (io.confluent.connect.s3.S3SinkConnector) for the `connect-s3` arm:
+# Debezium Postgres source -> Kafka -> S3 sink writing bench_source_i -> the
+# MinIO bucket "bench". The connector ships as a self-contained Confluent Hub
+# archive (its own storage-common/core/format/partitioner JARs, AWS SDK v2 and
+# Avro/Parquet/Hadoop deps), so the archive is downloaded and unpacked whole
+# rather than hand-listing every transitive JAR; the version is pinned, and the
+# plugin-path directory keeps its classloader isolated from the file/JDBC/Debezium
+# plugins.
 FROM quay.io/debezium/connect:3.2
 
 USER root
@@ -27,5 +38,11 @@ RUN mkdir -p /kafka/connect/kafka-connect-file \
     && curl -fsSL -o /kafka/connect/kafka-connect-jdbc/re2j-1.7.jar \
          https://repo1.maven.org/maven2/com/google/re2j/re2j/1.7/re2j-1.7.jar \
     && curl -fsSL -o /kafka/connect/kafka-connect-jdbc/jsqlparser-4.9.jar \
-         https://repo1.maven.org/maven2/com/github/jsqlparser/jsqlparser/4.9/jsqlparser-4.9.jar
+         https://repo1.maven.org/maven2/com/github/jsqlparser/jsqlparser/4.9/jsqlparser-4.9.jar \
+    && mkdir -p /kafka/connect/kafka-connect-s3 \
+    && curl -fsSL -o /tmp/kafka-connect-s3.zip \
+         https://hub-downloads.confluent.io/api/plugins/confluentinc/kafka-connect-s3/versions/12.1.11/confluentinc-kafka-connect-s3-12.1.11.zip \
+    && unzip -q /tmp/kafka-connect-s3.zip -d /tmp/kafka-connect-s3 \
+    && cp /tmp/kafka-connect-s3/confluentinc-kafka-connect-s3-12.1.11/lib/*.jar /kafka/connect/kafka-connect-s3/ \
+    && rm -rf /tmp/kafka-connect-s3.zip /tmp/kafka-connect-s3
 USER kafka

@@ -5,9 +5,9 @@
 #
 #   ROUNDS   number of full rounds (default 3); one warmup round is discarded.
 #   ARM ...  subset of arms: conduit conduit-aa connect conduit-pg connect-pg
-#            (default: all five). redpanda-connect is NOT run by default — its
-#            postgres_cdc input is Redpanda Connect ENTERPRISE, so a stock
-#            build refuses to start; see README.md.
+#            conduit-s3 connect-s3 (default: all seven). redpanda-connect is
+#            NOT run by default — its postgres_cdc input is Redpanda Connect
+#            ENTERPRISE, so a stock build refuses to start; see README.md.
 #   --keep   keep the instance running after the run (default: destroy it).
 #
 # End to end:
@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
 done
 ROUNDS=${ARGS[0]:-3}
 REST=("${ARGS[@]:1}")
-if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg); fi
+if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3); fi
 
 SSH_KEY=.ssh/conduit-bench.pem
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)

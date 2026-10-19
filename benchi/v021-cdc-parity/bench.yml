@@ -1,11 +1,11 @@
 # benchi config for the v0.21 close-out benchmark:
 # Conduit vs Kafka Connect (Debezium Postgres) vs Redpanda Connect on an
-# equivalent Postgres CDC workload, with both a file sink and a Postgres
-# destination.
+# equivalent Postgres CDC workload, with a file sink, a Postgres destination
+# and an S3 destination.
 #
 # THE METRIC IS GROUND TRUTH, NOT ENGINE METRICS. No Conduit/Kafka/Redpanda
 # metric is read for the comparison (benchi/METHODOLOGY.md: the retracted
-# msg-rate-per-second measured instrumentation, not throughput). Two ground
+# msg-rate-per-second measured instrumentation, not throughput). Three ground
 # truths are used, one per destination kind:
 #
 #   file-sink arms (conduit, conduit-aa, connect, redpanda-connect) write one
@@ -18,11 +18,17 @@
 #   key (id) and deletes on delete events, so the row count mirrors the LIVE
 #   rows of the source — the delta over the window is the net rows captured.
 #
-# In both cases: throughput = (count after - count before) / test duration.
+#   S3-destination arms (conduit-s3, connect-s3) write one JSON line per CDC
+#   event to objects in a local MinIO bucket; the pre/post hooks download every
+#   object and run `wc -l` on the SUM of lines across them.
+#
+# In all three cases: throughput = (count after - count before) / test duration.
 # The Postgres sink batches internally (funnel batching on the conduit side,
-# JDBC batch.size on the Connect side), so the SOURCE — not the sink — is what
-# is measured; the two Postgres-destination arms are a PARITY check, not a
-# throughput flip. See README.md and run.sh.
+# JDBC batch.size on the Connect side), and the S3 sink batches into objects
+# (sdk.batch.size on the conduit side, flush.size on the Connect side), so the
+# SOURCE — not the sink — is what is measured; the two Postgres-destination and
+# two S3-destination arms are each a PARITY check, not a throughput flip. See
+# README.md and run.sh.
 #
 # A/A CONTROL: `conduit-aa` is byte-for-byte the same image and pipeline as
 # `conduit` (only the container name differs). The spread between them is the
@@ -36,8 +42,8 @@
 # infra/compose.yml and loader/. TABLES (default 1) is exported by run.sh and
 # reaches the loader (`--tables`) and the connect registration hooks via
 # docker compose env substitution; scripts/generate.sh regenerates
-# pipelines/conduit.yml, pipelines/conduit-pg.yml and infra/init.sql for the
-# same TABLES.
+# pipelines/conduit.yml, pipelines/conduit-pg.yml, pipelines/conduit-s3.yml and
+# infra/init.sql for the same TABLES.
 
 infrastructure:
   postgres:
@@ -56,13 +62,18 @@ tools:
     compose: ./tools/compose-conduit-pg.yml
   connect-pg:
     compose: ./tools/compose-connect-pg.yml
+  conduit-s3:
+    compose: ./tools/compose-conduit-s3.yml
+  connect-s3:
+    compose: ./tools/compose-connect-s3.yml
 
 metrics:
   # CPU/memory of the DB only — a workload-invariance check, not the metric.
   # The loader writes at a fixed rate, so Postgres CPU should stay ~constant
   # across arms; a big swing would signal the workload drifted. The comparison
-  # number itself comes from the ground-truth hooks (wc -l for file arms,
-  # SELECT count(*) for Postgres-destination arms), never from a collector.
+  # number itself comes from the ground-truth hooks (wc -l for file and S3
+  # arms, SELECT count(*) for Postgres-destination arms), never from a
+  # collector.
   docker:
     collector: docker
     settings:
@@ -97,6 +108,27 @@ tests:
             - connect
             - redpanda-connect
           run: chmod 777 /sink && rm -f /sink/out.txt /sink/out_*.txt
+
+        # S3-destination arms only: create the MinIO bucket and clear anything a
+        # previous tool left behind. The counter installs aws-cli at container
+        # start, which races this early hook, so wait for the binary first; MinIO
+        # data is on tmpfs, so the bucket does not exist yet and mb creates it.
+        # This runs well before the sink writes (the loader waits LOADER_DELAY for
+        # the source's replication slot), so the bucket is always ready in time.
+        - name: reset-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            n=0
+            until command -v aws >/dev/null 2>&1; do
+              n=$((n+1))
+              if [ "$n" -ge 120 ]; then break; fi
+              sleep 1
+            done
+            aws --endpoint-url http://cdcparity-minio:9000 s3 mb s3://bench 2>/dev/null || true
+            aws --endpoint-url http://cdcparity-minio:9000 s3 rm --recursive s3://bench 2>/dev/null || true
 
       post-tool:
         # Kafka Connect + Debezium only: register N Debezium Postgres source
@@ -165,6 +197,42 @@ tests:
             done
             echo "connect-pg connectors registered (N=$N)"
 
+        # Kafka Connect + Debezium + S3-sink arm (connect-s3): register N
+        # Debezium Postgres source connectors (byte-for-byte the same pgoutput
+        # source as the connect arm, no unwrap — the S3 sink counts events, not
+        # net rows, so the Debezium envelope is written as-is) and N Confluent
+        # S3 sink connectors writing bench_source_i -> the MinIO bucket "bench".
+        # JsonFormat writes one bare-value JSON line per record (the Debezium
+        # envelope), matching the conduit-s3 destination's one-line-per-record
+        # json format. rotate.interval.ms mirrors conduit-s3's sdk.batch.delay:
+        # a time-based flush of a partial object, so neither sink holds an object
+        # open indefinitely.
+        - name: register-connect-s3-connectors
+          container: cdcparity-counter
+          tools:
+            - connect-s3
+          run: |
+            n=0
+            until wget -q -O /dev/null http://cdcparity-connect-s3:8083/connectors 2>/dev/null; do
+              n=$((n+1))
+              if [ "$n" -ge 240 ]; then echo "connect REST API never came up"; exit 1; fi
+              sleep 1
+            done
+
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              cat > /tmp/debezium-source-s3.json <<JSON
+            {"name":"debezium-s3-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparity","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_slot_${i}","publication.name":"debezium_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            JSON
+              cat > /tmp/s3-sink.json <<JSON
+            {"name":"s3-sink-${i}","config":{"connector.class":"io.confluent.connect.s3.S3SinkConnector","tasks.max":"1","topics":"cdcparity.public.${t}","format.class":"io.confluent.connect.s3.format.json.JsonFormat","flush.size":"1000","rotate.interval.ms":"1000","storage.class":"io.confluent.connect.s3.storage.S3Storage","partitioner.class":"io.confluent.connect.storage.partitioner.DefaultPartitioner","s3.bucket.name":"bench","s3.region":"us-east-1","store.url":"http://cdcparity-minio:9000","path.style.access.enabled":"true","aws.access.key.id":"conduitminio","aws.secret.access.key":"conduitminiosecret","schema.compatibility":"NONE"}}
+            JSON
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source-s3.json http://cdcparity-connect-s3:8083/connectors
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/s3-sink.json http://cdcparity-connect-s3:8083/connectors
+            done
+            echo "connect-s3 connectors registered (N=$N)"
+
       pre-test:
         # File-sink arms: wait until the CDC pipeline is streaming (sum of sink
         # lines > 0, up to 180s), warm up 15s, then count. Ground truth is the
@@ -217,6 +285,34 @@ tests:
             sleep 15
             echo "ROWS_BEFORE=$(count)"
 
+        # S3-destination arms: wait until the bucket has at least one object
+        # (up to 180s), warm up 15s, then count. Ground truth is the SUM of
+        # `wc -l` across every object in the bucket: the conduit-s3 builtin:s3
+        # format json and the connect-s3 JsonFormat both write one JSON line per
+        # CDC event, so the line count is the event count. The wait loop uses a
+        # cheap list-objects (metadata) call; only the two counts (before/after)
+        # download and cat every object.
+        - name: wait-and-count-before-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            count() {
+              rm -rf /tmp/s3dump
+              aws --endpoint-url http://cdcparity-minio:9000 s3 cp --recursive s3://bench/ /tmp/s3dump --quiet 2>/dev/null || true
+              find /tmp/s3dump -type f -exec cat {} + 2>/dev/null | wc -l | tr -d ' '
+            }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              cnt=$(aws --endpoint-url http://cdcparity-minio:9000 s3api list-objects-v2 --bucket bench --max-keys 1 --query 'KeyCount' --output text 2>/dev/null || echo 0)
+              if [ "${cnt:-0}" -gt 0 ]; then break; fi
+              n=$((n+1))
+              sleep 1
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(count)"
+
       post-test:
         - name: count-after
           container: cdcparity-counter
@@ -247,3 +343,13 @@ tests:
               echo "${c:-0}"
             }
             echo "ROWS_AFTER=$(count)"
+
+        - name: count-after-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            rm -rf /tmp/s3dump
+            aws --endpoint-url http://cdcparity-minio:9000 s3 cp --recursive s3://bench/ /tmp/s3dump --quiet 2>/dev/null || true
+            echo "ROWS_AFTER=$(find /tmp/s3dump -type f -exec cat {} + 2>/dev/null | wc -l | tr -d ' ')"

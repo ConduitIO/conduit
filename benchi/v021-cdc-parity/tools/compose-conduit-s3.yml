@@ -1,0 +1,35 @@
+# Conduit S3-destination arm (conduit-s3). Built from the SAME
+# conduit-bench:v021-cdc-parity image as the conduit arm by run.sh, but runs the
+# S3-destination pipeline (../pipelines/conduit-s3.yml) instead of the file-sink
+# pipeline: builtin:postgres CDC source (bench_source_i) -> builtin:s3
+# destination (MinIO bucket "bench").
+#
+# No sink volume is mounted: ground truth for this arm is the records the
+# builtin:s3 sink wrote to MinIO, counted by the count hooks in ../bench.yml
+# (which run in the counter container against the MinIO service), not a file.
+# The source connector config is byte-for-byte the same as the file-sink conduit
+# arm, so the only variable is the sink.
+services:
+  conduit:
+    image: conduit-bench:v021-cdc-parity
+    container_name: cdcparity-conduit-s3
+    # Built locally and never pushed; benchi's `docker compose pull` must not
+    # try to fetch it.
+    pull_policy: never
+    command:
+      - /app/conduit
+      - run
+      - --pipelines.path
+      - /app/pipelines
+      - --log.level
+      - error
+      - --log.format
+      - json
+    volumes:
+      - ../pipelines/conduit-s3.yml:/app/pipelines/conduit-s3.yml:ro
+    networks:
+      - benchi
+
+networks:
+  benchi:
+    external: true
