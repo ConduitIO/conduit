@@ -1,7 +1,7 @@
 # old_echo
 
-A frozen WASM processor built against **conduit-processor-sdk v0.8.0** and
-**conduit-commons v0.8.2**, before the `structured_values_v2` capability
+A frozen WASM processor built against `conduit-processor-sdk` v0.8.0 and
+`conduit-commons` v0.8.2, before the `structured_values_v2` capability
 existed. Its `Specify.Response` therefore lacks the `structured_values_v2`
 field, so the host reads the capability as `false` and keeps sending it
 `opencdc.v1` records (which refuse integers outside ±(2^53−1)).
@@ -15,7 +15,7 @@ the backward-compatibility test.
 There is deliberately no `processor.go` in this directory, so
 `build-test-processors.sh` skips it.
 
-Reproduce it (from a checkout whose `go.mod` pins conduit-processor-sdk
+Reproduce it (from a checkout whose `go.mod` pins `conduit-processor-sdk`
 v0.8.0) with:
 
 ```sh
