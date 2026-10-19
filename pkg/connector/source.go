@@ -562,8 +562,10 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 	}
 
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
-	for _, r := range resp.Records {
-		s.sanitizeRecord(&r, now)
+	// Index into the slice: a range variable is a copy, so sanitizing &r
+	// would drop every assignment to the record itself (#3107).
+	for i := range resp.Records {
+		s.sanitizeRecord(&resp.Records[i], now)
 	}
 
 	s.Instance.inspector.Send(ctx, resp.Records)
@@ -1203,28 +1205,28 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	}
 }
 
+// sanitizeRecord stamps the metadata Conduit guarantees on every record it
+// reads from a source: opencdc.readAt (when the connector did not set it) and
+// conduit.source.connector.id. It allocates the metadata map when the
+// connector left it nil.
+//
+// It deliberately leaves nil Key, Payload.Before and Payload.After nil. nil is
+// how "absent" travels through the engine and the SDK schema middleware, and
+// a zero-length RawData is a valid, present encoding (an empty key, a
+// zero-field record), so substituting one for the other would change what a
+// record means. See #3107.
+//
+// Invariant 6: Conduit adds metadata here but never rewrites the record's key
+// or payload.
 func (s *Source) sanitizeRecord(r *opencdc.Record, now string) {
-	if r.Key == nil {
-		r.Key = opencdc.RawData{}
-	}
-	if r.Payload.Before == nil {
-		r.Payload.Before = opencdc.RawData{}
-	}
-	if r.Payload.After == nil {
-		r.Payload.After = opencdc.RawData{}
-	}
 	if r.Metadata == nil {
-		r.Metadata = opencdc.Metadata{
-			opencdc.MetadataReadAt:                   now,
-			opencdc.MetadataConduitSourceConnectorID: s.Instance.ID,
-		}
-	} else {
-		if r.Metadata[opencdc.MetadataReadAt] == "" {
-			r.Metadata[opencdc.MetadataReadAt] = now
-		}
-		if r.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
-			r.Metadata[opencdc.MetadataConduitSourceConnectorID] = s.Instance.ID
-		}
+		r.Metadata = make(opencdc.Metadata, 2)
+	}
+	if r.Metadata[opencdc.MetadataReadAt] == "" {
+		r.Metadata[opencdc.MetadataReadAt] = now
+	}
+	if r.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
+		r.Metadata[opencdc.MetadataConduitSourceConnectorID] = s.Instance.ID
 	}
 }
 
