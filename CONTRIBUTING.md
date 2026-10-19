@@ -40,9 +40,29 @@ and that all the tests still run successfully.
   [Docker](https://www.docker.com/) to be installed and running. The tests will
   spin up required docker containers, run the integration tests and stop the
   containers afterwards.
+- Before pushing, run `make check`. It is the fast, Docker-free equivalent of
+  CI's `check` job: it runs `go mod tidy`, regenerates llms.txt and other
+  generated files, formats Go with gofumpt/gofmt/goimports, and lints markdown —
+  then fails with a `git diff` showing exactly what drifted. Catching the drift
+  here beats waiting for a red merge-queue check.
 
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
+
+### Resolving ConduitIO modules (fresh connector tags)
+
+`go get github.com/conduitio/*@vX.Y.Z` on a freshly tagged connector fails with
+"unknown revision" for 10–30 minutes while `proxy.golang.org` indexes the tag. Set
+this once so ConduitIO modules resolve directly from GitHub (third-party modules
+still use the proxy and the checksum DB — this is scoped, not a global
+`GOPROXY=direct`):
+
+```shell
+go env -w GOPRIVATE='github.com/conduitio/*' GONOSUMDB='github.com/conduitio/*'
+```
+
+The same two variables are set in CI (`.github/workflows/`) and in the
+`scripts/bump-builtin-connectors.sh` / `scripts/bump-sdk-in-connectors.sh` helpers.
 
 ## Test coverage
 

@@ -222,6 +222,31 @@ check-go-version:
 markdown-lint:
 	npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) $(MARKDOWNLINT_GLOBS)
 
+# check is the fast, Docker-free pre-push hygiene gate. It is the local form of
+# CI's `check` job, and it catches, in one run, the four drift classes that
+# keep failing merges: (a) stale llms.txt after a connector bump, (b) `go mod
+# tidy` wanting changes, (c) gofumpt formatting, (d) markdownlint MD049/MD044.
+# It runs, in order: go mod tidy, generate (llms.txt + other go:generate
+# output), the CI formatter (gofmt + gofumpt + goimports via `golangci-lint
+# fmt` — raw `gofumpt -l .` is NOT used here because it reformats generated
+# *.pb.go files that CI skips through .golangci.yml's `generated: lax`), then
+# markdownlint, then `git diff --exit-code` so any remaining drift fails the
+# run and is shown as a diff. Idempotent: a clean tree stays clean. No Docker,
+# no tests.
+.PHONY: check
+check: install-tools
+	@echo "==> go mod tidy"
+	@go mod tidy
+	@echo "==> generate"
+	@PATH="$(GOPATH_BIN):$$PATH" $(MAKE) generate
+	@echo "==> format (gofmt + gofumpt + goimports)"
+	@$(GOPATH_BIN)/golangci-lint fmt
+	@echo "==> markdown-lint"
+	@npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) $(MARKDOWNLINT_GLOBS)
+	@echo "==> diff"
+	@git diff --exit-code --numstat
+	@echo "check: all hygiene checks passed"
+
 # verify runs the CI-equivalent checks locally, using the same tool-resolution
 # CI uses (tools/go.mod for Go tools, a pinned npx for markdownlint) rather than
 # trusting ambient PATH, so a green `make verify` predicts a green CI. It is a

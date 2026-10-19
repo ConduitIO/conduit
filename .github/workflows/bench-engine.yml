@@ -74,6 +74,10 @@ permissions:
 env:
   ROUNDS: '5'
   BENCH_TIME: '3x'
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
 
 jobs:
   # Its own job and NOT continue-on-error: a failing comparer self-test must be

@@ -48,6 +48,12 @@ on:
       - 'pkg/kcmigrate/rules/drift/**'
       - 'pkg/kcmigrate/rules/upstream/**'
 
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
 # Read-only by default; only the issue job can write issues.
 permissions:
   contents: read
