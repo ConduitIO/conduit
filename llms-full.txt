@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.14.0)
+### kafka (v0.14.1)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -1092,7 +1092,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination reuses prepared statements (cache_statement) and checks a per-table schema fingerprint with every batch, so a column type change on a running pipeline invalidates the cache and the next write sees the new type — fast and correct. Set `default_query_exec_mode` to `describe_exec`, `exec` or `simple_protocol` to override; `cache_statement` and `cache_describe` are also guarded and safe. | required |
 
-### s3 (v0.11.0)
+### s3 (v0.11.1)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1427,8 +1427,8 @@ Author: Meroxa, Inc.
 | `partitioner.timestampField` | string |  | no | The payload field for timestampExtractor "recordField", dots for nested fields (Kafka Connect: timestamp.field). |  |
 | `partitioner.timezone` | string | UTC | no | The IANA time zone the time partitioners floor and format in. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is written to the destination. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 1s | no | Maximum delay before an incomplete batch is written to the destination. |  |
+| `sdk.batch.size` | int | 1000 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
 | `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
