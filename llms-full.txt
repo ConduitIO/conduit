@@ -551,7 +551,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.16.0)
+### postgres (v0.17.0)
 
 Conduit connector for PostgreSQL
 
@@ -985,26 +985,21 @@ forged record would be skipped, which a processor with that power could do to
 any record anyway.
 **Column type changes on a running pipeline**
 
-The destination describes every statement before it runs it (pgx's
-`describe_exec` query mode), so after `ALTER TABLE ... ALTER COLUMN ... TYPE`
-the next write is typed for the new column. A value the new type cannot hold
-fails the write instead of being converted.
+The destination reuses prepared statements (pgx's `cache_statement` query
+mode, the fast mode) and checks a per-table schema fingerprint with every
+batch. After `ALTER TABLE ... ALTER COLUMN ... TYPE` the fingerprint changes,
+the batch is rolled back, the statement cache is cleared, and the batch is
+retried with the new column types. A value the new type cannot hold exactly
+fails the write instead of being converted; a widening change is written
+type-exactly without an error.
 
-This costs throughput. On one dedicated machine (benchi
-`destination-exec-mode`: keyed upserts into a two-column table) the
-destination wrote 35% fewer rows per second than with cached statements at
-`sdk.batch.size: 1`, the default, and 16% fewer at 1000. If the tables a
-pipeline writes never change type while it runs, add
-`default_query_exec_mode=cache_statement` to the `url` to reuse prepared
-statements as before; the same benchmark measured no difference from the
-previous release with it. **Risk:** with `cache_statement` (or
-`cache_describe`) a statement keeps the parameter types it was prepared with,
-so after an `ALTER COLUMN ... TYPE` Postgres converts values into the new
-type without an error, for example 5/2 into an integer column stored as 3,
-until the destination restarts. The destination logs a warning at start when
-the URL selects a cache mode. `exec` and `simple_protocol`, which never cache
-parameter types (PgBouncer in transaction mode needs one of them), are kept
-when the URL sets them.
+This keeps cached statements' single round trip per batch. On one dedicated
+machine (benchi `destination-exec-mode`: keyed upserts into a two-column
+table) describing every statement instead cost 35% fewer rows per second at
+`sdk.batch.size: 1`, the default, and 16% fewer at 1000. `exec` and
+`simple_protocol`, which never cache parameter types (PgBouncer in
+transaction mode needs one of them), are kept when the URL sets them, as is
+`describe_exec`.
 
 **Numeric columns**
 
@@ -1034,8 +1029,7 @@ Postgres 17.5:
 - `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
   value is rejected, also on a destination that was already running when the
   column was changed to an integer type (see "Column type changes on a running
-  pipeline"). With `default_query_exec_mode=cache_statement` in the URL, such a
-  destination rounds 5/2 to 3 instead (#367).
+  pipeline").
 - `real`, `float8`: stored as the nearest binary float.
 - `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
 - `oid`: stored if the value is a whole number (7 is stored as `7`).
@@ -1096,7 +1090,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes each statement before it runs it, so a column type change on a running pipeline is seen by the next write. Add `default_query_exec_mode=cache_statement` to reuse prepared statements for speed, at the risk that after an ALTER COLUMN ... TYPE values are converted into the new type without an error until a restart (#367). | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination reuses prepared statements (cache_statement) and checks a per-table schema fingerprint with every batch, so a column type change on a running pipeline invalidates the cache and the next write sees the new type — fast and correct. Set `default_query_exec_mode` to `describe_exec`, `exec` or `simple_protocol` to override; `cache_statement` and `cache_describe` are also guarded and safe. | required |
 
 ### s3 (v0.11.0)
 
