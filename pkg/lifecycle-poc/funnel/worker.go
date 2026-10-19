@@ -103,6 +103,11 @@ type Worker struct {
 	// sourceTornDown is set only after Source.Teardown SUCCEEDS, so a failed
 	// teardown is retried by a later call rather than masked as done.
 	sourceTornDown bool
+	// teardownErr is the error from the FIRST failed Source.Teardown. It is
+	// sticky: every later tearDownSource call returns it, so the root cause
+	// (typically a final position write the state store rejected) is what
+	// Close reports, not the retry's "plugin is not running" (#2966).
+	teardownErr error
 
 	logger log.CtxLogger
 }
@@ -110,21 +115,38 @@ type Worker struct {
 // tearDownSource releases the source connector's resources. It serves two
 // purposes: on a graceful stop it interrupts a blocked source Read, and on every
 // path it frees the source. It is called from both Stop (graceful) and Close (all
-// paths, including a fatal error where Stop is never called), so it is idempotent
-// — but only a *successful* teardown is remembered: if Source.Teardown fails, the
-// source is left un-torn-down so the next caller retries, rather than masking the
-// failure and leaking the source.
+// paths, including a fatal error where Stop is never called), so it is idempotent.
+//
+// Only a *successful* teardown is remembered as done: if Source.Teardown fails,
+// the source is left un-torn-down so the next caller retries, rather than
+// masking the failure and leaking the source (#2559). The first failure is
+// sticky, though: once a Teardown has failed, this and every later call return
+// that first error, whatever the retry does. connector.Source.Teardown releases
+// the plugin before it reports a failed final position write, so the retry
+// almost always fails with plugin.ErrPluginNotRunning, and reporting that would
+// hide why the stop was not clean (#2966). The retry's own error is logged.
 func (w *Worker) tearDownSource(ctx context.Context) error {
 	w.teardownMu.Lock()
 	defer w.teardownMu.Unlock()
 	if w.sourceTornDown {
-		return nil
+		return w.teardownErr
 	}
-	if err := w.Source.Teardown(ctx); err != nil {
+	err := w.Source.Teardown(ctx)
+	if err == nil {
+		w.sourceTornDown = true
+		return w.teardownErr
+	}
+	if w.teardownErr == nil {
+		w.teardownErr = err
 		return err // not marked torn down; a later Stop/Close call retries
 	}
-	w.sourceTornDown = true
-	return nil
+	// A retry after an earlier failure. Invariant 3: the first error is what
+	// says whether the last positions were persisted, so it must not be
+	// replaced by the retry's.
+	w.logger.Warn(ctx).Err(err).
+		AnErr("first_teardown_error", w.teardownErr).
+		Msg("retrying source teardown failed; reporting the first teardown error")
+	return w.teardownErr
 }
 
 func NewWorker(
