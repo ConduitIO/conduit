@@ -27,7 +27,7 @@
     "translated": 5,
     "approximated": 4,
     "unsupported": 2,
-    "blocking": 11
+    "blocking": 9
   },
   "connectors": [
     {
@@ -199,20 +199,6 @@
           "fix": "Set KC_SINK_S3_00_SOURCE_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
           "blocking": true,
           "rule": "required/source/servers"
-        },
-        {
-          "code": "kc.setting_required",
-          "reason": "The builtin:s3 destination requires aws.accessKeyId, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_DESTINATION_AWS_ACCESSKEYID} instead.",
-          "fix": "Set KC_SINK_S3_00_DESTINATION_AWS_ACCESSKEYID in the environment (see secrets.env.template).",
-          "blocking": true,
-          "rule": "required/destination/aws.accessKeyId"
-        },
-        {
-          "code": "kc.setting_required",
-          "reason": "The builtin:s3 destination requires aws.secretAccessKey, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_DESTINATION_AWS_SECRETACCESSKEY} instead.",
-          "fix": "Set KC_SINK_S3_00_DESTINATION_AWS_SECRETACCESSKEY in the environment (see secrets.env.template).",
-          "blocking": true,
-          "rule": "required/destination/aws.secretAccessKey"
         },
         {
           "code": "kc.setting_required",

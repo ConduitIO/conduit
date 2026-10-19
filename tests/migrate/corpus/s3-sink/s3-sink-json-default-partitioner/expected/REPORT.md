@@ -1,6 +1,6 @@
 # Kafka Connect migration report
 
-1 connectors, 11 keys: 5 translated, 4 approximated, 2 unsupported, 11 blocking.
+1 connectors, 11 keys: 5 translated, 4 approximated, 2 unsupported, 9 blocking.
 
 ## sink-s3-00
 
@@ -26,8 +26,6 @@
 | blocking | sink-s3-00 | `kc.output_shape_differs` | Conduit writes one object per batch as &lt;prefix>/&lt;UnixNano>.&lt;ext>; the Kafka Connect S3 sink names and lays out objects by its partitioner, and its JsonFormat writes the bare record value where Conduit's json format writes one OpenCDC-shaped object per line. Consumers of the exact object keys or line shape break. | Keep this connector on Kafka Connect if consumers read the object keys or the bare-value JSON lines, or accept the difference with --accept-gaps. |
 | note | sink-s3-00 | `kc.delivery_semantics_differ` | Object names are not deterministic, so a batch that is retried after a failure or a restart is written again as a new object. A reader can see a record twice, never zero times; Kafka Connect's deterministic naming gives exactly-once object keys. | None needed; consumers should tolerate duplicate objects. |
 | blocking | sink-s3-00 | `kc.setting_required` | The builtin:kafka source requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_SOURCE_SERVERS} instead. | Set KC_SINK_S3_00_SOURCE_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers. |
-| blocking | sink-s3-00 | `kc.setting_required` | The builtin:s3 destination requires aws.accessKeyId, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_DESTINATION_AWS_ACCESSKEYID} instead. | Set KC_SINK_S3_00_DESTINATION_AWS_ACCESSKEYID in the environment (see secrets.env.template). |
-| blocking | sink-s3-00 | `kc.setting_required` | The builtin:s3 destination requires aws.secretAccessKey, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_DESTINATION_AWS_SECRETACCESSKEY} instead. | Set KC_SINK_S3_00_DESTINATION_AWS_SECRETACCESSKEY in the environment (see secrets.env.template). |
 | blocking | sink-s3-00 | `kc.setting_required` | The builtin:s3 destination requires format, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_DESTINATION_FORMAT} instead. | Set KC_SINK_S3_00_DESTINATION_FORMAT in the environment (see secrets.env.template). |
 | blocking | sink-s3-00 | `kc.converter_unknown` | Neither the connector nor a worker file sets key.converter, so the format Kafka Connect used is unknown. | Pass the worker properties with --worker, or set key.converter on the connector, then re-run. |
 | blocking | sink-s3-00 | `kc.converter_unknown` | Neither the connector nor a worker file sets value.converter, so the format Kafka Connect used is unknown. | Pass the worker properties with --worker, or set value.converter on the connector, then re-run. |

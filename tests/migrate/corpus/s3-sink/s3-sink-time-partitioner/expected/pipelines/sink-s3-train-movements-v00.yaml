@@ -14,9 +14,7 @@ pipelines:
         type: destination
         plugin: builtin:s3
         settings:
-          aws.accessKeyId: ${KC_SINK_S3_TRAIN_MOVEMENTS_V00_DESTINATION_AWS_ACCESSKEYID}
           aws.bucket: example-rail-streaming-bucket
           aws.region: us-west-2
-          aws.secretAccessKey: ${KC_SINK_S3_TRAIN_MOVEMENTS_V00_DESTINATION_AWS_SECRETACCESSKEY}
           format: ${KC_SINK_S3_TRAIN_MOVEMENTS_V00_DESTINATION_FORMAT}
           sdk.batch.size: "65536"
