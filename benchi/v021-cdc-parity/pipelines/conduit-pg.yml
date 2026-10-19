@@ -45,7 +45,7 @@ pipelines:
         type: destination
         plugin: builtin:postgres
         settings:
-          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable&default_query_exec_mode=cache_statement"
           table: "bench_dest_0"
           sdk.batch.size: "1000"
           sdk.batch.delay: "100ms"

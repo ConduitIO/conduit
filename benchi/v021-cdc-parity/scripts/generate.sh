@@ -176,7 +176,7 @@ emit_pg_pipeline() {
         type: destination
         plugin: builtin:postgres
         settings:
-          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable&default_query_exec_mode=cache_statement"
           table: "bench_dest_${i}"
           sdk.batch.size: "${CONDUIT_BATCH_SIZE}"
           sdk.batch.delay: "${CONDUIT_BATCH_DELAY}"
