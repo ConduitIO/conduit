@@ -1563,6 +1563,20 @@ func (s *Service) buildDestinationTasks(
 		tasks = append(tasks, destTasks)
 	}
 
+	// Read-ahead pipelining (docs/design-documents/20261019-funnel-read-ahead-pipelining.md):
+	// enabled only for a single destination. With M>1 destinations the M
+	// flusher goroutines would race on the single Worker's cross-batch source
+	// ack (each multiAckNacker orders within one batch, but the final hop to
+	// connector.Source.Ack has no cross-batch happens-before), so fan-out keeps
+	// the pre-pipelining synchronous flush.
+	if len(tasks) == 1 {
+		for _, branch := range tasks {
+			if dt, ok := branch[len(branch)-1].(*funnel.DestinationTask); ok {
+				dt.SetPipelined()
+			}
+		}
+	}
+
 	return tasks, nil
 }
 
