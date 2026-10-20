@@ -82,11 +82,28 @@ escape-analysis:
 	grep -vwE "(.*_test\.go|.*\/mock/.*\.go)" escape_analysis_full.txt > escape_analysis.txt
 	rm escape_analysis_full.txt
 
+# MEMORY_HEAVY_PKGS are the packages whose -race test binaries each hold GBs of
+# RSS: they compile and instantiate ~25 MB WASM processor modules (standalone,
+# registry) or spawn race-built conduit subprocesses (chaos). Measured locally
+# with `/usr/bin/time -l` on the -race --tags=integration test binaries:
+# standalone 5.4 GB, registry 3.2 GB, chaos 1.5 GB (plus children). Run
+# together by `go test ./...` (default -p = NumCPU) they exceed the 7 GB of a
+# GitHub-hosted ubuntu-latest runner and the runner is killed ("The runner has
+# received a shutdown signal", exit 143, no FAIL line). They therefore run one
+# at a time (-p 1), after everything else has finished.
+MEMORY_HEAVY_PKGS = \
+	github.com/conduitio/conduit/pkg/plugin/processor/standalone \
+	github.com/conduitio/conduit/pkg/registry \
+	github.com/conduitio/conduit/tests/chaos
+
 .PHONY: test-integration
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
 	docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml up --quiet-pull -d --wait
-	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
+	# phase 1: everything except the memory-heavy packages, in parallel
+	# phase 2: the memory-heavy packages, one binary at a time (see MEMORY_HEAVY_PKGS)
+	go test $(GOTEST_FLAGS) -race --tags=integration $$(go list ./... | grep -vxF $(foreach p,$(MEMORY_HEAVY_PKGS),-e $(p))); ret=$$?; \
+		go test -p 1 $(GOTEST_FLAGS) -race --tags=integration $(MEMORY_HEAVY_PKGS) || ret=$$?; \
 		docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml down; \
 		exit $$ret
 

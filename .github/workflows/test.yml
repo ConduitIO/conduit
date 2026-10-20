@@ -38,6 +38,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # A hung run should fail visibly, not sit until the 6h default.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
