@@ -43,6 +43,12 @@ const (
 	// FinishRequireKey blocks when the connector config lacks a key the
 	// upstream connector requires (no default). Argument: key.
 	FinishRequireKey = "require-key"
+	// FinishSinkConsumer writes the consumer group and start position of
+	// Kafka Connect's own consumer of a sink connector, where no key or
+	// worker setting does: group.id=connect-<name> and
+	// auto.offset.reset=earliest (Worker.baseConsumerConfigs). Takes no
+	// arguments.
+	FinishSinkConsumer = "sink-consumer-defaults"
 	// FinishPGURL names the finisher that assembles the Postgres connection
 	// URL from the parts the pg-url kind recorded (host, port, user,
 	// password, dbname and the ssl* parts), into the source's url setting.
@@ -55,6 +61,8 @@ var finishers = map[string]Finisher{
 	FinishMM2Offsets: mm2Offsets,
 	FinishRequireKey: requireKey,
 	FinishPGURL:      pgURL,
+
+	FinishSinkConsumer: sinkConsumerDefaults,
 }
 
 // requireKey returns a blocking kc.key_required note when the config does
@@ -98,6 +106,84 @@ func mm2Offsets(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 		Reason: head + start,
 		Fix:    "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
 	}}, nil
+}
+
+// Settings of the builtin:kafka source the sink-consumer-defaults finisher
+// writes. A test resolves them against the plugin's specification.
+const (
+	settingGroupID           = "groupID"
+	settingReadFromBeginning = "readFromBeginning"
+)
+
+// SinkConsumerSettings lists the builtin:kafka source settings the
+// sink-consumer-defaults finisher writes.
+func SinkConsumerSettings() []string {
+	return []string{settingGroupID, settingReadFromBeginning}
+}
+
+// sinkConsumerGroup is the consumer group Kafka Connect gives a sink
+// connector's consumer unless the worker's consumer.group.id or the
+// connector's consumer.override.group.id replaces it
+// (SinkUtils.consumerGroupId, Apache Kafka 4.2.0).
+func sinkConsumerGroup(connector string) string { return "connect-" + connector }
+
+// sinkConsumerDefaults carries Kafka Connect's own consumer defaults into a
+// sink's Kafka source. Kafka Connect reads a sink's topics in the group
+// connect-<name> and starts a partition with no committed offset at the
+// beginning (auto.offset.reset=earliest); the Kafka source defaults to a new
+// random group and to the end of each partition. Left alone, a migrated sink
+// would ignore the offsets the sink committed and skip every record written
+// before the pipeline starts.
+//
+// Invariant 3: a migrated sink resumes from the group's committed offsets
+// and, for a partition without one, from the beginning; it never starts at
+// the end because a default differs.
+//
+// The defaults are written below every worker and connector layer, so a
+// setting a key or the worker file set, or a blocked key claimed, is left
+// as it is. It returns a note for each default it wrote (kc.default_differs,
+// since the absent key has no entry to carry the difference) and the
+// cutover note, which holds whichever way the group was chosen.
+func sinkConsumerDefaults(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
+	idx, err := p.sides(SideConsumer)
+	if err != nil {
+		return nil, cerrors.Errorf(FinishSinkConsumer+": %w", err)
+	}
+	group := sinkConsumerGroup(p.ID)
+	var notes []kcmigrate.Note
+	p.origin, p.layer = OriginConnector, LayerFallback
+	for _, d := range []struct{ name, value, key, reason string }{
+		{
+			settingGroupID, group, "(default consumer group.id)",
+			"Kafka Connect reads a sink's topics in the consumer group connect-<name>, and the Kafka source defaults to a new random group. groupID is set to " + group + ", so the pipeline resumes from the offsets the Kafka Connect sink committed to that group.",
+		},
+		{
+			settingReadFromBeginning, "true", "(default consumer auto.offset.reset)",
+			"Kafka Connect's consumer defaults auto.offset.reset to earliest, and the Kafka source defaults to the end of each partition. readFromBeginning is set to true: a partition the group has no committed offset for is read from its first record, as Kafka Connect does, and a partition with a committed offset resumes from it.",
+		},
+	} {
+		_, overriddenBy, err := p.Set(SideConsumer, d.name, d.value, d.key)
+		if err != nil {
+			return nil, cerrors.Errorf(FinishSinkConsumer+": %w", err)
+		}
+		if overriddenBy != "" {
+			continue // a key or the worker decided it; its entry says how
+		}
+		notes = append(notes, kcmigrate.Note{
+			Code: kcmigrate.CodeDefaultDiffers.Reason(), Rule: FinishSinkConsumer + "/" + d.name,
+			Reason: d.reason,
+		})
+	}
+	// Read back what the pipeline has: the group may come from a key.
+	actual, ok := p.connectors[idx[0]].Settings[settingGroupID]
+	if !ok {
+		return notes, nil // a blocked key owns groupID; its entry blocks the pipeline
+	}
+	return append(notes, kcmigrate.Note{
+		Code: kcmigrate.CodeConsumerGroupShared.Reason(), Rule: FinishSinkConsumer + "/cutover",
+		Reason: "The pipeline's Kafka source reads in the consumer group " + actual + ", the group the Kafka Connect sink commits its offsets to, and resumes from them. While the Kafka Connect connector is still running, both consumers are in the group and Kafka splits the partitions between them, so neither sees every record. Records the sink processed after its last committed offset are read again, so they can reach the destination twice.",
+		Fix:    "Stop the Kafka Connect connector (PUT /connectors/<name>/stop, or delete it; pausing keeps its group membership) and wait until kafka-consumer-groups --describe --group " + actual + " lists no members, then start the pipeline.",
+	}), nil
 }
 
 // pgURL assembles the Postgres connection URL from the parts the pg-url kind
