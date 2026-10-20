@@ -27,15 +27,19 @@ The same code had two loud side effects, both caused by the type change:
   one with the same data.
 
 **Severity: sev-0 class** (silent cross-record corruption, invariant 6). **Status:** fixed on
-`conduit-commons` main by #338 (type-preserving deep copy, ships in v0.9.0 / Conduit v0.21). The
-patch lines get a deep copy that keeps the old types (#339 for `release/v0.7.x` → v0.7.2 →
-Conduit v0.20.3; #340 for `release/v0.8.x` → v0.8.3). No production occurrence is known.
+`conduit-commons` main by #338 (type-preserving deep copy, first released in v0.9.0). Conduit
+`main` is on commons v0.10.0 (soon v0.12.0), which has the full #338 fix, and ships it in v0.21.
+The patch lines get a deep copy that keeps the old types (#339 for `release/v0.7.x` → v0.7.2 →
+Conduit v0.20.5, #3216; #340 for `release/v0.8.x` → v0.8.3). No production occurrence is known.
 
 ## Impact
 
 ### Affected versions
 
-- **Conduit:** v0.8.0 through v0.20.2, and `main` until it takes commons v0.9.0.
+- **Conduit:** v0.8.0 through v0.20.4, and `main` until it took commons v0.10.0 (#3191,
+  2026-10-17).
+  - v0.20.2, v0.20.3 and v0.20.4 all ship commons v0.7.1, so all three are affected. v0.20.5
+    (#3216) is the first patch release with the fix (commons v0.7.2).
   - The current `Clone` came in with #1247 (2023-10-24), which replaced a reflection-based deep
     copy (`jinzhu/copier` with `DeepCopy: true`) by a hand-written one for speed (#885). v0.8.0
     (2023-11-09) is the first release with it. From v0.11.0, Conduit uses `conduit-commons`'
@@ -45,7 +49,8 @@ Conduit v0.20.3; #340 for `release/v0.8.x` → v0.8.3). No production occurrence
     repro tests that call the engine's `stream.Message.Clone` and run real built-in processors on
     the copies. No full pipeline was run. Earlier versions are inferred from the code, which is
     unchanged since #1247.
-- **`conduit-commons`:** every release, v0.0.x through v0.8.2.
+- **`conduit-commons`:** every release before v0.9.0, except the v0.7.2 and v0.8.3 patch
+  releases.
 - **SDKs and plugins:** anything that calls `Record.Clone` or `StructuredData.Clone` and then
   changes one of the copies.
   - Built-in connectors and processors are compiled into Conduit, so they use Conduit's
@@ -110,8 +115,8 @@ JavaScript change downstream, but nothing else.
   the clone, a nested array, an element inside one (including a map), or a nested
   `StructuredData`. The sibling copies and the original carry the change to their destinations,
   with acks. Nothing logs it.
-- **Standalone processors built against commons ≤ v0.8.2** that clone records inside the module
-  and then change one copy in place.
+- **Standalone processors built against a commons without the fix** (before v0.9.0, other than
+  v0.7.2 and v0.8.3) that clone records inside the module and then change one copy in place.
 - **Loud:** nested-path processors after a clone nack the record (DLQ or stopped pipeline).
 - **Shape:** `avro.encode` after a clone registers a schema with `record` where the uncloned data
   gives `map`. The published example output for `avro.encode` encodes this wrong shape, because the
@@ -153,6 +158,11 @@ All times are 2026-10-15 UTC unless stated otherwise.
   these and for the union-unwrap backports `#324` / `#325`.
 - **2026-10-15:** found during review: a JavaScript processor can return a record that contains
   itself, which makes any `Clone` overflow the stack and crash the process. Filed as #3148.
+- **2026-10-16 03:10:** Conduit v0.20.4 is tagged, still on commons v0.7.1.
+- **2026-10-17:** Conduit `main` moves to commons v0.10.0 with #3191, which includes #338.
+- **2026-10-20 01:55:** commons v0.7.2 and v0.8.3 are tagged.
+- **2026-10-20 04:10:** Conduit v0.20.5 is tagged from `release/v0.20.x` with commons v0.7.2
+  (#3216).
 
 ## Root cause
 
@@ -190,7 +200,8 @@ too, and that changed their type.
 - **patch lines (`conduit-commons#339`, `#340`):** the same deep copy, but a `map[string]any` held
   directly in a `StructuredData` is still retyped to `StructuredData`, exactly as before. The
   sharing (the corruption) is fixed; types are unchanged, so nested-path processors still fail
-  after a clone on v0.20.x (known issue, release-noted, workaround: put them before the fan-out).
+  after a clone on v0.20.5 and later v0.20.x releases (known issue, release-noted, workaround: put
+  them before the fan-out).
 
 ## New automated checks
 
@@ -202,19 +213,21 @@ too, and that changed their type.
 - The same file on `release/v0.7.x` and `release/v0.8.x` (#339, #340): the independence properties,
   plus a check that the result equals the released `Clone`'s result for every generated value, and
   a test that pins the retained retyping type by type.
-- Conduit (lands with the commons v0.9.0 bump, from `repro/clone-sharing`): arch-v1 fan-out with a
-  JavaScript processor changing a nested array on one branch must leave the sibling and the
-  original unchanged; `field.set` on a nested path must work on a cloned record.
+- Conduit, **not landed yet** (on `repro/clone-sharing`): arch-v1 fan-out with a JavaScript
+  processor changing a nested array on one branch must leave the sibling and the original
+  unchanged; `field.set` on a nested path must work on a cloned record. `main` took the fix
+  through the commons v0.10.0 bump (#3191) without them.
 
 ## Follow-ups
 
-- **Conduit commons v0.9.0 bump (with #3140):** take #338, add the two Conduit regression tests,
-  and update the `avro.encode` example. Its `myMap` has two keys, so its encoded bytes depend on Go
-  map iteration order. Switch it to a one-key map or compare decoded values, then regenerate the
-  processor docs.
+- **Conduit regression tests:** `main` already has #338 through commons v0.10.0 (#3191), and
+  #3191 updated the `avro.encode` example. Still to do: land the two Conduit regression tests
+  from `repro/clone-sharing`. The example's `myMap` has two keys, so its encoded bytes depend on
+  Go map iteration order; switch it to a one-key map or compare decoded values.
 - **Release notes:**
-  - v0.20.3: records cloned by the engine no longer share nested data; known issue for
-    nested-path processors after fan-out, `clone` or `split`.
+  - v0.20.5: records cloned by the engine no longer share nested data; known issue for
+    nested-path processors after fan-out, `clone` or `split`. The notes say v0.20.2 through
+    v0.20.4 are affected.
   - v0.21: Avro schemas that `avro.encode` auto-registers for nested maps in cloned or fanned-out
     records change from `record` to `map`, matching uncloned records. A subject registered under
     the old shape gets a new version.
