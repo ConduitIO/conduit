@@ -461,3 +461,140 @@ func TestSplitProcessor_Process_FailsMidBatch(t *testing.T) {
 	_, ok = out[1].(sdk.ErrorRecord)
 	is.True(ok)
 }
+
+func TestSplitProcessor_Configure_InvalidReference(t *testing.T) {
+	for _, field := range []string{".Key[", ".Payload.After..a", ".Payload.After.a["} {
+		t.Run(field, func(t *testing.T) {
+			is := is.New(t)
+			proc := NewSplitProcessor(log.Nop())
+			err := proc.Configure(context.Background(), config.Config{"field": field})
+			is.True(err != nil)
+			is.True(strings.Contains(err.Error(), `"field"`))
+		})
+	}
+}
+
+func TestFillNilData(t *testing.T) {
+	is := is.New(t)
+	rec := opencdc.Record{
+		Key:     opencdc.StructuredData(nil),
+		Payload: opencdc.Change{Before: opencdc.StructuredData(nil), After: opencdc.RawData("raw")},
+	}
+	fillNilData(&rec)
+	for _, d := range []opencdc.Data{rec.Key, rec.Payload.Before} {
+		sd, ok := d.(opencdc.StructuredData)
+		is.True(ok)
+		is.True(sd != nil) // typed nil replaced with an empty, writable map
+		sd["x"] = 1
+	}
+	is.Equal(rec.Payload.After, opencdc.RawData("raw")) // other data untouched
+
+	// Non-nil structured data and nil data are left as they are.
+	keep := opencdc.StructuredData{"a": 1}
+	rec = opencdc.Record{Key: keep}
+	fillNilData(&rec)
+	is.Equal(rec.Key, opencdc.Data(keep))
+	is.Equal(rec.Payload.Before, nil)
+}
+
+type (
+	typedStrs  []string
+	typedMap   map[string][]int
+	anySlice   []any
+	ifaceSlice []fmt.Stringer
+)
+
+type strer string
+
+func (s strer) String() string { return string(s) }
+
+func TestDeepCopy_NilsKeepTheirType(t *testing.T) {
+	is := is.New(t)
+	is.Equal(deepCopy(nil), nil)
+
+	m, ok := deepCopy(map[string]any(nil)).(map[string]any)
+	is.True(ok && m == nil)
+	sd, ok := deepCopy(opencdc.StructuredData(nil)).(opencdc.StructuredData)
+	is.True(ok && sd == nil)
+	s, ok := deepCopy([]any(nil)).([]any)
+	is.True(ok && s == nil)
+	ts, ok := deepCopy(typedStrs(nil)).(typedStrs)
+	is.True(ok && ts == nil)
+	tm, ok := deepCopy(typedMap(nil)).(typedMap)
+	is.True(ok && tm == nil)
+	var ip *int
+	p, ok := deepCopy(ip).(*int)
+	is.True(ok && p == nil)
+}
+
+func TestDeepCopy_IsolatesTypedContainers(t *testing.T) {
+	is := is.New(t)
+
+	// Typed slice of scalars: copied, type kept.
+	strs := typedStrs{"a", "b"}
+	gotStrs, ok := deepCopy(strs).(typedStrs)
+	is.True(ok)
+	gotStrs[0] = "changed"
+	is.Equal(strs[0], "a")
+
+	// Typed map holding slices: values are copied too.
+	tm := typedMap{"k": {1, 2}}
+	gotMap, ok := deepCopy(tm).(typedMap)
+	is.True(ok)
+	gotMap["k"][0] = 99
+	gotMap["new"] = []int{1}
+	is.Equal(tm["k"][0], 1)
+	is.Equal(len(tm), 1)
+
+	// Slice of slices (elements are not scalar kinds).
+	nested := [][]int{{1, 2}, nil, {3}}
+	gotNested, ok := deepCopy(nested).([][]int)
+	is.True(ok)
+	gotNested[0][0] = 99
+	is.Equal(nested[0][0], 1)
+	is.True(gotNested[1] == nil)
+
+	// Array: copied by value, nested slices inside are copied.
+	arr := [2][]int{{1}, {2}}
+	gotArr, ok := deepCopy(arr).([2][]int)
+	is.True(ok)
+	gotArr[1][0] = 99
+	is.Equal(arr[1][0], 2)
+
+	// Interface-typed elements, including a nil element.
+	anys := anySlice{map[string]any{"a": []any{1}}, nil}
+	gotAnys, ok := deepCopy(anys).(anySlice)
+	is.True(ok)
+	asMap(gotAnys[0])["a"].([]any)[0] = 99
+	is.Equal(asMap(anys[0])["a"].([]any)[0], 1)
+	is.Equal(gotAnys[1], nil)
+
+	ifaces := ifaceSlice{strer("x"), nil}
+	gotIfaces, ok := deepCopy(ifaces).(ifaceSlice)
+	is.True(ok)
+	is.Equal(len(gotIfaces), 2)
+	is.Equal(gotIfaces[0].String(), "x")
+	is.True(gotIfaces[1] == nil)
+
+	// Mixed StructuredData / map[string]any nesting keeps each type.
+	mixed := opencdc.StructuredData{
+		"sd": opencdc.StructuredData{"a": 1},
+		"m":  map[string]any{"b": 2},
+	}
+	gotMixed, ok := deepCopy(mixed).(opencdc.StructuredData)
+	is.True(ok)
+	_, ok = gotMixed["sd"].(opencdc.StructuredData)
+	is.True(ok)
+	_, ok = gotMixed["m"].(map[string]any)
+	is.True(ok)
+	gotMixed["sd"].(opencdc.StructuredData)["a"] = 99
+	is.Equal(mixed["sd"].(opencdc.StructuredData)["a"], 1)
+}
+
+func TestDeepCopy_SharesPointers(t *testing.T) {
+	is := is.New(t)
+	n := 5
+	got, ok := deepCopy([]*int{&n}).([]*int)
+	is.True(ok)
+	is.True(got[0] == &n) // documented: pointers are shared
+}
