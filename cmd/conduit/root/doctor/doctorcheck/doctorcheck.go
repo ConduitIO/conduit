@@ -37,6 +37,9 @@ const (
 	NameEngineReachable         = "engine.reachable"
 	NamePluginsStandaloneCompat = "plugins.standalone_compat"
 	NamePluginsStandaloneEnv    = "plugins.standalone_env"
+	// NameConnectorsOrphanedResources reports connectors deleted with
+	// --force after their delete hook failed (#3058).
+	NameConnectorsOrphanedResources = "connectors.orphaned_resources"
 	// NameConnectorsAmbientCredentials shows the effective
 	// connectors.ambient-credentials.* policy.
 	NameConnectorsAmbientCredentials = "connectors.ambient_credentials" //nolint:gosec // G101 false positive: a check name
@@ -115,6 +118,7 @@ func CheckNames() []string {
 		NameEngineReachable,
 		NamePluginsStandaloneCompat,
 		NamePluginsStandaloneEnv,
+		NameConnectorsOrphanedResources,
 		NameConnectorsAmbientCredentials,
 		NameArchV2Batching,
 	}
@@ -134,6 +138,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		configValidateCheck{cfg: cfg},
 		ambientCredentialsCheck{cfg: cfg, environ: opts.Environ},
 		storeReachableCheck{cfg: cfg, logger: logger},
+		orphanedResourcesCheck{cfg: cfg, logger: logger},
 	}
 
 	if cfg.Preview.PipelineArchV2 {

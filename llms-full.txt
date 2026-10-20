@@ -1471,7 +1471,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (164)
+## 3. Error codes (167)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1489,12 +1489,15 @@ Author: Meroxa, Inc.
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
 | `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
 | `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
+| `connector.delete_hook_failed` | FailedPrecondition | CodeConnectorDeleteHookFailed is raised when a connector is deleted and its plugin's delete hook (the "deleted" lifecycle event, which releases what the connector created outside Conduit, such as a Postgres replication slot) fails or cannot be run. The connector record is kept, so the delete can be retried; the hook is idempotent by contract. The message names the connector, its plugin, and the plugin's own error, which is the only place the plugin can say what it failed to release (#3058). |
 | `connector.endpoint_link_local` | PermissionDenied | CodeEndpointLinkLocal is raised when an ambient-credential connection would go to a link-local or cloud metadata address. |
 | `connector.endpoint_not_allowed` | PermissionDenied | CodeEndpointNotAllowed is raised when, under ambient credentials, an endpoint is not https or not an exact allow-endpoints entry. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
 | `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |
 | `connector.invalid_type` | InvalidArgument | CodeConnectorInvalidType is raised when a connector type is neither "source" nor "destination". |
+| `connector.orphan_not_found` | NotFound | CodeConnectorOrphanNotFound is raised when an orphan is acknowledged for a connector ID that has no orphan entry. |
+| `connector.orphaned_resources` | FailedPrecondition | CodeConnectorOrphanedResources is a warning, never returned as an error: a connector was deleted with force after its delete hook failed, so resources it created outside Conduit may remain. It is carried by the DeleteConnector response, logged, and reported by the `conduit doctor` check connectors.orphaned_resources until the orphan is acknowledged (#3058). The gRPC category is unused; FailedPrecondition is what it would mean if it ever were returned. |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
 | `connector.proxy_not_allowed` | PermissionDenied | CodeProxyNotAllowed is raised when a proxy variable is set and the operator has not set connectors.ambient-credentials.allow-proxy. |
 | `connector.redirect_refused` | PermissionDenied | CodeRedirectRefused is raised when a server redirects an ambient-credential request to another host or a non-https URL. |

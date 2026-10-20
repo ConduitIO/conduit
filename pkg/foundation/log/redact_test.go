@@ -191,3 +191,28 @@ func TestRedactedConfig_ParamsNonNilStillRedactsUnknownSensitiveKeys(t *testing.
 	// RedactAll path used at every real call site does not take this branch.
 	is.True(strings.Contains(got, `"topic":"orders"`))
 }
+
+func TestScrubSettingValues(t *testing.T) {
+	const pw = "hunter2-pw"
+	settings := map[string]string{
+		"url":       "postgres://repl:" + pw + "@db:5432/orders",
+		"slot.name": "conduit_orders",
+		"api.token": "tok-abcdef",
+		"short":     "on",
+	}
+	testCases := []struct {
+		name, in, want string
+	}{
+		{"whole url", "dial postgres://repl:" + pw + "@db:5432/orders: refused", "dial ***: refused"},
+		{"password alone", "auth failed for repl/" + pw, "auth failed for repl/***"},
+		{"api token", "bad token tok-abcdef", "bad token ***"},
+		{"non-secret kept", `could not drop slot "conduit_orders"`, `could not drop slot "conduit_orders"`},
+		{"short values ignored", "flag is on", "flag is on"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			is.Equal(ScrubSettingValues(tc.in, settings), tc.want)
+		})
+	}
+}
