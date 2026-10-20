@@ -97,10 +97,10 @@ const fanoutDeepBuild = `function process(rec) {
 // nested map[string]any values, and a script that walks through one fails with
 // a TypeError instead of showing the leak this case is about. mark and
 // markByte differ per branch, so a branch that reads another branch's edit is
-// visible and not only an unedited record. spinMS holds the branch back on
-// every record: the other branches run ahead, which is the state a kill must
-// catch (records durable in some destinations and not yet in the edit branch)
-// and the window in which the edit overlaps the other branches' reads.
+// visible and not only an unedited record. spinMS makes the edit take
+// longer on every record, which widens the window in which the edit overlaps
+// the other branches' reads and serialization. (The branches do not drift
+// apart: fan-out is backpressured, so they stay within a batch of each other.)
 func fanoutDeepEdit(mark string, markByte, spinMS int) string {
 	return fmt.Sprintf(`function process(rec) {
   var a = rec.Payload.After;
@@ -190,11 +190,14 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 	// redelivered); cut it so the restart appends after a whole line, which is
 	// what a destination whose write is atomic would have left.
 	pre := make(map[string]map[int]bool, len(dests))
+	preLines := make(map[string]int, len(dests))
 	for _, d := range dests {
 		if trimFanoutDeepTornTail(t, d.path) {
-			t.Logf("destination %s: cut a half-written last line left by the kill", d.name)
+			t.Fatalf("destination %s: the kill left a half-written last line, so builtin:file's batch write is not atomic across SIGKILL; "+
+				"look at conduit-connector-file's destination (one bufio Flush per batch) before touching this test", d.name)
 		}
 		recs, _ := readFanoutDeepDest(t, d)
+		preLines[d.name] = len(recs)
 		checkFanoutDeepRecords(t, "before restart", d, recs)
 		pre[d.name] = seqSet(recs)
 	}
@@ -208,6 +211,12 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 	// the last acknowledged one, so every record up to it must already be in
 	// every destination's file. A shorter prefix in any destination would be a
 	// record the source will never redeliver after the restart.
+	//
+	// The check is coarse: the persisted position is the connector persister's
+	// last flush, which trails the real acknowledgements by up to its 1s
+	// debounce (connector.DefaultPersisterDelayThreshold), so it only covers
+	// records acknowledged before the last flush. An early ack of a more recent
+	// record is caught by the gap check after the restart instead (invariant 3).
 	persisted := persistedFanoutDeepPosition(t, dir)
 	acked := int(persisted / fanoutDeepLineLen)
 	t.Logf("persisted source position %d: %d records acknowledged", persisted, acked)
@@ -243,6 +252,11 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 	if _, ok := cp2.line(markerFanoutDeepDone); !ok {
 		t.Fatalf("restarted run did not report a clean shutdown\n%s", cp2.diagnostics())
 	}
+	// Invariant 7 means checkpointed, not only exited: the drained shutdown must
+	// have persisted the position of the last record.
+	if got, want := persistedFanoutDeepPosition(t, dir), uint64(fanoutDeepTotal*fanoutDeepLineLen); got != want {
+		t.Errorf("invariant 7: persisted source position after SIGTERM is %d, want %d (every record acknowledged and checkpointed)", got, want)
+	}
 
 	// Invariant 3 (at-least-once): after the restart every destination holds
 	// every record, duplicates allowed, gaps not. And the value check again over
@@ -253,6 +267,8 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 			t.Errorf("destination %s: half-written last line after a clean shutdown", d.name)
 		}
 		checkFanoutDeepRecords(t, "after restart", d, recs)
+
+		checkFanoutDeepResume(t, d, recs, preLines[d.name], pre[d.name], acked)
 		seen := seqSet(recs)
 		var missing []int
 		for seq := 1; seq <= fanoutDeepTotal; seq++ {
@@ -264,6 +280,40 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 			t.Errorf("invariant 3: destination %s never received records %v (of 1..%d)", d.name, missing, fanoutDeepTotal)
 		}
 		t.Logf("destination %s: %d lines, %d distinct records (%d redelivered after the kill)", d.name, len(recs), len(seen), len(recs)-len(seen))
+	}
+}
+
+// checkFanoutDeepResume checks what the restarted run appended to d's file
+// (recs[preLines:]) against the persisted position (acked records).
+func checkFanoutDeepResume(t *testing.T, d fanoutDeepDest, recs []fanoutDeepRecord, preLines int, pre map[int]bool, acked int) {
+	t.Helper()
+	// Invariant 2: the restart resumes from the persisted position. What the
+	// restarted run appended starts right after the last acknowledged record
+	// and never goes behind it, and at least one record was redelivered (the
+	// persisted position trails what the destinations already hold). A restart
+	// that replayed from the beginning would fail the first two checks.
+	appended := recs
+	if preLines <= len(recs) {
+		appended = recs[preLines:]
+	}
+	if len(appended) == 0 {
+		t.Errorf("invariant 2: destination %s received nothing after the restart", d.name)
+	}
+	redelivered := 0
+	for i, r := range appended {
+		seq, _ := r.seq()
+		if i == 0 && seq != acked+1 {
+			t.Errorf("invariant 2: destination %s: the restarted run began with record %d, want %d (the record after the persisted position)", d.name, seq, acked+1)
+		}
+		if seq <= acked {
+			t.Errorf("invariant 2: destination %s: the restarted run redelivered record %d, at or behind the persisted position (%d)", d.name, seq, acked)
+		}
+		if pre[seq] {
+			redelivered++
+		}
+	}
+	if redelivered == 0 {
+		t.Errorf("destination %s: no record was redelivered after the kill, so the restart did not exercise at-least-once redelivery", d.name)
 	}
 }
 
