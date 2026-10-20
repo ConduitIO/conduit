@@ -58,22 +58,20 @@ var (
 	SpinBinary               []byte
 
 	ChaosProcessorModule wazero.CompiledModule
-	SpecifyErrorModule   wazero.CompiledModule
-	StallModule          wazero.CompiledModule
-	SpinModule           wazero.CompiledModule
 
 	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
 		testPluginChaosDir + "processor.wasm": {&ChaosProcessorBinary, &ChaosProcessorModule},
-		// The echo guests are read here but compiled lazily by the tests that use
-		// them (compileForTest): each ~25 MB module costs ~1.6 GB of heap to
+		// Only the chaos guest (used by most tests) is compiled eagerly. The
+		// other guests are read here and compiled by the one or two tests that
+		// use them (compileForTest): each ~25 MB module costs ~2 GB of heap to
 		// compile under -race, and compiling every guest in TestMain pushed the
-		// package past the CI runner's memory (swap thrash, runner killed).
+		// package to 14 GB (swap thrash, runner killed).
 		testPluginEchoDir + "processor.wasm":         {&EchoProcessorBinary, nil},
 		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
 		testPluginOldEchoDir + "processor.wasm":      {&OldEchoProcessorBinary, nil},
-		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
-		testPluginStallDir + "processor.wasm":        {&StallBinary, &StallModule},
-		testPluginSpinDir + "processor.wasm":         {&SpinBinary, &SpinModule},
+		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, nil},
+		testPluginStallDir + "processor.wasm":        {&StallBinary, nil},
+		testPluginSpinDir + "processor.wasm":         {&SpinBinary, nil},
 	}
 )
 
@@ -145,6 +143,21 @@ func TestMain(m *testing.M) {
 	exitOnError(err, "error closing wasm runtime")
 
 	os.Exit(code)
+}
+
+// compileForTest compiles a guest on the shared test runtime and closes the
+// compiled module when the test ends, so its heap is released instead of being
+// held for the whole run. Tests in this package do not run in parallel, which
+// the runtime requires for compilation (see TestMain).
+func compileForTest(t *testing.T, binary []byte) wazero.CompiledModule {
+	t.Helper()
+	ctx := context.Background()
+	m, err := TestRuntime.CompileModule(ctx, binary)
+	if err != nil {
+		t.Fatalf("compiling test guest: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Close(ctx) })
+	return m
 }
 
 func ChaosProcessorSpecifications() sdk.Specification {

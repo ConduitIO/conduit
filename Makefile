@@ -91,6 +91,11 @@ escape-analysis:
 # GitHub-hosted ubuntu-latest runner and the runner is killed ("The runner has
 # received a shutdown signal", exit 143, no FAIL line). They therefore run one
 # at a time (-p 1), after everything else has finished.
+# A soft Go heap limit makes the GC reclaim the multi-GB transient garbage that
+# wazero's module compilation produces instead of letting the heap (and the
+# race detector's shadow memory on top of it) grow into swap.
+MEMORY_HEAVY_GOMEMLIMIT ?= 4GiB
+
 MEMORY_HEAVY_PKGS = \
 	github.com/conduitio/conduit/pkg/plugin/processor/standalone \
 	github.com/conduitio/conduit/pkg/registry \
@@ -103,7 +108,7 @@ test-integration:
 	# phase 1: everything except the memory-heavy packages, in parallel
 	# phase 2: the memory-heavy packages, one binary at a time (see MEMORY_HEAVY_PKGS)
 	go test $(GOTEST_FLAGS) -race --tags=integration $$(go list ./... | grep -vxF $(foreach p,$(MEMORY_HEAVY_PKGS),-e $(p))); ret=$$?; \
-		go test -p 1 $(GOTEST_FLAGS) -race --tags=integration $(MEMORY_HEAVY_PKGS) || ret=$$?; \
+		GOMEMLIMIT=$(MEMORY_HEAVY_GOMEMLIMIT) go test -p 1 $(GOTEST_FLAGS) -race --tags=integration $(MEMORY_HEAVY_PKGS) || ret=$$?; \
 		docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml down; \
 		exit $$ret
 

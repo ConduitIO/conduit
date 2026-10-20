@@ -27,23 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/matryer/is"
-	"github.com/tetratelabs/wazero"
 )
-
-// compileForTest compiles a guest on the shared test runtime and closes the
-// compiled module when the test ends, so its heap is released instead of being
-// held for the whole run. Tests in this package do not run in parallel, which
-// the runtime requires for compilation (see TestMain).
-func compileForTest(t *testing.T, binary []byte) wazero.CompiledModule {
-	t.Helper()
-	ctx := context.Background()
-	m, err := TestRuntime.CompileModule(ctx, binary)
-	if err != nil {
-		t.Fatalf("compiling test guest: %v", err)
-	}
-	t.Cleanup(func() { _ = m.Close(ctx) })
-	return m
-}
 
 // wideIntRecord returns a record whose structured data holds values the v1
 // wire shape cannot carry: a wide int64 (2^53+1), a full-range uint64, raw
