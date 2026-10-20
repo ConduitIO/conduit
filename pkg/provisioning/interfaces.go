@@ -46,6 +46,8 @@ type ConnectorService interface {
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 	Update(ctx context.Context, id string, plugin string, c connector.Config) (*connector.Instance, error)
 	Delete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) error
+	// Restore puts back an instance Delete removed, keeping its state (#3137).
+	Restore(ctx context.Context, instance *connector.Instance) error
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)

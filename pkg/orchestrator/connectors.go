@@ -164,9 +164,13 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	// Invariant 2 (#3137): roll back by putting the same instance back, so it
+	// keeps its source position and last active config. The transaction is
+	// discarded, so the store keeps the original record; a freshly created
+	// instance would have no position until the next restart, and starting the
+	// pipeline would read the source from the beginning.
 	r.Append(func() error {
-		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
-		return err
+		return c.connectors.Restore(ctx, conn)
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {

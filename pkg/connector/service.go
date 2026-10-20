@@ -220,6 +220,50 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	return nil
 }
 
+// Restore puts back an instance that Delete removed, for a caller that rolls
+// back a failed operation after Delete succeeded (#3137). It reinstates the
+// same *Instance rather than creating a new one, so the connector keeps its
+// State (the source position), LastActiveConfig, ProcessorIDs and CreatedAt.
+// Creating a fresh instance instead left the process with a connector that
+// had never run until the next restart: its pipeline would read the source
+// from the beginning (invariant 2) and fire a "created" lifecycle event.
+//
+// Restore writes the record back to the store as well. Inside a transaction
+// that the caller then discards, the write is discarded with it and the
+// store keeps the record the discarded delete never removed; without a
+// transaction, the write undoes the delete. The in-memory entry is restored
+// first and stays restored even if the store write fails, because inside a
+// transaction (every production rollback except Engine.Import) the store
+// still holds the record, and memory must agree with it.
+//
+// Restore does not undo the delete hook: Delete has already run the
+// plugin's OnDelete, and that cannot be taken back here.
+//
+// It returns an error, and changes nothing, if a different instance is
+// registered under the same ID. Restoring an instance that is already
+// registered is a no-op.
+func (s *Service) Restore(ctx context.Context, instance *Instance) error {
+	if instance == nil {
+		return cerrors.New("can't restore a nil connector instance")
+	}
+	if current, ok := s.connectors[instance.ID]; ok {
+		if current == instance {
+			return nil
+		}
+		return cerrors.Errorf("can't restore connector %v: a different instance with that ID exists", instance.ID)
+	}
+
+	// Invariant 2: memory gets back the instance that holds the position the
+	// store holds, never a fresh one without it.
+	s.connectors[instance.ID] = instance
+	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Inc()
+
+	if err := s.store.Set(ctx, instance.ID, instance); err != nil {
+		return cerrors.Errorf("could not restore connector instance %v in store: %w", instance.ID, err)
+	}
+	return nil
+}
+
 // Update updates the connector config.
 func (s *Service) Update(ctx context.Context, id string, plugin string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
