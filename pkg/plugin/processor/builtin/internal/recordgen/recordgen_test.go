@@ -15,6 +15,7 @@
 package recordgen
 
 import (
+	"math"
 	"strconv"
 	"testing"
 
@@ -44,6 +45,39 @@ func TestJSONValue_PropertyRoundTrips(t *testing.T) {
 			t.Fatalf("value changed in a JSON round trip (-want +got):\n%s", diff)
 		}
 	})
+}
+
+// TestDecoded pins the oracle the json.decode properties compare against:
+// integral numbers narrow to int64, then uint64, and the rest stay float64.
+func TestDecoded(t *testing.T) {
+	in := map[string]any{
+		"one":      1.0,
+		"neg zero": math.Copysign(0, -1),
+		"half":     1.5,
+		"2^60":     float64(1 << 60),
+		"2^63":     float64(1 << 63),
+		"1e20":     1e20, // integer text, but above uint64
+		"1e21":     1e21, // exponent text
+		"nested":   []any{2.0, "s", map[string]any{"x": -3.0}, nil, true},
+	}
+	want := map[string]any{
+		"one":      int64(1),
+		"neg zero": int64(0),
+		"half":     1.5,
+		// The encoder writes a float64's shortest round-trip text, so 2^60
+		// is "1152921504606847000", and that is the integer decode reads.
+		"2^60":   int64(1152921504606847000),
+		"2^63":   uint64(9223372036854776000),
+		"1e20":   1e20,
+		"1e21":   1e21,
+		"nested": []any{int64(2), "s", map[string]any{"x": int64(-3)}, nil, true},
+	}
+	if diff := cmp.Diff(want, Decoded(in)); diff != "" {
+		t.Fatalf("Decoded (-want +got):\n%s", diff)
+	}
+	if in["one"] != 1.0 {
+		t.Fatal("Decoded modified its input")
+	}
 }
 
 // TestClone_PropertyDeepAndTypePreserving: Clone returns records equal to

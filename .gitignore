@@ -93,4 +93,4 @@ __pycache__/
 !tests/upgrade/storecompat/testdata/*/conduit.db/**
 
 # Fail files rapid writes to replay a failing property locally.
-testdata/rapid/
+**/testdata/rapid/

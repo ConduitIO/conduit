@@ -26,6 +26,7 @@ import (
 	"strconv"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/goccy/go-json"
 	"pgregory.net/rapid"
 )
 
@@ -37,8 +38,8 @@ const maxDepth = 3
 // three levels. Every value it draws survives a JSON marshal and unmarshal
 // round trip unchanged:
 //
-//   - numbers are finite float64s (JSON has no NaN or Inf, and decodes every
-//     number as float64);
+//   - numbers are finite float64s (JSON has no NaN or Inf, and
+//     encoding/json decodes every number into an any as float64);
 //   - strings are valid UTF-8 (JSON encoders replace invalid bytes with
 //     U+FFFD).
 func JSONValue() *rapid.Generator[any] {
@@ -49,6 +50,43 @@ func JSONValue() *rapid.Generator[any] {
 // like JSONValue's.
 func JSONObject() *rapid.Generator[map[string]any] {
 	return rapid.Custom(func(t *rapid.T) map[string]any { return drawObject(t, maxDepth) })
+}
+
+// Decoded returns v as the json.decode processor yields it after json.encode
+// wrote it: a number whose JSON text is an integer that fits in int64 becomes
+// an int64, one that fits only in uint64 becomes a uint64, and every other
+// number stays a float64. json.decode narrows numbers that way so integers
+// above 2^53 decode losslessly (#3134). The text comes from goccy/go-json,
+// the encoder json.encode uses, so "1" (from 1.0) narrows and "1e+21" does
+// not. v is not modified; maps and slices are copied.
+func Decoded(v any) any {
+	switch v := v.(type) {
+	case float64:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return v // not JSON-representable; the processor fails it anyway
+		}
+		if i, err := strconv.ParseInt(string(b), 10, 64); err == nil {
+			return i
+		}
+		if u, err := strconv.ParseUint(string(b), 10, 64); err == nil {
+			return u
+		}
+		return v
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, e := range v {
+			out[k] = Decoded(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, e := range v {
+			out[i] = Decoded(e)
+		}
+		return out
+	}
+	return v
 }
 
 func drawJSON(t *rapid.T, depth int) any {
