@@ -274,7 +274,7 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] **Elasticsearch** certified from labs, with OpenSearch
 - [ ] **Kafka→Kafka** with header, partition and topic preservation, plus a Redpanda profile
 - [ ] **S3 sink** format and partitioning parity with the Kafka Connect S3 sink, and the AWS default
-      credential chain (`conduit-connector-s3`#1021, #1022)
+      credential chain (`conduit-connector-s3`#1021, #1022; S3 destination benchi baseline: PR #3097)
 - [ ] Migration harness: runs real Kafka Connect configs through `migrate` and diffs the output
 
 #### Connector platform
@@ -358,7 +358,7 @@ re-snapshot;** offset import for them is v0.22.
 
 - [ ] **Default engine flip and v1 engine deletion**: the single engine from v0.21 becomes the
       default, and the v1 engine is removed after the flip, against a gate fixed in advance
-      (#2978 staged batch engine, #3184 ProcessBatch, #2956/#3067/#3097 cross-engine harness + matrix)
+      (PRs #2978 staged batch engine, #3184 ProcessBatch, #2956/#3067 cross-engine harness + matrix)
 - [ ] **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in v0.21; protocol
       v2 is removed no earlier than v0.24
 - [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
@@ -366,7 +366,7 @@ re-snapshot;** offset import for them is v0.22.
 - [ ] Postgres offset import by reusing the Debezium replication slot (v0.21 ships the fresh-slot
       strategy only)
 - [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
-      against real Debezium on the same database (#3076 data model + JsonConverter)
+      against real Debezium on the same database (PR #3076 data model + JsonConverter)
 - [ ] SMT compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs,
       mapped automatically by `migrate` — including the five missing today (Flatten,
       ExtractChangedRecordState, EventRouter, PartitionRouting, TimezoneConverter) and typed values
@@ -380,7 +380,7 @@ re-snapshot;** offset import for them is v0.22.
       database to lakehouse in real time, no Kafka required
 - [ ] Helm chart: Deployment/StatefulSet, pipeline configs via ConfigMap or git-sync,
       ServiceMonitor — static pipeline-to-instance assignment before the operator exists
-- [ ] Secrets: Vault, AWS and GCP KMS, Kubernetes secrets (#3128 secretref is the first slice)
+- [ ] Secrets: Vault, AWS and GCP KMS, Kubernetes secrets (PR #3128 secretref is the first slice)
 - [ ] Source-side dead-letter queue
 - [ ] OpenTelemetry metrics and prebuilt Grafana dashboards, with metrics covering what Kafka
       Connect operators alert on: lag, task and pipeline status, error rate
