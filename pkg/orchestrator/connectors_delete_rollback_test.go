@@ -23,8 +23,10 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -39,6 +41,15 @@ type failingRemoveConnector struct {
 	err error
 }
 
+// fakeDispenserFetcher returns dispenser for any plugin.
+type fakeDispenserFetcher struct {
+	dispenser connectorPlugin.Dispenser
+}
+
+func (f fakeDispenserFetcher) NewDispenser(log.CtxLogger, string, string) (connectorPlugin.Dispenser, error) {
+	return f.dispenser, nil
+}
+
 func (f failingRemoveConnector) RemoveConnector(context.Context, string, string) (*pipeline.Instance, error) {
 	return nil, f.err
 }
@@ -49,24 +60,25 @@ func (f failingRemoveConnector) RemoveConnector(context.Context, string, string)
 // The transaction was discarded, so the store kept the original record, but
 // in memory the connector became a fresh Instance until the next restart.
 //
-// The rollback must put back the same instance. What it may keep depends on
-// whether Delete already ran the plugin's delete hook:
+// The rollback must put back the same instance, position included. What
+// happens next depends on whether Delete already ran the plugin's delete
+// hook:
 //
 //   - The hook did not run (the connector never started, so there was no
-//     "deleted" event to deliver): the position is kept.
+//     "deleted" event to deliver): the connector starts normally.
 //   - The hook ran: the plugin may have released what the position points
-//     into. The Postgres connector drops its replication slot; resuming from
-//     the old position would recreate the slot at the current WAL and skip
-//     the gap (invariant 3). The position and last active config are
-//     cleared, so the next start fires "created" and re-reads: duplicates,
-//     no loss.
+//     into. The Postgres connector drops its replication slot; resuming would
+//     recreate the slot at the current WAL and skip the gap, and clearing the
+//     position is no safer (a Kafka source without one starts at the end).
+//     The connector fails closed: building it for a start returns
+//     connector.delete_hook_ran, and the position stays intact (invariant 3).
 func TestConnectorOrchestrator_Delete_RollbackRestoresInstance(t *testing.T) {
 	testCases := []struct {
 		name    string
 		started bool // the connector has a LastActiveConfig, so the hook runs
 	}{
-		{name: "delete hook did not run, position kept", started: false},
-		{name: "delete hook ran, position cleared", started: true},
+		{name: "delete hook did not run, starts normally", started: false},
+		{name: "delete hook ran, start fails closed", started: true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,18 +135,28 @@ func TestConnectorOrchestrator_Delete_RollbackRestoresInstance(t *testing.T) {
 			is.NoErr(err)
 			is.True(got == conn) // the same instance, not a fresh one
 			is.True(got.CreatedAt.Equal(conn.CreatedAt))
+			is.Equal(got.State, position) // never cleared
 			if tc.started {
-				is.Equal(got.State, nil)                           // invariant 3: no resume into a released slot
-				is.Equal(got.LastActiveConfig, connector.Config{}) // next start fires "created"
-			} else {
+				is.Equal(got.LastActiveConfig, cfg)
+			}
+
+			// The next start builds the connector (lifecycle calls Connector).
+			c, err := got.Connector(ctx, fakeDispenserFetcher{dispenser: pmock.NewDispenser(ctrl)})
+			if tc.started {
+				is.True(c == nil)
+				ce, ok := conduiterr.Get(err)
+				is.True(ok)
+				is.Equal(ce.Code.Reason(), connector.CodeConnectorDeleteHookRan.Reason())
 				is.Equal(got.State, position)
-				is.Equal(got.LastActiveConfig, connector.Config{})
+			} else {
+				is.NoErr(err)
+				is.True(c != nil)
 			}
 
 			// The discarded transaction kept the record: a restart still has
-			// the connector. (After a hook ran, the store still holds the old
-			// position until the next start persists a new one; see the PR's
-			// failure-mode analysis.)
+			// the connector, with its position. The fail-closed mark is in
+			// memory only, so a restart loads it unmarked (see the PR's
+			// failure-mode analysis).
 			restarted := connector.NewService(logger, db, nil)
 			is.NoErr(restarted.Init(ctx))
 			stored, err := restarted.Get(ctx, conn.ID)

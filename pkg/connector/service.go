@@ -223,18 +223,18 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 // Restore puts back an instance that Delete removed, for a caller that rolls
 // back a failed operation after Delete succeeded (#3137). It reinstates the
 // same *Instance rather than creating a new one, so the connector keeps its
-// ProcessorIDs, CreatedAt and, unless the delete hook ran, its State (the
-// source position) and LastActiveConfig. Creating a fresh instance instead
-// left the process with a connector that had never run until the next
-// restart.
+// State (the source position), LastActiveConfig, ProcessorIDs and CreatedAt.
+// Creating a fresh instance instead left the process with a connector that
+// had never run until the next restart.
 //
 // If Delete already delivered the "deleted" lifecycle event to the plugin,
-// Restore clears State and LastActiveConfig. The plugin may have released
-// what the position points into: the Postgres connector drops its
-// replication slot, and resuming from the old position would make it create
-// a new slot at the current WAL and skip everything in between (invariant 3).
-// With both cleared, the next start fires a "created" event and reads the
-// source from the beginning: duplicates, no loss.
+// the plugin may have released what the position points into: the Postgres
+// connector drops its replication slot, and resuming would recreate it at
+// the current WAL and skip the gap. Clearing the position is not safe either
+// (a Kafka source without one starts at the end). So Restore keeps State and
+// LastActiveConfig unchanged, and the instance stays marked: its next start
+// fails with CodeConnectorDeleteHookRan (invariant 3, fail closed). The mark
+// is in memory only; a process restart loads the instance without it.
 //
 // Restore writes to the store only when ctx carries no transaction. Inside a
 // transaction the caller is rolling back and will discard it, so the store
@@ -261,23 +261,16 @@ func (s *Service) Restore(ctx context.Context, instance *Instance) error {
 		return cerrors.Errorf("can't restore connector %v: a different instance with that ID exists", instance.ID)
 	}
 
-	instance.Lock()
-	cleared := instance.deleteHookRan
-	if cleared {
-		// Invariant 3: never resume from a position the plugin may have
-		// released. Re-reading from the beginning duplicates, never loses.
-		instance.State = nil
-		instance.LastActiveConfig = Config{}
-		instance.deleteHookRan = false
-	}
-	instance.Unlock()
-
 	// Invariant 2: memory gets back the instance itself, never a fresh one.
 	s.connectors[instance.ID] = instance
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Inc()
-	if cleared {
-		instance.logger.Warn(ctx).Msg("connector restored after a failed delete; its delete hook had already run, " +
-			"so its position was cleared and its next start reads the source from the beginning")
+
+	instance.RLock()
+	hookRan := instance.deleteHookRan
+	instance.RUnlock()
+	if hookRan {
+		instance.logger.Warn(ctx).Msg("connector restored after a failed delete whose delete hook had already run; " +
+			"it will refuse to start until it is deleted and created again or Conduit is restarted")
 	}
 
 	if database.TransactionFromContext(ctx) != nil {

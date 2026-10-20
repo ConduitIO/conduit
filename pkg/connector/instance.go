@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -75,8 +76,13 @@ type Instance struct {
 	// deleteHookRan is set when OnDelete delivered the "deleted" lifecycle
 	// event to the plugin and the plugin did not answer that it does not
 	// implement it. From then on the plugin may have released what State
-	// points into (for example a Postgres replication slot), so Restore
-	// clears State and LastActiveConfig (#3137). Not persisted.
+	// points into (for example a Postgres replication slot). If the delete is
+	// rolled back (Service.Restore), the instance keeps State, and Connector
+	// refuses to start it with CodeConnectorDeleteHookRan (#3137).
+	//
+	// It lives in memory only: persisting it would add a field to the stored
+	// connector record and need a write outside the rolled-back transaction.
+	// A process restart therefore loads the instance without it.
 	deleteHookRan bool
 
 	sync.RWMutex
@@ -122,7 +128,31 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 // when Open is called in the returned connector.
 // If a connector is already running for this Instance this method returns an
 // error.
-func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+	// Invariant 3 (#3137): fail closed. A rolled-back delete already ran the
+	// plugin's delete hook; resuming from the saved position could skip
+	// records, and clearing it could too (a Kafka source with no position
+	// starts at the end). Make an operator decide.
+	i.RLock()
+	hookRan := i.deleteHookRan
+	i.RUnlock()
+	if hookRan {
+		ce := conduiterr.New(CodeConnectorDeleteHookRan, fmt.Sprintf(
+			"connector %q (plugin %q, pipeline %q) was restored after a failed delete, but its plugin's delete hook "+
+				"had already run and may have released resources its saved position depends on "+
+				"(for example a Postgres replication slot); refusing to start from that position",
+			i.ID, i.Plugin, i.PipelineID))
+		ce.Suggestion = "delete the connector and create it again to start it from the beginning; " +
+			"to resume from the saved position instead, first check that the resources it depends on still exist " +
+			"(for example the replication slot), then restart Conduit, which reloads the connector without this check"
+		return nil, ce
+	}
+	return i.newConnector(ctx, dispenserFetcher)
+}
+
+// newConnector is Connector without the delete-hook check. Close uses it: a
+// connector whose delete hook already ran must still be deletable.
+func (i *Instance) newConnector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
 		// connector is already running, might be a bug where an old connector is stuck
 		// Invariant: errors.Is(err, ErrConnectorRunning) still holds — sentinel
@@ -161,7 +191,7 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 
 func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
 	i.inspector.Close()
-	conn, err := i.Connector(ctx, dispenserFetcher)
+	conn, err := i.newConnector(ctx, dispenserFetcher)
 	if err != nil {
 		return err
 	}

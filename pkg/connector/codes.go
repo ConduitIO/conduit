@@ -41,6 +41,14 @@ var (
 	// receives it. A source that receives it has not acked the affected
 	// positions upstream, so a restart re-reads from the last stored position.
 	CodeConnectorStatePersistFailed = conduiterr.Register("connector.state_persist_failed", codes.Unavailable)
+	// CodeConnectorDeleteHookRan is raised when a connector is started after a
+	// delete that was rolled back but had already delivered the "deleted"
+	// lifecycle event to the plugin. The plugin may have released resources
+	// its saved position depends on (for example a Postgres replication
+	// slot), so resuming from that position could skip records. The connector
+	// refuses to start until it is deleted and created again, or Conduit is
+	// restarted after the resources were checked (#3137).
+	CodeConnectorDeleteHookRan = conduiterr.Register("connector.delete_hook_ran", codes.FailedPrecondition)
 )
 
 // statePersistSuggestion is the Suggestion carried by

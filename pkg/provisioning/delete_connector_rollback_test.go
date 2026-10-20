@@ -21,8 +21,10 @@ import (
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -179,3 +181,58 @@ func (f *failingDeleteDB) Set(ctx context.Context, key string, value []byte) err
 }
 
 var errDeleteRefused = cerrors.New("store refused the delete")
+
+// TestDeleteConnectorAction_RollbackAfterDeleteHookFailsClosed is the
+// provisioning half of the fail-closed rule (#3137). A provisioning apply
+// that deletes a started connector runs its delete hook; if a later action
+// fails, the rollback restores the instance with its position, and its next
+// start (at boot, provisioning starts the pipeline right after the import)
+// is refused with connector.delete_hook_ran instead of resuming into what
+// the hook may have released.
+func TestDeleteConnectorAction_RollbackAfterDeleteHookFailsClosed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+	conns := connector.NewService(logger, db, nil)
+
+	cfg := config.Connector{ID: uuid.NewString(), Type: config.TypeSource, Plugin: "test-plugin", Name: "src", Settings: map[string]string{"slot": "s1"}}
+	connCfg := connector.Config{Name: cfg.Name, Settings: cfg.Settings}
+	conn, err := conns.Create(ctx, cfg.ID, connector.TypeSource, cfg.Plugin, uuid.NewString(), connCfg, connector.ProvisionTypeConfig)
+	is.NoErr(err)
+	conn.LastActiveConfig = connCfg // it has started
+	position := connector.SourceState{Position: opencdc.Position("orders:42")}
+	_, err = conns.SetState(ctx, conn.ID, position)
+	is.NoErr(err)
+
+	src := pmock.NewSourcePlugin(ctrl)
+	src.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.SourceLifecycleOnDeletedResponse{}, nil)
+	src.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().Return(src, nil)
+	plugins := mock.NewConnectorPluginService(ctrl)
+	plugins.EXPECT().NewDispenser(gomock.Any(), cfg.Plugin, cfg.ID).Return(dispenser, nil).AnyTimes()
+
+	b := actionsBuilder{connectorService: conns, connectorPluginService: plugins}
+	actions := b.prepareConnectorActions(cfg, config.Connector{}, conn.PipelineID)
+	is.Equal(len(actions), 1)
+
+	txn, tctx, err := db.NewTransaction(ctx, true)
+	is.NoErr(err)
+	is.NoErr(actions[0].Do(tctx))
+	is.NoErr(actions[0].Rollback(tctx))
+	txn.Discard()
+
+	got, err := conns.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.True(got == conn)
+	is.Equal(got.State, position)
+
+	c, err := got.Connector(ctx, plugins)
+	is.True(c == nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), connector.CodeConnectorDeleteHookRan.Reason())
+	is.Equal(got.State, position)
+}

@@ -16,12 +16,14 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/google/uuid"
@@ -97,52 +99,105 @@ func TestService_Restore_RefusesToReplace(t *testing.T) {
 	is.True(s.Restore(context.Background(), nil) != nil)
 }
 
-// TestService_Restore_AfterDeleteHook covers invariant 3 in Restore: once
-// Delete delivered the "deleted" event to the plugin, the plugin may have
-// released what the position points into (a Postgres slot), so the restored
-// connector must not resume from it.
+// TestService_Restore_AfterDeleteHook covers the fail-closed rule (#3137,
+// invariant 3). Once Delete delivered the "deleted" event to the plugin, the
+// plugin may have released what the position points into (a Postgres slot).
+// Restore keeps the position untouched, and the restored connector refuses
+// to start with CodeConnectorDeleteHookRan. Both the source and the
+// destination branch of the hook are covered.
 func TestService_Restore_AfterDeleteHook(t *testing.T) {
 	testCases := []struct {
-		name      string
-		hookErr   error
-		wantClear bool
+		name     string
+		started  bool  // has a LastActiveConfig, so the hook delivers "deleted"
+		hookErr  error // what the plugin's LifecycleOnDeleted returns
+		wantMark bool
 	}{
-		{name: "hook succeeded", hookErr: nil, wantClear: true},
+		{name: "hook succeeded", started: true, hookErr: nil, wantMark: true},
 		// The plugin got the event; it may have released part of it.
-		{name: "hook failed", hookErr: cerrors.New("could not drop slot"), wantClear: true},
+		{name: "hook failed", started: true, hookErr: cerrors.New("could not drop slot"), wantMark: true},
 		// An older plugin without lifecycle events did nothing.
-		{name: "hook not implemented", hookErr: pconnector.ErrUnimplemented, wantClear: false},
+		{name: "hook not implemented", started: true, hookErr: pconnector.ErrUnimplemented, wantMark: false},
+		// Never started: there is no "deleted" event to deliver.
+		{name: "hook did not run", started: false, wantMark: false},
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
-			ctx := context.Background()
-			ctrl := gomock.NewController(t)
-			s := NewService(log.Nop(), &inmemory.DB{}, nil)
-			conn := newRestoreTestConnector(t, s)
-			conn.LastActiveConfig = conn.Config // it has started
+	for _, typ := range []Type{TypeSource, TypeDestination} {
+		for _, tc := range testCases {
+			t.Run(typ.String()+"/"+tc.name, func(t *testing.T) {
+				is := is.New(t)
+				ctx := context.Background()
+				ctrl := gomock.NewController(t)
+				s := NewService(log.Nop(), &inmemory.DB{}, nil)
 
-			src := pmock.NewSourcePlugin(ctrl)
-			src.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.SourceLifecycleOnDeletedResponse{}, tc.hookErr)
-			src.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
-			dispenser := pmock.NewDispenser(ctrl)
-			dispenser.EXPECT().DispenseSource().Return(src, nil)
+				cfg := Config{Name: "conn", Settings: map[string]string{"table": "orders"}}
+				conn, err := s.Create(ctx, uuid.NewString(), typ, "test-plugin", uuid.NewString(), cfg, ProvisionTypeAPI)
+				is.NoErr(err)
+				var state any = SourceState{Position: opencdc.Position("orders:42")}
+				if typ == TypeDestination {
+					state = DestinationState{Positions: map[string]opencdc.Position{"src": opencdc.Position("orders:42")}}
+				}
+				if tc.started {
+					conn.LastActiveConfig = cfg
+				}
+				_, err = s.SetState(ctx, conn.ID, state)
+				is.NoErr(err)
+				wantLAC := conn.LastActiveConfig
 
-			is.NoErr(s.Delete(ctx, conn.ID, fakePluginFetcher{conn.Plugin: dispenser}))
-			is.NoErr(s.Restore(ctx, conn))
+				dispenser := hookDispenser(ctrl, typ, tc.started, tc.hookErr)
+				plugins := fakePluginFetcher{conn.Plugin: dispenser}
 
-			got, err := s.Get(ctx, conn.ID)
-			is.NoErr(err)
-			is.True(got == conn)
-			if tc.wantClear {
-				is.Equal(got.State, nil)
-				is.Equal(got.LastActiveConfig, Config{})
-			} else {
-				is.Equal(got.State, SourceState{Position: opencdc.Position("orders:42")})
-				is.Equal(got.LastActiveConfig, conn.Config)
-			}
-		})
+				is.NoErr(s.Delete(ctx, conn.ID, plugins))
+				is.NoErr(s.Restore(ctx, conn))
+
+				got, err := s.Get(ctx, conn.ID)
+				is.NoErr(err)
+				is.True(got == conn)
+				is.Equal(got.State, state) // never cleared
+				is.Equal(got.LastActiveConfig, wantLAC)
+
+				// The next start builds the connector first.
+				c, err := got.Connector(ctx, plugins)
+				if tc.wantMark {
+					is.True(c == nil)
+					ce, ok := conduiterr.Get(err)
+					is.True(ok)
+					is.Equal(ce.Code.Reason(), CodeConnectorDeleteHookRan.Reason())
+					is.True(ce.Suggestion != "")
+					is.True(strings.Contains(err.Error(), conn.ID))
+					is.Equal(got.State, state) // the refusal leaves the position intact
+				} else {
+					is.NoErr(err)
+					is.True(c != nil)
+				}
+
+				// A marked connector can still be deleted (the remedy).
+				if tc.wantMark {
+					is.NoErr(s.Delete(ctx, conn.ID, fakePluginFetcher{conn.Plugin: hookDispenser(ctrl, typ, true, nil)}))
+				}
+			})
+		}
 	}
+}
+
+// hookDispenser returns a dispenser whose plugin answers one delete hook
+// with hookErr, or a dispenser that is never asked for a plugin when the
+// connector has not started (no "deleted" event to deliver).
+func hookDispenser(ctrl *gomock.Controller, typ Type, started bool, hookErr error) *pmock.Dispenser {
+	dispenser := pmock.NewDispenser(ctrl)
+	if !started {
+		return dispenser
+	}
+	if typ == TypeSource {
+		src := pmock.NewSourcePlugin(ctrl)
+		src.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.SourceLifecycleOnDeletedResponse{}, hookErr)
+		src.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+		dispenser.EXPECT().DispenseSource().Return(src, nil)
+		return dispenser
+	}
+	dst := pmock.NewDestinationPlugin(ctrl)
+	dst.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.DestinationLifecycleOnDeletedResponse{}, hookErr)
+	dst.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.DestinationTeardownResponse{}, nil)
+	dispenser.EXPECT().DispenseDestination().Return(dst, nil)
+	return dispenser
 }
 
 // TestService_Restore_InTransactionDoesNotWrite checks that Restore leaves
