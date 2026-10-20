@@ -40,6 +40,14 @@
 //   - the values: decoding the body with that schema, again on a fresh config,
 //     gives back the expected value.
 //
+// A second test (fanout_test.go) covers conduit#3151 / conduit-commons#336:
+// one source into three destinations, on the classic and the arch-v2 engine,
+// where two destinations edit nested arrays and maps of their record in place
+// with custom.javascript and the third has no processor. Each destination's
+// output is compared with the exact value it must carry, so an
+// opencdc.Record.Clone that shares nested data between fan-out branches shows
+// as one branch writing another's edit.
+//
 // Invariant 6 (schema handling never silently mangles data) is what this
 // package guards. It runs nightly and on data-path pull requests through
 // .github/workflows/value-correctness.yml, and is skipped elsewhere unless
