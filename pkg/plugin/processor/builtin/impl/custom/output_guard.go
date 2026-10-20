@@ -69,7 +69,7 @@ type outputChecker struct {
 }
 
 func newOutputChecker() *outputChecker {
-	return &outputChecker{w: outputWalker{seen: map[containerID]int{}}}
+	return &outputChecker{w: outputWalker{seen: map[containerID]checked{}}}
 }
 
 // check verifies v, naming it root in error paths, and charges its expanded
@@ -77,7 +77,7 @@ func newOutputChecker() *outputChecker {
 func (c *outputChecker) check(root string, v any) error {
 	c.w.root = root
 	c.w.segs = c.w.segs[:0]
-	size, err := c.w.walk(v, 0)
+	size, _, err := c.w.walk(v, 0)
 	if err != nil {
 		return err
 	}
@@ -108,10 +108,21 @@ var (
 	typAnySlice      = reflect.TypeOf([]any(nil))
 )
 
-// inProgress marks a container on the current descent in outputWalker.seen.
-// A finished container maps to its expanded entry count, which is at least 1
-// because empty containers are never recorded.
+// inProgress marks a container on the current descent in outputWalker.seen
+// (as its size). A finished container maps to its expanded entry count, which
+// is at least 1 because empty containers are never recorded.
 const inProgress = -1
+
+// checked is what the walker remembers about a finished container.
+type checked struct {
+	// size is the expanded entry count of the container.
+	size int
+	// height is the number of container levels in its subtree, itself
+	// included (a container holding only scalars has height 1). A shared
+	// container is walked once, from wherever it was first seen; height lets
+	// every later parent re-check the depth limit against its own depth.
+	height int
+}
 
 // pathSeg is one step of an error path. It is kept as data and only
 // formatted on error, so a deep or wide output allocates nothing per node.
@@ -131,7 +142,7 @@ type outputWalker struct {
 	// itself. Any other value is the expanded entry count of a fully checked
 	// container, so a shared value is walked once however many parents
 	// reference it.
-	seen map[containerID]int
+	seen map[containerID]checked
 }
 
 // path returns the location of the value being visited.
@@ -164,17 +175,22 @@ func isLeaf(v any) bool {
 }
 
 // walk checks v and everything below it, depth levels below the root. It
-// returns the expanded entry count of v.
+// returns the expanded entry count of v and its height (see checked).
+func (w *outputWalker) walk(v any, depth int) (size, height int, err error) {
+	if isLeaf(v) {
+		return 0, 0, nil
+	}
+	return w.walkContainer(v, depth)
+}
+
+// walkContainer is walk for a value already known not to be a leaf.
 //
 // The type switch covers the shapes goja's Export produces, which is nearly
 // every record; it avoids reflect.Value.Interface, which allocates for each
 // child. Anything else (typed maps and slices from Go-side code, pointers to
 // containers) goes through reflection with the same identity and limit rules.
-func (w *outputWalker) walk(v any, depth int) (int, error) {
+func (w *outputWalker) walkContainer(v any, depth int) (size, height int, err error) {
 	switch t := v.(type) {
-	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16,
-		uint32, uint64, float32, float64, []byte, opencdc.RawData, *opencdc.RawData:
-		return 0, nil
 	case map[string]any:
 		return w.walkStringMap(t, typStringMap, depth)
 	case opencdc.StructuredData:
@@ -187,7 +203,7 @@ func (w *outputWalker) walk(v any, depth int) (int, error) {
 	switch rv.Kind() { //nolint:exhaustive // only containers can hold other values
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
-			return 0, nil
+			return 0, 0, nil
 		}
 		// Pointers to data (for example *opencdc.RawData from RawData()) are
 		// leaves. A pointer to a container is followed with the same
@@ -198,25 +214,34 @@ func (w *outputWalker) walk(v any, depth int) (int, error) {
 }
 
 // enter registers a non-empty container before its children are walked. If
-// it returns cached, the container was already fully checked and size is its
-// expanded entry count. Invariant 3: a cycle or runaway depth is rejected
-// here, before anything recurses into it.
-func (w *outputWalker) enter(id containerID, depth int) (size int, cached bool, err error) {
-	if s, ok := w.seen[id]; ok {
-		if s == inProgress {
-			return 0, false, cyclicErr(w.path())
+// it returns cached, the container was already fully checked and c holds what
+// was learned. Invariant 3: a cycle or runaway depth is rejected here, before
+// anything recurses into it. A cached container is re-checked against the
+// depth it appears at now, not the depth where it was first seen: the same
+// container reached late in a long chain is deeper than its first sighting.
+func (w *outputWalker) enter(id containerID, depth int) (c checked, cached bool, err error) {
+	if c, ok := w.seen[id]; ok {
+		if c.size == inProgress {
+			return checked{}, false, cyclicErr(w.path())
 		}
-		return s, true, nil
+		if depth+c.height > maxOutputDepth {
+			return checked{}, false, w.tooDeep()
+		}
+		return c, true, nil
 	}
-	w.seen[id] = inProgress
+	w.seen[id] = checked{size: inProgress}
 	if depth >= maxOutputDepth {
-		return 0, false, limitErr(w.path(), "nests deeper than "+strconv.Itoa(maxOutputDepth)+" levels")
+		return checked{}, false, w.tooDeep()
 	}
-	return 0, false, nil
+	return checked{}, false, nil
 }
 
 // leave records a fully checked container.
-func (w *outputWalker) leave(id containerID, total int) { w.seen[id] = total }
+func (w *outputWalker) leave(id containerID, c checked) { w.seen[id] = c }
+
+func (w *outputWalker) tooDeep() error {
+	return limitErr(w.path(), "nests deeper than "+strconv.Itoa(maxOutputDepth)+" levels")
+}
 
 func (w *outputWalker) tooBig() error {
 	return limitErr(w.path(), "expands to more than "+strconv.Itoa(maxOutputEntries)+" entries once shared values are counted at each place they appear")
@@ -224,109 +249,114 @@ func (w *outputWalker) tooBig() error {
 
 // descend walks child one level below the current container. Leaves return
 // immediately without touching the path.
-func (w *outputWalker) descend(child any, seg pathSeg, depth int) (int, error) {
+func (w *outputWalker) descend(child any, seg pathSeg, depth int) (size, height int, err error) {
 	if isLeaf(child) {
-		return 0, nil
+		return 0, 0, nil
 	}
 	w.segs = append(w.segs, seg)
-	size, err := w.walk(child, depth+1)
+	size, height, err = w.walkContainer(child, depth+1)
 	if err != nil {
-		return 0, err // keep segs: they locate the failure
+		return 0, 0, err // keep segs: they locate the failure
 	}
 	w.segs = w.segs[:len(w.segs)-1]
-	return size, nil
+	return size, height, nil
 }
 
-func (w *outputWalker) walkStringMap(m map[string]any, typ reflect.Type, depth int) (int, error) {
+func (w *outputWalker) walkStringMap(m map[string]any, typ reflect.Type, depth int) (int, int, error) {
 	n := len(m)
 	if n == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	id := containerID{ptr: reflect.ValueOf(m).Pointer(), len: n, typ: typ}
-	if size, cached, err := w.enter(id, depth); err != nil || cached {
-		return size, err
+	if c, cached, err := w.enter(id, depth); err != nil || cached {
+		return c.size, c.height, err
 	}
-	total := n
+	total, maxChild := n, 0
 	for k, c := range m {
-		size, err := w.descend(c, pathSeg{key: k}, depth)
+		size, h, err := w.descend(c, pathSeg{key: k}, depth)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		total += size
+		maxChild = max(maxChild, h)
 		if total > maxOutputEntries {
-			return 0, w.tooBig()
+			return 0, 0, w.tooBig()
 		}
 	}
-	w.leave(id, total)
-	return total, nil
+	res := checked{size: total, height: maxChild + 1}
+	w.leave(id, res)
+	return res.size, res.height, nil
 }
 
-func (w *outputWalker) walkAnySlice(s []any, depth int) (int, error) {
+func (w *outputWalker) walkAnySlice(s []any, depth int) (int, int, error) {
 	n := len(s)
 	if n == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	id := containerID{ptr: reflect.ValueOf(s).Pointer(), len: n, typ: typAnySlice}
-	if size, cached, err := w.enter(id, depth); err != nil || cached {
-		return size, err
+	if c, cached, err := w.enter(id, depth); err != nil || cached {
+		return c.size, c.height, err
 	}
-	total := n
+	total, maxChild := n, 0
 	for i, c := range s {
-		size, err := w.descend(c, pathSeg{index: i, isIdx: true}, depth)
+		size, h, err := w.descend(c, pathSeg{index: i, isIdx: true}, depth)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		total += size
+		maxChild = max(maxChild, h)
 		if total > maxOutputEntries {
-			return 0, w.tooBig()
+			return 0, 0, w.tooBig()
 		}
 	}
-	w.leave(id, total)
-	return total, nil
+	res := checked{size: total, height: maxChild + 1}
+	w.leave(id, res)
+	return res.size, res.height, nil
 }
 
 // walkValue is the reflection fallback for containers the fast path does not
 // know. Its identity and limit rules are the same as the fast path's.
-func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, error) {
+func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, int, error) {
 	var n int
 	switch rv.Kind() { //nolint:exhaustive // only containers can hold other values
 	case reflect.Map:
 		n = rv.Len()
 	case reflect.Slice, reflect.Array:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return 0, nil // byte data, no nesting
+			return 0, 0, nil // byte data, no nesting
 		}
 		n = rv.Len()
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
-			return 0, nil
+			return 0, 0, nil
 		}
 		return w.walkValue(rv.Elem(), depth)
 	default:
-		return 0, nil
+		return 0, 0, nil
 	}
 	if n == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	var id containerID
 	trackable := rv.Kind() == reflect.Map || rv.Kind() == reflect.Slice
 	if trackable {
 		id = containerID{ptr: rv.Pointer(), len: n, typ: rv.Type()}
-		if size, cached, err := w.enter(id, depth); err != nil || cached {
-			return size, err
+		if c, cached, err := w.enter(id, depth); err != nil || cached {
+			return c.size, c.height, err
 		}
 	} else if depth >= maxOutputDepth {
-		return 0, limitErr(w.path(), "nests deeper than "+strconv.Itoa(maxOutputDepth)+" levels")
+		return 0, 0, w.tooDeep()
 	}
 
-	total := n
+	total, maxChild := n, 0
 	add := func(child reflect.Value, seg pathSeg) error {
-		size, err := w.descend(child.Interface(), seg, depth)
+		size, h, err := w.descend(child.Interface(), seg, depth)
 		if err != nil {
 			return err
 		}
 		total += size
+		maxChild = max(maxChild, h)
 		if total > maxOutputEntries {
 			return w.tooBig()
 		}
@@ -338,21 +368,22 @@ func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, error) {
 		it := rv.MapRange()
 		for it.Next() {
 			if err := add(it.Value(), pathSeg{key: keyString(it.Key())}); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 		}
 	default:
 		for i := 0; i < n; i++ {
 			if err := add(rv.Index(i), pathSeg{index: i, isIdx: true}); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 		}
 	}
 
+	res := checked{size: total, height: maxChild + 1}
 	if trackable {
-		w.leave(id, total)
+		w.leave(id, res)
 	}
-	return total, nil
+	return res.size, res.height, nil
 }
 
 func keyString(k reflect.Value) string {

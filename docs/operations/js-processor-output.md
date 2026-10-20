@@ -39,9 +39,25 @@ and a recovering pipeline re-reads the same record and fails again (see the pois
   are fixed and not configurable.
 - Enable a DLQ so one bad record does not stall the pipeline.
 
-## Known gap
+## Known gaps
 
-The check runs after goja has converted the script's return value. goja's own conversion of a
-JavaScript object into Go recurses without a bound; a script that builds an object around 7 million
-levels deep in a loop can overflow the stack inside goja before the check runs. That needs a script
-written to do it and several gigabytes of memory.
+The check runs after goja has converted the script's value into Go data. Two ways to crash the
+process happen inside goja, before the check can run. Both need a script written to do it: record
+data cannot trigger them, only script code can.
+
+- **A `Map` or `Set` that contains itself.** goja exports a `Map` or `Set` without checking whether
+  it is already being exported, so a collection that reaches itself recurses until
+  `fatal error: stack overflow`. It happens on assignment to the record or to any input
+  object, not when the record is returned:
+
+  ```js
+  var s = new Set(); s.add(s);
+  r.Payload.After = {s: s};   // fatal here; the same with a Map, or via r.Payload.After["s"] = s
+  ```
+
+  Plain objects and arrays are not affected (goja tracks those), and the guard above covers them.
+  Until goja is fixed, do not store a `Map` or `Set` inside itself or inside one of its own
+  members. A fix in goja is being tracked.
+- **Extremely deep objects.** goja's own conversion of a JavaScript object into Go recurses without
+  a bound; a script that builds an object around 7 million levels deep in a loop can overflow the
+  stack inside goja before the check runs. That needs several gigabytes of memory.

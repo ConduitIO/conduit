@@ -430,3 +430,81 @@ func BenchmarkCheckOutput(b *testing.B) {
 		})
 	}
 }
+
+// TestCheckOutput_DepthOfSharedContainers: a container shared by several
+// parents is walked once, from wherever it was first seen. The depth limit
+// must still hold at every place it appears.
+func TestCheckOutput_DepthOfSharedContainers(t *testing.T) {
+	// A chain of N nodes, n0 -> n1 -> ... -> nN-1, with the root listing
+	// every step-th node in reverse order. Each listed node is walked for at
+	// most step levels before it meets the previously listed (cached) one, so
+	// no first walk is deep; yet the last listed node really nests about N
+	// levels.
+	const (
+		nodes = 560_000
+		step  = 9_824
+	)
+	// One key per node keeps the expanded size just under the entry limit
+	// (about 16.6M of 16.77M), so only the depth check can reject this.
+	chain := make([]map[string]any, nodes)
+	for i := range chain {
+		chain[i] = map[string]any{}
+		if i > 0 {
+			chain[i-1]["next"] = chain[i]
+		}
+	}
+	chain[nodes-1]["leaf"] = 1
+	var root []any
+	for i := nodes - 1; i >= 0; i -= step {
+		root = append(root, chain[i])
+	}
+
+	is := is.New(t)
+	err := checkOutput("", root)
+	is.True(err != nil) // a 560k-level nesting must be rejected however it is reached
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeJSOutputLimitExceeded)
+
+	// A shared container at the limit exactly is still fine.
+	shared := chainOf(maxOutputDepth - 1) // height maxOutputDepth-1, so depth 1 reaches the limit
+	is.NoErr(checkOutput("", []any{shared, shared}))
+	is.True(checkOutput("", []any{[]any{shared}, shared}) != nil) // one level deeper than the limit
+}
+
+// chainOf returns n nested maps (height n).
+func chainOf(n int) map[string]any {
+	root := map[string]any{}
+	cur := root
+	for i := 1; i < n; i++ {
+		next := map[string]any{}
+		cur["n"] = next
+		cur = next
+	}
+	cur["leaf"] = 1
+	return root
+}
+
+// TestCheckOutput_DepthViaReflection: the depth limit on the reflection
+// fallback (named map types) matches the fast path.
+func TestCheckOutput_DepthViaReflection(t *testing.T) {
+	type namedMap map[string]any
+	build := func(n int) any {
+		root := namedMap{}
+		cur := root
+		for i := 1; i < n; i++ {
+			next := namedMap{}
+			cur["n"] = next
+			cur = next
+		}
+		cur["leaf"] = 1
+		return root
+	}
+	is := is.New(t)
+	is.NoErr(checkOutput("", build(maxOutputDepth)))
+	err := checkOutput("", build(maxOutputDepth+1))
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeJSOutputLimitExceeded)
+}
