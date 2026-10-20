@@ -48,6 +48,7 @@ type DryRunFlags struct {
 	ResolvePlugins bool `long:"resolve-plugins" usage:"check that referenced builtin plugins exist (standalone plugins stay advisory)"`
 	Quiet          bool `long:"quiet" short:"q" usage:"suppress passing/OK lines and progress chrome; print only problems and the summary"`
 	NoColor        bool `long:"no-color" usage:"disable colored/glyph output even on a color-capable terminal"`
+	ArchV2         bool `long:"preview.pipeline-arch-v2" usage:"report a destination or dead-letter-queue with sdk.batch.size above 1 as unsupported (architecture v2 waits for every ack before the next read and cannot batch)"`
 }
 
 // DryRunCommand implements `conduit pipelines dry-run <path>`: everything
@@ -116,6 +117,7 @@ func (c *DryRunCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome
 		ResolvePlugins:    c.flags.ResolvePlugins,
 		BuiltinPlugins:    builtinPluginSet(),
 		BuiltinProcessors: builtinProcessorSet(),
+		ArchV2:            c.flags.ArchV2,
 	})
 	if err != nil {
 		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInvalidArgument,

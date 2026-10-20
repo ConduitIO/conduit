@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -121,6 +122,71 @@ func TestBatch_SetRecords_Filtered(t *testing.T) {
 	// Overwrite one
 	batch.SetRecords(1, records[:1])
 	is.Equal(batch.ActiveRecords(), []opencdc.Record{newRecords[0], records[0]})
+}
+
+// TestNewBatch_OwnsRecords is the regression test for the RAG template e2e
+// failure: NewBatch must take ownership of the records it is handed, so
+// SetRecords' in-place copy can never write into the caller's backing array.
+//
+// Before the fix, NewBatch stored the source connector's records slice by
+// reference. SetRecords then did copy(b.records[i:], recs) straight into that
+// shared array while the connector SDK's read goroutine was still reading
+// recs[len(recs)-1].Position (sourcePluginAdapter.runRead, which stores the
+// last-sent position after sending) - a data race the rag-template-e2e hit as
+// a write in runtime.slicecopy (runtime/slice.go:392) under -race, and which
+// silently corrupts a.lastPosition without the race detector.
+func TestNewBatch_OwnsRecords(t *testing.T) {
+	is := is.New(t)
+
+	records := randomRecords(2)
+	want := slices.Clone(records)
+
+	batch := NewBatch(records)
+
+	// Replace record 0 with a distinguishable record. If NewBatch shared the
+	// caller's array, this copy would overwrite records[0] out from under it.
+	replacement := []opencdc.Record{{Position: opencdc.Position("replaced")}}
+	batch.SetRecords(0, replacement)
+
+	is.Equal(records, want) // the caller's slice is untouched
+	is.Equal(batch.records[0].Position, opencdc.Position("replaced"))
+}
+
+// TestBatch_SetRecords_Overrun_Panics proves SetRecords rejects an overrun
+// loudly instead of silently truncating (unfiltered path) or panicking with an
+// opaque slice-bounds error (filtered path). A compliant processor never
+// triggers this - the SDK's Process contract returns one ProcessedRecord per
+// input record - so an overrun here is a processor-contract violation that
+// must not be allowed to mangle data (invariant 6).
+func TestBatch_SetRecords_Overrun_Panics(t *testing.T) {
+	t.Run("unfiltered", func(t *testing.T) {
+		batch := NewBatch(randomRecords(2))
+		assertPanicsWithPrefix(t, "(bug) SetRecords:", func() {
+			batch.SetRecords(0, randomRecords(3)) // 3 records into 2 slots
+		})
+	})
+	t.Run("filtered", func(t *testing.T) {
+		batch := NewBatch(randomRecords(3))
+		batch.Filter(1) // active view is [0, 2] (2 records)
+		assertPanicsWithPrefix(t, "(bug) SetRecords:", func() {
+			batch.SetRecords(0, randomRecords(3)) // 3 records into 2 active slots
+		})
+	})
+}
+
+func assertPanicsWithPrefix(t *testing.T, prefix string, f func()) {
+	t.Helper()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected a panic with prefix %q, but nothing panicked", prefix)
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.HasPrefix(msg, prefix) {
+			t.Fatalf("expected panic with prefix %q, got %v", prefix, r)
+		}
+	}()
+	f()
 }
 
 func TestBatch_SplitRecord(t *testing.T) {

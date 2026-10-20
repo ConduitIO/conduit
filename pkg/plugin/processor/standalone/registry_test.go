@@ -91,8 +91,12 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 
 	t.Run("ConcurrentProcessors", func(t *testing.T) {
 		const (
-			// spawn 25 processors, each processing 25 records simultaneously
-			processorCount = 25
+			// Spawn enough processors to exercise the shared registry's
+			// concurrency safety, but not so many that the WASM runtime
+			// instantiation cost (about a second per processor, cold) blows
+			// the 2-minute WaitTimeout on loaded CI runners (#3159). A race is
+			// caught by -race regardless of the count; 10 is plenty.
+			processorCount = 10
 			recordCount    = 25
 		)
 

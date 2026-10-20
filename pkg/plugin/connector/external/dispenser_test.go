@@ -37,7 +37,7 @@ func TestDispenser_Specify_RoundTrip(t *testing.T) {
 	is := is.New(t)
 
 	wantSpec := pconnector.Specification{Name: "fake-connector", Version: "v1.2.3"}
-	srv := startFakeServer(t, &fakeSpecifier{spec: wantSpec}, &fakeSource{}, &fakeDestination{})
+	srv := startFakeServer(t, 3, &fakeSpecifier{spec: wantSpec}, &fakeSource{}, &fakeDestination{})
 
 	d, err := external.NewDispenser(zerolog.Nop(), srv.addr)
 	is.NoErr(err)
@@ -58,7 +58,7 @@ func TestDispenser_DispenseSource_ConfigureRoundTrip(t *testing.T) {
 	is := is.New(t)
 
 	configured := make(chan pconnector.SourceConfigureRequest, 1)
-	srv := startFakeServer(t, &fakeSpecifier{}, &fakeSource{configured: configured}, &fakeDestination{})
+	srv := startFakeServer(t, 3, &fakeSpecifier{}, &fakeSource{configured: configured}, &fakeDestination{})
 
 	d, err := external.NewDispenser(zerolog.Nop(), srv.addr)
 	is.NoErr(err)
@@ -87,7 +87,7 @@ func TestDispenser_DispenseDestination_ConfigureRoundTrip(t *testing.T) {
 	is := is.New(t)
 
 	configured := make(chan pconnector.DestinationConfigureRequest, 1)
-	srv := startFakeServer(t, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{configured: configured})
+	srv := startFakeServer(t, 3, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{configured: configured})
 
 	d, err := external.NewDispenser(zerolog.Nop(), srv.addr)
 	is.NoErr(err)
@@ -117,7 +117,7 @@ func TestDispenser_DispenseDestination_ConfigureRoundTrip(t *testing.T) {
 func TestDispenser_Validate_Success(t *testing.T) {
 	is := is.New(t)
 
-	srv := startFakeServer(t, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{})
+	srv := startFakeServer(t, 2, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{})
 
 	d, err := external.NewDispenser(zerolog.Nop(), srv.addr, external.WithProtocolVersion(external.ProtocolVersionV2))
 	is.NoErr(err)
@@ -197,7 +197,7 @@ func TestDispenser_Validate_VersionMismatch(t *testing.T) {
 func TestDispenser_Teardown_CompletesGracefully(t *testing.T) {
 	is := is.New(t)
 
-	srv := startFakeServer(t, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{})
+	srv := startFakeServer(t, 3, &fakeSpecifier{}, &fakeSource{}, &fakeDestination{})
 
 	d, err := external.NewDispenser(zerolog.Nop(), srv.addr)
 	is.NoErr(err)

@@ -122,6 +122,44 @@ var (
 	CodeExternalConnectorVersionMismatch = Register("connector.external_version_mismatch", codes.FailedPrecondition)
 )
 
+// Ambient-credentials codes (docs/design-documents/20261012-builtin-connector-ambient-credentials.md).
+// The connector.* reasons are raised by built-in connectors as
+// conduit-commons/hostpolicy errors and converted at the builtin plugin
+// boundary; the string values must equal hostpolicy's Code constants (a test in
+// pkg/plugin/connector/builtin asserts it). They are registered here, not in
+// the builtin package, so a CLI decoding a gRPC status knows them too.
+var (
+	// CodeAmbientCredentialsDisabled is raised when a built-in connector has no
+	// static credentials and the operator has not enabled ambient credentials.
+	CodeAmbientCredentialsDisabled = Register("connector.ambient_credentials_disabled", codes.PermissionDenied)
+	// CodeCredentialsIncomplete is raised when only one of a static credential
+	// pair is set; it never falls back to ambient credentials.
+	CodeCredentialsIncomplete = Register("connector.credentials_incomplete", codes.PermissionDenied)
+	// CodeEndpointNotAllowed is raised when, under ambient credentials, an
+	// endpoint is not https or not an exact allow-endpoints entry.
+	CodeEndpointNotAllowed = Register("connector.endpoint_not_allowed", codes.PermissionDenied)
+	// CodeRedirectRefused is raised when a server redirects an
+	// ambient-credential request to another host or a non-https URL.
+	CodeRedirectRefused = Register("connector.redirect_refused", codes.PermissionDenied)
+	// CodeEndpointLinkLocal is raised when an ambient-credential connection
+	// would go to a link-local or cloud metadata address.
+	CodeEndpointLinkLocal = Register("connector.endpoint_link_local", codes.PermissionDenied)
+	// CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an
+	// exact allow-resources entry, or is an ARN or alias form.
+	CodeResourceNotAllowed = Register("connector.resource_not_allowed", codes.PermissionDenied)
+	// CodeProxyNotAllowed is raised when a proxy variable is set and the
+	// operator has not set connectors.ambient-credentials.allow-proxy.
+	CodeProxyNotAllowed = Register("connector.proxy_not_allowed", codes.PermissionDenied)
+
+	// CodeAmbientResourceWildcard is a startup error: an entry of
+	// connectors.ambient-credentials.allow-resources contains '*'. Bucket names
+	// are globally registrable, so a pattern would admit buckets anyone can create.
+	CodeAmbientResourceWildcard = Register("config.ambient_resource_wildcard", codes.InvalidArgument)
+	// CodeAmbientProxyEnv is a startup error: ambient credentials are enabled
+	// while an HTTP proxy variable is set and allow-proxy is false.
+	CodeAmbientProxyEnv = Register("config.ambient_proxy_env", codes.FailedPrecondition)
+)
+
 // Fix is a structured, machine-appliable change that resolves an error. The same
 // Fix is applied by the CLI `repair` command and the MCP `repair` tool, so a human
 // and an agent get the identical remediation rather than divergent capabilities.

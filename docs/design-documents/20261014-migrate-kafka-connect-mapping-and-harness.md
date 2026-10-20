@@ -159,6 +159,21 @@ key can never be `kc.key_unknown`). A scheduled job (lane-plan PR 20) fetches th
 pages named in each snapshot header, extracts the key tables, diffs them against the snapshot and fails the nightly
 when they differ, with the added, removed and changed-default keys in the failure message.
 
+As built (added 2026-10-15): the nightly job is `.github/workflows/kcmigrate-drift.yml`, running
+`cmd/conduit/internal/kcdrift`. A snapshot opts in with a `check` section naming the generated pages
+(`kafka.apache.org/<major><minor>/generated/<page>.html`) and the page keys it leaves out, each with a reason (a
+regex, or another snapshot's keys). A snapshot key records `documented` when the page shows a different default
+than the effective one it keeps, `undocumented` when no page lists it, and `required` when the page shows no
+default at all (an empty cell, which is not the same as `null`), so a key that becomes required upstream is
+drift. Each snapshot is compared twice: with its pinned version's pages, where a difference means the snapshot is
+wrong (exit 3), and with the newest version that publishes them, where a difference is drift (exit 1). The
+release list (downloads.apache.org) is read too: a released version with no generated pages cannot be checked
+(exit 2, as is a page that cannot be read). Any of them fails the run and files one tracking issue, from a
+separate job that alone can write issues. A pull request that touches the job or a snapshot runs it too, with
+drift as a warning and the other codes failing. The offline parser and comparison tests
+run in the normal test job. Snapshots of non-Kafka upstreams (Debezium, Confluent) add their page format when
+their families land.
+
 Consequences, all enforced by tests:
 
 - The known-key set of a class is the key list of its file. `kc.key_unknown` (migrate) and
@@ -172,6 +187,11 @@ Consequences, all enforced by tests:
   gate (_Harness corpus_, rule 4). It is declared in data and cross-checked by a test against the plugins that
   `emit` kinds can actually produce.
 - Docs: the per-connector guide's mapping table is generated from the same files.
+- A class that produces no pipeline (MirrorMaker's checkpoint and heartbeat connectors) declares
+  `pipeline: none` and one `every` outcome, unsupported, which every key of the connector gets, shared keys
+  included; it has no `keys`, `defaults`, `emits` or `finish`. Its class notes still apply. Its corpus cases
+  belong to the family whose connectors it runs with (`harness.FamilyAuxClasses`). It has no upstream key
+  snapshot: no key changes its outcome, so key drift cannot change the report (added 2026-10-15).
 
 ### Mapping conventions
 
@@ -624,8 +644,13 @@ group; the target selector is owned by #3007. Until the destination's spec lists
 fails and the connector carries the blocking note `kc.output_shape_differs` ("partition numbers, headers and
 timestamps are not preserved"). `MirrorCheckpointConnector` produces no pipeline (offset translation has no
 equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connector_class_unsupported`.
-`MirrorHeartbeatConnector` produces no pipeline either, non-blocking. A dedicated-mode `mm2.properties` file
-(`clusters`, `A->B.*`) is not an input format in v1 (D4).
+`MirrorHeartbeatConnector` produces no pipeline either, non-blocking: it writes heartbeat records for
+monitoring and copies no data. Both are `pipeline: none` rule files (`mirror-checkpoint.yaml`,
+`mirror-heartbeat.yaml`). The heartbeat file adds a non-blocking class note (`kc.output_shape_differs`) that
+heartbeats stop: the heartbeats topic gets no new records, which breaks dashboards and MirrorClient lookups, and
+the migrated source pipeline does not copy heartbeats topics. A literal secret in either still carries
+`kc.secret_plaintext`. A dedicated-mode
+`mm2.properties` file (`clusters`, `A->B.*`) is not an input format in v1 (D4).
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |

@@ -58,6 +58,7 @@ type Plan struct {
 	origin     string            // origin of the action being applied
 	layer      int               // layer of the action being applied
 	config     map[string]string // the connector's values, for finishers
+	pgURL      map[string]string // Postgres connection URL parts, assembled by the pg-url finisher
 	secrets    []Secret
 	envs       *EnvNames
 }

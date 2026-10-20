@@ -84,6 +84,15 @@ type Options struct {
 	// builtin.DefaultBuiltinProcessors, supplied by the dry-run command. Only
 	// consulted when ResolvePlugins.
 	BuiltinProcessors map[string]struct{}
+
+	// ArchV2 checks, on top of parse -> enrich -> validate, that no destination
+	// or dead-letter-queue sets sdk.batch.size above 1: architecture v2's
+	// stop-and-wait destination task waits for every ack before the next read,
+	// so it cannot batch, and the engine refuses such a pipeline at start with
+	// pipeline.archv2_destination_batching_unsupported. The offline engine has
+	// no runtime config, so the command passes this from
+	// preview.pipeline-arch-v2.
+	ArchV2 bool
 }
 
 // RunWithOptions is Run with the opt-in checks in opts. Run(ctx, path) is
@@ -233,6 +242,10 @@ func validateReader(ctx context.Context, name string, r io.Reader, opts Options)
 		if opts.ResolvePlugins {
 			fs.findings = append(fs.findings, resolvePluginRefs(enriched, opts)...)
 		}
+
+		if opts.ArchV2 {
+			fs.findings = append(fs.findings, archV2BatchingFindings(enriched)...)
+		}
 	}
 
 	return fs
@@ -295,6 +308,56 @@ func builtinRefFinding(pluginRef, id, configPath, code, kind string, builtins ma
 		ConfigPath: configPath,
 		Suggestion: fmt.Sprintf("check the plugin name, or use a standalone plugin path; run `conduit %s-plugins list` to see available builtins", kind),
 	}, true
+}
+
+// codeArchV2DestinationBatchingUnsupported is the runtime engine's error code
+// for a batched destination/DLQ under arch-v2 (lifecycle.CodeArchV2DestinationBatchingUnsupported).
+// It is a literal here so the offline engine does not import pkg/lifecycle-poc;
+// keep it in sync with that registration.
+const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_batching_unsupported"
+
+// archV2BatchingFindings is the --preview.pipeline-arch-v2 check: arch-v2's
+// stop-and-wait destination task waits for every ack before the next read, so
+// a destination (or the dead-letter queue) with sdk.batch.size above 1 is
+// refused at start with pipeline.archv2_destination_batching_unsupported. The
+// engine guard in pkg/lifecycle-poc enforces it at runtime; this surfaces the
+// same refusal offline, sharing config.SDKBatchSizeAboveOne with that guard so
+// the two agree. The code string must stay in sync with
+// lifecycle.CodeArchV2DestinationBatchingUnsupported (a literal here keeps the
+// offline engine from importing the whole lifecycle package).
+func archV2BatchingFindings(p config.Pipeline) []Finding {
+	add := func(findings []Finding, configPath, msg string) []Finding {
+		return append(findings, Finding{
+			Severity:   SeverityError,
+			Code:       codeArchV2DestinationBatchingUnsupported,
+			Message:    fmt.Sprintf("architecture v2 does not support %s", msg),
+			ConfigPath: configPath,
+			Suggestion: "set sdk.batch.size to 1 or remove it, or run the pipeline without architecture v2",
+			Fix:        &conduiterr.Fix{ConfigPath: configPath, Op: "remove"},
+		})
+	}
+
+	var findings []Finding
+	for ci, conn := range p.Connectors {
+		if conn.Type != config.TypeDestination {
+			continue
+		}
+		_, value, bad := config.SDKBatchSizeAboveOne(conn.Settings)
+		if !bad {
+			continue
+		}
+		findings = add(findings,
+			fmt.Sprintf("/pipelines/connectors/%d/settings/%s", ci, config.SDKBatchSizeSetting),
+			fmt.Sprintf("destination connector %q (sets %s=%s)", conn.ID, config.SDKBatchSizeSetting, value),
+		)
+	}
+	if _, value, bad := config.SDKBatchSizeAboveOne(p.DLQ.Settings); bad {
+		findings = add(findings,
+			"/pipelines/dead-letter-queue/settings/"+config.SDKBatchSizeSetting,
+			fmt.Sprintf("the dead letter queue (sets %s=%s)", config.SDKBatchSizeSetting, value),
+		)
+	}
+	return findings
 }
 
 // findingFromError converts one element of a cerrors.ForEach walk into a

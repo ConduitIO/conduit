@@ -25,6 +25,7 @@ const (
 	labelPipelineName = "pipeline_name"
 	labelType         = "type"
 	labelPlugin       = "plugin"
+	labelOutcome      = "outcome"
 	// labelComponentID is the ID of the pipeline component (connector or
 	// processor) a metric belongs to. It uses the same ID space as the
 	// topology nodes and as the existing conduit_inspector_sessions /
@@ -61,6 +62,17 @@ var (
 		"conduit_pipeline_status_persist_failures_total",
 		"Number of pipeline status writes that failed to reach the pipeline store (by pipeline name).",
 		[]string{labelPipelineName},
+	)
+	// AmbientCredentialsCounter counts built-in connector decisions about the
+	// host's ambient cloud credentials, by plugin and outcome (used,
+	// denied_disabled, denied_endpoint, denied_redirect, denied_link_local,
+	// denied_resource, denied_proxy). Outcome values are
+	// conduit-commons/hostpolicy Outcome constants. See
+	// docs/operations/ambient-credentials.md.
+	AmbientCredentialsCounter = metrics.NewLabeledCounter(
+		"conduit_connector_ambient_credentials_total",
+		"Number of built-in connector decisions about ambient cloud credentials (by plugin and outcome).",
+		[]string{labelPlugin, labelOutcome},
 	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
@@ -124,5 +136,37 @@ var (
 		"Amount of time spent writing records to DLQ connector per pipeline and plugin.",
 		[]string{labelPipelineName, labelPlugin},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
+	)
+
+	// ConnectorRecordsCounter and ConnectorErrorsCounter are the record-level
+	// throughput and failure signals for one connector instance (connector
+	// observability lane #3013). They share the
+	// pipeline_name/plugin/type/component_id label set with
+	// ConnectorBytesHistogram and ConnectorExecutionDurationTimer, so a
+	// dashboard can join records, bytes, latency and errors on component_id.
+	// Both are monotonic counters and carry the _total suffix per Prometheus
+	// convention. The error counter deliberately records only *that* an error
+	// occurred, not the error message or code: those are unbounded in
+	// cardinality and would explode the label space; operators who need the
+	// message get it from the pipeline error in the API and logs.
+	ConnectorRecordsCounter = metrics.NewLabeledCounter(
+		"conduit_connector_records_total",
+		"Number of records a connector processed by pipeline name, plugin, type (source, destination) and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
+	)
+	ConnectorErrorsCounter = metrics.NewLabeledCounter(
+		"conduit_connector_errors_total",
+		"Number of errors a connector returned by pipeline name, plugin, type (source, destination) and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
+	)
+	DLQRecordsCounter = metrics.NewLabeledCounter(
+		"conduit_dlq_records_total",
+		"Number of records a DLQ connector processed per pipeline and plugin.",
+		[]string{labelPipelineName, labelPlugin},
+	)
+	DLQErrorsCounter = metrics.NewLabeledCounter(
+		"conduit_dlq_errors_total",
+		"Number of errors a DLQ connector returned per pipeline and plugin.",
+		[]string{labelPipelineName, labelPlugin},
 	)
 )

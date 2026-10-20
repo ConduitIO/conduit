@@ -17,6 +17,7 @@ package steps_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -46,6 +47,26 @@ func TestBuild_Succeeds(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644))
 
 	assert.NoError(t, steps.Build(context.Background(), dir))
+}
+
+func TestBuildPython_Succeeds(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH")
+	}
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('ok')\n"), 0o644))
+
+	assert.NoError(t, steps.BuildPython(context.Background(), dir))
+}
+
+func TestBuildPython_Fails_OnSyntaxError(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH")
+	}
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.py"), []byte("def broken(:\n"), 0o644))
+
+	assert.Error(t, steps.BuildPython(context.Background(), dir))
 }
 
 func TestGitInit_CreatesRepoAndCommit(t *testing.T) {

@@ -50,8 +50,28 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			name:     "unsupported language python",
-			req:      Request{Kind: KindConnector, Language: "python", Name: "s3", Module: "github.com/devaris/conduit-connector-s3"},
+			name: "valid python connector",
+			req: Request{
+				Kind: KindConnector, Language: LanguagePython, Name: "s3",
+				Path: filepath.Join(t.TempDir(), "out"),
+			},
+		},
+		{
+			name: "valid python connector name with hyphen",
+			req: Request{
+				Kind: KindConnector, Language: LanguagePython, Name: "http-poll",
+				Path: filepath.Join(t.TempDir(), "out"),
+			},
+		},
+		{
+			name:     "python processor is unsupported",
+			req:      Request{Kind: KindProcessor, Language: LanguagePython, Name: "uppercase"},
+			wantErr:  true,
+			wantCode: CodeUnsupportedLanguage,
+		},
+		{
+			name:     "unsupported language ruby",
+			req:      Request{Kind: KindConnector, Language: "ruby", Name: "s3", Module: "github.com/devaris/conduit-connector-s3"},
 			wantErr:  true,
 			wantCode: CodeUnsupportedLanguage,
 		},
