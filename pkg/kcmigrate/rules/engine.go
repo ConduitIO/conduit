@@ -264,8 +264,13 @@ func (r *Rule) outcomeFor(v kcmigrate.Value) (Outcome, *Action) {
 	return r.Values[len(r.Values)-1].Outcome, nil
 }
 
+// BlockSinksKind is the one emit kind an unsupported outcome keeps: it
+// writes nothing, and decides per pipeline whether the entry blocks (a
+// worker key only sink connectors read).
+const BlockSinksKind = "block-sinks"
+
 func actionFor(o Outcome, a *Action) *Action {
-	if o.Status == kcmigrate.StatusUnsupported {
+	if o.Status == kcmigrate.StatusUnsupported && (a == nil || a.Kind != BlockSinksKind) {
 		return nil
 	}
 	return a

@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
-	github.com/conduitio/conduit-commons v0.10.0
+	github.com/conduitio/conduit-commons v0.12.0
 	github.com/conduitio/conduit-connector-file v0.10.10
 	github.com/conduitio/conduit-connector-generator v0.10.7
 	github.com/conduitio/conduit-connector-kafka v0.14.1
@@ -231,3 +231,19 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
+
+// goja panics with a fatal stack overflow when a script's Map or Set contains
+// itself and the value is exported to Go (ConduitIO/conduit#3148). Patched
+// fork of the version pinned before, one commit: https://github.com/dop251/goja/pull/816
+// Drop this replace and require the upstream version once that PR is merged
+// and released.
+//
+// While it stands:
+//   - govulncheck resolves the module as github.com/ConduitIO/goja, so it
+//     cannot see advisories filed against github.com/dop251/goja. Watch
+//     upstream goja advisories by hand.
+//   - Dependabot bumps of github.com/dop251/goja change nothing, because the
+//     replace wins. Bump the fork instead.
+//   - A replace only applies to the main module. Programs that embed Conduit
+//     must add the same line to their own go.mod.
+replace github.com/dop251/goja => github.com/ConduitIO/goja v0.0.0-20261020160110-aed438ab3fe6

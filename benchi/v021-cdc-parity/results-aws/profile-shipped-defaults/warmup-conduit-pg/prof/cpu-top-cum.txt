@@ -1,0 +1,69 @@
+File: conduit
+Build ID: 43cb2a080a989ca6e2e26ec24854c5f09edca1ef
+Type: cpu
+Time: 2026-10-20 00:35:01 PDT
+Duration: 76.61s, Total samples = 71.62s (93.48%)
+Showing nodes accounting for 32.70s, 45.66% of 71.62s total
+Dropped 821 nodes (cum <= 0.36s)
+Showing top 60 nodes out of 258
+      flat  flat%   sum%        cum   cum%
+     0.01s 0.014% 0.014%     29.16s 40.71%  github.com/conduitio/conduit-connector-sdk.(*destinationPluginAdapter).Run
+         0     0% 0.014%     29.16s 40.71%  github.com/conduitio/conduit/pkg/plugin/connector/builtin.(*destinationPluginAdapter).Run.func1
+     0.03s 0.042% 0.056%     28.93s 40.39%  github.com/conduitio/conduit-connector-sdk.(*writeStrategySingle).Write
+     0.04s 0.056%  0.11%     27.97s 39.05%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRateLimit).Write
+     0.08s  0.11%  0.22%     27.93s 39.00%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRecordFormat).Write
+     0.07s 0.098%  0.32%     27.85s 38.89%  github.com/conduitio/conduit-connector-sdk.(*destinationWithSchemaExtraction).Write
+     0.08s  0.11%  0.43%     25.68s 35.86%  github.com/conduitio/conduit-connector-postgres.(*Destination).Write
+         0     0%  0.43%     23.37s 32.63%  github.com/conduitio/conduit-connector-postgres.(*Destination).attemptWrite
+     0.06s 0.084%  0.52%     23.37s 32.63%  github.com/conduitio/conduit-connector-postgres.(*Destination).withConn
+     0.02s 0.028%  0.54%     20.76s 28.99%  github.com/conduitio/conduit-connector-postgres.(*Destination).attemptWrite.func1
+     0.08s  0.11%  0.66%     20.61s 28.78%  github.com/conduitio/conduit-connector-postgres.(*Destination).execBatch
+     0.06s 0.084%  0.74%     19.78s 27.62%  runtime.mcall
+     0.07s 0.098%  0.84%     19.59s 27.35%  runtime.park_m
+     0.31s  0.43%  1.27%     19.19s 26.79%  runtime.schedule
+    17.60s 24.57% 25.84%     17.60s 24.57%  internal/runtime/syscall/linux.Syscall6
+     0.06s 0.084% 25.93%     17.12s 23.90%  github.com/jackc/pgx/v5.(*Conn).SendBatch
+     0.03s 0.042% 25.97%     17.03s 23.78%  github.com/jackc/pgx/v5.(*Conn).sendBatchQueryExecModeDescribeExec
+     0.09s  0.13% 26.10%     16.92s 23.62%  github.com/jackc/pgx/v5.(*Conn).sendBatchExtendedWithDescription
+     0.03s 0.042% 26.14%     15.61s 21.80%  internal/poll.ignoringEINTRIO (inline)
+     0.02s 0.028% 26.17%     15.38s 21.47%  syscall.Syscall
+     0.47s  0.66% 26.82%     14.39s 20.09%  runtime.findRunnable
+     0.04s 0.056% 26.88%     14.13s 19.73%  syscall.RawSyscall6
+         0     0% 26.88%     13.04s 18.21%  gopkg.in/tomb%2ev2.(*Tomb).run
+         0     0% 26.88%     12.67s 17.69%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).Sync
+     0.02s 0.028% 26.91%     12.30s 17.17%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).Flush
+     0.03s 0.042% 26.95%     12.14s 16.95%  github.com/jackc/pgx/v5/pgconn.(*PgConn).flushWithPotentialWriteReadDeadlock
+     0.08s  0.11% 27.06%     11.65s 16.27%  github.com/jackc/pgx/v5/pgproto3.(*Frontend).Flush
+     0.04s 0.056% 27.12%     11.54s 16.11%  net.(*conn).Write
+     0.02s 0.028% 27.14%     11.50s 16.06%  net.(*netFD).Write
+     0.05s  0.07% 27.21%     11.48s 16.03%  internal/poll.(*FD).Write
+     0.02s 0.028% 27.24%     11.33s 15.82%  syscall.Write (inline)
+     0.04s 0.056% 27.30%     11.31s 15.79%  syscall.write
+     0.07s 0.098% 27.39%      9.89s 13.81%  github.com/jackc/pgx/v5.(*Conn).sendBatchExtendedWithDescription.func2
+     8.95s 12.50% 39.89%      8.95s 12.50%  runtime.futex
+         0     0% 39.89%      7.37s 10.29%  github.com/conduitio/conduit/pkg/lifecycle.(*Service).runPipeline.func3
+     0.06s 0.084% 39.97%      6.59s  9.20%  runtime.notewakeup
+     0.01s 0.014% 39.99%      6.53s  9.12%  runtime.futexwakeup
+     0.08s  0.11% 40.10%      6.27s  8.75%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).getResults
+     0.04s 0.056% 40.16%      6.25s  8.73%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).GetResults
+     0.08s  0.11% 40.27%      6.21s  8.67%  runtime.wakep
+         0     0% 40.27%      5.81s  8.11%  runtime.startm
+     0.10s  0.14% 40.41%      5.74s  8.01%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).receiveMessage
+     0.11s  0.15% 40.56%      5.69s  7.94%  github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage
+     0.08s  0.11% 40.67%      5.58s  7.79%  github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage
+     0.50s   0.7% 41.37%      5.54s  7.74%  runtime.mallocgc
+     0.07s 0.098% 41.47%      5.51s  7.69%  github.com/jackc/pgx/v5/pgconn.(*Pipeline).receiveParseComplete
+     0.23s  0.32% 41.79%      5.51s  7.69%  github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive
+     1.66s  2.32% 44.11%      5.49s  7.67%  runtime.selectgo
+     0.05s  0.07% 44.18%      5.15s  7.19%  io.ReadAtLeast
+     0.11s  0.15% 44.33%      5.15s  7.19%  runtime.systemstack
+     0.07s 0.098% 44.43%      5.14s  7.18%  github.com/jackc/pgx/v5/pgproto3.(*chunkReader).Next
+     0.12s  0.17% 44.60%      5.04s  7.04%  github.com/jackc/pgx/v5/pgconn/internal/bgreader.(*BGReader).Read
+     0.10s  0.14% 44.74%      4.84s  6.76%  net.(*conn).Read
+     0.05s  0.07% 44.81%      4.74s  6.62%  net.(*netFD).Read
+     0.09s  0.13% 44.93%      4.66s  6.51%  internal/poll.(*FD).Read
+         0     0% 44.93%      4.22s  5.89%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).Run.func1.2
+     0.05s  0.07% 45.00%      4.22s  5.89%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).runAck
+     0.05s  0.07% 45.07%      4.20s  5.86%  syscall.Read (inline)
+     0.03s 0.042% 45.11%      4.15s  5.79%  syscall.read
+     0.39s  0.54% 45.66%      4.10s  5.72%  runtime.netpoll
