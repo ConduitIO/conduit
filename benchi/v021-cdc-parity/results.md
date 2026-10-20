@@ -3,6 +3,17 @@
 Run date 2026-10-19/20 (UTC). Every number below comes from `results-aws/`; regenerate the
 tables with `python3 scripts/summarize.py results-aws/<run dir>`.
 
+> **Defaults-audit note (read first).** This run set `logrepl.withAvroSchema:
+> "false"` on the Conduit source and ran Conduit with `--log.level error
+> --log.format json`. Both ship differently (Avro `true`, info logging), so the
+> numbers below are shipped defaults **except those two overrides**, which
+> favour Conduit. `snapshotMode: never` is a workload choice, not a default.
+> The A/A control exists only on the file arm. A rerun with the audited kit
+> (both engines, an A/A twin on every Conduit arm, overrides removed) is
+> planned; treat this run as the pre-audit baseline. The Postgres and Kafka
+> gaps are about destination batching and are not explained by those two
+> overrides, but their size at true defaults is unmeasured.
+
 ## Verdict
 
 At **shipped defaults**, offered load 20,000 ops/s:

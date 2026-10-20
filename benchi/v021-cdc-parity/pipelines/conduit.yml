@@ -9,7 +9,8 @@
 # Equivalence notes (see ../README.md for the full list):
 #   - snapshotMode: never — no initial snapshot, matching Debezium
 #     snapshot.mode=never and Redpanda stream_snapshot:false.
-#   - logrepl.withAvroSchema: false — raw JSON payload, matching Debezium's
+#   - logrepl.withAvroSchema: NOT overridden at shipped defaults (ships true);
+#     CONDUIT_AVRO=false is a labelled TUNED run. Debezium's
 #     default and Redpanda's JSON message.
 #   - cdcMode: logrepl — pgoutput logical replication, the same wire
 #     protocol Debezium (plugin.name=pgoutput) and Redpanda use.
@@ -40,7 +41,7 @@ pipelines:
           logrepl.slotName: "conduit_slot_0"
           logrepl.publicationName: "conduit_pub_0"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+
 
       - id: cdc-parity-0:file-dest
         type: destination

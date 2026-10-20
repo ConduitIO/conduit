@@ -9,7 +9,7 @@
 #
 # Equivalence notes (see ../README.md for the full list):
 #   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:
-#     false — identical to the file-sink conduit arm and Debezium.
+#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium.
 #   - at the shipped defaults (no sdk.batch.*) the Kafka destination produces
 #     one record per request, so the DESTINATION is the limiter (0.30x of
 #     Connect, results.md). Debezium's producer batches on the connect-kafka
@@ -38,7 +38,7 @@ pipelines:
           logrepl.slotName: "conduit_kafka_slot_0"
           logrepl.publicationName: "conduit_kafka_pub_0"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+
 
       - id: cdc-parity-kafka-0:kafka-dest
         type: destination

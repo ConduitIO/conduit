@@ -19,9 +19,9 @@
 # Usage: benchi/v021-cdc-parity/run.sh [ROUNDS] [ARM ...]
 #   ROUNDS        number of measured rounds (default 3; the published runs used 5). One warmup round is
 #                 discarded first.
-#   ARM ...       subset of arms to run (default all nine).
+#   ARM ...       subset of arms to run (default all twelve: every Conduit arm has an -aa twin).
 #                 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3
-#                 conduit-kafka connect-kafka (redpanda-connect needs an Enterprise
+#                 conduit-pg-aa conduit-s3-aa conduit-kafka-aa conduit-kafka connect-kafka (redpanda-connect needs an Enterprise
 #                 license and is run only when named explicitly)
 #
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
@@ -36,7 +36,7 @@ ROUNDS=${1:-3}
 shift || true
 ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
-  ARMS=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka)
+  ARMS=(conduit conduit-aa connect conduit-pg conduit-pg-aa connect-pg conduit-s3 conduit-s3-aa connect-s3 conduit-kafka conduit-kafka-aa connect-kafka)
 fi
 
 # Number of source tables (and source+destination pairs). The workload is
@@ -50,6 +50,18 @@ export TABLES=${TABLES:-1}
 # to 2048; Conduit's batch-of-one default is the known gap this surfaces.
 # "default" = no sdk.batch.* at all = shipped defaults. An integer is a TUNED run.
 export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-default}
+# Engine: "classic" (the shipped default) or "v2" (--preview.pipeline-arch-v2 at
+# its own defaults). Logging: empty = shipped default (info, text); set
+# CONDUIT_LOG_ARGS="--log.level error --log.format json" only for a TUNED run.
+export CONDUIT_ENGINE=${CONDUIT_ENGINE:-classic}
+case "$CONDUIT_ENGINE" in
+  classic) export CONDUIT_ENGINE_ARGS="" ;;
+  v2)      export CONDUIT_ENGINE_ARGS="--preview.pipeline-arch-v2" ;;
+  *) echo "CONDUIT_ENGINE must be classic or v2" >&2; exit 1 ;;
+esac
+export CONDUIT_LOG_ARGS=${CONDUIT_LOG_ARGS:-}
+# "default" = the source's shipped logrepl.withAvroSchema (true); "false" is TUNED.
+export CONDUIT_AVRO=${CONDUIT_AVRO:-default}
 # Extra URL parameters for the builtin:postgres destination (empty = shipped
 # default exec mode; "&default_query_exec_mode=cache_statement" is TUNED).
 export PG_DEST_URL_EXTRA=${PG_DEST_URL_EXTRA:-}
@@ -110,7 +122,10 @@ echo "==> recording environment"
   echo "pg_dest_url_extra ${PG_DEST_URL_EXTRA:-<none: shipped default exec mode>}"
   echo "label ${RUN_LABEL:-shipped-defaults}"
   echo "git_dirty_files_outside_benchi $(git -C ../.. status --porcelain -- . ':!benchi' 2>/dev/null | wc -l | tr -d ' ')"
-  echo "conduit_engine classic (no --preview.pipeline-arch-v2; the shipped default)"
+  echo "conduit_engine $CONDUIT_ENGINE (args: ${CONDUIT_ENGINE_ARGS:-<none, shipped default>})"
+  echo "conduit_log_args ${CONDUIT_LOG_ARGS:-<none: shipped info/text logging>}"
+  echo "conduit_avro logrepl.withAvroSchema=${CONDUIT_AVRO} (default = not set = shipped)"
+  echo "snapshot_mode never (a WORKLOAD choice, not a default)"
   echo "conduit_connectors $(grep -E 'conduit-connector-(postgres|s3|file|kafka|sdk) ' ../../go.mod | awk '{print $1"@"$2}' | tr '\n' ' ')"
   echo "kernel $(uname -r) cpus=$(nproc) mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)"
   echo "instance_type $(T=$(curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' http://169.254.169.254/latest/api/token 2>/dev/null); curl -s -m 2 -H "X-aws-ec2-metadata-token: $T" http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo unknown)"
@@ -156,11 +171,11 @@ run() { # tool label
   # so the loader starts immediately — unchanged.
   local loader_slots=""
   case "$tool" in
-    conduit-pg|conduit-s3)     loader_slots=$(slot_list conduit_slot) ;;
+    conduit-pg|conduit-s3|conduit-pg-aa|conduit-s3-aa) loader_slots=$(slot_list conduit_slot) ;;
     connect-pg)                loader_slots=$(slot_list debezium_pg_slot) ;;
     connect-s3)                loader_slots=$(slot_list debezium_slot) ;;
     connect-kafka)             loader_slots=$(slot_list debezium_kafka_slot) ;;
-    conduit-kafka)             loader_slots=$(slot_list conduit_kafka_slot) ;;
+    conduit-kafka|conduit-kafka-aa) loader_slots=$(slot_list conduit_kafka_slot) ;;
   esac
   # PROFILE=1: diagnostic run only (never used for a published rate) — the
   # Conduit process writes CPU and heap profiles on graceful shutdown.
@@ -193,7 +208,7 @@ run() { # tool label
   before=$(getv ROWS_BEFORE); after=$(getv ROWS_AFTER)
   tsb=$(getv TS_BEFORE_MS); tsa=$(getv TS_AFTER_MS)
   # Postgres-destination arms count NET live rows; every other arm counts events.
-  case "$tool" in conduit-pg|connect-pg) key=SRC_NET ;; *) key=SRC_EVENTS ;; esac
+  case "$tool" in conduit-pg|connect-pg|conduit-pg-aa) key=SRC_NET ;; *) key=SRC_EVENTS ;; esac
   srcb=$(getv ${key}_BEFORE); srca=$(getv ${key}_AFTER)
   if [ -n "${before:-}" ] && [ -n "${after:-}" ]; then
     echo "$label,$tool,$before,$after,$(( after - before )),${tsb:-NA},${tsa:-NA},${srcb:-NA},${srca:-NA}" >> "$OUT/runs.csv"

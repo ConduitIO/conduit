@@ -63,14 +63,20 @@ tools:
     compose: ./tools/compose-redpanda.yml
   conduit-pg:
     compose: ./tools/compose-conduit-pg.yml
+  conduit-pg-aa:
+    compose: ./tools/compose-conduit-pg-aa.yml
   connect-pg:
     compose: ./tools/compose-connect-pg.yml
   conduit-s3:
     compose: ./tools/compose-conduit-s3.yml
+  conduit-s3-aa:
+    compose: ./tools/compose-conduit-s3-aa.yml
   connect-s3:
     compose: ./tools/compose-connect-s3.yml
   conduit-kafka:
     compose: ./tools/compose-conduit-kafka.yml
+  conduit-kafka-aa:
+    compose: ./tools/compose-conduit-kafka-aa.yml
   connect-kafka:
     compose: ./tools/compose-connect-kafka.yml
 
@@ -126,6 +132,7 @@ tests:
           container: cdcparity-counter
           tools:
             - conduit-s3
+            - conduit-s3-aa
             - connect-s3
           run: |
             n=0
@@ -298,6 +305,7 @@ tests:
           container: cdcparity-counter
           tools:
             - conduit-pg
+            - conduit-pg-aa
             - connect-pg
           run: |
             count() {
@@ -332,6 +340,7 @@ tests:
           container: cdcparity-counter
           tools:
             - conduit-s3
+            - conduit-s3-aa
             - connect-s3
           run: |
             count() {
@@ -358,6 +367,7 @@ tests:
           container: cdcparity-kafka
           tools:
             - conduit-kafka
+            - conduit-kafka-aa
             - connect-kafka
           run: |
             count() {
@@ -386,10 +396,13 @@ tests:
             - connect
             - redpanda-connect
             - conduit-pg
+            - conduit-pg-aa
             - connect-pg
             - conduit-s3
+            - conduit-s3-aa
             - connect-s3
             - conduit-kafka
+            - conduit-kafka-aa
             - connect-kafka
           run: |
             PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"
@@ -409,6 +422,7 @@ tests:
           container: cdcparity-counter
           tools:
             - conduit-pg
+            - conduit-pg-aa
             - connect-pg
           run: |
             count() {
@@ -429,6 +443,7 @@ tests:
           container: cdcparity-counter
           tools:
             - conduit-s3
+            - conduit-s3-aa
             - connect-s3
           run: |
             rm -rf /tmp/s3dump
@@ -439,6 +454,7 @@ tests:
           container: cdcparity-kafka
           tools:
             - conduit-kafka
+            - conduit-kafka-aa
             - connect-kafka
           run: |
             echo "ROWS_AFTER=$(/opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}')"
@@ -457,10 +473,13 @@ tests:
             - connect
             - redpanda-connect
             - conduit-pg
+            - conduit-pg-aa
             - connect-pg
             - conduit-s3
+            - conduit-s3-aa
             - connect-s3
             - conduit-kafka
+            - conduit-kafka-aa
             - connect-kafka
           run: |
             PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"

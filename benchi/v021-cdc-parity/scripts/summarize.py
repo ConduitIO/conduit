@@ -15,7 +15,9 @@ import csv, statistics, sys, os
 
 PAIRS = {  # arm -> its Kafka Connect counterpart
     "conduit": "connect", "conduit-aa": "connect",
-    "conduit-pg": "connect-pg", "conduit-s3": "connect-s3", "conduit-kafka": "connect-kafka",
+    "conduit-pg": "connect-pg", "conduit-pg-aa": "connect-pg",
+    "conduit-s3": "connect-s3", "conduit-s3-aa": "connect-s3",
+    "conduit-kafka": "connect-kafka", "conduit-kafka-aa": "connect-kafka",
 }
 
 def load(path):
@@ -72,12 +74,15 @@ def main(dirs):
         rs = [ra[k] / rb[k] for k in sorted(ra) if k in rb]
         if rs:
             print(f"| {a} vs {b} | {statistics.median(rs):.3f} | {', '.join(f'{x:.3f}' for x in rs)} |")
-    if "conduit" in by and "conduit-aa" in by:
-        ra = {x["round"]: x["rate"] for x in by["conduit"]}
-        rb = {x["round"]: x["rate"] for x in by["conduit-aa"]}
-        rs = [abs(ra[k] / rb[k] - 1) * 100 for k in ra if k in rb]
-        if rs:
-            print(f"\nA/A (conduit vs conduit-aa): per-round |delta| median {statistics.median(rs):.2f}%, max {max(rs):.2f}%")
+    print()
+    for a in ("conduit", "conduit-pg", "conduit-s3", "conduit-kafka"):
+        b = a + "-aa"
+        if a in by and b in by:
+            ra = {x["round"]: x["rate"] for x in by[a]}
+            rb = {x["round"]: x["rate"] for x in by[b]}
+            rs = [abs(ra[k] / rb[k] - 1) * 100 for k in ra if k in rb]
+            if rs:
+                print(f"A/A ({a} vs {b}): per-round |delta| median {statistics.median(rs):.2f}%, max {max(rs):.2f}%")
 
 if __name__ == "__main__":
     main(sys.argv[1:])

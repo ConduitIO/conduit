@@ -10,7 +10,7 @@
 #
 # Equivalence notes (see ../README.md for the full list):
 #   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:
-#     false — identical to the file-sink conduit arm and Debezium.
+#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium.
 #   - format json: one line per record, the SAME per-record shape the file
 #     sink writes; the S3 sink batches/partitions, so the source (not the
 #     sink) is what is measured — a parity check, like conduit-pg.
@@ -40,7 +40,7 @@ pipelines:
           logrepl.slotName: "conduit_slot_0"
           logrepl.publicationName: "conduit_pub_0"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+
 
       - id: cdc-parity-s3-0:s3-dest
         type: destination

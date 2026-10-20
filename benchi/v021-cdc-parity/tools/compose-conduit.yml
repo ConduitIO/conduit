@@ -11,12 +11,13 @@ services:
     # try to fetch it.
     pull_policy: never
     # sh -c + exec so signals reach conduit (graceful shutdown flushes the
-    # --dev.* profiles). CONDUIT_EXTRA_ARGS is empty in every measured run;
+    # --dev.* profiles). CONDUIT_ENGINE_ARGS / CONDUIT_LOG_ARGS are empty at shipped defaults
+    # (classic engine, info logging); CONDUIT_EXTRA_ARGS is empty in every measured run;
     # run.sh sets it only for a PROFILE=1 diagnostic run.
     command:
       - sh
       - -c
-      - exec /app/conduit run --pipelines.path /app/pipelines --log.level error --log.format json ${CONDUIT_EXTRA_ARGS:-}
+      - exec /app/conduit run --pipelines.path /app/pipelines ${CONDUIT_ENGINE_ARGS:-} ${CONDUIT_LOG_ARGS:-} ${CONDUIT_EXTRA_ARGS:-}
     stop_grace_period: 60s
     volumes:
       - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof

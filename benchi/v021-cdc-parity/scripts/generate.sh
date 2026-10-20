@@ -48,6 +48,15 @@ PG_DEST_URL_EXTRA=${PG_DEST_URL_EXTRA:-}
 
 # batch_lines <indent> — the two sdk.batch.* settings, or nothing at the shipped
 # default.
+# avro_line <indent> — logrepl.withAvroSchema override, only for a TUNED run
+# (CONDUIT_AVRO=false). The shipped default is true and is NOT overridden: every
+# default user pays the SDK Avro encode/decode and schema registration cost.
+CONDUIT_AVRO=${CONDUIT_AVRO:-default}
+avro_line() {
+  if [ "$CONDUIT_AVRO" = "default" ]; then return 0; fi
+  printf '%slogrepl.withAvroSchema: "%s"' "$1" "$CONDUIT_AVRO"
+}
+
 batch_lines() {
   if [ "$CONDUIT_BATCH_SIZE" = "default" ]; then return 0; fi
   printf '%ssdk.batch.size: "%s"\n%ssdk.batch.delay: "%s"' "$1" "$CONDUIT_BATCH_SIZE" "$1" "$CONDUIT_BATCH_DELAY"
@@ -123,7 +132,7 @@ emit_file_pipeline() {
           logrepl.slotName: "conduit_slot_${i}"
           logrepl.publicationName: "conduit_pub_${i}"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+$(avro_line "          ")
 $(batch_lines "          ")
       - id: cdc-parity-${i}:file-dest
         type: destination
@@ -146,7 +155,8 @@ EOF
   echo "# Equivalence notes (see ../README.md for the full list):"
   echo "#   - snapshotMode: never — no initial snapshot, matching Debezium"
   echo "#     snapshot.mode=never and Redpanda stream_snapshot:false."
-  echo "#   - logrepl.withAvroSchema: false — raw JSON payload, matching Debezium's"
+  echo "#   - logrepl.withAvroSchema: NOT overridden at shipped defaults (ships true);"
+  echo "#     CONDUIT_AVRO=false is a labelled TUNED run. Debezium's"
   echo "#     default and Redpanda's JSON message."
   echo "#   - cdcMode: logrepl — pgoutput logical replication, the same wire"
   echo "#     protocol Debezium (plugin.name=pgoutput) and Redpanda use."
@@ -186,7 +196,7 @@ emit_pg_pipeline() {
           logrepl.slotName: "conduit_slot_${i}"
           logrepl.publicationName: "conduit_pub_${i}"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+$(avro_line "          ")
 $(batch_lines "          ")
       - id: cdc-parity-pg-${i}:pg-dest
         type: destination
@@ -212,7 +222,7 @@ EOF
   echo "#"
   echo "# Equivalence notes (see ../README.md for the full list):"
   echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
-  echo "#     false — identical to the file-sink conduit arm and Debezium."
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
   echo "#   - sdk.batch.* and the destination exec mode are the shipped defaults unless"
   echo "#     CONDUIT_BATCH_SIZE / PG_DEST_URL_EXTRA were set (a labelled tuned run)."
   echo "#"
@@ -248,7 +258,7 @@ emit_s3_pipeline() {
           logrepl.slotName: "conduit_slot_${i}"
           logrepl.publicationName: "conduit_pub_${i}"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+$(avro_line "          ")
 $(batch_lines "          ")
       - id: cdc-parity-s3-${i}:s3-dest
         type: destination
@@ -278,7 +288,7 @@ EOF
   echo "#"
   echo "# Equivalence notes (see ../README.md for the full list):"
   echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
-  echo "#     false — identical to the file-sink conduit arm and Debezium."
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
   echo "#   - format json: one line per record, the SAME per-record shape the file"
   echo "#     sink writes; the S3 sink batches/partitions, so the source (not the"
   echo "#     sink) is what is measured — a parity check, like conduit-pg."
@@ -317,7 +327,7 @@ emit_kafka_pipeline() {
           logrepl.slotName: "conduit_kafka_slot_${i}"
           logrepl.publicationName: "conduit_kafka_pub_${i}"
           logrepl.autoCleanup: "false"
-          logrepl.withAvroSchema: "false"
+$(avro_line "          ")
 $(batch_lines "          ")
       - id: cdc-parity-kafka-${i}:kafka-dest
         type: destination
@@ -342,7 +352,7 @@ EOF
   echo "#"
   echo "# Equivalence notes (see ../README.md for the full list):"
   echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
-  echo "#     false — identical to the file-sink conduit arm and Debezium."
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
   echo "#   - at the shipped defaults (no sdk.batch.*) the Kafka destination produces"
   echo "#     one record per request, so the DESTINATION is the limiter (0.30x of"
   echo "#     Connect, results.md). Debezium's producer batches on the connect-kafka"

@@ -6,7 +6,7 @@
 #   ROUNDS   number of measured rounds (default 5, what the published runs used);
 #            one warmup round is discarded first.
 #   ARM ...  subset of arms: conduit conduit-aa connect conduit-pg connect-pg
-#            conduit-s3 connect-s3 conduit-kafka connect-kafka (default: all nine). redpanda-connect is
+#            conduit-s3 connect-s3 conduit-kafka connect-kafka (default: all twelve, every Conduit arm with an -aa twin). redpanda-connect is
 #            NOT run by default — its postgres_cdc input is Redpanda Connect
 #            ENTERPRISE, so a stock build refuses to start; see README.md.
 #   --keep   keep the instance running after the run (default: destroy it).
@@ -26,7 +26,8 @@
 # Env (forwarded to run.sh on the instance): TABLES (default 1; sweep 1, 2, 4),
 # CONDUIT_BATCH_SIZE (default "default" = no sdk.batch.* = shipped defaults; an
 # integer is a TUNED run), CONDUIT_BATCH_DELAY (default 100ms), PG_DEST_URL_EXTRA
-# (default empty), LOADER_RATE (default 20000), LOADER_SLOT_TIMEOUT (default
+# (default empty), CONDUIT_ENGINE (classic|v2), CONDUIT_LOG_ARGS (empty = shipped
+# info logging), CONDUIT_AVRO (default = shipped; false = TUNED), LOADER_RATE (default 20000), LOADER_SLOT_TIMEOUT (default
 # 600s), RUN_LABEL, CONDUIT_REF (pin a commit SHA for a published result),
 # SSH_KEY (default outside the repo), SSH_CIDR (default: this machine's /32).
 set -euo pipefail
@@ -38,6 +39,9 @@ export CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-default}   # default = shipped d
 export PG_DEST_URL_EXTRA=${PG_DEST_URL_EXTRA:-}            # empty = shipped exec mode; non-empty = TUNED
 export LOADER_RATE=${LOADER_RATE:-20000}
 export RUN_LABEL=${RUN_LABEL:-shipped-defaults}
+export CONDUIT_ENGINE=${CONDUIT_ENGINE:-classic}   # classic | v2 (--preview.pipeline-arch-v2)
+export CONDUIT_LOG_ARGS=${CONDUIT_LOG_ARGS:-}      # empty = shipped info logging
+export CONDUIT_AVRO=${CONDUIT_AVRO:-default}       # default = shipped withAvroSchema; false = TUNED
 export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
 export LOADER_SLOT_TIMEOUT=${LOADER_SLOT_TIMEOUT:-600s}
 
@@ -107,7 +111,7 @@ rsync -az -e "ssh ${SSH_OPTS[*]}" \
 # 5. Put the linux loader in place and run.
 echo "==> running benchmark (rounds=$ROUNDS arms=${REST[*]} tables=$TABLES batch=$CONDUIT_BATCH_SIZE)"
 ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \
-  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_SLOT_TIMEOUT=$LOADER_SLOT_TIMEOUT LOADER_RATE=$LOADER_RATE RUN_LABEL='$RUN_LABEL' PG_DEST_URL_EXTRA='$PG_DEST_URL_EXTRA' bash run.sh $ROUNDS ${REST[*]}"
+  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_SLOT_TIMEOUT=$LOADER_SLOT_TIMEOUT LOADER_RATE=$LOADER_RATE RUN_LABEL='$RUN_LABEL' CONDUIT_ENGINE='$CONDUIT_ENGINE' CONDUIT_LOG_ARGS='$CONDUIT_LOG_ARGS' CONDUIT_AVRO='$CONDUIT_AVRO' PG_DEST_URL_EXTRA='$PG_DEST_URL_EXTRA' bash run.sh $ROUNDS ${REST[*]}"
 
 # 6. Collect results.
 echo "==> collecting results to ./results-aws/"

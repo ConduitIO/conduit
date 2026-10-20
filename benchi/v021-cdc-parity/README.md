@@ -33,7 +33,7 @@ is captured.
 
 | arm | pipeline | config |
 | --- | --- | --- |
-| `conduit` | `TABLES` pipelines, each a `builtin:postgres` source (`cdcMode: logrepl`, `snapshotMode: never`, `withAvroSchema: false`, `sdk.batch.size: CONDUIT_BATCH_SIZE`, only when set) → `builtin:file` sink | `pipelines/conduit.yml` (generated), `tools/compose-conduit.yml` |
+| `conduit` | `TABLES` pipelines, each a `builtin:postgres` source (`cdcMode: logrepl`, `snapshotMode: never`, `withAvroSchema` left at its shipped default unless `CONDUIT_AVRO` is set, `sdk.batch.size: CONDUIT_BATCH_SIZE`, only when set) → `builtin:file` sink | `pipelines/conduit.yml` (generated), `tools/compose-conduit.yml` |
 | `conduit-aa` | byte-for-byte the same as `conduit` (the A/A control; only the container name differs) | `tools/compose-conduit-aa.yml` |
 | `connect` | `TABLES` Debezium Postgres source connectors (`plugin.name: pgoutput`, `snapshot.mode: never`, `tombstones.on.delete: false`) → Kafka broker → `TABLES` `FileStreamSinkConnector`s | `tools/compose-connect.yml`, `tools/connect.Dockerfile`, registration loop in `bench.yml` |
 | `redpanda-connect` | `postgres_cdc` input (`stream_snapshot: false`) → `file` output (`codec: lines`); single-table, blocked by licensing | `config/redpanda.yaml`, `tools/compose-redpanda.yml` |
@@ -156,14 +156,49 @@ source tables; the destination tables are populated by the pipeline under test.
   resources with its own defaults (JVM heap for Connect, GOMAXPROCS for
   Conduit/Redpanda). No cgroup limits are applied.
 
+## What "shipped defaults" means here (defaults audit)
+
+A run is labelled shipped-defaults only if the Conduit side overrides nothing
+except what the workload requires:
+
+- `snapshotMode: never` is a **workload choice** (steady-state CDC only, no
+  initial table dump), not a default; Debezium `snapshot.mode: never` matches it.
+  It is the only source setting the kit changes at the default phase.
+- `logrepl.withAvroSchema` is NOT overridden: it ships `true`, so the default
+  phase includes the SDK Avro encode/decode and schema-registration cost every
+  default user pays. Debezium runs with schemaless JSON, so this is a
+  documented non-equivalence that favours Connect; `CONDUIT_AVRO=false`
+  removes it and is a labelled TUNED run.
+- Logging is NOT overridden: Conduit runs at its default info level
+  (`CONDUIT_LOG_ARGS` empty). `CONDUIT_LOG_ARGS="--log.level error --log.format
+  json"` is TUNED.
+- `sdk.batch.*` and the postgres destination exec mode are not set
+  (`CONDUIT_BATCH_SIZE=default`, `PG_DEST_URL_EXTRA` empty).
+- Note on tuned `sdk.batch.size=1000`: it also shrinks the postgres source
+  snapshot `FETCH` from 50000 rows to 1000 (`snapshot.fetchSize` is dead
+  config). It does not affect this CDC-only workload (snapshot disabled).
+
+Phases for a rerun, each its own `run.sh` invocation with a `RUN_LABEL`, every
+arm on both engines, and an `-aa` twin of every Conduit arm so each comparison
+has its own noise floor:
+
+1. classic engine at shipped defaults (`CONDUIT_ENGINE=classic`);
+2. arch-v2 at its own defaults (`CONDUIT_ENGINE=v2`, i.e.
+   `--preview.pipeline-arch-v2`);
+3. tuned, each tuning labelled (batch size, `cache_statement`, `CONDUIT_AVRO`,
+   `CONDUIT_LOG_ARGS`).
+
+The runs published in `results.md` predate this audit; see the note there.
+
 ## The A/A floor rule
 
 `conduit-aa` is the same image, pipeline and compose as `conduit`, built the
 same way. Any measured difference between them is run-to-run noise — the
 harness's floor. **A Conduit-vs-competitor delta smaller than the A/A spread
 means nothing.** The A/A control runs interleaved with the file-sink arms (rotated order), not
-as a separate block. It exists **only on the file arm**; the Postgres, S3 and
-Kafka pairs rely on their within-arm min-max and the size of the effect.
+as a separate block. The published run has it **only on the file arm**; the kit now
+also has `conduit-pg-aa`, `conduit-s3-aa` and `conduit-kafka-aa`, so a rerun
+carries a noise floor on every pair.
 
 ## The Postgres-destination arms are a parity check
 
