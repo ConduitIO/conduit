@@ -1,0 +1,69 @@
+# Kafka Connect + Debezium + S3-sink arm (connect-s3):
+#
+#   kafka   — Apache Kafka 4.0.0 broker, single-node KRaft (no ZooKeeper).
+#   connect — Kafka Connect 4.0.0 (quay.io/debezium/connect:3.2) with the
+#             Debezium Postgres source connector AND the Confluent S3 sink
+#             connector (io.confluent.connect.s3.S3SinkConnector) on its plugin
+#             path (see ../tools/connect.Dockerfile).
+#
+# The Debezium Postgres source captures bench_source_i over pgoutput logical
+# replication (the same wire protocol as Conduit's logrepl) and produces one
+# Kafka message per INSERT/UPDATE/DELETE. The S3 sink writes those messages,
+# one JSON line per record (JsonFormat), to the MinIO bucket "bench" — the SAME
+# bucket the conduit-s3 arm writes, so the line count is the ground truth for
+# both. No sink volume is mounted.
+#
+# Both connectors are registered over the Connect REST API by the
+# register-connect-s3 step in ../bench.yml (post-tool), which runs only for
+# this tool. See ../bench.yml for the exact connector configs.
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: cdcparity-kafka
+    environment:
+      CLUSTER_ID: "cdcparity-kafka-cluster"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://cdcparity-kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@cdcparity-kafka:9093"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_NUM_PARTITIONS: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - benchi
+
+  connect:
+    # Built by run.sh from tools/connect.Dockerfile: the Debezium connect image
+    # plus the bundled connect-file JAR (for the connect arm), the Confluent
+    # JDBC sink connector (for the connect-pg arm) and the Confluent S3 sink
+    # connector + its storage-*/AWS SDK deps (for this arm).
+    image: connect-debezium:3.2
+    container_name: cdcparity-connect-s3
+    pull_policy: never
+    environment:
+      BOOTSTRAP_SERVERS: "cdcparity-kafka:9092"
+      GROUP_ID: "cdcparity-connect"
+      CONFIG_STORAGE_TOPIC: "cdcparity-connect-config"
+      OFFSET_STORAGE_TOPIC: "cdcparity-connect-offsets"
+      STATUS_STORAGE_TOPIC: "cdcparity-connect-status"
+      CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    depends_on:
+      - kafka
+    networks:
+      - benchi
+
+networks:
+  benchi:
+    external: true
