@@ -41,8 +41,10 @@ follows from the code; I have not run it.
 ### Since when
 
 - The SDK has behaved this way since referencing was added: `c84a242`, "Referencing fields (#14)",
-  2024-02-08, released in processor-sdk v0.1.0. It is unchanged on the SDK's `main`, `c8b0705`
-  (v0.8.1). Conduit uses v0.8.0.
+  2024-02-08, released in processor-sdk v0.1.0. Conduit `main` uses processor-sdk v0.9.1, and the
+  behavior is confirmed there: `internal/reference/reference.go` writes the empty containers at
+  line 303 (`Metadata`), 397 (`Key`), 487 (`Payload.Before`), 539 (`Payload.After`) and 587 (a
+  nested field).
 - The built-in processors moved to SDK references in Conduit `00dbcba7`, "Better processors
   (#1378)", 2024-03-07, first released in v0.9.0. Every Conduit release since v0.9.0 is affected.
 - Standalone (WASM) processors built with the SDK carry the same code. They keep the behavior
@@ -180,8 +182,10 @@ guarantee:
 
 - [#3147](https://github.com/ConduitIO/conduit/issues/3147): the issue.
 - [#3139](https://github.com/ConduitIO/conduit/pull/3139): the property tests that found it.
-- [`ConduitIO/conduit-commons#336`](https://github.com/ConduitIO/conduit-commons/issues/336):
-  `Record.Clone` turns nested `map[string]any` into `StructuredData`. `dataFieldReference.walk`
-  accepts only `map[string]any` for a nested object, so a nested field of a cloned record may not
-  resolve. That needs checking alongside this change.
+- [`ConduitIO/conduit-commons#336`](https://github.com/ConduitIO/conduit-commons/issues/336)
+  (fixed by `conduit-commons#338`, in commons v0.9.0 and later; Conduit `main` is on v0.10.0):
+  `Record.Clone` used to turn nested `map[string]any` into `StructuredData`, which
+  `dataFieldReference.walk` does not accept for a nested object. With the fix a clone keeps its
+  types, so that interaction is gone on `main`. The v0.20.x patch line (commons v0.7.2) keeps the
+  old retyping by design.
 - `docs/design-documents/20231117-better-processors.md`: where field references were introduced.
