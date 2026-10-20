@@ -303,6 +303,10 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 	// other processor error (nack, DLQ per policy), never take the process
 	// down. Cyclic or absurdly deep output would overflow the stack in the
 	// next Record.Clone, which is fatal and cannot be recovered.
+	//
+	// One checker for all three values: its entry budget is per record, the
+	// same unit Record.Clone copies.
+	guard := newOutputChecker()
 	for _, d := range []struct {
 		path string
 		data any
@@ -311,7 +315,7 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 		{".Payload.Before", jsr.Payload.Before},
 		{".Payload.After", jsr.Payload.After},
 	} {
-		if err := checkOutput(d.path, d.data); err != nil {
+		if err := guard.check(d.path, d.data); err != nil {
 			return nil, err
 		}
 	}

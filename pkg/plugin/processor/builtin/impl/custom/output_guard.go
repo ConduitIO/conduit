@@ -51,14 +51,43 @@ const (
 // A value reachable by two different paths (a DAG) is not a cycle and is
 // accepted. The walk visits each distinct container once, so it is linear in
 // the number of containers.
+//
+// checkOutput applies the entry limit to this one value. To bound several
+// values of one record together, use an outputChecker.
 func checkOutput(root string, v any) error {
-	w := &outputWalker{
-		root:   root,
-		onPath: map[containerID]struct{}{},
-		done:   map[containerID]int{},
+	return newOutputChecker().check(root, v)
+}
+
+// outputChecker checks the values of one record against a single shared entry
+// budget: Record.Clone copies Key, Payload.Before and Payload.After, so the
+// work and memory it needs is the sum of the three, and the limit is per
+// record rather than per field. Create one per record; it is not safe for
+// concurrent use.
+type outputChecker struct {
+	w    outputWalker
+	used int
+}
+
+func newOutputChecker() *outputChecker {
+	return &outputChecker{w: outputWalker{seen: map[containerID]int{}}}
+}
+
+// check verifies v, naming it root in error paths, and charges its expanded
+// entry count to the record's budget.
+func (c *outputChecker) check(root string, v any) error {
+	c.w.root = root
+	c.w.segs = c.w.segs[:0]
+	size, err := c.w.walk(v, 0)
+	if err != nil {
+		return err
 	}
-	_, err := w.walk(v, 0)
-	return err
+	c.used += size
+	if c.used > maxOutputEntries {
+		return limitErr(root, "pushes the record past "+strconv.Itoa(maxOutputEntries)+
+			" entries: the key, the payload before and the payload after are counted together, "+
+			"with a shared value counted at each place it appears")
+	}
+	return nil
 }
 
 // containerID identifies a map or slice by its backing storage. Length and
@@ -70,30 +99,88 @@ type containerID struct {
 	typ reflect.Type
 }
 
+// Types of the containers goja's Export produces, for the fast path. They
+// must equal what reflect.TypeOf would report for the same values, so a
+// container gets the same identity on both paths.
+var (
+	typStringMap     = reflect.TypeOf(map[string]any(nil))
+	typStructuredMap = reflect.TypeOf(opencdc.StructuredData(nil))
+	typAnySlice      = reflect.TypeOf([]any(nil))
+)
+
+// inProgress marks a container on the current descent in outputWalker.seen.
+// A finished container maps to its expanded entry count, which is at least 1
+// because empty containers are never recorded.
+const inProgress = -1
+
+// pathSeg is one step of an error path. It is kept as data and only
+// formatted on error, so a deep or wide output allocates nothing per node.
+type pathSeg struct {
+	key   string
+	index int
+	isIdx bool
+}
+
 type outputWalker struct {
 	// root names the checked value in error paths; segs are the steps from it
-	// to the value being visited. The path string is only built on error, so
-	// a deep or wide output does not allocate one string per node.
+	// to the value being visited.
 	root string
-	segs []string
-	// onPath holds the containers on the current descent. Meeting one again
-	// means the value contains itself.
-	onPath map[containerID]struct{}
-	// done maps fully checked containers to their expanded entry count, so a
-	// shared value is walked once however many parents reference it.
-	done map[containerID]int
+	segs []pathSeg
+	// seen holds every container met so far. A container mapped to inProgress
+	// is on the current descent: meeting it again means the value contains
+	// itself. Any other value is the expanded entry count of a fully checked
+	// container, so a shared value is walked once however many parents
+	// reference it.
+	seen map[containerID]int
 }
 
 // path returns the location of the value being visited.
-func (w *outputWalker) path() string { return w.root + strings.Join(w.segs, "") }
+func (w *outputWalker) path() string {
+	var sb strings.Builder
+	sb.WriteString(w.root)
+	for _, s := range w.segs {
+		if s.isIdx {
+			sb.WriteByte('[')
+			sb.WriteString(strconv.Itoa(s.index))
+			sb.WriteByte(']')
+			continue
+		}
+		sb.WriteByte('.')
+		sb.WriteString(s.key)
+	}
+	return sb.String()
+}
 
-// walk checks v and everything below it, depth levels below the root. It
-// returns the expanded entry count of v.
-func (w *outputWalker) walk(v any, depth int) (int, error) {
+// isLeaf reports whether v is a value that cannot hold other values, for the
+// types goja's Export and opencdc produce. A false result only means the
+// value needs a closer look (walk falls back to reflection for it).
+func isLeaf(v any) bool {
 	switch v.(type) {
 	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16,
 		uint32, uint64, float32, float64, []byte, opencdc.RawData, *opencdc.RawData:
+		return true
+	}
+	return false
+}
+
+// walk checks v and everything below it, depth levels below the root. It
+// returns the expanded entry count of v.
+//
+// The type switch covers the shapes goja's Export produces, which is nearly
+// every record; it avoids reflect.Value.Interface, which allocates for each
+// child. Anything else (typed maps and slices from Go-side code, pointers to
+// containers) goes through reflection with the same identity and limit rules.
+func (w *outputWalker) walk(v any, depth int) (int, error) {
+	switch t := v.(type) {
+	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16,
+		uint32, uint64, float32, float64, []byte, opencdc.RawData, *opencdc.RawData:
 		return 0, nil
+	case map[string]any:
+		return w.walkStringMap(t, typStringMap, depth)
+	case opencdc.StructuredData:
+		return w.walkStringMap(t, typStructuredMap, depth)
+	case []any:
+		return w.walkAnySlice(t, depth)
 	}
 
 	rv := reflect.ValueOf(v)
@@ -110,6 +197,96 @@ func (w *outputWalker) walk(v any, depth int) (int, error) {
 	return w.walkValue(rv, depth)
 }
 
+// enter registers a non-empty container before its children are walked. If
+// it returns cached, the container was already fully checked and size is its
+// expanded entry count. Invariant 3: a cycle or runaway depth is rejected
+// here, before anything recurses into it.
+func (w *outputWalker) enter(id containerID, depth int) (size int, cached bool, err error) {
+	if s, ok := w.seen[id]; ok {
+		if s == inProgress {
+			return 0, false, cyclicErr(w.path())
+		}
+		return s, true, nil
+	}
+	w.seen[id] = inProgress
+	if depth >= maxOutputDepth {
+		return 0, false, limitErr(w.path(), "nests deeper than "+strconv.Itoa(maxOutputDepth)+" levels")
+	}
+	return 0, false, nil
+}
+
+// leave records a fully checked container.
+func (w *outputWalker) leave(id containerID, total int) { w.seen[id] = total }
+
+func (w *outputWalker) tooBig() error {
+	return limitErr(w.path(), "expands to more than "+strconv.Itoa(maxOutputEntries)+" entries once shared values are counted at each place they appear")
+}
+
+// descend walks child one level below the current container. Leaves return
+// immediately without touching the path.
+func (w *outputWalker) descend(child any, seg pathSeg, depth int) (int, error) {
+	if isLeaf(child) {
+		return 0, nil
+	}
+	w.segs = append(w.segs, seg)
+	size, err := w.walk(child, depth+1)
+	if err != nil {
+		return 0, err // keep segs: they locate the failure
+	}
+	w.segs = w.segs[:len(w.segs)-1]
+	return size, nil
+}
+
+func (w *outputWalker) walkStringMap(m map[string]any, typ reflect.Type, depth int) (int, error) {
+	n := len(m)
+	if n == 0 {
+		return 0, nil
+	}
+	id := containerID{ptr: reflect.ValueOf(m).Pointer(), len: n, typ: typ}
+	if size, cached, err := w.enter(id, depth); err != nil || cached {
+		return size, err
+	}
+	total := n
+	for k, c := range m {
+		size, err := w.descend(c, pathSeg{key: k}, depth)
+		if err != nil {
+			return 0, err
+		}
+		total += size
+		if total > maxOutputEntries {
+			return 0, w.tooBig()
+		}
+	}
+	w.leave(id, total)
+	return total, nil
+}
+
+func (w *outputWalker) walkAnySlice(s []any, depth int) (int, error) {
+	n := len(s)
+	if n == 0 {
+		return 0, nil
+	}
+	id := containerID{ptr: reflect.ValueOf(s).Pointer(), len: n, typ: typAnySlice}
+	if size, cached, err := w.enter(id, depth); err != nil || cached {
+		return size, err
+	}
+	total := n
+	for i, c := range s {
+		size, err := w.descend(c, pathSeg{index: i, isIdx: true}, depth)
+		if err != nil {
+			return 0, err
+		}
+		total += size
+		if total > maxOutputEntries {
+			return 0, w.tooBig()
+		}
+	}
+	w.leave(id, total)
+	return total, nil
+}
+
+// walkValue is the reflection fallback for containers the fast path does not
+// know. Its identity and limit rules are the same as the fast path's.
 func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, error) {
 	var n int
 	switch rv.Kind() { //nolint:exhaustive // only containers can hold other values
@@ -136,30 +313,22 @@ func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, error) {
 	trackable := rv.Kind() == reflect.Map || rv.Kind() == reflect.Slice
 	if trackable {
 		id = containerID{ptr: rv.Pointer(), len: n, typ: rv.Type()}
-		if _, ok := w.onPath[id]; ok {
-			return 0, cyclicErr(w.path())
+		if size, cached, err := w.enter(id, depth); err != nil || cached {
+			return size, err
 		}
-		if size, ok := w.done[id]; ok {
-			return size, nil
-		}
-		w.onPath[id] = struct{}{}
-	}
-
-	if depth >= maxOutputDepth {
+	} else if depth >= maxOutputDepth {
 		return 0, limitErr(w.path(), "nests deeper than "+strconv.Itoa(maxOutputDepth)+" levels")
 	}
 
 	total := n
-	add := func(child reflect.Value, seg string) error {
-		w.segs = append(w.segs, seg)
-		size, err := w.walk(child.Interface(), depth+1)
+	add := func(child reflect.Value, seg pathSeg) error {
+		size, err := w.descend(child.Interface(), seg, depth)
 		if err != nil {
 			return err
 		}
-		w.segs = w.segs[:len(w.segs)-1]
 		total += size
 		if total > maxOutputEntries {
-			return limitErr(w.path(), "expands to more than "+strconv.Itoa(maxOutputEntries)+" entries once shared values are counted at each place they appear")
+			return w.tooBig()
 		}
 		return nil
 	}
@@ -168,21 +337,20 @@ func (w *outputWalker) walkValue(rv reflect.Value, depth int) (int, error) {
 	case reflect.Map:
 		it := rv.MapRange()
 		for it.Next() {
-			if err := add(it.Value(), "."+keyString(it.Key())); err != nil {
+			if err := add(it.Value(), pathSeg{key: keyString(it.Key())}); err != nil {
 				return 0, err
 			}
 		}
 	default:
 		for i := 0; i < n; i++ {
-			if err := add(rv.Index(i), "["+strconv.Itoa(i)+"]"); err != nil {
+			if err := add(rv.Index(i), pathSeg{index: i, isIdx: true}); err != nil {
 				return 0, err
 			}
 		}
 	}
 
 	if trackable {
-		delete(w.onPath, id)
-		w.done[id] = total
+		w.leave(id, total)
 	}
 	return total, nil
 }

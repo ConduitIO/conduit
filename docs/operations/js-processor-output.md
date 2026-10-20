@@ -14,7 +14,7 @@ The failing record's error carries one of two stable codes:
 | Code | Cause |
 | --- | --- |
 | `processor.js_cyclic_output` | The returned key or payload contains itself, for example `record.Payload.After["self"] = record.Payload.After`. The message names the path where the cycle closes (`.Payload.After.self`). |
-| `processor.js_output_limit_exceeded` | The returned data nests deeper than 10,000 levels, or expands to more than 16,777,216 map entries and slice elements when a value shared by several parents is counted once per parent. |
+| `processor.js_output_limit_exceeded` | The returned data nests deeper than 10,000 levels, or the record as a whole (key, `Payload.Before` and `Payload.After` together) expands to more than 16,777,216 map entries and slice elements, counting a value shared by several parents once per parent. The limit is per record: three fields that are each under it can still be over it together, and the message then names the field that crossed it. |
 
 The record is not emitted and nothing is truncated or rewritten. It fails like any other processor
 error: with a DLQ threshold above 0 it is routed to the dead-letter queue and the pipeline keeps

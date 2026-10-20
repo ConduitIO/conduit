@@ -16,6 +16,7 @@ package custom
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/dop251/goja"
 	"github.com/matryer/is"
 )
 
@@ -242,4 +244,189 @@ func runCyclicChild(t *testing.T) {
 		t.Fatalf("expected an ErrorRecord, got %T", got[0])
 	}
 	t.Log("CHILD-OK")
+}
+
+// sharedBlowup returns a value whose expanded size is about 3*2^k entries
+// while it holds only k+1 distinct containers: s0 = [1], s(i+1) = [s(i), s(i)].
+func sharedBlowup(k int) any {
+	var v any = []any{1}
+	for i := 0; i < k; i++ {
+		v = []any{v, v}
+	}
+	return v
+}
+
+// TestOutputChecker_SharedBudget: the entry limit is per record, not per
+// field. Each value below is under the limit on its own; together they are
+// over it.
+func TestOutputChecker_SharedBudget(t *testing.T) {
+	// sharedBlowup(21) expands to 3*2^21-2, about 6.3M entries; the limit is
+	// 16.7M. Two fit, three do not.
+	v := sharedBlowup(21)
+
+	t.Run("each alone is under the limit", func(t *testing.T) {
+		is := is.New(t)
+		is.NoErr(checkOutput(".Key", v))
+	})
+	t.Run("two together fit", func(t *testing.T) {
+		is := is.New(t)
+		c := newOutputChecker()
+		is.NoErr(c.check(".Key", v))
+		is.NoErr(c.check(".Payload.Before", v))
+	})
+	t.Run("three together do not", func(t *testing.T) {
+		is := is.New(t)
+		c := newOutputChecker()
+		is.NoErr(c.check(".Key", v))
+		is.NoErr(c.check(".Payload.Before", v))
+		err := c.check(".Payload.After", v)
+		is.True(err != nil) // expected the joint budget to be exceeded
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code, CodeJSOutputLimitExceeded)
+		is.True(strings.Contains(ce.Message, ".Payload.After"))
+	})
+}
+
+// TestJSProcessor_OutputLimitIsPerRecord drives the same scenario through
+// toSDKRecords, so it fails if the three calls stop sharing one budget.
+func TestJSProcessor_OutputLimitIsPerRecord(t *testing.T) {
+	p := NewJavascriptProcessor(log.Nop())
+	v := map[string]any{"v": sharedBlowup(21)}
+	rt := goja.New()
+
+	tests := []struct {
+		name     string
+		rec      *jsRecord
+		wantCode conduiterr.Code
+	}{
+		{name: "two fields", rec: newBudgetRecord(v, v, nil)},
+		{name: "three fields", rec: newBudgetRecord(v, v, v), wantCode: CodeJSOutputLimitExceeded},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			_, err := p.toSDKRecords(rt.ToValue(tc.rec))
+			if tc.wantCode.IsZero() {
+				is.NoErr(err)
+				return
+			}
+			is.True(err != nil) // expected the record to be rejected
+			ce, ok := conduiterr.Get(err)
+			is.True(ok)
+			is.Equal(ce.Code, tc.wantCode)
+		})
+	}
+}
+
+func newBudgetRecord(key, before, after map[string]any) *jsRecord {
+	r := &jsRecord{Operation: "create"}
+	if key != nil {
+		r.Key = key
+	}
+	if before != nil {
+		r.Payload.Before = before
+	}
+	if after != nil {
+		r.Payload.After = after
+	}
+	return r
+}
+
+// TestCheckOutput_FastPathParity: the type-switch fast path and the
+// reflection fallback must agree. The cases mix shapes the fast path handles
+// (map[string]any, []any, StructuredData) with ones only reflection sees
+// (named map and slice types, pointers to maps), including cycles that cross
+// from one path to the other, and the false-positive shapes.
+func TestCheckOutput_FastPathParity(t *testing.T) {
+	type namedMap map[string]any // not handled by the type switch
+	type namedSlice []any
+
+	selfFast := map[string]any{}
+	selfFast["me"] = selfFast
+	selfNamed := namedMap{}
+	selfNamed["me"] = selfNamed
+
+	// A cycle that crosses both paths: fast map -> pointer to the same map.
+	viaPtr := map[string]any{}
+	viaPtr["me"] = &viaPtr
+
+	structured := opencdc.StructuredData{}
+	structured["list"] = []any{structured}
+
+	s := []any{1, 2}
+	sharedSlice := []any{s, s[:1], s, s[:1]} // same backing array, two lengths: a DAG, not a cycle
+	namedShared := namedSlice{s, s[:1], s, s[:1]}
+
+	sub := map[string]any{"x": 1}
+	nilMap := map[string]any(nil)
+	var nilPtr *map[string]any
+	var nilRaw *opencdc.RawData
+
+	tests := []struct {
+		name   string
+		in     any
+		cyclic bool
+	}{
+		{name: "self fast", in: selfFast, cyclic: true},
+		{name: "self named", in: selfNamed, cyclic: true},
+		{name: "self via pointer", in: viaPtr, cyclic: true},
+		{name: "structured data cycle", in: structured, cyclic: true},
+		{name: "same backing array different lengths", in: sharedSlice},
+		{name: "same backing array different lengths, named", in: namedShared},
+		{name: "same map under many parents", in: map[string]any{"a": sub, "b": []any{sub, sub}, "c": namedMap{"d": sub}}},
+		{name: "typed nil map", in: map[string]any{"a": nilMap}},
+		{name: "typed nil pointers", in: map[string]any{"a": nilPtr, "b": nilRaw}},
+		{name: "empty containers", in: []any{map[string]any{}, []any{}, opencdc.StructuredData{}, namedMap{}}},
+		{name: "raw data and bytes", in: map[string]any{"a": opencdc.RawData("x"), "b": []byte("y"), "c": func() any { r := opencdc.RawData("z"); return &r }()}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			err := checkOutput("", tc.in)
+			if !tc.cyclic {
+				is.NoErr(err)
+				return
+			}
+			ce, ok := conduiterr.Get(err)
+			is.True(ok) // expected a coded error
+			is.Equal(ce.Code, CodeJSCyclicOutput)
+		})
+	}
+}
+
+func benchRecordData() map[string]any {
+	m := make(map[string]any, 20)
+	for i := 0; i < 20; i++ {
+		m[fmt.Sprintf("field%d", i)] = i
+	}
+	return m
+}
+
+// BenchmarkCheckOutput measures the guard alone. Indicative only (a laptop
+// micro-benchmark, not a benchi run).
+func BenchmarkCheckOutput(b *testing.B) {
+	nested := map[string]any{
+		"a": benchRecordData(),
+		"b": []any{benchRecordData(), benchRecordData()},
+		"c": map[string]any{"d": []any{1, "x", 2.5, true, nil}},
+	}
+	for _, bc := range []struct {
+		name string
+		in   any
+	}{
+		{"flat20", benchRecordData()},
+		{"structured20", opencdc.StructuredData(benchRecordData())},
+		{"nested", nested},
+		{"rawdata", opencdc.RawData("payload")},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := checkOutput(".Payload.After", bc.in); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
