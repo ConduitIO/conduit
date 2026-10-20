@@ -22,6 +22,7 @@ command: {args: [migrate, kafka-connect, --worker, input/worker.properties, inpu
 expect:
   exitCode: 2
   entries:
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: bootstrap.servers, status: translated}
     - {key: group.id, status: translated}
     - {key: config.storage.topic, status: translated}

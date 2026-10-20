@@ -17,6 +17,11 @@
 # Bumps the versions of built-in connectors.
 # Requires GitHub CLI.
 
+# Resolve ConduitIO modules directly from GitHub (skip proxy.golang.org +
+# sum.golang.org index lag on fresh tags); third-party deps still use both.
+export GOPRIVATE=github.com/conduitio/*
+export GONOSUMDB=github.com/conduitio/*
+
 git checkout main
 git pull origin main
 git checkout -b bump-builtin-connectors

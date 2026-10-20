@@ -16,11 +16,11 @@ package processor
 
 import (
 	"context"
-	"maps"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
@@ -51,10 +51,13 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 	// its declared parameters does not reject the operator's egress opt-in as an
 	// "unrecognized parameter". The guest must never see host-reserved config
 	// (design: 20260726-wasm-host-egress-capability.md).
-	settings := maps.Clone(p.Config.Settings)
+	settings, err := env.ResolveSettings(p.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve processor settings: %w", err)
+	}
 	egress.StripReservedKeys(settings)
 
-	err := p.proc.Configure(ctx, settings)
+	err = p.proc.Configure(ctx, settings)
 	if err != nil {
 		return cerrors.Errorf("failed configuring processor: %w", err)
 	}
@@ -68,6 +71,22 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 }
 
 func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	// Invariant 6: isolate the engine's records from the processor. A processor
+	// that mutates its input in place and then errors (custom.javascript, and any
+	// built-in that edits before failing) must not be able to corrupt the record
+	// the engine holds — that record is what the engine nacks and writes to the
+	// DLQ, and what sibling branches still see (#3153). Hand every processor a
+	// deep copy so a mutating-then-failing processor leaves the engine's record
+	// untouched by construction. Cost: one deep copy per record per invocation;
+	// raw payloads are a memcpy, and WASM processors already serialize, so they
+	// pay a redundant copy (see
+	// docs/design-documents/20261015-processor-input-isolation-for-dlq.md).
+	inputs := make([]opencdc.Record, len(records))
+	for i, rec := range records {
+		inputs[i] = rec.Clone()
+	}
+	records = inputs
+
 	p.inInsp.Send(ctx, records)
 
 	var outRecs []sdk.ProcessedRecord

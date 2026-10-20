@@ -292,3 +292,70 @@ func TestMirror_AliasRequired(t *testing.T) {
 	}
 	is.Equal(settings(t, res, "pipelines/mm.yaml", "destination")["topic"], `us.{{ index .Metadata "opencdc.collection" }}`)
 }
+
+func auxRun(t *testing.T, accept bool, config string) Result {
+	t.Helper()
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), e, withValidator(Request{ConduitVersion: "v", AcceptGaps: accept, RequiredSettings: BuiltinRequired, Inputs: []kcmigrate.Input{in("c.properties", config)}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// MirrorHeartbeatConnector copies no data: no pipeline, every key
+// unsupported and non-blocking, so the run passes.
+func TestMirror_HeartbeatNoPipeline(t *testing.T) {
+	is := is.New(t)
+	res := auxRun(t, false, "name=hb\nconnector.class=org.apache.kafka.connect.mirror.MirrorHeartbeatConnector\nsource.cluster.alias=a\nemit.heartbeats.interval.seconds=5\n")
+	rc := mmConnector(res)
+	is.Equal(len(rc.Entries), 4)
+	for _, e := range rc.Entries {
+		is.Equal(e.Status, kcmigrate.StatusUnsupported)
+		is.Equal(e.Code, kcmigrate.CodeConnectorClassUnsupported.Reason())
+		is.True(!e.Blocking)
+	}
+	is.Equal(rc.Pipeline, "")
+	is.Equal(rc.PipelineStatus, kcmigrate.PipelineStatus(""))
+	is.True(res.OK)
+	// Retiring it stops the heartbeats; the note says so, without blocking.
+	var stops bool
+	for _, n := range rc.Notes {
+		stops = stops || (n.Code == kcmigrate.CodeOutputShapeDiffers.Reason() && !n.Blocking && strings.Contains(n.Reason, "Heartbeats stop"))
+	}
+	is.True(stops)
+	is.True(strings.Contains(file(res, "REPORT.md"), "Heartbeats stop"))
+	for _, f := range res.Files {
+		is.True(!strings.HasPrefix(f.Path, "pipelines/"))
+	}
+}
+
+// MirrorCheckpointConnector translates consumer offsets, which has no
+// equivalent: no pipeline and every key blocks. A literal secret is still
+// noted, since the input holds it.
+func TestMirror_CheckpointNoPipeline(t *testing.T) {
+	is := is.New(t)
+	cfg := "name=cp\nconnector.class=org.apache.kafka.connect.mirror.MirrorCheckpointConnector\ngroups=.*\n" +
+		`target.cluster.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="u" password="CPCANARY";` + "\n"
+	res := auxRun(t, false, cfg)
+	rc := mmConnector(res)
+	for _, e := range rc.Entries {
+		is.Equal(e.Code, kcmigrate.CodeConnectorClassUnsupported.Reason())
+		is.True(e.Blocking)
+	}
+	is.True(entryFor(rc, "target.cluster.sasl.jaas.config").Secret)
+	var plaintext bool
+	for _, n := range rc.Notes {
+		plaintext = plaintext || n.Code == kcmigrate.CodeSecretPlaintext.Reason()
+	}
+	is.True(plaintext)
+	is.True(!res.OK)
+	is.Equal(rc.Pipeline, "")
+	for _, f := range res.Files {
+		is.True(!strings.Contains(string(f.Content), "CPCANARY"))
+	}
+	is.True(auxRun(t, true, cfg).OK) // accepted gaps
+}

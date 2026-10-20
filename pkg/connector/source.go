@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -79,6 +80,13 @@ type Source struct {
 	// stream is the stream used to exchange records and acks with the
 	// source plugin.
 	stream pconnector.SourceRunStreamClient
+
+	// pendingRecv holds the result channel of a stream.Recv call started by
+	// a Read whose context was canceled before the call returned. The next
+	// Read consumes it instead of starting a new receive. Like the stream
+	// itself, it is only accessed by Read, which must not be called
+	// concurrently.
+	pendingRecv <-chan recvResult
 
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
@@ -534,18 +542,57 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 		return nil, cerrors.Errorf("source stream not open: %w", connectorPlugin.ErrStreamNotOpen)
 	}
 
-	resp, err := s.stream.Recv()
+	// stream.Recv does not observe ctx, so it runs in its own goroutine and
+	// Read selects on its result and ctx.Done(). A receive whose Read was
+	// canceled stays pending and is picked up by the next Read, so records
+	// the plugin sends in the meantime are not dropped.
+	if s.pendingRecv == nil {
+		s.pendingRecv = s.recv()
+	}
+	var res recvResult
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res = <-s.pendingRecv:
+		s.pendingRecv = nil
+	}
+	resp, err := res.resp, res.err
 	if err != nil {
 		return nil, err
 	}
 
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
-	for _, r := range resp.Records {
-		s.sanitizeRecord(&r, now)
+	// Index into the slice: a range variable is a copy, so sanitizing &r
+	// would drop every assignment to the record itself (#3107).
+	for i := range resp.Records {
+		s.sanitizeRecord(&resp.Records[i], now)
 	}
 
 	s.Instance.inspector.Send(ctx, resp.Records)
 	return resp.Records, nil
+}
+
+// recvResult is the outcome of a single stream.Recv call.
+type recvResult struct {
+	resp pconnector.SourceRunResponse
+	err  error
+}
+
+// recv starts a stream.Recv call in a separate goroutine and returns a channel
+// that receives its result. The call is tracked in wg, so Teardown waits for
+// it (it returns once stopStream closes the stream) before tearing down the
+// plugin. It must only be called while a plugin call is in flight (see
+// preparePluginCall).
+func (s *Source) recv() <-chan recvResult {
+	ch := make(chan recvResult, 1)
+	stream := s.stream
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		resp, err := stream.Recv()
+		ch <- recvResult{resp: resp, err: err}
+	}()
+	return ch
 }
 
 // Ack acknowledges that the records at the given positions were fully
@@ -1056,7 +1103,11 @@ func (s *Source) state() SourceState {
 
 func (s *Source) configure(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
-	_, err := s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: s.Instance.Config.Settings})
+	settings, err := env.ResolveSettings(s.Instance.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve source connector settings: %w", err)
+	}
+	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure source connector plugin: %w", err)
 	}
@@ -1084,6 +1135,7 @@ func (s *Source) run(ctx context.Context) error {
 		return cerrors.Errorf("could not run source connector plugin: %w", err)
 	}
 	s.stream = stream.Client()
+	s.pendingRecv = nil
 	s.stopStream = stopStream
 	s.streamCtx = ctx
 	return nil
@@ -1153,28 +1205,28 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	}
 }
 
+// sanitizeRecord stamps the metadata Conduit guarantees on every record it
+// reads from a source: opencdc.readAt (when the connector did not set it) and
+// conduit.source.connector.id. It allocates the metadata map when the
+// connector left it nil.
+//
+// It deliberately leaves nil Key, Payload.Before and Payload.After nil. nil is
+// how "absent" travels through the engine and the SDK schema middleware, and
+// a zero-length RawData is a valid, present encoding (an empty key, a
+// zero-field record), so substituting one for the other would change what a
+// record means. See #3107.
+//
+// Invariant 6: Conduit adds metadata here but never rewrites the record's key
+// or payload.
 func (s *Source) sanitizeRecord(r *opencdc.Record, now string) {
-	if r.Key == nil {
-		r.Key = opencdc.RawData{}
-	}
-	if r.Payload.Before == nil {
-		r.Payload.Before = opencdc.RawData{}
-	}
-	if r.Payload.After == nil {
-		r.Payload.After = opencdc.RawData{}
-	}
 	if r.Metadata == nil {
-		r.Metadata = opencdc.Metadata{
-			opencdc.MetadataReadAt:                   now,
-			opencdc.MetadataConduitSourceConnectorID: s.Instance.ID,
-		}
-	} else {
-		if r.Metadata[opencdc.MetadataReadAt] == "" {
-			r.Metadata[opencdc.MetadataReadAt] = now
-		}
-		if r.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
-			r.Metadata[opencdc.MetadataConduitSourceConnectorID] = s.Instance.ID
-		}
+		r.Metadata = make(opencdc.Metadata, 2)
+	}
+	if r.Metadata[opencdc.MetadataReadAt] == "" {
+		r.Metadata[opencdc.MetadataReadAt] = now
+	}
+	if r.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
+		r.Metadata[opencdc.MetadataConduitSourceConnectorID] = s.Instance.ID
 	}
 }
 
