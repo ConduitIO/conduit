@@ -69,7 +69,7 @@ and the flush still runs synchronously on the worker when credit is free.
 
 Move the flush onto a dedicated goroutine per destination. The worker appends source reads to the
 buffer; when the buffer fills it enqueues the pending batches onto a bounded channel (capacity = the
-credit) and immediately returns to read the next batch. The flusher goroutine is the *only* caller of
+credit) and immediately returns to read the next batch. The flusher goroutine is the _only_ caller of
 `Write`/`Ack`: it takes flushes off the channel in FIFO order, does `Write` → drain acks → ack each
 source batch, then takes the next. A full channel blocks the worker's enqueue, which is the correct
 backpressure when the destination is slower than the source.
@@ -103,7 +103,7 @@ Pipelining is implemented as Alternative B, scoped to **single-destination pipel
   are issued in FIFO order — batch N fully acked before batch N+1 (Invariant 4). Within a flush,
   `ackPending` acks each buffered source batch in source order exactly as today.
 - **Fan-out stays synchronous.** With M>1 destinations, M flushers would race on the single Worker's
-  source ack across batches: each multiAckNacker guarantees *within*-batch prefix ordering, but the
+  source ack across batches: each multiAckNacker guarantees _within_-batch prefix ordering, but the
   final hop to `connector.Source.Ack` has no cross-batch happens-before, so batch N+1's ack could reach
   the source before batch N's (a monotonic-position violation). The current synchronous flush
   serializes this naturally (a pass completes, including acks, before the next pass). `buildSharedTail`
@@ -154,7 +154,7 @@ an operator's explicit `sdk.batch.size` exactly as the batching work already doc
 
 ## Rollback
 
-Pipelining is gated on `batchingEnabled` (destination `sdk.batch.*`) *and* on single-destination
+Pipelining is gated on `batchingEnabled` (destination `sdk.batch.*`) _and_ on single-destination
 pipelines. A pipeline without those settings, or with multiple destinations, keeps the existing path
 unchanged. Rolling back is reverting the commit — no config, state, or wire-format change.
 

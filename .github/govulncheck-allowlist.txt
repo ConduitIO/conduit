@@ -29,6 +29,11 @@
 # v0.21 connector fleet move off hamba/avro onto iskorotkov/avro (#2817, #3012).
 
 # ---------------------------------------------------------------------------
+# Blind spot: go.mod replaces github.com/dop251/goja with the ConduitIO/goja
+# fork (dop251/goja#816) so govulncheck looks advisories up under
+# github.com/ConduitIO/goja and cannot report ones filed against dop251/goja.
+# Watch upstream goja advisories by hand until the replace is dropped.
+# ---------------------------------------------------------------------------
 # golang.org/x/crypto (1 finding)
 #
 # The openpgp package is unmaintained and "unsafe by design" per its own

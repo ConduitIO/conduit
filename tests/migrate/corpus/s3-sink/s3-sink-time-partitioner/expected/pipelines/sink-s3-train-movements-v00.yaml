@@ -8,6 +8,8 @@ pipelines:
         type: source
         plugin: builtin:kafka
         settings:
+          groupID: connect-sink-s3-train-movements-v00
+          readFromBeginning: "true"
           servers: ${KC_SINK_S3_TRAIN_MOVEMENTS_V00_SOURCE_SERVERS}
           topics: TRAIN_MOVEMENTS_ACTIVATIONS_SCHEDULE_00
       - id: destination
