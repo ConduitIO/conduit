@@ -129,6 +129,17 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 // If a connector is already running for this Instance this method returns an
 // error.
 func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+	if err := i.CheckStartable(); err != nil {
+		return nil, err
+	}
+	return i.newConnector(ctx, dispenserFetcher)
+}
+
+// CheckStartable returns a CodeConnectorDeleteHookRan error if this instance
+// must not be started, and nil otherwise. Connector calls it; the lifecycle
+// services also call it for every connector of a pipeline before they build
+// any node, so a refused start leaves nothing half built (#3137).
+func (i *Instance) CheckStartable() error {
 	// Invariant 3 (#3137): fail closed. A rolled-back delete already ran the
 	// plugin's delete hook; resuming from the saved position could skip
 	// records, and clearing it could too (a Kafka source with no position
@@ -136,18 +147,18 @@ func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispens
 	i.RLock()
 	hookRan := i.deleteHookRan
 	i.RUnlock()
-	if hookRan {
-		ce := conduiterr.New(CodeConnectorDeleteHookRan, fmt.Sprintf(
-			"connector %q (plugin %q, pipeline %q) was restored after a failed delete, but its plugin's delete hook "+
-				"had already run and may have released resources its saved position depends on "+
-				"(for example a Postgres replication slot); refusing to start from that position",
-			i.ID, i.Plugin, i.PipelineID))
-		ce.Suggestion = "delete the connector and create it again to start it from the beginning; " +
-			"to resume from the saved position instead, first check that the resources it depends on still exist " +
-			"(for example the replication slot), then restart Conduit, which reloads the connector without this check"
-		return nil, ce
+	if !hookRan {
+		return nil
 	}
-	return i.newConnector(ctx, dispenserFetcher)
+	ce := conduiterr.New(CodeConnectorDeleteHookRan, fmt.Sprintf(
+		"connector %q (plugin %q, pipeline %q) was restored after a failed delete, but its plugin's delete hook "+
+			"had already run and may have released resources its saved position depends on "+
+			"(for example a Postgres replication slot); refusing to start from that position",
+		i.ID, i.Plugin, i.PipelineID))
+	ce.Suggestion = "delete the connector and create it again to start it from the beginning; " +
+		"to resume from the saved position instead, first check that the resources it depends on still exist " +
+		"(for example the replication slot), then restart Conduit, which reloads the connector without this check"
+	return ce
 }
 
 // newConnector is Connector without the delete-hook check. Close uses it: a
