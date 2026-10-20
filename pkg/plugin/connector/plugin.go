@@ -25,6 +25,15 @@ type Dispenser interface {
 	DispenseDestination() (DestinationPlugin, error)
 }
 
+// BuiltinDispenser is an optional interface of a Dispenser. A dispenser of a
+// built-in connector reports the connector's plugin name (without the
+// "builtin:" prefix or a version); any other dispenser (standalone, external)
+// reports false. It lets the engine tell a built-in "postgres" from a
+// standalone plugin that resolved from the same bare name.
+type BuiltinDispenser interface {
+	BuiltinPluginName() (name string, ok bool)
+}
+
 type SourcePlugin interface {
 	pconnector.SourcePlugin
 	NewStream() pconnector.SourceRunStream

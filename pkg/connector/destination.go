@@ -64,6 +64,13 @@ type Destination struct {
 	// stop-and-wait loop). See pkg/lifecycle-poc/batching_guard.go and
 	// docs/design-documents/20261017-funnel-destination-batching.md.
 	engineBatches bool
+
+	// classicDefaultBatching is set by the classic engine (pkg/lifecycle) for
+	// regular destinations. configure then applies the classic default
+	// sdk.batch.size/sdk.batch.delay to the settings it hands the plugin when
+	// the user set neither and the plugin is an allowlisted built-in. It is
+	// never set for a DLQ or by the arch-v2 engine. See classic_batching.go.
+	classicDefaultBatching bool
 }
 
 type DestinationState struct {
@@ -85,6 +92,19 @@ func (d *Destination) ID() string {
 // and does not withhold acks behind its own buffer.
 func (d *Destination) SetEngineBatches() {
 	d.engineBatches = true
+}
+
+// SetClassicDefaultBatching opts this destination into the classic engine's
+// default write batching (see classicBatchDefaults). Only the classic engine
+// calls it, for regular destinations: not for a DLQ, and not from the arch-v2
+// engine, which batches in the funnel.
+func (d *Destination) SetClassicDefaultBatching() {
+	d.classicDefaultBatching = true
+}
+
+// ClassicDefaultBatching reports whether SetClassicDefaultBatching was called.
+func (d *Destination) ClassicDefaultBatching() bool {
+	return d.classicDefaultBatching
 }
 
 func (d *Destination) Errors() <-chan error {
@@ -355,12 +375,36 @@ func (d *Destination) configure(ctx context.Context) error {
 		// batch, which would stall the engine's stop-and-wait loop.
 		delete(settings, "sdk.batch.size")
 		delete(settings, "sdk.batch.delay")
+	} else if d.classicDefaultBatching {
+		// settings is the resolved copy; Instance.Config.Settings (what is
+		// persisted and compared for lifecycle events) is never modified.
+		if applied, why := classicBatchDefaults(settings, d.builtinPluginName()); applied {
+			d.Instance.logger.Info(ctx).
+				Str(log.ConnectorIDField, d.Instance.ID).
+				Str("plugin", d.Instance.Plugin).
+				Str("sdk.batch.size", ClassicDefaultBatchSize).
+				Str("sdk.batch.delay", ClassicDefaultBatchDelay).
+				Msg("sdk.batch.size and sdk.batch.delay are not set: applying the classic engine's default destination batching (set sdk.batch.size to 1 to write one record at a time)")
+		} else if why != "" {
+			d.Instance.logger.Debug(ctx).Str("reason", why).Msg("classic default destination batching not applied")
+		}
 	}
 	_, err = d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure destination connector plugin: %w", err)
 	}
 	return nil
+}
+
+// builtinPluginName returns the built-in connector's name, or "" if the
+// dispenser is not a built-in connector's.
+func (d *Destination) builtinPluginName() string {
+	if b, ok := d.dispenser.(connectorPlugin.BuiltinDispenser); ok {
+		if name, ok := b.BuiltinPluginName(); ok {
+			return name
+		}
+	}
+	return ""
 }
 
 func (d *Destination) open(ctx context.Context) error {

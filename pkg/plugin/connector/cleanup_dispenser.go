@@ -35,6 +35,14 @@ func DispenserWithCleanup(d Dispenser, cleanup func()) Dispenser {
 	return &cleanupDispenser{target: d, cleanup: cleanup}
 }
 
+// BuiltinPluginName forwards to the wrapped dispenser (see BuiltinDispenser).
+func (c *cleanupDispenser) BuiltinPluginName() (string, bool) {
+	if b, ok := c.target.(BuiltinDispenser); ok {
+		return b.BuiltinPluginName()
+	}
+	return "", false
+}
+
 func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
 	return c.target.DispenseSpecifier()
 }

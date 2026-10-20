@@ -1110,6 +1110,13 @@ func (s *Service) buildDestinationNodes(
 			return nil, err
 		}
 
+		// Classic engine only: apply the default destination batching to the
+		// allowlisted built-ins when the user set no batching of their own
+		// (docs/design-documents/20261020-classic-default-destination-batching.md).
+		// Not done for the DLQ destination (buildDLQHandlerNode) and never by
+		// lifecycle-poc: arch-v2 batches in the funnel.
+		dest.(*connector.Destination).SetClassicDefaultBatching()
+
 		ackerNode := s.buildDestinationAckerNode(dest.(*connector.Destination))
 		destinationNode := stream.DestinationNode{
 			Name:        instance.ID,

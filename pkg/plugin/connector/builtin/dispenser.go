@@ -53,6 +53,12 @@ func NewDispenser(
 	}
 }
 
+// BuiltinPluginName reports the built-in connector's plugin name, without the
+// "builtin:" prefix or version (connector.BuiltinDispenser).
+func (d *Dispenser) BuiltinPluginName() (string, bool) {
+	return d.name.PluginName(), true
+}
+
 func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	return newSpecifierPluginAdapter(d.specifierPlugin(), d.pluginLogger("specifier")), nil
 }
