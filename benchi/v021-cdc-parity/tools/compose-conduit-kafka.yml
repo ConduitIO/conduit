@@ -1,0 +1,68 @@
+# Conduit Kafka-destination arm (conduit-kafka). Built from the SAME
+# conduit-bench:v021-cdc-parity image as the conduit arm by run.sh, but runs the
+# Kafka-destination pipeline (../pipelines/conduit-kafka.yml) instead of the
+# file-sink pipeline: builtin:postgres CDC source (bench_source_i) ->
+# builtin:kafka destination (topic cdcparitykafka.public.bench_source_i).
+#
+# This arm needs a Kafka broker to produce into, so the tool compose brings one
+# up. It shares the broker image, config and container name (cdcparity-kafka)
+# with the connect-kafka arm so the ground-truth count hook in ../bench.yml can
+# run GetOffsetShell inside the SAME container for both arms. The broker has a
+# healthcheck and conduit waits on it, because the builtin:kafka destination
+# dials the broker at Open and should not race a broker that is still starting.
+#
+# No sink volume is mounted: ground truth for this arm is the topic's record
+# count (GetOffsetShell), read by the count hooks in ../bench.yml, not a file.
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: cdcparity-kafka
+    environment:
+      CLUSTER_ID: "cdcparity-kafka-cluster"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://cdcparity-kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@cdcparity-kafka:9093"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_NUM_PARTITIONS: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 10s
+      retries: 60
+    networks:
+      - benchi
+
+  conduit:
+    image: conduit-bench:v021-cdc-parity
+    container_name: cdcparity-conduit-kafka
+    # Built locally and never pushed; benchi's `docker compose pull` must not
+    # try to fetch it.
+    pull_policy: never
+    # sh -c + exec so signals reach conduit (graceful shutdown flushes the
+    # --dev.* profiles). CONDUIT_EXTRA_ARGS is empty in every measured run;
+    # run.sh sets it only for a PROFILE=1 diagnostic run.
+    command:
+      - sh
+      - -c
+      - exec /app/conduit run --pipelines.path /app/pipelines --log.level error --log.format json ${CONDUIT_EXTRA_ARGS:-}
+    stop_grace_period: 60s
+    volumes:
+      - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof
+      - ../pipelines/conduit-kafka.yml:/app/pipelines/conduit-kafka.yml:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - benchi
+
+networks:
+  benchi:
+    external: true

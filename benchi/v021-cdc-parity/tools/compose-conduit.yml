@@ -1,0 +1,34 @@
+# Conduit arm. Built from the working tree (v0.21 nightly) by run.sh:
+#   docker build -t conduit-bench:v021-cdc-parity -f Dockerfile ../..
+#
+# The same image and pipeline are used by compose-conduit-aa.yml — the A/A
+# control — so the spread between these two arms is run-to-run noise alone.
+services:
+  conduit:
+    image: conduit-bench:v021-cdc-parity
+    container_name: cdcparity-conduit
+    # Built locally and never pushed; benchi's `docker compose pull` must not
+    # try to fetch it.
+    pull_policy: never
+    # sh -c + exec so signals reach conduit (graceful shutdown flushes the
+    # --dev.* profiles). CONDUIT_EXTRA_ARGS is empty in every measured run;
+    # run.sh sets it only for a PROFILE=1 diagnostic run.
+    command:
+      - sh
+      - -c
+      - exec /app/conduit run --pipelines.path /app/pipelines --log.level error --log.format json ${CONDUIT_EXTRA_ARGS:-}
+    stop_grace_period: 60s
+    volumes:
+      - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof
+      - ../pipelines/conduit.yml:/app/pipelines/conduit.yml:ro
+      - cdcparity-sink:/sink
+    networks:
+      - benchi
+
+volumes:
+  cdcparity-sink:
+    external: true
+
+networks:
+  benchi:
+    external: true

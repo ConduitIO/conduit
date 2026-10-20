@@ -1,0 +1,21 @@
+# Redpanda Connect arm. postgres_cdc -> file output, one line per CDC event
+# written to /sink/out.txt (see ../config/redpanda.yaml).
+services:
+  redpanda-connect:
+    image: docker.redpanda.com/redpandadata/connect:latest
+    container_name: cdcparity-redpanda
+    # Pre-pulled once; never pull mid-benchmark.
+    pull_policy: never
+    volumes:
+      - ../config/redpanda.yaml:/connect.yaml:ro
+      - cdcparity-sink:/sink
+    networks:
+      - benchi
+
+volumes:
+  cdcparity-sink:
+    external: true
+
+networks:
+  benchi:
+    external: true

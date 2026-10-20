@@ -1,0 +1,19 @@
+# Built binaries are not committed.
+/loader/loader
+/loader/loader-linux-amd64
+
+# Raw results ARE committed (results-aws/<run>/: runs.csv, environment.txt,
+# per-run logs and CSVs). Only scratch output dirs are ignored.
+/results/
+
+# Never committed: Terraform state, provider cache, throwaway SSH keys, env files.
+.ssh/
+*.pem
+*.key
+.env
+.env.*
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log

@@ -1,0 +1,466 @@
+# benchi config for the v0.21 close-out benchmark:
+
+
+
+# Conduit vs Kafka Connect (Debezium Postgres) vs Redpanda Connect on an
+# equivalent Postgres CDC workload, with a file sink, a Postgres destination
+# and an S3 destination.
+#
+# THE METRIC IS GROUND TRUTH, NOT ENGINE METRICS. No Conduit/Kafka/Redpanda
+# metric is read for the comparison (benchi/METHODOLOGY.md: the retracted
+# msg-rate-per-second measured instrumentation, not throughput). Three ground
+# truths are used, one per destination kind:
+#
+#   file-sink arms (conduit, conduit-aa, connect, redpanda-connect) write one
+#   line per CDC event to their sink file(s) on a shared volume; the pre/post
+#   hooks run `wc -l` on the SUM of lines across those files.
+#
+#   Postgres-destination arms (conduit-pg, connect-pg) write into
+#   bench_dest_0 .. bench_dest_{N-1}; the pre/post hooks run a `SELECT
+#   count(*)` SUM across those tables. The destination upserts on the record
+#   key (id) and deletes on delete events, so the row count mirrors the LIVE
+#   rows of the source — the delta over the window is the net rows captured.
+#
+#   S3-destination arms (conduit-s3, connect-s3) write one JSON line per CDC
+#   event to objects in a local MinIO bucket; the pre/post hooks download every
+#   object and run `wc -l` on the SUM of lines across them.
+#
+# In all three cases: throughput = (count after - count before) / test duration.
+# The Postgres sink batches internally (funnel batching on the conduit side,
+# JDBC batch.size on the Connect side), and the S3 sink batches into objects
+# (sdk.batch.size on the conduit side, flush.size on the Connect side), so the
+# SOURCE — not the sink — is what is measured; the two Postgres-destination and
+# two S3-destination arms are each a PARITY check, not a throughput flip. See
+# README.md and run.sh.
+#
+# A/A CONTROL: `conduit-aa` is byte-for-byte the same image and pipeline as
+# `conduit` (only the container name differs). The spread between them is the
+# harness's noise floor; an A/B delta smaller than it means nothing. run.sh
+# runs the arms in rotated order and reports medians with variance, never a
+# single best run.
+#
+# Loader: the SAME record generator (infra/loader, a fixed-rate
+# INSERT/UPDATE/DELETE mix split across bench_source_0 .. bench_source_{N-1})
+# runs for every arm, so the workload is identical by construction. See
+# infra/compose.yml and loader/. TABLES (default 1) is exported by run.sh and
+# reaches the loader (`--tables`) and the connect registration hooks via
+# docker compose env substitution; scripts/generate.sh regenerates
+# pipelines/conduit.yml, pipelines/conduit-pg.yml, pipelines/conduit-s3.yml and
+# infra/init.sql for the same TABLES.
+
+infrastructure:
+  postgres:
+    compose: ./infra/compose.yml
+
+tools:
+  conduit:
+    compose: ./tools/compose-conduit.yml
+  conduit-aa:
+    compose: ./tools/compose-conduit-aa.yml
+  connect:
+    compose: ./tools/compose-connect.yml
+  redpanda-connect:
+    compose: ./tools/compose-redpanda.yml
+  conduit-pg:
+    compose: ./tools/compose-conduit-pg.yml
+  connect-pg:
+    compose: ./tools/compose-connect-pg.yml
+  conduit-s3:
+    compose: ./tools/compose-conduit-s3.yml
+  connect-s3:
+    compose: ./tools/compose-connect-s3.yml
+  conduit-kafka:
+    compose: ./tools/compose-conduit-kafka.yml
+  connect-kafka:
+    compose: ./tools/compose-connect-kafka.yml
+
+metrics:
+  # CPU/memory of the DB only — a workload-invariance check, not the metric.
+  # The loader writes at a fixed rate, so Postgres CPU should stay ~constant
+  # across arms; a big swing would signal the workload drifted. The comparison
+  # number itself comes from the ground-truth hooks (wc -l for file and S3
+  # arms, SELECT count(*) for Postgres-destination arms), never from a
+  # collector.
+  docker:
+    collector: docker
+    settings:
+      containers:
+        - "cdcparity-postgres"
+        - "cdcparity-loader"
+
+tests:
+  - name: cdc-parity
+    # 60s steady state, per benchi/METHODOLOGY.md (the 30s A/A floor was ±13%;
+    # 60s drops it to ±3%).
+    duration: 60s
+
+    steps:
+      post-infrastructure:
+        # Clear any sink file left by a previous run, while no tool has the
+        # file open yet (this runs before the tool starts). rm (not truncate)
+        # is safe here for exactly that reason. chmod 777 lets the Debezium
+        # connect container (which runs as the non-root `kafka` user) write the
+        # sink file; the Conduit and Redpanda containers run as root and write
+        # regardless. out.txt is the Redpanda single-table sink; out_0.txt ..
+        # out_{N-1}.txt are the N-way Conduit and Connect sinks.
+        #
+        # File-sink arms only: the Postgres-destination arms write to
+        # bench_dest_i, which starts empty on every run (Postgres data is on
+        # tmpfs, so each arm gets a fresh database) and needs no reset.
+        - name: reset-sink
+          container: cdcparity-counter
+          tools:
+            - conduit
+            - conduit-aa
+            - connect
+            - redpanda-connect
+          run: chmod 777 /sink && rm -f /sink/out.txt /sink/out_*.txt
+
+        # S3-destination arms only: create the MinIO bucket and clear anything a
+        # previous tool left behind. The counter installs aws-cli at container
+        # start, which races this early hook, so wait for the binary first; MinIO
+        # data is on tmpfs, so the bucket does not exist yet and mb creates it.
+        # This runs well before the sink writes (the loader waits for the source's
+        # replication slot before writing), so the bucket is always ready in time.
+        - name: reset-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            n=0
+            until command -v aws >/dev/null 2>&1; do
+              n=$((n+1))
+              if [ "$n" -ge 120 ]; then break; fi
+              sleep 1
+            done
+            aws --endpoint-url http://cdcparity-minio:9000 s3 mb s3://bench 2>/dev/null || true
+            aws --endpoint-url http://cdcparity-minio:9000 s3 rm --recursive s3://bench 2>/dev/null || true
+
+      post-tool:
+        # Kafka Connect + Debezium only: register N Debezium Postgres source
+        # connectors and N FileStreamSinkConnectors over the Connect REST API
+        # (one per table -> topic -> sink), then wait until the sink is
+        # actually writing so pipeline startup stays out of the measured window
+        # (the pre-test hook re-waits too). Runs inside the counter container
+        # (alpine), which carries TABLES from infra/compose.yml.
+        - name: register-connect-connectors
+          container: cdcparity-counter
+          tools:
+            - connect
+          run: |
+            n=0
+            until wget -q -O /dev/null http://cdcparity-connect:8083/connectors 2>/dev/null; do
+              n=$((n+1))
+              if [ "$n" -ge 240 ]; then echo "connect REST API never came up"; exit 1; fi
+              sleep 1
+            done
+
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              cat > /tmp/debezium-source.json <<JSON
+            {"name":"debezium-postgres-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparity","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_slot_${i}","publication.name":"debezium_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            JSON
+              cat > /tmp/file-sink.json <<JSON
+            {"name":"file-sink-${i}","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSinkConnector","topics":"cdcparity.public.${t}","file":"/sink/out_${i}.txt","tasks.max":"1","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            JSON
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source.json http://cdcparity-connect:8083/connectors
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/file-sink.json http://cdcparity-connect:8083/connectors
+            done
+            echo "connect connectors registered (N=$N)"
+
+        # Kafka Connect + Debezium + JDBC-sink arm (connect-pg): register N
+        # Debezium Postgres source connectors (same pgoutput source as the
+        # connect arm, plus the unwrap transform) and N Confluent JDBC sink
+        # connectors writing bench_source_i -> bench_dest_i. The JDBC sink runs
+        # in upsert mode on the record key (id), with delete.enabled so
+        # unwrap-turned tombstones delete the row — the same upsert/delete
+        # semantics as the conduit-pg destination's builtin:postgres sink.
+        - name: register-connect-pg-connectors
+          container: cdcparity-counter
+          tools:
+            - connect-pg
+          run: |
+            n=0
+            until wget -q -O /dev/null http://cdcparity-connect-pg:8083/connectors 2>/dev/null; do
+              n=$((n+1))
+              if [ "$n" -ge 240 ]; then echo "connect REST API never came up"; exit 1; fi
+              sleep 1
+            done
+
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              d="bench_dest_${i}"
+              cat > /tmp/debezium-source-pg.json <<JSON
+            {"name":"debezium-pg-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparitypg","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_pg_slot_${i}","publication.name":"debezium_pg_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"true","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"true","transforms":"unwrap","transforms.unwrap.type":"io.debezium.transforms.ExtractNewRecordState","transforms.unwrap.delete.tombstone.handling.mode":"tombstone"}}
+            JSON
+              cat > /tmp/jdbc-sink-pg.json <<JSON
+            {"name":"jdbc-pg-${i}","config":{"connector.class":"io.confluent.connect.jdbc.JdbcSinkConnector","tasks.max":"1","topics":"cdcparitypg.public.${t}","connection.url":"jdbc:postgresql://cdcparity-postgres:5432/bench","connection.user":"bench","connection.password":"bench","table.name.format":"${d}","insert.mode":"upsert","pk.mode":"record_key","pk.fields":"id","delete.enabled":"true","auto.create":"false","auto.evolve":"false","batch.size":"3000","max.retries":"10","retry.backoff.ms":"3000","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"true","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"true"}}
+            JSON
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source-pg.json http://cdcparity-connect-pg:8083/connectors
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/jdbc-sink-pg.json http://cdcparity-connect-pg:8083/connectors
+            done
+            echo "connect-pg connectors registered (N=$N)"
+
+        # Kafka Connect + Debezium + S3-sink arm (connect-s3): register N
+        # Debezium Postgres source connectors (byte-for-byte the same pgoutput
+        # source as the connect arm, no unwrap — the S3 sink counts events, not
+        # net rows, so the Debezium envelope is written as-is) and N Confluent
+        # S3 sink connectors writing bench_source_i -> the MinIO bucket "bench".
+        # JsonFormat writes one bare-value JSON line per record (the Debezium
+        # envelope), matching the conduit-s3 destination's one-line-per-record
+        # json format. rotate.interval.ms mirrors conduit-s3's sdk.batch.delay:
+        # a time-based flush of a partial object, so neither sink holds an object
+        # open indefinitely.
+        - name: register-connect-s3-connectors
+          container: cdcparity-counter
+          tools:
+            - connect-s3
+          run: |
+            n=0
+            until wget -q -O /dev/null http://cdcparity-connect-s3:8083/connectors 2>/dev/null; do
+              n=$((n+1))
+              if [ "$n" -ge 240 ]; then echo "connect REST API never came up"; exit 1; fi
+              sleep 1
+            done
+
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              cat > /tmp/debezium-source-s3.json <<JSON
+            {"name":"debezium-s3-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparity","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_slot_${i}","publication.name":"debezium_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            JSON
+              cat > /tmp/s3-sink.json <<JSON
+            {"name":"s3-sink-${i}","config":{"connector.class":"io.confluent.connect.s3.S3SinkConnector","tasks.max":"1","topics":"cdcparity.public.${t}","format.class":"io.confluent.connect.s3.format.json.JsonFormat","flush.size":"1000","rotate.interval.ms":"1000","storage.class":"io.confluent.connect.s3.storage.S3Storage","partitioner.class":"io.confluent.connect.storage.partitioner.DefaultPartitioner","s3.bucket.name":"bench","s3.region":"us-east-1","store.url":"http://cdcparity-minio:9000","path.style.access.enabled":"true","aws.access.key.id":"conduitminio","aws.secret.access.key":"conduitminiosecret","schema.compatibility":"NONE"}}
+            JSON
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source-s3.json http://cdcparity-connect-s3:8083/connectors
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/s3-sink.json http://cdcparity-connect-s3:8083/connectors
+            done
+            echo "connect-s3 connectors registered (N=$N)"
+
+        # Kafka Connect + Debezium Kafka-destination arm (connect-kafka):
+        # register N Debezium Postgres source connectors over the Connect REST
+        # API. Debezium's source IS the Kafka producer — it writes one message
+        # per INSERT/UPDATE/DELETE straight into topic
+        # cdcparitykafka.public.bench_source_i (topic.prefix cdcparitykafka), so
+        # no sink connector is needed. The pre-test hook re-waits for records to
+        # appear in the topic.
+        - name: register-connect-kafka-connectors
+          container: cdcparity-counter
+          tools:
+            - connect-kafka
+          run: |
+            n=0
+            until wget -q -O /dev/null http://cdcparity-connect-kafka:8083/connectors 2>/dev/null; do
+              n=$((n+1))
+              if [ "$n" -ge 240 ]; then echo "connect REST API never came up"; exit 1; fi
+              sleep 1
+            done
+
+            N="${TABLES:-1}"
+            for i in $(seq 0 $((N-1))); do
+              t="bench_source_${i}"
+              cat > /tmp/debezium-source-kafka.json <<JSON
+            {"name":"debezium-kafka-${i}","config":{"connector.class":"io.debezium.connector.postgresql.PostgresConnector","database.hostname":"cdcparity-postgres","database.port":"5432","database.user":"bench","database.password":"bench","database.dbname":"bench","topic.prefix":"cdcparitykafka","table.include.list":"public.${t}","plugin.name":"pgoutput","slot.name":"debezium_kafka_slot_${i}","publication.name":"debezium_kafka_pub_${i}","publication.autocreate.mode":"filtered","snapshot.mode":"never","tombstones.on.delete":"false","heartbeat.interval.ms":"0","key.converter":"org.apache.kafka.connect.json.JsonConverter","key.converter.schemas.enable":"false","value.converter":"org.apache.kafka.connect.json.JsonConverter","value.converter.schemas.enable":"false"}}
+            JSON
+              wget -q -O- --header='Content-Type: application/json' --post-file=/tmp/debezium-source-kafka.json http://cdcparity-connect-kafka:8083/connectors
+            done
+            echo "connect-kafka connectors registered (N=$N)"
+
+      pre-test:
+        # File-sink arms: wait until the CDC pipeline is streaming (sum of sink
+        # lines > 0, up to 180s), warm up 15s, then count. Ground truth is the
+        # SUM of line counts across all sink files.
+        - name: wait-and-count-before
+          container: cdcparity-counter
+          tools:
+            - conduit
+            - conduit-aa
+            - connect
+            - redpanda-connect
+          run: |
+            sum() { cat /sink/out*.txt 2>/dev/null | wc -l | tr -d ' '; }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              if [ "$(sum)" -gt 0 ]; then break; fi
+              n=$((n+1))
+              sleep 1
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(sum)"
+
+        # Postgres-destination arms: wait until the destination tables have
+        # rows (sum of count(*) > 0, up to 180s), warm up 15s, then count.
+        # Ground truth is the SUM of count(*) across bench_dest_*.
+        - name: wait-and-count-before-pg
+          container: cdcparity-counter
+          tools:
+            - conduit-pg
+            - connect-pg
+          run: |
+            count() {
+              q="SELECT COALESCE(SUM(cnt),0)::bigint FROM ("
+              i=0
+              while [ "$i" -lt "${TABLES:-1}" ]; do
+                if [ "$i" -gt 0 ]; then q="$q UNION ALL"; fi
+                q="$q SELECT count(*) AS cnt FROM bench_dest_${i}"
+                i=$((i+1))
+              done
+              q="$q) t"
+              c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc "$q" 2>/dev/null | tr -d ' ')
+              echo "${c:-0}"
+            }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              if [ "$(count)" -gt 0 ]; then break; fi
+              n=$((n+1))
+              sleep 1
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(count)"
+
+        # S3-destination arms: wait until the bucket has at least one object
+        # (up to 180s), warm up 15s, then count. Ground truth is the SUM of
+        # `wc -l` across every object in the bucket: the conduit-s3 builtin:s3
+        # format json and the connect-s3 JsonFormat both write one JSON line per
+        # CDC event, so the line count is the event count. The wait loop uses a
+        # cheap list-objects (metadata) call; only the two counts (before/after)
+        # download and cat every object.
+        - name: wait-and-count-before-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            count() {
+              rm -rf /tmp/s3dump
+              aws --endpoint-url http://cdcparity-minio:9000 s3 cp --recursive s3://bench/ /tmp/s3dump --quiet 2>/dev/null || true
+              find /tmp/s3dump -type f -exec cat {} + 2>/dev/null | wc -l | tr -d ' '
+            }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              cnt=$(aws --endpoint-url http://cdcparity-minio:9000 s3api list-objects-v2 --bucket bench --max-keys 1 --query 'KeyCount' --output text 2>/dev/null || echo 0)
+              if [ "${cnt:-0}" -gt 0 ]; then break; fi
+              n=$((n+1))
+              sleep 1
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(count)"
+
+        # Kafka-destination arms: wait until the topics have records (sum of
+        # latest offsets > 0, up to 180s), warm up 15s, then count. Ground truth
+        # is the SUM of the topics' latest offsets (one message per CDC event,
+        # one partition per topic). Runs inside the kafka broker container,
+        # which has kafka-get-offsets.sh on its classpath.
+        - name: wait-and-count-before-kafka
+          container: cdcparity-kafka
+          tools:
+            - conduit-kafka
+            - connect-kafka
+          run: |
+            count() {
+              /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}'
+            }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              if [ "$(count)" -gt 0 ]; then break; fi
+              n=$((n+1))
+              sleep 1
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(count)"
+
+        # Source-side marker, run AFTER the destination count above. Prints the
+        # wall-clock time (ms, Postgres clock) and the source tables' cumulative
+        # change counters. The true elapsed window is the TS delta (not a nominal
+        # 60s, which a slow count such as the S3 download would skew), and
+        # SRC_EVENTS - ROWS gives the end-to-end LAG, which tells a sustained rate
+        # (bounded lag) from a backlog drain or a saturated arm (lag moving).
+        - name: mark-before
+          container: cdcparity-counter
+          tools:
+            - conduit
+            - conduit-aa
+            - connect
+            - redpanda-connect
+            - conduit-pg
+            - connect-pg
+            - conduit-s3
+            - connect-s3
+            - conduit-kafka
+            - connect-kafka
+          run: |
+            PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"
+
+      post-test:
+        - name: count-after
+          container: cdcparity-counter
+          tools:
+            - conduit
+            - conduit-aa
+            - connect
+            - redpanda-connect
+          run: |
+            echo "ROWS_AFTER=$(cat /sink/out*.txt 2>/dev/null | wc -l | tr -d ' ')"
+
+        - name: count-after-pg
+          container: cdcparity-counter
+          tools:
+            - conduit-pg
+            - connect-pg
+          run: |
+            count() {
+              q="SELECT COALESCE(SUM(cnt),0)::bigint FROM ("
+              i=0
+              while [ "$i" -lt "${TABLES:-1}" ]; do
+                if [ "$i" -gt 0 ]; then q="$q UNION ALL"; fi
+                q="$q SELECT count(*) AS cnt FROM bench_dest_${i}"
+                i=$((i+1))
+              done
+              q="$q) t"
+              c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc "$q" 2>/dev/null | tr -d ' ')
+              echo "${c:-0}"
+            }
+            echo "ROWS_AFTER=$(count)"
+
+        - name: count-after-s3
+          container: cdcparity-counter
+          tools:
+            - conduit-s3
+            - connect-s3
+          run: |
+            rm -rf /tmp/s3dump
+            aws --endpoint-url http://cdcparity-minio:9000 s3 cp --recursive s3://bench/ /tmp/s3dump --quiet 2>/dev/null || true
+            echo "ROWS_AFTER=$(find /tmp/s3dump -type f -exec cat {} + 2>/dev/null | wc -l | tr -d ' ')"
+
+        - name: count-after-kafka
+          container: cdcparity-kafka
+          tools:
+            - conduit-kafka
+            - connect-kafka
+          run: |
+            echo "ROWS_AFTER=$(/opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}')"
+
+        # Source-side marker, run AFTER the destination count above. Prints the
+        # wall-clock time (ms, Postgres clock) and the source tables' cumulative
+        # change counters. The true elapsed window is the TS delta (not a nominal
+        # 60s, which a slow count such as the S3 download would skew), and
+        # SRC_EVENTS - ROWS gives the end-to-end LAG, which tells a sustained rate
+        # (bounded lag) from a backlog drain or a saturated arm (lag moving).
+        - name: mark-after
+          container: cdcparity-counter
+          tools:
+            - conduit
+            - conduit-aa
+            - connect
+            - redpanda-connect
+            - conduit-pg
+            - connect-pg
+            - conduit-s3
+            - connect-s3
+            - conduit-kafka
+            - connect-kafka
+          run: |
+            PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"
