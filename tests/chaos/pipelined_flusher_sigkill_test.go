@@ -99,7 +99,8 @@ func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 //
 // Here the first child runs unbatched with production capped at 22, so the
 // resume position is exactly 22 on every run. A restart batched at 8 (what the
-// crash test's restart used to do) times out here on every run.
+// crash test's restart used to do) times out here deterministically, since the
+// resume is pinned at 22.
 func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -144,6 +145,10 @@ func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 // under test is the first child's; replaying its in-flight batches is the
 // source re-reading from the persisted position, which does not depend on the
 // restart's batch size.
+//
+// This is a workaround for #3231 (a partial batch has no flush timer and is
+// not acked on graceful stop). Restore destBatchSize: cfg.destBatchSize here
+// once #3231 lands, so the restart exercises batching again.
 func pipelinedFlusherRestart(cfg lcChildConfig) lcChildConfig {
 	return lcChildConfig{
 		dbDir:         cfg.dbDir,
