@@ -375,7 +375,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.14.4)
+### postgres (v0.14.5)
 
 Conduit connector for PostgreSQL
 
@@ -709,6 +709,28 @@ deleted, the record will be ignored.
 
 If there is no key, the record will be simply appended.
 
+**Column type changes on a running pipeline**
+
+The destination describes every statement before it runs it (pgx's
+`describe_exec` query mode), so after `ALTER TABLE ... ALTER COLUMN ... TYPE`
+the next write is typed for the new column. A value the new type cannot hold
+fails the write instead of being converted. Up to v0.14.4 the destination
+used pgx's default, `cache_statement`, and a running pipeline stored 5/2 in a
+column that had become integer as 3, without an error (#367).
+
+Describing each statement costs a round trip per statement. If the tables a
+pipeline writes never change type while it runs, add
+`default_query_exec_mode=cache_statement` to the `url` to reuse prepared
+statements as before. **Risk:** with `cache_statement` (or `cache_describe`)
+a statement keeps the parameter types it was prepared with, so after an
+`ALTER COLUMN ... TYPE` Postgres converts values into the new type without an
+error until the destination restarts. Behind PgBouncer or another pooler that
+shares prepared statements between clients, a restart is not enough, so do
+not use a cache mode there. The destination logs a warning at start when the
+connection settings select a cache mode. Any mode set in the URL, the
+keyword/value form or a service file is kept as it is; `exec` and
+`simple_protocol` never cache parameter types.
+
 **Numeric columns**
 
 Decimal values (`big.Rat`) are sent to Postgres as exact decimal strings, and
@@ -735,10 +757,10 @@ Postgres converts the string, and the examples below were checked on
 Postgres 17.5:
 
 - `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
-  value is rejected, except on a destination that was already running when the
-  column was changed to an integer type: the cached prepared statement still
-  types the parameter as `numeric`, so 5/2 is silently rounded to 3
-  (see #367).
+  value is rejected, also on a destination that was already running when the
+  column was changed to an integer type (see "Column type changes on a running
+  pipeline"). With `default_query_exec_mode=cache_statement` in the URL, such a
+  destination rounds 5/2 to 3 instead (#367).
 - `real`, `float8`: stored as the nearest binary float.
 - `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
 - `oid`: stored if the value is a whole number (7 is stored as `7`).
@@ -798,7 +820,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. The destination describes each statement before it runs it, so a column type change on a running pipeline is seen by the next write. Add `default_query_exec_mode=cache_statement` to reuse prepared statements for speed, at the risk that after an ALTER COLUMN ... TYPE values are converted into the new type without an error until a restart (#367). | required |
 
 ### s3 (v0.9.5)
 
