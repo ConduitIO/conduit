@@ -15,7 +15,9 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -121,4 +123,130 @@ func TestServiceLifecycle_WaitPipeline_WaitsForCleanupTail(t *testing.T) {
 	}
 	is.True(cerrors.Is(err, wantErr))
 	is.Equal(pipeline.StatusDegraded, pl.GetStatus())
+}
+
+// messageGate is a log writer that holds the nth line carrying message until
+// release is closed (or abort, so a failing test cannot hang). held closes
+// when that line is being held.
+type messageGate struct {
+	message []byte
+	nth     int64
+	seen    atomic.Int64
+	held    chan struct{}
+	release <-chan struct{}
+	abort   <-chan struct{}
+}
+
+func (g *messageGate) Write(p []byte) (int, error) {
+	if !bytes.Contains(p, g.message) {
+		return len(p), nil
+	}
+	if g.seen.Add(1) == g.nth {
+		close(g.held)
+		select {
+		case <-g.release:
+		case <-g.abort:
+		}
+	}
+	return len(p), nil
+}
+
+// TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor is the
+// arch-v2 port of pkg/lifecycle's test of the same name (#3087 review). The
+// recovery restart runs on the failed run's cleanup goroutine, which logs
+// "pipeline started" after the restarted run is published and only then
+// returns. The gate holds it there; the restarted run is stopped, and
+// WaitPipeline must not return until the predecessor is released.
+func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+
+	release := make(chan struct{})
+	abort := make(chan struct{})
+	t.Cleanup(func() { close(abort) })
+	gate := &messageGate{
+		message: []byte(`"message":"pipeline started"`),
+		nth:     2, // the first is the test's own Start
+		held:    make(chan struct{}),
+		release: release,
+		abort:   abort,
+	}
+	nop := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(nop, db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(nop, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	transientErr := cerrors.New("lost connection to source")
+	healthyRecords := generateRecords(3)
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := sourceRecoversAfterTransientError(ctrl, persister, healthyRecords, transientErr)
+	destination, destDispenser := destinationRecovers(ctrl, persister, healthyRecords)
+	dlq, dlqDispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		log.New(zerolog.New(gate).Level(zerolog.InfoLevel)),
+		testErrRecoveryCfg(),
+		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		ps,
+		false,
+	)
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+	first, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+
+	select {
+	case <-gate.held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the predecessor never logged \"pipeline started\" for the restart")
+	}
+	restarted, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+	is.True(restarted != first)
+	if isDead(first.t) {
+		t.Fatal("the predecessor's tomb is dead while its goroutine is held; the gate does not hold the window")
+	}
+
+	waitForRecordsAcked(t, source, healthyRecords)
+	is.NoErr(ls.Stop(ctx, pl.ID, false))
+	select {
+	case <-restarted.t.Dead():
+	case <-time.After(10 * time.Second):
+		t.Fatal("the restarted run did not stop within 10s")
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+	select {
+	case err := <-waitDone:
+		close(release)
+		t.Fatalf("WaitPipeline returned (%v) while the recovery predecessor was still running (#3087)", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case err = <-waitDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("WaitPipeline did not return within 10s after the predecessor was released")
+	}
+	is.NoErr(err)
+	is.True(isDead(first.t))
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 }

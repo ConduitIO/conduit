@@ -15,10 +15,21 @@
 package lifecycle
 
 import (
+	"bytes"
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/google/uuid"
+	"github.com/matryer/is"
+	"github.com/rs/zerolog"
+	"go.uber.org/mock/gomock"
 )
 
 // waitPipelineTailWindow is how long the tests below give a wrong
@@ -124,4 +135,128 @@ func assertWaitPipelineHeld(t *testing.T, tr *terminalRun, release chan struct{}
 	default:
 		t.Fatal("WaitPipeline returned before the run's tomb was dead")
 	}
+}
+
+// messageGate is a log writer that holds the nth line carrying message until
+// release is closed (or abort, so a failing test cannot hang). held closes
+// when that line is being held.
+type messageGate struct {
+	message []byte
+	nth     int64
+	seen    atomic.Int64
+	held    chan struct{}
+	release <-chan struct{}
+	abort   <-chan struct{}
+}
+
+func (g *messageGate) Write(p []byte) (int, error) {
+	if !bytes.Contains(p, g.message) {
+		return len(p), nil
+	}
+	if g.seen.Add(1) == g.nth {
+		close(g.held)
+		select {
+		case <-g.release:
+		case <-g.abort:
+		}
+	}
+	return len(p), nil
+}
+
+// TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor covers the
+// recovery chain (#3087 review). A recovery restart runs on the failed run's
+// cleanup goroutine: Start publishes the restarted run, and the old goroutine
+// then keeps going (it logs "pipeline started", releases its reservation and
+// returns). WaitPipeline on the restarted run used to wait for that run's
+// tomb only, so it could report the pipeline stopped while the predecessor
+// was still running.
+//
+// The gate holds the predecessor in its "pipeline started" log line (the
+// second one: the first is the test's own Start). The restarted run is then
+// stopped; WaitPipeline must not return until the predecessor is released.
+func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+
+	release := make(chan struct{})
+	abort := make(chan struct{})
+	t.Cleanup(func() { close(abort) })
+	gate := &messageGate{
+		message: []byte(`"message":"pipeline started"`),
+		nth:     2,
+		held:    make(chan struct{}),
+		release: release,
+		abort:   abort,
+	}
+	logger := log.New(zerolog.New(gate).Level(zerolog.InfoLevel))
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(log.Nop(), db, time.Second, 3)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	ps := pipeline.NewService(log.Nop(), db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	ctrl := gomock.NewController(t)
+	source, srcDispenser := asserterSource(ctrl, persister, generateRecords(0), nil, true, 2)
+	destination, destDispenser := asserterDestination(ctrl, persister, generateRecords(0), 2)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(logger, testErrRecoveryCfg(),
+		testConnectorService{source.ID: source, destination.ID: destination, testDLQID: dlq},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		}, ps)
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+	first, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+
+	// A recoverable error: the run's cleanup goroutine restarts the pipeline
+	// after the backoff (MinDelay 1s) and is then held by the gate.
+	injectSourceError(ctx, t, ls, pl.ID, cerrors.New("lost connection to database"))
+	waitClosed(t, gate.held, "the predecessor to log \"pipeline started\" for the restart")
+
+	restarted, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+	is.True(restarted != first)
+	if isDead(first.t) {
+		t.Fatal("the predecessor's tomb is dead while its goroutine is held; the gate does not hold the window")
+	}
+
+	// Stop the restarted run and wait for every goroutine of it to return.
+	is.NoErr(ls.Stop(ctx, pl.ID, false))
+	waitClosed(t, restarted.t.Dead(), "the restarted run to stop")
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+	select {
+	case err := <-waitDone:
+		close(release)
+		t.Fatalf("WaitPipeline returned (%v) while the recovery predecessor was still running (#3087)", err)
+	case <-time.After(waitPipelineTailWindow):
+	}
+
+	close(release)
+	select {
+	case err = <-waitDone:
+	case <-time.After(terminalStatusGuard):
+		t.Fatalf("WaitPipeline did not return within %s after the predecessor was released", terminalStatusGuard)
+	}
+	is.NoErr(err)
+	select {
+	case <-first.t.Dead():
+	default:
+		t.Fatal("WaitPipeline returned before the predecessor's tomb was dead")
+	}
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 }

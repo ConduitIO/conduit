@@ -30,7 +30,6 @@ import (
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
-	"gopkg.in/tomb.v2"
 )
 
 // TestServiceLifecycle_Recovery_SupersededCleanupKeepsLiveEntry is the #2811
@@ -181,7 +180,7 @@ func TestServiceLifecycle_Recovery_SupersededCleanupKeepsLiveEntry(t *testing.T)
 // contract directly: a stale owner never removes a different run's entry.
 func TestService_deleteRunningPipelineIfCurrent(t *testing.T) {
 	is := is.New(t)
-	s := &Service{runningPipelines: csync.NewMap[string, *runnablePipeline](), lastRun: csync.NewMap[string, *tomb.Tomb]()}
+	s := &Service{runningPipelines: csync.NewMap[string, *runnablePipeline](), lastRun: csync.NewMap[string, *runChain]()}
 
 	older := &runnablePipeline{}
 	newer := &runnablePipeline{}
@@ -217,7 +216,7 @@ func TestService_deleteRunningPipelineIfCurrent(t *testing.T) {
 //     the window and be erased.
 func TestService_deleteRunningPipelineIfCurrent_SerializedAgainstPublish(t *testing.T) {
 	is := is.New(t)
-	s := &Service{runningPipelines: csync.NewMap[string, *runnablePipeline](), lastRun: csync.NewMap[string, *tomb.Tomb]()}
+	s := &Service{runningPipelines: csync.NewMap[string, *runnablePipeline](), lastRun: csync.NewMap[string, *runChain]()}
 
 	departing := &runnablePipeline{}
 	newer := &runnablePipeline{}
