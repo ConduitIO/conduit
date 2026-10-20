@@ -130,6 +130,26 @@ func TestJSProcessor_CyclicOutput(t *testing.T) {
 			wantPath: ".Key.list[0]",
 		},
 		{
+			// goja used to overflow the stack exporting these on assignment
+			// (dop251/goja#816); they now reach the guard.
+			name:     "map holds itself",
+			script:   `function process(r) { var m = new Map(); m.set("a", m); r.Payload.After = {m: m}; return r; }`,
+			wantCode: CodeJSCyclicOutput,
+			wantPath: ".Payload.After.m[0][1]",
+		},
+		{
+			name:     "set holds itself",
+			script:   `function process(r) { var s = new Set(); s.add(s); r.Payload.After = {s: s}; return r; }`,
+			wantCode: CodeJSCyclicOutput,
+			wantPath: ".Payload.After.s[0]",
+		},
+		{
+			name:     "set holds itself through an array, assigned to the key",
+			script:   `function process(r) { var s = new Set(); s.add([s]); r.Key = {s: s}; return r; }`,
+			wantCode: CodeJSCyclicOutput,
+			wantPath: ".Key.s[0][0]",
+		},
+		{
 			name: "deeper than the limit",
 			script: `function process(r) {
 				var o = {}; var c = o;

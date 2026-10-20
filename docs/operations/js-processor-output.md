@@ -49,6 +49,19 @@ a script written to do it (record data cannot trigger it) and several gigabytes 
 Conduit builds against a patched goja for one related case. goja exported a `Map` or `Set` that
 contains itself without noticing, and recursed until `fatal error: stack overflow` on assignment
 (`var s = new Set(); s.add(s); r.Payload.After = {s: s}`), before this check could run. The fix
-(<https://github.com/dop251/goja/pull/816>) is applied through a `replace` in `go.mod` until it
-is merged upstream. Such a value now reaches the check and is rejected as
+(<https://github.com/dop251/goja/pull/816>) is applied through a `replace` in Conduit's `go.mod`
+until it is merged upstream. Such a value now reaches the check and is rejected as
 `processor.js_cyclic_output`.
+
+A `replace` applies only to the main module of a build. **Programs that embed Conduit
+(`go get github.com/conduitio/conduit`) resolve the unpatched goja** and are still exposed to the
+crash unless they add the same line to their own `go.mod` until dop251/goja#816 is merged and
+released:
+
+```text
+replace github.com/dop251/goja => github.com/ConduitIO/goja v0.0.0-20261020160110-aed438ab3fe6
+```
+
+A `Map` or `Set` referenced from two places in a record now exports as one shared slice (aliasing),
+the same way goja already exports a plain object referenced twice. `Record.Clone` deep-copies it,
+so downstream records do not alias.

@@ -237,4 +237,13 @@ require (
 // fork of the version pinned before, one commit: https://github.com/dop251/goja/pull/816
 // Drop this replace and require the upstream version once that PR is merged
 // and released.
+//
+// While it stands:
+//   - govulncheck resolves the module as github.com/ConduitIO/goja, so it
+//     cannot see advisories filed against github.com/dop251/goja. Watch
+//     upstream goja advisories by hand.
+//   - Dependabot bumps of github.com/dop251/goja change nothing, because the
+//     replace wins. Bump the fork instead.
+//   - A replace only applies to the main module. Programs that embed Conduit
+//     must add the same line to their own go.mod.
 replace github.com/dop251/goja => github.com/ConduitIO/goja v0.0.0-20261020160110-aed438ab3fe6
