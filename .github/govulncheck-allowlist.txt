@@ -24,25 +24,9 @@
 #
 # Baseline captured 2026-08-21 against main (24 findings). The 20 Go standard
 # library entries were cleared on 2026-10-07 by bumping go.mod to go 1.25.14;
-# every one was fixed in a 1.25.x patch release (1.25.9 through 1.25.13).
-
-# ---------------------------------------------------------------------------
-# github.com/hamba/avro/v2 (3 findings) — UNFIXABLE, tracked in #2817
-#
-# All three are decoder-side (CPU exhaustion, integer overflow, unbounded map
-# allocation) and all are "Fixed in: N/A". Upstream ARCHIVED the repository on
-# 2026-01-18; v2.31.0 is final. Reached via conduit-commons/schema/avro from
-# the built-in Avro processor, so this is data-path code decoding untrusted
-# input. #2817 tracks the decision: fork, replace the codec, bound the input at
-# the call site, or accept and document. Do not remove these lines until that
-# issue is resolved — they are the reason the issue exists.
-# ---------------------------------------------------------------------------
-# CPU exhaustion in Avro decoder in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
-GO-2026-5046
-# Integer overflow in Avro decoder in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
-GO-2026-5047
-# Denial of service via unbounded map allocations in github.com/iskorotkov/avro/v2 and github.com/hamba/avro/v2
-GO-2026-5048
+# every one was fixed in a 1.25.x patch release (1.25.9 through 1.25.13). The 3
+# hamba/avro entries (GO-2026-5046/5047/5048) were cleared on 2026-10-16 by the
+# v0.21 connector fleet move off hamba/avro onto iskorotkov/avro (#2817, #3012).
 
 # ---------------------------------------------------------------------------
 # golang.org/x/crypto (1 finding)

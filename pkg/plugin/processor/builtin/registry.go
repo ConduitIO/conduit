@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sync"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
@@ -35,6 +36,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/protobuf"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
@@ -62,6 +64,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"json.encode":         Constructor(json.NewEncodeProcessor),
 	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
 	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
+	"protobuf.decode":     Constructor(protobuf.NewDecodeProcessor),
 	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
 	"split":               Constructor(impl.NewSplitProcessor),
 	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),
@@ -98,6 +101,11 @@ type blueprint struct {
 
 type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
 
+// pprocutilsLoggerOnce bounds the SDK's process-wide logger assignment to at
+// most once per process (#3111). NewRegistry runs once per runtime, so two
+// concurrent NewRuntime calls would otherwise race on pprocutils.Logger.
+var pprocutilsLoggerOnce sync.Once
+
 func NewRegistry(
 	logger log.CtxLogger,
 	constructors map[string]ProcessorPluginConstructor,
@@ -109,11 +117,16 @@ func NewRegistry(
 	// processor belongs to (see schema_scope.go, issue #3088).
 	installScopedSchemaService()
 	// The SDK logger stays process-wide: with two runtimes in one process,
-	// built-in processors log through the most recently created runtime's
-	// logger. Documented as a known limitation in the root doc.go.
-	pprocutils.Logger = logger.WithComponent("processor").
-		ZerologWithComponent().
-		Hook(ctxutil.ProcessorIDLogCtxHook{})
+	// built-in processors log through the first runtime's logger. It is set at
+	// most once per process so concurrent NewRegistry/NewRuntime don't race on
+	// pprocutils.Logger (#3111); routing to the owning runtime's logger is the
+	// v0.21 embed-hardening follow-up (#3002). Documented as a known
+	// limitation in the root doc.go.
+	pprocutilsLoggerOnce.Do(func() {
+		pprocutils.Logger = logger.WithComponent("processor").
+			ZerologWithComponent().
+			Hook(ctxutil.ProcessorIDLogCtxHook{})
+	})
 
 	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()

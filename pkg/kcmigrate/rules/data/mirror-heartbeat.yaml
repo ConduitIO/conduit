@@ -1,0 +1,20 @@
+# MirrorMaker 2's heartbeat connector (org.apache.kafka.connect.mirror.MirrorHeartbeatConnector).
+# Mapping design 20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "MirrorMaker-style Kafka to Kafka": it produces no pipeline, non-blocking.
+# MirrorHeartbeatTask only writes a heartbeat record to the heartbeats topic
+# of its own cluster every emit.heartbeats.interval.seconds, for monitoring;
+# it copies no data, so nothing is lost by not migrating it.
+rulesVersion: 1
+scope: source
+class: org.apache.kafka.connect.mirror.MirrorHeartbeatConnector
+upstream: {name: kafka, version: "4.2"}
+pipeline: none
+every:
+  status: unsupported
+  code: kc.connector_class_unsupported
+  reason: MirrorHeartbeatConnector only writes heartbeat records to its cluster's heartbeats topic for monitoring and copies no data, so no pipeline is written for it.
+  fix: None needed. Keep it on Kafka Connect if a dashboard or MirrorClient reads the heartbeats topic; the migrated MirrorSourceConnector pipeline does not replicate heartbeats.
+notes:
+  - code: kc.output_shape_differs
+    reason: Heartbeats stop once this connector is retired. The heartbeats topic gets no new records, so dashboards and MirrorClient lookups that read it (replication hops, upstream clusters) stop working. With heartbeats.replication.enabled, the migrated MirrorSourceConnector pipeline does not copy heartbeats topics either, since it reads only its listed topics.
+    fix: Keep this connector on Kafka Connect while anything reads the heartbeats topic, or move those dashboards to Conduit's pipeline metrics before retiring it.

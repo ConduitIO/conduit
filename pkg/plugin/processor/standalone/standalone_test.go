@@ -36,7 +36,9 @@ const (
 	testPluginDir = "./test/wasm_processors/"
 
 	testPluginChaosDir        = testPluginDir + "chaos/"
+	testPluginEchoDir         = testPluginDir + "echo/"
 	testPluginMalformedDir    = testPluginDir + "malformed/"
+	testPluginOldEchoDir      = testPluginDir + "old_echo/"
 	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
 	testPluginStallDir        = testPluginDir + "stall/"
 	testPluginSpinDir         = testPluginDir + "spin/"
@@ -48,19 +50,25 @@ var (
 	CompiledHostModule *wazergo.CompiledModule[*hostModuleInstance]
 
 	ChaosProcessorBinary     []byte
+	EchoProcessorBinary      []byte
 	MalformedProcessorBinary []byte
+	OldEchoProcessorBinary   []byte
 	SpecifyErrorBinary       []byte
 	StallBinary              []byte
 	SpinBinary               []byte
 
-	ChaosProcessorModule wazero.CompiledModule
-	SpecifyErrorModule   wazero.CompiledModule
-	StallModule          wazero.CompiledModule
-	SpinModule           wazero.CompiledModule
+	ChaosProcessorModule   wazero.CompiledModule
+	EchoProcessorModule    wazero.CompiledModule
+	OldEchoProcessorModule wazero.CompiledModule
+	SpecifyErrorModule     wazero.CompiledModule
+	StallModule            wazero.CompiledModule
+	SpinModule             wazero.CompiledModule
 
 	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
 		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
+		testPluginEchoDir + "processor.wasm":         {&EchoProcessorBinary, &EchoProcessorModule},
 		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
+		testPluginOldEchoDir + "processor.wasm":      {&OldEchoProcessorBinary, &OldEchoProcessorModule},
 		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
 		testPluginStallDir + "processor.wasm":        {&StallBinary, &StallModule},
 		testPluginSpinDir + "processor.wasm":         {&SpinBinary, &SpinModule},

@@ -1,0 +1,26 @@
+schemaVersion: 1
+id: mm2-checkpoint-sasl-scram
+family: kafka-mirror
+description: >-
+  AWS sample for migrating to MSK, the checkpoint connector: SASL/SCRAM on both clusters, a custom replication policy and consumer-group offset sync. It produces no pipeline, and every key blocks.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/aws-samples/mirrormaker2-msk-migration/blob/eb595196b48b7fcae15e674ed3e796e220e2214a/Configuration/connectors/sasl-scram/mm2-cpc-sasl-auth.json
+  license: MIT-0
+  copyright: Amazon.com, Inc. or its affiliates
+  modifications:
+    - "bootstrap placeholders filled with b-1.source.internal.example and b-1.target.internal.example"
+    - "JAAS username placeholder set to example-user, password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/mm2-cpc.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: connector.class, status: unsupported, blocking: true, code: kc.connector_class_unsupported}
+    - {key: sync.group.offsets.enabled, status: unsupported, blocking: true, code: kc.connector_class_unsupported}
+    - {key: source.cluster.sasl.jaas.config, status: unsupported, blocking: true, secret: true}
+covers:
+  - class: org.apache.kafka.connect.mirror.MirrorCheckpointConnector
+    keys: [sync.group.offsets.enabled, emit.checkpoints.enabled, checkpoints.topic.replication.factor, source.cluster.sasl.jaas.config]
+run: {tier: offline}

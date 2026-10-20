@@ -49,6 +49,7 @@ type ValidateArgs struct {
 type ValidateFlags struct {
 	Quiet   bool `long:"quiet" short:"q" usage:"suppress passing/OK lines and progress chrome; print only failures and the summary"`
 	NoColor bool `long:"no-color" usage:"disable colored/glyph output even on a color-capable terminal"`
+	ArchV2  bool `long:"preview.pipeline-arch-v2" usage:"report a destination or dead-letter-queue with sdk.batch.size above 1 as unsupported (architecture v2 waits for every ack before the next read and cannot batch)"`
 }
 
 // ValidateCommand implements `conduit pipelines validate <path>`: offline,
@@ -111,7 +112,7 @@ func (c *ValidateCommand) ResultCommand() string { return "pipelines.validate" }
 func (c *ValidateCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, error) {
 	c.renderer = ui.NewRenderer(rendererOutput(ctx), c.flags.NoColor)
 
-	report, err := validate.Run(ctx, c.args.Path)
+	report, err := validate.RunWithOptions(ctx, c.args.Path, validate.Options{ArchV2: c.flags.ArchV2})
 	if err != nil {
 		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInvalidArgument,
 			fmt.Sprintf("could not resolve path %q: %v", c.args.Path, err), err)

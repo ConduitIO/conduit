@@ -72,6 +72,13 @@ var catalog = []ToolInfo{
 		Mutates: false,
 	},
 	{
+		Name: ToolKCMigrate,
+		Description: "Translates Kafka Connect connector configs (content-in, never a server path) into Conduit " +
+			"pipelines plus a compatibility report, and returns the files content-out. Mutates nothing. Same " +
+			"engine as `conduit migrate kafka-connect`.",
+		Mutates: false,
+	},
+	{
 		Name: ToolLint,
 		Description: "Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/" +
 			"unknown fields, version fallback). Same engine as `conduit pipelines lint`.",

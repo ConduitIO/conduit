@@ -40,6 +40,10 @@ const (
 	// NameConnectorsAmbientCredentials shows the effective
 	// connectors.ambient-credentials.* policy.
 	NameConnectorsAmbientCredentials = "connectors.ambient_credentials" //nolint:gosec // G101 false positive: a check name
+	// NameArchV2Batching checks the pipelines directory for a destination or
+	// DLQ with sdk.batch.size > 1, which arch-v2 refuses at start. It only
+	// runs when preview.pipeline-arch-v2 is enabled.
+	NameArchV2Batching = "pipeline.archv2_batching"
 )
 
 // Categories doctor's own checks use for human-output grouping (see
@@ -112,6 +116,7 @@ func CheckNames() []string {
 		NamePluginsStandaloneCompat,
 		NamePluginsStandaloneEnv,
 		NameConnectorsAmbientCredentials,
+		NameArchV2Batching,
 	}
 }
 
@@ -129,6 +134,10 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		configValidateCheck{cfg: cfg},
 		ambientCredentialsCheck{cfg: cfg, environ: opts.Environ},
 		storeReachableCheck{cfg: cfg, logger: logger},
+	}
+
+	if cfg.Preview.PipelineArchV2 {
+		checks = append(checks, archV2BatchingCheck{cfg: cfg})
 	}
 
 	if cfg.API.Enabled {

@@ -83,8 +83,18 @@ var bundleExitCodes = exitcodedoc.Render(
 	exitcodedoc.Entry{Code: index.CodeVersionYanked, When: "the requested version was yanked"},
 	exitcodedoc.Entry{Code: registry.CodeNoPlatformArtifact, When: "no artifact for the requested OS/architecture"},
 	exitcodedoc.Entry{Code: index.CodeIndexUnreachable, When: "index could not be fetched"},
+	exitcodedoc.Entry{Code: index.CodeSchemaTooNew, When: "index schemaVersion newer than this Conduit understands"},
+	exitcodedoc.Entry{Code: index.CodeIndexIntegrity, When: "index content does not match its cryptographic signatures"},
+	exitcodedoc.Entry{Code: index.CodeIndexStale, When: "index timestamp older than the freshness window"},
+	exitcodedoc.Entry{Code: index.CodeIndexRollback, When: "index version older than the locally pinned one"},
+	exitcodedoc.Entry{Code: index.CodeTrustAnchorExpired, When: "no signature matches an embedded trust anchor"},
 	exitcodedoc.Entry{Code: registry.CodeDownloadFailed, When: "artifact download failed"},
+	exitcodedoc.Entry{Code: registry.CodeTrustAnchorsUnavailable, When: "embedded trust anchors are missing or corrupt (reinstall conduit)"},
 	exitcodedoc.Entry{Code: trust.CodeIdentityRevoked, When: "publisher identity revoked"},
+	exitcodedoc.Entry{Code: trust.CodeUnsigned, When: "artifact has no valid signature"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityMismatch, When: "signature verifies but for a different identity"},
+	exitcodedoc.Entry{Code: trust.CodeProvenanceInvalid, When: "SLSA provenance is invalid or does not match"},
+	exitcodedoc.Entry{Code: trust.CodeIdentityPatternTooLoose, When: "the connector's pinned identity pattern is too broad"},
 )
 
 func (c *BundleCommand) Docs() ecdysis.Docs {

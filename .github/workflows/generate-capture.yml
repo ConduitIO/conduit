@@ -106,6 +106,12 @@ on:
         required: false
         default: ''
 
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
 # No repo-wide default permissions - each job states exactly what it needs,
 # per plan §7.2's split.
 permissions: {}

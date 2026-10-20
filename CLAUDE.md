@@ -117,9 +117,18 @@ We're building infrastructure people bet their data on. Design like it.
   human would want to read. See `docs/releases.md`.
 - **Performance:** claims require benchi runs, committed configs, reproducible results. Never
   assert numbers without a benchmark in the repo.
-- **State layer discipline:** local embedded KV state, checkpointed with the pipeline. No
-  distributed snapshots, no pluggable state backends, no event-time watermark machinery. If a
-  design doc starts growing Flink features, stop and flag it.
+- **State layer discipline:** scope is set by ADR
+  `20261008-state-layer-scope-windows-and-bounded-lateness.md`. Allowed: dedup with TTL,
+  lookup/enrichment tables and stream-table joins, keyed upsert/merge, tumbling/sliding/session
+  windows, standard aggregates, and event time with **bounded lateness only** (per partition, a
+  window closes when max observed event time minus a fixed configured allowance passes its end;
+  later records go to the DLQ/late-data output per policy, never silently dropped — invariant 6).
+  State is partition-scoped (moves with partition claims), lives in the local embedded KV, and every
+  state write commits atomically with the pipeline checkpoint (invariant 5). Read-only key lookups
+  over the API/MCP are in scope; queries, scans and SQL are not. Excluded: global/distributed
+  watermarks, a triggers framework, stream-stream joins, distributed snapshots, pluggable state
+  backends, any expression/config DSL. If a design doc starts growing any excluded item, stop and
+  flag it.
 - **Docs move with code:** a feature PR without docs is incomplete. Update `conduit.io` docs
   source AND `llms.txt` when behavior changes — maintained together, always.
 
@@ -189,7 +198,7 @@ protocol, serialization formats):
 
 **Automated gates:** lint, race detector, unit + integration, conventional-commit check — all live
 and blocking. The engine coverage floor is **live as a ratchet** (see Process maturity below); the
-benchi regression check is **not live** (no CI job implements it yet). Dependency vulnerability scanning
+benchi regression gate is **live and blocking** (see Process maturity below). Dependency vulnerability scanning
 (govulncheck) is **live and blocking as a ratchet**: it fails a PR that makes a NEW vulnerability
 reachable, while the 4 remaining pre-existing findings are held in a justified baseline — see Process
 maturity below.
@@ -219,7 +228,7 @@ Do not claim a bar is met when it structurally isn't. Mark PRs against what's re
 | Adversarial self-review on AI PRs | **live now** |
 | Human (DeVaris) sign-off on Tier 1 | **live now** |
 | Coverage floor enforcement | **live now, blocking as a ratchet** (`.github/workflows/coverage.yml` + `.github/coverage-baseline.txt` + `.github/scripts/coverage_ratchet.py`). Runs on every PR and on push to `main`. It measures per-package unit-test statement coverage (`make coverage`: `go test ./pkg/...`, no Docker, no integration tag) and compares the engine packages (`pkg/connector`, `pipeline`, `lifecycle`, `orchestrator`, `processor`, `provisioning`, `plugin`, `schemaregistry`, `conduit`, `inspector`) to a committed baseline. **It fails when an engine package drops more than 1.0 point below its baseline, when a baseline package has no coverage data, or when a NEW engine package is under 80%.** 19 of 45 baselined packages are below the 80% floor today (for example `pkg/pipeline` 57.8%, `pkg/plugin/connector` 5.6%, `pkg/plugin/processor` 37.5%), so the floor itself is NOT met: a hard 80% would fail every PR, and report-only would be silent. The baseline is the work list; raise entries as coverage improves (the job summary says which). **REQUIRED**: `coverage (engine ratchet)` is in `main`'s required contexts (blocking), added 2026-10-14 after its first push run on `main` was green. Integration-tag coverage is not measured |
-| benchi regression gate | **NOT live** (was "by Phase 1"). No workflow runs benchi; the numbers that exist are per-PR runs a human read. Targeted at v0.21, where the arch-v2 flip makes a standing regression gate load-bearing |
+| benchi regression gate | **live now, blocking** (`.github/workflows/bench-engine.yml` + `.github/workflows/bench-engine-comment.yml` + `.github/scripts/bench_engine_compare.py`; was "by Phase 1", targeted at v0.21 where the arch-v2 flip makes it load-bearing). Runs on every engine PR (path-filtered to `pkg/lifecycle*`, `pkg/connector`, `pkg/plugin`, `pkg/internal/enginetest`, `go.mod`/`go.sum`). It builds the base and head in-process benchmark binaries (`make bench-engine`: `pkg/internal/enginetest/engines/bench_test.go`, fake connectors, no Docker) and runs base, head and base again (an A/A control) interleaved, 5 rounds, rotating order each round. The metric is ground truth — the fake source produces `records*sources` records and reports records/s only after the destination acked every one — not engine instrumentation (`benchi/METHODOLOGY.md`). **It fails when any benchmark is more than 10% slower than base AND that slowdown exceeds twice the A/A noise floor measured on unchanged code in the same job** (so a 10% delta only fails when the floor is under 5%; the floor is cited next to every gate decision in the step summary and the PR comment). A run that cannot resolve the gate (base did not build, or no floor is measurable) reports "cannot resolve" and does not fail — no comparison is not a regression; a crashing benchmark binary fails the job (fail-closed). **NOT in `main`'s required contexts**: it is path-filtered, and a path-filtered workflow cannot become a required context without the always-report/fail-closed restructure (same caveat as `rag-template-e2e`); same-repo PRs only (a fork's token cannot comment and a fork's benchmark code must not run with trust) |
 | Dependency vulnerability scan (govulncheck) | **live now, blocking as a ratchet** (`.github/workflows/govulncheck.yml` + `.github/govulncheck-allowlist.txt`, added 2026-08-21). Runs on every PR, on push to `main`, and nightly (05:15) via `govulncheck -format json ./...` — reachability-aware, so it reports only vulnerabilities this codebase's call graph can actually reach, not every CVE in the dependency tree. **It fails when a called-level vulnerability appears that is not in the baseline.** The baseline held 24 findings reachable on `main` at introduction; the 20 Go standard library entries were cleared 2026-10-07 by the go 1.25.14 bump (#2914). It now holds 4, each with a written justification beside it: 1 `golang.org/x/crypto` openpgp (unmaintained upstream) and 3 `github.com/hamba/avro/v2` (upstream archived 2026-01-18, #2817; cleared by the v0.21 connector sweep to `iskorotkov/avro`). Failing on ANY finding would have failed every PR for problems unrelated to its diff; report-only would have been green and therefore silent. To tighten further: clear baseline entries (the job reports which are already fixed) and add `govulncheck` to `main`'s required contexts |
 | Property + fuzz tests on data-path/boundaries | **partially live** (was "by Phase 1"). 9 packages carry `Fuzz*` targets (egress policy/IP guard, registry envelope/trust/bounded-fetch, conduiterr status, fuzzymatch, diff) and their seed corpora run inside the normal `test` job — so a seed regression IS caught. What is missing is most of the testing-standards split: the only short-fuzz CI run is `migrate-harness`'s 30-second `FuzzParseInput` over the migration-corpus parsers (`tests/migrate/harness`); there is no repo-wide short-fuzz job, no scheduled long run, and no property-based framework (rapid/gopter) in the tree at all |
 | Chaos suite (`tests/chaos`) nightly | **live now + REQUIRED** (`.github/workflows/chaos.yml`) — nightly + every PR via the always-report/fail-closed detector (the job runs on all PRs; the SIGKILL/FIFO-ack no-infra suite executes only when a data-path tree changed, fail-closed on any diff ambiguity). `tests/chaos (race, x3)` **is** in `main`'s required branch-protection contexts (blocking) — the earlier "not yet required" note was stale. `bundle-e2e` **is now required too**. `rag-e2e` **is now required too** (verified against the live branch-protection API 2026-08-21; the earlier "one toggle away, held for a de-flake soak" note was stale). `rag-template-e2e` IS path-filtered, so it cannot become required until it is restructured to the always-report/fail-closed pattern; a path-filtered workflow never reports on unrelated PRs and would block every merge permanently. Required contexts on `main` today: `test`, `golangci-lint`, `validate-generated-files`, `build (linux/386)`, `docker build`, `tests/chaos (race, x3)`, `bundle-e2e`, `rag-e2e`, `coverage (engine ratchet)` |
@@ -332,8 +341,16 @@ The release quiet window is measured on the release branch, not on `main`.
 
 ### State layer
 
-- Scope check first: dedup, lookup tables, simple windows — nothing else without explicit
-  maintainer sign-off. Checkpoint/recovery tests are mandatory (kill mid-window, verify state).
+- Scope check first against ADR `20261008-state-layer-scope-windows-and-bounded-lateness.md`:
+  dedup with TTL, lookup tables and stream-table joins, keyed upsert/merge, tumbling/sliding/session
+  windows, standard aggregates, bounded-lateness event time, read-only key lookups over API/MCP.
+  Anything on its excluded list needs a superseding ADR, not a design-doc footnote.
+- Prerequisites before state work beyond design: arch-v2 is the default engine, the
+  partition-claims protocol has shipped, replay/backfill verbs exist.
+- State is partition-scoped and committed atomically with the checkpoint (invariant 5); late
+  records follow the configured policy, never silently dropped (invariant 6).
+- Checkpoint/recovery tests are mandatory for every state feature (kill mid-write and mid-window,
+  verify state and positions).
 
 ### Benchmarks
 
@@ -344,13 +361,19 @@ The release quiet window is measured on the release branch, not on `main`.
 
 - Never introduce a privileged integration for one broker vendor.
 - Never add license restrictions or enterprise-gated features to open-source repos.
-- Never claim Conduit replaces Flink; use the state-layer + streaming-SQL-partner framing.
+- Never claim Conduit replaces Flink; position it as operational stream processing for
+  integration and AI, with streaming SQL partner engines for heavy SQL and stream-stream joins.
+- Never add global/distributed watermarks, a triggers framework, stream-stream joins, distributed
+  snapshots, or pluggable state backends to the state layer without a superseding ADR.
 - Never introduce a bespoke transformation DSL — transformations are real-language code compiled
-  to WASM.
+  to WASM or run as out-of-process gRPC processors. Established standard query languages (jq,
+  JMESPath, SQL) are allowed as processor parameters, never as a pipeline configuration language.
 - Never change `conduit-connector-protocol` without an explicit versioning discussion.
 - Never publish performance claims without reproducible benchi results.
 - Never mark a connector "supported" without acceptance tests passing in CI.
-- Never start a speculative C#/Ruby/Java-native SDK without documented demand.
+- Never start a speculative SDK for a community-tier language (Ruby, etc.) without documented
+  demand. Official languages are Go, Python, TypeScript, Rust (full tier) and Java, C# (enterprise
+  tier) — see `ROADMAP.md`.
 - Never merge a Tier 1 (data-path) change on automated review alone — human sign-off is
   mandatory.
 - Never trade an ack-correctness, ordering, or crash-safety guarantee for throughput without a

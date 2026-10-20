@@ -130,10 +130,18 @@ func (e *Engine) Classify(c kcmigrate.Connector) Classified {
 	}
 	f, ok := e.classes[c.Class]
 	var ds []Decision
-	if ok {
+	switch {
+	case ok && f.NoPipeline():
+		// Completeness: still one decision per key, all with the class's one
+		// outcome.
+		rc.Role = kcmigrate.Role(f.Scope)
+		for _, kv := range c.Config {
+			ds = append(ds, Decision{Entry: f.Every.entry(kv.Key, kv.Origin), KV: kv})
+		}
+	case ok:
 		rc.Role = kcmigrate.Role(f.Scope)
 		ds = classifyAll(c.Config, f, e.shared)
-	} else {
+	default:
 		rc.Role, f = kcmigrate.RoleUnknown, nil
 		for _, kv := range c.Config {
 			ds = append(ds, Decision{Entry: classUnsupported(c.Class).entry(kv.Key, kv.Origin), KV: kv})

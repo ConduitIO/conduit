@@ -38,7 +38,7 @@ import (
 // Flags are the flags shared by `connector new` and `processor new`, per
 // this command's design doc.
 type Flags struct {
-	Lang         string `long:"lang" usage:"target language; only \"go\" is available today"`
+	Lang         string `long:"lang" usage:"target language: \"go\" (connectors and processors) or \"python\" (connectors only)"`
 	Module       string `long:"module" usage:"Go module path (required)"` // overridden per-kind in Flags(), below
 	Path         string `long:"path" usage:"destination directory (default: ./conduit-<kind>-<name>)"`
 	SDKVersion   string `long:"sdk-version" usage:"override the SDK version pinned in the embedded template"`
@@ -73,10 +73,9 @@ func (c *NewCommand) Flags() []ecdysis.Flag {
 	// tag-declared default isn't read; only SetDefault after the fact is),
 	// so this is the documented way to get a true default through it.
 	flags.SetDefault("git", true)
-	// --lang defaults to "go", the only language ready today (see the design
-	// doc's feasibility verdict) — --lang python is still accepted (and
-	// still gated by scaffold.validate) so the honest "not yet" error fires
-	// on an explicit request instead of silently substituting go.
+	// --lang defaults to "go"; "python" is accepted for connectors and gated
+	// by scaffold.validate (which rejects it for processors and for any
+	// other value).
 	flags.SetDefault("lang", string(scaffold.LanguageGo))
 
 	// --module's usage text is kind-specific ("conduit-connector-<name>" vs
@@ -161,13 +160,16 @@ func (c *NewCommand) ExecuteWithResult(ctx context.Context) (cecdysis.Outcome, e
 // (connector.yaml + README, via conn-sdk-cli) than a processor
 // (paramgen_proc.go, via paramgen) — the same asymmetry package steps
 // documents.
-func stepLabel(kind scaffold.Kind, name string) string {
+func stepLabel(kind scaffold.Kind, lang scaffold.Language, name string) string {
 	switch name {
 	case scaffold.StepToolchain:
 		return "Toolchain OK"
 	case scaffold.StepExtractTemplate:
 		return "Wrote template files"
 	case scaffold.StepRewriteModule:
+		if lang == scaffold.LanguagePython {
+			return "Rewrote name"
+		}
 		return "Rewrote module path"
 	case scaffold.StepSDKVersion:
 		return "Set SDK version"
@@ -179,6 +181,9 @@ func stepLabel(kind scaffold.Kind, name string) string {
 		}
 		return "Generated connector.yaml + README"
 	case scaffold.StepBuild:
+		if lang == scaffold.LanguagePython {
+			return "python syntax check OK"
+		}
 		return "go build OK"
 	case scaffold.StepGitInit:
 		return "Initialized git, created first commit"
@@ -205,9 +210,13 @@ func (c *NewCommand) Render(outcome cecdysis.Outcome) string {
 		if !s.OK {
 			glyph = ui.StatusFail // git_init is best-effort and can be OK:false without failing the run
 		}
-		label := stepLabel(res.Kind, s.Name)
+		label := stepLabel(res.Kind, res.Language, s.Name)
 		if s.Name == scaffold.StepRewriteModule {
-			label += " → " + res.Module
+			if res.Language == scaffold.LanguagePython {
+				label += " → " + res.Name
+			} else {
+				label += " → " + res.Module
+			}
 		}
 		fmt.Fprintf(&b, "%s %s (%s)\n", r.Glyph(glyph), label, formatDuration(s.DurationMS))
 	}

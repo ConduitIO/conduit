@@ -77,6 +77,16 @@ func toolOK[T any](ok bool, result T, summary any) (*sdkmcp.CallToolResult, Resu
 // documented way to report a domain/tool-execution error while keeping full
 // control of both Content and StructuredContent (design doc §4, AC-6).
 func toolErr[T any](err error) (*sdkmcp.CallToolResult, Result[T], error) {
+	res, detail := toolErrResult(err)
+	return res, Result[T]{OK: false, Error: detail}, nil
+}
+
+// toolErrResult builds the CallToolResult (IsError with a text Content) and
+// the ErrorDetail for a failed tool call. It is the shared body of toolErr
+// and kcMigrateToolErr (tools_migrate.go), which differ only in the
+// structured-content envelope they wrap the ErrorDetail in — Result[T] for
+// every other tool, kcMigrateResult (which adds files[]) for kc_migrate.
+func toolErrResult(err error) (*sdkmcp.CallToolResult, *ErrorDetail) {
 	detail := errorDetail(err)
 
 	text := detail.Code + ": " + detail.Message
@@ -88,7 +98,7 @@ func toolErr[T any](err error) (*sdkmcp.CallToolResult, Result[T], error) {
 		IsError: true,
 		Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: text}},
 	}
-	return res, Result[T]{OK: false, Error: detail}, nil
+	return res, detail
 }
 
 // errorDetail converts any error into the envelope's ErrorDetail shape: a

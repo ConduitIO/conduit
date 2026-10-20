@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -76,6 +77,7 @@ func parseJSONConnectors(in Input, format Format) ([]Connector, error) {
 			return nil, err
 		}
 		c.fillNameClass()
+		c.deriveName(in.Name)
 		return []Connector{c}, nil
 	case shapeExport:
 		out := make([]Connector, 0, len(root.members))
@@ -222,6 +224,23 @@ func configKVs(file string, obj *jnode, base string) ([]KV, error) {
 		kvs = append(kvs, KV{Key: m.key, Value: NewValue(m.val.lit), Origin: Origin{File: file, Pointer: ptr}})
 	}
 	return kvs, nil
+}
+
+// deriveName fills an empty connector name from the input file's base name
+// minus its extension. A bare config map is the body of
+// PUT /connectors/{name}/config, whose name lives in the URL path; the file
+// name stands in for that path segment. A name-less connector cannot be
+// written (each connector becomes one pipeline named after it), so the name
+// is derived rather than refused.
+func (c *Connector) deriveName(file string) {
+	if c.Name != "" {
+		return
+	}
+	base := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+	if base == "" || base == "." || base == ".." || base == string(filepath.Separator) {
+		return
+	}
+	c.Name = base
 }
 
 func member(n *jnode, key string) *jnode {

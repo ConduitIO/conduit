@@ -16,11 +16,12 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
-  notes: [kc.converter_unknown]
+  notes: [kc.converter_unknown, kc.output_shape_differs]
   # No converter and no worker file: kc.converter_unknown is a blocking
   # note (report contract, #3069), one per missing converter.
   exitCode: 2
   entries:
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: plugin.name, status: translated}
     - {key: slot.name, status: approximated, blocking: false}
     - {key: publication.name, status: approximated, blocking: false}

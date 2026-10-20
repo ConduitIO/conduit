@@ -23,7 +23,6 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
-	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
@@ -141,16 +140,9 @@ func (c *KafkaConnectCommand) ExecuteWithResult(ctx context.Context) (cecdysis.O
 	if err != nil {
 		return cecdysis.Outcome{}, err
 	}
-	engine, err := rules.Builtin()
-	if err != nil {
-		return cecdysis.Outcome{}, conduiterr.Wrap(conduiterr.CodeInternal, "the embedded migration rules are invalid", err)
-	}
-	res, err := migrate.Run(ctx, engine, migrate.Request{
+	res, err := Run(ctx, migrate.Request{
 		Inputs: inputs, Worker: worker, Format: format,
 		Strict: c.flags.Strict, AcceptGaps: c.flags.AcceptGaps,
-		ConduitVersion:   conduit.Version(false),
-		ValidatePipeline: ValidatePipeline(ctx),
-		RequiredSettings: migrate.BuiltinRequired,
 	})
 	if err != nil {
 		return cecdysis.Outcome{}, err

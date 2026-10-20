@@ -221,6 +221,39 @@ func TestDestination_LifecycleOnDeleted_Skip(t *testing.T) {
 	is.NoErr(err)
 }
 
+// TestDestination_EngineBatchesStripsSDKBatchSettings: when the arch-v2 funnel
+// batches writes itself, the connector adapter must strip sdk.batch.size and
+// sdk.batch.delay before Configure so the SDK destination does not also buffer
+// and withhold acks (which would stall the funnel's stop-and-wait loop).
+func TestDestination_EngineBatchesStripsSDKBatchSettings(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dest, destinationMock := newTestDestination(ctx, t, ctrl)
+	dest.Instance.Config.Settings = map[string]string{
+		"foo":             "bar",
+		"sdk.batch.size":  "100",
+		"sdk.batch.delay": "10ms",
+	}
+	dest.Instance.LastActiveConfig = dest.Instance.Config
+	dest.SetEngineBatches()
+
+	// Configure must receive the settings without the sdk.batch.* keys.
+	destinationMock.EXPECT().Configure(gomock.Any(), pconnector.DestinationConfigureRequest{
+		Config: map[string]string{"foo": "bar"},
+	}).Return(pconnector.DestinationConfigureResponse{}, nil)
+	destinationMock.EXPECT().Open(gomock.Any(), pconnector.DestinationOpenRequest{}).Return(pconnector.DestinationOpenResponse{}, nil)
+	stream := &builtin.InMemoryDestinationRunStream{}
+	destinationMock.EXPECT().NewStream().Return(stream)
+	destinationMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
+		stream.Init(ctx)
+		return nil
+	})
+
+	is.NoErr(dest.Open(ctx))
+}
+
 func newTestDestination(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (*Destination, *mock.DestinationPlugin) {
 	is := is.New(t)
 	logger := log.Nop()

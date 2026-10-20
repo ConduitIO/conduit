@@ -18,6 +18,7 @@ import (
 	"context"
 	"runtime"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -311,4 +312,81 @@ func waitForGoroutinesAtMost(t *testing.T, limit int) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// TestServiceLifecycle_PersistFailureOnStop_ReportsPersistError is the
+// Service-level regression test for #2966. The store goes down after every
+// record is through, so the graceful stop's source Teardown is what fails to
+// persist the last positions. The run's terminal error must name that
+// failure. Before the fix, Worker.Close retried Teardown against the already
+// released plugin and the run usually ended with "failed to tear down source:
+// plugin is not running" instead.
+func TestServiceLifecycle_PersistFailureOnStop_ReportsPersistError(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+
+	storeDB := &failingTxDB{DB: &inmemory.DB{}}
+	// No automatic flush: the only flush is the one Teardown forces.
+	persister := connector.NewPersister(logger, storeDB, time.Hour, 1_000_000)
+	defer stopAndWaitPersister(t, killAll, persister)
+
+	db := &inmemory.DB{}
+	ps := pipeline.NewService(logger, db)
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	records := generateRecords(5)
+	ctrl := gomock.NewController(t)
+
+	source := dummySource(persister)
+	srcDispenser := pmock.NewDispenser(ctrl)
+	srcDispenser.EXPECT().DispenseSource().Return(pmock.NewConfigurableSourcePlugin(ctrl,
+		pmock.SourcePluginWithConfigure(),
+		pmock.SourcePluginWithOpen(),
+		pmock.SourcePluginWithRun(),
+		pmock.SourcePluginWithRecords(records, nil),
+		// Invariant 1: no position was stored, so no ack may reach the plugin.
+		pmock.SourcePluginWithAcks(0, true),
+		pmock.SourcePluginWithTeardown(),
+	), nil)
+	destination, destDispenser := asserterDestination(ctrl, persister, records, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		ps,
+		false,
+	)
+
+	is.NoErr(ls.Start(ctx, pl.ID))
+	waitForPipelineRunning(t, pl)
+	waitForRecordsAcked(t, source, records)
+	storeDB.armed.Store(true)
+
+	_ = ls.Stop(ctx, pl.ID, false) // returns the same teardown error; asserted below via pl.Error
+	_ = ls.WaitPipeline(pl.ID)
+
+	is.True(storeDB.failures.Load() > 0)
+	is.True(strings.Contains(pl.Error, errStoreDown.Error()))     // the persist failure is the reported cause
+	is.True(!strings.Contains(pl.Error, "plugin is not running")) // not the retry's symptom
 }

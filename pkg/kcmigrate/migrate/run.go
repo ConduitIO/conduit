@@ -260,6 +260,16 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	if cl.Rules == nil {
 		return run, nil
 	}
+	if cl.Rules.NoPipeline() {
+		run.rc.Notes = append(run.rc.Notes, classNotes(cl)...)
+		if hasLiteralSecret(cl.Decisions) {
+			n := plaintextNote()
+			n.Reason = "The input holds at least one secret as a literal value. No pipeline is written for this connector, but the input file itself contains the secret."
+			n.Fix = "Replace the literal in the Kafka Connect config with a config-provider reference."
+			run.rc.Notes = append(run.rc.Notes, n)
+		}
+		return run, nil // a class that produces no pipeline: the entries say why
+	}
 	plan, err := emit.NewPlan(cl.Connector.Name, cl.Rules.Scope, cl.Rules.Emits, envs)
 	if err != nil {
 		return run, err
@@ -278,12 +288,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	if err != nil {
 		return run, err
 	}
-	for _, n := range cl.Rules.Notes {
-		run.rc.Notes = append(run.rc.Notes, kcmigrate.Note{
-			Code: n.Code, Reason: n.Reason, Fix: n.Fix, Blocking: n.Blocking,
-			Rule: strings.TrimSuffix(cl.Rules.Name(), ".yaml") + "/notes/" + n.Code,
-		})
-	}
+	run.rc.Notes = append(run.rc.Notes, classNotes(cl)...)
 	run.rc.Notes = append(run.rc.Notes, finished...)
 	run.rc.Notes = append(run.rc.Notes, emit.RequireSettings(plan, required)...)
 	run.plan = plan
@@ -302,6 +307,18 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 		run.rc.Notes = append(run.rc.Notes, plaintextNote())
 	}
 	return run, nil
+}
+
+// classNotes are the notes every connector of the class carries.
+func classNotes(cl rules.Classified) []kcmigrate.Note {
+	var out []kcmigrate.Note
+	for _, n := range cl.Rules.Notes {
+		out = append(out, kcmigrate.Note{
+			Code: n.Code, Reason: n.Reason, Fix: n.Fix, Blocking: n.Blocking,
+			Rule: strings.TrimSuffix(cl.Rules.Name(), ".yaml") + "/notes/" + n.Code,
+		})
+	}
+	return out
 }
 
 func hasLiteralSecret(ds []rules.Decision) bool {

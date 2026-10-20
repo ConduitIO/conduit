@@ -17,7 +17,10 @@
 package json
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"strconv"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -52,6 +55,11 @@ func (p *DecodeProcessor) Specification() (sdk.Specification, error) {
 		Description: `The processor takes JSON raw data (` + "`string`" + ` or ` + "`[]byte`" + `)
 from the target field, parses it as JSON structured data and stores the decoded
 structured data in the target field.
+
+JSON numbers are decoded without loss of precision: an integer that fits in
+` + "`int64`" + ` becomes an ` + "`int64`" + `, one that fits in ` + "`uint64`" + ` becomes a ` + "`uint64`" + `, and
+any other number becomes a ` + "`float64`" + `. Earlier versions decoded every number to
+` + "`float64`" + `, which rounds integers above 2^53.
 
 This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and
 ` + "`.Payload.After`" + `, as they can contain structured data.`,
@@ -115,15 +123,84 @@ func (p *DecodeProcessor) Process(_ context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (p *DecodeProcessor) setJSONData(bytes []byte, ref sdk.Reference) error {
-	if len(bytes) == 0 {
+func (p *DecodeProcessor) setJSONData(raw []byte, ref sdk.Reference) error {
+	if len(raw) == 0 {
 		// value is an empty json
 		return ref.Set(nil)
 	}
+
+	// Invariant 6: decode with UseNumber so a JSON integer above 2^53 is not
+	// silently rounded through a float64. The numbers are then narrowed below,
+	// because downstream processors type-switch on int64 and float64.
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
 	var jsonData any
-	err := json.Unmarshal(bytes, &jsonData)
+	if err := dec.Decode(&jsonData); err != nil {
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+	}
+	// Decode reads a single value and stops; reject trailing data exactly as
+	// json.Unmarshal would.
+	if _, err := dec.Token(); !cerrors.Is(err, io.EOF) {
+		if err == nil {
+			err = cerrors.New("invalid character after top-level value")
+		}
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+	}
+
+	jsonData, err := decodeNumbers(jsonData)
 	if err != nil {
 		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
 	}
 	return ref.Set(jsonData)
+}
+
+// decodeNumbers converts the json.Number values produced by Decoder.UseNumber
+// into concrete Go types, recursively, so that no json.Number reaches a
+// downstream processor (which type-switches on int64 and float64).
+func decodeNumbers(v any) (any, error) {
+	switch v := v.(type) {
+	case json.Number:
+		return decodeJSONNumber(v)
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, val := range v {
+			nv, err := decodeNumbers(val)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = nv
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(v))
+		for i, val := range v {
+			nv, err := decodeNumbers(val)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = nv
+		}
+		return out, nil
+	default:
+		return v, nil
+	}
+}
+
+// decodeJSONNumber narrows a json.Number to the smallest lossless Go type: an
+// integer that fits in int64 becomes int64, an integer that fits in uint64
+// becomes uint64, and any other number becomes float64, as before the
+// UseNumber change. An integer that fits in neither int64 nor uint64 falls
+// back to float64, matching the pre-change behavior.
+func decodeJSONNumber(n json.Number) (any, error) {
+	if i, err := n.Int64(); err == nil {
+		return i, nil
+	}
+	if u, err := strconv.ParseUint(string(n), 10, 64); err == nil {
+		return u, nil
+	}
+	f, err := n.Float64()
+	if err != nil {
+		return nil, cerrors.Errorf("number %q is outside the float64 range: %w", n, err)
+	}
+	return f, nil
 }
