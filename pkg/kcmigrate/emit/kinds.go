@@ -565,9 +565,19 @@ func pgURLPart(p *Plan, d *rules.Decision) error {
 // blockSinks makes the entry blocking on a sink's pipeline and leaves it
 // as classified (not blocking) on any other. The plan records the key so the
 // run stops this pipeline only (Plan.SinkBlocked).
+//
+// A sink whose connector sets the start position itself (consumer.override.
+// auto.offset.reset, which Kafka Connect applies above the worker's
+// consumer.*) is not held: the worker's value never reaches its consumer.
 func blockSinks(p *Plan, d *rules.Decision) error {
 	if p.scope != rules.ScopeSink {
 		return nil
+	}
+	if idx, err := p.sides(SideConsumer); err == nil {
+		path := fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", idx[0], escapePointer("readFromBeginning"))
+		if o, ok := p.owner[path]; ok && o.layer > p.layer {
+			return nil
+		}
 	}
 	d.Entry.Blocking = true
 	if p.sinkBlocked == nil {
