@@ -160,7 +160,16 @@ but no test asserts the exit time on a wedged pipeline.
 
 - Engine: `TestInvariant7_StopDrainsInFlightRecords`, `TestInvariant7_StopWhileSourceReadIsStalled`,
   `TestInvariant7_ForceStopReleasesAPipelineWedgedOnAcks`,
-  `TestServiceLifecycle_StopAndWait_DrainsAndPersists`.
+  `TestServiceLifecycle_StopAndWait_DrainsAndPersists`. `WaitPipeline` (and so `StopAndWait`)
+  returns only once every goroutine of the run it found has returned, also after that run has removed
+  itself from the running set, and also once a recovery restart's predecessor, still unwinding when
+  the restart was published, has returned. It does not wait for successors: called during a recovery
+  backoff, it waits for the failed run and can return while the restart is live (`Service.Wait`
+  covers every run): `TestServiceLifecycle_WaitPipeline_WaitsForNodeGoroutineTail` (v1),
+  `TestServiceLifecycle_WaitPipeline_WaitsForCleanupTail` and
+  `TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor` (both engines;
+  [#3087](https://github.com/ConduitIO/conduit/issues/3087)). An OnFailure handler must not call
+  `WaitPipeline` or `StopAndWait` for its own pipeline: it runs on the run's cleanup goroutine.
 - Chaos: `TestSIGTERM_GracefulTeardown_DrainsDeferredAck`, and the SIGKILL recovery tests under
   Guarantee 1 for the crash half of the guarantee.
 
