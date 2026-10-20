@@ -1,0 +1,370 @@
+#!/usr/bin/env bash
+# Regenerates the N-dependent benchmark artifacts from the environment:
+#
+#   TABLES               number of source tables / source+destination pairs
+#                        (default 1; the benchmark sweeps 1, 2, 4)
+#   CONDUIT_BATCH_SIZE   sdk.batch.size for each Conduit source AND destination.
+#                        "default" (the default) sets NO sdk.batch.* at all (the
+#                        shipped defaults); an integer is a tuned run.
+#   PG_DEST_URL_EXTRA    extra URL parameters for the builtin:postgres destination
+#                        (default empty = shipped default exec mode)
+#   CONDUIT_BATCH_DELAY  sdk.batch.delay for each Conduit source AND destination
+#                        (default 100ms)
+#
+# Emits (committed copies are the TABLES=1 default; run.sh regenerates them for
+# the TABLES it was asked to run):
+#
+#   pipelines/conduit.yml     one pipeline per table: builtin:postgres source
+#                             (bench_source_i, its own slot/publication) ->
+#                             builtin:file sink (/sink/out_i.txt)
+#   pipelines/conduit-pg.yml  one pipeline per table: builtin:postgres source
+#                             (bench_source_i) -> builtin:postgres destination
+#                             (bench_dest_i)
+#   pipelines/conduit-s3.yml  one pipeline per table: builtin:postgres source
+#                             (bench_source_i) -> builtin:s3 destination
+#                             (MinIO bucket "bench")
+#   pipelines/conduit-kafka.yml one pipeline per table: builtin:postgres source
+#                             (bench_source_i) -> builtin:kafka destination
+#                             (topic cdcparitykafka.public.bench_source_i)
+#   infra/init.sql            CREATE TABLE bench_source_0 .. bench_source_{N-1}
+#                             AND bench_dest_0 .. bench_dest_{N-1} (same shape)
+#
+# Boring and obvious on purpose: plain shell, no template engine, no branching
+# beyond the loop over N. run.sh calls this before benchi so the artifacts match
+# the TABLES it exports to docker compose.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+TABLES=${TABLES:-1}
+# "default" (the shipped default) emits NO sdk.batch.* settings at all, so every
+# connector and the engine run with what Conduit ships. Any integer is a TUNED
+# configuration and must be labelled as such wherever its numbers are reported.
+CONDUIT_BATCH_SIZE=${CONDUIT_BATCH_SIZE:-default}
+CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
+# Extra connection-URL parameters for the builtin:postgres DESTINATION, e.g.
+# "&default_query_exec_mode=cache_statement" (conduit-connector-postgres#437).
+# Empty (the default) is the shipped default exec mode. Non-empty is TUNED.
+PG_DEST_URL_EXTRA=${PG_DEST_URL_EXTRA:-}
+
+# batch_lines <indent> — the two sdk.batch.* settings, or nothing at the shipped
+# default.
+# avro_line <indent> — logrepl.withAvroSchema override, only for a TUNED run
+# (CONDUIT_AVRO=false). The shipped default is true and is NOT overridden: every
+# default user pays the SDK Avro encode/decode and schema registration cost.
+CONDUIT_AVRO=${CONDUIT_AVRO:-default}
+avro_line() {
+  if [ "$CONDUIT_AVRO" = "default" ]; then return 0; fi
+  printf '%slogrepl.withAvroSchema: "%s"' "$1" "$CONDUIT_AVRO"
+}
+
+batch_lines() {
+  if [ "$CONDUIT_BATCH_SIZE" = "default" ]; then return 0; fi
+  printf '%ssdk.batch.size: "%s"\n%ssdk.batch.delay: "%s"' "$1" "$CONDUIT_BATCH_SIZE" "$1" "$CONDUIT_BATCH_DELAY"
+}
+
+# Validate: TABLES and CONDUIT_BATCH_SIZE are positive integers, the delay is a
+# non-empty duration string.
+case "$TABLES" in
+  ''|*[!0-9]*) echo "TABLES must be a positive integer (got '$TABLES')" >&2; exit 1 ;;
+esac
+if [ "$TABLES" -lt 1 ]; then echo "TABLES must be >= 1 (got '$TABLES')" >&2; exit 1; fi
+if [ "$CONDUIT_BATCH_SIZE" != "default" ]; then
+  case "$CONDUIT_BATCH_SIZE" in
+    ''|*[!0-9]*) echo "CONDUIT_BATCH_SIZE must be 'default' or a positive integer (got '$CONDUIT_BATCH_SIZE')" >&2; exit 1 ;;
+  esac
+  if [ "$CONDUIT_BATCH_SIZE" -lt 1 ]; then echo "CONDUIT_BATCH_SIZE must be >= 1" >&2; exit 1; fi
+fi
+if [ -z "$CONDUIT_BATCH_DELAY" ]; then echo "CONDUIT_BATCH_DELAY must be non-empty" >&2; exit 1; fi
+
+# -- infra/init.sql -----------------------------------------------------------
+{
+  echo "-- Source tables (bench_source_0 .. bench_source_{TABLES-1}) and"
+  echo "-- destination tables (bench_dest_0 .. bench_dest_{TABLES-1}), same row"
+  echo "-- shape. Every CDC arm captures the source tables; the Postgres-"
+  echo "-- destination arms (conduit-pg, connect-pg) write into the destination"
+  echo "-- tables, whose row count is their ground truth."
+  echo "--"
+  echo "-- The loader writes a fixed-rate INSERT/UPDATE/DELETE mix into each"
+  echo "-- source table (see ../loader); it never touches the destination tables."
+  echo "-- Row shape is fixed (id bigint PRIMARY KEY, payload text) and identical"
+  echo "-- across tables and arms. id stays PRIMARY KEY on the destination tables"
+  echo "-- too: the builtin:postgres destination and the JDBC sink both upsert on"
+  echo "-- the record key (id), which needs a unique constraint to target."
+  echo "--"
+  echo "-- REPLICA IDENTITY stays DEFAULT (the primary key), so pgoutput emits the"
+  echo "-- key for deletes and all systems can reconstruct the changed row."
+  echo "--"
+  echo "-- GENERATED by scripts/generate.sh from TABLES (committed copy is the"
+  echo "-- TABLES=1 default); run.sh regenerates it. Do not edit by hand."
+  for ((i = 0; i < TABLES; i++)); do
+    echo "CREATE TABLE bench_source_${i} ("
+    echo "    id      bigint PRIMARY KEY,"
+    echo "    payload text   NOT NULL"
+    echo ");"
+    echo ""
+    echo "CREATE TABLE bench_dest_${i} ("
+    echo "    id      bigint PRIMARY KEY,"
+    echo "    payload text   NOT NULL"
+    echo ");"
+  done
+} > infra/init.sql
+
+# -- pipelines/conduit.yml ----------------------------------------------------
+emit_file_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-${i}
+    status: running
+    name: cdc-parity-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> file sink
+      /sink/out_${i}.txt. Ground truth = lines written to /sink/out_${i}.txt
+      (summed across tables).
+    connectors:
+      - id: cdc-parity-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_slot_${i}"
+          logrepl.publicationName: "conduit_pub_${i}"
+          logrepl.autoCleanup: "false"
+$(avro_line "          ")
+$(batch_lines "          ")
+      - id: cdc-parity-${i}:file-dest
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/out_${i}.txt
+$(batch_lines "          ")
+EOF
+}
+
+{
+  echo "# Conduit arm: one pipeline per table — builtin:postgres CDC source"
+  echo "# (bench_source_i) -> builtin:file sink (/sink/out_i.txt)."
+  echo "#"
+  echo "# Ground truth is the files the sinks write: builtin:file appends exactly"
+  echo "# one line per record (record.Bytes() + '\n'), so the sum of"
+  echo "# \`wc -l /sink/out_*.txt\` is the number of CDC events actually delivered."
+  echo "# No Conduit metric is read."
+  echo "#"
+  echo "# Equivalence notes (see ../README.md for the full list):"
+  echo "#   - snapshotMode: never — no initial snapshot, matching Debezium"
+  echo "#     snapshot.mode=never and Redpanda stream_snapshot:false."
+  echo "#   - logrepl.withAvroSchema: NOT overridden at shipped defaults (ships true);"
+  echo "#     CONDUIT_AVRO=false is a labelled TUNED run. Debezium's"
+  echo "#     default and Redpanda's JSON message."
+  echo "#   - cdcMode: logrepl — pgoutput logical replication, the same wire"
+  echo "#     protocol Debezium (plugin.name=pgoutput) and Redpanda use."
+  echo "#   - sdk.batch.*: absent at the shipped default (CONDUIT_BATCH_SIZE=default);"
+  echo "#     present only on a labelled tuned run. Debezium's"
+  echo "#     max.batch.size defaults to 2048."
+  echo "#"
+  echo "# GENERATED by scripts/generate.sh from TABLES and CONDUIT_BATCH_SIZE"
+  echo "# (committed copy is the TABLES=1 default); run.sh regenerates it."
+  echo 'version: "2.2"'
+  echo "pipelines:"
+  for ((i = 0; i < TABLES; i++)); do
+    emit_file_pipeline "$i"
+  done
+} > pipelines/conduit.yml
+
+# -- pipelines/conduit-pg.yml -------------------------------------------------
+emit_pg_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-pg-${i}
+    status: running
+    name: cdc-parity-pg-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> Postgres
+      destination (bench_dest_${i}). Ground truth = row count of bench_dest_${i}
+      (summed across tables).
+    connectors:
+      - id: cdc-parity-pg-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_slot_${i}"
+          logrepl.publicationName: "conduit_pub_${i}"
+          logrepl.autoCleanup: "false"
+$(avro_line "          ")
+$(batch_lines "          ")
+      - id: cdc-parity-pg-${i}:pg-dest
+        type: destination
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable${PG_DEST_URL_EXTRA}"
+          table: "bench_dest_${i}"
+$(batch_lines "          ")
+EOF
+}
+
+{
+  echo "# Conduit Postgres-destination arm: one pipeline per table —"
+  echo "# builtin:postgres CDC source (bench_source_i) -> builtin:postgres"
+  echo "# destination (bench_dest_i)."
+  echo "#"
+  echo "# Ground truth is the row count of the destination tables: the destination"
+  echo "# upserts on the record key (id) and deletes on delete events, so"
+  echo "# bench_dest_i mirrors the LIVE rows of bench_source_i (net inserts minus"
+  echo "# deletes). The pre/post-test hooks SELECT count(*) across bench_dest_* and"
+  echo "# the delta over the 60s window is the number of net rows captured. No"
+  echo "# Conduit metric is read."
+  echo "#"
+  echo "# Equivalence notes (see ../README.md for the full list):"
+  echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
+  echo "#   - sdk.batch.* and the destination exec mode are the shipped defaults unless"
+  echo "#     CONDUIT_BATCH_SIZE / PG_DEST_URL_EXTRA were set (a labelled tuned run)."
+  echo "#"
+  echo "# GENERATED by scripts/generate.sh from TABLES and CONDUIT_BATCH_SIZE"
+  echo "# (committed copy is the TABLES=1 default); run.sh regenerates it."
+  echo 'version: "2.2"'
+  echo "pipelines:"
+  for ((i = 0; i < TABLES; i++)); do
+    emit_pg_pipeline "$i"
+  done
+} > pipelines/conduit-pg.yml
+
+# -- pipelines/conduit-s3.yml -------------------------------------------------
+emit_s3_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-s3-${i}
+    status: running
+    name: cdc-parity-s3-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> S3
+      destination (MinIO bucket "bench"). Ground truth = records written to the
+      bucket (one JSON line per record, summed across tables).
+    connectors:
+      - id: cdc-parity-s3-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_slot_${i}"
+          logrepl.publicationName: "conduit_pub_${i}"
+          logrepl.autoCleanup: "false"
+$(avro_line "          ")
+$(batch_lines "          ")
+      - id: cdc-parity-s3-${i}:s3-dest
+        type: destination
+        plugin: builtin:s3
+        settings:
+          aws.accessKeyId: "conduitminio"
+          aws.secretAccessKey: "conduitminiosecret"
+          aws.region: "us-east-1"
+          aws.bucket: "bench"
+          aws.endpoint: "http://cdcparity-minio:9000"
+          aws.pathStyle: "true"
+          format: "json"
+$(batch_lines "          ")
+EOF
+}
+
+{
+  echo "# Conduit S3-destination arm: one pipeline per table —"
+  echo "# builtin:postgres CDC source (bench_source_i) -> builtin:s3 destination"
+  echo "# (MinIO bucket \"bench\")."
+  echo "#"
+  echo "# Ground truth is the records the sink writes: builtin:s3 format json"
+  echo "# writes one OpenCDC-shaped JSON object per line (Operation, Position,"
+  echo "# Payload, Key, Metadata), one object per source batch, so the SUM of"
+  echo "# \`wc -l\` across every object in the bucket is the number of CDC events"
+  echo "# actually delivered. No Conduit metric is read."
+  echo "#"
+  echo "# Equivalence notes (see ../README.md for the full list):"
+  echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
+  echo "#   - format json: one line per record, the SAME per-record shape the file"
+  echo "#     sink writes; the S3 sink batches/partitions, so the source (not the"
+  echo "#     sink) is what is measured — a parity check, like conduit-pg."
+  echo "#   - aws.endpoint + aws.pathStyle point at the local MinIO (no MINIO_DOMAIN,"
+  echo "#     so path-style addressing is required)."
+  echo "#"
+  echo "# GENERATED by scripts/generate.sh from TABLES and CONDUIT_BATCH_SIZE"
+  echo "# (committed copy is the TABLES=1 default); run.sh regenerates it."
+  echo 'version: "2.2"'
+  echo "pipelines:"
+  for ((i = 0; i < TABLES; i++)); do
+    emit_s3_pipeline "$i"
+  done
+} > pipelines/conduit-s3.yml
+
+# -- pipelines/conduit-kafka.yml ----------------------------------------------
+emit_kafka_pipeline() {
+  local i=$1
+  cat <<EOF
+  - id: cdc-parity-kafka-${i}
+    status: running
+    name: cdc-parity-kafka-${i}
+    description: >
+      Postgres CDC source (bench_source_${i}, pgoutput/logrepl) -> Kafka
+      destination (topic cdcparitykafka.public.bench_source_${i}). Ground truth =
+      records produced to the topic (summed across tables).
+    connectors:
+      - id: cdc-parity-kafka-${i}:pg-src
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable"
+          tables: "bench_source_${i}"
+          cdcMode: "logrepl"
+          snapshotMode: "never"
+          logrepl.slotName: "conduit_kafka_slot_${i}"
+          logrepl.publicationName: "conduit_kafka_pub_${i}"
+          logrepl.autoCleanup: "false"
+$(avro_line "          ")
+$(batch_lines "          ")
+      - id: cdc-parity-kafka-${i}:kafka-dest
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: "cdcparity-kafka:9092"
+          topic: "cdcparitykafka.public.bench_source_${i}"
+          acks: "all"
+$(batch_lines "          ")
+EOF
+}
+
+{
+  echo "# Conduit Kafka-destination arm: one pipeline per table —"
+  echo "# builtin:postgres CDC source (bench_source_i) -> builtin:kafka destination"
+  echo "# (topic cdcparitykafka.public.bench_source_i)."
+  echo "#"
+  echo "# Ground truth is the topic's record count: each source record (one per"
+  echo "# INSERT/UPDATE/DELETE CDC event) becomes exactly one Kafka message, so the"
+  echo "# SUM of the topics' latest offsets (GetOffsetShell, one partition each) is"
+  echo "# the number of CDC events delivered. No Conduit metric is read."
+  echo "#"
+  echo "# Equivalence notes (see ../README.md for the full list):"
+  echo "#   - snapshotMode: never, cdcMode: logrepl (pgoutput), withAvroSchema:"
+  echo "#     shipped default (see CONDUIT_AVRO) — identical to the file-sink conduit arm and Debezium."
+  echo "#   - at the shipped defaults (no sdk.batch.*) the Kafka destination produces"
+  echo "#     one record per request, so the DESTINATION is the limiter (0.30x of"
+  echo "#     Connect, results.md). Debezium's producer batches on the connect-kafka"
+  echo "#     side. With sdk.batch.* set (a labelled tuned run) the pair reaches parity."
+  echo "#"
+  echo "# GENERATED by scripts/generate.sh from TABLES and CONDUIT_BATCH_SIZE"
+  echo "# (committed copy is the TABLES=1 default); run.sh regenerates it."
+  echo 'version: "2.2"'
+  echo "pipelines:"
+  for ((i = 0; i < TABLES; i++)); do
+    emit_kafka_pipeline "$i"
+  done
+} > pipelines/conduit-kafka.yml
+
+echo "generated: TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY"

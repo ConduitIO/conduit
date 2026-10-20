@@ -82,11 +82,41 @@ escape-analysis:
 	grep -vwE "(.*_test\.go|.*\/mock/.*\.go)" escape_analysis_full.txt > escape_analysis.txt
 	rm escape_analysis_full.txt
 
+# MEMORY_HEAVY_PKGS are the packages whose -race test binaries each hold GBs of
+# RSS: they compile and instantiate ~25 MB WASM processor modules (standalone,
+# registry) or spawn race-built conduit subprocesses (chaos).
+# Local (macOS, `/usr/bin/time -l`, -race --tags=integration test binaries):
+# standalone 5.4 GB, registry 3.2 GB, chaos 1.5 GB (plus children).
+# CI (ubuntu-latest, 16 GB, sampled in the Test step): the standalone binary
+# alone grew to ~14 GB before the lazy guest compilation and GOMEMLIMIT, which
+# swapped the runner to death ("The runner has received a shutdown signal",
+# exit 143, no FAIL line); it peaks at ~6.8 GB (8.8 GB used on the box) now.
+# They run one at a time (-p 1), after everything else has finished.
+# A soft Go heap limit makes the GC reclaim the multi-GB transient garbage that
+# wazero's module compilation produces instead of letting the heap (and the
+# race detector's shadow memory on top of it) grow into swap. It is set only
+# for the heavy phase; tests/chaos/harness.go strips it from the conduit child
+# processes it spawns.
+MEMORY_HEAVY_GOMEMLIMIT ?= 4GiB
+
+MEMORY_HEAVY_PKGS = \
+	github.com/conduitio/conduit/pkg/plugin/processor/standalone \
+	github.com/conduitio/conduit/pkg/registry \
+	github.com/conduitio/conduit/tests/chaos
+
 .PHONY: test-integration
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
 	docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml up --quiet-pull -d --wait
-	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
+	# phase 1: everything except the memory-heavy packages, in parallel
+	# phase 2: the memory-heavy packages, one binary at a time (see MEMORY_HEAVY_PKGS)
+	# The package list must come from the same build tags as the test run: an
+	# untagged `go list` silently drops integration-only packages.
+	pkgs="$$(go list --tags=integration ./...)" || exit 1; \
+		test -n "$$pkgs" || { echo "go list returned no packages"; exit 1; }; \
+		rest="$$(printf '%s\n' "$$pkgs" | grep -vxF $(foreach p,$(MEMORY_HEAVY_PKGS),-e $(p)))"; \
+		go test $(GOTEST_FLAGS) -race --tags=integration $$rest; ret=$$?; \
+		GOMEMLIMIT=$(MEMORY_HEAVY_GOMEMLIMIT) go test -p 1 $(GOTEST_FLAGS) -race --tags=integration $(MEMORY_HEAVY_PKGS) || ret=$$?; \
 		docker compose -f test/compose-postgres.yaml -f test/compose-schemaregistry.yaml down; \
 		exit $$ret
 
