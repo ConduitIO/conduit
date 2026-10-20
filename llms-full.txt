@@ -551,7 +551,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.17.0)
+### postgres (v0.17.2)
 
 Conduit connector for PostgreSQL
 
@@ -985,21 +985,56 @@ forged record would be skipped, which a processor with that power could do to
 any record anyway.
 **Column type changes on a running pipeline**
 
-The destination reuses prepared statements (pgx's `cache_statement` query
-mode, the fast mode) and checks a per-table schema fingerprint with every
-batch. After `ALTER TABLE ... ALTER COLUMN ... TYPE` the fingerprint changes,
-the batch is rolled back, the statement cache is cleared, and the batch is
-retried with the new column types. A value the new type cannot hold exactly
-fails the write instead of being converted; a widening change is written
-type-exactly without an error.
+By default the destination describes every statement on the connection that
+runs it (pgx's `describe_exec` query mode), so after `ALTER TABLE ... ALTER
+COLUMN ... TYPE` the next write uses the new column types. A value the new
+type cannot hold exactly fails the write instead of being converted.
 
-This keeps cached statements' single round trip per batch. On one dedicated
-machine (benchi `destination-exec-mode`: keyed upserts into a two-column
-table) describing every statement instead cost 35% fewer rows per second at
-`sdk.batch.size: 1`, the default, and 16% fewer at 1000. `exec` and
-`simple_protocol`, which never cache parameter types (PgBouncer in
-transaction mode needs one of them), are kept when the URL sets them, as is
-`describe_exec`.
+The cached modes, `cache_statement` and `cache_describe`, are opt-in. They
+reuse prepared statements and check a per-table schema fingerprint with
+every batch: after a column type change the batch is rolled back, the
+statement cache is cleared, and the batch is retried with the new types. A
+fired check is logged at Info with the table name and the running count
+(`schema_changes_total`). The destination warns at startup when a cached
+mode is set.
+
+**The cached modes are safe only on a direct connection, or behind a pooler
+that does not share prepared statements between clients.** A pooler that
+shares them hands a statement one client prepared before a column type
+change to every client that sends the same SQL; the fingerprint check
+cannot see that, and values are converted without an error (5/2 stored as 3
+in a column that became `integer`). v0.17.0 and v0.17.1 used
+`cache_statement` by default; see the v0.17.2 release notes.
+
+If pgx closes the connection after a failed batch (for example a value
+that does not encode into a parameter type, on any record but the first),
+the destination reconnects and, in a cached mode, retries the batch once
+on an empty statement cache; nothing of a batch that fails this way was
+committed. A value that does not fit fails the write, and the error names
+the index of the record that holds it.
+
+One benchi run on a dedicated machine (`benchi/destination-exec-mode`:
+keyed upserts into a two-column table) measured cached statements
+*without* the fingerprint check against `describe_exec`: describing every
+statement cost 35% fewer rows per second at `sdk.batch.size: 1` and 16%
+fewer at 1000. Cached statements with the check have not been measured
+with benchi; that run is pending (the `pg-guarded` arm). The Go
+microbenchmark `BenchmarkDestination_Write_Upsert` compares the two modes on
+a local machine; it is indicative only, not a benchi result.
+
+**Connection poolers**
+
+Behind PgBouncer, at any `max_prepared_statements`, use the default
+(`describe_exec`) or `exec`. That likely applies to other poolers that
+share or route prepared statements (Supavisor, PgCat, Odyssey), which have
+not been tested. With `max_prepared_statements` above 0, PgBouncer shares
+prepared statements between clients, so a cached mode can convert values
+silently after a column type change. With `max_prepared_statements=0`, a
+batch can reach a server that does not have its statement; the destination
+retries batches that fail with SQLSTATE 26000 (prepared statement does not
+exist) or 42P05 (prepared statement already exists) on an empty statement
+cache, up to three times, but a cached mode still fails some batches
+there. `describe_exec` was tested with PgBouncer 1.26 in both settings.
 
 **Numeric columns**
 
@@ -1090,7 +1125,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination reuses prepared statements (cache_statement) and checks a per-table schema fingerprint with every batch, so a column type change on a running pipeline invalidates the cache and the next write sees the new type — fast and correct. Set `default_query_exec_mode` to `describe_exec`, `exec` or `simple_protocol` to override; `cache_statement` and `cache_describe` are also guarded and safe. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
 ### s3 (v0.11.1)
 
