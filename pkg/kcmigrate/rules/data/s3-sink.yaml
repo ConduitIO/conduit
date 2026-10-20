@@ -17,6 +17,16 @@ upstream: {name: confluent, version: "12.1.5"}
 emits:
   - {plugin: builtin:kafka, role: source}
   - {plugin: builtin:s3, role: destination}
+finish:
+  # Kafka Connect's consumer for a sink reads in group connect-<name> from
+  # earliest unless consumer.override.* or the worker's consumer.* say
+  # otherwise (Worker.baseConsumerConfigs, Apache Kafka 4.2.0, lines 923-931).
+  # The Kafka source defaults to a random group and the end of each
+  # partition, which would skip every record written before cutover; this
+  # writes groupID and readFromBeginning where no key did, and notes the
+  # cutover (stop the Kafka Connect connector first). Every sink family's file
+  # carries this line.
+  - {kind: sink-consumer-defaults}
 notes:
   - code: kc.output_shape_differs
     blocking: true

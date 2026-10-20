@@ -250,6 +250,26 @@ keys:
         code: kc.key_unsupported
         reason: The Kafka destination supports none, gzip, snappy, lz4 and zstd.
         fix: Use one of the supported codecs.
+  - key: consumer.group.id
+    status: translated
+    reason: The worker's consumer.-prefixed settings replace the group connect-<name> for every sink connector's consumer, so every sink without its own consumer.override.group.id reads in this one group.
+    emit: {kind: setting, side: consumer, name: groupID, layer: client}
+    diff: identity
+  - key: consumer.auto.offset.reset
+    diff: behavior
+    values:
+      - match: [earliest]
+        status: translated
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "true", layer: client}
+      - match: [latest]
+        status: translated
+        emit: {kind: setting, side: consumer, name: readFromBeginning, value: "false", layer: client}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Only earliest and latest have a Conduit equivalent; none fails on a missing offset in Kafka Connect.
+        fix: Set consumer.auto.offset.reset to earliest or latest, or keep the sinks that use this consumer on Kafka Connect.
   - key: {regex: '^(producer|consumer|admin)\..+$'}
     status: unsupported
     code: kc.key_unsupported

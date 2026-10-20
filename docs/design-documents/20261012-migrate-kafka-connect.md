@@ -463,10 +463,14 @@ as above) are reported individually. The poll-interval keys are approximated, no
 
 **JDBC sink.** Kafka source with `groupID` set to the KC sink's consumer group, `connect-<name>`, and
 `readFromBeginning: false`, so a sink picks up from its committed offsets. This is a design assumption that
-is **a marked dependency**: whether the `kafka` source starts from committed consumer-group offsets is
-being checked by the certification lane (open question). Until it is confirmed, `readFromBeginning: true` is
-emitted, the entry is approximated, and the report says the sink replays from the beginning (at-least-once
-holds, duplicates are possible) (see _Failure modes_). `connection.url` (`jdbc:postgresql://...`) to destination
+was **a marked dependency** on whether the `kafka` source starts from committed consumer-group offsets.
+Resolved 2026-10-20 (#3089): it does (connector v0.14.1, "Resume uses the consumer group"), and
+`readFromBeginning` applies only to a partition with no committed offset. So the source carries Kafka
+Connect's effective group (`consumer.override.group.id`, else the worker's `consumer.group.id`, else
+`connect-<name>`) and `readFromBeginning` from the effective `auto.offset.reset` (override, else worker,
+else `earliest`, which is `true`). Keys that set them are `translated`; values migrate filled in are
+`kc.default_differs` notes; and the note `kc.consumer_group_shared` tells the operator to stop the Kafka
+Connect connector before the pipeline starts (see _Failure modes_). `connection.url` (`jdbc:postgresql://...`) to destination
 `url`/`dsn`; `table.name.format` to `table` (template: `${topic}` becomes the collection metadata);
 `insert.mode` `insert` is translated, `upsert` and `update` depend on the destination's key handling and are
 approximated until the certification acceptance tests cover them; `pk.mode` and `pk.fields` map to key
@@ -841,7 +845,7 @@ a plausible-looking pipeline that behaves differently.
 | **Both slots retain WAL while Debezium and Conduit run side by side** | Disk growth on the source database | the cutover waits for Debezium's offset to pass the new slot's consistent point and then stops Debezium; the runbook and `kc.lint` explain the window; mechanics in #341/#3029 |
 | **Import applied against an unsafe state** (offset mid-snapshot, slot invalidated or ahead, unsupported Postgres minor version, publication mismatch) | A wrong skip rule loses records | #341's preflights and coded refusals (`postgres.import.*`); no silent fallback; `migrate` reports preflights as pending rather than claiming the result offline |
 | **Rollback after cutover** | Debezium's slot is lost or invalidated, or Conduit's slot is dropped before Debezium has caught up | v0.21 has no automated rollback: the operator follows the runbook in #3029, and the read-only `--check-rollback` (S12 of #341) gates every step: it reports a lost, invalidated or recreated Debezium slot, Conduit behind Debezium's stop position, an unsafe Debezium config and two writers, follows slot continuity across the manual restart, and returns `ready_to_drop` only when dropping Conduit's slot is safe; automated reset and rollback are v0.22 (#3044); (v0.22) rollback after slot reuse is harder because the slot was advanced, and is part of that design |
-| Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | marked dependency on the certification lane's check of the `kafka` source; until it is confirmed, `readFromBeginning: true` is set explicitly and the report says "replays from the beginning", at-least-once preserved |
+| Sink adopts KC's consumer group `connect-<name>` | If the KC sink is still running, rebalances; if Conduit's Kafka source does not honor group offsets on start, it replays from `readFromBeginning` (duplicates) or the latest (loss) | the `kafka` source resumes from the group's committed offsets (confirmed, #3089); `groupID` and `readFromBeginning` are written explicitly, and the note `kc.consumer_group_shared` says to stop the Kafka Connect connector first. Offsets the sink had not committed are read again: at-least-once, duplicates possible |
 | At-least-once vs KC's stronger guarantees (S3 sink, exactly-once source, KIP-618) | Duplicates after crash | connector-level note in the report; never claimed equivalent |
 | Output-format change (OpenCDC, not Debezium envelope; S3 layout) | Consumers break | blocking entries stop the pipeline; Debezium-compatible output mode removes the Postgres-to-Kafka case in v0.21; Debezium MySQL and S3 layout remain blocking |
 | Input is itself malformed or hostile (huge file, deep JSON, ReDoS in key regexes) | Crash or hang | size and depth limits, fuzzing, RE2 only |
@@ -920,9 +924,9 @@ document has been updated to match; this section is the record.
 
 ## Open questions
 
-1. **Kafka source and existing consumer groups** (Decision 9). Does the `kafka` source start from committed
-   group offsets when `groupID` already exists? If not, resuming a migrated sink needs a connector change
-   (Tier 1), and migrated sinks replay from the beginning in v0.21.
+1. ~~**Kafka source and existing consumer groups** (Decision 9).~~ Answered 2026-10-20 (#3089): the `kafka`
+   source resumes from the group's committed offsets when `groupID` already exists; no connector change is
+   needed. `docs/operations/kafka-connect-sink-cutover.md` is the procedure.
 2. **Output-mode option set.** The list of Debezium envelope options the output mode supports (decimal, time,
    tombstone, binary, hstore, interval encodings) is defined by that mode's own design; the mapping rows here
    read it, and any option outside it stays unsupported and blocking.

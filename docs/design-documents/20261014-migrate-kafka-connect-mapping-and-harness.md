@@ -344,6 +344,7 @@ Connector config keys common to all classes, and worker properties (`--worker`).
 | Worker: `security.protocol`, `sasl.*`, `ssl.*` (top level) | T | none | No-op: they configure the worker's own clients (internal topics, group membership) and never reach a connector's producer or consumer (corrected 2026-10-15, see the note below the table) |
 | Worker: `producer.bootstrap.servers`, `consumer.bootstrap.servers` | T | destination / source `servers` | Override the worker's `bootstrap.servers` for every connector's producer or consumer |
 | Worker: `producer.`/`consumer.` + `security.protocol`, `sasl.mechanism`, `sasl.jaas.config`, `client.id`; `producer.acks`, `producer.compression.type` | T | destination / source TLS, SASL, `clientID`, `acks`, `compression` | The middle layer of a connector's client config; a connector override wins over it |
+| Worker: `consumer.group.id`, `consumer.auto.offset.reset` | `earliest`, `latest` T for the reset (else U!); the group T | sink source `groupID`, `readFromBeginning` | Replace Connect's `connect-<name>` and `earliest` for every sink (`Worker.java` line 931); a connector's `consumer.override.*` wins over them (added 2026-10-20, #3089) |
 | Worker: `producer.ssl.*`, `consumer.ssl.*` | U! | none | Fix "export PEM and set `caCert`, `clientCert`, `clientKey`" |
 | Worker: `producer.*`, `consumer.*`, `admin.*` other | U | none | Tuning |
 | Worker: `exactly.once.source.support` | U! when `enabled` or `preparing`; T when `disabled` | none | |
@@ -358,8 +359,12 @@ this table mapped them onto every pipeline, which would have enabled TLS or SASL
 clients ran without them, and treated `producer.bootstrap.servers` and `producer.override.bootstrap.servers` as
 tuning, which would have written to the wrong cluster. Found in review of #3080. Connect's own client defaults
 (`acks=all`, idempotence off, `max.in.flight.requests.per.connection=1`, `auto.offset.reset=earliest`, group
-`connect-<name>`) are absent-key defaults of this layer and are tracked separately (they must be modelled before
-a sink family ships).
+`connect-<name>`) are absent-key defaults of this layer and are tracked separately (modelled for sinks 2026-10-20, issue
+number 3089: `connect-<name>` and `earliest` are written by the `sink-consumer-defaults` finisher at the lowest
+layer, below the worker's `consumer.group.id` and `consumer.auto.offset.reset` and the connector's
+`consumer.override.*`; each default it writes is a `kc.default_differs` note, and `kc.consumer_group_shared`
+tells the operator to stop the Kafka Connect connector first. The producer defaults of a source are still
+open).
 
 **Which pipeline connector the worker reaches (corrected 2026-10-15).** The chain above builds Kafka Connect's own
 client of a connector: the producer of a source connector, the consumer of a sink. In the pipeline that is the
@@ -531,8 +536,8 @@ rows, with no recipe yet that reproduces the original topic's value format). Wha
 #### JDBC sink
 
 `io.confluent.connect.jdbc.JdbcSinkConnector` to `builtin:kafka` source and the `postgres` or `mysql`
-destination. Source side: `groupID` is `connect-<name>` and `readFromBeginning` follows the open question in the
-base document (Decision 9). Other databases: `kc.connector_class_unsupported`.
+destination. Source side: `groupID` is `connect-<name>` and `readFromBeginning` is `true` unless a key or the
+worker sets them (resolved 2026-10-20, #3089: the `sink-consumer-defaults` finisher, below). Other databases: `kc.connector_class_unsupported`.
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |

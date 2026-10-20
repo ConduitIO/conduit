@@ -1,0 +1,27 @@
+schemaVersion: 1
+id: s3-sink-consumer-overrides
+family: s3-sink
+description: >-
+  S3 sink whose consumer.override.group.id and consumer.override.auto.offset.reset
+  replace Kafka Connect's own consumer defaults (group connect-<name>, earliest).
+  The source carries the override group and readFromBeginning false, and the
+  cutover note names the group the Kafka Connect connector must leave first.
+provenance:
+  source: synthetic
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka-connect-s3: "12.1.5", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/sink-s3-orders.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs, kc.delivery_semantics_differ, kc.consumer_group_shared]
+  entries:
+    - {key: consumer.override.group.id, status: translated}
+    - {key: consumer.override.auto.offset.reset, status: translated}
+covers:
+  - class: io.confluent.connect.s3.S3SinkConnector
+    keys: [consumer.override.group.id, consumer.override.auto.offset.reset]
+emits:
+  - {plugin: builtin:kafka, role: source}
+  - {plugin: builtin:s3, role: destination}
+run: {tier: offline}
