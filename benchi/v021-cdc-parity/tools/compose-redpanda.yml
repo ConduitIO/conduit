@@ -2,7 +2,7 @@
 # written to /sink/out.txt (see ../config/redpanda.yaml).
 services:
   redpanda-connect:
-    image: docker.redpanda.com/redpandadata/connect:latest
+    image: docker.redpanda.com/redpandadata/connect:latest@sha256:481e8df48ed733f080623ae67f0dccc82d29ae509dfb3f957347a9e900e74910
     container_name: cdcparity-redpanda
     # Pre-pulled once; never pull mid-benchmark.
     pull_policy: never

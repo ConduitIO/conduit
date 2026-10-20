@@ -3,9 +3,10 @@
 #
 #   benchi/v021-cdc-parity/run-aws.sh [ROUNDS] [ARM ...] [--keep]
 #
-#   ROUNDS   number of full rounds (default 3); one warmup round is discarded.
+#   ROUNDS   number of measured rounds (default 5, what the published runs used);
+#            one warmup round is discarded first.
 #   ARM ...  subset of arms: conduit conduit-aa connect conduit-pg connect-pg
-#            conduit-s3 connect-s3 (default: all nine). redpanda-connect is
+#            conduit-s3 connect-s3 conduit-kafka connect-kafka (default: all nine). redpanda-connect is
 #            NOT run by default — its postgres_cdc input is Redpanda Connect
 #            ENTERPRISE, so a stock build refuses to start; see README.md.
 #   --keep   keep the instance running after the run (default: destroy it).
@@ -22,9 +23,12 @@
 #
 # Requires: aws CLI + terraform + go (loader cross-compile), AWS creds.
 #
-# Env: TABLES (default 1; sweep 1, 2, 4), CONDUIT_BATCH_SIZE (default 1000),
-# CONDUIT_BATCH_DELAY (default 100ms), LOADER_SLOT_TIMEOUT (default 600s) —
-# forwarded to run.sh on the instance.
+# Env (forwarded to run.sh on the instance): TABLES (default 1; sweep 1, 2, 4),
+# CONDUIT_BATCH_SIZE (default "default" = no sdk.batch.* = shipped defaults; an
+# integer is a TUNED run), CONDUIT_BATCH_DELAY (default 100ms), PG_DEST_URL_EXTRA
+# (default empty), LOADER_RATE (default 20000), LOADER_SLOT_TIMEOUT (default
+# 600s), RUN_LABEL, CONDUIT_REF (pin a commit SHA for a published result),
+# SSH_KEY (default outside the repo), SSH_CIDR (default: this machine's /32).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -46,7 +50,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-ROUNDS=${ARGS[0]:-3}
+ROUNDS=${ARGS[0]:-5}
 REST=("${ARGS[@]:1}")
 if [ ${#REST[@]} -eq 0 ]; then REST=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka); fi
 
@@ -59,16 +63,12 @@ SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/n
 echo "==> building loader for linux/amd64"
 (cd loader && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o loader-linux-amd64 .)
 
-# 2. Provision.
-echo "==> provisioning instance (terraform apply)"
-terraform -chdir=terraform init -input=false >/dev/null
-terraform -chdir=terraform apply -auto-approve -input=false
-
-IP=$(terraform -chdir=terraform output -raw public_ip)
-mkdir -p "$(dirname "$SSH_KEY")"
-terraform -chdir=terraform output -raw private_key_pem > "$SSH_KEY"
-chmod 600 "$SSH_KEY"
-echo "==> instance ready at $IP"
+# 2. Provision. SSH is opened to this machine's /32 only (override with SSH_CIDR).
+if [ -z "${SSH_CIDR:-}" ]; then
+  SSH_CIDR="$(curl -fsS -m 5 https://checkip.amazonaws.com | tr -d '[:space:]')/32"
+fi
+export TF_VAR_ssh_cidr="$SSH_CIDR"
+IP=""
 
 cleanup() {
   if [ "$KEEP" = "0" ]; then
@@ -78,7 +78,19 @@ cleanup() {
     echo "==> keeping instance (IP $IP); destroy with: terraform -chdir=terraform destroy -auto-approve"
   fi
 }
+# Registered BEFORE apply so a failed or interrupted apply still destroys
+# whatever it created; destroy on an empty state is a no-op.
 trap cleanup EXIT
+
+echo "==> provisioning instance (terraform apply)"
+terraform -chdir=terraform init -input=false >/dev/null
+terraform -chdir=terraform apply -auto-approve -input=false
+
+IP=$(terraform -chdir=terraform output -raw public_ip)
+mkdir -p "$(dirname "$SSH_KEY")"
+terraform -chdir=terraform output -raw private_key_pem > "$SSH_KEY"
+chmod 600 "$SSH_KEY"
+echo "==> instance ready at $IP"
 
 # 3. Clone the conduit source (the conduit arm builds its image from it).
 echo "==> cloning conduit @ ${CONDUIT_REF} onto the instance"

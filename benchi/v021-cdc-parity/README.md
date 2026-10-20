@@ -19,9 +19,9 @@ kinds are measured:
   metric.
 
 The method follows `benchi/METHODOLOGY.md`: the metric is **ground truth**
-(what the sink actually wrote), every comparison carries an **A/A control** to
-establish the noise floor, and results are **medians with variance**, never a
-single best run.
+(what the sink actually wrote), the **A/A control** (`conduit-aa`, file arm
+only) establishes the noise floor, and results are **medians with variance**,
+never a single best run.
 
 ## The pipelines
 
@@ -78,9 +78,10 @@ source tables; the destination tables are populated by the pipeline under test.
   one JSON line per CDC event — the builtin:s3 `format: json` writes one
   OpenCDC-shaped object per line, the S3 sink's `JsonFormat` writes one
   bare-value Debezium envelope per line — so the line count across the bucket
-  is the event count for both. Both batch into objects (`sdk.batch.size` on the
-  Conduit side, `flush.size` on the Connect side), so the sink is not the
-  limiter.
+  is the event count for both. The Connect side batches into objects
+  (`flush.size`); Conduit batches only if `sdk.batch.*` is set (a tuned run).
+  At shipped defaults both S3 arms saturate near 18k events/s, so the S3
+  sink is compared at saturation (see `results.md`).
 - **Kafka-destination write semantics**: `conduit-kafka` and `connect-kafka`
   both produce exactly one Kafka message per CDC event (INSERT/UPDATE/DELETE)
   into the same topic per table (`cdcparitykafka.public.bench_source_i`). The
@@ -106,12 +107,12 @@ source tables; the destination tables are populated by the pipeline under test.
   Postgres-destination arms count **live rows**, not events: the destination
   upserts on the key, so INSERTs add a row, UPDATEs rewrite in place, and
   DELETEs remove a row. `rows_delta` for a Postgres-destination arm is
-  therefore the *net* rows captured (≈ inserts − deletes, ~60% of the raw event
+  therefore the _net_ rows captured (≈ inserts − deletes, ~60% of the raw event
   count at the default 70/20/10 mix) — a LOWER number than the file arms'
   event count, and **not directly comparable to it**. The two Postgres-
-  destination arms are comparable to *each other*; the two file-sink arms to
-  *each other*; and the S3- and Kafka-destination arms (both event counts) to
-  *each other* and to the file-sink arms' event count, though the S3/Kafka arms
+  destination arms are comparable to _each other_; the two file-sink arms to
+  _each other_; and the S3- and Kafka-destination arms (both event counts) to
+  _each other_ and to the file-sink arms' event count, though the S3/Kafka arms
   wait for their source's slot before writing and the file arms do not.
 - **S3 objects differ in layout and line content.** The Conduit `format: json`
   writes one OpenCDC-shaped object per line to flat keys
@@ -121,11 +122,11 @@ source tables; the destination tables are populated by the pipeline under test.
   keys or line shape would see a difference.
 - **Postgres sinks write differently under the hood.** The builtin:postgres
   destination builds per-record `INSERT … ON CONFLICT (id) DO UPDATE` /
-  `DELETE` statements and batches via the engine's funnel batching
-  (`sdk.batch.size`/`sdk.batch.delay`). The Confluent JDBC sink batches
-  inserts (`batch.size: 3000`) and issues its own upsert/delete SQL. Both
-  batch, which is why the sink is not the bottleneck and the SOURCE is what is
-  measured — this is a parity check, not expected to flip throughput.
+  `DELETE` statements. At shipped defaults (`sdk.batch.size` unset) it writes one
+  record per round trip, and that destination write IS the bottleneck
+  (0.30x of Connect in `results.md`); with `sdk.batch.size` set it batches. The
+  Confluent JDBC sink batches inserts (`batch.size: 3000`) and issues its own
+  upsert/delete SQL.
 - **Record encoding differs on the Connect Postgres arm.** The JDBC sink needs
   the record key schema to extract the primary key (`pk.mode: record_key`), so
   `connect-pg` runs `key.converter`/`value.converter` with
@@ -160,21 +161,20 @@ source tables; the destination tables are populated by the pipeline under test.
 `conduit-aa` is the same image, pipeline and compose as `conduit`, built the
 same way. Any measured difference between them is run-to-run noise — the
 harness's floor. **A Conduit-vs-competitor delta smaller than the A/A spread
-means nothing.** Every result below is reported next to the A/A spread, and the
-A/A control runs interleaved with the A/B arms (rotated order), not as a
-separate block.
+means nothing.** The A/A control runs interleaved with the file-sink arms (rotated order), not
+as a separate block. It exists **only on the file arm**; the Postgres, S3 and
+Kafka pairs rely on their within-arm min-max and the size of the effect.
 
 ## The Postgres-destination arms are a parity check
 
 The two Postgres-destination arms exist to measure the real "CDC→Postgres"
 workload people index on: Conduit `builtin:postgres → builtin:postgres` vs
-Debezium Postgres → Kafka Connect JDBC sink. Because both sinks batch writes
-internally, the sink is not the limiter; the measured quantity is how fast the
-SOURCE captures CDC events. Both sources read the same pgoutput stream, so the
-expected result is **parity** — equal `rows_delta` per window — not a throughput
-flip. A systematic gap between `conduit-pg` and `connect-pg` would point at the
-source (logrepl vs Debezium) or the Kafka hop, and would need to be read
-against the A/A floor before it means anything.
+Debezium Postgres → Kafka Connect JDBC sink. Both sources read the same pgoutput
+stream. The JDBC sink batches (`batch.size: 3000`); the Conduit destination
+batches only when `sdk.batch.size` is set. At shipped defaults it does not, so
+the destination write is the limiter and the arm measures the sink, not the
+source: the result is 0.30x of Connect (`results.md`). With batching set
+(a tuned run) the pair reaches parity.
 
 Because the destination mirrors the source's LIVE rows, the loader must not
 write before the `snapshotMode: never` source has created its replication slot:
@@ -190,20 +190,17 @@ net rows, have no slot to wait for, and write immediately.
 
 The two S3-destination arms measure the "CDC→object storage" workload: Conduit
 `builtin:postgres → builtin:s3` vs Debezium Postgres → Kafka Connect S3 sink.
-Because both sinks batch writes internally (`sdk.batch.size` / `flush.size`),
-the sink is not the limiter; the measured quantity is how fast the SOURCE
-captures CDC events. Both sources read the same pgoutput stream, so the expected
-result is **parity** — equal `rows_delta` per window — not a throughput flip. A
-systematic gap between `conduit-s3` and `connect-s3` would point at the source
-(logrepl vs Debezium) or the Kafka hop, and would need to be read against the
-A/A floor before it means anything.
+Both sources read the same pgoutput stream. Both arms saturate near 18k
+events/s at the 20k offered load, so the comparison is at saturation; read any
+gap against the within-arm spread, since the A/A control is on the file arm
+only.
 
 The S3-destination arms also wait for their source's replication slot before
 the loader writes, but for a different reason than the Postgres-destination
-arms: they count *events*, so a pre-slot write cannot create a phantom-row
+arms: they count _events_, so a pre-slot write cannot create a phantom-row
 artifact — it is simply never captured. The wait is applied anyway for
 methodological consistency with the other parity arms, so the loader's initial
-fill happens *after* the slot exists (a captured, clean steady-state stream)
+fill happens _after_ the slot exists (a captured, clean steady-state stream)
 and both `conduit-s3` and `connect-s3` start their measured window from the
 same point. This is a documented non-equivalence only against the file-sink
 arms, which write immediately; it does not affect the `conduit-s3` vs
@@ -214,14 +211,11 @@ arms, which write immediately; it does not affect the `conduit-s3` vs
 The two Kafka-destination arms (`conduit-kafka` vs `connect-kafka`) measure the
 "CDC → Kafka" workload: Conduit `builtin:postgres → builtin:kafka` vs Debezium
 Postgres producing straight to Kafka (Debezium's native producer via Kafka
-Connect, with no sink connector). Both producers batch — the builtin:kafka
-destination batches via franz-go (plus `sdk.batch.size`/`sdk.batch.delay`),
-Debezium's source batches via the Kafka producer — so the sink/producer is not
-the limiter; the measured quantity is how fast the SOURCE captures CDC events.
-Both sources read the same pgoutput stream and both emit exactly one message per
-event into the same topic, so the expected result is **parity** — equal
-`rows_delta` per window — not a throughput flip. A systematic gap would point at
-the source (logrepl vs Debezium) and must be read against the A/A floor.
+Connect, with no sink connector). Debezium's producer batches. The
+builtin:kafka destination produces one record per request at shipped defaults
+(`sdk.batch.size` unset), which makes the destination the limiter (0.30x of
+Connect, `results.md`); with `sdk.batch.*` set (a tuned run) it reaches parity.
+Both emit exactly one message per event into the same topic.
 
 The slot-aware wait is still applied to these arms, but for a different reason
 than the Postgres-destination arms. A Kafka arm's ground truth is an **event
@@ -241,7 +235,7 @@ wait just makes the loader's first writes captured rather than wasted.
 cannot run on the free edition. `postgres_cdc` is a Redpanda Connect
 **Enterprise** component; at startup the stock image fails with:
 
-```
+```text
 failed to init input <no label> path root.input: this feature requires a valid
 Redpanda Enterprise Edition license that includes the Connect product.
 ```
@@ -260,7 +254,7 @@ kind:
   across `/sink/out*.txt` — the total CDC events delivered.
 - **Postgres-destination arms**: `ROWS_BEFORE` / `ROWS_AFTER` are the SUM of
   `SELECT count(*)` across `bench_dest_0` .. `bench_dest_{TABLES-1}` — the live
-  rows the destination holds, i.e. the *net* rows captured.
+  rows the destination holds, i.e. the _net_ rows captured.
 - **S3-destination arms**: `ROWS_BEFORE` / `ROWS_AFTER` are the SUM of `wc -l`
   across every object in the MinIO bucket `bench` (the counter container
   downloads the bucket with `aws s3 cp --recursive` and cats the objects) — the
@@ -270,7 +264,7 @@ kind:
   `cdcparitykafka.public.bench_source_{TABLES-1}` (GetOffsetShell, one partition
   per topic) — the total CDC events delivered to the broker.
 
-```
+```text
 throughput = (ROWS_AFTER - ROWS_BEFORE) / test_duration
 ```
 
@@ -321,7 +315,8 @@ counter container's env for the connect registration loops in `bench.yml`).
 Prerequisites: Docker, `go` (for the loader), `benchi` (v0.4.1+), and the
 images `postgres:17`, `alpine:3.20`, `apache/kafka:4.0.0`,
 `quay.io/debezium/connect:3.2`,
-`docker.redpanda.com/redpandadata/connect:latest`, and the MinIO build
+`docker.redpanda.com/redpandadata/connect` (pinned by digest in
+`tools/compose-redpanda.yml`; that arm is blocked and was not run), and the MinIO build
 `pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372`
 (the S3-destination arms' object store; `minio/minio` was removed from Docker
 Hub, and `pgsty/minio` is the maintained community build the rest of the

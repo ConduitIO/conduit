@@ -1,4 +1,4 @@
-Linux 7.0.0-1014-aws (ip-172-31-11-10) 	10/20/26 	_x86_64_	(8 CPU)
+Linux 7.0.0-1014-aws (host) 	10/20/26 	_x86_64_	(8 CPU)
 
 10/20/26 06:10:56
 avg-cpu:  %user   %nice %system %iowait  %steal   %idle

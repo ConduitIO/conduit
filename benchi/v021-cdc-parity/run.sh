@@ -5,22 +5,24 @@
 # (conduit-pg vs connect-pg) and an S3-destination parity pair (conduit-s3 vs
 # connect-s3).
 #
-# Each benchi invocation runs ONE arm, with fresh infrastructure, for a 60s
-# measured window. The ground-truth metric is, per destination kind:
+# Each benchi invocation runs ONE arm, with fresh infrastructure, for a nominal
+# 60s measured window (the real elapsed time is recorded in runs.csv). The ground-truth metric is, per destination kind:
 #   - file-sink arms:  the number of lines the sink files accumulated in the
 #     window (wc -l on /sink/out*.txt),
 #   - Postgres-destination arms: the net rows the destination tables
 #     accumulated (SELECT count(*) on bench_dest_*),
 #   - S3-destination arms: the records the sink wrote to the MinIO bucket
 #     (wc -l across every object in the bucket).
-# Each is reported as ROWS_AFTER - ROWS_BEFORE, divided by 60s. See README.md
+# Each is reported as ROWS_AFTER - ROWS_BEFORE, divided by the real elapsed window. See README.md
 # and bench.yml.
 #
 # Usage: benchi/v021-cdc-parity/run.sh [ROUNDS] [ARM ...]
-#   ROUNDS        number of full rounds (default 3). One warmup round is
+#   ROUNDS        number of measured rounds (default 3; the published runs used 5). One warmup round is
 #                 discarded first.
-#   ARM ...       subset of arms to run (default all eight).
-#                 conduit conduit-aa connect redpanda-connect conduit-pg connect-pg conduit-s3 connect-s3
+#   ARM ...       subset of arms to run (default all nine).
+#                 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3
+#                 conduit-kafka connect-kafka (redpanda-connect needs an Enterprise
+#                 license and is run only when named explicitly)
 #
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
 # TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
@@ -34,7 +36,7 @@ ROUNDS=${1:-3}
 shift || true
 ARMS=("$@")
 if [ ${#ARMS[@]} -eq 0 ]; then
-  ARMS=(conduit conduit-aa connect redpanda-connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka)
+  ARMS=(conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka)
 fi
 
 # Number of source tables (and source+destination pairs). The workload is
@@ -64,7 +66,7 @@ export LOADER_SLOT_TIMEOUT=${LOADER_SLOT_TIMEOUT:-600s}
 bash scripts/generate.sh
 
 BENCHI=${BENCHI:-benchi}
-OUT=${OUT:-results/$(date +%Y%m%dT%H%M%S)}
+OUT=${OUT:-results/$(date +%Y%m%dT%H%M%S)-$(printf %s "${RUN_LABEL:-shipped-defaults}" | tr -c "A-Za-z0-9._=+-" "_")}
 mkdir -p "$OUT"
 
 # benchi creates and always removes a docker network named "benchi"; never run
@@ -107,6 +109,7 @@ echo "==> recording environment"
   echo "loader_rate ${LOADER_RATE:-20000}"
   echo "pg_dest_url_extra ${PG_DEST_URL_EXTRA:-<none: shipped default exec mode>}"
   echo "label ${RUN_LABEL:-shipped-defaults}"
+  echo "git_dirty_files_outside_benchi $(git -C ../.. status --porcelain -- . ':!benchi' 2>/dev/null | wc -l | tr -d ' ')"
   echo "conduit_engine classic (no --preview.pipeline-arch-v2; the shipped default)"
   echo "conduit_connectors $(grep -E 'conduit-connector-(postgres|s3|file|kafka|sdk) ' ../../go.mod | awk '{print $1"@"$2}' | tr '\n' ' ')"
   echo "kernel $(uname -r) cpus=$(nproc) mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)"
@@ -185,7 +188,6 @@ run() { # tool label
   wait "$sampler" 2>/dev/null || true
   VMSTAT_PID=""; IOSTAT_PID=""
   cat /proc/loadavg > "$dir/load-after.txt" 2>/dev/null || uptime > "$dir/load-after.txt"
-  local before after
   local before after tsb tsa srcb srca key
   getv() { grep -o "$1=[0-9]*" "$dir/benchi.log" 2>/dev/null | grep -o '[0-9]*$' | tail -1 || true; }
   before=$(getv ROWS_BEFORE); after=$(getv ROWS_AFTER)

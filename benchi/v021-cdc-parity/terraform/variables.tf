@@ -23,9 +23,8 @@ variable "disk_size_gb" {
 }
 
 variable "ssh_cidr" {
-  description = "CIDR allowed to SSH into the instance."
+  description = "CIDR allowed to SSH into the instance (required; run-aws.sh passes this machine's /32)."
   type        = string
-  default     = "0.0.0.0/0"
 }
 
 variable "benchi_version" {
