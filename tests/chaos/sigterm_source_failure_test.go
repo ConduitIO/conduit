@@ -54,10 +54,10 @@ const sigtermAfterSourceFailureExitBound = 20 * time.Second
 // before the destination can release a single ack (holdAcksUntilStop), so it
 // lands inside the window by construction, not by timing. The one ordering
 // left to the scheduler is the node noticing the failed read, which takes
-// microseconds after the stream closes; the short sleep below covers it. If
-// it ever lost, the stop would be an ordinary graceful stop, which must pass
-// these assertions too, so the case cannot fail spuriously, only pass
-// vacuously, and the "fails on v0.20.0" check in the PR guards that.
+// microseconds after the stream closes. Nothing waits for it: if the stop
+// ever won, it would be an ordinary graceful stop, which must pass these
+// assertions too, so the case cannot fail spuriously, only pass vacuously,
+// and the "fails on v0.20.0" check in the PR guards that.
 func TestSIGTERM_SourceFailureRacingStop_ExitsAndReplays(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -82,7 +82,6 @@ func TestSIGTERM_SourceFailureRacingStop_ExitsAndReplays(t *testing.T) {
 
 	first := spawnLCChild(t, cfg)
 	first.waitForMarker(t, markerLCSourceFailed, 10*time.Second)
-	time.Sleep(100 * time.Millisecond) // let the source node observe the failed read
 	first.sigterm(t, sigtermAfterSourceFailureExitBound)
 
 	_, exited := first.line(markerLCSigtermExit)
