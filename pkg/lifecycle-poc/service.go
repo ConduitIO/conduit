@@ -108,6 +108,15 @@ type Service struct {
 	// docs/design-documents/20260706-forceful-stop-test-determinism.md.
 	terminalErrors *csync.Map[string, error]
 
+	// lastRun holds, per pipeline ID, the tomb of the run most recently
+	// published to runningPipelines. It outlives the runningPipelines entry:
+	// the cleanup goroutine deletes that entry before it is done (the
+	// OnFailure handlers run after it), so WaitPipeline waits for this tomb to
+	// die rather than trusting the missing entry (#3087, same field as
+	// pkg/lifecycle). Written under publishMu, next to the runningPipelines
+	// entry.
+	lastRun *csync.Map[string, *tomb.Tomb]
+
 	// testWorkersReleased, if set, is called synchronously from runPipeline
 	// immediately after this run's worker goroutines are released (i.e.
 	// right after close(registered)) — the earliest instant a worker could
@@ -213,6 +222,7 @@ func NewService(
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
 		terminalErrors:   csync.NewMap[string, error](),
+		lastRun:          csync.NewMap[string, *tomb.Tomb](),
 		starting:         make(map[string]*reservation),
 		metricsDisabled:  metricsDisabled,
 	}
@@ -949,12 +959,15 @@ func (s *Service) waitInternal() error {
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped, and
-// returns the pipeline's terminal error (nil on a graceful stop).
+// returns the pipeline's terminal error (nil on a graceful stop). "Stopped"
+// means every goroutine of the run has returned: its workers and its cleanup
+// goroutine, including the OnFailure handlers it calls.
 //
 // It is safe to call before, during, or after the pipeline's own cleanup: while
 // the pipeline is running it waits on the tomb; if the pipeline has already
-// stopped and removed itself from runningPipelines, it returns the recorded
-// terminal error instead of a false nil. Returns nil for an ID that never ran.
+// removed itself from runningPipelines, it still waits for that run's tomb to
+// die (#3087) and returns the recorded terminal error instead of a false nil.
+// Returns nil for an ID that never ran.
 //
 // Without this fallback there is a time-of-check/time-of-use race: the cleanup
 // goroutine (runPipeline) can call runningPipelines.Delete(id) between this
@@ -973,15 +986,31 @@ func (s *Service) WaitPipeline(id string) error {
 		<-res.done
 	}
 
+	// Both lookups under publishMu, which every publication holds while it
+	// sets the two entries: if the run is gone from runningPipelines, last is
+	// that run's tomb, not the tomb of a run a concurrent Start published
+	// after the lookup.
+	s.publishMu.Lock()
 	p, ok := s.runningPipelines.Get(id)
+	last, hasLast := s.lastRun.Get(id)
+	s.publishMu.Unlock()
 	if ok && p.t != nil {
 		return p.t.Wait()
 	}
-	// The pipeline already cleaned itself up (or never started under this ID).
-	// terminalErrors is written before the runningPipelines entry is deleted, so
-	// if the pipeline ran and stopped, its terminal error is here — recovering
-	// the result the lookup above would otherwise have lost to the cleanup race.
-	if err, ok := s.terminalErrors.Get(id); ok {
+	// The pipeline already removed itself from runningPipelines (or never
+	// started under this ID). terminalErrors is written before the
+	// runningPipelines entry is deleted, so if the pipeline ran and stopped,
+	// its terminal error is here — recovering the result the lookup above
+	// would otherwise have lost to the cleanup race. Read it before waiting,
+	// so a Start that clears it after the run dies cannot turn it into a
+	// false nil.
+	err, hasErr := s.terminalErrors.Get(id)
+	// Invariant 7 (#3087): the entry is deleted before the run is done. Do not
+	// report the pipeline stopped while any of its goroutines still runs.
+	if hasLast {
+		<-last.Dead()
+	}
+	if hasErr {
 		return err
 	}
 	return nil
@@ -2435,6 +2464,7 @@ func (s *Service) publishRunningPipeline(id string, rp *runnablePipeline) *pendi
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	s.runningPipelines.Set(id, rp)
+	s.lastRun.Set(id, rp.t)
 	return s.consumeReservationLocked(rp)
 }
 

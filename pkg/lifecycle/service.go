@@ -105,6 +105,15 @@ type Service struct {
 	// again. See docs/design-documents/20260706-forceful-stop-test-determinism.md.
 	terminalErrors *csync.Map[string, error]
 
+	// lastRun holds, per pipeline ID, the tomb of the run most recently
+	// published to runningPipelines. It outlives the runningPipelines entry:
+	// a run deletes that entry from its cleanup goroutine before it is done
+	// (OnFailure handlers run after it, and every node goroutine logs "node
+	// stopped" after nodesWg.Done()), so WaitPipeline waits for this tomb to
+	// die rather than trusting the missing entry (#3087). Written under
+	// publishMu, next to the runningPipelines entry.
+	lastRun *csync.Map[string, *tomb.Tomb]
+
 	// runs counts live runs and holds the shutdown flag (#2901). StopAll
 	// begins the shutdown; from then on Start and recovery restarts are
 	// refused, and Wait does not return while any run is live. See
@@ -183,6 +192,7 @@ func NewService(
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
 		terminalErrors:   csync.NewMap[string, error](),
+		lastRun:          csync.NewMap[string, *tomb.Tomb](),
 		starting:         make(map[string]*reservation),
 	}
 }
@@ -744,12 +754,15 @@ func (s *Service) waitInternal() error {
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped, and
-// returns the pipeline's terminal error (nil on a graceful stop).
+// returns the pipeline's terminal error (nil on a graceful stop). "Stopped"
+// means every goroutine of the run has returned: its node goroutines and its
+// cleanup goroutine, including the OnFailure handlers it calls.
 //
 // It is safe to call before, during, or after the pipeline's own cleanup: while
 // the pipeline is running it waits on the tomb; if the pipeline has already
-// stopped and removed itself from runningPipelines, it returns the recorded
-// terminal error instead of a false nil. Returns nil for an ID that never ran.
+// removed itself from runningPipelines, it still waits for that run's tomb to
+// die (#3087) and returns the recorded terminal error instead of a false nil.
+// Returns nil for an ID that never ran.
 func (s *Service) WaitPipeline(id string) error {
 	// A run that is still being built is waited for: once its reservation is
 	// consumed (published) or released (start failed), the lookups below
@@ -761,15 +774,31 @@ func (s *Service) WaitPipeline(id string) error {
 		<-res.done
 	}
 
+	// Both lookups under publishMu, which every publication holds while it
+	// sets the two entries: if the run is gone from runningPipelines, last is
+	// that run's tomb, not the tomb of a run a concurrent Start published
+	// after the lookup.
+	s.publishMu.Lock()
 	p, ok := s.runningPipelines.Get(id)
+	last, hasLast := s.lastRun.Get(id)
+	s.publishMu.Unlock()
 	if ok && p.t != nil {
 		return p.t.Wait()
 	}
-	// The pipeline already cleaned itself up (or never started under this ID).
-	// terminalErrors is written before the runningPipelines entry is deleted, so
-	// if the pipeline ran and stopped, its terminal error is here — recovering
-	// the result the lookup above would otherwise have lost to the cleanup race.
-	if err, ok := s.terminalErrors.Get(id); ok {
+	// The pipeline already removed itself from runningPipelines (or never
+	// started under this ID). terminalErrors is written before the
+	// runningPipelines entry is deleted, so if the pipeline ran and stopped,
+	// its terminal error is here — recovering the result the lookup above
+	// would otherwise have lost to the cleanup race. Read it before waiting,
+	// so a Start that clears it after the run dies cannot turn it into a
+	// false nil.
+	err, hasErr := s.terminalErrors.Get(id)
+	// Invariant 7 (#3087): the entry is deleted before the run is done. Do not
+	// report the pipeline stopped while any of its goroutines still runs.
+	if hasLast {
+		<-last.Dead()
+	}
+	if hasErr {
 		return err
 	}
 	return nil
@@ -1616,6 +1645,7 @@ func (s *Service) publishRunningPipeline(rp *runnablePipeline) {
 
 	s.publishMu.Lock()
 	s.runningPipelines.Set(rp.pipeline.ID, rp)
+	s.lastRun.Set(rp.pipeline.ID, rp.t)
 	// The reservation becomes this entry in the same critical section, so a
 	// concurrent Start sees one or the other, never neither (invariant 2).
 	pending := s.consumeReservationLocked(rp)
