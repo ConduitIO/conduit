@@ -29,15 +29,78 @@ Families: `debezium-postgres`, `debezium-mysql`, `jdbc-source`, `jdbc-sink`,
 ## Running
 
 ```sh
-go test ./tests/migrate/...
+go test ./tests/migrate/...                                   # corpus checks; runner checks pending
+go build -o /tmp/conduit ./cmd/conduit
+CONDUIT_BIN=/tmp/conduit go test -v ./tests/migrate/...       # the full harness
+CONDUIT_BIN=/tmp/conduit go test ./tests/migrate/ -run TestMigrate_CLI -update   # rewrite goldens
 ```
 
-These tests are hermetic and run in the normal `test` job. They check the
-corpus itself: every manifest parses strictly, every input parses, every key a
+Without `CONDUIT_BIN` (the normal `test` job) the tests check the corpus
+itself: every manifest parses strictly, every input parses, every key a
 manifest names is in its input, scrub-v1 passes, every cited repository is in
-`ATTRIBUTION.md` with the declared license, and every emitted plugin has a
-certification entry. Set `MIGRATE_HARNESS_RELEASE=1` for the release-gate form
-of the certification check, which requires `tier: certified`.
+`ATTRIBUTION.md` with the declared license, and every declared plugin has a
+certification entry. `TestMigrate_InProcess` also runs the command, inside
+the test binary through the same `cmd/conduit/root/migrate` code, for every
+case whose rule data exists: the report contract and completeness, the case's
+expectations, leak checks, the goldens and determinism. It needs no binary,
+so a rule change that breaks a golden fails the PR that makes it
+(`go test ./tests/migrate/ -run TestMigrate_InProcess -update` rewrites the
+goldens the same way). The binary-only checks (`pipelines validate`, the
+second working directory, MCP parity) stay pending.
+
+With `CONDUIT_BIN`, `TestMigrate_CLI` runs each case through
+`conduit migrate kafka-connect --json --out <tmp>` with a fixed environment
+and checks, in order:
+
+1. the `--json` envelope against `cmd/conduit/cecdysis/testdata/envelope.schema.json`;
+2. the result against `pkg/kcmigrate/schema/report.v1.schema.json`;
+3. the report contract: `summary` equals the entries, `ok` and the exit code
+   follow the blocking entries and notes, `reason`/`fix`/`code` are present
+   where required, a blocking connector is written `stopped`, secrets carry
+   `target.env`, `report.json` equals the `--json` result;
+4. never silently drop: per input file, the report entries are the input keys
+   (as counted by the harness's own parsers) in input order at the same line or
+   pointer; a rejected input must be refused with `expect.error` and write no
+   pipeline; an unexpected `kc.key_unknown` fails;
+5. the case's `expect`;
+6. no `PLACEHOLDER_SECRET_` canary and no host path in stdout, stderr or any file;
+7. determinism: a second run from another working directory with absolute
+   input paths is byte-identical;
+8. the goldens in `expected/` (rule 1 normalization only);
+9. `conduit pipelines validate --json` on the generated pipelines;
+10. after all cases, rule 4 over the plugins the pipelines actually reference
+    (pending until a ready case declares an emitted plugin).
+
+`TestMigrate_MCPParity` runs each case through the `kc_migrate` tool of
+`conduit mcp` and requires the same `ok`, `summary`, `result`, `error` and
+file bytes as the CLI. `TestValidator_Smoke` proves step 9 can pass and fail.
+
+Pending is never passing. A check whose surface does not exist yet (no
+`migrate kafka-connect`, no `kc_migrate`, no report schema) is skipped with
+`PENDING:` and counted in the job summary. It becomes a failure when:
+
+- `CONDUIT_BIN` is set and the rule data in `pkg/kcmigrate/rules/data` covers
+  the case: its family's class file, the shared file for an unsupported-class
+  case, the worker file for a `--worker` case. Families without a rule file
+  stay pending, so the command landing with every class unsupported changes
+  nothing, and each family's rule-file PR turns its own cases on. That PR must
+  carry the goldens for those cases (`-update`), or the harness fails on
+  `expected/ is missing`;
+- for parity, additionally once a top-level file of `cmd/conduit/internal/mcp`
+  registers `kc_migrate`;
+- `MIGRATE_HARNESS_REQUIRE_CLI=1` / `MIGRATE_HARNESS_REQUIRE_MCP=1`: every case,
+  ready or not;
+- `MIGRATE_HARNESS_RELEASE=1`, the release gate, which also requires
+  `tier: certified` for every emitted plugin.
+
+CI: `.github/workflows/migrate-harness.yml`, on every PR (gated inside the job
+by a fail-closed change detector), on push to `main` and nightly. Not yet a
+required check.
+
+Expectations describe the v0.21 target. A case whose rows depend on a lane
+that has not merged (the `debezium.*` settings of lane #3032, the mirror
+settings of design #3038) fails until that lane lands, and the failure names the row. That is the
+release bar working, not a flaky case.
 
 ## Adding a case
 

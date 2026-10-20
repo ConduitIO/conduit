@@ -31,6 +31,11 @@ import (
 // withTempConfigFile.
 type ConfigArgs struct {
 	Config string `json:"config" jsonschema:"the pipeline configuration YAML content to check"`
+	// ArchV2 runs the arch-v2 check: a destination or dead-letter-queue with
+	// sdk.batch.size above 1 is reported with
+	// pipeline.archv2_destination_batching_unsupported, matching the runtime
+	// engine's refusal at start.
+	ArchV2 bool `json:"arch_v2,omitempty" jsonschema:"report a destination or dead-letter-queue with sdk.batch.size above 1 as unsupported under architecture v2"`
 }
 
 // validate implements the validate tool: offline, static verification of a
@@ -38,7 +43,7 @@ type ConfigArgs struct {
 // `conduit pipelines validate` (cmd/conduit/internal/validate.Run).
 func (s *server) validate(ctx context.Context, _ *sdkmcp.CallToolRequest, in ConfigArgs) (*sdkmcp.CallToolResult, Result[validate.Result], error) {
 	report, err := withTempConfigFile(in.Config, func(path string) (validate.Report, error) {
-		return validate.Run(ctx, path)
+		return validate.RunWithOptions(ctx, path, validate.Options{ArchV2: in.ArchV2})
 	})
 	if err != nil {
 		return toolErr[validate.Result](wrapUnresolvable(err))
@@ -50,7 +55,7 @@ func (s *server) validate(ctx context.Context, _ *sdkmcp.CallToolRequest, in Con
 // parser's advisory warnings. Same engine as `conduit pipelines lint`.
 func (s *server) lint(ctx context.Context, _ *sdkmcp.CallToolRequest, in ConfigArgs) (*sdkmcp.CallToolResult, Result[validate.Result], error) {
 	report, err := withTempConfigFile(in.Config, func(path string) (validate.Report, error) {
-		return validate.RunWithOptions(ctx, path, validate.Options{Warnings: true})
+		return validate.RunWithOptions(ctx, path, validate.Options{Warnings: true, ArchV2: in.ArchV2})
 	})
 	if err != nil {
 		return toolErr[validate.Result](wrapUnresolvable(err))
@@ -68,6 +73,7 @@ func (s *server) dryRun(ctx context.Context, _ *sdkmcp.CallToolRequest, in Confi
 			Enriched:       true,
 			ResolvePlugins: true,
 			BuiltinPlugins: builtinPluginSet(),
+			ArchV2:         in.ArchV2,
 		})
 	})
 	if err != nil {

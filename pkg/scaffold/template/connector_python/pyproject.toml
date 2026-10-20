@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "conduit-connector-connectorname"
+version = "0.1.0"
+description = "A Conduit connector scaffolded by `conduit connector new --lang python`."
+requires-python = ">=3.11"
+dependencies = [
+    # The merged `conduit` distribution (import package `conduit`, exposing
+    # `conduit.connector` and `conduit.client`). Bump once the distribution is
+    # published; the scaffold imports `conduit.connector`.
+    "conduitio>=0.1.0.dev0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Put the project root on sys.path so `tests/test_acceptance.py` can
+# `from main import ...` (the connector's entry module lives at the root).
+pythonpath = ["."]

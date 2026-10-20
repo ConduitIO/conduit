@@ -19,15 +19,16 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -54,9 +55,16 @@ type blueprint struct {
 	dispenserFactory dispenserFactory
 }
 
-type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger, policy hostpolicy.Policy) connector.Dispenser
 
-func newDispenserFactory(conn sdk.Connector) dispenserFactory {
+// newDispenserFactory returns a factory of dispensers for conn. service is the
+// runtime's connector schema service; a nil service leaves the plugin without
+// a schema scope (only used to read the specification).
+func newDispenserFactory(conn sdk.Connector, service *connutils.SchemaService) dispenserFactory {
+	var scoped pconnutils.SchemaService
+	if service != nil {
+		scoped = service // avoid a non-nil interface holding a nil pointer
+	}
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -64,8 +72,8 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser {
-		return NewDispenser(
+	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger, policy hostpolicy.Policy) connector.Dispenser {
+		d := NewDispenser(
 			name,
 			logger,
 			func() pconnector.SpecifierPlugin {
@@ -78,6 +86,9 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg, conn.NewSpecification().DestinationParams)
 			},
 		)
+		d.schemaService = scoped
+		d.policy = policy
+		return d
 	}
 }
 
@@ -89,17 +100,26 @@ type Registry struct {
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
 	service *connutils.SchemaService
+	// ambient is the operator's ambient-credentials policy; the zero value
+	// denies. Set once at construction, read-only afterwards.
+	ambient hostpolicy.Policy
 }
 
-func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService, opts ...RegistryOption) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
-	// The built-in plugins use Conduit's own schema service
-	schema.Service = service
+	// Built-in connectors resolve schemas through the connector SDK's
+	// package-level service. It is installed once per process as a router
+	// that answers each call from the schema service of the runtime the
+	// calling connector belongs to (see schema_scope.go, issue #3088).
+	installScopedSchemaService()
 
 	r := &Registry{
 		logger:     logger,
 		connectors: connectors,
 		service:    service,
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	return r
@@ -120,7 +140,7 @@ func (r *Registry) Init(ctx context.Context) {
 func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.connectors))
 	for moduleName, conn := range r.connectors {
-		factory := newDispenserFactory(conn)
+		factory := newDispenserFactory(conn, r.service)
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
@@ -155,7 +175,7 @@ func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string
 }
 
 func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
-	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{})
+	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{}, hostpolicy.Policy{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
@@ -217,7 +237,9 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		return nil, err
 	}
 
-	return b.dispenserFactory(fullName, cfg, logger), nil
+	// Invariant (ambient credentials): the policy is bound here, by the engine,
+	// to this connector instance; nothing in cfg or the pipeline config feeds it.
+	return b.dispenserFactory(fullName, cfg, logger, r.policyFor(fullName.PluginName(), cfg.ConnectorID)), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

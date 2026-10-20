@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/hostpolicy"
+
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
@@ -112,7 +114,7 @@ func TestSourcePluginAdapter_DoesNotLeakSecrets(t *testing.T) {
 			is := is.New(t)
 			var buf bytes.Buffer
 			logger := log.New(zerolog.New(&buf).Level(zerolog.DebugLevel))
-			adapter := newSourcePluginAdapter(mockSource, logger)
+			adapter := newSourcePluginAdapter(mockSource, logger, hostpolicy.Policy{})
 
 			err := tc.call(adapter)
 			is.NoErr(err)
@@ -174,7 +176,7 @@ func TestDestinationPluginAdapter_DoesNotLeakSecrets(t *testing.T) {
 			is := is.New(t)
 			var buf bytes.Buffer
 			logger := log.New(zerolog.New(&buf).Level(zerolog.DebugLevel))
-			adapter := newDestinationPluginAdapter(mockDestination, logger)
+			adapter := newDestinationPluginAdapter(mockDestination, logger, hostpolicy.Policy{})
 
 			err := tc.call(adapter)
 			is.NoErr(err)

@@ -5,7 +5,37 @@ on:
     branches: [ main, 'release/**' ]
   pull_request:
 
+env:
+  # Resolve ConduitIO modules directly from GitHub instead of waiting for
+  # proxy.golang.org to index a freshly tagged connector (10-30 min of
+  # "unknown revision" failures). Scoped to ConduitIO only; third-party deps
+  # still use the proxy and checksum DB.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
 jobs:
+  check:
+    # Fast, Docker-free hygiene gate that fails a PR on exactly the drift that
+    # keeps recurring in the merge queue: stale llms.txt after a connector bump
+    # (validate-generated-files), "go: updates to go.mod needed" (go mod tidy),
+    # gofumpt formatting (golangci-lint), and markdownlint MD049/MD044. It runs
+    # `make check`, which is idempotent, so it reports a definitive pass/fail
+    # on every PR (always-report, not path-filtered, so it can become a
+    # required context later). It finishes in a couple of minutes, well before
+    # the `test` job, giving early signal.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Check hygiene (go mod tidy, generate, gofumpt, markdownlint)
+        run: make check
+
   test:
     runs-on: ubuntu-latest
     steps:

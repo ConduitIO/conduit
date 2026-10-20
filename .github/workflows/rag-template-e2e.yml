@@ -44,6 +44,10 @@ on:
 env:
   PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || 'main' }}
   PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'main' }}
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
 
 jobs:
   rag-template-e2e:

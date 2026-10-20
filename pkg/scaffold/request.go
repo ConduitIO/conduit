@@ -32,22 +32,25 @@ const (
 	KindProcessor = template.KindProcessor
 )
 
-// Language selects the target language for the scaffold. Go is the only
-// value that produces a scaffold today — see doc.go and the design doc's
-// feasibility verdict for why Python is a gated error rather than a
-// half-implemented code path.
+// Language selects the target language for the scaffold. Go produces both
+// connector and processor scaffolds; Python produces connector scaffolds only
+// (see validate and doc.go).
 type Language string
 
-// LanguageGo is the only supported Language.
-const LanguageGo Language = "go"
+const (
+	// LanguageGo is the Go language.
+	LanguageGo Language = "go"
+	// LanguagePython is the Python language, available for connectors only.
+	LanguagePython Language = "python"
+)
 
 // Request is the input to Generate.
 type Request struct {
 	// Kind selects connector or processor.
 	Kind Kind
-	// Language is the target language flag (--lang). Only LanguageGo
-	// produces a scaffold; any other non-empty value is a gated error (see
-	// validate).
+	// Language is the target language flag (--lang). LanguageGo and
+	// LanguagePython (connectors only) produce a scaffold; any other value
+	// is a gated error (see validate).
 	Language Language
 	// Name is the connector/processor's resource name (the positional CLI
 	// arg, e.g. "s3" for conduit-connector-s3). It becomes the Go package
@@ -131,6 +134,13 @@ type Result struct {
 // constraint.
 var namePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// pythonNamePattern enforces a valid Python distribution/project name. Unlike
+// Go (where Name becomes a package identifier), a Python connector's name only
+// appears in pyproject.toml's `name` field and Specification(name=...), so
+// hyphens are legal ("http-poll") — but it must still be a well-formed
+// distribution name (alphanumeric start/end, only [a-zA-Z0-9._-] inside).
+var pythonNamePattern = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$`)
+
 // modulePrefix returns the required "conduit-connector-"/"conduit-processor-"
 // module suffix prefix for kind.
 func modulePrefix(kind Kind) string {
@@ -145,34 +155,54 @@ func modulePrefix(kind Kind) string {
 // It does not touch the filesystem beyond checking whether Path already
 // exists (Request.Force) — no directory is created here.
 func validate(req Request) (Request, error) {
-	if req.Language != LanguageGo {
+	switch req.Language {
+	case LanguageGo:
+		if req.Name == "" {
+			return req, newErr(CodeInvalidModule, "a connector/processor name is required",
+				fmt.Sprintf("conduit %s new <name>, e.g. conduit %s new s3", string(req.Kind), string(req.Kind)),
+			)
+		}
+		if !namePattern.MatchString(req.Name) {
+			return req, newErr(CodeInvalidModule, fmt.Sprintf("name %q is not a valid Go identifier", req.Name),
+				"use letters, digits, and underscores only (it becomes the scaffolded Go package name), e.g. \"s3\" not \"google-cloud-storage\"",
+			)
+		}
+
+		if req.Module == "" {
+			return req, newErr(CodeInvalidModule, "--module is required",
+				fmt.Sprintf("--module github.com/<you>/%s%s", modulePrefix(req.Kind), req.Name),
+			)
+		}
+		wantSuffix := modulePrefix(req.Kind) + req.Name
+		if !moduleMatches(req.Module, wantSuffix) {
+			return req, newErr(CodeInvalidModule,
+				fmt.Sprintf("--module %q must match \"github.com/<owner>/%s\" for name %q", req.Module, wantSuffix, req.Name),
+				fmt.Sprintf("--module github.com/<you>/%s", wantSuffix),
+			)
+		}
+	case LanguagePython:
+		// Python connectors only today: there is no Python processor template,
+		// and the Python GA design scopes scaffolding to `connector new`.
+		if req.Kind != KindConnector {
+			return req, newErr(CodeUnsupportedLanguage, "--lang python is only available for connectors",
+				"use --lang go for processors, or scaffold a Python connector with `conduit connector new --lang python <name>`",
+			)
+		}
+		if req.Name == "" {
+			return req, newErr(CodeInvalidModule, "a connector name is required",
+				fmt.Sprintf("conduit %s new --lang python <name>, e.g. conduit %s new --lang python s3", string(req.Kind), string(req.Kind)),
+			)
+		}
+		if !pythonNamePattern.MatchString(req.Name) {
+			return req, newErr(CodeInvalidModule, fmt.Sprintf("name %q is not a valid Python distribution name", req.Name),
+				"use letters, digits, hyphens, underscores, and dots only (it becomes the scaffolded pyproject name), e.g. \"s3\" or \"http-poll\"",
+			)
+		}
+		// --module is a Go concept (the module path in go.mod); a Python
+		// scaffold has no module path, so req.Module is ignored for Python.
+	default:
 		return req, newErr(CodeUnsupportedLanguage, unsupportedLanguageMessage(req.Language),
-			"only --lang go is available today; see docs/design-documents/20260707-python-connector-sdk.md "+
-				"for the blocker on Python and track it there before filing a duplicate issue",
-		)
-	}
-
-	if req.Name == "" {
-		return req, newErr(CodeInvalidModule, "a connector/processor name is required",
-			fmt.Sprintf("conduit %s new <name>, e.g. conduit %s new s3", string(req.Kind), string(req.Kind)),
-		)
-	}
-	if !namePattern.MatchString(req.Name) {
-		return req, newErr(CodeInvalidModule, fmt.Sprintf("name %q is not a valid Go identifier", req.Name),
-			"use letters, digits, and underscores only (it becomes the scaffolded Go package name), e.g. \"s3\" not \"google-cloud-storage\"",
-		)
-	}
-
-	if req.Module == "" {
-		return req, newErr(CodeInvalidModule, "--module is required",
-			fmt.Sprintf("--module github.com/<you>/%s%s", modulePrefix(req.Kind), req.Name),
-		)
-	}
-	wantSuffix := modulePrefix(req.Kind) + req.Name
-	if !moduleMatches(req.Module, wantSuffix) {
-		return req, newErr(CodeInvalidModule,
-			fmt.Sprintf("--module %q must match \"github.com/<owner>/%s\" for name %q", req.Module, wantSuffix, req.Name),
-			fmt.Sprintf("--module github.com/<you>/%s", wantSuffix),
+			"only --lang go and --lang python (connectors) are available today",
 		)
 	}
 

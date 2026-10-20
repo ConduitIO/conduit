@@ -1,0 +1,229 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 12,
+    "translated": 10,
+    "approximated": 0,
+    "unsupported": 2,
+    "blocking": 3
+  },
+  "connectors": [
+    {
+      "name": "mm2-basicuserdata",
+      "class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+      "role": "source",
+      "pipeline": "pipelines/mm2-basicuserdata.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:kafka",
+        "destination": "builtin:kafka"
+      },
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/key.converter"
+          },
+          "reason": "Bytes pass through unchanged.",
+          "blocking": false
+        },
+        {
+          "key": "value.converter",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter"
+          },
+          "reason": "Bytes pass through unchanged.",
+          "blocking": false
+        },
+        {
+          "key": "header.converter",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/header.converter"
+          },
+          "reason": "Headers are not carried in this version (see the class note), so the header converter has nothing to convert.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.alias",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/source.cluster.alias"
+          },
+          "reason": "Used in the destination topic name (DefaultReplicationPolicy names it alias, separator, topic).",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.alias",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/target.cluster.alias"
+          },
+          "reason": "A metrics label.",
+          "blocking": false
+        },
+        {
+          "key": "source.cluster.bootstrap.servers",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/source.cluster.bootstrap.servers"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/servers"
+          },
+          "reason": "The pipeline reads the source cluster.",
+          "blocking": false
+        },
+        {
+          "key": "target.cluster.bootstrap.servers",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/target.cluster.bootstrap.servers"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/servers"
+          },
+          "reason": "Kafka Connect's producer writes the records to the worker's cluster; this fills the destination's servers when neither the worker file nor producer.override.bootstrap.servers sets them, and MirrorMaker requires the two to be the same cluster.",
+          "blocking": false
+        },
+        {
+          "key": "topics",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/topics"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/topics"
+          },
+          "reason": "A literal topic list.",
+          "blocking": false
+        },
+        {
+          "key": "replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/replication.factor"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "MirrorMaker creates remote topics with this replication factor; Conduit's Kafka destination creates topics with the broker's defaults.",
+          "fix": "Create the destination topics ahead of time with the replication factor you need.",
+          "blocking": false
+        },
+        {
+          "key": "offset-syncs.topic.replication.factor",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/offset-syncs.topic.replication.factor"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "Offset syncs are not written.",
+          "fix": "None needed.",
+          "blocking": false
+        },
+        {
+          "key": "sync.topic.acls.enabled",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/sync.topic.acls.enabled"
+          },
+          "reason": "ACLs are not synced, as in the pipeline.",
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Records keep their key, value and topic name (per the replication policy), but not their partition, headers or timestamp. This version does not write the Kafka mirror settings; the destination partitions by key and stamps the time of writing.",
+          "fix": "Keep this flow on MirrorMaker if consumers rely on partition numbers, headers or record timestamps, or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "mirror-source/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.offsets_not_migrated",
+          "reason": "MirrorMaker resumes every partition from the offsets Kafka Connect stored for it, and reads a partition with none from the beginning unless auto.offset.reset says otherwise. migrate does not carry the stored offsets over. The pipeline reads every partition from the beginning (readFromBeginning: true), so the records MirrorMaker already copied are copied again.",
+          "fix": "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
+          "blocking": true,
+          "rule": "mm2-offsets"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "refresh.topics.enabled is absent (true), so MirrorMaker discovers new topics; the pipeline reads a fixed topic list.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/refresh.topics.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "sync.topic.configs.enabled is absent (true), so MirrorMaker syncs topic configs to the destination; the pipeline does not.",
+          "fix": "Create the destination topics ahead of time with the source topics' configs, or set sync.topic.configs.enabled=false if they already match.",
+          "blocking": true,
+          "rule": "mirror-source/defaults/sync.topic.configs.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "emit.offset-syncs.enabled is absent (true), so MirrorMaker writes offset syncs for checkpointing; the pipeline does not, and consumer offsets cannot be translated for this flow.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/emit.offset-syncs.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "heartbeats.replication.enabled is absent (true), so MirrorMaker replicates heartbeat topics; the pipeline reads only the listed topics.",
+          "blocking": false,
+          "rule": "mirror-source/defaults/heartbeats.replication.enabled"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

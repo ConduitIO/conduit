@@ -30,10 +30,17 @@ import (
 	"github.com/conduitio/yaml/v3"
 )
 
+// FamilyCommon holds cases that test parsers, secrets, SMTs, converters
+// and unsupported classes rather than one connector family.
+const FamilyCommon = "common"
+
+// FamilyDebeziumPostgres is the Debezium Postgres family.
+const FamilyDebeziumPostgres = "debezium-postgres"
+
 // Families are the corpus families of the design, in its order.
 var Families = []string{
-	"debezium-postgres", "debezium-mysql", "jdbc-source", "jdbc-sink",
-	"s3-sink", "elasticsearch-sink", "kafka-mirror", "common",
+	FamilyDebeziumPostgres, "debezium-mysql", "jdbc-source", "jdbc-sink",
+	"s3-sink", "elasticsearch-sink", FamilyKafkaMirror, FamilyCommon,
 }
 
 // AllowedLicenses are the SPDX ids a corpus input may be taken under. All
@@ -41,6 +48,17 @@ var Families = []string{
 // Confluent Community License (the license of the Confluent connector
 // repositories themselves) is deliberately not on the list.
 var AllowedLicenses = []string{"Apache-2.0", "MIT", "MIT-0", "BSD-2-Clause", "BSD-3-Clause", "CC0-1.0"}
+
+// Command-line words the harness uses.
+const (
+	cmdMigrate      = "migrate"
+	cmdKafkaConnect = "kafka-connect"
+	flagJSON        = "--json"
+	flagWorker      = "--worker"
+	roleSource      = "source"
+	// KeyConnectorClass is the Kafka Connect key that names the class.
+	KeyConnectorClass = "connector.class"
+)
 
 // Status values of a report entry (base design, "Output: the compatibility report").
 const (
@@ -53,9 +71,9 @@ var (
 	caseIDRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	commitRe   = regexp.MustCompile(`/[0-9a-f]{40}/`)
 	codeRe     = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_-]+)+$`)
-	inputFlags = map[string]bool{"--worker": true}
+	inputFlags = map[string]bool{flagWorker: true}
 	// runnerFlags are added by the runner; a case must not set them.
-	runnerFlags = []string{"--json", "--out", "--force", "--quiet", "--no-color"}
+	runnerFlags = []string{flagJSON, "--out", "--force", "--quiet", "--no-color"}
 )
 
 // Manifest is case.yaml. Fields beyond the design's sketch are additive and
@@ -137,7 +155,7 @@ type Run struct {
 
 // Case is one corpus case on disk.
 type Case struct {
-	// Dir is the case directory.
+	// Dir is the absolute case directory.
 	Dir string
 	// Rel is the case directory relative to the corpus root, slash separated
 	// (<family>/<id>).
@@ -163,7 +181,11 @@ func (c Case) Inputs() []string {
 func LoadCorpus(root string) ([]Case, []error) {
 	var cases []Case
 	var problems []error
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, []error{cerrors.Errorf("corpus root: %w", err)}
+	}
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -256,7 +278,7 @@ func validateManifest(c *Case) []string {
 	}
 
 	args := m.Command.Args
-	if len(args) < 3 || args[0] != "migrate" || args[1] != "kafka-connect" {
+	if len(args) < 3 || args[0] != cmdMigrate || args[1] != cmdKafkaConnect {
 		add("command.args must start with [migrate, kafka-connect] and name at least one input")
 	}
 	for i, a := range args {
@@ -323,7 +345,7 @@ func validateManifest(c *Case) []string {
 		}
 	}
 
-	if m.Family != "common" && len(m.Covers) == 0 && e.Error == "" {
+	if m.Family != FamilyCommon && len(m.Covers) == 0 && e.Error == "" {
 		add("covers must name the rule keys this case exercises (rule 3)")
 	}
 	for _, cv := range m.Covers {
@@ -332,7 +354,7 @@ func validateManifest(c *Case) []string {
 		}
 	}
 	for _, em := range m.Emits {
-		if em.Plugin == "" || (em.Role != "source" && em.Role != "destination") {
+		if em.Plugin == "" || (em.Role != roleSource && em.Role != "destination") {
 			add("emits entry %+v needs a plugin and role source|destination", em)
 		}
 	}

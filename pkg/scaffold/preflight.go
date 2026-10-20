@@ -31,26 +31,37 @@ import (
 // raises its own go.mod floor.
 const minGoVersion = "1.25.0"
 
-// preflightChecks returns this command's toolchain preflight: the checks
-// the design doc calls out by name (Go on PATH at the minimum version, git
-// on PATH, GOPATH/bin writable), composed from the shared pkg/conduit/check
-// engine's generic constructors rather than hand-rolled — per the ADR
-// resolving the doctor/scaffold check-engine boundary, scaffold supplies its
-// own check *set*, reusing check's engine and generic constructors, not a
-// forked copy of doctor.
+// minPythonVersion is the minimum CPython version a scaffolded Python
+// connector supports — matches the `requires-python = ">=3.11"` floor in the
+// Python connector template's pyproject.toml and the merged distribution's
+// README support window.
+const minPythonVersion = "3.11.0"
+
+// preflightChecks returns this command's toolchain preflight, per language:
+// the checks the design doc calls out by name, composed from the shared
+// pkg/conduit/check engine's generic constructors rather than hand-rolled —
+// per the ADR resolving the doctor/scaffold check-engine boundary, scaffold
+// supplies its own check *set*, reusing check's engine and generic
+// constructors, not a forked copy of doctor.
 //
 // docker is deliberately not checked here: the design doc lists it as
 // warn-only for a future acceptance-test workflow this command doesn't run
 // yet (docker compose integration tests are a `make test-integration`
 // concern for the scaffolded repo itself, not something `connector new`
 // needs to have working before it can write files).
-func preflightChecks() []check.Check {
-	gopathBin := filepath.Join(goPath(), "bin")
-	return []check.Check{
-		check.BinaryOnPath("go", minGoVersion),
-		check.BinaryOnPath("git", ""),
-		check.DirWritable(gopathBin, ""),
+func preflightChecks(lang Language) []check.Check {
+	// git is shared by every scaffold (GitInit).
+	checks := []check.Check{check.BinaryOnPath("git", "")}
+	if lang == LanguagePython {
+		// A Python scaffold needs python3 for the verified syntax check
+		// (steps.BuildPython); it has no GOPATH/bin code-gen tool to install.
+		return append(checks, check.BinaryOnPath("python3", minPythonVersion))
 	}
+	gopathBin := filepath.Join(goPath(), "bin")
+	return append(checks,
+		check.BinaryOnPath("go", minGoVersion),
+		check.DirWritable(gopathBin, ""),
+	)
 }
 
 // goPath returns the effective GOPATH the same way the go tool itself
@@ -74,8 +85,8 @@ func goPath() string {
 // doctor, where an unwritable configured directory is a config problem —
 // that default is wrong for scaffold's specific "your Go install is broken"
 // case, so this function overrides it rather than trusting Report.ExitCode).
-func preflight(ctx context.Context) (check.Report, error) {
-	report := check.Run(ctx, preflightChecks())
+func preflight(ctx context.Context, lang Language) (check.Report, error) {
+	report := check.Run(ctx, preflightChecks(lang))
 	if report.Summary.Failed == 0 {
 		return report, nil
 	}

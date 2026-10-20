@@ -118,7 +118,7 @@
         "key": null,
         "payload": {
           "before": null,
-          "after": "\u0000\u0000\u0000\u0000\u0001ffffff\u0002@\u0002\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0001@\u0001\u0006bar\u0000\u0002"
+          "after": "\u0000\u0000\u0000\u0000\u0001ffffff\u0002@\u0002\u0003\u0026\u0006bar\u0002\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0001@\u0006foo\u0000\u0001\u0000\u0006bar\u0000\u0002"
         }
       }
     },

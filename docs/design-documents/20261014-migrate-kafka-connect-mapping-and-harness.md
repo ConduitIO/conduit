@@ -159,6 +159,21 @@ key can never be `kc.key_unknown`). A scheduled job (lane-plan PR 20) fetches th
 pages named in each snapshot header, extracts the key tables, diffs them against the snapshot and fails the nightly
 when they differ, with the added, removed and changed-default keys in the failure message.
 
+As built (added 2026-10-15): the nightly job is `.github/workflows/kcmigrate-drift.yml`, running
+`cmd/conduit/internal/kcdrift`. A snapshot opts in with a `check` section naming the generated pages
+(`kafka.apache.org/<major><minor>/generated/<page>.html`) and the page keys it leaves out, each with a reason (a
+regex, or another snapshot's keys). A snapshot key records `documented` when the page shows a different default
+than the effective one it keeps, `undocumented` when no page lists it, and `required` when the page shows no
+default at all (an empty cell, which is not the same as `null`), so a key that becomes required upstream is
+drift. Each snapshot is compared twice: with its pinned version's pages, where a difference means the snapshot is
+wrong (exit 3), and with the newest version that publishes them, where a difference is drift (exit 1). The
+release list (downloads.apache.org) is read too: a released version with no generated pages cannot be checked
+(exit 2, as is a page that cannot be read). Any of them fails the run and files one tracking issue, from a
+separate job that alone can write issues. A pull request that touches the job or a snapshot runs it too, with
+drift as a warning and the other codes failing. The offline parser and comparison tests
+run in the normal test job. Snapshots of non-Kafka upstreams (Debezium, Confluent) add their page format when
+their families land.
+
 Consequences, all enforced by tests:
 
 - The known-key set of a class is the key list of its file. `kc.key_unknown` (migrate) and
@@ -172,6 +187,11 @@ Consequences, all enforced by tests:
   gate (_Harness corpus_, rule 4). It is declared in data and cross-checked by a test against the plugins that
   `emit` kinds can actually produce.
 - Docs: the per-connector guide's mapping table is generated from the same files.
+- A class that produces no pipeline (MirrorMaker's checkpoint and heartbeat connectors) declares
+  `pipeline: none` and one `every` outcome, unsupported, which every key of the connector gets, shared keys
+  included; it has no `keys`, `defaults`, `emits` or `finish`. Its class notes still apply. Its corpus cases
+  belong to the family whose connectors it runs with (`harness.FamilyAuxClasses`). It has no upstream key
+  snapshot: no key changes its outcome, so key drift cannot change the report (added 2026-10-15).
 
 ### Mapping conventions
 
@@ -314,16 +334,52 @@ Connector config keys common to all classes, and worker properties (`--worker`).
 | `producer.override.acks`, `.compression.type`, `.client.id`, `.security.protocol`, `.sasl.*` | T | destination `acks`, `compression`, `clientID`, TLS and SASL settings | `acks` map: Kafka `all` and `-1` to `all`, `1` to `one`, `0` to `none`. Security keys follow _Worker and Kafka client settings_ |
 | `consumer.override.auto.offset.reset` | T | source `readFromBeginning` (`earliest` true, `latest` false) | |
 | `consumer.override.group.id`, `.client.id`, `.security.protocol`, `.sasl.*` | T | source `groupID`, `clientID`, TLS and SASL | |
+| `producer.override.bootstrap.servers`, `consumer.override.bootstrap.servers` | T | destination / source `servers` | The connector's clients talk to other brokers than the worker's; never tuning (corrected 2026-10-15) |
 | any other `producer.override.*`, `consumer.override.*`, `admin.override.*` | U | none | Tuning (`linger.ms`, `batch.size`, `max.request.size`, `fetch.*`, `max.poll.records`). Non-blocking; `kc.lint.client_override_policy` and `kc.lint.kip1188_override_risk` apply |
 | Worker: `bootstrap.servers` | T | `servers` | |
 | Worker: `group.id`, `config.storage.*`, `offset.storage.*`, `status.storage.*`, `plugin.path`, `plugin.discovery`, `listeners`, `admin.listeners`, `rest.*`, `access.control.*`, `offset.flush.*`, `task.shutdown.graceful.timeout.ms`, `heartbeat.interval.ms`, `rebalance.timeout.ms`, `session.timeout.ms`, `worker.*`, `scheduled.rebalance.max.delay.ms`, `connections.max.idle.ms`, `request.timeout.ms`, `retry.backoff.*`, `reconnect.backoff.*`, `metadata.*`, `receive.buffer.bytes`, `send.buffer.bytes`, `client.dns.lookup`, `metrics.*`, `metric.reporters`, `topic.tracking.*`, `response.http.headers.config`, `rest.extension.classes` | T | none | No worker cluster in Conduit; reason recorded. `offset.storage.file.filename` (standalone): U with fix "export offsets through the REST API" |
 | Worker: `key.converter`, `value.converter`, `header.converter` | T | inherited by connectors that set none | |
 | Worker: `config.providers`, `config.providers.<name>.*` | T | none | Handled by _Secrets_: references pass through by name |
 | Worker: `connector.client.config.override.policy`, `connector.client.config.override.allowlist` | T | none | Read by the lint rules only |
-| Worker: `security.protocol`, `sasl.mechanism`, `sasl.jaas.config`, `ssl.truststore.*`/`ssl.keystore.*` | per _Worker and Kafka client settings_ | | JKS and PKCS12 stores: U!, fix "export PEM" |
-| Worker: `ssl.*` other, `sasl.*` other | U | none | Cipher suites, protocols, endpoint identification. U! when `ssl.endpoint.identification.algorithm` is empty (verification disabled) |
-| Worker: `producer.*`, `consumer.*`, `admin.*` | T for `acks`, `compression.type`, `client.id`; U otherwise | destination `acks`, `compression`, `clientID` | |
+| Worker: `security.protocol`, `sasl.*`, `ssl.*` (top level) | T | none | No-op: they configure the worker's own clients (internal topics, group membership) and never reach a connector's producer or consumer (corrected 2026-10-15, see the note below the table) |
+| Worker: `producer.bootstrap.servers`, `consumer.bootstrap.servers` | T | destination / source `servers` | Override the worker's `bootstrap.servers` for every connector's producer or consumer |
+| Worker: `producer.`/`consumer.` + `security.protocol`, `sasl.mechanism`, `sasl.jaas.config`, `client.id`; `producer.acks`, `producer.compression.type` | T | destination / source TLS, SASL, `clientID`, `acks`, `compression` | The middle layer of a connector's client config; a connector override wins over it |
+| Worker: `producer.ssl.*`, `consumer.ssl.*` | U! | none | Fix "export PEM and set `caCert`, `clientCert`, `clientKey`" |
+| Worker: `producer.*`, `consumer.*`, `admin.*` other | U | none | Tuning |
 | Worker: `exactly.once.source.support` | U! when `enabled` or `preparing`; T when `disabled` | none | |
+
+**How Kafka Connect layers a connector's client config (corrected 2026-10-15).** Apache Kafka 4.2.0,
+`connect/runtime/src/main/java/org/apache/kafka/connect/runtime/Worker.java`: `baseProducerConfigs` (lines
+837-874) and `baseConsumerConfigs` (lines 911-942) start from the worker's `bootstrap.servers` and Connect's own
+client defaults, then add `config.originalsWithPrefix("producer.")` (line 862) or `("consumer.")` (line 931),
+then the connector's `producer.override.`/`consumer.override.` keys. The worker's top-level `security.protocol`,
+`sasl.*` and `ssl.*` are not in that chain; they configure only the worker's own clients. The first version of
+this table mapped them onto every pipeline, which would have enabled TLS or SASL on pipelines whose Kafka Connect
+clients ran without them, and treated `producer.bootstrap.servers` and `producer.override.bootstrap.servers` as
+tuning, which would have written to the wrong cluster. Found in review of #3080. Connect's own client defaults
+(`acks=all`, idempotence off, `max.in.flight.requests.per.connection=1`, `auto.offset.reset=earliest`, group
+`connect-<name>`) are absent-key defaults of this layer and are tracked separately (they must be modelled before
+a sink family ships).
+
+**Which pipeline connector the worker reaches (corrected 2026-10-15).** The chain above builds Kafka Connect's own
+client of a connector: the producer of a source connector, the consumer of a sink. In the pipeline that is the
+`builtin:kafka` destination of a source, or the `builtin:kafka` source of a sink, and only that connector gets
+worker keys. A pipeline's other Kafka connector is the connector's own client (MirrorMaker's consumer of the
+source cluster): no worker key reaches it, not `bootstrap.servers` and not `consumer.*`, and a missing source
+cluster is a blocking `kc.setting_required`, never the worker's cluster. Ownership of a setting is decided by
+origin (worker or connector), key and layer, so a worker key and a connector key of the same name are different
+keys. Rule files name layers (`client`, `cluster-client`, `override`, `fallback`) instead of numbers, and
+`override` is above every other connector layer. A `fallback` cluster (MirrorMaker's `target.cluster.*`) is used
+as a whole or not at all: when any other layer names the side's brokers, none of its keys is written and each
+entry says so, so two clusters' settings never mix. Entries a higher layer replaced are marked after every layer
+is applied, and a variable whose setting was replaced is not listed in `secrets.env.template`. A blocked key still
+owns every setting its rule could write: Kafka Connect would use its value, so the setting stays unset (a required
+one gets its variable) and no lower layer fills it, also under `--accept-gaps`. An unset claimed setting runs with
+Conduit's default, not with the value Kafka Connect would have used, so a rule must never treat unset as neutral:
+the blocking entry is what keeps such a pipeline stopped. A fallback cluster that a higher layer overrides in part
+(possible only with a worker file that lacks `bootstrap.servers`) says on its entries that it is not used as a
+whole. `kc.secret_plaintext` follows the input, not the pipeline: a literal secret in a key that ends up unused is
+still noted, on the worker file's entry when it is in the worker file. Found in review of #3117 and #3118.
 
 #### Debezium PostgreSQL
 
@@ -588,27 +644,60 @@ group; the target selector is owned by #3007. Until the destination's spec lists
 fails and the connector carries the blocking note `kc.output_shape_differs` ("partition numbers, headers and
 timestamps are not preserved"). `MirrorCheckpointConnector` produces no pipeline (offset translation has no
 equivalent in v0.21): every key `unsupported`, blocking, class-level `kc.connector_class_unsupported`.
-`MirrorHeartbeatConnector` produces no pipeline either, non-blocking. A dedicated-mode `mm2.properties` file
-(`clusters`, `A->B.*`) is not an input format in v1 (D4).
+`MirrorHeartbeatConnector` produces no pipeline either, non-blocking: it writes heartbeat records for
+monitoring and copies no data. Both are `pipeline: none` rule files (`mirror-checkpoint.yaml`,
+`mirror-heartbeat.yaml`). The heartbeat file adds a non-blocking class note (`kc.output_shape_differs`) that
+heartbeats stop: the heartbeats topic gets no new records, which breaks dashboards and MirrorClient lookups, and
+the migrated source pipeline does not copy heartbeats topics. A literal secret in either still carries
+`kc.secret_plaintext`. A dedicated-mode
+`mm2.properties` file (`clusters`, `A->B.*`) is not an input format in v1 (D4).
 
 | Upstream key | Status | Conduit | Notes |
 | --- | --- | --- | --- |
-| `source.cluster.alias` | T | destination `topic` template prefix | `DefaultReplicationPolicy`: `<alias><separator><topic>` |
+| `source.cluster.alias` | T | destination `topic` template prefix | `DefaultReplicationPolicy`: `<alias><separator><topic>`. Required, no default in 4.2 (`MirrorConnectorConfig.java` lines 270-273): absent is the blocking note `kc.key_required` and no prefix is written (corrected 2026-10-15; found by the upstream-drift check) |
 | `target.cluster.alias` | T | none | Metrics label |
 | `replication.policy.class` | Default T; `IdentityReplicationPolicy` T; else U! | destination `topic` template | |
 | `replication.policy.separator` | T | in the template | |
 | `replication.policy.internal.topic.separator.enabled`, `forwarding.admin.class`, `admin.timeout.ms`, `config.providers` | U | none | `forwarding.admin.class` non-default: U! |
-| `source.cluster.bootstrap.servers`, `target.cluster.bootstrap.servers` | T | source `servers`, destination `servers` | |
-| `source.cluster.<client key>`, `target.cluster.<client key>` (`security.protocol`, `sasl.*`, `ssl.*`) | per _Worker and Kafka client settings_ | source / destination TLS and SASL | JKS: U! |
-| `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list") |
+| `source.cluster.bootstrap.servers` | T | source `servers` | MirrorMaker's own consumer reads the source cluster (corrected 2026-10-15, note below). Absent (and no `consumer.`/`source.consumer.bootstrap.servers`): blocking `kc.setting_required`, never the worker's cluster |
+| `source.cluster.<client key>`, then `consumer.<client key>`, then `source.consumer.<client key>` (`bootstrap.servers`, `security.protocol`, `sasl.*`) | T | source `servers`, TLS and SASL | Merged in that order, later wins (`MirrorConnectorConfig.sourceConsumerConfig`). `ssl.*`: U! (PEM); other client keys: U. No worker key reaches this consumer |
+| `consumer.auto.offset.reset`, `source.consumer.auto.offset.reset` (same order) | `earliest`, `latest` T; else U! | source `readFromBeginning` | Absent: `readFromBeginning: true`, MirrorMaker's `earliest` (`MirrorConnectorConfig.java` line 184). `none` fails every partition, since no stored offsets are carried over |
+| `consumer.isolation.level`, `source.consumer.isolation.level` | `read_uncommitted` T; `read_committed` U! | none | The Kafka source reads uncommitted records |
+| `target.cluster.bootstrap.servers`, `target.cluster.<client key>` | T | destination `servers`, TLS and SASL, at the fallback layer | Used only when neither the worker file nor `producer.override.*` sets them: Kafka Connect's producer writes the records to the worker's cluster (corrected 2026-10-15, note below) |
+| `topics` | T for a literal list; U! for regex | source `topics` | Absent key means `.*`: blocking `kc.default_differs` ("every topic is mirrored by default; Conduit needs a list"). A listed topic that the default `topics.exclude` (`mm2.*\.internal`, `.*\.replica`, `__.*`) drops: U! |
 | `topics.exclude`, `topic.filter.class` (non-default) | U! | none | |
 | `refresh.topics.enabled`, `refresh.topics.interval.seconds` | U | none | New topics are not discovered. Absent means `true`: same status |
-| `enabled` | `false` T; `true` T | pipeline `status` | `false` writes the pipeline `stopped` |
-| `sync.topic.configs.enabled`, `sync.topic.configs.interval.seconds`, `config.properties.exclude`, `config.property.filter.class`, `sync.topic.acls.enabled`, `sync.topic.acls.interval.seconds` | U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time. Absent means `true`: same status |
+| `enabled` | `false` T; `true` T | pipeline `status` | `false` writes the pipeline `stopped`, also under `--accept-gaps`; the entry does not block (Kafka Connect runs no tasks for a disabled flow) |
+| `sync.topic.configs.enabled`, `sync.topic.acls.enabled` | `false` T; `true` U! | none | Topic configs and ACLs are not synced. Fix: create destination topics ahead of time. Absent means `true`: same status |
+| `sync.topic.configs.interval.seconds`, `sync.topic.acls.interval.seconds`, `config.properties.exclude`, `config.property.filter.class` | U | none | Matter only while syncing, which the rows above report |
 | `replication.factor` | U | none | |
 | `emit.offset-syncs.enabled`, `offset-syncs.topic.location`, `offset-syncs.topic.replication.factor`, `offset.lag.max`, `heartbeats.replication.enabled`, `consumer.poll.timeout.ms` | U | none | |
 | `groups`, `groups.exclude`, `group.filter.class`, `emit.checkpoints.enabled`, `emit.checkpoints.interval.seconds`, `sync.group.offsets.enabled`, `sync.group.offsets.interval.seconds`, `refresh.groups.*`, `checkpoints.topic.replication.factor` | U! | none | Consumer-group offset translation; `emit.checkpoints.enabled` absent means `true`: same status. The report says plainly that a migration relying on consumer failover between clusters must not move |
 | `emit.heartbeats.*`, `heartbeats.topic.replication.factor` | U | none | Heartbeat connector only |
+
+**Where MirrorMaker's records come from and go to (corrected 2026-10-15; the decision on this correction is pending
+DeVaris).** The first version of this table mapped `target.cluster.*` onto the destination. In connector form that
+is not what Kafka Connect does. Apache Kafka 4.2.0: `MirrorSourceTask` reads the source cluster with its own
+consumer, configured by `MirrorConnectorConfig.sourceConsumerConfig` (`connect/mirror/.../MirrorConnectorConfig.java`
+lines 171-186), which merges `source.cluster.*` (client keys only), then the connector's `consumer.*`, then
+`source.consumer.*`. The task's records are written by Kafka Connect's own producer, which
+`Worker.baseProducerConfigs` builds from the worker's `bootstrap.servers`, the worker's `producer.*` keys and the
+connector's `producer.override.*` (`connect/runtime/.../Worker.java` lines 837-874), so they go to the worker's
+cluster. `target.cluster.*` configures only MirrorMaker's own admin and offset-sync clients on the target
+(`targetAdminConfig` and `targetProducerConfig`, lines 188-206). A correct deployment has the worker's cluster and the
+target cluster be the same, so `target.cluster.*` is a good default for the destination when the run has no worker
+file, and the rules use it at a fallback layer below the worker and the overrides. Connect's
+`consumer.override.*` reaches only a source connector's offsets consumer, so it has no effect on MirrorMaker's data
+consumer and is unsupported, non-blocking, in the MirrorMaker rules (`consumer.override.ssl.*` included).
+
+**Where the pipeline starts (added 2026-10-15).** MirrorMaker resumes each partition from the offsets Kafka Connect
+stored for it, and reads a partition with none from the beginning. `migrate` does not carry those offsets over, so
+every MirrorMaker migration carries the blocking note `kc.offsets_not_migrated`, and the source is written
+`readFromBeginning: true` unless `auto.offset.reset` says otherwise. The note states the position actually written:
+`true` copies the records already mirrored again; `false` (from `latest`) and unset (a blocked `auto.offset.reset`
+owns the setting, so the Kafka source's default, the end, applies) skip the records written before the pipeline
+starts. Under `--accept-gaps` the report's
+`acceptedGaps` names the note. Found in review of #3118.
 
 #### Legacy and alias handling
 
@@ -701,7 +790,9 @@ by connector, with a "before you deploy" section (secrets, `kc.secret_stored_exp
 
 **Error codes.** New in this document, in addition to the base table: `kc.key_deprecated` (A), `kc.key_duplicate`
 (T, no-op), `kc.default_differs`, `kc.output_shape_differs`, `kc.delivery_semantics_differ`,
-`kc.setting_required` (notes), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
+`kc.setting_required` (notes), `kc.topic_name_unsupported` (note: a topic naming the destination's topic
+template cannot express), `kc.key_required` (note: a key the upstream connector requires is absent, so Kafka
+Connect would reject the config), `kc.target_capability_missing` (U!, from the `requires` gate), and the lint and
 diff codes below. All are registered through `conduiterr.Register`; the registry-completeness test in
 `pkg/conduit/exitcode` already fails a registered code with no exit bucket. Every code has a `fix` text. A table
 test fails if a code is emitted by a rule file but not registered, or registered but never emitted by any rule,

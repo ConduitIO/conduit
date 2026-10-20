@@ -1,0 +1,138 @@
+name: migrate harness
+
+# Migration harness for `conduit migrate kafka-connect` (#3010; corpus format
+# and runner rules in docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md).
+# Runs every case in tests/migrate/corpus through the real conduit binary and
+# checks that the generated pipelines validate, the report conforms to its
+# contract, no input key is silently dropped, no secret or host path leaks,
+# output is deterministic, the goldens match, and every emitted plugin has a
+# certification entry. Also runs the parsers' fuzz target briefly.
+#
+# Until the CLI lane (#3003) lands `migrate kafka-connect`, every check that
+# runs the command reports PENDING (skipped, counted in the job summary),
+# never passing. Pending ends per family, not all at once: a case becomes
+# required when the rule data in pkg/kcmigrate/rules/data covers it (its
+# family's class file; the shared file for unsupported-class cases; the
+# worker file for --worker cases). The command landing hidden with every
+# class unsupported (#3074) leaves every case pending; each family's
+# rule-file PR turns its cases on and must carry their goldens. MCP parity
+# becomes required for ready cases once the MCP adapter's source registers
+# kc_migrate (see tests/migrate/run_test.go, runEnv).
+#
+# NOT YET A REQUIRED CHECK. It is written to the always-report/fail-closed
+# contract (chaos.yml, bundle-e2e.yml) so that it can become one by adding
+# the context to main's branch protection, with no workflow change: the
+# trigger is not path-filtered, the single job always reports, and the
+# harness itself is gated inside the job by a change detector that runs the
+# suite on any ambiguity. An unrelated PR completes green in seconds.
+#
+# The release gate (Wave 3, #3002) is workflow_dispatch with release=true:
+# MIGRATE_HARNESS_RELEASE=1 makes every pending check a failure and requires
+# `tier: certified` for every emitted plugin.
+
+on:
+  push:
+    branches: [ main, 'release/**' ]
+  pull_request:
+  schedule:
+    # Nightly, offset from chaos.yml (4:45) and govulncheck.yml (5:15).
+    - cron: '35 5 * * *'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Run as the v0.21 release gate (no pending checks, certified tiers only)'
+        type: boolean
+        required: false
+        default: false
+
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
+permissions:
+  contents: read
+
+jobs:
+  migrate-harness:
+    name: migrate-harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so the detector can diff against the PR base ref.
+          fetch-depth: 0
+
+      - name: Detect migrate changes
+        id: detect
+        # schedule, push and workflow_dispatch always run. For pull_request,
+        # run when a surface the harness exercises changed, FAILING CLOSED:
+        # any inability to compute the diff runs the suite. The list is every
+        # tree that can change what `migrate kafka-connect` emits or how its
+        # output is validated: the translator and its rules, the commands,
+        # the MCP adapter, the CLI envelope, pipeline validation and
+        # provisioning, the built-in connector registry (plugin specs used by
+        # --resolve-plugins), the harness itself, and dependency bumps.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "reason=event $EVENT_NAME always runs" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "reason=base ref unavailable - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "reason=git diff failed - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/kcmigrate/|cmd/conduit/root/migrate/|cmd/conduit/root/kc/|cmd/conduit/internal/mcp/|cmd/conduit/root/mcp/|cmd/conduit/root/pipelines/|cmd/conduit/internal/validate/|cmd/conduit/cecdysis/|pkg/provisioning/|pkg/plugin/connector/builtin/|tests/migrate/|\.github/workflows/migrate-harness\.yml$)'; then
+            echo "reason=migrate surface changed" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reason=no migrate surface changed - skipping harness, check passes" >> "$GITHUB_OUTPUT"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate decision
+        env:
+          RUN: ${{ steps.detect.outputs.run }}
+          REASON: ${{ steps.detect.outputs.reason }}
+        run: |
+          echo "migrate harness run=$RUN ($REASON)"
+          echo "migrate harness run=$RUN ($REASON)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build conduit
+        if: steps.detect.outputs.run == 'true'
+        run: go build -o "$RUNNER_TEMP/conduit" ./cmd/conduit
+
+      - name: Run the harness (race detector)
+        if: steps.detect.outputs.run == 'true'
+        env:
+          RELEASE: ${{ github.event.inputs.release == 'true' && '1' || '' }}
+        run: |
+          set -euo pipefail
+          export CONDUIT_BIN="$RUNNER_TEMP/conduit"
+          export MIGRATE_HARNESS_SUMMARY="$GITHUB_STEP_SUMMARY"
+          export MIGRATE_HARNESS_RELEASE="$RELEASE"
+          go test -race -count=1 -v ./tests/migrate/...
+
+      - name: Fuzz the input parsers (short)
+        if: steps.detect.outputs.run == 'true'
+        run: go test -run '^$' -fuzz '^FuzzParseInput$' -fuzztime 30s ./tests/migrate/harness/

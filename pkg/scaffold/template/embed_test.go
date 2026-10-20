@@ -76,3 +76,26 @@ func TestFS_RootsAtTemplate(t *testing.T) {
 	assert.Contains(t, names, "go.mod.tmpl")
 	assert.Contains(t, names, "processor.go.tmpl")
 }
+
+// TestExtractPython_RewritePython asserts the Python connector snapshot
+// extracts (no .tmpl renaming, dotfiles included) and that RewritePython
+// substitutes the name placeholder in every file that carries it.
+func TestExtractPython_RewritePython(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, template.ExtractPython(dir))
+	require.NoError(t, template.RewritePython(dir, "widget"))
+
+	for _, want := range []string{"pyproject.toml", "main.py", "tests/test_acceptance.py", ".gitignore", "README.md"} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(want)))
+	}
+
+	mainPy, err := os.ReadFile(filepath.Join(dir, "main.py"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainPy), `Specification(name="widget"`)
+	assert.NotContains(t, string(mainPy), "connectorname")
+
+	pyproject, err := os.ReadFile(filepath.Join(dir, "pyproject.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pyproject), `name = "conduit-connector-widget"`)
+	assert.NotContains(t, string(pyproject), "connectorname")
+}

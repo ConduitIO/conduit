@@ -1,0 +1,22 @@
+{
+    "name": "mm2-hbc",
+    "connector.class": "org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+    "replication.policy.class":"com.amazonaws.kafka.samples.CustomMM2ReplicationPolicy",
+    "clusters": "msksource,mskdest",
+    "source.cluster.alias": "msksource",
+    "target.cluster.alias": "mskdest",
+    "target.cluster.bootstrap.servers": "b-1.target.internal.example:9096",
+    "source.cluster.bootstrap.servers": "b-1.source.internal.example:9096",
+    "source.cluster.security.protocol": "SASL_SSL",
+    "source.cluster.sasl.mechanism" : "SCRAM-SHA-512",
+    "source.cluster.sasl.jaas.config" :" org.apache.kafka.common.security.scram.ScramLoginModule required  username=\"example-user\"  password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\"; ",
+    "target.cluster.security.protocol": "SASL_SSL",
+    "target.cluster.sasl.mechanism" : "SCRAM-SHA-512",
+    "target.cluster.sasl.jaas.config" :" org.apache.kafka.common.security.scram.ScramLoginModule  required  username=\"example-user\"  password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\"; ",
+    "tasks.max": "1",
+    "key.converter": " org.apache.kafka.connect.converters.ByteArrayConverter",
+    "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+    "replication.factor": "3",
+    "heartbeats.topic.replication.factor": "2",
+    "emit.heartbeats.interval.seconds": "20"
+}

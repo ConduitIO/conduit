@@ -18,10 +18,10 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sync"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
-	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -36,6 +36,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/protobuf"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
@@ -63,6 +64,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"json.encode":         Constructor(json.NewEncodeProcessor),
 	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
 	"openai.embed":        Constructor(openai.NewEmbeddingsProcessor),
+	"protobuf.decode":     Constructor(protobuf.NewDecodeProcessor),
 	"openai.textgen":      Constructor(openai.NewTextgenProcessor),
 	"split":               Constructor(impl.NewSplitProcessor),
 	"unwrap.debezium":     Constructor(unwrap.NewDebeziumProcessor),
@@ -86,6 +88,9 @@ type Registry struct {
 	// name, the second key is the plugin version
 	plugins        map[string]map[string]blueprint
 	schemaRegistry schemaregistry.Registry
+	// schemaService is this runtime's schema service. It is attached to the
+	// context of every call into a processor this registry creates.
+	schemaService pprocutils.SchemaService
 }
 
 type blueprint struct {
@@ -96,16 +101,32 @@ type blueprint struct {
 
 type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
 
+// pprocutilsLoggerOnce bounds the SDK's process-wide logger assignment to at
+// most once per process (#3111). NewRegistry runs once per runtime, so two
+// concurrent NewRuntime calls would otherwise race on pprocutils.Logger.
+var pprocutilsLoggerOnce sync.Once
+
 func NewRegistry(
 	logger log.CtxLogger,
 	constructors map[string]ProcessorPluginConstructor,
 	schemaRegistry schemaregistry.Registry,
 ) *Registry {
-	// set schema service and logger for builtin processors
-	schema.SchemaService = procutils.NewSchemaService(logger, schemaRegistry)
-	pprocutils.Logger = logger.WithComponent("processor").
-		ZerologWithComponent().
-		Hook(ctxutil.ProcessorIDLogCtxHook{})
+	// Built-in processors resolve schemas through the processor SDK's
+	// package-level service. It is installed once per process as a router
+	// that answers each call from the registry of the runtime the calling
+	// processor belongs to (see schema_scope.go, issue #3088).
+	installScopedSchemaService()
+	// The SDK logger stays process-wide: with two runtimes in one process,
+	// built-in processors log through the first runtime's logger. It is set at
+	// most once per process so concurrent NewRegistry/NewRuntime don't race on
+	// pprocutils.Logger (#3111); routing to the owning runtime's logger is the
+	// v0.21 embed-hardening follow-up (#3002). Documented as a known
+	// limitation in the root doc.go.
+	pprocutilsLoggerOnce.Do(func() {
+		pprocutils.Logger = logger.WithComponent("processor").
+			ZerologWithComponent().
+			Hook(ctxutil.ProcessorIDLogCtxHook{})
+	})
 
 	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()
@@ -119,6 +140,7 @@ func NewRegistry(
 		plugins:        loadPlugins(buildInfo, constructors),
 		logger:         logger,
 		schemaRegistry: schemaRegistry,
+		schemaService:  procutils.NewSchemaService(logger, schemaRegistry),
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin processor plugins initialized")
 	return r
@@ -232,8 +254,8 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 	// This is done by Conduit only for the built-in processors.
 	// In the standalone processors, the Run() method adds the middleware.
 	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
-	// attach processor ID for logs
-	p = newProcessorWithID(p, id)
+	// attach processor ID for logs and this runtime's schema service
+	p = newProcessorWithID(p, id, r.schemaService)
 
 	return p, nil
 }
