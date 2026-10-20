@@ -125,6 +125,19 @@ func ListOrphans(ctx context.Context, db database.DB) ([]*Orphan, error) {
 	return out, nil
 }
 
+// mergeOrphan folds a previous entry for the same connector ID into o. A
+// connector can be force-deleted, recreated under the same ID (provisioned
+// config) and force-deleted again before the first leftovers were
+// acknowledged; overwriting would lose what the first failure named.
+func mergeOrphan(o, prev *Orphan) {
+	if prev == nil {
+		return
+	}
+	if prev.HookError != "" && prev.HookError != o.HookError {
+		o.HookError += " | earlier unacknowledged failure (" + prev.DeletedAt.Format(time.RFC3339) + "): " + prev.HookError
+	}
+}
+
 func (s *Store) setOrphan(ctx context.Context, o *Orphan) error {
 	raw, err := json.Marshal(o)
 	if err != nil {
@@ -168,6 +181,14 @@ func deleteHookError(instance *Instance, hookErr error) error {
 		instance.ID, strings.ToLower(instance.Type.String()), instance.Plugin, instance.PipelineID,
 		scrubbedHookError(instance, hookErr),
 	), hookErr)
+	// Wrap keeps an inner coded error's code (a plugin that is missing
+	// returns connector.plugin_not_found, for example). This boundary must
+	// always report the delete-hook code, and the inner error's remediation
+	// data describes a different problem, so none of it is inherited.
+	ce.Code = CodeConnectorDeleteHookFailed
+	ce.ConfigPath = ""
+	ce.Fix = nil
+	ce.DocsURL = ""
 	ce.Suggestion = deleteHookSuggestion
 	return ce
 }

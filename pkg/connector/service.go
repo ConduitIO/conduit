@@ -256,12 +256,18 @@ func (s *Service) ForceDelete(ctx context.Context, id string, dispenserFetcher P
 		HookError:   scrubbedHookError(instance, hookErr),
 		DeletedAt:   time.Now().UTC(),
 	}
+	prev, err := s.store.getOrphan(ctx, instance.ID)
+	if err != nil {
+		return nil, err
+	}
+	mergeOrphan(orphan, prev)
 	if err := s.store.setOrphan(ctx, orphan); err != nil {
 		return nil, err
 	}
 	if err := s.removeRecord(ctx, instance); err != nil {
 		return nil, err
 	}
+	instance.inspector.Close() // the connector is gone for good, so are its sessions
 	instance.logger.Warn(ctx).
 		Str(log.PipelineIDField, instance.PipelineID).
 		Str("code", CodeConnectorOrphanedResources.Reason()).

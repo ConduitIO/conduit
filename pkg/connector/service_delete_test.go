@@ -243,3 +243,120 @@ func TestDecodeOrphan_RejectsUnknownVersion(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(o.ConnectorID, "x")
 }
+
+// TestService_Delete_CodedCauseKeepsDeleteHookCode: errors.Wrap keeps an
+// inner coded error's code, so a plugin error that carries its own code used
+// to surface as that code instead of connector.delete_hook_failed.
+func TestService_Delete_CodedCauseKeepsDeleteHookCode(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn := startedSource(t, service)
+
+	inner := conduiterr.New(conduiterr.CodeInvalidArgument, "inner problem")
+	inner.Suggestion = "inner suggestion"
+	inner.ConfigPath = "/some/path"
+	fetcher := hookFetcher(gomock.NewController(t), conn, inner)
+
+	err := service.Delete(ctx, conn.ID, fetcher)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeConnectorDeleteHookFailed)
+	is.Equal(ce.Suggestion, deleteHookSuggestion)
+	is.Equal(ce.ConfigPath, "")
+	is.True(cerrors.Is(err, inner)) // the cause stays reachable
+}
+
+// TestService_ForceDelete_MissingPluginCode: the plugin is not installed
+// (the case the coded-cause bug hit in practice).
+func TestService_ForceDelete_MissingPluginIsDeleteHookFailed(t *testing.T) {
+	is := is.New(t)
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn := startedSource(t, service)
+	err := service.Delete(context.Background(), conn.ID, fakePluginFetcher{})
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeConnectorDeleteHookFailed)
+}
+
+// TestService_ForceDelete_SameIDTwiceMergesEntries: force-delete, recreate
+// the same ID, force-delete again before acknowledging. The second entry must
+// not erase what the first one named.
+func TestService_ForceDelete_SameIDTwiceMergesEntries(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	service := NewService(log.Nop(), db, nil)
+	conn := startedSource(t, service)
+
+	_, err := service.ForceDelete(ctx, conn.ID, hookFetcher(gomock.NewController(t), conn, cerrors.New("first: slot a_slot busy")))
+	is.NoErr(err)
+
+	again, err := service.Create(ctx, conn.ID, TypeSource, conn.Plugin, conn.PipelineID, conn.Config, ProvisionTypeConfig)
+	is.NoErr(err)
+	again.LastActiveConfig = again.Config
+	is.NoErr(service.store.Set(ctx, again.ID, again))
+
+	orphan, err := service.ForceDelete(ctx, again.ID, hookFetcher(gomock.NewController(t), again, cerrors.New("second: publication p_pub busy")))
+	is.NoErr(err)
+	is.True(strings.Contains(orphan.HookError, "second: publication p_pub busy"))
+	is.True(strings.Contains(orphan.HookError, "first: slot a_slot busy"))
+
+	stored, err := ListOrphans(ctx, db)
+	is.NoErr(err)
+	is.Equal(len(stored), 1)
+	is.Equal(stored[0].HookError, orphan.HookError)
+}
+
+// diesAfterDB models a process killed mid-sequence: after n successful Sets
+// every write fails and nothing more reaches the store.
+type diesAfterDB struct {
+	*inmemory.DB
+	left int
+}
+
+func (d *diesAfterDB) Set(ctx context.Context, key string, value []byte) error {
+	if d.left <= 0 {
+		return cerrors.New("killed")
+	}
+	d.left--
+	return d.DB.Set(ctx, key, value)
+}
+
+// TestService_ForceDelete_KilledBetweenTheTwoWrites (invariant 5): without a
+// transaction the entry is written first, so a kill between the writes leaves
+// an entry next to a record that still exists, never a deleted record with no
+// entry. The retry after the restart completes the delete.
+func TestService_ForceDelete_KilledBetweenTheTwoWrites(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inner := &inmemory.DB{}
+	setup := NewService(log.Nop(), inner, nil)
+	conn := startedSource(t, setup)
+
+	killed := NewService(log.Nop(), &diesAfterDB{DB: inner, left: 1}, nil)
+	is.NoErr(killed.Init(ctx))
+	_, err := killed.ForceDelete(ctx, conn.ID, hookFetcher(gomock.NewController(t), conn, cerrors.New("hook failed")))
+	is.True(err != nil)
+
+	// "Restart" on the surviving store.
+	restarted := NewService(log.Nop(), inner, nil)
+	is.NoErr(restarted.Init(ctx))
+	_, err = restarted.Get(ctx, conn.ID)
+	is.NoErr(err) // record survived
+	stored, err := ListOrphans(ctx, inner)
+	is.NoErr(err)
+	is.Equal(len(stored), 1) // entry survived: the leftovers are not forgotten
+
+	// Retry completes; the entry is not duplicated.
+	restartedConn, err := restarted.Get(ctx, conn.ID)
+	is.NoErr(err)
+	orphan, err := restarted.ForceDelete(ctx, conn.ID, hookFetcher(gomock.NewController(t), restartedConn, cerrors.New("hook failed")))
+	is.NoErr(err)
+	is.True(orphan != nil)
+	_, err = restarted.Get(ctx, conn.ID)
+	is.True(cerrors.Is(err, ErrInstanceNotFound))
+	stored, err = ListOrphans(ctx, inner)
+	is.NoErr(err)
+	is.Equal(len(stored), 1)
+}

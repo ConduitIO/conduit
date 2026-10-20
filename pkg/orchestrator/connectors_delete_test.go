@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
@@ -186,4 +187,59 @@ func TestConnectorOrchestrator_AcknowledgeOrphan_RefusedForExistingConnector(t *
 	ce, ok = conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, connector.CodeConnectorOrphanNotFound)
+}
+
+// commitFailsDB is a store whose transactions die at commit, as a kill
+// during the commit would: nothing the transaction staged is applied.
+type commitFailsDB struct {
+	*inmemory.DB
+}
+
+type commitFailsTxn struct {
+	database.Transaction
+}
+
+func (t commitFailsTxn) Commit() error {
+	t.Transaction.Discard()
+	return cerrors.New("killed during commit")
+}
+
+func (d commitFailsDB) NewTransaction(ctx context.Context, w bool) (database.Transaction, context.Context, error) {
+	txn, ctx, err := d.DB.NewTransaction(ctx, w)
+	return commitFailsTxn{txn}, ctx, err
+}
+
+// TestConnectorOrchestrator_ForceDelete_KilledAtCommit (invariant 5): the
+// orphan entry, the record delete and the pipeline update are one
+// transaction. When the process dies at commit none of them is applied, so
+// a restart sees the connector exactly as before and the delete can be
+// retried.
+func TestConnectorOrchestrator_ForceDelete_KilledAtCommit(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	h := newDeleteHarness(t)
+
+	_, _, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	expectMutation(t, lifecycleMock, h.pl.ID, true)
+	ctrl := gomock.NewController(t)
+	plugin := pmock.NewSourcePlugin(ctrl)
+	plugin.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.SourceLifecycleOnDeletedResponse{}, cerrors.New("hook failed"))
+	plugin.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().Return(plugin, nil)
+	connPluginMock.EXPECT().NewDispenser(gomock.Any(), h.conn.Plugin, h.conn.ID).Return(dispenser, nil)
+	orc := NewOrchestrator(commitFailsDB{h.db}, log.Nop(), h.ps, h.cs, procsMock, connPluginMock, procPluginMock, lifecycleMock)
+
+	_, err := orc.Connectors.ForceDelete(ctx, h.conn.ID)
+	is.True(err != nil)
+
+	is.True(h.storedConnectorExists(t))
+	orphans, err := connector.ListOrphans(ctx, h.db)
+	is.NoErr(err)
+	is.Equal(len(orphans), 0)
+	fresh := pipeline.NewService(log.Nop(), h.db)
+	is.NoErr(fresh.Init(ctx))
+	pl, err := fresh.Get(ctx, h.pl.ID)
+	is.NoErr(err)
+	is.Equal(pl.ConnectorIDs, []string{h.conn.ID})
 }

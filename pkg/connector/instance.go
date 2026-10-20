@@ -153,15 +153,17 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 }
 
 func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
-	i.inspector.Close()
 	conn, err := i.Connector(ctx, dispenserFetcher)
 	if err != nil {
 		return err
 	}
 	err = conn.OnDelete(ctx)
 	if err != nil {
+		// The connector is kept so the delete can be retried (#3058), so its
+		// inspector sessions are kept too.
 		return err
 	}
+	i.inspector.Close()
 
 	return nil
 }
