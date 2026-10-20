@@ -4,7 +4,7 @@ go 1.26.9
 
 require (
 	github.com/conduitio/conduit v0.0.0
-	github.com/conduitio/conduit-commons v0.8.2
+	github.com/conduitio/conduit-commons v0.11.0
 	github.com/matryer/is v1.4.1
 	github.com/rs/zerolog v1.35.1
 )
@@ -17,8 +17,8 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bufbuild/protocompile v0.14.2-0.20260127163740-a85d2ef77713 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/conduitio/conduit-connector-protocol v0.10.0 // indirect
-	github.com/conduitio/conduit-processor-sdk v0.8.0 // indirect
+	github.com/conduitio/conduit-connector-protocol v0.11.1 // indirect
+	github.com/conduitio/conduit-processor-sdk v0.9.1 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.6 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -37,7 +37,7 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/iskorotkov/avro/v2 v2.34.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect

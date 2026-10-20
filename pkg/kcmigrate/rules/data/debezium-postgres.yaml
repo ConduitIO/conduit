@@ -1,0 +1,967 @@
+# Debezium Postgres (io.debezium.connector.postgresql.PostgresConnector) to
+# builtin:postgres source and builtin:kafka destination. Mapping design
+# docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md,
+# "Debezium PostgreSQL", written against Debezium 3.7.0.Final and the
+# builtin:postgres v0.15.0 source spec.
+#
+# Debezium-compatible output mode (#3032) is not wired yet: the released
+# builtin:postgres source has no `debezium.enabled` setting (it lives on the
+# connector's `feat/debezium-mode-cdc` branch) and the `debezium.encode`
+# processor (#3183) is not merged. Every migration therefore carries the
+# blocking note kc.output_shape_differs, and every key whose Conduit target
+# is a `debezium.*` source setting or the processor is unsupported and
+# blocking with kc.target_capability_missing, rather than a broken mapping to
+# a setting the released connector rejects.
+rulesVersion: 1
+scope: source
+class: io.debezium.connector.postgresql.PostgresConnector
+upstream: {name: debezium, version: "3.7.0.Final"}
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+notes:
+  - code: kc.output_shape_differs
+    blocking: true
+    reason: Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break.
+    fix: Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps.
+finish:
+  # Assemble database.* into the source url.
+  - {kind: pg-url}
+  # table.include.list absent means every table; the Conduit source needs an
+  # explicit list, and "*" is its all-tables wildcard.
+  - {kind: default-setting, side: source, name: tables, value: "*"}
+keys:
+  # --- Connection ---
+  - key: database.hostname
+    status: translated
+    reason: Becomes part of the source connection string.
+    emit: {kind: pg-url, part: host}
+    diff: identity
+  - key: database.port
+    status: translated
+    reason: Becomes part of the source connection string.
+    emit: {kind: pg-url, part: port}
+    diff: identity
+  - key: database.user
+    status: translated
+    reason: Becomes part of the source connection string.
+    emit: {kind: pg-url, part: user}
+    diff: identity
+  - key: database.password
+    status: translated
+    reason: Becomes part of the source connection string, as a variable.
+    emit: {kind: pg-url, part: password}
+    secret: true
+    diff: secret
+  - key: database.dbname
+    status: translated
+    reason: Becomes part of the source connection string.
+    emit: {kind: pg-url, part: dbname}
+    diff: identity
+  - key: database.sslmode
+    status: translated
+    reason: Becomes the sslmode part of the source connection string; the value is the libpq sslmode.
+    emit: {kind: pg-url, part: sslmode}
+    diff: identity
+  - key: database.sslcert
+    status: approximated
+    code: kc.key_approximated
+    reason: Becomes the sslcert part of the source connection string. The path is copied; it must exist on the Conduit host.
+    emit: {kind: pg-url, part: sslcert}
+    diff: identity
+  - key: database.sslkey
+    status: approximated
+    code: kc.key_approximated
+    reason: Becomes the sslkey part of the source connection string. The path is copied; it must exist on the Conduit host.
+    emit: {kind: pg-url, part: sslkey}
+    diff: identity
+  - key: database.sslrootcert
+    status: approximated
+    code: kc.key_approximated
+    reason: Becomes the sslrootcert part of the source connection string. The path is copied; it must exist on the Conduit host.
+    emit: {kind: pg-url, part: sslrootcert}
+    diff: identity
+  - key: database.sslpassword
+    status: translated
+    reason: Becomes the sslpassword part of the source connection string, as a variable.
+    emit: {kind: pg-url, part: sslpassword}
+    secret: true
+    diff: secret
+  - key: database.sslfactory
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A custom SSL socket factory; express it as libpq connection string parameters instead.
+    fix: Remove the factory and set the equivalent database.ssl* keys.
+    diff: behavior
+  - key: database.connection.factory.class
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A custom connection factory; express it as libpq connection string parameters instead.
+    fix: Remove the factory and set the equivalent database.ssl* keys.
+    diff: behavior
+  - key: {prefix: driver.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A JDBC driver setting; Conduit's Postgres connector has no JDBC driver.
+    fix: Express the setting as libpq connection string parameters.
+    diff: behavior
+  - key: database.tcpKeepAlive
+    status: translated
+    reason: The Go dialer keeps the connection alive; no setting needed.
+    emit: {kind: none}
+    diff: tuning
+  - key: database.initial.statements
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Session statements (SET TIME ZONE, SET ROLE) can change what is read.
+    fix: Apply the statements at the role or database level, or keep this connector on Kafka Connect.
+    diff: behavior
+  - key: database.query.timeout.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Postgres connector has its own query timeout.
+    fix: None needed.
+    diff: tuning
+
+  # --- Logical decoding ---
+  - key: plugin.name
+    diff: behavior
+    values:
+      - match: [pgoutput]
+        status: translated
+        reason: Conduit decodes the pgoutput plugin natively.
+        emit: {kind: none}
+      - match: [decoderbufs]
+        status: approximated
+        code: kc.key_approximated
+        reason: Conduit decodes with pgoutput only; decoderbufs-specific differences are not emulated.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit decodes pgoutput only; this plugin's wire format would differ.
+        fix: Use plugin.name=pgoutput, or keep this connector on Kafka Connect.
+  - key: slot.name
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit creates its own replication slot (logrepl.slotName, default conduitslot) so rollback stays possible; Debezium's slot is not reused.
+    diff: identity
+  - key: publication.name
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit creates its own publication (logrepl.publicationName, default conduitpub); Debezium's publication is not reused.
+    diff: identity
+  - key: slot.drop.on.stop
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: Conduit does not drop its slot on stop (logrepl.autoCleanup is false).
+        emit: {kind: setting, side: source, name: logrepl.autoCleanup, value: "false"}
+      - match: ["true"]
+        status: unsupported
+        code: kc.key_unsupported
+        reason: Debezium drops its slot when the connector stops; Conduit keeps its slot, which is the safer behavior.
+        fix: None needed; the slot is kept.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: slot.failover
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: The slot is not failover, as in Conduit.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A failover slot survives a primary switch; Conduit's slot does not.
+        fix: Keep this connector on Kafka Connect until the connector creates failover slots.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: offset.mismatch.strategy
+    diff: behavior
+    values:
+      - match: [no_validation]
+        status: translated
+        reason: Conduit does not validate the offset; the same as no_validation.
+        emit: {kind: none}
+      - match: [validation, adjust]
+        status: unsupported
+        code: kc.key_unsupported
+        reason: Debezium's offset validation and adjustment have no Conduit equivalent.
+        fix: Set offset.mismatch.strategy=no_validation.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a recognized offset mismatch strategy.
+        fix: Set offset.mismatch.strategy to no_validation, validation or adjust.
+  - key: lsn.flush.mode
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [connector, "true"]
+        status: translated
+        reason: Conduit flushes the LSN with its own logic; no setting needed.
+        emit: {kind: none}
+      - match: [manual, connector_and_driver, "false"]
+        status: unsupported
+        code: kc.key_unsupported
+        reason: Manual or driver-side LSN flushing is not reproduced.
+        fix: Set lsn.flush.mode=connector.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a recognized lsn.flush.mode.
+        fix: Set lsn.flush.mode to connector or manual.
+  - key: flush.lsn.source
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Flush LSN source selection has no Conduit equivalent.
+    fix: None needed; Conduit flushes its own LSN.
+    diff: tuning
+  - key: lsn.flush.timeout.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's flush timeout is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: lsn.flush.timeout.action
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's flush timeout action is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: slot.stream.params
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Plugin options (for example table filters) change what is decoded.
+    fix: Keep this connector on Kafka Connect, or express the filter with tables.
+    diff: behavior
+  - key: slot.max.retries
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery.
+    diff: tuning
+  - key: slot.retry.delay.ms
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery with its own backoff.
+    diff: tuning
+  - key: retriable.restart.connector.wait.ms
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery with its own backoff.
+    diff: tuning
+  - key: errors.max.retries
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit retries through pipeline recovery.
+    diff: tuning
+  - key: status.update.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit writes status updates on its own interval.
+    fix: None needed.
+    diff: tuning
+  - key: xmin.fetch.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit does not fetch xmin.
+    fix: None needed.
+    diff: tuning
+  - key: read.only
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's source is read-only by construction.
+    fix: None needed.
+    diff: tuning
+  - key: publication.autocreate.mode
+    status: approximated
+    code: kc.key_approximated
+    reason: Conduit creates a publication for the listed tables; Debezium's publication is not reused.
+    diff: behavior
+  - key: publish.via.partition.root
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: ["false"]
+        status: translated
+        reason: Partitioned-table root events are not published, as in Conduit.
+        emit: {kind: none}
+      - match: ["true"]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Partitioned-table event shape is unsupported.
+        fix: Keep this connector on Kafka Connect until it lists partitioned tables.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a boolean.
+        fix: Set true or false.
+  - key: replica.identity.autoset.values
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Debezium sets replica identities on the source; Conduit does not alter them.
+    fix: Set the replica identities ahead of time.
+    diff: behavior
+
+  # --- Topic naming (Debezium-compatible output mode) ---
+  - key: topic.prefix
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps.
+    diff: identity
+  - key: database.server.name
+    aliasOf: topic.prefix
+    diff: identity
+  - key: topic.delimiter
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: topic.delimiter becomes debezium.topic.delimiter, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: identity
+  - key: topic.naming.strategy
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: Topic naming is part of the Debezium-compatible output mode, which is not available; a custom strategy names topics in code migrate cannot read.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: topic.cache.size
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit does not cache topic names.
+    fix: None needed.
+    diff: tuning
+  - key: topic.transaction
+    status: unsupported
+    code: kc.key_unsupported
+    reason: The transaction topic is not produced.
+    fix: None needed.
+    diff: tuning
+  - key: topic.heartbeat.prefix
+    status: unsupported
+    code: kc.key_unsupported
+    reason: The heartbeat topic is not produced.
+    fix: None needed.
+    diff: tuning
+  - key: topic.heartbeat.name
+    status: unsupported
+    code: kc.key_unsupported
+    reason: The heartbeat topic is not produced.
+    fix: None needed.
+    diff: tuning
+
+  # --- Table and schema selection ---
+  - key: table.include.list
+    diff: identity
+    values:
+      - pattern: '^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_*][A-Za-z0-9_*]*)?(\s*,\s*[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_*][A-Za-z0-9_*]*)?)*$'
+        status: translated
+        reason: The tables are read as listed.
+        emit: {kind: list-setting, side: source, name: tables}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: table.include.list uses regex metacharacters; the Conduit source reads a literal table list, not a pattern.
+        fix: List the tables explicitly as schema.table entries, separated by commas.
+  - key: table.exclude.list
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The source's tables list has no exclusion.
+    fix: List only the tables to read in table.include.list.
+    diff: identity
+  - key: schema.include.list
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Schema selection folds into the source's tables list only when a literal table.include.list is also set; alone it cannot be expressed.
+    fix: List the tables explicitly in table.include.list (schema.table), or keep this connector on Kafka Connect.
+    diff: identity
+  - key: schema.exclude.list
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Schema exclusion folds into the source's tables list only when a literal table.include.list is also set; alone it cannot be expressed.
+    fix: List the tables to read in table.include.list.
+    diff: identity
+
+  # --- Columns, messages and type handling (Debezium-compatible output mode) ---
+  - key: column.include.list
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: column.include.list becomes debezium.column.include.list, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: column.exclude.list
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: column.exclude.list becomes debezium.column.exclude.list, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: message.key.columns
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: message.key.columns becomes debezium.message.key.columns, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: message.prefix.include.list
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: message.prefix.include.list becomes debezium.message.prefix.include.list, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: message.prefix.exclude.list
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: message.prefix.exclude.list becomes debezium.message.prefix.exclude.list, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: skipped.operations
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: skipped.operations becomes debezium.skipped.operations, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: skip.messages.without.change
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Debezium suppresses events with no change in captured columns; Conduit would emit them.
+    fix: Keep this connector on Kafka Connect, or accept the difference with --accept-gaps.
+    diff: behavior
+  - key: tombstones.on.delete
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: tombstones.on.delete becomes a debezium.encode processor setting, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: provide.transaction.metadata
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: provide.transaction.metadata becomes debezium.provide.transaction.metadata, which requires the Debezium-compatible output mode; the transaction topic is not produced.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: time.precision.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: time.precision.mode becomes debezium.time.precision.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: decimal.handling.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: decimal.handling.mode becomes debezium.decimal.handling.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: binary.handling.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: binary.handling.mode becomes debezium.binary.handling.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: interval.handling.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: interval.handling.mode becomes debezium.interval.handling.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: hstore.handling.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: hstore.handling.mode becomes debezium.hstore.handling.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: money.fraction.digits
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: money.fraction.digits becomes debezium.money.fraction.digits, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: unavailable.value.placeholder
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: unavailable.value.placeholder becomes debezium.unavailable.value.placeholder, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: include.unknown.datatypes
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: include.unknown.datatypes becomes debezium.include.unknown.datatypes, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: schema.name.adjustment.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: schema.name.adjustment.mode becomes debezium.schema.name.adjustment.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: field.name.adjustment.mode
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: field.name.adjustment.mode becomes debezium.field.name.adjustment.mode, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+  - key: extended.headers.enabled
+    status: unsupported
+    blocking: true
+    code: kc.target_capability_missing
+    reason: extended.headers.enabled becomes a debezium source setting, which requires the Debezium-compatible output mode.
+    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    diff: behavior
+
+  # --- Masking and converters ---
+  - key: {regex: '^column\.mask\.with\.[0-9]+\.chars$'}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Column masking is not translated by this version.
+    fix: Mask the column in a processor before the destination, or keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: column.mask.hash.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Column hashing is not part of Debezium-compatible output mode in v0.21.
+    fix: Hash the column in a processor before the destination, or keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {regex: '^column\.truncate\.to\.[0-9]+\.chars$'}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Column truncation is not translated by this version.
+    fix: Truncate the column in a processor before the destination, or keep this connector on Kafka Connect.
+    diff: behavior
+  - key: column.propagate.source.type
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Source type propagation is not translated by this version.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: datatype.propagate.source.type
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Source type propagation is not translated by this version.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: converters
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Custom converters are not translated by this version.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: converters.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: A custom converter setting; converters are not translated by this version.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: schema.refresh.mode
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit refreshes the schema on its own policy.
+    fix: None needed.
+    diff: tuning
+
+  # --- Snapshot ---
+  - key: snapshot.mode
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [initial]
+        status: translated
+        reason: A snapshot runs on the first start, as in Conduit.
+        emit: {kind: setting, side: source, name: snapshotMode, value: initial}
+      - match: [never, no_data]
+        status: approximated
+        blocking: true
+        code: kc.resume_unavailable
+        reason: Starting without a snapshot resumes from Debezium's position, which needs the offset import; it was not requested.
+        fix: Keep this connector on Kafka Connect, or accept the difference with --accept-gaps.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: This snapshot mode has no Conduit equivalent (only initial and never are supported).
+        fix: Use snapshot.mode=initial or never, or keep this connector on Kafka Connect.
+  - key: {prefix: snapshot.mode.configuration.based.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters for snapshot.mode=configuration_based, which is unsupported.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.mode.custom.name
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters for snapshot.mode=custom, which is unsupported.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.locking.mode
+    diff: behavior
+    values:
+      - match: [none]
+        status: translated
+        reason: No table locks during the snapshot, as in Conduit.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Conduit's snapshot does not lock tables.
+        fix: Use snapshot.locking.mode=none.
+  - key: snapshot.locking.mode.custom.name
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters for snapshot.locking.mode=custom, which is unsupported.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.query.mode
+    diff: behavior
+    values:
+      - match: [select_all]
+        status: translated
+        reason: The snapshot reads every row, as in Conduit.
+        emit: {kind: none}
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: A custom snapshot query would read different rows.
+        fix: Use snapshot.query.mode=select_all.
+  - key: snapshot.query.mode.custom.name
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Only matters for snapshot.query.mode=custom, which is unsupported.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.select.statement.overrides
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Overriding snapshot SELECT statements changes what is read.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: snapshot.select.statement.overrides.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Overriding snapshot SELECT statements changes what is read.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: snapshot.include.collection.list
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Collection-scoped snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: snapshot.isolation.mode
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's snapshot isolation mode is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.lock.timeout.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit does not lock tables during the snapshot.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.delay.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit does not delay the snapshot.
+    fix: None needed.
+    diff: tuning
+  - key: streaming.delay.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit does not delay streaming.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.max.threads
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's snapshot concurrency is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.max.threads.multiplier
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's snapshot concurrency is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: legacy.snapshot.max.threads
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's snapshot concurrency is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: snapshot.fetch.size
+    status: translated
+    reason: The number of rows fetched at a time during the snapshot.
+    emit: {kind: setting, side: source, name: snapshot.fetchSize}
+    diff: tuning
+
+  # --- Signals and notifications ---
+  - key: signal.data.collection
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Ad hoc and incremental snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: signal.enabled.channels
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Ad hoc and incremental snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: signal.kafka.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Ad hoc and incremental snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: signal.consumer.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Ad hoc and incremental snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: {prefix: incremental.snapshot.}
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Incremental snapshots are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: notification.enabled.channels
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Notifications are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+  - key: notification.sink.topic.name
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: Notifications are not supported.
+    fix: Keep this connector on Kafka Connect.
+    diff: behavior
+
+  # --- Heartbeat ---
+  - key: heartbeat.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Postgres source does not emit heartbeats.
+    fix: None needed.
+    diff: tuning
+  - key: heartbeat.action.query
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Postgres source does not emit heartbeats.
+    fix: None needed.
+    diff: tuning
+
+  # --- Error handling and batch ---
+  - key: event.processing.failure.handling.mode
+    diff: behavior
+    ignoreCase: true
+    values:
+      - match: [fail]
+        status: translated
+        reason: The pipeline stops on a failed event, as Debezium does.
+        emit: {kind: none}
+      - match: [warn, skip]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: warn and skip drop events, which Conduit's at-least-once guarantee forbids.
+        fix: Use fail, or keep this connector on Kafka Connect.
+      - otherwise: true
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: Not a recognized failure handling mode.
+        fix: Set fail, warn or skip.
+  - key: max.batch.size
+    status: approximated
+    code: kc.key_approximated
+    reason: Debezium batches at the source; Conduit batches at the destination, so the batch boundary differs.
+    diff: tuning
+  - key: max.queue.size
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's queue size is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: max.queue.size.in.bytes
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's queue size is fixed.
+    fix: None needed.
+    diff: tuning
+  - key: poll.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit polls the replication stream continuously.
+    fix: None needed.
+    diff: tuning
+  - key: poll.dispatch.interval.ms
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit dispatches records continuously.
+    fix: None needed.
+    diff: tuning
+  - key: statistics.metrics.enabled
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit exposes its own metrics.
+    fix: None needed.
+    diff: tuning
+  - key: custom.metric.tags
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit metrics have no custom tags.
+    fix: None needed.
+    diff: tuning
+  - key: custom.sanitize.pattern
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit sanitizes its own config.
+    fix: None needed.
+    diff: tuning
+  - key: guardrail.collections.max
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit has no collection guardrail.
+    fix: None needed.
+    diff: tuning
+  - key: guardrail.collections.limit.action
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit has no collection guardrail.
+    fix: None needed.
+    diff: tuning
+
+  # --- Schema history (not used by the Postgres connector) ---
+  - key: {prefix: schema.history.internal.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Postgres source has no schema history store.
+    fix: None needed.
+    diff: tuning
+  - key: {prefix: database.history.}
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Conduit's Postgres source has no database history store.
+    fix: None needed.
+    diff: tuning
+
+  # --- Legacy keys with changed values ---
+  - key: table.whitelist
+    aliasOf: table.include.list
+    diff: identity
+  - key: table.blacklist
+    aliasOf: table.exclude.list
+    diff: identity
+  - key: schema.whitelist
+    aliasOf: schema.include.list
+    diff: identity
+  - key: schema.blacklist
+    aliasOf: schema.exclude.list
+    diff: identity
+  - key: column.whitelist
+    aliasOf: column.include.list
+    diff: behavior
+  - key: column.blacklist
+    aliasOf: column.exclude.list
+    diff: behavior
+  - key: truncate.handling.mode
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The legacy truncate handling key; use skipped.operations instead, which is itself blocked until the Debezium output mode ships.
+    fix: Use skipped.operations.
+    diff: behavior
+  - key: sanitize.field.names
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The legacy field-name sanitizing key; use field.name.adjustment.mode instead.
+    fix: Use field.name.adjustment.mode.
+    diff: behavior
+  - key: toasted.value.placeholder
+    status: unsupported
+    blocking: true
+    code: kc.key_unsupported
+    reason: The legacy TOAST placeholder key; use unavailable.value.placeholder instead.
+    fix: Use unavailable.value.placeholder.
+    diff: behavior
+defaults:
+  - key: plugin.name
+    default: decoderbufs
+    note:
+      code: kc.default_differs
+      reason: plugin.name is absent, so Debezium uses decoderbufs; Conduit decodes with pgoutput only, and decoder-specific differences are not emulated.
+      fix: Set plugin.name=pgoutput in the Kafka Connect config, or accept the difference.
+  - key: table.include.list
+    default: ""
+    note:
+      code: kc.default_differs
+      reason: table.include.list is absent, so Debezium reads every table; the source is set to tables "*", whose schema coverage is connector-defined.
+      fix: Set table.include.list to the tables to read, or accept the difference.

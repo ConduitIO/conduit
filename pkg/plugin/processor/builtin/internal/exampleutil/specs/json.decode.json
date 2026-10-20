@@ -2,7 +2,7 @@
   "specification": {
     "name": "json.decode",
     "summary": "Decodes a specific field from JSON raw data (string) to structured data.",
-    "description": "The processor takes JSON raw data (`string` or `[]byte`)\nfrom the target field, parses it as JSON structured data and stores the decoded\nstructured data in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
+    "description": "The processor takes JSON raw data (`string` or `[]byte`)\nfrom the target field, parses it as JSON structured data and stores the decoded\nstructured data in the target field.\n\nJSON numbers are decoded without loss of precision: an integer that fits in\n`int64` becomes an `int64`, one that fits in `uint64` becomes a `uint64`, and\nany other number becomes a `float64`. Earlier versions decoded every number to\n`float64`, which rounds integers above 2^53.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {

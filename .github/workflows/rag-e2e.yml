@@ -38,6 +38,10 @@ env:
   # e2e is green against the new commits; override per-run via the inputs above.
   PROCESSOR_AI_REF: ${{ github.event.inputs.processor_ai_ref || '24dee9ffd9e8be633a010d427a142d6c2f244793' }}
   PGVECTOR_REF: ${{ github.event.inputs.pgvector_ref || 'b5361ef72d943a684fcb41b0e33605eef28c41b9' }}
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
 
 jobs:
   rag-e2e:

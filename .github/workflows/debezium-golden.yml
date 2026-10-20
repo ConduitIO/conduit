@@ -23,6 +23,12 @@ on:
       - 'tests/debezium/**'
       - '.github/workflows/debezium-golden.yml'
 
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
 permissions:
   contents: read
   issues: write

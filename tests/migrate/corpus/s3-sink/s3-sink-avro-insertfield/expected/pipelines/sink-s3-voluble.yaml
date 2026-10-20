@@ -1,0 +1,20 @@
+version: "2.2"
+pipelines:
+  - id: sink-s3-voluble
+    status: stopped
+    description: Migrated from Kafka Connect connector "sink-s3-voluble" (io.confluent.connect.s3.S3SinkConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          servers: ${KC_SINK_S3_VOLUBLE_SOURCE_SERVERS}
+          topics: cats
+      - id: destination
+        type: destination
+        plugin: builtin:s3
+        settings:
+          aws.bucket: example-voluble-bucket
+          aws.region: us-east-1
+          format: ${KC_SINK_S3_VOLUBLE_DESTINATION_FORMAT}
+          sdk.batch.size: "65536"

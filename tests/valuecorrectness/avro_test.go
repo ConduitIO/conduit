@@ -181,7 +181,31 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 	}
 
 	runErr := make(chan error, 1)
-	go func() { runErr <- r.Run(ctx) }()
+	runDone := make(chan struct{})
+	go func() {
+		runErr <- r.Run(ctx)
+		close(runDone)
+	}()
+
+	// stopRuntime shuts the runtime down and waits, bounded, for Run to
+	// return. It is registered as a cleanup so it runs on every path —
+	// including a t.Fatalf inside the loops below — before t.TempDir removes
+	// dir. A live runtime still writing into dir while it is deleted, or a
+	// Run goroutine that outlives the test, is the leak this closes: the
+	// runtime's connectors, persister and DB would otherwise keep running
+	// (and, if shutdown deadlocks, hang) past the test. runDone is a
+	// separate channel from runErr so the wait is idempotent even after the
+	// early-exit case below has already drained runErr.
+	stopRuntime := func() {
+		cancel()
+		select {
+		case <-runDone:
+		case <-time.After(30 * time.Second):
+			t.Error("runtime did not stop within 30s")
+		}
+	}
+	t.Cleanup(stopRuntime)
+
 	select {
 	case <-r.Ready:
 	case err := <-runErr:
@@ -207,12 +231,7 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 		waitLines(ctx, t, p.out, recordsPerPipeline, logs)
 	}
 
-	cancel()
-	select {
-	case <-runErr:
-	case <-time.After(30 * time.Second):
-		t.Error("runtime did not stop within 30s")
-	}
+	stopRuntime()
 
 	for _, p := range pipelines {
 		t.Run(p.id, func(t *testing.T) {

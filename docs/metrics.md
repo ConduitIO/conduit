@@ -27,7 +27,11 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | `conduit_connectors`                           | Gauge     | Number of connectors by type (source, destination).                                                            |
     | `conduit_processors`                           | Gauge     | Number of processors by name and type.                                                                         |
     | `conduit_connector_bytes`                      | Histogram | Number of bytes* a connector processed by pipeline name, plugin, type (source, destination) and component ID.  |
+    | `conduit_connector_records_total`               | Counter   | Number of records a connector processed by pipeline name, plugin, type (source, destination) and component ID. |
+    | `conduit_connector_errors_total`                | Counter   | Number of errors a connector returned by pipeline name, plugin, type (source, destination) and component ID.   |
     | `conduit_dlq_bytes`                            | Histogram | Number of bytes* a DLQ connector processed per pipeline and plugin.                                            |
+    | `conduit_dlq_records_total`                     | Counter   | Number of records a DLQ connector processed per pipeline and plugin.                                           |
+    | `conduit_dlq_errors_total`                      | Counter   | Number of errors a DLQ connector returned per pipeline and plugin.                                             |
     | `conduit_pipeline_execution_duration_seconds`  | Histogram | Amount of time records spent in a pipeline.                                                                    |
     | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin, connector type (source, destination) and component ID. |
     | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline, processor and component ID.                           |
@@ -52,6 +56,22 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
   stop being written, new ones carrying `component_id` start from zero); this
   does not affect any other metric and has no effect on pipeline state or
   data.
+
+  **Record and error counters (added for connector observability, #3013):**
+  `conduit_connector_records_total` and `conduit_connector_errors_total` carry
+  the same `pipeline_name`/`plugin`/`type`/`component_id` label set as
+  `conduit_connector_bytes` and `conduit_connector_execution_duration_seconds`,
+  so a dashboard can join records, bytes, latency and errors on `component_id`.
+  `records` is incremented at the connector boundary — once per record read
+  from a source, once per record a destination acknowledged — and therefore
+  matches the bytes/latency metrics' existing semantics. `errors` is incremented
+  once per read/write/ack failure the connector returns; it records only _that_
+  an error occurred (never the message or code), so the metric's cardinality
+  stays bounded. To get the error detail, read the pipeline error from the API
+  or logs. The DLQ variants (`conduit_dlq_records_total`,
+  `conduit_dlq_errors_total`) follow the DLQ bytes/duration metrics' two-label
+  `pipeline_name`/`plugin` shape and count records written to, and errors
+  returned by, the DLQ connector.
 
 - **Go runtime metrics**: The default metrics exposed by Prometheus' official Go
   package, [client_golang](https://pkg.go.dev/github.com/prometheus/client_golang).

@@ -16,6 +16,7 @@ package scaffold
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
@@ -27,14 +28,22 @@ import (
 func TestPreflight_Passes(t *testing.T) {
 	// go and git are both required to run this test suite at all, so a
 	// clean environment should always pass preflight.
-	_, err := preflight(context.Background())
+	_, err := preflight(context.Background(), LanguageGo)
+	require.NoError(t, err)
+}
+
+func TestPreflight_Python_Passes(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH")
+	}
+	_, err := preflight(context.Background(), LanguagePython)
 	require.NoError(t, err)
 }
 
 func TestPreflight_MissingToolchain(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // a directory with nothing on it
 
-	_, err := preflight(context.Background())
+	_, err := preflight(context.Background(), LanguageGo)
 	require.Error(t, err)
 
 	ce, ok := conduiterr.Get(err)
