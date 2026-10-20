@@ -164,11 +164,12 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	// Invariant 2 (#3137): roll back by putting the same instance back, so it
-	// keeps its source position and last active config. The transaction is
-	// discarded, so the store keeps the original record; a freshly created
-	// instance would have no position until the next restart, and starting the
-	// pipeline would read the source from the beginning.
+	// Invariant 2 (#3137): roll back by putting the same instance back, not a
+	// fresh one. It keeps its position unless Delete already ran the plugin's
+	// delete hook, which may have released what the position points into; then
+	// Restore clears it (invariant 3: re-read, never skip). ctx carries txn,
+	// so Restore only touches memory: the transaction is discarded and the
+	// store keeps the original record.
 	r.Append(func() error {
 		return c.connectors.Restore(ctx, conn)
 	})

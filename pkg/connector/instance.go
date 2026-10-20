@@ -72,6 +72,13 @@ type Instance struct {
 	// nil the connector is not running.
 	connector Connector
 
+	// deleteHookRan is set when OnDelete delivered the "deleted" lifecycle
+	// event to the plugin and the plugin did not answer that it does not
+	// implement it. From then on the plugin may have released what State
+	// points into (for example a Postgres replication slot), so Restore
+	// clears State and LastActiveConfig (#3137). Not persisted.
+	deleteHookRan bool
+
 	sync.RWMutex
 }
 

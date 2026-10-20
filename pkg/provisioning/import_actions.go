@@ -624,7 +624,8 @@ func (a deleteConnectorAction) Rollback(ctx context.Context) error {
 	if a.deleted == nil || a.deleted.instance == nil {
 		return nil
 	}
-	// Invariant 2: the restored connector keeps its source position.
+	// Invariant 2: the same instance comes back. It keeps its position unless
+	// the delete hook ran (then Restore clears it, invariant 3).
 	err := a.connectorService.Restore(ctx, a.deleted.instance)
 	if err != nil {
 		return cerrors.Errorf("failed to restore connector: %w", err)

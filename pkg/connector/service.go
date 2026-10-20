@@ -223,28 +223,36 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 // Restore puts back an instance that Delete removed, for a caller that rolls
 // back a failed operation after Delete succeeded (#3137). It reinstates the
 // same *Instance rather than creating a new one, so the connector keeps its
-// State (the source position), LastActiveConfig, ProcessorIDs and CreatedAt.
-// Creating a fresh instance instead left the process with a connector that
-// had never run until the next restart: its pipeline would read the source
-// from the beginning (invariant 2) and fire a "created" lifecycle event.
+// ProcessorIDs, CreatedAt and, unless the delete hook ran, its State (the
+// source position) and LastActiveConfig. Creating a fresh instance instead
+// left the process with a connector that had never run until the next
+// restart.
 //
-// Restore writes the record back to the store as well. Inside a transaction
-// that the caller then discards, the write is discarded with it and the
-// store keeps the record the discarded delete never removed; without a
-// transaction, the write undoes the delete. The in-memory entry is restored
-// first and stays restored even if the store write fails, because inside a
-// transaction (every production rollback except Engine.Import) the store
-// still holds the record, and memory must agree with it.
+// If Delete already delivered the "deleted" lifecycle event to the plugin,
+// Restore clears State and LastActiveConfig. The plugin may have released
+// what the position points into: the Postgres connector drops its
+// replication slot, and resuming from the old position would make it create
+// a new slot at the current WAL and skip everything in between (invariant 3).
+// With both cleared, the next start fires a "created" event and reads the
+// source from the beginning: duplicates, no loss.
 //
-// Restore does not undo the delete hook: Delete has already run the
-// plugin's OnDelete, and that cannot be taken back here.
+// Restore writes to the store only when ctx carries no transaction. Inside a
+// transaction the caller is rolling back and will discard it, so the store
+// keeps the record the discarded delete never removed, and a write there
+// could fail on a backend that rejects statements in an aborted transaction
+// (Postgres, 25P02). Without a transaction (Service.Import, used by the
+// embed API's Engine.Import) the delete reached the store, and Restore
+// writes the record back.
 //
-// It returns an error, and changes nothing, if a different instance is
-// registered under the same ID. Restoring an instance that is already
-// registered is a no-op.
+// It returns an error, and changes nothing, for a nil or DLQ instance, or if
+// a different instance is registered under the same ID. Restoring an
+// instance that is already registered is a no-op.
 func (s *Service) Restore(ctx context.Context, instance *Instance) error {
 	if instance == nil {
 		return cerrors.New("can't restore a nil connector instance")
+	}
+	if instance.ProvisionedBy == ProvisionTypeDLQ {
+		return cerrors.Errorf("can't restore DLQ connector %v: DLQ connectors are not registered", instance.ID)
 	}
 	if current, ok := s.connectors[instance.ID]; ok {
 		if current == instance {
@@ -253,11 +261,28 @@ func (s *Service) Restore(ctx context.Context, instance *Instance) error {
 		return cerrors.Errorf("can't restore connector %v: a different instance with that ID exists", instance.ID)
 	}
 
-	// Invariant 2: memory gets back the instance that holds the position the
-	// store holds, never a fresh one without it.
+	instance.Lock()
+	cleared := instance.deleteHookRan
+	if cleared {
+		// Invariant 3: never resume from a position the plugin may have
+		// released. Re-reading from the beginning duplicates, never loses.
+		instance.State = nil
+		instance.LastActiveConfig = Config{}
+		instance.deleteHookRan = false
+	}
+	instance.Unlock()
+
+	// Invariant 2: memory gets back the instance itself, never a fresh one.
 	s.connectors[instance.ID] = instance
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Inc()
+	if cleared {
+		instance.logger.Warn(ctx).Msg("connector restored after a failed delete; its delete hook had already run, " +
+			"so its position was cleared and its next start reads the source from the beginning")
+	}
 
+	if database.TransactionFromContext(ctx) != nil {
+		return nil
+	}
 	if err := s.store.Set(ctx, instance.ID, instance); err != nil {
 		return cerrors.Errorf("could not restore connector instance %v in store: %w", instance.ID, err)
 	}

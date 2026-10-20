@@ -1184,6 +1184,11 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	case oldConfig != nil && newConfig == nil:
 		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on source connector plugin")
 		_, err := s.plugin.LifecycleOnDeleted(ctx, pconnector.SourceLifecycleOnDeletedRequest{Config: oldConfig})
+		if !cerrors.Is(err, pconnector.ErrUnimplemented) {
+			// Invariant 3 (#3137): the plugin got the event and may have
+			// released what the position refers to, even if it failed.
+			s.Instance.deleteHookRan = true
+		}
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"deleted\": %w", err)
 		}
