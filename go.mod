@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
-	github.com/conduitio/conduit-commons v0.11.0
+	github.com/conduitio/conduit-commons v0.12.0
 	github.com/conduitio/conduit-connector-file v0.10.10
 	github.com/conduitio/conduit-connector-generator v0.10.7
 	github.com/conduitio/conduit-connector-kafka v0.14.1
@@ -18,8 +18,8 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.17.2
 	github.com/conduitio/conduit-connector-protocol v0.11.1
 	github.com/conduitio/conduit-connector-s3 v0.11.1
-	github.com/conduitio/conduit-connector-sdk v0.17.2-0.20261019202626-dbd2f02ecf93
-	github.com/conduitio/conduit-processor-sdk v0.9.1
+	github.com/conduitio/conduit-connector-sdk v0.17.2
+	github.com/conduitio/conduit-processor-sdk v0.9.2
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
