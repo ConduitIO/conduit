@@ -231,3 +231,10 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
+
+// goja panics with a fatal stack overflow when a script's Map or Set contains
+// itself and the value is exported to Go (ConduitIO/conduit#3148). Patched
+// fork of the version pinned before, one commit: https://github.com/dop251/goja/pull/816
+// Drop this replace and require the upstream version once that PR is merged
+// and released.
+replace github.com/dop251/goja => github.com/ConduitIO/goja v0.0.0-20261020160110-aed438ab3fe6

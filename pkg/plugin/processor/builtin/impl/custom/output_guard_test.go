@@ -192,6 +192,16 @@ func TestJSProcessor_CyclicOutputDoesNotCrashProcess(t *testing.T) {
 	scripts := map[string]string{
 		"self assignment": `function process(r) { r.Payload.After["self"] = r.Payload.After; return r; }`,
 		"fresh object":    `function process(r) { var a = {}; a.me = a; r.Payload.After = a; return r; }`,
+		// A Map or Set that contains itself: goja exports it on assignment,
+		// before the guard runs. Fatal on goja without the Map/Set export fix
+		// (github.com/dop251/goja/pull/816, see go.mod).
+		"set in field":     `function process(r) { var s = new Set(); s.add(s); r.Payload.After = {s: s}; return r; }`,
+		"map in field":     `function process(r) { var m = new Map(); m.set("a", m); r.Payload.After = {m: m}; return r; }`,
+		"set nested input": `function process(r) { var s = new Set(); s.add(s); r.Payload.After.n.s = s; return r; }`,
+		"map top key":      `function process(r) { var m = new Map(); m.set("a", m); r.Payload.After["m"] = m; return r; }`,
+		"map via object":   `function process(r) { var m = new Map(); var o = {m: m}; m.set("o", o); r.Payload.After = o; return r; }`,
+		"set in array":     `function process(r) { var s = new Set(); s.add([s]); r.Payload.After = {l: [s]}; return r; }`,
+		"new record":       `function process(r) { var m = new Map(); m.set("a", m); var o = Record(); o.Payload.After = {m: m}; return o; }`,
 		// Not cyclic: nesting alone overflows Record.Clone (about 2M levels
 		// exhaust the 1 GB goroutine stack limit; 1M still fits).
 		"deep nesting": `function process(r) {
@@ -231,7 +241,7 @@ func runCyclicChild(t *testing.T) {
 	if err := p.Open(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rec := opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"a": 1}}}
+	rec := opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"a": 1, "n": map[string]any{}}}}
 	got := p.Process(ctx, []opencdc.Record{rec})
 
 	// What every downstream consumer does with a processed record.

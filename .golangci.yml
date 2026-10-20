@@ -54,6 +54,11 @@ linters:
     - wastedassign
     - whitespace
   settings:
+    gomoddirectives:
+      # Temporary: patched goja fork until dop251/goja#816 is merged and
+      # released. See the comment above the replace in go.mod.
+      replace-allow-list:
+        - github.com/dop251/goja
     depguard:
       rules:
         Main:
