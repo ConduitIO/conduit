@@ -42,6 +42,11 @@ const (
 	KindList       = "list-setting"
 	KindStopped    = "pipeline-stopped"
 	KindPGURL      = "pg-url"
+	// KindBlockSinks blocks, for the pipelines of sink connectors only, a
+	// worker key whose entry is not blocking as classified. A worker key
+	// that configures the consumer Kafka Connect runs for a sink reaches no
+	// source connector, so it must not stop their pipelines.
+	KindBlockSinks = rules.BlockSinksKind
 )
 
 var kinds = map[string]Kind{
@@ -53,6 +58,7 @@ var kinds = map[string]Kind{
 	KindList:       listSetting,
 	KindStopped:    pipelineStopped,
 	KindPGURL:      pgURLPart,
+	KindBlockSinks: blockSinks,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -553,5 +559,20 @@ func pgURLPart(p *Plan, d *rules.Decision) error {
 	if env != "" {
 		d.Entry.Secret = true
 	}
+	return nil
+}
+
+// blockSinks makes the entry blocking on a sink's pipeline and leaves it
+// as classified (not blocking) on any other. The plan records the key so the
+// run stops this pipeline only (Plan.SinkBlocked).
+func blockSinks(p *Plan, d *rules.Decision) error {
+	if p.scope != rules.ScopeSink {
+		return nil
+	}
+	d.Entry.Blocking = true
+	if p.sinkBlocked == nil {
+		p.sinkBlocked = map[string]bool{}
+	}
+	p.sinkBlocked[d.KV.Key] = true
 	return nil
 }

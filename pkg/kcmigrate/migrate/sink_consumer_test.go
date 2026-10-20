@@ -192,3 +192,84 @@ func TestSinkConsumer_NotWrittenForSources(t *testing.T) {
 	_, ok := noteByRule(mmConnector(res), "sink-consumer-defaults/cutover")
 	is.True(!ok)
 }
+
+const wkBase = "bootstrap.servers=k:9092\nkey.converter=org.apache.kafka.connect.converters.ByteArrayConverter\nvalue.converter=org.apache.kafka.connect.converters.ByteArrayConverter\n"
+
+// A worker consumer.auto.offset.reset Conduit cannot carry (none,
+// by_duration:...) is read only by sink connectors' consumers, so it blocks a
+// sink and nothing else. A MirrorMaker or source run is not stopped by it.
+func TestSinkConsumer_WorkerResetBlocksOnlySinks(t *testing.T) {
+	for _, v := range []string{"none", "by_duration:PT1H"} {
+		t.Run(v, func(t *testing.T) {
+			is := is.New(t)
+			worker := wkBase + "consumer.auto.offset.reset=" + v + "\n"
+
+			// Sink run: blocking worker entry, stopped pipeline, no start position written.
+			res, p := sinkRun(t, worker, "")
+			is.True(entryFor(res.Report.Connectors[0], "consumer.auto.offset.reset").Blocking)
+			is.Equal(res.Report.Connectors[1].PipelineStatus, kcmigrate.PipelineStopped)
+			is.True(!res.OK)
+			is.True(!strings.Contains(p, "readFromBeginning"))
+
+			// MirrorMaker-only run: the entry is reported, does not block, and
+			// changes neither the blocking count nor the verdict.
+			base := mmRun(t, wkBase, "source.cluster.alias=src\n")
+			mm := mmRun(t, worker, "source.cluster.alias=src\n")
+			e := entryFor(mm.Report.Connectors[0], "consumer.auto.offset.reset")
+			is.Equal(e.Status, kcmigrate.StatusUnsupported)
+			is.True(!e.Blocking)
+			is.True(e.Fix != "")
+			is.Equal(mm.Report.Summary.Blocking, base.Report.Summary.Blocking)
+			is.Equal(mmConnector(mm).PipelineStatus, mmConnector(base).PipelineStatus)
+			is.Equal(mm.OK, base.OK)
+		})
+	}
+}
+
+// An unknown reset value is invalid in Kafka itself and still blocks every
+// pipeline of the run.
+func TestSinkConsumer_WorkerResetInvalidBlocksAll(t *testing.T) {
+	is := is.New(t)
+	mm := mmRun(t, wkBase+"consumer.auto.offset.reset=sometimes\n", "source.cluster.alias=src\n")
+	is.True(entryFor(mm.Report.Connectors[0], "consumer.auto.offset.reset").Blocking)
+	is.Equal(mmConnector(mm).PipelineStatus, kcmigrate.PipelineStopped)
+}
+
+// In a run with a sink and a MirrorMaker connector, only the sink is held by
+// the worker key. With --accept-gaps the sink runs.
+func TestSinkConsumer_WorkerResetMixedRun(t *testing.T) {
+	is := is.New(t)
+	e, err := rules.Builtin()
+	is.NoErr(err)
+	w := in("w.properties", wkBase+"consumer.auto.offset.reset=none\n")
+	req := Request{ConduitVersion: "v", RequiredSettings: BuiltinRequired, Worker: &w, Inputs: []kcmigrate.Input{
+		in("sink.properties", s3SinkBase),
+		in("mm.properties", mmBase+"topics=orders\nsource.cluster.alias=src\n"),
+	}}
+	res, err := Run(context.Background(), e, withValidator(req))
+	is.NoErr(err)
+	byName := map[string]kcmigrate.ReportConnector{}
+	for _, c := range res.Report.Connectors {
+		byName[c.Name] = c
+	}
+	is.Equal(byName["orders-sink"].PipelineStatus, kcmigrate.PipelineStopped)
+	// The MirrorMaker pipeline's status comes from its own blocking notes
+	// only (the offsets note), exactly as without the worker key.
+	req.Worker = nil
+	base, err := Run(context.Background(), e, withValidator(req))
+	is.NoErr(err)
+	for _, c := range base.Report.Connectors {
+		if c.Name == "mm" {
+			is.Equal(byName["mm"].PipelineStatus, c.PipelineStatus)
+		}
+	}
+	req.Worker = &w
+	req.AcceptGaps = true
+	acc, err := Run(context.Background(), e, withValidator(req))
+	is.NoErr(err)
+	for _, c := range acc.Report.Connectors {
+		if c.Name == "orders-sink" {
+			is.Equal(c.PipelineStatus, kcmigrate.PipelineRunning)
+		}
+	}
+}

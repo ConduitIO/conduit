@@ -18,9 +18,11 @@ written before the pipeline starts. So the migrated source sets:
 | `groupID` | the key `consumer.override.group.id`, else the worker's `consumer.group.id`, else `connect-<name>` |
 | `readFromBeginning` | `consumer.override.auto.offset.reset`, else the worker's `consumer.auto.offset.reset`, else `true` (`earliest`) |
 
-A value that came from the connector or the worker is a `translated` entry in the report. A value
-migrate filled in because nothing set it is a `kc.default_differs` note. `auto.offset.reset` values
-other than `earliest` and `latest` (`none`, `by_duration:...`) block the migration.
+A value that came from the connector or the worker is a `translated` entry in the report. A value migrate filled in
+because nothing set it is a `kc.default_differs` note. `auto.offset.reset` values other than `earliest` and
+`latest` (`none`, `by_duration:...`) block the sink. In a worker file they block the sink pipelines of the run
+only, since no other connector reads with the worker's consumer; any other value is invalid in Kafka and blocks
+every pipeline.
 
 The Kafka source resumes from the group's committed offsets whenever the group has them;
 `readFromBeginning` only decides where a partition without a committed offset starts (the group is
