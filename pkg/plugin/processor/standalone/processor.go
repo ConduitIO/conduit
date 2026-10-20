@@ -85,6 +85,15 @@ type wasmProcessor struct {
 	id     string
 	logger log.CtxLogger
 
+	// structuredValuesV2 is the guest's declared capability (Specify.Response
+	// structured_values_v2). It is read once, from the same Specify response the
+	// registry caches at load time, and decides which record shape Process sends
+	// and receives: opencdc.v2 for true, opencdc.v1 for false. It is written
+	// during specification() (the registry load path, before the processor is
+	// handed to a pipeline) and read during Process, so it is never mutated
+	// while records flow.
+	structuredValuesV2 bool
+
 	// module is the WASM module that implements the processor
 	module api.Module
 
@@ -288,7 +297,15 @@ func (p *wasmProcessor) specification(ctx context.Context) (sdk.Specification, e
 
 	switch specResp := resp.Response.(type) {
 	case *processorv1.CommandResponse_Specify:
-		return p.protoconv.specification(specResp.Specify)
+		// Record the guest's capability before returning the spec. The flag is
+		// additive and defaults to false, so an old guest — whose SDK predates
+		// structured_values_v2 — yields false here and keeps getting v1 records.
+		p.structuredValuesV2 = specResp.Specify.GetStructuredValuesV2()
+		spec, err := p.protoconv.specification(specResp.Specify)
+		if err != nil {
+			return sdk.Specification{}, err
+		}
+		return spec, nil
 	default:
 		return sdk.Specification{}, fmt.Errorf("unexpected response type: %T", resp)
 	}
@@ -337,7 +354,17 @@ func (p *wasmProcessor) Open(ctx context.Context) error {
 }
 
 func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	protoRecords, err := p.protoconv.records(records)
+	// Pick the wire shape from the guest's declared capability and use the same
+	// shape end to end. A capable guest gets opencdc.v2 (lossless); an old guest
+	// keeps opencdc.v1, where a wide integer is refused here, before the command
+	// is sent — it is never rounded and never sent as a v2 record.
+	procReq := &processorv1.Process_Request{}
+	var err error
+	if p.structuredValuesV2 {
+		procReq.RecordsV2, err = p.protoconv.recordsV2(records)
+	} else {
+		procReq.Records, err = p.protoconv.records(records)
+	}
 	if err != nil {
 		p.logger.Err(ctx, err).Msg("failed to convert records to proto")
 		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
@@ -345,9 +372,7 @@ func (p *wasmProcessor) Process(ctx context.Context, records []opencdc.Record) [
 
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Process{
-			Process: &processorv1.Process_Request{
-				Records: protoRecords,
-			},
+			Process: procReq,
 		},
 	}
 

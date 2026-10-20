@@ -42,17 +42,17 @@ func TestNewRuntime_CLIDefaultsUnchanged(t *testing.T) {
 	cfg.API.Enabled = false
 	cfg.Pipelines.Path = t.TempDir()
 
-	prevGlobal := zerolog.DefaultContextLogger
-	zerolog.DefaultContextLogger = nil
-	defer func() { zerolog.DefaultContextLogger = prevGlobal }()
-
 	// The exact CLI call pattern: no RuntimeOptions.
 	r, err := conduit.NewRuntime(cfg)
 	is.NoErr(err)
 	is.True(r != nil)
 	defer r.DB.Close()
 
-	// AC-5.3: CLI path still sets the process-global fallback logger.
+	// AC-5.3: the CLI path sets the process-global fallback logger. It is
+	// guarded by a sync.Once (#3111), so it is assigned at most once per
+	// process: if an earlier test already consumed the Once this assertion
+	// still holds (the global was set then), and we no longer reset the global
+	// here because a reset would defeat the Once and make the assertion flaky.
 	is.True(zerolog.DefaultContextLogger != nil)
 
 	// AC-5.2: CLI path still calls configureMetrics(), which registers

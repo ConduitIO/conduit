@@ -1,0 +1,28 @@
+schemaVersion: 1
+id: unsupported-class-debezium-jdbc-sink
+family: common
+description: >-
+  Debezium's own JDBC sink (io.debezium.connector.jdbc.JdbcSinkConnector), not
+  the Confluent class the v0.21 mapping covers. All keys listed unsupported,
+  no pipeline, and the password canary must not reach any output.
+provenance:
+  source: vendor-doc
+  ref: https://github.com/debezium/debezium-examples/blob/8b083bcb37986f828d4af47f11cbdaeefbae7d63/unwrap-smt/jdbc-sink.json
+  license: Apache-2.0
+  copyright: Debezium Authors
+  modifications:
+    - "JDBC URL host rewritten to postgres.internal.example"
+    - "connection.password replaced with a PLACEHOLDER_SECRET_ canary"
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  pipelines: 0
+  entries:
+    - {key: connector.class, status: unsupported, blocking: true, code: kc.connector_class_unsupported}
+    - {key: connection.password, status: unsupported, blocking: true}
+    - {key: primary.key.mode, status: unsupported, blocking: true}
+    - {key: schema.evolution, status: unsupported, blocking: true}
+emits: []
+run: {tier: offline}

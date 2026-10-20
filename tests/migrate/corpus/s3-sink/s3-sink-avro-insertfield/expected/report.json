@@ -1,0 +1,289 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "io.confluent.connect.s3.S3SinkConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "confluent",
+          "version": "12.1.5"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 16,
+    "translated": 6,
+    "approximated": 2,
+    "unsupported": 8,
+    "blocking": 13
+  },
+  "connectors": [
+    {
+      "name": "sink-s3-voluble",
+      "class": "io.confluent.connect.s3.S3SinkConnector",
+      "role": "sink",
+      "pipeline": "pipelines/sink-s3-voluble.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:kafka",
+        "destination": "builtin:s3"
+      },
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/key.converter"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This converter is not translated by this version of migrate; the wire format of keys would differ.",
+          "fix": "Keep this connector on Kafka Connect until migrate translates the converter.",
+          "blocking": true
+        },
+        {
+          "key": "tasks.max",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/tasks.max"
+          },
+          "reason": "One task, one reader.",
+          "blocking": false
+        },
+        {
+          "key": "topics",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/topics"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/topics"
+          },
+          "reason": "Kafka Connect trims the list and splits it on commas with surrounding whitespace; written the same way.",
+          "blocking": false
+        },
+        {
+          "key": "s3.region",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/s3.region"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/aws.region"
+          },
+          "reason": "The bucket region.",
+          "blocking": false
+        },
+        {
+          "key": "s3.bucket.name",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/s3.bucket.name"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/aws.bucket"
+          },
+          "reason": "The bucket objects are written to.",
+          "blocking": false
+        },
+        {
+          "key": "flush.size",
+          "status": "approximated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/flush.size"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/1/settings/sdk.batch.size"
+          },
+          "code": "kc.key_approximated",
+          "reason": "Kafka Connect rotates a file after flush.size records; Conduit writes one object per batch, so sdk.batch.size bounds the records per object instead.",
+          "blocking": false
+        },
+        {
+          "key": "storage.class",
+          "status": "translated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/storage.class"
+          },
+          "reason": "The S3 object store.",
+          "blocking": false
+        },
+        {
+          "key": "format.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/format.class"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "Conduit has no Avro object format; AvroFormat stores an Avro container file.",
+          "fix": "Use JsonFormat or ParquetFormat, or keep this connector on Kafka Connect.",
+          "blocking": true
+        },
+        {
+          "key": "schema.generator.class",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/schema.generator.class"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "The Hive schema generator names the object schema; Conduit has no schema generator.",
+          "fix": "Keep this connector on Kafka Connect if a Hive metastore reads the schema, or accept the difference with --accept-gaps.",
+          "blocking": true
+        },
+        {
+          "key": "schema.compatibility",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/schema.compatibility"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "Conduit has no schema compatibility mode.",
+          "fix": "Keep this connector on Kafka Connect if a schema registry or Hive metastore enforces compatibility.",
+          "blocking": true
+        },
+        {
+          "key": "partitioner.class",
+          "status": "approximated",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/partitioner.class"
+          },
+          "code": "kc.key_approximated",
+          "reason": "Kafka Connect writes objects under topics/<topic>/partition=<n>/; Conduit writes them under <prefix>/<UnixNano>.<ext>, so the object layout differs.",
+          "fix": "Keep this connector on Kafka Connect if consumers read the partitioned object keys, or accept the difference with --accept-gaps.",
+          "blocking": true
+        },
+        {
+          "key": "transforms",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/transforms"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "The connector has single message transforms, which this version of migrate does not translate. Transforms change data.",
+          "fix": "Keep this connector on Kafka Connect, or remove the transforms and add the equivalent processors to the pipeline by hand.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.AddMetadata.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/transforms.AddMetadata.type"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
+          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "blocking": true
+        },
+        {
+          "key": "transforms.AddMetadata.offset.field",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/transforms.AddMetadata.offset.field"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
+          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "blocking": true
+        },
+        {
+          "key": "transforms.AddMetadata.partition.field",
+          "status": "unsupported",
+          "origin": {
+            "file": "sink-s3-voluble.json",
+            "pointer": "/transforms.AddMetadata.partition.field"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
+          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "blocking": true
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Conduit writes one object per batch as <prefix>/<UnixNano>.<ext>; the Kafka Connect S3 sink names and lays out objects by its partitioner, and its JsonFormat writes the bare record value where Conduit's json format writes one OpenCDC-shaped object per line. Consumers of the exact object keys or line shape break.",
+          "fix": "Keep this connector on Kafka Connect if consumers read the object keys or the bare-value JSON lines, or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "s3-sink/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.delivery_semantics_differ",
+          "reason": "Object names are not deterministic, so a batch that is retried after a failure or a restart is written again as a new object. A reader can see a record twice, never zero times; Kafka Connect's deterministic naming gives exactly-once object keys.",
+          "fix": "None needed; consumers should tolerate duplicate objects.",
+          "blocking": false,
+          "rule": "s3-sink/notes/kc.delivery_semantics_differ"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:kafka source requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_VOLUBLE_SOURCE_SERVERS} instead.",
+          "fix": "Set KC_SINK_S3_VOLUBLE_SOURCE_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
+          "blocking": true,
+          "rule": "required/source/servers"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:s3 destination requires format, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_VOLUBLE_DESTINATION_FORMAT} instead.",
+          "fix": "Set KC_SINK_S3_VOLUBLE_DESTINATION_FORMAT in the environment (see secrets.env.template).",
+          "blocking": true,
+          "rule": "required/destination/format"
+        },
+        {
+          "code": "kc.converter_unknown",
+          "reason": "Neither the connector nor a worker file sets value.converter, so the format Kafka Connect used is unknown.",
+          "fix": "Pass the worker properties with --worker, or set value.converter on the connector, then re-run.",
+          "blocking": true,
+          "rule": "shared/converters/value.converter"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.",
+          "blocking": false,
+          "rule": "shared/defaults/header.converter"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

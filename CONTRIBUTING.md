@@ -40,9 +40,29 @@ and that all the tests still run successfully.
   [Docker](https://www.docker.com/) to be installed and running. The tests will
   spin up required docker containers, run the integration tests and stop the
   containers afterwards.
+- Before pushing, run `make check`. It is the fast, Docker-free equivalent of
+  CI's `check` job: it runs `go mod tidy`, regenerates llms.txt and other
+  generated files, formats Go with gofumpt/gofmt/goimports, and lints markdown —
+  then fails with a `git diff` showing exactly what drifted. Catching the drift
+  here beats waiting for a red merge-queue check.
 
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
+
+### Resolving ConduitIO modules (fresh connector tags)
+
+`go get github.com/conduitio/*@vX.Y.Z` on a freshly tagged connector fails with
+"unknown revision" for 10–30 minutes while `proxy.golang.org` indexes the tag. Set
+this once so ConduitIO modules resolve directly from GitHub (third-party modules
+still use the proxy and the checksum DB — this is scoped, not a global
+`GOPROXY=direct`):
+
+```shell
+go env -w GOPRIVATE='github.com/conduitio/*' GONOSUMDB='github.com/conduitio/*'
+```
+
+The same two variables are set in CI (`.github/workflows/`) and in the
+`scripts/bump-builtin-connectors.sh` / `scripts/bump-sdk-in-connectors.sh` helpers.
 
 ## Test coverage
 
@@ -105,14 +125,39 @@ To propose a new template:
 6. Push to the branch
 7. Create new pull request
 
+## Adding a Kafka Connect migration case
+
+The migration harness (`tests/migrate`, #3010) holds real Kafka Connect configurations and the
+outcome `conduit migrate kafka-connect` must produce for each. A case is a sanitized upstream
+config under a permissive license, a `case.yaml` recording where it came from and what is
+expected, and, once the command exists, its goldens. The procedure, the scrub rules and the
+license allow-list are in [`tests/migrate/README.md`](tests/migrate/README.md); run
+`go test ./tests/migrate/...` before opening the PR. Connector lanes add the cases for their
+connector in the PR that certifies it.
+
 ## Changing a pipeline engine
 
-The engines are `pkg/lifecycle` (v1, default) and `pkg/lifecycle-poc` (arch-v2, behind
-`--preview.pipeline-arch-v2`), plus the layer under them: `pkg/connector` (source and destination
-wrappers, the position persister) and the plugin boundary in `pkg/plugin`. Read
-[Life of a record](docs/architecture/life-of-a-record.md) and
-[Guarantees](docs/architecture/guarantees.md) first. The second page says which promises a test enforces
-and which do not; a change that touches a promise updates its row in the same PR.
+The engine is the layer that moves records from source to destination. A map of its packages, in the
+order a record touches them:
+
+- `pkg/connector` — `connector.Source` and `connector.Destination`, the wrappers both engines talk to,
+  and the position persister (`persister.go`). The persist-before-ack rule (invariant 1) and the
+  atomic position/state write (invariant 5) live here.
+- `pkg/lifecycle` + `pkg/lifecycle/stream` — the v1 engine (default): a graph of nodes, one message per
+  record, goroutines connected by channels.
+- `pkg/lifecycle-poc` + `pkg/lifecycle-poc/funnel` — the v2 engine (arch-v2, behind
+  `--preview.pipeline-arch-v2`): one worker per source, one batch at a time, fan-out voted by
+  `multiAckNacker`.
+- `pkg/processor` — `RunnableProcessor`, the single choke point every processor is invoked through;
+  condition evaluation and input cloning happen here.
+- `pkg/plugin` — the plugin boundary: `plugin/connector` (builtin, standalone, external) and
+  `plugin/processor` (builtin, standalone/WASM). Protocol-version and value negotiation live here.
+- `pkg/schemaregistry` — the built-in schema registry and the Avro codec limits.
+
+Where to start reading: [Life of a record](docs/architecture/life-of-a-record.md) and
+[Guarantees](docs/architecture/guarantees.md) first, then the `doc.go` files in the packages above, then
+[`docs/package_structure.md`](docs/package_structure.md). The guarantees page says which promises a test
+enforces and which do not; a change that touches a promise updates its guarantee in the same PR.
 
 > The tier guidance, the design-doc template and the proof steps below are **proposals**, distilled from
 > `CLAUDE.md` and the existing design docs. They are not yet agreed project policy.
@@ -217,10 +262,11 @@ In this order, cheapest first:
    bench-engine` runs: drift between invocations shows up as a significant delta on identical code. `make
    bench-engine` alone gives one snapshot. The benchmark runs seven reference shapes (1x1, 2x2, 4x4, source batch
    100, ack latency, buffered acks, destination batching) on both engines; one pass is about 15 s, so
-   `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR a CI job posts the same comparison
-   as a comment, with a noise floor measured on unchanged code. Both are indicative: they drive fakes, so they show
-   engine overhead and say nothing about connector throughput. A throughput claim needs a benchi run with committed
-   configs and an environment spec.
+   `bench-engine-ab` at the default 5 rounds takes a few minutes. On an engine PR the `bench-engine (gate)` CI
+   check runs the same interleaved comparison and **fails the build when a benchmark is more than 10% slower than
+   base beyond twice the A/A noise floor**, citing the floor in the step summary and a PR comment. These drive
+   fakes in-process, so they show engine overhead and say nothing about connector throughput. A throughput claim
+   needs a benchi run with committed configs and an environment spec.
 5. **Update the docs.** The matching row in `docs/architecture/guarantees.md`, the flow in
    `docs/architecture/life-of-a-record.md` if the behaviour changed, and `llms.txt` if anything user-facing did.
 

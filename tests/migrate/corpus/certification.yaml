@@ -1,0 +1,20 @@
+# Declared certification state of every plugin `conduit migrate kafka-connect`
+# can emit (harness rule 4, docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md).
+#
+# A plugin migrate can emit with no entry here fails the harness. The owning
+# connector lane flips its entry from `pending` to `certified` in the PR that
+# completes certification, adding `registry:` (the index id) and any
+# `capabilities:` with their proving tests. The per-PR run requires an entry;
+# the release run (MIGRATE_HARNESS_RELEASE=1) requires `tier: certified`, and
+# the nightly compares each entry with the live registry index tier so this
+# file cannot claim more than the index says.
+# v0.21 release bar (#3002): every emitted plugin is certified on the swept
+# protocol-v3 releases below, each with acceptance-v2 green on the v3 stack.
+# `registry:` holds the connector's index id (its `name` in the registry
+# index). No `capabilities:` are claimed: the harness requires none for a
+# certified entry (see tests/migrate/harness/certification.go).
+- {plugin: builtin:postgres, version: ">=0.16.0", tier: certified, lane: 3004, registry: postgres}
+- {plugin: mysql,            version: ">=0.5.0",  tier: certified, lane: 3005, registry: mysql}
+- {plugin: builtin:kafka,    version: ">=0.14.0", tier: certified, lane: 3008, registry: kafka}
+- {plugin: builtin:s3,       version: ">=0.11.0", tier: certified, lane: 3009, registry: s3}
+- {plugin: elasticsearch,    version: ">=0.6.0",  tier: certified, lane: 3007, registry: elasticsearch}

@@ -1,0 +1,3 @@
+debezium_image=quay.io/debezium/connect@sha256:5a62d0fb204c3ff3ba66f9e402ec8d628e8b05d527b06185764c72e28dfb1d04
+converter=json-txmeta
+connector_status={"name":"golden","connector":{"state":"RUNNING","worker_id":"172.27.0.5:8083"},"tasks":[{"id":0,"state":"RUNNING","worker_id":"172.27.0.5:8083"}],"type":"source"}

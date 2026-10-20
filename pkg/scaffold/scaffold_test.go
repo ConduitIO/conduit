@@ -203,7 +203,7 @@ func TestGenerate_UnsupportedLanguage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
 	_, err := scaffold.Generate(context.Background(), scaffold.Request{
 		Kind:     scaffold.KindConnector,
-		Language: "python",
+		Language: "ruby",
 		Name:     "s3",
 		Module:   "github.com/devaris/conduit-connector-s3",
 		Path:     dir,
@@ -215,6 +215,56 @@ func TestGenerate_UnsupportedLanguage(t *testing.T) {
 	assert.Equal(t, exitcode.Validation, exitcode.ExitCode(err))
 	assert.NotEmpty(t, ce.Suggestion)
 	assert.NoDirExists(t, dir)
+}
+
+// TestGenerate_ConnectorPython is the Python half of the headline acceptance
+// criterion: `connector new --lang python s3` scaffolds a connector that
+// imports `conduit.connector`, pins the merged `conduitio` distribution, and
+// passes a Python syntax check with no edits. It does not need network (the
+// Python path installs no code-gen tool), so unlike the Go E2E tests it runs
+// in the standard CI job — only python3 on PATH is required.
+func TestGenerate_ConnectorPython(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH")
+	}
+
+	dir := filepath.Join(t.TempDir(), "conduit-connector-s3")
+	res, err := scaffold.Generate(context.Background(), scaffold.Request{
+		Kind:     scaffold.KindConnector,
+		Language: scaffold.LanguagePython,
+		Name:     "s3",
+		Path:     dir,
+		Git:      false,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, dir, res.Path)
+	assert.Equal(t, scaffold.KindConnector, res.Kind)
+	assert.Equal(t, scaffold.LanguagePython, res.Language)
+	assert.NotEmpty(t, res.TemplateRef)
+	assert.Equal(t, "0.1.0.dev0", res.SDKVersion)
+	assertAllStepsOK(t, res)
+
+	// The Python path skips the Go-only install/codegen steps.
+	for _, s := range res.Steps {
+		assert.NotEqual(t, scaffold.StepInstallTools, s.Name)
+		assert.NotEqual(t, scaffold.StepGenerate, s.Name)
+	}
+
+	mainPy, err := os.ReadFile(filepath.Join(dir, "main.py"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainPy), "from conduit.connector import")
+	assert.Contains(t, string(mainPy), `Specification(name="s3"`)
+
+	pyproject, err := os.ReadFile(filepath.Join(dir, "pyproject.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pyproject), `name = "conduit-connector-s3"`)
+	assert.Contains(t, string(pyproject), `"conduitio>=0.1.0.dev0"`)
+
+	acceptance, err := os.ReadFile(filepath.Join(dir, "tests", "test_acceptance.py"))
+	require.NoError(t, err)
+	assert.Contains(t, string(acceptance), "AcceptanceTestSuite")
+	assert.Contains(t, string(acceptance), `Specification(name="s3"`)
 }
 
 func assertAllStepsOK(t *testing.T, res scaffold.Result) {

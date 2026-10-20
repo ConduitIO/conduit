@@ -220,10 +220,11 @@ func TestParser_V1_EnvVars(t *testing.T) {
 							Plugin: "builtin:s3",
 							Name:   "s3-source",
 							Settings: map[string]string{
-								// env variables should be replaced with their values
-								"aws.secret": "my-aws-secret",
-								"aws.key":    "my-aws-key",
-								"aws.url":    "my/aws-url/url",
+								// env references are preserved unresolved; the
+								// provisioner resolves them at runtime
+								"aws.secret": "${TEST_PARSER_AWS_SECRET}",
+								"aws.key":    "${TEST_PARSER_AWS_KEY}",
+								"aws.url":    "my/${TEST_PARSER_AWS_URL}/url",
 							},
 						},
 					},
@@ -593,10 +594,11 @@ func TestParser_V2_EnvVars(t *testing.T) {
 							Plugin: "builtin:s3",
 							Name:   "s3-source",
 							Settings: map[string]string{
-								// env variables should be replaced with their values
-								"aws.secret": "my-aws-secret",
-								"aws.key":    "my-aws-key",
-								"aws.url":    "my/aws-url/url",
+								// env references are preserved unresolved; the
+								// provisioner resolves them at runtime
+								"aws.secret": "${TEST_PARSER_AWS_SECRET}",
+								"aws.key":    "${TEST_PARSER_AWS_KEY}",
+								"aws.url":    "my/${TEST_PARSER_AWS_URL}/url",
 							},
 						},
 					},

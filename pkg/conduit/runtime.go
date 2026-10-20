@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package conduit wires up everything under the hood of a Conduit instance
-// including metrics, telemetry, logging, and server construction.
-// It should only ever interact with the Orchestrator, never individual
-// services. All of that responsibility should be left to the Orchestrator.
 package conduit
 
 import (
@@ -31,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/conduitio/conduit-commons/hostpolicy"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-commons/database/badger"
@@ -186,6 +184,14 @@ type RuntimeOption func(*runtimeOptions)
 func WithLogger(logger log.CtxLogger) RuntimeOption {
 	return func(o *runtimeOptions) { o.logger = &logger }
 }
+
+// defaultContextLoggerOnce bounds the process-global
+// zerolog.DefaultContextLogger assignment to at most once per process (#3111).
+// NewRuntime can be called concurrently by embedders, and a second assignment
+// would race with the first runtime's goroutines reading the global (and
+// misroute ambient logs between runtimes). The first runtime to need a
+// fallback wins; embedders that want per-runtime isolation pass WithLogger.
+var defaultContextLoggerOnce sync.Once
 
 // WithMetricsRegisterer supplies a Prometheus registerer that receives this
 // Runtime's metric families instead of the package-level configureMetrics()
@@ -395,8 +401,12 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		Hook(ctxutil.FilepathLogCtxHook{})
 	if ro.logger == nil {
 		// CLI path only (AC-5.3): an embed-supplied logger must never become
-		// the ambient global fallback — see WithLogger's doc.
-		zerolog.DefaultContextLogger = &logger.Logger
+		// the ambient global fallback — see WithLogger's doc. Assigned at most
+		// once per process so concurrent NewRuntime calls don't race on the
+		// process-wide global or misroute ambient logs between runtimes (#3111).
+		defaultContextLoggerOnce.Do(func() {
+			zerolog.DefaultContextLogger = &logger.Logger
+		})
 	}
 
 	// Warn as soon as there is a logger to warn with. This is the ENTIRE
@@ -546,12 +556,24 @@ func createServices(r *Runtime) error {
 	tokenService := connutils.NewAuthManager()
 	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
 
+	// Operator policy for built-in connectors' use of the host's ambient cloud
+	// credentials (connectors.ambient-credentials.*). Off by default: the zero
+	// policy denies. Validated in Config.Validate; rebuilt here as the single
+	// source of truth and re-checked so a caller that skipped Validate still
+	// fails closed.
+	ambientPolicy, ambientWarnings, err := r.Config.AmbientCredentialsPolicy(os.Getenv)
+	if err != nil {
+		return cerrors.Errorf("invalid ambient credentials config: %w", err)
+	}
+	r.logAmbientCredentialsPolicy(ambientPolicy, ambientWarnings)
+
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
 			r.logger,
 			r.Config.ConnectorPlugins,
 			connSchemaService,
+			conn_builtin.WithAmbientCredentialsPolicy(ambientPolicy),
 		),
 		conn_standalone.NewRegistry(
 			r.logger,
@@ -964,7 +986,15 @@ func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
 			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
 		}
 
-		pipelinesStopped <- struct{}{}
+		// Signal the progress logger above to stop. This must be a close, not
+		// a send on an unbuffered channel: the logger's loop runs for exactly
+		// count*interval == exitTimeout, so when ls.Wait returns after the full
+		// exitTimeout (pipelines did not stop in time) the logger has already
+		// left its final select and returned, and a send here would block
+		// forever with no receiver — deadlocking Runtime.Run and hanging
+		// shutdown. Closing is idempotent with a missing receiver, so Run
+		// always returns.
+		close(pipelinesStopped)
 
 		t.Go(func() error {
 			r.connectorPersister.Wait()
@@ -1645,5 +1675,23 @@ func (r *Runtime) devPipelineStatus(ctx context.Context, pipelineID string) (boo
 		return false, nil
 	default:
 		return false, nil
+	}
+}
+
+// logAmbientCredentialsPolicy logs the effective ambient-credentials policy at
+// startup, so an operator can see what is on without reading the config.
+// Endpoint and resource lists are counted, not printed (they are shown by
+// `conduit doctor`).
+func (r *Runtime) logAmbientCredentialsPolicy(p hostpolicy.Policy, warnings []string) {
+	ctx := context.Background()
+	logger := r.logger.WithComponent("connector.AmbientCredentials")
+	logger.Info(ctx).
+		Bool("enabled", p.AmbientCredentials).
+		Int("allow_endpoints_count", len(p.AllowEndpoints)).
+		Int("allow_resources_count", len(p.AllowResources)).
+		Bool("allow_proxy", p.AllowProxy).
+		Msg("ambient credentials policy")
+	for _, w := range warnings {
+		logger.Warn(ctx).Msg(w)
 	}
 }

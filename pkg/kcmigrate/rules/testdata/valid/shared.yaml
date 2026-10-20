@@ -1,0 +1,19 @@
+rulesVersion: 1
+scope: shared
+upstream: {name: kafka, version: "4.2"}
+keys:
+  - key: tasks.max
+    status: approximated
+    code: kc.key_approximated
+    reason: A pipeline has one reader.
+    diff: behavior
+  - key: name
+    status: unsupported
+    code: kc.key_unsupported
+    reason: Shadowed by the class rule in tests.
+    fix: n/a
+    diff: identity
+  - key: {regex: '^(key|value)\.converter$'}
+    status: translated
+    emit: {kind: none}
+    diff: identity
