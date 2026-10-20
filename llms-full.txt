@@ -1471,7 +1471,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (166)
+## 3. Error codes (167)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1519,6 +1519,7 @@ Author: Meroxa, Inc.
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |
 | `kc.connector_class_unsupported` | InvalidArgument | CodeConnectorClassUnsupported: the connector class has no mapping; every key of the connector is listed with this code and no pipeline is written. |
+| `kc.consumer_group_shared` | InvalidArgument | CodeConsumerGroupShared: a connector-level note that a migrated sink's Kafka source reads in the consumer group the Kafka Connect sink commits its offsets to, so the Kafka Connect connector must be stopped before the pipeline starts. Not blocking: two live consumers in one group split the partitions between them, which delays records and duplicates none, and the operator is the only one who can stop it. |
 | `kc.converter_unknown` | InvalidArgument | CodeConverterUnknown: a connector-level note when neither the connector nor the worker file sets key.converter or value.converter, so the wire format is unknown. Blocking. |
 | `kc.converter_unsupported` | InvalidArgument | CodeConverterUnsupported: a converter with no Conduit equivalent in this version. Blocking: the wire format would differ. |
 | `kc.default_differs` | InvalidArgument | CodeDefaultDiffers: a connector-level note for an absent key whose Kafka Connect default differs from Conduit's behavior. |
