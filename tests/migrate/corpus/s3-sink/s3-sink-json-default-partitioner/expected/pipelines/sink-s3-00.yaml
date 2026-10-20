@@ -8,6 +8,8 @@ pipelines:
         type: source
         plugin: builtin:kafka
         settings:
+          groupID: connect-sink-s3-00
+          readFromBeginning: "true"
           servers: ${KC_SINK_S3_00_SOURCE_SERVERS}
           topics: customers,transactions
       - id: destination
