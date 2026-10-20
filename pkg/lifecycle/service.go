@@ -115,6 +115,12 @@ type Service struct {
 	// publishMu, next to the runningPipelines entry.
 	lastRun *csync.Map[string, *runChain]
 
+	// testWaitPipelineLookedUp, if set, is called by WaitPipeline right after
+	// its lookups, with whether it found a live entry. It lets a test know
+	// which path WaitPipeline took before changing what it waits for. Nil in
+	// production: only this package's tests set it.
+	testWaitPipelineLookedUp func(live bool)
+
 	// runs counts live runs and holds the shutdown flag (#2901). StopAll
 	// begins the shutdown; from then on Start and recovery restarts are
 	// refused, and Wait does not return while any run is live. See
@@ -794,6 +800,9 @@ func (s *Service) WaitPipeline(id string) error {
 	p, ok := s.runningPipelines.Get(id)
 	last, hasLast := s.lastRun.Get(id)
 	s.publishMu.Unlock()
+	if s.testWaitPipelineLookedUp != nil {
+		s.testWaitPipelineLookedUp(ok && p.t != nil)
+	}
 	if ok && p.t != nil {
 		err := p.t.Wait()
 		// Invariant 7 (#3087): a recovery restart's predecessor can still be

@@ -174,7 +174,18 @@ func (g *messageGate) Write(p []byte) (int, error) {
 // The gate holds the predecessor in its "pipeline started" log line (the
 // second one: the first is the test's own Start). The restarted run is then
 // stopped; WaitPipeline must not return until the predecessor is released.
+//
+// Two variants, one per WaitPipeline path. "after stop" calls it once the
+// restarted run is dead and gone from runningPipelines (the cleaned-up path).
+// "while live" calls it while the restarted run is still the live entry; the
+// testWaitPipelineLookedUp hook confirms it took the live-entry path before
+// the run is stopped.
 func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T) {
+	t.Run("after stop", func(t *testing.T) { testWaitsForRecoveryPredecessor(t, false) })
+	t.Run("while live", func(t *testing.T) { testWaitsForRecoveryPredecessor(t, true) })
+}
+
+func testWaitsForRecoveryPredecessor(t *testing.T, whileLive bool) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -233,12 +244,31 @@ func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T)
 		t.Fatal("the predecessor's tomb is dead while its goroutine is held; the gate does not hold the window")
 	}
 
+	waitDone := make(chan error, 1)
+	startWait := func(wantLive bool) {
+		lookedUp := make(chan bool, 1)
+		ls.testWaitPipelineLookedUp = func(live bool) { lookedUp <- live }
+		go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+		select {
+		case live := <-lookedUp:
+			if live != wantLive {
+				t.Fatalf("WaitPipeline took the wrong path: live entry = %v, want %v", live, wantLive)
+			}
+		case <-time.After(terminalStatusGuard):
+			t.Fatal("WaitPipeline did not look the pipeline up")
+		}
+	}
+	if whileLive {
+		startWait(true)
+	}
+
 	// Stop the restarted run and wait for every goroutine of it to return.
 	is.NoErr(ls.Stop(ctx, pl.ID, false))
 	waitClosed(t, restarted.t.Dead(), "the restarted run to stop")
 
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+	if !whileLive {
+		startWait(false)
+	}
 	select {
 	case err := <-waitDone:
 		close(release)

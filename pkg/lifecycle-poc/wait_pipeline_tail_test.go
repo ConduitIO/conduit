@@ -157,7 +157,16 @@ func (g *messageGate) Write(p []byte) (int, error) {
 // "pipeline started" after the restarted run is published and only then
 // returns. The gate holds it there; the restarted run is stopped, and
 // WaitPipeline must not return until the predecessor is released.
+//
+// Two variants, one per WaitPipeline path: "after stop" (the cleaned-up path)
+// and "while live" (the live-entry path, confirmed by the
+// testWaitPipelineLookedUp hook before the run is stopped).
 func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T) {
+	t.Run("after stop", func(t *testing.T) { testWaitsForRecoveryPredecessor(t, false) })
+	t.Run("while live", func(t *testing.T) { testWaitsForRecoveryPredecessor(t, true) })
+}
+
+func testWaitsForRecoveryPredecessor(t *testing.T, whileLive bool) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -224,6 +233,25 @@ func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T)
 	}
 
 	waitForRecordsAcked(t, source, healthyRecords)
+
+	waitDone := make(chan error, 1)
+	startWait := func(wantLive bool) {
+		lookedUp := make(chan bool, 1)
+		ls.testWaitPipelineLookedUp = func(live bool) { lookedUp <- live }
+		go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+		select {
+		case live := <-lookedUp:
+			if live != wantLive {
+				t.Fatalf("WaitPipeline took the wrong path: live entry = %v, want %v", live, wantLive)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("WaitPipeline did not look the pipeline up")
+		}
+	}
+	if whileLive {
+		startWait(true)
+	}
+
 	is.NoErr(ls.Stop(ctx, pl.ID, false))
 	select {
 	case <-restarted.t.Dead():
@@ -231,8 +259,9 @@ func TestServiceLifecycle_WaitPipeline_WaitsForRecoveryPredecessor(t *testing.T)
 		t.Fatal("the restarted run did not stop within 10s")
 	}
 
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- ls.WaitPipeline(pl.ID) }()
+	if !whileLive {
+		startWait(false)
+	}
 	select {
 	case err := <-waitDone:
 		close(release)

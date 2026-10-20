@@ -24,8 +24,16 @@ import "gopkg.in/tomb.v2"
 // restart, logs, and releases its reservation, and only then returns. So the
 // restarted run can be stopped and dead while its predecessor is still
 // running. WaitPipeline waits for the whole chain, not only for the run it
-// finds, so that it never reports a pipeline stopped while any run of it is
-// still running.
+// finds, so it never returns while the run it found, or any earlier run of
+// the pipeline that was still unwinding when that run was published, is
+// running.
+//
+// The chain covers predecessors, not successors. During a recovery backoff
+// runningPipelines still holds the failed run; a WaitPipeline called then
+// waits for that run's chain, which dies once the restart has been
+// published, and can return while the restarted run is live. That is the
+// pre-existing backoff-window behaviour described at runPipeline's
+// publication; Service.Wait covers every run regardless.
 //
 // A chain only links runs that were not dead at publication, so it stays short:
 // dead links are dropped every time a run is published.

@@ -118,6 +118,12 @@ type Service struct {
 	// entry.
 	lastRun *csync.Map[string, *runChain]
 
+	// testWaitPipelineLookedUp, if set, is called by WaitPipeline right after
+	// its lookups, with whether it found a live entry. It lets a test know
+	// which path WaitPipeline took before changing what it waits for. Nil in
+	// production: only this package's tests set it.
+	testWaitPipelineLookedUp func(live bool)
+
 	// testWorkersReleased, if set, is called synchronously from runPipeline
 	// immediately after this run's worker goroutines are released (i.e.
 	// right after close(registered)) — the earliest instant a worker could
@@ -1006,6 +1012,9 @@ func (s *Service) WaitPipeline(id string) error {
 	p, ok := s.runningPipelines.Get(id)
 	last, hasLast := s.lastRun.Get(id)
 	s.publishMu.Unlock()
+	if s.testWaitPipelineLookedUp != nil {
+		s.testWaitPipelineLookedUp(ok && p.t != nil)
+	}
 	if ok && p.t != nil {
 		err := p.t.Wait()
 		// Invariant 7 (#3087): a recovery restart's predecessor can still be
