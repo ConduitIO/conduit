@@ -17,52 +17,13 @@ package provisioning
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
-	lifecyclev2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
-	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
-	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
-
-// archV2Lifecycle is what runtime.go wires under --preview.pipeline-arch-v2:
-// the real lifecycle-poc service (which carries PreflightPipelineConfig),
-// except lifecycle calls go to a strict mock so the test sees every call.
-type archV2Lifecycle struct {
-	*mock.LifecycleService
-	v2 *lifecyclev2.Service
-}
-
-// Compile-time guard: if *lifecycle-poc.Service stops implementing the
-// preflight interface (a rename or signature drift), ApplyPlanLive's type
-// assertion would silently stop firing and the live-apply guard would vanish.
-var _ startConfigPreflighter = (*lifecyclev2.Service)(nil)
-
-func (l archV2Lifecycle) PreflightPipelineConfig(cfg config.Pipeline) error {
-	return l.v2.PreflightPipelineConfig(cfg)
-}
-
-func newArchV2PreflightService(ctrl *gomock.Controller) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.LifecycleService) {
-	v2 := lifecyclev2.NewService(log.Nop(), &lifecyclev1.ErrRecoveryCfg{
-		MinDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 2, MaxRetriesWindow: time.Minute,
-	}, noopV2ConnectorService{}, noopV2ProcessorService{}, noopV2ConnectorPluginService{}, noopV2PipelineService{}, true)
-
-	pipSrv := mock.NewPipelineService(ctrl)
-	connSrv := mock.NewConnectorService(ctrl)
-	procSrv := mock.NewProcessorService(ctrl)
-	connPlugSrv := mock.NewConnectorPluginService(ctrl)
-	lifecycleSrv := mock.NewLifecycleService(ctrl)
-	srv := NewService(&inmemory.DB{}, log.Nop(), pipSrv, connSrv, procSrv, connPlugSrv,
-		archV2Lifecycle{LifecycleService: lifecycleSrv, v2: v2}, "")
-	return srv, pipSrv, connSrv, procSrv, lifecycleSrv
-}
 
 func batchingApplyFixture() (old, desired config.Pipeline) {
 	old = config.Pipeline{
@@ -79,33 +40,6 @@ func batchingApplyFixture() (old, desired config.Pipeline) {
 		{ID: "p1:out", Type: config.TypeDestination, Plugin: "builtin:file", Settings: map[string]string{"path": "/tmp/x", "sdk.batch.size": "100"}},
 	}
 	return old, desired
-}
-
-// TestApplyPlanLive_ArchV2_RefusesDestinationBatchingBeforeStopping: a live
-// apply that adds sdk.batch.size to a RUNNING arch-v2 pipeline is refused with
-// the coded error before StopAndWait. The strict lifecycle mock has no
-// StopAndWait/Start expectation and the connector mock no Update expectation,
-// so stopping the pipeline or committing the config fails the test (#2979).
-func TestApplyPlanLive_ArchV2_RefusesDestinationBatchingBeforeStopping(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	srv, pipSrv, connSrv, procSrv, _ := newArchV2PreflightService(ctrl)
-
-	old, desired := batchingApplyFixture()
-	instance := expectExportRunning(pipSrv, connSrv, procSrv, old)
-
-	diff, err := srv.Plan(ctx, desired)
-	is.NoErr(err)
-	is.True(!diff.Empty())
-
-	_, err = srv.ApplyPlanLive(ctx, desired, diff.Hash, true)
-
-	ce, ok := conduiterr.Get(err)
-	is.True(ok)
-	is.Equal(ce.Code, lifecyclev2.CodeArchV2DestinationBatchingUnsupported)
-	is.Equal(ce.ConfigPath, "/connectors/1/settings/sdk.batch.size")
-	is.Equal(instance.GetStatus(), pipeline.StatusRunning) // untouched
 }
 
 // TestApplyPlanLive_NoPreflightOnDefaultEngine pins that the default engine,

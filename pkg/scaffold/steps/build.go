@@ -16,6 +16,8 @@ package steps
 
 import (
 	"context"
+	"os/exec"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
@@ -37,6 +39,24 @@ import (
 func Build(ctx context.Context, dir string) error {
 	if _, err := runGo(ctx, dir, "build", "./..."); err != nil {
 		return cerrors.Errorf("steps: go build ./...: %w", err)
+	}
+	return nil
+}
+
+// BuildPython verifies a scaffolded Python connector is syntactically valid
+// by compiling every .py file under dir (`python3 -m compileall -q .`). This
+// is the Python analog of Build's "builds with no edits" promise: compileall
+// parses without importing, so it needs neither the `conduitio` distribution
+// nor the connector's other dependencies installed. Import-time verification
+// (actually importing `conduit.connector`) is the scaffolded repo's own
+// acceptance-test concern, run against the published distribution — not
+// something this command can do before that distribution is released.
+func BuildPython(ctx context.Context, dir string) error {
+	cmd := exec.CommandContext(ctx, "python3", "-m", "compileall", "-q", ".")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return cerrors.Errorf("steps: python3 -m compileall -q .: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

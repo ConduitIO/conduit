@@ -16,11 +16,13 @@ package funnel
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -91,8 +93,46 @@ func TestWorker_tearDownSource_RetriesAfterFailure(t *testing.T) {
 
 	w := &Worker{Source: src}
 	is.True(cerrors.Is(w.tearDownSource(ctx), teardownErr)) // failure surfaced, not masked
-	is.NoErr(w.tearDownSource(ctx))                         // retried and succeeded
-	is.NoErr(w.tearDownSource(ctx))                         // now a no-op (no third Teardown)
+	// Retried and succeeded, but the first failure stays the reported one
+	// (#2966): the stop was still not clean.
+	is.True(cerrors.Is(w.tearDownSource(ctx), teardownErr))
+	is.True(cerrors.Is(w.tearDownSource(ctx), teardownErr)) // now a no-op (no third Teardown)
+}
+
+// TestWorker_Close_ReportsFirstTeardownError is the regression test for #2966.
+// Stop's Teardown fails on the final position write; connector.Source has
+// already released the plugin by then, so the retry from Close fails with
+// plugin.ErrPluginNotRunning. Close, whose error becomes the run's terminal
+// error, must report the persist failure, not the retry's.
+func TestWorker_Close_ReportsFirstTeardownError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	sourceMock, tasks, taskNode := newMockTasks(ctrl, "sourceTask", "task1")
+	dlq, dlqDest := NewMockDLQ(ctrl, logger)
+	dlqDest.EXPECT().Teardown(gomock.Any()).Return(nil)
+	for _, task := range tasks {
+		task.EXPECT().Close(gomock.Any()).Return(nil)
+	}
+
+	persistErr := cerrors.New("failed to persist source connector position during teardown: store unavailable")
+	gomock.InOrder(
+		sourceMock.EXPECT().Teardown(gomock.Any()).Return(persistErr),
+		sourceMock.EXPECT().Teardown(gomock.Any()).Return(plugin.ErrPluginNotRunning),
+	)
+
+	w, err := NewWorker(taskNode, dlq, logger, noop.Timer{})
+	is.NoErr(err)
+
+	stopErr := w.Stop(ctx)
+	is.True(cerrors.Is(stopErr, persistErr))
+
+	closeErr := w.Close(ctx)
+	is.True(cerrors.Is(closeErr, persistErr))                  // the root cause is reported
+	is.True(!cerrors.Is(closeErr, plugin.ErrPluginNotRunning)) // not the retry's symptom
+	is.True(!strings.Contains(closeErr.Error(), "plugin is not running"))
 }
 
 // TestWorker_tearDownSource_OnceOnSuccess confirms a successful teardown is

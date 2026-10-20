@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/registry"
+	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/conduitio/conduit/pkg/registry/trust"
 	"github.com/conduitio/ecdysis"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +103,17 @@ func TestHelpExitCodesMatchMapping(t *testing.T) {
 			cmd:  &connectors.BundleCommand{},
 			required: []conduiterr.Code{
 				registry.CodeCorruptDownload,
+				index.CodeSchemaTooNew,
+				index.CodeIndexIntegrity,
+				index.CodeIndexStale,
+				index.CodeIndexRollback,
+				index.CodeTrustAnchorExpired,
+				registry.CodeTrustAnchorsUnavailable,
 				trust.CodeIdentityRevoked,
+				trust.CodeUnsigned,
+				trust.CodeIdentityMismatch,
+				trust.CodeProvenanceInvalid,
+				trust.CodeIdentityPatternTooLoose,
 			},
 		},
 	}

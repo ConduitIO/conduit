@@ -30,7 +30,7 @@
 // pconnector/client.New) or reattaching to a process already running at a
 // known address (plugin.ClientConfig.Reattach). Both converge on the exact
 // same code path once a plugin.Client has an address: gRPC dial, then
-// dispensing the pconnector v1/v2 gRPC client stubs. No conduit-connector-
+// dispensing the pconnector v1/v2/v3 gRPC client stubs. No conduit-connector-
 // protocol wire message or .proto file changes between the two - Reattach
 // only changes how the client finds the server, never what it says to it
 // once connected. Dispenser implements the same connector.Dispenser

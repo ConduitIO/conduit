@@ -151,6 +151,24 @@ type Config struct {
 			// can set it to false. See docs/operations/standalone-plugin-environment.md.
 			EnvWarning bool `long:"connectors.standalone.env-warning" mapstructure:"env-warning" usage:"warn at startup about sensitive host environment variables passed to standalone connector plugins"`
 		}
+
+		// AmbientCredentials is the operator's policy for built-in connectors
+		// that can fall back to the host's ambient cloud identity (for AWS, the
+		// default credential chain). Tier-1 security control.
+		//
+		// SECURITY POSTURE: off by default. A pipeline author cannot turn it on:
+		// these keys are not connector parameters, and the policy reaches
+		// built-in connectors only on the engine-built call context (see
+		// pkg/plugin/connector/builtin). Standalone plugins never receive it
+		// and so always deny. See
+		// docs/design-documents/20261012-builtin-connector-ambient-credentials.md
+		// and docs/operations/ambient-credentials.md.
+		AmbientCredentials struct {
+			Enabled        bool     `long:"connectors.ambient-credentials.enabled" mapstructure:"enabled" usage:"allow built-in connectors to use this process's ambient cloud credentials (for example the AWS default credential chain) when a pipeline sets no static keys (default false)"`
+			AllowEndpoints []string `long:"connectors.ambient-credentials.allow-endpoints" mapstructure:"allow-endpoints" usage:"the only custom endpoints that may receive ambient-credential-signed requests: exact https://host[:port] entries (repeatable)"`
+			AllowResources []string `long:"connectors.ambient-credentials.allow-resources" mapstructure:"allow-resources" usage:"exact resource names (for s3, bucket names) the ambient identity may use; required when enabled, wildcards are refused (repeatable)"`
+			AllowProxy     bool     `long:"connectors.ambient-credentials.allow-proxy" mapstructure:"allow-proxy" usage:"allow ambient credentials while HTTP_PROXY/HTTPS_PROXY/ALL_PROXY is set; the link-local address refusal then cannot apply"`
+		} `mapstructure:"ambient-credentials"`
 	}
 
 	Install struct {
@@ -657,6 +675,9 @@ func (c Config) Validate() error {
 	}
 
 	if err := c.validateEgressConfig(); err != nil {
+		return err
+	}
+	if _, _, err := c.AmbientCredentialsPolicy(os.Getenv); err != nil {
 		return err
 	}
 	return nil

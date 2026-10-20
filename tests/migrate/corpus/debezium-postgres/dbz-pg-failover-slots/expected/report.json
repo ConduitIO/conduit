@@ -1,0 +1,250 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "io.debezium.connector.postgresql.PostgresConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "debezium",
+          "version": "3.7.0.Final"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 12,
+    "translated": 8,
+    "approximated": 0,
+    "unsupported": 4,
+    "blocking": 8
+  },
+  "connectors": [
+    {
+      "name": "inventory-source",
+      "class": "io.debezium.connector.postgresql.PostgresConnector",
+      "role": "source",
+      "pipeline": "pipelines/inventory-source.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:postgres",
+        "destination": "builtin:kafka"
+      },
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "tasks.max",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/tasks.max"
+          },
+          "reason": "One task, one reader.",
+          "blocking": false
+        },
+        {
+          "key": "database.hostname",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/database.hostname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.port",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/database.port"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.user",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/database.user"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.password",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/database.password"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url",
+            "env": "KC_INVENTORY_SOURCE_DATABASE_PASSWORD"
+          },
+          "reason": "Becomes part of the source connection string, as a variable.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "database.dbname",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/database.dbname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "topic.prefix",
+          "status": "unsupported",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/topic.prefix"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.",
+          "fix": "Keep this connector on Kafka Connect until",
+          "blocking": true
+        },
+        {
+          "key": "schema.include.list",
+          "status": "unsupported",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/schema.include.list"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "Schema selection folds into the source's tables list only when a literal table.include.list is also set; alone it cannot be expressed.",
+          "fix": "List the tables explicitly in table.include.list (schema.table), or keep this connector on Kafka Connect.",
+          "blocking": true
+        },
+        {
+          "key": "plugin.name",
+          "status": "translated",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/plugin.name"
+          },
+          "reason": "Conduit decodes the pgoutput plugin natively.",
+          "blocking": false
+        },
+        {
+          "key": "slot.failover",
+          "status": "unsupported",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/slot.failover"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A failover slot survives a primary switch; Conduit's slot does not.",
+          "fix": "Keep this connector on Kafka Connect until the connector creates failover slots.",
+          "blocking": true
+        },
+        {
+          "key": "snapshot.mode",
+          "status": "unsupported",
+          "origin": {
+            "file": "inventory-source.json",
+            "pointer": "/snapshot.mode"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This snapshot mode has no Conduit equivalent (only initial and never are supported).",
+          "fix": "Use snapshot.mode=initial or never, or keep this connector on Kafka Connect.",
+          "blocking": true
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break.",
+          "fix": "Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "debezium-postgres/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_SOURCE_DESTINATION_SERVERS} instead.",
+          "fix": "Set KC_INVENTORY_SOURCE_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
+          "blocking": true,
+          "rule": "required/destination/servers"
+        },
+        {
+          "code": "kc.converter_unknown",
+          "reason": "Neither the connector nor a worker file sets key.converter, so the format Kafka Connect used is unknown.",
+          "fix": "Pass the worker properties with --worker, or set key.converter on the connector, then re-run.",
+          "blocking": true,
+          "rule": "shared/converters/key.converter"
+        },
+        {
+          "code": "kc.converter_unknown",
+          "reason": "Neither the connector nor a worker file sets value.converter, so the format Kafka Connect used is unknown.",
+          "fix": "Pass the worker properties with --worker, or set value.converter on the connector, then re-run.",
+          "blocking": true,
+          "rule": "shared/converters/value.converter"
+        },
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+          "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "table.include.list is absent, so Debezium reads every table; the source is set to tables \"*\", whose schema coverage is connector-defined.",
+          "fix": "Set table.include.list to the tables to read, or accept the difference.",
+          "blocking": false,
+          "rule": "debezium-postgres/defaults/table.include.list"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.",
+          "blocking": false,
+          "rule": "shared/defaults/header.converter"
+        }
+      ],
+      "transforms": []
+    }
+  ],
+  "acceptedGaps": []
+}

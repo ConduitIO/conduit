@@ -457,6 +457,7 @@ Everything above is as of 2026-10-08 and is not rewritten. These are the changes
 
 ## Related
 
+- [Connector catalog scorecard](catalog/scorecard.md): the public tier + license listing seeded from this inventory
 - [Debezium roadmap design doc](design-documents/20260722-debezium-compete-roadmap.md): the Kafka Connect wrapper
   analysis this inventory relies on
 - [AI pipeline components design doc](design-documents/20260724-ai-pipeline-components.md): the `ai.chunk` and

@@ -75,12 +75,91 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(rows[0]["head"], 5.0)
 
 
+class GateTest(unittest.TestCase):
+    def row(self, a, b, h):
+        rows = c.compare({"X": a}, {"X": b}, {"X": h})
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def verdict(self, a, b, h, base_ok="true"):
+        return c.gate_verdict([self.row(a, b, h)], base_ok)[0]
+
+    def test_clear_regression_fails(self):
+        # 30% slower, floor 3%: a 10% gate resolves this comfortably.
+        self.assertEqual(self.verdict([100, 100, 100], [100, 100, 100], [70, 70, 70]), "fail")
+
+    def test_regression_within_the_floor_does_not_fail(self):
+        # 11% slower, but the A/A floor is 8% (2x floor = 16%): not beyond noise.
+        self.assertEqual(self.verdict([100, 100, 100], [108, 108, 108], [89, 89, 89]), "pass")
+
+    def test_ten_percent_exactly_is_not_a_regression(self):
+        # ">10% slower" is strict: exactly 10% slower does not fail.
+        self.assertEqual(self.verdict([100, 100, 100], [100, 100, 100], [90, 90, 90]), "pass")
+
+    def test_floor_over_five_percent_cannot_resolve_a_ten_percent_gate(self):
+        # Floor 6%: a 10% delta would not exceed 2x floor (12%), so it cannot fail.
+        self.assertEqual(self.verdict([100, 100, 100], [106, 106, 106], [89, 89, 89]), "pass")
+
+    def test_improvement_never_fails(self):
+        self.assertEqual(self.verdict([100, 100, 100], [100, 100, 100], [130, 130, 130]), "pass")
+
+    def test_base_not_built_cannot_resolve(self):
+        self.assertEqual(c.gate_verdict([self.row([], [], [70.0])], "false")[0], "cannot-resolve")
+
+    def test_no_base_samples_cannot_resolve(self):
+        # base-a produced no samples (base absent / not run), so no floor and no
+        # delta are measurable: the gate must not call a regression.
+        rows = c.compare({}, {}, {"X": [70, 70, 70]})
+        self.assertEqual(c.gate_verdict(rows, "true")[0], "cannot-resolve")
+
+    def test_failing_rows_are_reported(self):
+        rows = [self.row([100, 100, 100], [100, 100, 100], [70, 70, 70])]
+        verdict, failing = c.gate_verdict(rows, "true")
+        self.assertEqual(verdict, "fail")
+        self.assertEqual([r["name"] for r in failing], ["X"])
+
+    def test_summary_cites_the_floor(self):
+        # A/A control differs 3% from the reference: the floor is 3.0%.
+        rows = [self.row([100, 101, 99], [103, 103, 103], [70, 70, 70])]
+        out = c.gate_summary(rows, "true")
+        self.assertIn("FAIL", out)
+        self.assertIn("-30.0%", out)  # the delta
+        self.assertIn("3.0%", out)    # the floor, cited next to the delta
+        self.assertIn("10.0%", out)   # the threshold
+
+    def test_gate_mode_exit_code(self):
+        import contextlib
+        import io
+
+        def write(path, text):
+            with open(path, "w") as fh:
+                fh.write(text)
+
+        with tempfile.TemporaryDirectory() as d:
+            a = d + "/a"; b = d + "/b"; h = d + "/h"
+            write(a, "BenchmarkEngine/X-16 3 1 ns/op 100 records/s\n")
+            write(b, "BenchmarkEngine/X-16 3 1 ns/op 100 records/s\n")
+            write(h, "BenchmarkEngine/X-16 3 1 ns/op 70 records/s\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(c.main(["--base-a", a, "--base-b", b, "--head", h,
+                                         "--out", d + "/gate.md", "--gate", "--base-ok", "true"]), 3)
+            write(h, "BenchmarkEngine/X-16 3 1 ns/op 100 records/s\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(c.main(["--base-a", a, "--base-b", b, "--head", h,
+                                         "--out", d + "/gate.md", "--gate", "--base-ok", "true"]), 0)
+
+
 class RenderTest(unittest.TestCase):
-    def test_comment_is_labelled_indicative_and_carries_the_marker(self):
+    def test_comment_is_labelled_and_carries_the_marker(self):
         out = c.render(c.compare({"X": [100]}, {"X": [100]}, {"X": [100]}), args())
         self.assertIn(c.MARKER, out)
-        self.assertIn("indicative, not a gate", out)
+        self.assertIn("A/A control", out)
+        self.assertIn("Gate: pass", out)
         self.assertIn("`X`", out)
+
+    def test_comment_reports_a_failing_gate(self):
+        out = c.render(c.compare({"X": [100]}, {"X": [100]}, {"X": [70]}), args())
+        self.assertIn("Gate: FAIL", out)
 
     def test_base_not_built_is_reported_and_no_table_is_shown(self):
         rows = c.compare({}, {}, {"X": [5.0]})

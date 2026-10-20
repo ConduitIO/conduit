@@ -21,11 +21,12 @@ import (
 
 func SrSubjectSchema(s sr.SubjectSchema) schema.Schema {
 	return schema.Schema{
-		Subject: s.Subject,
-		Version: s.Version,
-		ID:      s.ID,
-		Type:    SrSchemaType(s.Schema.Type),
-		Bytes:   []byte(s.Schema.Schema),
+		Subject:    s.Subject,
+		Version:    s.Version,
+		ID:         s.ID,
+		Type:       SrSchemaType(s.Schema.Type),
+		Bytes:      []byte(s.Schema.Schema),
+		References: srReferences(s.Schema.References),
 	}
 }
 
@@ -34,12 +35,26 @@ func SrSubjectSchema(s sr.SubjectSchema) schema.Schema {
 // to marshal and unmarshal data.
 func SrSchema(s sr.Schema) schema.Schema {
 	return schema.Schema{
-		Subject: "",
-		Version: 0,
-		ID:      0,
-		Type:    SrSchemaType(s.Type),
-		Bytes:   []byte(s.Schema),
+		Subject:    "",
+		Version:    0,
+		ID:         0,
+		Type:       SrSchemaType(s.Type),
+		Bytes:      []byte(s.Schema),
+		References: srReferences(s.References),
 	}
+}
+
+// srReferences maps the registry's reference list onto schema.Reference, so a
+// Protobuf schema with imports carries them into SerdeWithResolver.
+func srReferences(refs []sr.SchemaReference) []schema.Reference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]schema.Reference, len(refs))
+	for i, r := range refs {
+		out[i] = schema.Reference{Name: r.Name, Subject: r.Subject, Version: r.Version}
+	}
+	return out
 }
 
 func SrSchemaType(t sr.SchemaType) schema.Type {
@@ -47,7 +62,7 @@ func SrSchemaType(t sr.SchemaType) schema.Type {
 	case sr.TypeAvro:
 		return schema.TypeAvro
 	case sr.TypeProtobuf:
-		return 0 // not supported yet
+		return schema.TypeProtobuf
 	case sr.TypeJSON:
 		return 0 // not supported yet
 	default:

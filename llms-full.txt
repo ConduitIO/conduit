@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.9)
+### file (v0.10.10)
 
 A file source and destination plugin for Conduit.
 
@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.13.0)
+### kafka (v0.14.1)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -241,8 +241,26 @@ consumer's offset in Kafka. Internally, though, we're not saving the offset as
 the position: instead, we're saving the consumer group ID, since that's all
 which is needed for Kafka to find the offsets for our consumer.
 
-A source is getting associated with a consumer group ID the first time the
-`Read()` method is called.
+A source is associated with a consumer group ID when it is first opened. Set
+`groupID` to choose it; otherwise a random one is generated and kept in the
+position.
+
+**Headers**
+
+Each Kafka header is emitted as a metadata entry `kafka.header.<key>` holding
+the header value. Metadata is a string map, so a key that repeats in one
+record keeps its last value.
+
+A header whose key or value is not valid UTF-8 is emitted unchanged, but a
+record carrying it cannot be marshalled as an OpenCDC protobuf record: it
+fails wherever records cross a protobuf boundary (a standalone connector or
+processor, the API), and JSON encoders replace the invalid bytes with U+FFFD.
+The source logs `KAFKA_LEGACY_HEADER_NOT_UTF8` at WARN once per header key,
+with the key as base64 in `header_key_b64` (the value is never logged), and
+reports the count as `kafka_source_legacy_header_not_utf8_total` in the logs
+and at teardown. A future version will omit such entries by default, after
+the deprecation period
+([#319](https://github.com/ConduitIO/conduit-connector-kafka/issues/319)).
 
 **Destination**
 
@@ -268,6 +286,160 @@ Batching can also be configured using connector SDK provided options:
 - `sdk.batch.delay`: maximum delay before an incomplete batch is written to the
   destination (defaults to 0, no limit)
 
+**Delivery semantics**
+
+These are the guarantees that the connector's CI checks with the SDK
+acceptance suite v2 and a kill -9 test, and the conditions under which they
+hold.
+
+**Source guarantees**
+
+- **At-least-once.** The source commits a record's offset to its consumer group
+  only after Conduit acknowledged the record. It never commits an offset it
+  has not been acked for.
+- **Commits are batched**, so a restart after a crash re-delivers records:
+  offsets are committed after every `commitOffsetsSize` acks (default 1000),
+  every `commitOffsetsDelay` (default 5s), and when the pipeline stops
+  gracefully. After a crash (kill -9, power loss) the source re-delivers at
+  most the records acked since the last commit, fewer than `commitOffsetsSize`
+  when commits succeed. Setting `commitOffsetsSize` to 1 commits on every ack
+  and lowers throughput.
+- **Ordering:** records of one partition are delivered in offset order, so
+  records with the same key (which Kafka keeps in one partition) arrive in the
+  order they were written. Re-delivery after a restart repeats a suffix of each
+  partition, in order. There is no order between partitions.
+- **Resume uses the consumer group**, not the offset in the Conduit position.
+  If the group's committed offsets are gone (the group was deleted, or the
+  pipeline was stopped longer than the broker's `offsets.retention.minutes`,
+  7 days by default), the source starts where `readFromBeginning` says: from
+  the beginning of the topic (re-delivery), or from the end, which **skips the
+  records written while the pipeline was stopped**. Use
+  `readFromBeginning: true` where skipping is not acceptable.
+- **Restart after a crash can pause.** The crashed instance stays a member of
+  the consumer group until the broker's session timeout expires (45s by
+  default), and the partitions it held are not consumed until then.
+
+**Destination guarantees**
+
+- **At-least-once.** A record is acknowledged to Conduit only after the broker
+  confirmed it. With `acks: all` (the default) that means the in-sync replicas
+  have it. `acks: one` acknowledges after the leader alone has it, and a leader
+  failure can lose acknowledged records; `acks: none` acknowledges without any
+  confirmation. Only `acks: all` keeps the at-least-once guarantee.
+- **Not idempotent.** A record that is replayed after a crash is written again.
+  The idempotent producer (on with `acks: all`) removes duplicates from its own
+  retries of a produce request, not from a record sent twice.
+- **Ordering:** records with the same key go to the same partition (key hash)
+  in the order Conduit wrote them, as long as the partition count of the topic
+  does not change. One exception: if the broker rejects a record after it was
+  enqueued (for example `MESSAGE_TOO_LARGE`), the later records of the same
+  batch may already be written. Conduit is told the batch failed from that
+  record on, and when the records are replayed the rejected record is stored
+  after them, together with duplicates of them.
+- **Writes can wait for an unreachable broker without a bound** when
+  `deliveryTimeout` is 0 (the default). Cancelling the pipeline ends the wait
+  and nacks the records; nothing unconfirmed is acknowledged.
+- **Large records:** a record must fit in `batchBytes` (default 1000012 bytes)
+  and in the topic's `max.message.bytes`, after the output format is applied.
+  The default `opencdc/json` format base64-encodes raw payloads, which adds
+  about a third, so with the defaults the largest raw payload is about
+  730 KiB (roughly 750000 bytes, less the record's key and metadata). Larger
+  records need a higher `batchBytes` and a higher `max.message.bytes` on the
+  topic (and on the broker, if its `message.max.bytes` is lower). The
+  acceptance suite's 1 MiB records run with both set to 4 MiB.
+
+**Acceptance suite claims**
+
+The acceptance suite v2 run (revision 2.0.1) claims per-key ordering for the
+source, a redelivery bound of 1000 records after a restart, and a
+non-idempotent destination.
+
+- **Redelivery bound.** The suite's default bound is 10. The source's bound,
+  read from the code, is `commitOffsetsSize`: offsets are committed
+  synchronously once that many acks have accumulated, so at most
+  `commitOffsetsSize`-1 acked records are uncommitted when the process dies.
+  The suite's restart case and the kill -9 test did not exceed it, which
+  shows it is not violated in those runs; it is not a measured maximum. The
+  bound of 1000 holds only for `commitOffsetsSize` up to 1000 (the default).
+  A larger value raises the bound with it, and such a configuration is
+  outside what the certification covers.
+- **Destination per-key ordering is not claimed**, and the suite's ordering
+  case for the destination is skipped, because of the exception above: a
+  record the broker rejects after it was enqueued is stored after later
+  records of its batch when the batch is replayed.
+- **Killing a source in-process.** The suite kills a source inside the test
+  process, which leaves its consumer group membership alive. The test closes
+  the killed source's client without committing, which releases its
+  partitions. A real process death sends no LeaveGroup: the broker drops the
+  member only when its session times out (see "Restart after a crash can
+  pause" above). The kill -9 test covers a real process death.
+
+**Mirroring (Kafka→Kafka)**
+
+To copy a topic faithfully, preserving key, value, headers, timestamp and
+partition, set `emitMirrorMetadata: true` on the source and `mirror: true` on
+the destination:
+
+```yaml
+version: 2.2
+pipelines:
+  - id: mirror
+    status: running
+    connectors:
+      - id: source
+        plugin: "kafka"
+        type: source
+        settings:
+          servers: "localhost:9092"
+          topics: "orders"
+          readFromBeginning: "true"
+          emitMirrorMetadata: "true"
+      - id: destination
+        plugin: "kafka"
+        type: destination
+        settings:
+          servers: "localhost:9092"
+          topic: "orders.mirror"
+          mirror: "true"
+```
+
+`mirror` writes each record to the destination partition named by the source
+partition, so a consumer of the copy sees the same per-partition order as the
+source. Rules and caveats:
+
+- The destination topic must already exist (mirror mode does not auto-create
+  it) and have at least as many partitions as the source topic; otherwise the
+  first record fails with `KAFKA_PARTITION_COUNT_MISMATCH`, and a record whose
+  partition is missing fails with `KAFKA_PARTITION_OUT_OF_RANGE`. A
+  destination with more partitions is allowed: the extra partitions stay
+  empty, and key-hash locality is not preserved.
+- `mirror` requires `acks: all` and rejects `deliveryTimeout` and a user-set
+  `sdk.record.format`; it writes the record value bytes verbatim, bypassing
+  the output format.
+- Per-partition order is preserved until the first produce error after a
+  record is enqueued (for example the broker rejects it); after that the
+  partition may hold later records before an earlier one, and the connector
+  logs a WARN with `kafka_destination_post_enqueue_errors_total`. The remedy
+  is to re-seed the affected partition.
+- A mirror pipeline must keep the default error policy (a DLQ with
+  `window-size: 0` or a nack threshold above 0 turns a configuration error
+  into silent record loss).
+- Timestamp topic-config checks are not yet enforced: a destination topic
+  with `message.timestamp.type=LogAppendTime`, a short `retention.ms`, or
+  `message.timestamp.before/after.max.ms` bounds may rewrite, expire or
+  reject preserved timestamps. The connector preserves the timestamp but
+  does not yet fail on these topic configurations.
+
+**Redpanda**
+
+The kafka connector is the Redpanda profile: the retired labs `redpanda`
+connector is replaced by this connector pointed at a Redpanda cluster
+(`servers` set to the Redpanda Kafka API address). CI runs the integration,
+acceptance-v2 and kill -9 tests against both Apache Kafka and Redpanda. Mirror
+mode works on both brokers; Redpanda does not return or enforce the
+`message.timestamp.before/after.max.ms` bounds, so only the timestamp type and
+retention rules can differ from Apache Kafka.
+
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -280,6 +452,7 @@ Author: Meroxa, Inc.
 | `clientKey` | string |  | no | ClientKey is the Kafka client's private key. |  |
 | `commitOffsetsDelay` | duration | 5s | no | CommitOffsetsDelay defines how often consumed offsets should be committed. |  |
 | `commitOffsetsSize` | int | 1000 | no | CommitOffsetsSize defines the maximum number of consumed offsets to be committed at a time. | greater-than(-1) |
+| `emitMirrorMetadata` | bool |  | no | EmitMirrorMetadata, when true, additionally emits lossless mirror metadata on every record: kafka.partition, kafka.partitions, kafka.offset, kafka.timestamp, kafka.timestamp.type, kafka.headers, kafka.key.null and kafka.value.null. It is off by default because metadata is carried to every destination, and destinations that serialize it write different bytes for pipelines that never asked for mirroring. Enable it together with the destination's mirror option to preserve header, partition and timestamp across a Kafka-to-Kafka copy. |  |
 | `groupID` | string |  | no | GroupID defines the consumer group id. |  |
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `readFromBeginning` | bool |  | no | ReadFromBeginning determines from whence the consumer group should begin consuming when it finds a partition without a committed offset. If this options is set to true it will start with the first message in that partition. |  |
@@ -305,6 +478,7 @@ Author: Meroxa, Inc.
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
 | `acks` | string | all | no | Acks defines the number of acknowledges from partition replicas required before receiving a response to a produce request. None = fire and forget, one = wait for the leader to acknowledge the writes, all = wait for the full ISR to acknowledge the writes. | inclusion(none,one,all) |
+| `allowLossyHeaders` | bool |  | no | AllowLossyHeaders, valid only with mirror, writes headers rebuilt from kafka.header.<k> entries when kafka.headers is absent (repeated keys collapsed, order undefined). Without it, mirror mode fails a record whose kafka.headers is missing. |  |
 | `batchBytes` | int | 1000012 | no | BatchBytes limits the maximum size of a request in bytes before being sent to a partition. This mirrors Kafka's max.message.bytes. |  |
 | `caCert` | string |  | no | CACert is the Kafka broker's certificate. |  |
 | `clientCert` | string |  | no | ClientCert is the Kafka client's certificate. |  |
@@ -313,6 +487,8 @@ Author: Meroxa, Inc.
 | `compression` | string | snappy | no | Compression set the compression codec to be used to compress messages. | inclusion(none,gzip,snappy,lz4,zstd) |
 | `deliveryTimeout` | duration |  | no | DeliveryTimeout for write operation performed by the Writer. |  |
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
+| `mirror` | bool |  | no | Mirror enables Kafka-to-Kafka mirror mode: it writes the record's key, value, headers, timestamp and partition to Kafka verbatim from the mirror metadata the source emits when its emitMirrorMetadata option is on. It requires acks=all, rejects deliveryTimeout > 0 and a user-set sdk.record.format, and disables topic auto-creation. See the kafka mirror passthrough design in ConduitIO/conduit. |  |
+| `produceTimeout` | duration | 2m | no | ProduceTimeout is a connector-side bound on a Write in mirror mode, because deliveryTimeout must stay unset there. Minimum 30s, maximum 1h. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
@@ -375,9 +551,41 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.14.4)
+### postgres (v0.17.2)
 
 Conduit connector for PostgreSQL
+
+**Connection and SCRAM authentication**
+
+Source and destination connect with the `url` setting. Over TLS with SCRAM
+authentication, the connector does not use channel binding unless you ask for it:
+`channel_binding=prefer`, the default of the pgx driver since 5.9, is mapped to
+`disable`, which is how the driver behaved in earlier releases. Channel binding
+(SCRAM-SHA-256-PLUS) fails against a server with an Ed25519 certificate and behind
+a proxy that terminates TLS and passes the SCRAM exchange through. Add
+`channel_binding=require` to the URL, or set `PGCHANNELBINDING=require` in the
+environment of the Conduit process, to require it. The driver reads
+`PGCHANNELBINDING` when the URL has no `channel_binding`. An explicit `prefer`,
+in the URL or in the environment, is also mapped to `disable`; `require` and
+`disable` are kept.
+
+```
+postgres://user:pass@host:5432/db?sslmode=require&channel_binding=require
+```
+
+**Upgrading from v0.14.x: connection string parsing**
+
+This version uses pgx 5.11, which parses connection strings like libpq does.
+Most URLs are unaffected. Check yours if it relies on one of these (the full
+list is in the pgx 5.11.0 changelog):
+
+- `+` in a query value is literal, no longer a space; encode a space as `%20`.
+- If a query parameter is repeated, the last one wins (the first used to).
+- An IPv6 host in a URL needs brackets: `postgres://[::1]/db`.
+- In a `key=value` connection string a backslash escapes the next character,
+  so a Windows path must be written `sslcert=C:\\path\\to\\cert`.
+- Default locations of the client certificate, key and `.pgpass` file are
+  resolved from `$HOME` instead of the OS account's home directory.
 
 **Source**
 
@@ -455,77 +663,6 @@ downstream. The source refuses to open on such a table with the error code
 `postgres.replica_identity.excludes_key`. Fix it with
 `ALTER TABLE <table> REPLICA IDENTITY FULL`, or use a unique index that includes the
 primary key.
-
-**Numeric Columns**
-
-A `numeric` column with a precision and scale, `numeric(p,s)`, is an Avro
-`decimal(p,s)` and its values are `big.Rat`.
-
-A `numeric` column **without** a precision and scale can hold any value Postgres
-can store, which no Avro `decimal` can. With `logrepl.withAvroSchema: true` (the
-default) it is an Avro `string` holding the exact text of the value, with its
-scale (`1.50` stays `1.50`), and `NaN`, `Infinity` and
-`-Infinity` as those three words: **a consumer of such a column must handle
-them**, a plain decimal parser will reject them. Earlier versions used `decimal(65535, 65531)`, which could not encode a
-value of 10000 or more and stopped the pipeline. The first record after an
-upgrade registers a new schema version for the table; consumers must read the
-field as a string. This connector's destination writes the string to a `numeric`
-column exactly.
-
-**Known issue:** a zero with a display scale reads as `0` in the snapshot and as
-`0.000` (its stored text) in change data capture. The values are numerically
-equal; only the text differs. Tracked in
-[#391](https://github.com/ConduitIO/conduit-connector-postgres/issues/391).
-
-So the Go type of an unconstrained `numeric` depends on the setting: a `string`
-with `logrepl.withAvroSchema: true`, a `big.Rat` with `false`.
-
-Without an Avro schema, a `numeric` is a `big.Rat`; `NaN`, `Infinity` and
-`-Infinity` are the strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and the same
-applies to the elements of `numeric[]` (finite elements are unchanged). A `NULL`
-stays `NULL`.
-
-`NaN` in a `numeric(p,s)` column (the infinities cannot be stored there) cannot
-be an Avro decimal, and the connector never replaces it with `NULL` or a number:
-the source stops with the error code `postgres.source.numeric_not_representable`,
-which names the table, the column, the value and the row's key. To continue:
-
-- **Change data capture:** restart once with `logrepl.withAvroSchema: false`
-  from the same position. The value is delivered as a string. **Then set it
-  back to `true` as soon as that record has been delivered.** Without an Avro
-  schema a finite `numeric` is a `big.Rat`, which a standalone connector
-  cannot send to Conduit (#378): the next finite numeric would stop the
-  pipeline. Built-in pipelines are not affected.
-  On a standalone connector the SDK also fails the whole read batch on the
-  first record it cannot send, so if the NaN/Infinity record or its batch
-  contains any finite numeric, it is never delivered with Avro off and this
-  workaround does not help (#378 is the fix). While Avro is off,
-  JSON-serializing destinations receive a finite numeric as the string `"3/2"`.
-- **Snapshot:** `UPDATE` the row to a finite value (or `NULL`) and restart.
-- Removing the row, or adding a `CHECK` constraint, does not help for a change
-  that is already in the WAL: it is read again after every restart. Do not drop
-  the replication slot to get past it, that loses the position. A constraint
-  only keeps new bad values out.
-
-**Infinite Dates and Timestamps**
-
-`date`, `timestamp` and `timestamptz` columns can hold `infinity` and
-`-infinity`. The Avro date and timestamp types cannot represent them. Earlier
-versions wrote them as `1970-01-02` and `1969-12-31` (dates) without any error.
-
-- With `logrepl.withAvroSchema: true` (the default), the source stops with the
-  error code `postgres.source.temporal_not_representable`, which names the
-  table, the column and the value. Removing the row does not help once the
-  change is in the WAL: set `logrepl.withAvroSchema` to `false`.
-- With `logrepl.withAvroSchema: false`, the values are emitted as the strings
-  `"infinity"` and `"-infinity"`.
-
-The same applies per element of `date[]`, `timestamp[]`, `timestamptz[]` and
-`numeric[]` (for `numeric[]`, `NaN`, `Infinity` and `-Infinity` elements are
-emitted as strings; finite elements are unchanged). The connector has no Avro
-mapping for array columns, so with the default `logrepl.withAvroSchema: true`
-a table with an array column already stops with a schema error before any
-record is emitted.
 
 **Before Image of Updates and Deletes**
 
@@ -664,12 +801,86 @@ What this means for your destination:
   row image carries every column, and this connector backfills unchanged TOASTed
   values from it so the payload is always complete.
 
-With the default `logrepl.withAvroSchema: true` and the default
-`REPLICA IDENTITY`, an update that leaves a TOASTed column unchanged still stops the
-source: the field is omitted, but the Avro payload schema requires it, so the record
-cannot be encoded
-([#383](https://github.com/ConduitIO/conduit-connector-postgres/issues/383)). Set
-`REPLICA IDENTITY FULL` on such tables.
+**Value Representation**
+
+Values do not depend on the time zone of the machine running the connector or on the
+version of the Postgres driver. The same row gives the same record everywhere, for
+snapshot and CDC.
+
+| Postgres type | Without an Avro schema | With an Avro schema (`logrepl.withAvroSchema`, the default) |
+| --- | --- | --- |
+| `timestamp` | The wall clock stored in Postgres, as a time with no offset information (`2024-01-02T03:04:05Z` for `2024-01-02 03:04:05`). | `local-timestamp-micros` of the same wall clock. |
+| `timestamptz` | The instant, in UTC (`Z`). | `timestamp-micros`. |
+| `date` | Midnight UTC of the date. | `date`. |
+| `tsvector` | Postgres text form, `'a':1 'cat':3A,4B`. | `string`, same text. |
+| `infinity`, `-infinity` | The strings `infinity` and `-infinity`. | The source halts with error code `postgres.source.temporal_not_representable`. |
+| Years before 1 BC or after 9999 AD | Postgres text, for example `0044-03-15 12:00:00 BC`. | As above, up to what 64-bit microseconds hold; beyond that the same error. |
+| Arrays, ranges, multiranges of these | Element and bound values as above. | Not supported by the Avro schema. |
+
+A range or multirange is a JSON object `{"Lower":...,"Upper":...,"LowerType":105,
+"UpperType":101,"Valid":true}`, and a multirange is an array of them. `LowerType` and
+`UpperType` are the ASCII codes of the bound kind: `105` (`i`) inclusive, `101` (`e`)
+exclusive, `85` (`U`) unbounded (the bound is `null`), `69` (`E`) empty range. Bounds
+follow the rules above. Arrays of `tsmultirange`, `tstzmultirange` and `datemultirange`
+are emitted as the Postgres text of the array.
+
+If the source halts with `postgres.source.temporal_not_representable`, set
+`logrepl.withAvroSchema` to `false`. Removing the row does not help a change that is
+already in the WAL, because it is read again after every restart.
+
+**Numeric Columns**
+
+A `numeric` column with a precision and scale, `numeric(p,s)`, is an Avro
+`decimal(p,s)` and its values are `big.Rat`.
+
+A `numeric` column **without** a precision and scale can hold any value Postgres
+can store, which no Avro `decimal` can. With `logrepl.withAvroSchema: true` (the
+default) it is an Avro `string` holding the exact text of the value, with its
+scale (`1.50` stays `1.50`), and `NaN`, `Infinity` and
+`-Infinity` as those three words: **a consumer of such a column must handle
+them**, a plain decimal parser will reject them. Earlier versions used `decimal(65535, 65531)`, which could not encode a
+value of 10000 or more and stopped the pipeline. The first record after an
+upgrade registers a new schema version for the table; consumers must read the
+field as a string. This connector's destination writes the string to a `numeric`
+column exactly.
+
+**Known issue:** a zero with a display scale reads as `0` in the snapshot and as
+`0.000` (its stored text) in change data capture. The values are numerically
+equal; only the text differs. Tracked in
+[#391](https://github.com/ConduitIO/conduit-connector-postgres/issues/391).
+
+So the Go type of an unconstrained `numeric` depends on the setting: a `string`
+with `logrepl.withAvroSchema: true`, a `big.Rat` with `false`. Changing a column
+between `text`/`varchar` and an unconstrained numeric is accepted by the
+`evolve` schema-drift policy only when `withAvroSchema` is `true` (the Avro
+shape does not change); with `false` the value's type changes, so it halts.
+
+Without an Avro schema, a `numeric` is a `big.Rat`; `NaN`, `Infinity` and
+`-Infinity` are the strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and the same
+applies to the elements of `numeric[]` (finite elements are unchanged). A `NULL`
+stays `NULL`.
+
+`NaN` in a `numeric(p,s)` column (the infinities cannot be stored there) cannot
+be an Avro decimal, and the connector never replaces it with `NULL` or a number:
+the source stops with the error code `postgres.source.numeric_not_representable`,
+which names the table, the column, the value and the row's key. To continue:
+
+- **Change data capture:** restart once with `logrepl.withAvroSchema: false`
+  from the same position. The value is delivered as a string. **Then set it
+  back to `true` as soon as that record has been delivered.** Without an Avro
+  schema a finite `numeric` is a `big.Rat`, which a standalone connector
+  cannot send to Conduit (#378): the next finite numeric would stop the
+  pipeline. Built-in pipelines are not affected.
+  On a standalone connector the SDK also fails the whole read batch on the
+  first record it cannot send, so if the NaN/Infinity record or its batch
+  contains any finite numeric, it is never delivered with Avro off and this
+  workaround does not help (#378 is the fix). While Avro is off,
+  JSON-serializing destinations receive a finite numeric as the string `"3/2"`.
+- **Snapshot:** `UPDATE` the row to a finite value (or `NULL`) and restart.
+- Removing the row, or adding a `CHECK` constraint, does not help for a change
+  that is already in the WAL: it is read again after every restart. Do not drop
+  the replication slot to get past it, that loses the position. A constraint
+  only keeps new bad values out.
 
 **Limitations**
 
@@ -709,6 +920,122 @@ deleted, the record will be ignored.
 
 If there is no key, the record will be simply appended.
 
+**Keys, columns and acknowledgements**
+
+- **Upsert key.** With a structured record key (or a raw key that is a JSON object),
+  a create, update or snapshot record is `INSERT ... ON CONFLICT (<key columns>) DO
+  UPDATE SET` every other field of the record. The key columns must carry a primary
+  key or unique constraint, otherwise Postgres rejects the statement. When a record has
+  no field besides its key columns (a table whose columns are all key columns), the
+  statement is `ON CONFLICT DO NOTHING`, so a redelivery is a no-op.
+- **Columns.** Each record is written with exactly its own fields. A field the table has
+  no column for fails the write; the destination does not create or alter tables. A
+  field the record lacks is not written: an insert gets the column default, an existing
+  row keeps its value. A create, update or snapshot record without fields fails with
+  `postgres.destination.payload_empty`.
+- **Key values** must be one non-null scalar per key column, for upserts and deletes. A
+  null value fails with `postgres.destination.key_column_missing` (a delete would match
+  every row with a NULL there, an upsert would append a new row on every redelivery), and
+  a list or object fails with `postgres.destination.key_value_not_scalar` (a delete would
+  match several rows or none).
+- **Deletes** need a key and delete the rows matching every key column.
+- **Raw JSON** keys and payloads are decoded without going through `float64`: an integer
+  literal is an `int64` (or `uint64`), and any other number keeps its literal, so
+  `numeric`, `text` and `json`/`jsonb` columns store it exactly. Integer columns take a
+  whole value in any form (`1e3`, `7.0`) and reject a fraction; `real` and `float8`
+  columns store the nearest float. Structured data that arrives over the plugin protocol
+  has already passed through a double (ConduitIO/conduit#3100), so integers above 2^53
+  sent that way are rounded before the destination sees them.
+- **Names** of the table and columns are quoted as Postgres identifiers, so reserved
+  words, upper case and double quotes work. A name with a NUL byte or longer than 63 bytes
+  fails with `postgres.destination.invalid_identifier`, because Postgres would address a
+  different table or column. The table name is one identifier: a dot is part of the name,
+  not a schema separator.
+- **Acknowledgements.** A write is one implicit transaction. If any statement or the
+  commit fails, nothing from that write is stored and no record of it is acknowledged;
+  the records are redelivered (at-least-once). Keyed upserts make redelivery
+  idempotent; keyless inserts append again.
+
+**Schema-drift markers**
+
+When the Postgres source halts on schema drift it emits a drift marker: a create
+record with no key and no payload, with the metadata `postgres.schema.drift=true`.
+The destination skips and acknowledges a marker without writing a row, but only
+when the record's position proves the Postgres source produced it as a marker for
+the table named in `postgres.schema.drift.table`. The metadata alone is not proof,
+because any processor or upstream system can set it.
+
+- A record that carries the metadata but not a marker's position, and has a key
+  or a payload, is written as an ordinary record. One WARN per batch reports it.
+- A record shaped like a marker (no key, no payload) without a marker's position
+  stops the pipeline with `postgres.destination.drift_marker_unverified`. Nothing
+  in that batch is written or acknowledged.
+- A proven marker that a processor added a key or fields to is still skipped as
+  a marker, with a WARN that names the added fields.
+
+A marker loses its position when it passes through another system, such as Kafka
+or a file, because records read from there carry that system's position. In a
+Postgres to Kafka to Postgres setup, drop drift markers before the hop with a
+filter processor on the `postgres.schema.drift` metadata.
+
+The proof relies on the engine not letting processors change a record's
+position. Conduit's classic engine refuses that; the arch-v2 engine lets a
+processor rewrite positions, so there a processor could forge a marker. The
+forged record would be skipped, which a processor with that power could do to
+any record anyway.
+**Column type changes on a running pipeline**
+
+By default the destination describes every statement on the connection that
+runs it (pgx's `describe_exec` query mode), so after `ALTER TABLE ... ALTER
+COLUMN ... TYPE` the next write uses the new column types. A value the new
+type cannot hold exactly fails the write instead of being converted.
+
+The cached modes, `cache_statement` and `cache_describe`, are opt-in. They
+reuse prepared statements and check a per-table schema fingerprint with
+every batch: after a column type change the batch is rolled back, the
+statement cache is cleared, and the batch is retried with the new types. A
+fired check is logged at Info with the table name and the running count
+(`schema_changes_total`). The destination warns at startup when a cached
+mode is set.
+
+**The cached modes are safe only on a direct connection, or behind a pooler
+that does not share prepared statements between clients.** A pooler that
+shares them hands a statement one client prepared before a column type
+change to every client that sends the same SQL; the fingerprint check
+cannot see that, and values are converted without an error (5/2 stored as 3
+in a column that became `integer`). v0.17.0 and v0.17.1 used
+`cache_statement` by default; see the v0.17.2 release notes.
+
+If pgx closes the connection after a failed batch (for example a value
+that does not encode into a parameter type, on any record but the first),
+the destination reconnects and, in a cached mode, retries the batch once
+on an empty statement cache; nothing of a batch that fails this way was
+committed. A value that does not fit fails the write, and the error names
+the index of the record that holds it.
+
+One benchi run on a dedicated machine (`benchi/destination-exec-mode`:
+keyed upserts into a two-column table) measured cached statements
+*without* the fingerprint check against `describe_exec`: describing every
+statement cost 35% fewer rows per second at `sdk.batch.size: 1` and 16%
+fewer at 1000. Cached statements with the check have not been measured
+with benchi; that run is pending (the `pg-guarded` arm). The Go
+microbenchmark `BenchmarkDestination_Write_Upsert` compares the two modes on
+a local machine; it is indicative only, not a benchi result.
+
+**Connection poolers**
+
+Behind PgBouncer, at any `max_prepared_statements`, use the default
+(`describe_exec`) or `exec`. That likely applies to other poolers that
+share or route prepared statements (Supavisor, PgCat, Odyssey), which have
+not been tested. With `max_prepared_statements` above 0, PgBouncer shares
+prepared statements between clients, so a cached mode can convert values
+silently after a column type change. With `max_prepared_statements=0`, a
+batch can reach a server that does not have its statement; the destination
+retries batches that fail with SQLSTATE 26000 (prepared statement does not
+exist) or 42P05 (prepared statement already exists) on an empty statement
+cache, up to three times, but a cached mode still fails some batches
+there. `describe_exec` was tested with PgBouncer 1.26 in both settings.
+
 **Numeric columns**
 
 Decimal values (`big.Rat`) are sent to Postgres as exact decimal strings, and
@@ -735,10 +1062,9 @@ Postgres converts the string, and the examples below were checked on
 Postgres 17.5:
 
 - `integer`, `smallint`, `bigint`: stored if the value is whole. A fractional
-  value is rejected, except on a destination that was already running when the
-  column was changed to an integer type: the cached prepared statement still
-  types the parameter as `numeric`, so 5/2 is silently rounded to 3
-  (see #367).
+  value is rejected, also on a destination that was already running when the
+  column was changed to an integer type (see "Column type changes on a running
+  pipeline").
 - `real`, `float8`: stored as the nearest binary float.
 - `money`: rounded to the locale's fraction digits (1/3 is stored as `$0.33`).
 - `oid`: stored if the value is a whole number (7 is stored as `7`).
@@ -759,7 +1085,6 @@ Postgres 17.5:
 Every accepted conversion to a non-numeric type is a silent coercion if the
 schema maps a numeric field to the wrong column, so check the mapping.
 
-
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -768,7 +1093,9 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `cdcMode` | string | auto | no | CDCMode determines how the connector should listen to changes. | inclusion(auto,logrepl) |
 | `logrepl.autoCleanup` | bool | true | no | LogreplAutoCleanup determines if the replication slot and publication should be removed when the connector is deleted. |  |
+| `logrepl.import.debeziumOffset` | string |  | no | LogreplImportDebeziumOffset starts the pipeline from a Debezium Postgres connector's committed offset instead of a snapshot. It is written by `conduit migrate kafka-connect --cutover`, not by hand. It applies only while the pipeline has no position: the first acknowledged record writes an ordinary position and the setting is ignored from then on (remove it once the import is complete). Requires snapshotMode "never" and cdcMode "logrepl", and an existing slot and publication, which import mode never creates. Requires Conduit v0.19.0 or later, which acks a record only after its position is persisted. |  |
 | `logrepl.publicationName` | string | conduitpub | no | LogreplPublicationName determines the publication name in case the connector uses logical replication to listen to changes (see CDCMode). |  |
+| `logrepl.schemaDrift.policy` | string | halt | no | LogreplSchemaDriftPolicy determines how the connector handles schema drift (a DDL that changes a table's shape during CDC; DBZ-3 B1):   - "halt" (default): emit a drift marker record, checkpoint before it,     and stop with a terminal error until the pipeline is restarted to     approve the change.   - "evolve": accept additive changes silently; incompatible (narrowing)     changes still halt. "dlq" is reserved for a future version and rejected at validation. |  |
 | `logrepl.slotName` | string | conduitslot | no | LogreplSlotName determines the replication slot name in case the connector uses logical replication to listen to changes (see CDCMode). Can only contain lower-case letters, numbers, and the underscore character. | regex(^[a-z0-9_]+$) |
 | `logrepl.withAvroSchema` | bool | true | no | WithAvroSchema determines whether the connector should attach an avro schema on each record. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -783,7 +1110,7 @@ Author: Meroxa, Inc.
 | `snapshot.fetchSize` | int | 50000 | no | Snapshot fetcher size determines the number of rows to retrieve at a time. |  |
 | `snapshotMode` | string | initial | no | SnapshotMode is whether the plugin will take a snapshot of the entire table before starting cdc mode. | inclusion(initial,never) |
 | `tables` | string |  | yes | Tables is a List of table names to read from, separated by a comma, e.g.:"table1,table2". Use "*" if you'd like to listen to all tables. | required |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
 
 #### Destination parameters
 
@@ -798,9 +1125,9 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
-| `url` | string |  | yes | URL is the connection string for the Postgres database. | required |
+| `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
-### s3 (v0.9.5)
+### s3 (v0.11.1)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -935,12 +1262,150 @@ configurations, using `aws.bucket`, `aws.accessKeyId`,`aws.secretAccessKey` and
 `aws.region`. If the permissions fail, the connector will not be ready for
 writing to S3.
 
-**Writer**
+**Writes and delivery**
 
-The S3 destination writer has a buffer with the size of `bufferSize`, for each
-time `Write` is called, a new record is added to the buffer. When the buffer is
-full, all the records from it will be written to the S3 bucket, and an ack
-function will be called for each record after being written.
+Every batch the SDK hands to the destination (`sdk.batch.size` records, or
+fewer after `sdk.batch.delay`; one record per batch by default) is written
+with one `PutObject` per object, and the records are acknowledged only after
+`PutObject` succeeded. Delivery is at-least-once: a batch that is retried
+after a failure or a restart is written again as a new object, so a reader
+can see a record twice, never zero times. Object names are
+`<UnixNano>-<writer id>-<counter>.<ext>`: the write time in nanoseconds (so
+objects still sort by write time), a random 16-hex-character id per
+destination instance, and that instance's write counter. They are unique by
+construction, also across pipelines or Conduit instances writing to the same
+bucket and prefix in the same clock tick, and not deterministic (a retried
+batch gets a new name). With `conditionalWrites` (default true) every
+`PutObject` carries `If-None-Match: *`, so a store never replaces an existing
+object. The records of a refused write are not acknowledged:
+
+- `s3.destination.key_exists` (412): the key exists. Either another writer
+  used it, or the AWS SDK retried this writer's own `PutObject` after the
+  response to a successful first attempt was lost; in that case the records
+  are already stored, and redelivering them writes a duplicate under a new
+  key (at-least-once, nothing is lost).
+- `s3.destination.conditional_conflict` (409): a conflicting operation on
+  the key was in progress. Transient; a retry writes under a new key.
+- `s3.destination.conditional_writes_unsupported`: the store rejects the
+  header (501, or a 400/405 that names it). Set `conditionalWrites: false`;
+  keys stay unique by construction.
+
+A store that silently ignores `If-None-Match` writes unconditionally, with
+no warning; the protection then rests on the unique names alone. Tested on
+MinIO; AWS S3 documents support for conditional writes.
+
+**Formats**
+
+- `json`: one JSON object per line with `Operation`, `Position`, `Payload`,
+  `Key` and `Metadata`; payload and key are JSON strings. A record whose key,
+  payload, position or metadata is not valid UTF-8 is refused with the error
+  `s3.destination.invalid_utf8` instead of being stored with replaced bytes.
+- `parquet`: the same fields as string columns.
+- `bytearray`: the payload bytes of every record, unchanged, each followed
+  by `format.bytearray.separator` (default a newline). Structured payloads
+  are written as their JSON encoding. A record without a payload (a delete,
+  a Kafka tombstone) or with an empty one is refused with the error
+  `s3.destination.null_value`; drop such records with a `filter` processor
+  if they are expected. A Kafka tombstone arrives as an empty value, so an
+  empty Kafka value cannot be told apart from it and is refused too. The
+  separator is not escaped inside payloads: a payload that contains it
+  cannot be split back unambiguously (as with Kafka Connect's
+  `ByteArrayFormat`).
+
+`compression` is `none` or `gzip` for `json` and `bytearray` (gzip appends
+`.gz` to the extension and sets the content type to `application/gzip`), and
+`none`, `gzip` (default) or `snappy` for `parquet`, where it is the column
+codec.
+
+When a record is refused, the records before it in the batch are written as
+one object and acked, the refused record and the ones after it are nacked
+(to the DLQ, if one is configured).
+
+**Coming from the Kafka Connect S3 sink**
+
+- `ByteArrayFormat` is `format: bytearray`; `format.bytearray.separator` and
+  `format.bytearray.extension` have the same meaning (Kafka Connect's
+  extension default is `.bin` as well).
+- `JsonFormat` for topics with JSON values is `format: bytearray` with
+  `format.bytearray.extension: .json`: the stored bytes are the record
+  values. Kafka Connect re-serializes values through its converter, so
+  whitespace and key order can differ, and `schemas.enable=true` envelopes
+  are not produced.
+- `s3.compression.type: gzip` is `compression: gzip`; `parquet.codec` is
+  `compression` with `format: parquet` (Kafka Connect defaults to snappy,
+  this connector to gzip).
+- `behavior.on.null.values` other than `fail` has no counterpart.
+
+**Server-side encryption**
+
+By default the destination sends no server-side encryption header, so the
+bucket's default encryption applies. On AWS every bucket encrypts new
+objects with SSE-S3 unless it is configured otherwise, and a bucket whose
+default is SSE-KMS gets SSE-KMS objects. An S3-compatible store without a
+default encryption configuration stores objects unencrypted. When
+`aws.serverSideEncryption` is empty, `Open` reads the bucket's default
+encryption (`GetBucketEncryption`, permission
+`s3:GetEncryptionConfiguration`) and logs a warning with the code
+`s3.destination.bucket_unencrypted` if there is none. It never refuses to
+start; without the permission the check is skipped (debug log).
+
+Set `aws.serverSideEncryption` to `AES256`, `aws:kms` or `aws:kms:dsse` to
+request a mode explicitly, and `aws.sseKmsKeyId` to pick the KMS key for the
+two KMS modes. An explicit mode overrides the bucket default.
+
+Upgrading from v0.9.5 or earlier: those versions sent `AES256` on every
+write, whatever the bucket default was, so an SSE-KMS bucket default was
+silently replaced by SSE-S3 (#1047). To keep the old behavior, set
+`aws.serverSideEncryption: AES256`.
+
+**Partitioning (Kafka Connect S3 sink layout)**
+
+`partitioner` selects the directory layout under `prefix`:
+
+| `partitioner` | Object key |
+| --- | --- |
+| `none` (default) | `<prefix>/<UnixNano>.<ext>` |
+| `default` | `<prefix>/<collection>/partition=<kafka.partition>/<UnixNano>.<ext>` |
+| `field` | `<prefix>/<collection>/<field>=<value>/.../<UnixNano>.<ext>` |
+| `time`, `hourly`, `daily` | `<prefix>/<collection>/<time formatted with partitioner.pathFormat>/<UnixNano>.<ext>` |
+
+`<collection>` is the `opencdc.collection` metadata, which `builtin:kafka`
+sets to the topic, so with `prefix: topics` the directories are the ones the
+Kafka Connect S3 sink writes, and tables or partition projections defined
+over them keep working. `partitioner.pathFormat` takes Kafka Connect's
+`path.format` syntax (numeric fields only), for example
+`'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH`. `hourly` and `daily` are Kafka
+Connect's `HourlyPartitioner` and `DailyPartitioner`. Partition values are
+escaped the way Hive escapes path names (`/` becomes `%2F`).
+
+A batch is split into one object per directory. If one of those writes
+fails, the records before the first record of the failed object are
+acknowledged and the rest are nacked with the error: the pipeline stops,
+or, with a dead-letter queue configured, those records go to it. Nothing is
+acknowledged that is not stored. A restart delivers the nacked records
+again, and records of objects that were already written can then be stored
+twice (at-least-once). A record without the value its partitioner needs
+(no collection, no `kafka.partition`, no `opencdc.createdAt`, a missing or
+null field) is never written under an empty partition: it fails with the
+error code `s3.destination.partition_value`.
+
+Differences from Kafka Connect's `FieldPartitioner` that a reader of the
+layout can notice:
+
+- a null field fails the record (`s3.destination.partition_value`); Kafka
+  Connect writes it under `field=null`;
+- values are escaped as Hive escapes path names (`/` becomes `%2F`, `=`
+  becomes `%3D`, and so on); Kafka Connect writes them unescaped, so a
+  value with `/` there becomes extra directory levels;
+- numbers keep the text they have in a raw JSON payload (`5`, `5.0`,
+  `1e3` stay as written), and a number in structured data is written in its
+  shortest form (`5` for 5.0). Kafka Connect writes the Java string of the
+  converted value (`5.0` for a double, `1000.0` for `1e3`), so a double
+  field with a whole value can land in `field=5` here and `field=5.0`
+  there.
+
+`builtin:kafka` does not set `kafka.partition` yet, so `partitioner: default`
+needs it set by a processor until it does.
 
 Author: Meroxa, Inc.
 
@@ -948,13 +1413,18 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
-| `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
+| `aws.accessKeyId` | string |  | no | AWS access key id. Optional, but must be set together with aws.secretAccessKey. When both are unset the connector uses the Conduit host's ambient AWS identity (the AWS SDK default credential chain: environment, shared config and SSO, web identity/IRSA, ECS and EC2 roles), but only if the Conduit operator enabled connectors.ambient-credentials and listed the bucket, and only as the built-in connector (builtin:s3). Otherwise the connector refuses with connector.ambient_credentials_disabled. |  |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
 | `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
 | `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
-| `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
-| `lookbackPeriod` | duration | 5m | no | How far back, from the newest object seen, every CDC poll looks for objects that became visible late. S3 stamps an object with the time its upload began (a multipart upload with the time it was initiated), not the time it completed, and lists in key order, so an object can show up after newer ones were already delivered. Each poll selects the objects modified since (newest LastModified seen - lookbackPeriod) that were not delivered yet. Listing based CDC is best effort and bounded by this value: an upload that completes later than this value after newer objects were seen can still be missed (see the connector description for the full list of known limits). Cost: memory for the objects modified within the window (limit about 256 MiB; beyond it the window is shortened with a warning s3.source.dedupe_window_shrunk, which lowers the tolerance for late-visible objects, so lower this value instead), and redelivery (at-least-once) of the objects modified within the window after a restart and when the snapshot hands over to CDC. Listing cost does not depend on it. Values above 1h log a warning, above 24h are rejected, and 0 disables the lookback. |  |
+| `aws.secretAccessKey` | string |  | no | AWS secret access key. Optional, but must be set together with aws.accessKeyId. See aws.accessKeyId for ambient credentials. |  |
+| `cdc.maxEarlyObjects` | int | 16384 | no | The largest number of new objects delivered before they settle (the early set kept in every position, about 20 bytes per object). A bucket written faster than cdc.maxEarlyObjects / lookbackPeriod gets the excess up to lookbackPeriod later. Memory: positions take up to records in flight x (80 + key length + 20 x this) bytes. 0 delivers everything only once settled. At most 16384. The default delivers a burst of the SDK acceptance suite's maximum batch (10000) at once instead of deferring it for lookbackPeriod. |  |
+| `cdc.maxPendingUploadAge` | duration | 24h | no | Multipart uploads initiated longer ago than this are not tracked (an abandoned upload would otherwise occupy a slot forever); if one still completes, its object can be missed. Add an AbortIncompleteMultipartUpload lifecycle rule with DaysAfterInitiation at most this. Must be at least lookbackPeriod. |  |
+| `cdc.maxSettledBytesPerPoll` | int | 67108864 | no | The memory budget, in bytes, for the settled objects one poll delivers (a catch-up after downtime continues on the next poll). |  |
+| `cdc.maxTrackedUploads` | int | 256 | no | The largest number of long-running multipart uploads tracked in a position. When more run at once, the oldest untracked one delays settling until a slot frees up. At most 10000. |  |
+| `cdc.multipartHold` | bool | true | no | Track in-progress multipart uploads, so that an upload running longer than lookbackPeriod is not missed (AWS stamps the completed object with the time the upload started). Needs s3:ListBucketMultipartUploads. false skips it and is lossy for such uploads. |  |
+| `lookbackPeriod` | duration | 5m | no | The late-visibility tolerance of change capture. An object is "settled" once it is older than this (by the store's clock); the source assumes that no object becomes visible in listings later than this after its LastModified (replication lag, a slow PUT and clock skew between store nodes must stay below it; multipart uploads are tracked separately). New objects are delivered at once while they fit cdc.maxEarlyObjects, the rest when they settle, so this is also the maximum extra latency on a busy bucket. Positions resume exactly whatever the value. 30s or more is supported; 1s to 29s is deprecated (a warning; rejected in a later release); 0 is accepted but lossy for late-visible objects; above 24h is rejected. |  |
 | `pollingPeriod` | duration | 1s | no | polling period for the CDC mode, formatted as a time.Duration string. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -971,16 +1441,29 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
-| `aws.accessKeyId` | string |  | yes | AWS access key id. | required |
+| `aws.accessKeyId` | string |  | no | AWS access key id. Optional, but must be set together with aws.secretAccessKey. When both are unset the connector uses the Conduit host's ambient AWS identity (the AWS SDK default credential chain: environment, shared config and SSO, web identity/IRSA, ECS and EC2 roles), but only if the Conduit operator enabled connectors.ambient-credentials and listed the bucket, and only as the built-in connector (builtin:s3). Otherwise the connector refuses with connector.ambient_credentials_disabled. |  |
 | `aws.bucket` | string |  | yes | the AWS S3 bucket name. | required |
 | `aws.endpoint` | string |  | no | The endpoint to connect to. Set this when using an S3-compatible object store such as MinIO (for example http://localhost:9000). Leave empty to use the default AWS endpoints. The AWS_ENDPOINT_URL environment variable is also honored when this is empty. Note that an http:// endpoint sends every request, including the SigV4 Authorization header that carries the access key ID, in the clear: use https:// for anything that is not on localhost. |  |
 | `aws.pathStyle` | bool | false | no | Use path-style addressing (http://endpoint/bucket/key) instead of virtual-hosted addressing (http://bucket.endpoint/key). Set this to true when using an S3-compatible store that does not support virtual-hosted addressing. The default MinIO setup (started without MINIO_DOMAIN) is one: it ignores the bucket in the host name and takes the first path segment as the bucket instead. What comes back depends on the key: with a prefix configured the remaining segments are still a key, so PutObject fails with a 404 NoSuchBucket; without a prefix there is no key left and MinIO answers with a 400 MalformedXML. Leave false for AWS S3. |  |
 | `aws.region` | string |  | yes | the AWS S3 bucket region | required |
-| `aws.secretAccessKey` | string |  | yes | AWS secret access key. | required |
-| `format` | string |  | yes | the destination format, either "json" or "parquet". | required, inclusion(parquet,json) |
+| `aws.secretAccessKey` | string |  | no | AWS secret access key. Optional, but must be set together with aws.accessKeyId. See aws.accessKeyId for ambient credentials. |  |
+| `aws.serverSideEncryption` | string |  | no | Server-side encryption to request for every object written: AES256 (SSE-S3), aws:kms (SSE-KMS) or aws:kms:dsse (DSSE-KMS). Leave empty to send no encryption header, so the bucket's default encryption applies (on AWS every bucket encrypts with SSE-S3 by default; an S3-compatible store may store the object unencrypted). An explicit value overrides the bucket default: setting AES256 on a bucket whose default is SSE-KMS stores objects with SSE-S3 instead. |  |
+| `aws.sseKmsKeyId` | string |  | no | The KMS key ID, key ARN, alias name or alias ARN to encrypt objects with. Only valid when aws.serverSideEncryption is aws:kms or aws:kms:dsse; when empty with those modes, S3 uses the bucket's default KMS key, or the AWS managed key aws/s3. |  |
+| `compression` | string |  | no | Compression of the objects: none or gzip for json and bytearray (gzip appends .gz to the extension), none, gzip or snappy (the column codec) for parquet. Empty means the format's default: none for json and bytearray, gzip for parquet. |  |
+| `conditionalWrites` | bool | true | no | Send If-None-Match: * with every PutObject, so that the store refuses to replace an existing object (error s3.destination.key_exists) instead of silently overwriting one whose records were already acknowledged. Object keys are unique by construction; this makes any collision fail loudly (a 412 can also be the AWS SDK retrying this writer's own write after a lost response: then the redelivered records are a duplicate, never a loss). Tested on MinIO; AWS S3 documents support. Set to false for a store that answers with s3.destination.conditional_writes_unsupported. A store that silently ignores the header writes unconditionally, without a warning. |  |
+| `format` | string |  | yes | The destination format: "json" (one OpenCDC-shaped JSON object per line), "parquet", or "bytearray" (the payload bytes of every record followed by format.bytearray.separator; Kafka Connect's ByteArrayFormat, and with format.bytearray.extension set to .json the bytes Kafka Connect's JsonFormat writes for JSON values). bytearray fails a record without a payload (a delete or a Kafka tombstone) or with an empty one (indistinguishable from a tombstone) with the error s3.destination.null_value; json fails a record that is not valid UTF-8 with s3.destination.invalid_utf8. | required, inclusion(parquet,json,bytearray) |
+| `format.bytearray.extension` | string | .bin | no | File extension of objects written by format bytearray, with or without the leading dot. |  |
+| `format.bytearray.separator` | string | \n | no | Written after every record by format bytearray. The escapes \n, \r, \t and \\ are resolved. The separator is not escaped inside payloads, so a payload that contains it cannot be split back unambiguously (as with Kafka Connect's ByteArrayFormat); pick a separator the data cannot contain, or use json or parquet. |  |
+| `partitioner` | string | none | no | The directory layout under the prefix (<name> is the object name, <UnixNano>-<writer id>-<counter>). "none" writes every batch to <prefix>/<name>.<ext>, as earlier versions do. The others reproduce the directories of the Kafka Connect S3 sink's partitioners, under <prefix>/<collection>/ (the collection is the opencdc.collection metadata, the topic for records from builtin:kafka): "default" adds partition=<kafka.partition metadata>, "field" adds <field>=<value> per field in partitioner.fields, "time" adds the record time formatted with partitioner.pathFormat, "hourly" and "daily" are "time" with Kafka Connect's hourly and daily patterns. A batch is split into one object per directory. A record that lacks the value its partitioner needs is not written: it fails with the error code s3.destination.partition_value. | inclusion(none,default,field,time,hourly,daily) |
+| `partitioner.duration` | duration |  | no | The width of a time partition for partitioner "time", at least 1s (Kafka Connect: partition.duration.ms). The record time is floored to a multiple of it in partitioner.timezone. |  |
+| `partitioner.fields` | string |  | no | Comma-separated payload fields for partitioner "field", dots for nested fields (Kafka Connect: partition.field.name). The payload must be structured data or a raw JSON object. |  |
+| `partitioner.pathFormat` | string |  | no | The directory pattern for partitioner "time", in Kafka Connect's path.format syntax: yyyy or YYYY, MM, dd, HH, mm, ss, and quoted literal text, for example 'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH. Text fields (MMM) are not supported. |  |
+| `partitioner.timestampExtractor` | string | record | no | Where the time partitioners take the time from: "record" (the opencdc.createdAt metadata, the Kafka record timestamp for builtin:kafka), "recordField" (the payload field in partitioner.timestampField: epoch milliseconds, an RFC 3339 string or a time) or "wallclock" (the time of the write; a redelivered record can land in a later directory). | inclusion(record,recordField,wallclock) |
+| `partitioner.timestampField` | string |  | no | The payload field for timestampExtractor "recordField", dots for nested fields (Kafka Connect: timestamp.field). |  |
+| `partitioner.timezone` | string | UTC | no | The IANA time zone the time partitioners floor and format in. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is written to the destination. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 1s | no | Maximum delay before an incomplete batch is written to the destination. |  |
+| `sdk.batch.size` | int | 1000 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
 | `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
@@ -988,20 +1471,27 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (142)
+## 3. Error codes (167)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |
+| `config.ambient_proxy_env` | FailedPrecondition | CodeAmbientProxyEnv is a startup error: ambient credentials are enabled while an HTTP proxy variable is set and allow-proxy is false. |
+| `config.ambient_resource_wildcard` | InvalidArgument | CodeAmbientResourceWildcard is a startup error: an entry of connectors.ambient-credentials.allow-resources contains '*'. Bucket names are globally registrable, so a pattern would admit buckets anyone can create. |
+| `config.env_var_missing` | InvalidArgument | CodeEnvVarMissing is raised when a ${VAR} reference cannot be resolved because the environment variable is not set. The fix is to set the variable and restart the pipeline. |
 | `config.field_invalid` | InvalidArgument | config: field invalid |
 | `config.field_renamed` | InvalidArgument | CodeFieldRenamed is the stable code carried by a lint warning for a deprecated field that was mechanically renamed (the old key's value moves unchanged to a new key) — see pkg/provisioning/config/yaml/internal.Change.RenamedTo and (*configLinter).newWarning. It is distinct from the generic validate.CodeLintWarning so cmd/conduit/internal/repair's fix-producer scan (design doc 20260712-repair-command.md §6, item #1) can find exactly these findings without pattern-matching warning text. |
 | `config.field_required` | InvalidArgument | config: field required |
 | `config.field_too_long` | InvalidArgument | config: field too long |
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
+| `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
+| `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
 | `connector.delete_hook_failed` | FailedPrecondition | CodeConnectorDeleteHookFailed is raised when a connector is deleted and its plugin's delete hook (the "deleted" lifecycle event, which releases what the connector created outside Conduit, such as a Postgres replication slot) fails or cannot be run. The connector record is kept, so the delete can be retried; the hook is idempotent by contract. The message names the connector, its plugin, and the plugin's own error, which is the only place the plugin can say what it failed to release (#3058). |
+| `connector.endpoint_link_local` | PermissionDenied | CodeEndpointLinkLocal is raised when an ambient-credential connection would go to a link-local or cloud metadata address. |
+| `connector.endpoint_not_allowed` | PermissionDenied | CodeEndpointNotAllowed is raised when, under ambient credentials, an endpoint is not https or not an exact allow-endpoints entry. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
 | `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |
@@ -1009,8 +1499,18 @@ Author: Meroxa, Inc.
 | `connector.orphan_not_found` | NotFound | CodeConnectorOrphanNotFound is raised when an orphan is acknowledged for a connector ID that has no orphan entry. |
 | `connector.orphaned_resources` | FailedPrecondition | CodeConnectorOrphanedResources is a warning, never returned as an error: a connector was deleted with force after its delete hook failed, so resources it created outside Conduit may remain. It is carried by the DeleteConnector response, logged, and reported by the `conduit doctor` check connectors.orphaned_resources until the orphan is acknowledged (#3058). The gRPC category is unused; FailedPrecondition is what it would mean if it ever were returned. |
 | `connector.plugin_not_found` | NotFound | CodeConnectorPluginNotFound is raised when a referenced connector plugin cannot be located. |
+| `connector.proxy_not_allowed` | PermissionDenied | CodeProxyNotAllowed is raised when a proxy variable is set and the operator has not set connectors.ambient-credentials.allow-proxy. |
+| `connector.redirect_refused` | PermissionDenied | CodeRedirectRefused is raised when a server redirects an ambient-credential request to another host or a non-https URL. |
+| `connector.resource_not_allowed` | PermissionDenied | CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an exact allow-resources entry, or is an ARN or alias form. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
+| `debezium.avro_unsupported` | Unimplemented | CodeAvroUnsupported is raised when key.converter or value.converter is "avro": the Confluent AvroConverter (AvroData port, subject naming, Confluent wire format) is not implemented yet. It fails at configure time, before any record is encoded, so a misconfigured pipeline never emits a half-encoded message. |
+| `debezium.config_invalid` | InvalidArgument | CodeConfigInvalid is raised when the processor settings are invalid. |
+| `debezium.descriptor_missing` | FailedPrecondition | CodeDescriptorMissing is raised when a record carries no debezium.descriptor, or a descriptor that does not match this format.version. |
+| `debezium.old_key_unavailable` | InvalidArgument | CodeOldKeyUnavailable is raised on a primary-key change whose debezium.old_key is missing or unparsable, so the delete and tombstone cannot be keyed. |
+| `debezium.record_schema_mismatch` | InvalidArgument | CodeRecordSchemaMismatch is raised when a record's key, before or after does not match the descriptor: a missing required field, an unknown field, or a value of the wrong type. It never coerces (invariant 6). |
+| `debezium.unsupported_type` | InvalidArgument | CodeUnsupportedType is raised when a descriptor names a Connect type this encoder cannot serialize. |
+| `debezium.value_out_of_range` | InvalidArgument | CodeValueOutOfRange is raised when a value does not fit its declared schema (a decimal wider than its scale, a timestamp outside the epoch microsecond range). |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |
@@ -1025,6 +1525,7 @@ Author: Meroxa, Inc.
 | `kc.converter_unknown` | InvalidArgument | CodeConverterUnknown: a connector-level note when neither the connector nor the worker file sets key.converter or value.converter, so the wire format is unknown. Blocking. |
 | `kc.converter_unsupported` | InvalidArgument | CodeConverterUnsupported: a converter with no Conduit equivalent in this version. Blocking: the wire format would differ. |
 | `kc.default_differs` | InvalidArgument | CodeDefaultDiffers: a connector-level note for an absent key whose Kafka Connect default differs from Conduit's behavior. |
+| `kc.delivery_semantics_differ` | InvalidArgument | CodeDeliverySemanticsDiffer: a connector-level note that a Kafka Connect delivery guarantee is not reproduced, for example the S3 sink's deterministic object names, which give exactly-once object keys. |
 | `kc.key_approximated` | InvalidArgument | CodeKeyApproximated: translated with a documented difference. |
 | `kc.key_conflict` | InvalidArgument | CodeKeyConflict: two keys map onto one Conduit setting. Blocking, since either value could be the one Kafka Connect used. |
 | `kc.key_deprecated` | InvalidArgument | CodeKeyDeprecated: a legacy key name, handled as its current name. |
@@ -1034,9 +1535,11 @@ Author: Meroxa, Inc.
 | `kc.key_unsupported` | InvalidArgument | CodeKeyUnsupported: a known key with no Conduit equivalent for its value. |
 | `kc.offsets_not_migrated` | InvalidArgument | CodeOffsetsNotMigrated: a connector-level note that the connector resumes from offsets Kafka Connect stored, which migrate does not carry over; the note says where the pipeline starts instead. Blocking: records are copied again or skipped. |
 | `kc.output_shape_differs` | InvalidArgument | CodeOutputShapeDiffers: a connector-level note that records, objects or topics differ in shape or layout from the original connector's. |
+| `kc.resume_unavailable` | InvalidArgument | CodeResumeUnavailable: a key needs the Debezium offset import (or another cutover mechanism) to resume where the original connector stopped, and that mechanism was not requested or is not available. Blocking: starting fresh would skip or replay records. |
 | `kc.secret_plaintext` | InvalidArgument | CodeSecretPlaintext: a connector-level note that the input holds a secret as a literal value. The value is not copied anywhere, but the input file is itself a leak. |
 | `kc.setting_required` | InvalidArgument | CodeSettingRequired: a connector-level note for a setting the Conduit plugin requires that no Kafka Connect key provides; it is written as an environment variable to fill. Blocking: the pipeline cannot run as is. |
 | `kc.smt_unsupported` | InvalidArgument | CodeSMTUnsupported: a single message transform or predicate outside the subset migrate translates exactly. Blocking: transforms change data. |
+| `kc.target_capability_missing` | InvalidArgument | CodeTargetCapabilityMissing: a key maps to a Conduit setting the target plugin does not provide yet (a requires-gate param or capability the connector lane has not shipped). Blocking: writing nothing would drop the setting, so the migration stops until the lane lands. |
 | `kc.topic_name_unsupported` | InvalidArgument | CodeTopicNameUnsupported: a connector-level note that the connector's topic naming cannot be written as the destination's topic template. Blocking: the destination topic must be set by hand. |
 | `lifecycle_v2.partial_graceful_stop_escalated` | Aborted | CodePartialGracefulStopEscalated is returned by Stop/StopAndWait for an N-source pipeline (slice 3b of the arch-v2 multi-connector epic) when a graceful stop arms some sources within the deadline but not others. See stopRunnablePipeline's doc and the adversarial-review finding this closes (H1, docs/design-documents/20260801-archv2-multiconnector-nsource.md).  Leaving that state unresolved would strand the pipeline reporting StatusRunning indefinitely: the still-unarmed worker(s) keep reading, workersWg never drains, and runPipeline's cleanup goroutine (the only thing that ever writes a terminal status) never runs - invisible to an operator except as an error return that may go to a disconnected caller. Instead the pipeline's tomb is force-killed with this code so every still-unarmed worker's next context check observes cancellation and unwinds, guaranteeing the pipeline reaches a terminal (Degraded) status instead of a silent, half-stopped one. At-least-once is preserved: this never acks anything, so an interrupted worker's in-flight, unacked batch simply replays on the pipeline's next start (invariant 3). |
 | `lifecycle_v2.stop_and_wait_timeout` | DeadlineExceeded | lifecycle v2: stop and wait timeout |
@@ -1054,7 +1557,7 @@ Author: Meroxa, Inc.
 | `orchestrator.redacted_setting_plugin_changed` | InvalidArgument | CodeRedactedSettingPluginChanged is raised when an update sends "***" for a setting while changing the plugin (including only its version). A stored value, typically a credential, is never carried to a different plugin; the update must send real values. |
 | `orchestrator.redacted_setting_with_other_changes` | InvalidArgument | CodeRedactedSettingWithOtherChanges is raised when an update sends "***" (keep the stored value) for a setting while any other setting in the same update changes: a different value, an added key, or a removed key. A stored value is kept only by a pure round trip, so an update that repoints a host or URL cannot also ask Conduit to send the stored credential there. The update must send real values. |
 | `orchestrator.redacted_setting_without_stored_value` | InvalidArgument | CodeRedactedSettingWithoutStoredValue is raised when an update sends the redacted placeholder "***" for a setting that has no stored value. "***" in an update means "keep the stored value"; with nothing stored there is nothing to keep, and storing "***" itself would silently break the setting. |
-| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a destination connector, or the dead-letter-queue connector, sets sdk.batch.size above 1 (#2979).  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/connectors/<index>/settings/sdk.batch.size or /dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the destination, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
+| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's sdk.batch.size/sdk.batch.delay (see docs/design-documents/20261017-funnel-destination-batching.md) and strips the settings from the SDK plugin, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so its SDK destination batching still withholds acks and is refused.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
 | `pipeline.config_changing` | Unavailable | CodePipelineConfigChanging is raised when a pipeline start is refused because an update, delete or connector/processor change on that pipeline is writing its config. Starting inside that window would build the run from a half-applied config, or for a pipeline that is being deleted. The change is a short store write, never a node operation. Unavailable: retry the start shortly. |
 | `pipeline.duplicate_source_position` | FailedPrecondition | CodeDuplicateSourcePosition is returned when a single batch read from a source contains two or more records carrying identical position bytes, and that batch is fanned out to multiple destinations.  A position is a record's identity: multiAckNacker keys its per-position unanimity tally on it, and connector.Source.Ack advances the persisted position from it. Two records sharing one position make those two things ambiguous — the tally cannot tell the records apart, so one of them could never reach unanimity, and because positions are released to the source strictly in order (invariant 4), a single unresolvable slot silently stops the WHOLE batch from ever being acked. The pipeline would keep running, reading and writing records, while its source position never advanced and no error was ever surfaced.  Failing loudly here is deliberate. At-least-once is not violated by the stall (nothing is acked, so nothing is lost — the records replay on restart), but a silent, unbounded liveness failure is far worse for an operator than a clear error naming the offending connector behaviour. Emitting duplicate positions within one batch is a connector contract violation, so this is a user-actionable error, not an internal assertion. |
 | `pipeline.empty_source_position` | FailedPrecondition | CodeEmptySourcePosition is returned when a batch about to be acked to the source contains a record with an empty/nil position.  connector.Source.Ack persists State.Position = p[len(p)-1] unconditionally, so acking an empty position OVERWRITES the durable source position with nothing: on restart the source resumes from an empty position — a full re-snapshot for Postgres, offset 0 for file/Kafka. That is an invariant-2 (monotonic, crash-safe positions) violation.  There are two distinct causes, and the suggestion names both because they call for different fixes.  The one reachable today is a SOURCE CONNECTOR emitting a record with an empty position, which is then acked or nacked. Nothing in the read path validates positions, so it reaches Worker.Ack/Worker.Nack unaltered. Like CodeDuplicateSourcePosition, that is a connector contract violation — every record must carry a distinct, non-empty position.  The second is a processor-chain shape: Batch.SplitRecord gives every piece after the first a nil position, so a sub-batch covering only the tail of a split run collapses to nils. On the ack path this is reachable; on the nack path the run ledger currently withholds split members and forwards the run's own non-nil origPos instead, so the guard there is a contract check rather than a live route. |
@@ -1079,6 +1582,11 @@ Author: Meroxa, Inc.
 | `plugin.standalone_env_passed` | FailedPrecondition | CodeEnvPassedToPlugins is the stable code carried by the startup log event and by the `plugins.standalone_env` doctor finding when the host environment contains variables that standalone connector plugin processes will inherit and whose names look like credentials or configuration secrets. Operators can alert on the log field `code` or on the doctor finding code. By design this is a log/finding code, not an error code: no API or CLI call fails with it. It is registered in conduiterr so the code set that llms.txt publishes, and that alerting can rely on, stays complete. |
 | `processor.instance_not_found` | NotFound | CodeProcessorNotFound is raised when a referenced processor instance cannot be located. |
 | `processor.plugin_not_found` | NotFound | CodeProcessorPluginNotFound is raised when a referenced processor plugin cannot be located. |
+| `processor.protobuf_decode.message_index` | InvalidArgument | CodeMessageIndex is returned when the Confluent message-index prefix is malformed or out of range. |
+| `processor.protobuf_decode.reference_resolve` | FailedPrecondition | CodeReferenceResolve is returned when a schema reference cannot be resolved, or the reference graph forms a cycle. |
+| `processor.protobuf_decode.schema_compile` | InvalidArgument | CodeSchemaCompile is returned when the .proto source fails to compile. |
+| `processor.protobuf_decode.unknown_field` | InvalidArgument | CodeUnknownField is returned when the payload carries a field the schema does not declare and the policy is reject. |
+| `processor.protobuf_decode.wire_format` | InvalidArgument | CodeWireFormat is returned when the payload is not valid protobuf wire format for the schema. |
 | `provisioning.live_apply_unauthorized` | FailedPrecondition | CodeLiveApplyUnauthorized is raised by ApplyPlanLive when it refuses to apply a restart-class (EffectRestart) change to a currently-running pipeline because the caller did not authorize it — see ApplyPlanLive's allowRestartOnRunning parameter and docs/design-documents/20260708-live-server-deploy-apply.md, "Item 6 (reworked conservative): the data-path gate". The authorization is a process-level operator flag (conduit.Config.API.AllowLiveRestartApply), never a value the RPC caller/agent can set directly — see pkg/http/api/pipeline_v1.go's ApplyPipeline handler, the only caller that can set allowRestartOnRunning to true. |
 | `provisioning.multi_pipeline_file` | InvalidArgument | CodeMultiPipelineFile is raised when a file resolves to more than one pipeline document. Wave 2 (per the design doc's Scope boundary) supports exactly one pipeline per file — multi-pipeline-file orchestration is deferred alongside `--remote`. |
 | `provisioning.pipeline_id_duplicate` | InvalidArgument | CodePipelineIDDuplicate is raised when two pipeline documents — in the same file or across files — declare the same pipeline ID.  It is distinct from config.CodeIDDuplicate, which config.Validate raises for a connector/processor ID collision *within* a single pipeline document: that check has the whole document in hand. A pipeline-ID collision spans documents (and files), which config.Validate never sees (it validates one config.Pipeline at a time) — detecting it is the job of whatever collects pipelines across a directory: today that's Service.findDuplicateIDs (a bare sentinel, ErrDuplicatedPipelineID, since it only needs to skip the offending pipelines during provisioning) and the offline `conduit pipelines validate` engine (cmd/conduit/internal/validate, which needs a real code + configPath per finding for its report). |
@@ -1135,7 +1643,7 @@ Author: Meroxa, Inc.
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 | `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error. With a DLQ enabled (threshold above 0) it is routed to the dead-letter queue; otherwise the pipeline is degraded (classic engine, avro.decode and processor paths) or recovering (classic engine destination path, and architecture v2), and a recovering pipeline re-reads the same record. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit. |
 
-## 4. MCP tool catalog (13)
+## 4. MCP tool catalog (14)
 
 | Name | Class | Description |
 | --- | --- | --- |
@@ -1144,6 +1652,7 @@ Author: Meroxa, Inc.
 | `doctor` | read | Checks whether the local machine and configuration are ready for `conduit run` — offline, non-destructive. Same engine as `conduit doctor`. |
 | `dry_run` | read | Everything validate checks, plus the fully-enriched pipeline graph `conduit run` would load and a builtin-plugin existence check. Same engine as `conduit pipelines dry-run`. |
 | `inspect` | read | Reports a running pipeline's live status, per-stage connector summary, and DLQ. Requires a running Conduit (conduit mcp --api-address). Same engine as `conduit pipelines inspect`. |
+| `kc_migrate` | read | Translates Kafka Connect connector configs (content-in, never a server path) into Conduit pipelines plus a compatibility report, and returns the files content-out. Mutates nothing. Same engine as `conduit migrate kafka-connect`. |
 | `lint` | read | Everything validate checks, plus the parser's advisory warnings (deprecated/renamed/unknown fields, version fallback). Same engine as `conduit pipelines lint`. |
 | `repair` | read | Scans a pipeline configuration for findings that carry a structured, machine-appliable fix (a deprecated/renamed field, an unambiguous invalid status value, a negative processor workers count, an over-long description), classifies each fix's safety (safe / restart / data_path), and returns a plan hash. Mutates nothing. Same engine as `conduit pipelines repair`. |
 | `repair_apply` | write (requires --allow-mutations) | Applies the plan computed by repair — safe fixes only, unless select names others — only if hash still matches the freshly recomputed plan (a stale hash is refused, nothing mutated). A data-path-adjacent fix (connector settings, a connector's own plugin/type, DLQ config, any id field) is NEVER applied by this tool, even if selected explicitly — it comes back in the result as a skipped fix; only the CLI's --escalate flag (human-only) can apply one. Same engine as `conduit pipelines repair --apply`. |
