@@ -57,18 +57,20 @@ var (
 	StallBinary              []byte
 	SpinBinary               []byte
 
-	ChaosProcessorModule   wazero.CompiledModule
-	EchoProcessorModule    wazero.CompiledModule
-	OldEchoProcessorModule wazero.CompiledModule
-	SpecifyErrorModule     wazero.CompiledModule
-	StallModule            wazero.CompiledModule
-	SpinModule             wazero.CompiledModule
+	ChaosProcessorModule wazero.CompiledModule
+	SpecifyErrorModule   wazero.CompiledModule
+	StallModule          wazero.CompiledModule
+	SpinModule           wazero.CompiledModule
 
 	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
-		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
-		testPluginEchoDir + "processor.wasm":         {&EchoProcessorBinary, &EchoProcessorModule},
+		testPluginChaosDir + "processor.wasm": {&ChaosProcessorBinary, &ChaosProcessorModule},
+		// The echo guests are read here but compiled lazily by the tests that use
+		// them (compileForTest): each ~25 MB module costs ~1.6 GB of heap to
+		// compile under -race, and compiling every guest in TestMain pushed the
+		// package past the CI runner's memory (swap thrash, runner killed).
+		testPluginEchoDir + "processor.wasm":         {&EchoProcessorBinary, nil},
 		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
-		testPluginOldEchoDir + "processor.wasm":      {&OldEchoProcessorBinary, &OldEchoProcessorModule},
+		testPluginOldEchoDir + "processor.wasm":      {&OldEchoProcessorBinary, nil},
 		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
 		testPluginStallDir + "processor.wasm":        {&StallBinary, &StallModule},
 		testPluginSpinDir + "processor.wasm":         {&SpinBinary, &SpinModule},
