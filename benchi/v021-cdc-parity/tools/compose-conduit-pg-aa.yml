@@ -1,0 +1,37 @@
+# A/A control for conduit-pg: byte-for-byte compose-conduit-pg.yml with only the
+# container_name changed. The spread between the two is the noise floor for this pair.
+# Conduit Postgres-destination arm (conduit-pg). Built from the SAME
+# conduit-bench:v021-cdc-parity image as the conduit arm by run.sh, but runs the
+# Postgres-destination pipeline (../pipelines/conduit-pg.yml) instead of the
+# file-sink pipeline: builtin:postgres CDC source (bench_source_i) ->
+# builtin:postgres destination (bench_dest_i).
+#
+# No sink volume is mounted: ground truth for this arm is the row count of the
+# bench_dest_i tables, read by the count hooks in ../bench.yml (which run in the
+# counter container), not a file. The source connector config is byte-for-byte
+# the same as the file-sink conduit arm, so the only variable is the sink.
+services:
+  conduit:
+    image: conduit-bench:v021-cdc-parity
+    container_name: cdcparity-conduit-pg-aa
+    # Built locally and never pushed; benchi's `docker compose pull` must not
+    # try to fetch it.
+    pull_policy: never
+    # sh -c + exec so signals reach conduit (graceful shutdown flushes the
+    # --dev.* profiles). CONDUIT_ENGINE_ARGS / CONDUIT_LOG_ARGS are empty at shipped defaults
+    # (classic engine, info logging); CONDUIT_EXTRA_ARGS is empty in every measured run;
+    # run.sh sets it only for a PROFILE=1 diagnostic run.
+    command:
+      - sh
+      - -c
+      - exec /app/conduit run --pipelines.path /app/pipelines ${CONDUIT_ENGINE_ARGS:-} ${CONDUIT_LOG_ARGS:-} ${CONDUIT_EXTRA_ARGS:-}
+    stop_grace_period: 60s
+    volumes:
+      - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof
+      - ../pipelines/conduit-pg.yml:/app/pipelines/conduit-pg.yml:ro
+    networks:
+      - benchi
+
+networks:
+  benchi:
+    external: true
