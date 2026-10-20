@@ -1,10 +1,17 @@
 # S3 destination: parity with the Kafka Connect S3 sink
 
+**Status: implemented** in `ConduitIO/conduit-connector-s3` v0.11.x: partitioners (s3#1054), the `bytearray`
+format and gzip (s3#1053), unique object keys and `conditionalWrites` (s3#1066), SSE settings (s3#1051) and
+ambient credentials under the operator policy (s3#1027, #3108). Conduit's built-in `s3` moves to v0.11.2 with
+PR #3220 (`main` is on v0.11.1 until it merges). Where the implementation differs from the text below, the
+difference is marked _Implemented:_.
+
 ## Summary
 
-`conduit migrate kafka-connect` maps `io.confluent.connect.s3.S3SinkConnector` to `builtin:s3`. Today every
-such migration is blocking: the S3 destination writes every batch to `<prefix>/<UnixNano>.<ext>`, has no
-partitioners, writes JSON as one OpenCDC-shaped object per line, and has no raw-bytes format. Readers built for
+`conduit migrate kafka-connect` maps `io.confluent.connect.s3.S3SinkConnector` to `builtin:s3`. When this was
+written (s3 v0.9.5), every such migration was blocking: the S3 destination wrote every batch to
+`<prefix>/<UnixNano>.<ext>`, had no partitioners, wrote JSON as one OpenCDC-shaped object per line, and had no
+raw-bytes format. Readers built for
 the Kafka Connect layout (Athena, Hive, Spark and Trino tables over `topics/<topic>/year=.../`, partition
 projection) break on the first object.
 
@@ -33,10 +40,12 @@ that is ack logic (invariant 1).
   `<prefix>/<UnixNano>.<ext>`. `Write` returns after `PutObject` succeeds, so acks follow durable storage.
 - No other Conduit S3 sink exists in `ConduitIO` or `conduitio-labs`. The generic `file` and `log` destinations
   do not apply. Nothing to reuse beyond extending this connector.
-- Open in the same repo (`s3#N` below is `ConduitIO/conduit-connector-s3#N`): SSE settings (s3#1047, PR
-  s3#1051), the default credential chain (s3#1021, blocked on the ambient-credentials design #3041), typed
-  Parquet (s3#1034), conditional writes (s3#621), deterministic keys and record encoding (s3#1030), partitioning
-  (s3#1033, which this document supersedes in design).
+- In the same repo (`s3#N` below is `ConduitIO/conduit-connector-s3#N`), at the time of writing: SSE settings
+  (s3#1047, PR s3#1051), the default credential chain (s3#1021, blocked on the ambient-credentials design #3041),
+  typed Parquet (s3#1034), conditional writes (s3#621), deterministic keys and record encoding (s3#1030),
+  partitioning (s3#1033, which this document supersedes in design). _Implemented:_ SSE (s3#1051) and the
+  credential chain (s3#1027) are done; `conditionalWrites` exists (s3#1066). Still open: typed Parquet
+  (s3#1034), deterministic names (s3#621) and s3#1030's remaining items.
 - The mapping rows in `20261014-migrate-kafka-connect-mapping-and-harness.md` (_S3 sink_) say they follow this
   lane's matrix. This document is that matrix; the migrate lane updates its rule data from it.
 
@@ -73,11 +82,17 @@ A new destination setting `partitioner` selects the layout:
 the place of `<topic>`. `prefix` takes the place of `topics.dir`; `migrate` emits `prefix: topics` when
 `topics.dir` is absent, so the default Kafka Connect layout is reproduced.
 
-The file name stays `<UnixNano>.<ext>` (plus the compression suffix). Kafka Connect's
+The file name stays `<UnixNano>.<ext>` (plus the compression suffix). _Implemented:_ the name is
+`<UnixNano>-<writer id>-<counter>.<ext>`, unique by construction (s3#1066). Kafka Connect's
 `<topic>+<partition>+<offset>` names are deterministic and are the basis of its exactly-once. Conduit does not
 have the Kafka offset in a generic form, and deterministic names without conditional writes would let a
-replay overwrite an object that already holds acked records. Deterministic names with `If-None-Match` writes are
-s3#621, out of scope for v0.21.
+replay overwrite an object that already holds acked records.
+
+Conditional writes exist: `conditionalWrites` (default `true`, s3#1066) sends `If-None-Match: *` with every
+`PutObject`, so a key collision fails with `s3.destination.key_exists` instead of overwriting acked records. A
+store that rejects the header answers with `s3.destination.conditional_writes_unsupported`; set
+`conditionalWrites: false` for it. What stays out of scope for v0.21 is deterministic, offset-based names, and
+with them exactly-once (s3#621).
 
 `default` needs the Kafka partition number. `builtin:kafka` does not put it in the record metadata today (only
 the topic, the record timestamp and headers). The destination reads `kafka.partition`; the Kafka lane (#3008)
@@ -180,7 +195,7 @@ difference), **U** unsupported (reason given). Options that only tune Kafka Conn
 | `s3.bucket.name`, `s3.region` | S | `aws.bucket`, `aws.region` | |
 | `store.url`, `s3.path.style.access.enabled` | S | `aws.endpoint`, `aws.pathStyle` | Defaults differ (KC `true`, Conduit `false`) |
 | `aws.access.key.id`, `aws.secret.access.key` | S | `aws.accessKeyId`, `aws.secretAccessKey` | |
-| `s3.credentials.provider.class` (default chain) | U for v0.21 | none | Blocked on #3041 (operator policy for ambient credentials); s3#1027 is on hold |
+| `s3.credentials.provider.class` (default chain) | M | leave `aws.accessKeyId` and `aws.secretAccessKey` unset | The AWS SDK default chain, only when the operator enables `connectors.ambient-credentials` and lists the bucket, and only as `builtin:s3`; otherwise `connector.ambient_credentials_disabled` (s3#1027, #3108) |
 | `sts.role.*` | U | none | Assume-role is not supported |
 | `topics.dir` | S | `prefix` | `migrate` emits `topics` when absent |
 | `partitioner.class` `DefaultPartitioner` | M | `partitioner: default` | Needs `kafka.partition` from `builtin:kafka` (#3008) |
@@ -193,16 +208,17 @@ difference), **U** unsupported (reason given). Options that only tune Kafka Conn
 | `format.class` `ByteArrayFormat`, `format.bytearray.*` | S | `format: bytearray`, `format.bytearray.*` | |
 | `format.class` `JsonFormat` | M | `format: bytearray`, extension `.json` | Same bytes for schemaless JSON values; KC re-serializes through its converter, so whitespace and key order can differ, and `schemas.enable=true` envelopes are not produced |
 | `format.class` `ParquetFormat`, `parquet.codec` | M | `format: parquet`, `compression` | Fixed string columns until s3#1034 (typed Parquet) |
-| `format.class` `AvroFormat`, `avro.codec`, `enhanced.avro.schema.support`, `connect.meta.data` | U | none | No maintained Avro library after hamba/avro was archived (#2817, #2823); revisit with that decision |
+| `format.class` `AvroFormat`, `avro.codec`, `enhanced.avro.schema.support`, `connect.meta.data` | U | none | No Avro format in s3 v0.11.x. The library question is settled: the stack moved from the archived hamba/avro to `iskorotkov/avro` (#2817, #2823; s3#1031). An Avro format is a follow-up |
 | `schema.compatibility`, `schema.generator.class` | U | none | No schema projection in the destination |
 | `s3.compression.type` | S | `compression` | `none`, `gzip` |
 | `s3.compression.level` | U | none | Default gzip level |
-| `flush.size` | M | `sdk.batch.size` | Kafka Connect counts per partition; Conduit per batch, which is then split by partition |
+| `flush.size` | M | `sdk.batch.size` | Kafka Connect counts per partition; Conduit per batch, which is then split by partition. The destination defaults to `sdk.batch.size: 1000` and `sdk.batch.delay: 1s` (s3#1069) |
 | `rotate.interval.ms` | M | `sdk.batch.delay` | Wall clock, not record time |
 | `rotate.schedule.interval.ms` | U | none | |
-| file naming: `<topic>+<partition>+<offset>`, `file.delim`, `directory.delim`, `filename.offset.zero.pad.width` | U | none | Names are `<UnixNano>.<ext>`; deterministic names need conditional writes (s3#621) |
-| exactly-once (deterministic names), `enable.conditional.writes` | U | none | At-least-once; a replay writes a new object (s3#621) |
-| `s3.ssea.name`, `s3.sse.kms.key.id` | S once s3#1051 merges | `aws.serverSideEncryption`, `aws.sseKmsKeyId` | Empty means the bucket default, as in KC |
+| file naming: `<topic>+<partition>+<offset>`, `file.delim`, `directory.delim`, `filename.offset.zero.pad.width` | U | none | Names are `<UnixNano>-<writer id>-<counter>.<ext>`, unique by construction (s3#1066); offset-based names are s3#621 |
+| `enable.conditional.writes` | M | `conditionalWrites` (default `true`) | `If-None-Match: *` on every `PutObject`; a collision fails with `s3.destination.key_exists`. It guards against overwrites; it does not make names deterministic |
+| exactly-once (deterministic names) | U | none | At-least-once; a replay writes a new object (s3#621) |
+| `s3.ssea.name`, `s3.sse.kms.key.id` | S | `aws.serverSideEncryption`, `aws.sseKmsKeyId` | Empty means the bucket default, as in KC (s3#1051) |
 | `s3.sse.customer.key` | U | none | SSE-C |
 | `s3.acl.canned` | U | none | Hardcoded `private`; follow-up |
 | `s3.object.tagging*` | U | none | |
@@ -244,7 +260,8 @@ The S3 source reads any object under a prefix, including Kafka Connect's.
 | Kafka tombstone with `bytearray` | Record fails | `s3.destination.null_value` |
 | Non-UTF-8 bytes with `json` | Record fails; before this change the bytes were replaced silently | `s3.destination.invalid_utf8` |
 | High-cardinality field | One object per distinct value per batch: many small objects, more `PutObject` calls | Object count; documented with `sdk.batch.size` guidance |
-| Host clock steps back | `<UnixNano>` can repeat within the same directory and overwrite an object (also true today with `partitioner: none`) | Not detected; fixed by conditional writes (s3#621). Documented |
+| Host clock steps back | _Implemented:_ names carry a writer id and a counter after `<UnixNano>`, so they do not repeat (s3#1066); with `conditionalWrites` a collision fails instead of overwriting | `s3.destination.key_exists` |
+| Store ignores `If-None-Match` | Writes are unconditional, with no warning; keys are still unique by construction | Not detected. Documented on the setting |
 | `wallclock` extractor and replay | A redelivered record can land in a later directory | Documented as non-deterministic |
 | `recordField` holds seconds instead of milliseconds | Records land in 1970 | Documented: epoch milliseconds, as Kafka Connect |
 
@@ -255,8 +272,11 @@ failed group is nacked, never dropped.
 
 ### Upgrade and rollback
 
-The defaults (`partitioner: none`, existing formats) write exactly what v0.9.5 writes, so an upgrade changes
-nothing until a pipeline opts in. Rolling the connector back with a pipeline that uses the new settings fails at
+The defaults (`partitioner: none`, existing formats) keep v0.9.5's layout, so an upgrade changes no directory
+until a pipeline opts in. _Implemented:_ two defaults did change in v0.10/v0.11: object names gained a writer id
+and counter (s3#1066), and the destination batches by default (s3#1069). `conditionalWrites` defaults to `true`;
+a store that rejects `If-None-Match` fails the write with `s3.destination.conditional_writes_unsupported` until
+the pipeline sets it to `false`. Rolling the connector back with a pipeline that uses the new settings fails at
 configuration time (unknown parameter), not at write time. Objects already written stay valid for their readers.
 The destination keeps no state, so there is nothing to migrate.
 
@@ -278,7 +298,7 @@ for it.
   `partitioner: field` would prove nothing more about delivery, and the read-back would have to know the layout.
 - Chaos: SIGKILL of a Conduit process mid-batch with `partitioner: time`, then verify every acked record is in
   the bucket (invariant 1) and every record is there at least once (invariant 3). Owned by the S3 chaos task of
-  #3009.
+  #3009; _Implemented:_ s3#1055.
 
 ## Related
 
@@ -286,5 +306,7 @@ for it.
 - `20261014-migrate-kafka-connect-mapping-and-harness.md` (_S3 sink_ rows follow this matrix)
 - `ConduitIO/conduit-connector-s3`: s3#1033 (partitioning), s3#1030, s3#621, s3#1034, s3#1047 (PR s3#1051),
   s3#1021 (PR s3#1027)
+- Implementation: s3#1053 (bytearray, gzip), s3#1054 (partitioners), s3#1055 (chaos), s3#1066 (unique keys,
+  `conditionalWrites`), s3#1069 (default batching); Conduit #3220 (built-in s3 v0.11.2)
 - #2817, #2823 (Avro library)
 - #3041 (ambient credentials), #3008 (Kafka lane: `kafka.partition` metadata)
