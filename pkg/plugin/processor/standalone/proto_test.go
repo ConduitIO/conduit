@@ -19,6 +19,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
+	opencdcv2 "github.com/conduitio/conduit-commons/proto/opencdc/v2"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 	"github.com/matryer/is"
@@ -90,4 +91,36 @@ func TestProtoConverter_ProcessedRecord_MultiRecord_Empty(t *testing.T) {
 	}
 	is.True(multi != nil)
 	is.Equal(len(multi), 0)
+}
+
+// TestProtoConverter_ProcessedRecord_MultiRecordV2 proves the host reads the
+// v2 fan-out variant a capable guest emits, and that a wide integer in it is
+// decoded exactly (lossless), not rounded through the v1 path.
+func TestProtoConverter_ProcessedRecord_MultiRecordV2(t *testing.T) {
+	is := is.New(t)
+	c := protoConverter{}
+
+	wide := int64(9007199254740993) // 2^53 + 1
+	rec := opencdc.Record{Key: opencdc.StructuredData{"id": wide}}
+	protoRec := &opencdcv2.Record{}
+	is.NoErr(rec.ToProtoV2(protoRec))
+
+	in := &processorv1.Process_ProcessedRecord{
+		Record: &processorv1.Process_ProcessedRecord_MultiRecordV2{
+			MultiRecordV2: &processorv1.Process_MultiRecordV2{
+				Records: []*opencdcv2.Record{protoRec},
+			},
+		},
+	}
+
+	out, err := c.processedRecord(in)
+	is.NoErr(err)
+
+	multi, ok := out.(sdk.MultiRecord)
+	if !ok {
+		t.Fatalf("want sdk.MultiRecord, got %T (%+v)", out, out)
+	}
+	is.Equal(len(multi), 1)
+	key := multi[0].Key.(opencdc.StructuredData)
+	is.Equal(key["id"], wide)
 }

@@ -1,0 +1,98 @@
+name: value correctness
+
+# Runs tests/valuecorrectness: several pipelines in one Conduit process whose
+# registered Avro schemas share type names with different definitions. It
+# compares the bytes and decoded values each pipeline writes against an
+# isolated codec. Added after conduit-commons#305, where those pipelines
+# silently wrote each other's encodings (docs/postmortems/
+# 20261015-avro-encoder-cache-collision.md).
+#
+# The test is skipped unless CONDUIT_VALUE_CORRECTNESS=1, so the `test` job's
+# `go test ./...` compiles it but does not run it. This workflow is where it
+# runs.
+#
+# Same always-report / fail-closed shape as chaos.yml, so it can become a
+# required check without blocking unrelated PRs: the job always runs and
+# reports, and the suite is gated inside the job by a data-path change
+# detector that runs the suite on any ambiguity (missing base, git error).
+
+on:
+  schedule:
+    # Nightly, offset from trigger-nightly (0:00), flake-hunt (3:30) and
+    # chaos (4:45).
+    - cron: '15 5 * * *'
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
+jobs:
+  value-correctness:
+    name: tests/valuecorrectness (race, x3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so the detector can diff against the PR base.
+          fetch-depth: 0
+
+      - name: Detect data-path changes
+        id: detect
+        # The path list is chaos.yml's plus this suite and this workflow. The
+        # schema path matters most here: pkg/schemaregistry and the built-in
+        # avro processors (under pkg/plugin/processor) encode and decode
+        # records, and conduit-commons (where the Avro Serde lives) only
+        # changes through go.mod/go.sum. Keep it in sync with chaos.yml.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "reason=event $EVENT_NAME always runs" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "reason=base ref unavailable - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "reason=git diff failed - running suite (fail-closed)" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/pipeline/|pkg/processor/|pkg/lifecycle/|pkg/lifecycle-poc/|pkg/plugin/connector/|pkg/plugin/processor/|pkg/internal/wasmengine/|pkg/schemaregistry/|tests/valuecorrectness/|\.github/workflows/value-correctness\.yml$)'; then
+            echo "reason=data-path change detected" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reason=no data-path change - skipping suite, gate passes" >> "$GITHUB_OUTPUT"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate decision
+        env:
+          RUN: ${{ steps.detect.outputs.run }}
+          REASON: ${{ steps.detect.outputs.reason }}
+        run: echo "value-correctness suite run=$RUN ($REASON)"
+
+      - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run value-correctness suite (race, x3)
+        if: steps.detect.outputs.run == 'true'
+        # -count=3: pipelines start one at a time, so a cross-pipeline leak
+        # fails every run, but repetition still catches a cache filled in a
+        # different order under the race detector's scheduling.
+        env:
+          CONDUIT_VALUE_CORRECTNESS: '1'
+        run: go test -race -v -count=3 -shuffle=on ./tests/valuecorrectness/...

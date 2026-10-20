@@ -34,6 +34,12 @@ const (
 	ScopeWorker = "worker" // worker properties
 )
 
+// PipelineNone marks a class that produces no pipeline.
+const PipelineNone = "none"
+
+// NoPipeline reports whether the class produces no pipeline.
+func (f *File) NoPipeline() bool { return f.Pipeline == PipelineNone }
+
 // Diff classes, consumed by `kc diff`.
 const (
 	DiffIdentity = "identity"
@@ -66,6 +72,12 @@ type File struct {
 	// worker setting, for settings that depend on several keys and their
 	// upstream defaults together (a topic naming policy, for example).
 	Finish []Action `yaml:"finish"`
+	// Pipeline is PipelineNone for a class that produces no pipeline
+	// (MirrorMaker's heartbeat and checkpoint connectors). Such a file has
+	// no keys and no emits; Every is the outcome of every key.
+	Pipeline string `yaml:"pipeline"`
+	// Every is the outcome of every key of a no-pipeline class.
+	Every *Outcome `yaml:"every"`
 
 	name     string // file name, for errors
 	exact    map[string]*Rule
@@ -243,6 +255,7 @@ func (f *File) validate() error {
 	if f.Upstream.Name == "" || f.Upstream.Version == "" {
 		fail("upstream needs name and version")
 	}
+	errs = append(errs, f.validatePipeline()...)
 	seen := map[string]bool{}
 	for i := range f.Keys {
 		r := &f.Keys[i]
@@ -371,6 +384,43 @@ func (r *Rule) validateBranch(i int, values map[string]bool) []error {
 		values[v] = true
 	}
 	return append(errs, b.Outcome.validate(branchEmit(r, b))...)
+}
+
+// validatePipeline checks a no-pipeline class: one outcome for every key,
+// unsupported (nothing is written for any key), and nothing to emit.
+func (f *File) validatePipeline() []error {
+	var errs []error
+	fail := func(format string, args ...any) {
+		errs = append(errs, cerrors.Errorf("%s: "+format, append([]any{f.name}, args...)...))
+	}
+	switch f.Pipeline {
+	case "":
+		if f.Every != nil {
+			fail("every needs pipeline: none")
+		}
+		return errs
+	case PipelineNone:
+	default:
+		fail("pipeline must be absent or none, not %q", f.Pipeline)
+		return errs
+	}
+	if f.Scope != ScopeSource && f.Scope != ScopeSink {
+		fail("pipeline: none needs scope source or sink")
+	}
+	if e := f.Every; e == nil {
+		fail("pipeline: none needs every")
+	} else if e.Status != kcmigrate.StatusUnsupported || e.Reason == "" || (e.Blocking && e.Fix == "") || !strings.HasPrefix(e.Code, "kc.") {
+		fail("every must be unsupported, with a kc.* code, a reason, and a fix when blocking")
+	} else if _, ok := conduiterr.LookupCode(e.Code); !ok {
+		fail("every: code %q is not registered", e.Code)
+	}
+	if len(f.Keys) > 0 || len(f.Defaults) > 0 {
+		fail("pipeline: none has no keys and no defaults: every is the outcome of every key")
+	}
+	if len(f.Emits) > 0 || len(f.Finish) > 0 {
+		fail("pipeline: none has no emits and no finish actions")
+	}
+	return errs
 }
 
 func (o Outcome) validate(emit *Action) []error {

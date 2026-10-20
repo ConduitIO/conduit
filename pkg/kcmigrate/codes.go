@@ -82,6 +82,10 @@ var (
 	// CodeOutputShapeDiffers: a connector-level note that records, objects or
 	// topics differ in shape or layout from the original connector's.
 	CodeOutputShapeDiffers = conduiterr.Register("kc.output_shape_differs", codes.InvalidArgument)
+	// CodeDeliverySemanticsDiffer: a connector-level note that a Kafka
+	// Connect delivery guarantee is not reproduced, for example the S3 sink's
+	// deterministic object names, which give exactly-once object keys.
+	CodeDeliverySemanticsDiffer = conduiterr.Register("kc.delivery_semantics_differ", codes.InvalidArgument)
 	// CodeTopicNameUnsupported: a connector-level note that the connector's
 	// topic naming cannot be written as the destination's topic template.
 	// Blocking: the destination topic must be set by hand.
@@ -99,4 +103,14 @@ var (
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.
 	CodeSecretPlaintext = conduiterr.Register("kc.secret_plaintext", codes.InvalidArgument)
+	// CodeTargetCapabilityMissing: a key maps to a Conduit setting the target
+	// plugin does not provide yet (a requires-gate param or capability the
+	// connector lane has not shipped). Blocking: writing nothing would drop
+	// the setting, so the migration stops until the lane lands.
+	CodeTargetCapabilityMissing = conduiterr.Register("kc.target_capability_missing", codes.InvalidArgument)
+	// CodeResumeUnavailable: a key needs the Debezium offset import (or
+	// another cutover mechanism) to resume where the original connector
+	// stopped, and that mechanism was not requested or is not available.
+	// Blocking: starting fresh would skip or replay records.
+	CodeResumeUnavailable = conduiterr.Register("kc.resume_unavailable", codes.InvalidArgument)
 )

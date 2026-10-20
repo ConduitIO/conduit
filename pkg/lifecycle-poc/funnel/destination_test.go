@@ -24,6 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -77,6 +79,39 @@ func TestDestinationTask_Do_WriteFailure(t *testing.T) {
 	task := NewDestinationTask("test", destinationMock, logger, NoOpConnectorMetrics{})
 	err := task.Do(ctx, batch)
 	is.True(cerrors.Is(err, wantErr))
+}
+
+func TestDestinationTask_Do_WriteFailure_ObservesError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	ctrl := gomock.NewController(t)
+	destinationMock := NewMockDestination(ctrl)
+
+	records := randomRecords(10)
+	batch := NewBatch(records)
+
+	wantErr := cerrors.New("error")
+	destinationMock.EXPECT().Write(ctx, records).Return(wantErr)
+
+	recs := &recordingCounter{}
+	errs := &recordingCounter{}
+	connMetrics := ConnectorMetricsImpl{
+		timer:     noop.Timer{},
+		histogram: metrics.NewRecordBytesHistogram(noop.Histogram{}),
+		records:   recs,
+		errors:    errs,
+	}
+
+	task := NewDestinationTask("test", destinationMock, logger, connMetrics)
+	err := task.Do(ctx, batch)
+	is.True(cerrors.Is(err, wantErr))
+
+	// The write failed before any record could be acknowledged, so exactly one
+	// error must be recorded and no records.
+	is.Equal(errs.total, float64(1))
+	is.Equal(recs.total, float64(0))
 }
 
 func TestDestinationTask_Do_FilteredAndNacks(t *testing.T) {

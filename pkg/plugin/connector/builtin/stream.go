@@ -32,6 +32,10 @@ func (s *InMemoryDestinationRunStream) Init(ctx context.Context) {
 		reqChan:  make(chan pconnector.DestinationRunRequest),
 		respChan: make(chan pconnector.DestinationRunResponse),
 		stopChan: make(chan struct{}),
+		// The destination server's Send carries acks (small position bytes)
+		// back to the engine. Clone them so the engine never shares ack bytes
+		// with the destination plugin that produced them.
+		cloneServerResponse: true,
 	}
 }
 
@@ -63,6 +67,18 @@ func (s *InMemorySourceRunStream) Init(ctx context.Context) {
 		reqChan:  make(chan pconnector.SourceRunRequest),
 		respChan: make(chan pconnector.SourceRunResponse),
 		stopChan: make(chan struct{}),
+		// The source server's Send carries records from the source plugin to
+		// the engine. The SDK already transfers ownership of these records on
+		// ReadN (see conduit-connector-sdk Source.ReadN: "once ReadN returns,
+		// the returned records belong to the SDK... allocate a new position,
+		// metadata map and data buffers for every record"), and after Send the
+		// SDK only reads the last record's Position for its Stop response. The
+		// engine never mutates a record's Position in place, so the source's
+		// copy stays correct without cloning every record at this boundary —
+		// which would double the record's memory (Position bytes + Metadata map
+		// + Key and Payload StructuredData) on the hottest path in the process.
+		// See the invariant comment on inMemoryStreamServer.Send.
+		cloneServerResponse: false,
 	}
 }
 
@@ -89,6 +105,13 @@ type inMemoryStream[REQ any, RES any] struct {
 	reqChan  chan REQ
 	respChan chan RES
 	stopChan chan struct{}
+
+	// cloneServerResponse controls whether inMemoryStreamServer.Send clones
+	// the response before handing it to the client. It is false only for the
+	// source stream, whose server hands ownership of each record to the engine
+	// (see InMemorySourceRunStream.Init); it stays true everywhere else so the
+	// client can never observe a plugin's data being mutated.
+	cloneServerResponse bool
 
 	reason error
 	m      sync.Mutex
@@ -154,14 +177,23 @@ func (s *inMemoryStreamClient[REQ, RES]) emptyRes() RES {
 type inMemoryStreamServer[REQ any, RES cloner[RES]] inMemoryStream[REQ, RES]
 
 func (s *inMemoryStreamServer[REQ, RES]) Send(resp RES) error {
+	// Invariant: when cloneServerResponse is false (the source stream), the
+	// server transfers ownership of resp to the client and must not touch it
+	// again. That holds because the SDK source only reads the last record's
+	// Position after Send, and the engine never mutates Position in place. If
+	// a source plugin were to reuse record data after Send, or the engine
+	// started mutating Position, this would need to be a clone again — the
+	// load-bearing destination-side clone in inMemoryStreamClient.Send is
+	// unaffected (#2910).
+	if s.cloneServerResponse {
+		resp = resp.Clone()
+	}
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case <-s.stopChan:
 		return io.EOF
-	// We clone the data before sending it into the stream to avoid
-	// sharing the same data between the server and the client.
-	case s.respChan <- resp.Clone():
+	case s.respChan <- resp:
 		return nil
 	}
 }

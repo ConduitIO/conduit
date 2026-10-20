@@ -16,15 +16,22 @@ name: bench-engine comment
 #   - The PR number comes from the workflow_run event payload, must be the only
 #     associated PR, and is checked to be an integer here; it is never read from the artifact. SHAs and the run
 #     URL come from the payload too.
-#   - It is advisory: it posts one comment and gates nothing. Not a required
-#     context.
+#   - It is advisory: it posts one comment and gates nothing. The gate is the
+#     `bench-engine (gate)` check in bench-engine.yml, whose fail decision is
+#     made on the same artifact by the same comparer. This workflow only renders
+#     the numbers and the floor, including a `Gate:` line, so a red gate still
+#     has the explanation in the comment. Not a required context.
+#
+# It fires on both success and failure: a detected regression makes the gate
+# check fail, and the comment (with the failing row and its floor) is exactly
+# when a human wants it.
 #
 # workflow_run only fires for workflow files on the default branch, so this does
 # nothing until it is merged.
 
 on:
   workflow_run:
-    workflows: ['bench-engine (indicative)']
+    workflows: ['bench-engine (gate)']
     types: [completed]
 
 permissions:
@@ -37,7 +44,7 @@ jobs:
     name: post benchmark comment (non-blocking)
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -65,7 +72,22 @@ jobs:
           if [ "${#PR_NUMBER}" -gt 9 ]; then echo "PR number out of range"; exit 1; fi
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
+      # The run can complete as `failure` either from a detected regression
+      # (artifact present — we want the comment) or from a benchmark/build crash
+      # (no artifact — nothing to comment on). Check before downloading so a
+      # missing artifact is a clean skip, not a download error.
+      - name: Check the results artifact exists
+        id: artifact
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runId = context.payload.workflow_run.id;
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id: runId });
+            core.setOutput('found', data.artifacts.some((a) => a.name === 'bench-engine-results') ? 'true' : 'false');
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: steps.artifact.outputs.found == 'true'
         with:
           name: bench-engine-results
           path: ${{ runner.temp }}/results
@@ -73,6 +95,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Build comment (artifact parsed as data)
+        if: steps.artifact.outputs.found == 'true'
         env:
           BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -93,6 +116,7 @@ jobs:
           cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post or update the PR comment
+        if: steps.artifact.outputs.found == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}

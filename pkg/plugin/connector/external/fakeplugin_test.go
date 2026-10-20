@@ -17,6 +17,7 @@ package external_test
 import (
 	"context"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -158,28 +159,28 @@ func (s *fakeServer) stop() {
 	<-s.closeCh
 }
 
-// startFakeServer starts a full v1+v2 conduit-connector-protocol server
+// startFakeServer starts a full v1+v2+v3 conduit-connector-protocol server
 // (via pconnector/server.Serve, the same entry point a real connector
 // plugin - standalone or external - uses) and returns its listening
-// address.
-func startFakeServer(t *testing.T, specifier pconnector.SpecifierPlugin, source pconnector.SourcePlugin, destination pconnector.DestinationPlugin) *fakeServer {
+// address. protocolVersion pins which version the server actually registers:
+// go-plugin's VersionedPlugins mechanism picks which version's PluginSet a
+// *spawned* server registers on its grpc.Server by reading
+// PLUGIN_PROTOCOL_VERSIONS from its own environment (server.go's
+// protocolVersion, matched against client.go:642, which sets it on cmd.Env
+// before spawning) - that negotiation is carried entirely by the spawn path's
+// environment, not by anything Reattach participates in. An external
+// connector process is never spawned by Conduit, so nothing sets this for it
+// automatically; a real external-connector host process serving multiple
+// versions needs to set it out-of-band (or simply only ever serve one
+// version). This test pins it explicitly to reproduce that same deterministic
+// selection, rather than falling through to go-plugin's documented fallback
+// ("return the lowest version") and silently exercising v1 instead of the
+// version this package's Dispenser hard-codes.
+func startFakeServer(t *testing.T, protocolVersion int, specifier pconnector.SpecifierPlugin, source pconnector.SourcePlugin, destination pconnector.DestinationPlugin) *fakeServer {
 	t.Helper()
 	is := is.New(t)
 
-	// go-plugin's VersionedPlugins mechanism picks which version's PluginSet
-	// a *spawned* server actually registers on its grpc.Server by reading
-	// PLUGIN_PROTOCOL_VERSIONS from its own environment (server.go's
-	// protocolVersion, matched against client.go:642, which sets it on
-	// cmd.Env before spawning) - that negotiation is carried entirely by the
-	// spawn path's environment, not by anything Reattach participates in.
-	// An external connector process is never spawned by Conduit, so nothing
-	// sets this for it automatically; a real external-connector host process
-	// serving multiple versions needs to set it out-of-band (or simply only
-	// ever serve one version). This test pins it explicitly to reproduce
-	// that same deterministic selection, rather than falling through to
-	// go-plugin's documented fallback ("return the lowest version") and
-	// silently exercising v1 instead of the v2 this package defaults to.
-	t.Setenv("PLUGIN_PROTOCOL_VERSIONS", "2")
+	t.Setenv("PLUGIN_PROTOCOL_VERSIONS", strconv.Itoa(protocolVersion))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	reattachCh := make(chan *goplugin.ReattachConfig, 1)
@@ -211,9 +212,9 @@ func startFakeServer(t *testing.T, specifier pconnector.SpecifierPlugin, source 
 // pconnector v2 gRPC services (no v1) - used to prove Dispenser.Validate's
 // version-mismatch classification against a server that genuinely doesn't
 // speak the version a Dispenser hard-coded, as opposed to one that is merely
-// unreachable. pconnector/server.Serve always registers both v1 and v2
-// (matching a real connector plugin, which supports both), so a v1-only or
-// v2-only server has to be built directly against go-plugin.
+// unreachable. pconnector/server.Serve always registers v1, v2 and v3
+// (matching a real connector plugin, which supports all three), so a v1-only
+// or v2-only server has to be built directly against go-plugin.
 func startFakeV2OnlyServer(t *testing.T, specifier pconnector.SpecifierPlugin) *fakeServer {
 	t.Helper()
 	is := is.New(t)
