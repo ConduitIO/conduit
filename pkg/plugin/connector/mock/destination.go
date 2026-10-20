@@ -139,7 +139,7 @@ func DestinationPluginWithRecords(records []opencdc.Record) ConfigurableDestinat
 					if offset >= len(records) {
 						return cerrors.Errorf("destination mock received more records than expected")
 					}
-					is.Equal(got, records[offset])
+					is.Equal(withoutConduitStamps(got, records[offset]), records[offset])
 					offset++
 					acks[i] = pconnector.DestinationRunResponseAck{Position: got.Position}
 				}
@@ -213,7 +213,7 @@ func DestinationPluginWithUnorderedRecords(records []opencdc.Record) Configurabl
 						mu.Unlock()
 						return cerrors.Errorf("destination mock received an unexpected or duplicate record at position %q", got.Position)
 					}
-					is.Equal(got, wantRec)
+					is.Equal(withoutConduitStamps(got, wantRec), wantRec)
 					delete(want, string(got.Position))
 					acks[i] = pconnector.DestinationRunResponseAck{Position: got.Position}
 				}
@@ -269,7 +269,7 @@ func DestinationPluginWithControlledError(records []opencdc.Record, received cha
 					if offset >= len(records) {
 						return cerrors.Errorf("destination mock received more records than expected")
 					}
-					is.Equal(got, records[offset])
+					is.Equal(withoutConduitStamps(got, records[offset]), records[offset])
 					offset++
 				}
 			}
@@ -311,7 +311,7 @@ func DestinationPluginWithControlledBlock(records []opencdc.Record, received cha
 					if offset >= len(records) {
 						return cerrors.Errorf("destination mock received more records than expected")
 					}
-					is.Equal(got, records[offset])
+					is.Equal(withoutConduitStamps(got, records[offset]), records[offset])
 					acks[i] = pconnector.DestinationRunResponseAck{Position: got.Position}
 					offset++
 				}
@@ -356,4 +356,31 @@ func DestinationPluginWithTeardown() ConfigurableDestinationPluginOption {
 			Teardown(gomock.Any(), gomock.Any()).
 			Return(pconnector.DestinationTeardownResponse{}, nil)
 	})
+}
+
+// withoutConduitStamps returns got without the metadata pkg/connector.Source
+// stamps on every record it reads (opencdc.readAt and
+// conduit.source.connector.id), unless want carries them itself. Test
+// records are built without metadata, and the stamps hold a read time and a
+// connector ID the test cannot predict. Since #3107 the stamps also reach
+// records whose connector left Metadata nil, so a nil map in want matches a
+// got whose only metadata is the stamps.
+func withoutConduitStamps(got, want opencdc.Record) opencdc.Record {
+	if got.Metadata == nil {
+		return got
+	}
+	md := make(opencdc.Metadata, len(got.Metadata))
+	for k, v := range got.Metadata {
+		md[k] = v
+	}
+	for _, k := range []string{opencdc.MetadataReadAt, opencdc.MetadataConduitSourceConnectorID} {
+		if _, ok := want.Metadata[k]; !ok {
+			delete(md, k)
+		}
+	}
+	if len(md) == 0 && want.Metadata == nil {
+		md = nil
+	}
+	got.Metadata = md
+	return got
 }

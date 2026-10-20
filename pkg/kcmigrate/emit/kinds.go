@@ -17,6 +17,7 @@ package emit
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,6 +41,7 @@ const (
 	KindHaltOnFail = "dlq-halt"
 	KindList       = "list-setting"
 	KindStopped    = "pipeline-stopped"
+	KindPGURL      = "pg-url"
 )
 
 var kinds = map[string]Kind{
@@ -50,6 +52,7 @@ var kinds = map[string]Kind{
 	KindHaltOnFail: haltOnFailure,
 	KindList:       listSetting,
 	KindStopped:    pipelineStopped,
+	KindPGURL:      pgURLPart,
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
@@ -228,6 +231,8 @@ func claimedSettings(a rules.Action) []string {
 		return []string{"tls.enabled"}
 	case KindSASLJAAS:
 		return []string{"saslUsername", "saslPassword"}
+	case KindPGURL:
+		return []string{"url"}
 	}
 	return nil
 }
@@ -419,6 +424,9 @@ func CheckActions(refs []rules.ActionRef) error {
 		if (a.Kind == KindSetting || a.Kind == KindList) && a.Args["name"] == "" {
 			errs = append(errs, cerrors.Errorf("%s: key %s: setting needs a name", r.File, r.Key))
 		}
+		if a.Kind == KindPGURL && !isPGURLPart(a.Args["part"]) {
+			errs = append(errs, cerrors.Errorf("%s: key %s: pg-url part %q is not one of %v", r.File, r.Key, a.Args["part"], pgURLParts))
+		}
 	}
 	return cerrors.Join(errs...)
 }
@@ -506,3 +514,44 @@ func listSetting(p *Plan, d *rules.Decision) error {
 }
 
 var listSplit = regexp.MustCompile(`\s*,\s*`)
+
+// pgURLParts are the Postgres connection string parts the pg-url kind
+// accepts, in the order the finisher assembles them. A part outside this
+// list is a rule-data error, caught by CheckActions.
+var pgURLParts = []string{"host", "port", "user", "password", "dbname", "sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword"}
+
+// isPGURLPart reports whether name is a connection string part.
+func isPGURLPart(name string) bool { return slices.Contains(pgURLParts, name) }
+
+// pgURLPart records one part of the Postgres connection URL, for the pg-url
+// finisher to assemble. A secret part (a password, or a value that is a
+// config-provider reference) is replaced by a ${VAR} reference and the entry
+// is marked secret; the assembled URL is the one place a raw secret never
+// reaches a pipeline. Every part's entry points at the source's url setting.
+func pgURLPart(p *Plan, d *rules.Decision) error {
+	part := d.Emit.Args["part"]
+	if part == "" {
+		return cerrors.Errorf("key %s: pg-url needs a part", d.KV.Key)
+	}
+	if p.pgURL == nil {
+		p.pgURL = map[string]string{}
+	}
+	value := strings.TrimSpace(d.KV.Value.Reveal())
+	env := ""
+	if d.Secret || kcmigrate.IsSecretKey(d.KV.Key) || rules.IsReference(value) {
+		value, env = p.secretRef(d)
+	}
+	p.pgURL[part] = value
+	idx, err := p.sides(SideSource)
+	if err != nil {
+		return err // a source class always has a source; otherwise the pipeline has no url
+	}
+	d.Entry.Target = &kcmigrate.EntryTarget{
+		ConfigPath: fmt.Sprintf("/pipelines/0/connectors/%d/settings/%s", idx[0], escapePointer("url")),
+		Env:        env,
+	}
+	if env != "" {
+		d.Entry.Secret = true
+	}
+	return nil
+}

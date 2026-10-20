@@ -26,15 +26,24 @@ import (
 
 type ConnectorMetrics interface {
 	Observe(records []opencdc.Record, start time.Time)
+	// ObserveError records a read/write/ack failure this connector returned.
+	// It deliberately does not record the error message or code: those are
+	// unbounded in cardinality and would explode the Prometheus label space.
+	// Operators who need the message get it from the pipeline error surfaced
+	// through the API and logs.
+	ObserveError()
 }
 
 type NoOpConnectorMetrics struct{}
 
 func (m NoOpConnectorMetrics) Observe([]opencdc.Record, time.Time) {}
+func (m NoOpConnectorMetrics) ObserveError()                       {}
 
 type ConnectorMetricsImpl struct {
 	timer     metrics.Timer
 	histogram metrics.RecordBytesHistogram
+	records   metrics.Counter
+	errors    metrics.Counter
 }
 
 // NewConnectorMetrics builds the shared connector throughput/latency metrics
@@ -43,24 +52,46 @@ type ConnectorMetricsImpl struct {
 // recorded via the component_id label so per-node dashboards can attribute
 // throughput to a specific connector instance.
 func NewConnectorMetrics(pipelineName, pluginName string, connType connector.Type, componentID string) ConnectorMetricsImpl {
+	connTypeName := strings.ToLower(connType.String())
+
 	timer := measure.ConnectorExecutionDurationTimer.WithValues(
 		pipelineName,
 		pluginName,
-		strings.ToLower(connType.String()),
+		connTypeName,
 		componentID,
 	)
 
 	histogram := measure.ConnectorBytesHistogram.WithValues(
 		pipelineName,
 		pluginName,
-		strings.ToLower(connType.String()),
+		connTypeName,
+		componentID,
+	)
+
+	records := measure.ConnectorRecordsCounter.WithValues(
+		pipelineName,
+		pluginName,
+		connTypeName,
+		componentID,
+	)
+
+	errors := measure.ConnectorErrorsCounter.WithValues(
+		pipelineName,
+		pluginName,
+		connTypeName,
 		componentID,
 	)
 
 	return ConnectorMetricsImpl{
 		timer:     timer,
 		histogram: metrics.NewRecordBytesHistogram(histogram),
+		records:   records,
+		errors:    errors,
 	}
+}
+
+func (m ConnectorMetricsImpl) ObserveError() {
+	m.errors.Inc()
 }
 
 func (m ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time) {
@@ -86,6 +117,13 @@ func (m ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time)
 	if len(records) == 0 {
 		return
 	}
+
+	// The record counter is incremented synchronously, before the goroutine
+	// below observes bytes and latency: it is the one observation that must
+	// not be lost if the process is killed mid-batch (a counter is cheap and
+	// carries no per-record work), and recording it before the goroutine keeps
+	// the "N records processed" signal exact.
+	m.records.Inc(float64(len(records)))
 
 	sizes := make([]float64, len(records))
 	for i, rec := range records {

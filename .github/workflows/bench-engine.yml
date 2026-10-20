@@ -1,30 +1,38 @@
-name: bench-engine (indicative)
+name: bench-engine (gate)
 
-# A NON-BLOCKING benchmark comment on PRs that touch the pipeline engines.
+# The benchi regression gate (CLAUDE.md Process-maturity row "benchi regression
+# gate"): fails a PR whose engine throughput regresses more than 10% against the
+# base, beyond the A/A noise floor measured on unchanged code in the same job.
 #
-# It is not a gate and must never become one by accident:
-#   - it is not in main's required status contexts, and must not be added;
-#   - the job is continue-on-error, so even a broken benchmark leaves the PR
-#     check green;
-#   - the comment says "indicative, not a gate".
-# The regression gate (CLAUDE.md: >10% throughput or latency regression fails
-# the build) is separate work that needs a dedicated, quiet runner. A shared
-# GitHub-hosted runner cannot support it, which is why this job measures its own
-# noise instead of asserting a threshold.
+# METHODOLOGY (benchi/METHODOLOGY.md): the in-process benchmark
+# (`make bench-engine`, pkg/internal/enginetest/engines/bench_test.go) counts
+# real records — the fake source produces `records*sources` records and the run
+# only reports records/s after the destination acked every one — so the metric
+# is ground truth (records actually moved through the pipeline), not engine
+# instrumentation. The job builds the base revision and the PR head, then runs
+# base, head and base again (an A/A control) alternately, five rounds, rotating
+# the order each round so position in the round does not favour any arm. The A/A
+# control is the noise floor: a head delta is only meaningful beyond it.
 #
-# What it does: builds the benchmark test binary for the base revision and for
-# the PR head, then runs base, head and base again (an A/A control) alternately
-# on this one runner, five rounds, rotating the order each round so position in
-# the round does not favour any of them. The comparer
-# (.github/scripts/bench_engine_compare.py) reports medians, the delta, and a
-# noise floor taken from the unchanged base code, then bench-engine-comment.yml upserts one PR
-# comment.
+# THE THRESHOLD lives in .github/scripts/bench_engine_compare.py (--gate): the
+# job fails when any benchmark is more than 10% slower than base AND that
+# slowdown exceeds twice the A/A floor. That is the METHODOLOGY rule in one
+# inequality — a >10% gate is only meaningful on a runner whose A/A floor is
+# comfortably under 10%, so a 10% delta only fails when the floor is under 5%.
+# The floor is cited next to every gate decision (step summary and the PR
+# comment). A run that cannot resolve the gate (base did not build, or no floor
+# is measurable) reports "cannot resolve" and does NOT fail: no comparison is
+# not a regression. A crashing or failing benchmark binary fails the job
+# (fail-closed), so a thin sample can never be read as a pass.
 #
-# The base tree is built with the HEAD's pkg/internal/enginetest harness copied
-# over it, so the comparison is "same harness, different engine code" and works
-# even while the base has no harness yet. If the head's harness does not compile
-# against the base's engine code (a PR that changes an engine API the harness
-# calls), the comment says so and shows head numbers only.
+# BLOCKING, NOT REQUIRED: the `bench` job is not continue-on-error, so a
+# detected regression turns the PR red. It is NOT in main's required status
+# contexts. It is path-filtered (it only runs on engine PRs), and a
+# path-filtered workflow cannot become a required context — it would never
+# report on unrelated PRs and would block every merge permanently. Before this
+# can be added to main's required contexts it must be restructured to the
+# always-report/fail-closed pattern (see chaos.yml), the same caveat as
+# rag-template-e2e in CLAUDE.md.
 #
 # SECURITY MODEL (this workflow is half of a pair; read both headers):
 #   - THIS workflow runs PR code (the benchmark binaries) on `pull_request`,
@@ -38,7 +46,8 @@ name: bench-engine (indicative)
 #     shell script or expression here. Only the base SHA is used, via env.
 #
 # Cost: two test-binary builds plus about 3 x 5 x 13 s of benchmark time, roughly
-# six minutes on ubuntu-latest. Same-repo PRs only: a fork's token cannot comment.
+# six minutes on ubuntu-latest. Same-repo PRs only: a fork's token cannot comment
+# and a fork's benchmark code must not run with any trust.
 
 on:
   pull_request:
@@ -49,6 +58,7 @@ on:
       - 'pkg/plugin/**'
       - 'pkg/internal/enginetest/**'
       - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/bench-engine.yml'
       - '.github/workflows/bench-engine-comment.yml'
       - '.github/scripts/bench_engine_compare.py'
@@ -64,6 +74,10 @@ permissions:
 env:
   ROUNDS: '5'
   BENCH_TIME: '3x'
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
 
 jobs:
   # Its own job and NOT continue-on-error: a failing comparer self-test must be
@@ -81,12 +95,10 @@ jobs:
         run: python3 -m unittest -v test_bench_engine_compare
 
   bench:
-    name: bench-engine (indicative, non-blocking)
+    name: bench-engine (gate)
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Never turn the PR red. See the header.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -125,9 +137,14 @@ jobs:
           set -u
           out="$RUNNER_TEMP/bench"
           : > "$out/head.txt"; : > "$out/base-a.txt"; : > "$out/base-b.txt"
+          # A crashing or failing benchmark binary must not become a silently
+          # thin sample: fail the job (fail-closed) instead.
           run() { # run <binary> <output file>
-            "$1" -test.run='^$' -test.bench='^BenchmarkEngine$' \
-              -test.benchtime="$BENCH_TIME" -test.count=1 >> "$2" || true
+            if ! "$1" -test.run='^$' -test.bench='^BenchmarkEngine$' \
+              -test.benchtime="$BENCH_TIME" -test.count=1 >> "$2"; then
+              echo "error: benchmark binary $1 failed; aborting (fail-closed)" >&2
+              exit 1
+            fi
           }
           for round in $(seq 1 "$ROUNDS"); do
             if [ "$BASE_OK" = "true" ]; then
@@ -150,6 +167,7 @@ jobs:
           done
 
       - name: Collect results
+        id: collect
         env:
           BASE_OK: ${{ steps.build.outputs.base_ok }}
         run: |
@@ -162,9 +180,26 @@ jobs:
           # from a merge commit, not from the PR head SHA. Record it.
           git rev-parse HEAD | tr -d '\n' > "$out/upload/merge_sha"
 
+      - name: Decide gate (>10% slower than base, beyond the A/A floor)
+        env:
+          BASE_OK: ${{ steps.build.outputs.base_ok }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/bench"
+          # Exit code 3 fails this step (the gate); 0 passes. The summary is
+          # written to the step summary and cites the A/A floor next to the delta.
+          python3 .github/scripts/bench_engine_compare.py \
+            --gate \
+            --base-a "$out/base-a.txt" --base-b "$out/base-b.txt" --head "$out/head.txt" \
+            --out "$RUNNER_TEMP/gate-summary.md" \
+            --base-ok "$BASE_OK" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Untrusted output: produced by PR code. bench-engine-comment.yml parses it
-      # as data.
+      # as data. Upload even when the gate fails, so the comment still shows the
+      # numbers and the floor.
       - uses: actions/upload-artifact@v4
+        if: always() && steps.collect.outcome == 'success'
         with:
           name: bench-engine-results
           path: ${{ runner.temp }}/bench/upload

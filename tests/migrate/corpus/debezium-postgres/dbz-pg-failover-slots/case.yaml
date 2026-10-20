@@ -16,12 +16,13 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/inventory-source.json]}
 expect:
-  notes: [kc.converter_unknown]
+  notes: [kc.converter_unknown, kc.output_shape_differs]
   exitCode: 2
   entries:
     - {key: slot.failover, status: unsupported, blocking: true}
     - {key: snapshot.mode, status: unsupported, blocking: true}
     - {key: schema.include.list, status: unsupported, blocking: true}
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: plugin.name, status: translated}
 covers:
   - class: io.debezium.connector.postgresql.PostgresConnector

@@ -43,6 +43,10 @@ const (
 	// FinishRequireKey blocks when the connector config lacks a key the
 	// upstream connector requires (no default). Argument: key.
 	FinishRequireKey = "require-key"
+	// FinishPGURL names the finisher that assembles the Postgres connection
+	// URL from the parts the pg-url kind recorded (host, port, user,
+	// password, dbname and the ssl* parts), into the source's url setting.
+	FinishPGURL = "pg-url"
 )
 
 var finishers = map[string]Finisher{
@@ -50,6 +54,7 @@ var finishers = map[string]Finisher{
 	FinishDefault:    defaultSetting,
 	FinishMM2Offsets: mm2Offsets,
 	FinishRequireKey: requireKey,
+	FinishPGURL:      pgURL,
 }
 
 // requireKey returns a blocking kc.key_required note when the config does
@@ -93,6 +98,42 @@ func mm2Offsets(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 		Reason: head + start,
 		Fix:    "Stop the MirrorMaker connector before starting the pipeline, and accept the re-copied or skipped records with --accept-gaps, which records kc.offsets_not_migrated in acceptedGaps.",
 	}}, nil
+}
+
+// pgURL assembles the Postgres connection URL from the parts the pg-url kind
+// recorded (see pgURLPart) and writes it to the source's url setting. It
+// writes nothing when no part was recorded, so the required-settings check
+// reports the missing url as kc.setting_required. A secret part is already a
+// ${VAR} reference, so the assembled URL carries no plaintext secret.
+func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
+	if len(p.pgURL) == 0 {
+		return nil, nil
+	}
+	var parts []string
+	for _, name := range pgURLParts {
+		if v := p.pgURL[name]; v != "" {
+			parts = append(parts, name+"="+dsnQuote(v))
+		}
+	}
+	if len(parts) == 0 {
+		return nil, nil
+	}
+	if _, _, err := p.Set(SideSource, "url", strings.Join(parts, " "), "(pg-url)"); err != nil {
+		return nil, cerrors.Errorf(FinishPGURL+": %w", err)
+	}
+	return nil, nil
+}
+
+// dsnQuote single-quotes a libpq keyword/value value that needs it: a value
+// with whitespace, a single quote or a backslash. libpq reads an unquoted
+// value up to the next whitespace.
+func dsnQuote(v string) string {
+	if !strings.ContainsAny(v, " \t'\\") {
+		return v
+	}
+	v = strings.ReplaceAll(v, `\`, `\\`)
+	v = strings.ReplaceAll(v, `'`, `\'`)
+	return "'" + v + "'"
 }
 
 // defaultSetting writes value to setting name of side unless a key or the

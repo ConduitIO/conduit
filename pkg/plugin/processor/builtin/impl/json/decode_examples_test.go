@@ -37,7 +37,7 @@ func ExampleDecodeProcessor_rawKey() {
 		Want: sdk.SingleRecord{
 			Operation: opencdc.OperationCreate,
 			Key: opencdc.StructuredData{
-				"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+				"after": map[string]interface{}{"data": int64(4), "id": int64(3)},
 			},
 		},
 	})
@@ -86,7 +86,7 @@ func ExampleDecodeProcessor_rawPayloadField() {
 			Payload: opencdc.Change{
 				Before: opencdc.StructuredData{
 					"foo": map[string]any{
-						"before": map[string]any{"data": float64(4), "id": float64(3)},
+						"before": map[string]any{"data": int64(4), "id": int64(3)},
 						"baz":    "bar",
 					},
 				},

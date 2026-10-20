@@ -20,6 +20,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
 	v1 "github.com/conduitio/conduit-connector-protocol/pconnector/v1" //nolint:staticcheck // Disabling Staticcheck linter due to backwards compatibility requirements
 	v2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2"
+	v3 "github.com/conduitio/conduit-connector-protocol/pconnector/v3"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
 )
@@ -35,5 +36,12 @@ func TestAcceptanceV2(t *testing.T) {
 	logger := zerolog.Nop()
 	connector.AcceptanceTest(t, func(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
 		return newTestDispenser(t, logger, v2.Version)
+	})
+}
+
+func TestAcceptanceV3(t *testing.T) {
+	logger := zerolog.Nop()
+	connector.AcceptanceTest(t, func(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
+		return newTestDispenser(t, logger, v3.Version)
 	})
 }

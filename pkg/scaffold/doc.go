@@ -39,6 +39,17 @@
 // design doc's "Failure modes / dependencies" section); this package only
 // consumes whatever snapshot is embedded.
 //
+// # Languages: Go and Python
+//
+// Go scaffolds both connectors and processors. Python scaffolds connectors
+// only (no Python processor template exists), from a template authored in
+// this repository (package template's connector_python snapshot) rather than
+// an upstream repo. The Python path skips the Go-specific install/codegen
+// steps and verifies the result with `python3 -m compileall` instead of `go
+// build`; it depends on the published `conduitio` distribution, so a
+// scaffolded connector's build/acceptance run requires that distribution to
+// have been released (see docs/design/20261016-python-ga-merged-distribution.md).
+//
 // # Connector and processor are not symmetric
 //
 // The two templates' setup.sh scripts diverge after the rename step: the

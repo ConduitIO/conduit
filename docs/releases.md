@@ -12,6 +12,13 @@ A Conduit release has the following parts:
 - a GitHub package, which is the official Docker image for Conduit. It's available on GitHub's Container Registry. The
 latest Docker image which is not a nightly is tagged with `latest`.
 
+## Release notes
+
+The human-readable release notes for each release live in `docs/releases/vX.Y.Z.md` (for example
+`docs/releases/v0.21.0.md`). They are mirrored on the [Conduit.io changelog](https://conduitdata.io/changelog)
+and in the GitHub release body. The GitHub release's changelog is generated from conventional commits; the notes
+file is the curated summary a human would actually want to read.
+
 ## Nightly builds
 
 We provide nightly builds (binaries and Docker images). The last 5 nightly releases are kept, and nightly Docker images

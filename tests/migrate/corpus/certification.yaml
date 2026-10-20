@@ -8,8 +8,13 @@
 # the release run (MIGRATE_HARNESS_RELEASE=1) requires `tier: certified`, and
 # the nightly compares each entry with the live registry index tier so this
 # file cannot claim more than the index says.
-- {plugin: builtin:postgres, version: ">=0.15.0", tier: pending, lane: 3004} # source; destination certified by #3006
-- {plugin: mysql,            version: ">=0.2.0",  tier: pending, lane: 3005} # source; destination certified by #3006
-- {plugin: builtin:kafka,    version: ">=0.13.0", tier: pending, lane: 3008}
-- {plugin: builtin:s3,       version: ">=0.9.5",  tier: pending, lane: 3009}
-- {plugin: elasticsearch,    version: ">=0.4.0",  tier: pending, lane: 3007}
+# v0.21 release bar (#3002): every emitted plugin is certified on the swept
+# protocol-v3 releases below, each with acceptance-v2 green on the v3 stack.
+# `registry:` holds the connector's index id (its `name` in the registry
+# index). No `capabilities:` are claimed: the harness requires none for a
+# certified entry (see tests/migrate/harness/certification.go).
+- {plugin: builtin:postgres, version: ">=0.16.0", tier: certified, lane: 3004, registry: postgres}
+- {plugin: mysql,            version: ">=0.5.0",  tier: certified, lane: 3005, registry: mysql}
+- {plugin: builtin:kafka,    version: ">=0.14.0", tier: certified, lane: 3008, registry: kafka}
+- {plugin: builtin:s3,       version: ">=0.11.0", tier: certified, lane: 3009, registry: s3}
+- {plugin: elasticsearch,    version: ">=0.6.0",  tier: certified, lane: 3007, registry: elasticsearch}

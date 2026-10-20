@@ -22,9 +22,13 @@ import (
 func NewDLQMetrics(pipelineName string, plugin string) ConnectorMetrics {
 	timer := measure.DLQExecutionDurationTimer.WithValues(pipelineName, plugin)
 	histogram := measure.DLQBytesHistogram.WithValues(pipelineName, plugin)
+	records := measure.DLQRecordsCounter.WithValues(pipelineName, plugin)
+	errors := measure.DLQErrorsCounter.WithValues(pipelineName, plugin)
 
 	return &ConnectorMetricsImpl{
 		timer:     timer,
 		histogram: metrics.NewRecordBytesHistogram(histogram),
+		records:   records,
+		errors:    errors,
 	}
 }
