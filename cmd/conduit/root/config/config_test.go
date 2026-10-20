@@ -136,6 +136,25 @@ func TestConfigWithFlags(t *testing.T) {
 				// Host-egress ceiling is deny-all by default (the flag is
 				// registered and reads false unless an operator opts in).
 				"processors.egress.enabled: false",
+				// Ambient credentials for built-in connectors are off by default.
+				"connectors.ambient-credentials.enabled: false",
+				"connectors.ambient-credentials.allow-proxy: false",
+			},
+		},
+		{
+			name: "ambient credentials flags",
+			args: []string{
+				"--connectors.ambient-credentials.enabled=true",
+				"--connectors.ambient-credentials.allow-resources", "acme-ingest-prod",
+				"--connectors.ambient-credentials.allow-resources", "acme-ingest-staging",
+				"--connectors.ambient-credentials.allow-endpoints", "https://minio.internal:9000",
+				"--connectors.ambient-credentials.allow-proxy=true",
+			},
+			wantLines: []string{
+				"connectors.ambient-credentials.enabled: true",
+				"connectors.ambient-credentials.allow-resources: [acme-ingest-prod acme-ingest-staging]",
+				"connectors.ambient-credentials.allow-endpoints: [https://minio.internal:9000]",
+				"connectors.ambient-credentials.allow-proxy: true",
 			},
 		},
 		{
@@ -191,5 +210,40 @@ func TestConfigWithFlags(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestConfigAmbientCredentialsFromEnv checks the documented CONDUIT_* names of
+// the ambient-credentials keys map to the config.
+func TestConfigAmbientCredentialsFromEnv(t *testing.T) {
+	is := is.New(t)
+	t.Setenv("CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ENABLED", "true")
+	t.Setenv("CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_RESOURCES", "acme-ingest-prod")
+	t.Setenv("CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_ENDPOINTS", "https://minio.internal:9000")
+	t.Setenv("CONDUIT_CONNECTORS_AMBIENT_CREDENTIALS_ALLOW_PROXY", "true")
+
+	readFrom, writeTo, err := os.Pipe()
+	is.NoErr(err)
+	e := ecdysis.New()
+	cmd := e.MustBuildCobraCommand(&ConfigCommand{RunCmd: &run.RunCommand{}})
+	cmd.SetArgs([]string{})
+	cmd.SetOut(writeTo)
+	cmd.SetErr(writeTo)
+	is.NoErr(cmd.Execute())
+	is.NoErr(writeTo.Close())
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, readFrom)
+	is.NoErr(err)
+
+	lines := strings.Split(buf.String(), "\n")
+	for _, want := range []string{
+		"connectors.ambient-credentials.enabled: true",
+		"connectors.ambient-credentials.allow-resources: [acme-ingest-prod]",
+		"connectors.ambient-credentials.allow-endpoints: [https://minio.internal:9000]",
+		"connectors.ambient-credentials.allow-proxy: true",
+	} {
+		if !slices.Contains(lines, want) {
+			t.Errorf("output does not contain %q\n%s", want, buf.String())
+		}
 	}
 }

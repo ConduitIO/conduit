@@ -32,6 +32,11 @@ fi
 
 SDK_V=$1
 
+# Resolve ConduitIO modules directly from GitHub (skip proxy.golang.org +
+# sum.golang.org index lag on fresh tags); third-party deps still use both.
+export GOPRIVATE=github.com/conduitio/*
+export GONOSUMDB=github.com/conduitio/*
+
 for conn in 'file' 'kafka' 'generator' 's3' 'postgres' 'log'
 do
 	cd ../conduit-connector-$conn || exit

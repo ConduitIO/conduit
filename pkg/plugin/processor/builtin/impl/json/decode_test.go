@@ -45,7 +45,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{
-					"after": map[string]any{"data": float64(4), "id": float64(3)},
+					"after": map[string]any{"data": int64(4), "id": int64(3)},
 				},
 			},
 		}, {
@@ -62,7 +62,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"foo": map[string]any{
-							"after": map[string]any{"data": float64(4), "id": float64(3)},
+							"after": map[string]any{"data": int64(4), "id": int64(3)},
 							"baz":   "bar",
 						},
 					},
@@ -113,7 +113,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					Before: opencdc.StructuredData{
-						"before": map[string]any{"data": float64(4)},
+						"before": map[string]any{"data": int64(4)},
 						"foo":    "bar",
 					},
 				},
@@ -159,7 +159,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.RawData(`"invalid":"json"`),
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character ':' after top-level value")},
+			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character ':' looking for beginning of value")},
 		},
 	}
 	for _, tc := range testCases {
@@ -227,6 +227,65 @@ func TestDecodeJSON_Configure(t *testing.T) {
 				return
 			}
 			is.NoErr(err)
+		})
+	}
+}
+
+// TestDecodeJSON_IntegerPrecision is the regression test for #3134: a JSON
+// integer above 2^53 must decode exactly, not through a float64 that rounds it.
+func TestDecodeJSON_IntegerPrecision(t *testing.T) {
+	proc := NewDecodeProcessor(log.Nop())
+	ctx := context.Background()
+
+	testCases := []struct {
+		name string
+		raw  string
+		want map[string]any
+	}{
+		{
+			name: "2^53+1 is exact",
+			raw:  `{"id":9007199254740993}`,
+			want: map[string]any{"id": int64(9007199254740993)},
+		},
+		{
+			name: "-2^53-1 is exact",
+			raw:  `{"id":-9007199254740993}`,
+			want: map[string]any{"id": int64(-9007199254740993)},
+		},
+		{
+			name: "uint64 max is exact",
+			raw:  `{"id":18446744073709551615}`,
+			want: map[string]any{"id": uint64(18446744073709551615)},
+		},
+		{
+			name: "small integer becomes int64",
+			raw:  `{"id":3}`,
+			want: map[string]any{"id": int64(3)},
+		},
+		{
+			name: "decimal stays float64",
+			raw:  `{"id":1.5}`,
+			want: map[string]any{"id": float64(1.5)},
+		},
+		{
+			name: "nested integers are exact",
+			raw:  `{"items":[{"id":9007199254740993}]}`,
+			want: map[string]any{"items": []any{map[string]any{"id": int64(9007199254740993)}}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			err := proc.Configure(ctx, config.Config{"field": ".Key"})
+			is.NoErr(err)
+			got := proc.Process(ctx, []opencdc.Record{{Key: opencdc.RawData(tc.raw)}})
+			is.Equal(1, len(got))
+			rec, ok := got[0].(sdk.SingleRecord)
+			is.True(ok) // the record must decode, not produce an ErrorRecord
+			sd, ok := rec.Key.(opencdc.StructuredData)
+			is.True(ok)
+			is.Equal(tc.want, map[string]any(sd))
 		})
 	}
 }

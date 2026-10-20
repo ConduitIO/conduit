@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package lifecycle contains the logic to manage the lifecycle of pipelines.
-// It is responsible for starting, stopping and managing pipelines.
 package lifecycle
 
 import (

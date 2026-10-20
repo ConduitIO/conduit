@@ -44,10 +44,18 @@ type abandoningDB struct {
 	release chan struct{}
 	pending chan struct{} // closed when the last hung write has applied
 	sawCtx  []context.Context
+	// started gets a signal each time Set is entered; hung gets the context
+	// of each Set that hangs. Tests wait on them instead of sleeping.
+	started chan struct{}
+	hung    chan context.Context
 }
 
 func newAbandoningDB() *abandoningDB {
-	return &abandoningDB{release: make(chan struct{})}
+	return &abandoningDB{
+		release: make(chan struct{}),
+		started: make(chan struct{}, 16),
+		hung:    make(chan context.Context, 16),
+	}
 }
 
 func (d *abandoningDB) Set(ctx context.Context, key string, value []byte) error {
@@ -61,6 +69,10 @@ func (d *abandoningDB) Set(ctx context.Context, key string, value []byte) error 
 	applied := make(chan struct{})
 	d.pending = applied
 	d.mu.Unlock()
+	d.started <- struct{}{}
+	if hang {
+		d.hung <- ctx
+	}
 
 	// Like badger's per-key lock: wait, bounded by ctx, for the previous
 	// write to land before starting this one.
@@ -89,6 +101,24 @@ func (d *abandoningDB) Set(ctx context.Context, key string, value []byte) error 
 	case <-ctx.Done():
 		return ctx.Err() // abandoned: the goroutine still applies it
 	}
+}
+
+// unblockWhenAbandoned releases the hung write once the caller has given up on
+// it, i.e. when the context of the Set that hangs ends.
+func (d *abandoningDB) unblockWhenAbandoned() {
+	go func() {
+		ctx := <-d.hung
+		<-ctx.Done()
+		d.unblock()
+	}()
+}
+
+// cancelWhenStarted calls cancel once a Set has been entered.
+func (d *abandoningDB) cancelWhenStarted(cancel context.CancelFunc) {
+	go func() {
+		<-d.started
+		cancel()
+	}()
 }
 
 func (d *abandoningDB) unblock() {
@@ -150,7 +180,7 @@ func TestService_Create_ClientCancelDoesNotSplitMemoryAndStore(t *testing.T) {
 	s := NewService(log.Nop(), db)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { time.Sleep(10 * time.Millisecond); cancel() }()
+	db.cancelWhenStarted(cancel)
 	_, err := s.Create(ctx, "p1", Config{Name: "p1"}, ProvisionTypeAPI)
 	is.NoErr(err)
 	consistent(t, s, db, "p1")
@@ -166,7 +196,7 @@ func TestService_Create_RetryAfterAbandonedWrite(t *testing.T) {
 
 	// The first attempt hangs past the bound; release it while the retry
 	// waits behind it.
-	go func() { time.Sleep(70 * time.Millisecond); db.unblock() }()
+	db.unblockWhenAbandoned()
 	_, err := s.Create(context.Background(), "p1", Config{Name: "p1"}, ProvisionTypeAPI)
 	is.NoErr(err)
 	is.True(storeHas(t, db, "p1"))
@@ -203,7 +233,7 @@ func TestService_Delete_RetryAfterAbandonedWrite(t *testing.T) {
 	db.mu.Unlock()
 	t.Cleanup(db.unblock)
 	s.configWriteTimeout = 50 * time.Millisecond
-	go func() { time.Sleep(70 * time.Millisecond); db.unblock() }()
+	db.unblockWhenAbandoned()
 
 	is.NoErr(s.Delete(context.Background(), "p1"))
 	consistent(t, s, db, "p1")
@@ -220,8 +250,11 @@ func TestService_Delete_ClientCancelDoesNotSplitMemoryAndStore(t *testing.T) {
 	db.mu.Lock()
 	db.lag = 50 * time.Millisecond
 	db.mu.Unlock()
+	for len(db.started) > 0 { // drop the signal from the Create above
+		<-db.started
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { time.Sleep(10 * time.Millisecond); cancel() }()
+	db.cancelWhenStarted(cancel)
 	is.NoErr(s.Delete(ctx, "p1"))
 	consistent(t, s, db, "p1")
 }

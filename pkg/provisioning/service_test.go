@@ -521,7 +521,8 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	)
 
 	plService := pipeline.NewService(logger, db)
-	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	connService := connector.NewService(logger, db, persister)
 	procService := processor.NewService(logger, db, procPluginService)
 
 	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
@@ -532,6 +533,16 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		MaxRetriesWindow: 5 * time.Minute,
 	}
 	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connService, procService, connPluginService, plService)
+
+	// Stop the pipelines and drain the persister before the db.Close cleanup
+	// registered above runs (t.Cleanup is LIFO, so this one runs first). A
+	// flush goroutine committing to badger after the store is closed panics
+	// with "send on closed channel" (#3103, invariants 5 and 7).
+	t.Cleanup(func() {
+		lifecycleService.StopAll(context.Background(), pipeline.ErrGracefulShutdown)
+		_ = lifecycleService.Wait(30 * time.Second)
+		persister.Wait()
+	})
 
 	// create destination file
 	destFile := "./test/dest-file.txt"

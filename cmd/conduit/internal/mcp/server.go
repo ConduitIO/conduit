@@ -40,6 +40,7 @@ const (
 	ToolScaffoldProcessor = "scaffold_processor"
 	ToolRepair            = "repair"
 	ToolRepairApply       = "repair_apply"
+	ToolKCMigrate         = "kc_migrate"
 )
 
 // Config configures NewServer.
@@ -99,11 +100,12 @@ type server struct {
 
 // NewServer builds the `conduit mcp` tool catalog over cfg.
 //
-// Read tools — validate, lint, dry_run, doctor, deploy, inspect, repair —
-// are always registered; none of them mutate anything (deploy computes a
-// Diff/hash but never executes it, see deploy.go; repair computes a plan
-// over CONTENT and returns proposed fixes, never touching a store or a
-// running pipeline, see cmd/conduit/internal/repair's doc).
+// Read tools — validate, lint, dry_run, doctor, deploy, inspect, repair,
+// kc_migrate — are always registered; none of them mutate anything (deploy
+// computes a Diff/hash but never executes it, see deploy.go; repair computes
+// a plan over CONTENT and returns proposed fixes, never touching a store or
+// a running pipeline, see cmd/conduit/internal/repair's doc; kc_migrate
+// returns the migrated pipelines content-out, see tools_migrate.go).
 //
 // Write tools — apply, start, stop, scaffold_connector, scaffold_processor,
 // repair_apply — are registered only when cfg.AllowMutations is set (design
@@ -135,7 +137,8 @@ func NewServer(cfg Config) *sdkmcp.Server {
 			"repair scans a configuration for machine-appliable fixes and returns them classified " +
 			"(safe/restart/data_path) with a plan hash; repair_apply, when present, applies the safe ones " +
 			"(or an explicit `select`) but NEVER a data_path fix — those require the human-only CLI --escalate " +
-			"path. If present, apply/start/stop/scaffold_connector/scaffold_processor/repair_apply mutate the " +
+			"path. kc_migrate translates Kafka Connect connector configs (content-in) into Conduit pipelines " +
+			"plus a compatibility report, returning the files content-out. If present, apply/start/stop/scaffold_connector/scaffold_processor/repair_apply mutate the " +
 			"local pipeline store, a running pipeline, or the filesystem — apply requires the hash from a prior " +
 			"deploy call and is refused on a stale hash or a running pipeline; start/stop require --api-address " +
 			"like inspect and are refused on an invalid transition (already running / not running); these tools " +
@@ -150,6 +153,7 @@ func NewServer(cfg Config) *sdkmcp.Server {
 	sdkmcp.AddTool(srv, tool(ToolDeploy), s.deploy)
 	sdkmcp.AddTool(srv, tool(ToolInspect), s.inspect)
 	sdkmcp.AddTool(srv, tool(ToolRepair), s.repair)
+	sdkmcp.AddTool(srv, tool(ToolKCMigrate), s.kcMigrate)
 
 	if cfg.AllowMutations {
 		sdkmcp.AddTool(srv, tool(ToolApply), s.apply)

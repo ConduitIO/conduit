@@ -84,7 +84,12 @@ type Worker struct {
 	FirstTask *TaskNode
 	DLQ       *DLQ
 
-	lastReadAt time.Time
+	// lastReadAt is the UnixNano timestamp of the most recent source read,
+	// used as the fallback readAt in updateTimer. It is atomic because the
+	// destination flusher goroutine calls updateTimer (via Worker.Ack) while
+	// the worker writes this on every source read (see
+	// docs/design-documents/20261019-funnel-read-ahead-pipelining.md).
+	lastReadAt atomic.Int64
 	timer      metrics.Timer
 
 	// processingLock is a lock in form of a channel with a buffer size of 1 to
@@ -98,6 +103,11 @@ type Worker struct {
 	// sourceTornDown is set only after Source.Teardown SUCCEEDS, so a failed
 	// teardown is retried by a later call rather than masked as done.
 	sourceTornDown bool
+	// teardownErr is the error from the FIRST failed Source.Teardown. It is
+	// sticky: every later tearDownSource call returns it, so the root cause
+	// (typically a final position write the state store rejected) is what
+	// Close reports, not the retry's "plugin is not running" (#2966).
+	teardownErr error
 
 	logger log.CtxLogger
 }
@@ -105,21 +115,38 @@ type Worker struct {
 // tearDownSource releases the source connector's resources. It serves two
 // purposes: on a graceful stop it interrupts a blocked source Read, and on every
 // path it frees the source. It is called from both Stop (graceful) and Close (all
-// paths, including a fatal error where Stop is never called), so it is idempotent
-// — but only a *successful* teardown is remembered: if Source.Teardown fails, the
-// source is left un-torn-down so the next caller retries, rather than masking the
-// failure and leaking the source.
+// paths, including a fatal error where Stop is never called), so it is idempotent.
+//
+// Only a *successful* teardown is remembered as done: if Source.Teardown fails,
+// the source is left un-torn-down so the next caller retries, rather than
+// masking the failure and leaking the source (#2559). The first failure is
+// sticky, though: once a Teardown has failed, this and every later call return
+// that first error, whatever the retry does. connector.Source.Teardown releases
+// the plugin before it reports a failed final position write, so the retry
+// almost always fails with plugin.ErrPluginNotRunning, and reporting that would
+// hide why the stop was not clean (#2966). The retry's own error is logged.
 func (w *Worker) tearDownSource(ctx context.Context) error {
 	w.teardownMu.Lock()
 	defer w.teardownMu.Unlock()
 	if w.sourceTornDown {
-		return nil
+		return w.teardownErr
 	}
-	if err := w.Source.Teardown(ctx); err != nil {
+	err := w.Source.Teardown(ctx)
+	if err == nil {
+		w.sourceTornDown = true
+		return w.teardownErr
+	}
+	if w.teardownErr == nil {
+		w.teardownErr = err
 		return err // not marked torn down; a later Stop/Close call retries
 	}
-	w.sourceTornDown = true
-	return nil
+	// A retry after an earlier failure. Invariant 3: the first error is what
+	// says whether the last positions were persisted, so it must not be
+	// replaced by the retry's.
+	w.logger.Warn(ctx).Err(err).
+		AnErr("first_teardown_error", w.teardownErr).
+		Msg("retrying source teardown failed; reporting the first teardown error")
+	return w.teardownErr
 }
 
 func NewWorker(
@@ -522,6 +549,22 @@ func (w *Worker) doTaskAttempt(
 		Bool("tainted", b.tainted).
 		Msg("executing task")
 
+	// Destination-write batching (see destination_batch.go): a batching
+	// destination task owns the write+ack cycle itself, so it is called here
+	// instead of t.Do. If it buffered the batch it defers the source ack
+	// (errBuffered) and the worker reads the next batch; if it flushed, the
+	// batch is already acked/nacked and there is nothing left to do here.
+	if dt, ok := t.(*DestinationTask); ok && dt.batchingEnabled() {
+		err := dt.doBuffered(ctx, b, acker)
+		if isBuffered(err) {
+			return nil // deferred: read the next source batch, do not ack
+		}
+		if err != nil {
+			return cerrors.Errorf("task %s: %w", t.ID(), err)
+		}
+		return nil // flushed and acked by the destination task
+	}
+
 	err := t.Do(ctx, b)
 
 	w.logger.Trace(ctx).
@@ -613,7 +656,7 @@ func (w *Worker) doTaskAttempt(
 		//   the batch is being processed.
 		// - It checks if the source was torn down after receiving the batch and
 		//   before acquiring the lock.
-		w.lastReadAt = time.Now()
+		w.lastReadAt.Store(time.Now().UnixNano())
 
 		release, err := w.acquireProcessingLock(ctx)
 		if err != nil {
@@ -791,6 +834,10 @@ func (w *Worker) doTaskAttempt(
 // subBatchByFlag collects a sub-batch of records with the same status starting
 // from the given index. It returns nil if firstIndex is out of bounds.
 func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
+	return subBatchByFlag(b, firstIndex)
+}
+
+func subBatchByFlag(b *Batch, firstIndex int) *Batch {
 	if firstIndex >= len(b.recordStatuses) {
 		return nil
 	}
@@ -1081,7 +1128,7 @@ func (w *Worker) updateTimer(records []opencdc.Record) {
 		if err != nil {
 			// If the record metadata has changed and does not include ReadAt
 			// fallback to the time the worker received the record.
-			readAt = w.lastReadAt
+			readAt = time.Unix(0, w.lastReadAt.Load())
 		}
 		w.timer.UpdateSince(readAt)
 	}

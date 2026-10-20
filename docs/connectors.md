@@ -35,3 +35,9 @@ A full list of connectors is hosted here: <https://conduitdata.io/docs/using/con
 [`catalog-inventory.md`](catalog-inventory.md) records the state of every connector and processor repository
 (SDK version, tests, CI, registry, maintenance) and maps planned catalog work to what already exists. A CSV copy
 is in [`data/catalog-inventory.csv`](data/catalog-inventory.csv).
+
+### Catalog scorecard
+
+[`catalog/scorecard.md`](catalog/scorecard.md) lists the connectors in the registry by quality tier
+(`certified` / `verified` / `adapter` / `community`), with license metadata, and records the embedding and
+generator consolidations.

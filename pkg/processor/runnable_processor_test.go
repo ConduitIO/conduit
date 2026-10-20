@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/matryer/is"
@@ -417,6 +418,49 @@ func TestRunnableProcessor_Process_Batch(t *testing.T) {
 	defer underTest.Close()
 
 	is.Equal(wantRecs, gotRecs)
+}
+
+// TestRunnableProcessor_Process_IsolatesInputOnError is the regression test for
+// #3153: custom.javascript mutates its input in place and then throws, so the
+// record the engine nacks (and writes to the DLQ) is the half-edited input.
+// The processor invocation boundary must hand the processor a deep copy, so a
+// mutating-then-failing processor leaves the engine's record — and therefore
+// the record the DLQ and sibling branches see — unchanged by construction.
+func TestRunnableProcessor_Process_IsolatesInputOnError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	js := custom.NewJavascriptProcessor(log.Nop())
+	is.NoErr(js.Configure(ctx, config.Config{"script": `
+		function process(r) {
+			r.Payload.After.nested.x = "half-written";
+			r.Metadata["touched"] = "yes";
+			throw new Error("boom");
+		}`}))
+	is.NoErr(js.Open(ctx))
+	defer func() { _ = js.Teardown(ctx) }()
+
+	underTest := newRunnableProcessor(js, nil, newTestInstance())
+	defer underTest.Close()
+
+	in := opencdc.Record{
+		Position:  opencdc.Position("p1"),
+		Operation: opencdc.OperationCreate,
+		Metadata:  opencdc.Metadata{},
+		Payload: opencdc.Change{After: opencdc.StructuredData{
+			"nested": map[string]any{"x": 1, "items": []any{"a", "b"}},
+		}},
+	}
+	before := in.Clone()
+
+	out := underTest.Process(ctx, []opencdc.Record{in})
+
+	_, ok := out[0].(sdk.ErrorRecord)
+	is.True(ok) // the script threw, so the processor returns an ErrorRecord
+
+	// Invariant 6: the input record the engine holds — what it nacks to the DLQ —
+	// is unchanged; the processor only ever saw a deep copy.
+	is.Equal(before, in)
 }
 
 func newTestInstance() *Instance {

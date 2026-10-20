@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package lifecycle contains the logic to manage the lifecycle of pipelines.
-// It is responsible for starting, stopping and managing pipelines.
 package lifecycle
 
 import (
@@ -35,6 +33,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
@@ -518,8 +517,11 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	}()
 
 	// #2979: refuse before anything is built or opened, so a refused start reads
-	// nothing from the source and acks nothing (invariants 1 and 3).
-	if err := s.checkDestinationBatching(ctx, pl); err != nil {
+	// nothing from the source and acks nothing (invariants 1 and 3). Destinations
+	// are no longer refused — they batch in the engine itself
+	// (docs/design-documents/20261017-funnel-destination-batching.md) — but the
+	// DLQ is not wired through that path and is still refused.
+	if err := s.checkDLQBatching(pl); err != nil {
 		return err
 	}
 
@@ -1514,11 +1516,27 @@ func (s *Service) buildDestinationTasks(
 			return nil, err
 		}
 
-		destTask := funnel.NewDestinationTask(
+		// Destination-write batching (docs/design-documents/
+		// 20261017-funnel-destination-batching.md): the funnel batches writes
+		// itself using the destination's sdk.batch.size/sdk.batch.delay, so the
+		// SDK must not also batch (which would withhold acks and stall the
+		// stop-and-wait loop). Read the settings, mark the connector adapter to
+		// strip them, and hand them to the destination task.
+		instance.RLock()
+		destSettings := instance.Config.Settings
+		instance.RUnlock()
+		batchSize, batchDelay, batching := config.SDKBatchSettings(destSettings)
+		if batching {
+			dest.(*connector.Destination).SetEngineBatches()
+		}
+
+		destTask := funnel.NewBatchingDestinationTask(
 			instance.ID,
 			dest.(*connector.Destination),
 			logger,
 			s.newConnectorMetrics(pl.Config.Name, instance),
+			batchSize,
+			batchDelay,
 		)
 
 		// Add processor tasks
@@ -1543,6 +1561,20 @@ func (s *Service) buildDestinationTasks(
 		destTasks = append(destTasks, procTasks...)
 		destTasks = append(destTasks, destTask)
 		tasks = append(tasks, destTasks)
+	}
+
+	// Read-ahead pipelining (docs/design-documents/20261019-funnel-read-ahead-pipelining.md):
+	// enabled only for a single destination. With M>1 destinations the M
+	// flusher goroutines would race on the single Worker's cross-batch source
+	// ack (each multiAckNacker orders within one batch, but the final hop to
+	// connector.Source.Ack has no cross-batch happens-before), so fan-out keeps
+	// the pre-pipelining synchronous flush.
+	if len(tasks) == 1 {
+		for _, branch := range tasks {
+			if dt, ok := branch[len(branch)-1].(*funnel.DestinationTask); ok {
+				dt.SetPipelined()
+			}
+		}
 	}
 
 	return tasks, nil

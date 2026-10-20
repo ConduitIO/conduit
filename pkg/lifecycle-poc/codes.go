@@ -60,9 +60,16 @@ var (
 
 // CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the
 // live-apply preflight (PreflightPipelineConfig), when a pipeline would run on
-// the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a
-// destination connector, or the dead-letter-queue connector, sets
-// sdk.batch.size above 1 (#2979).
+// the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the
+// dead-letter-queue connector sets sdk.batch.size above 1 (#2979).
+//
+// Regular destinations are no longer refused by this code: the funnel now
+// batches destination writes itself using the destination's
+// sdk.batch.size/sdk.batch.delay (see
+// docs/design-documents/20261017-funnel-destination-batching.md) and strips the
+// settings from the SDK plugin, so a destination batch can no longer withhold
+// its acks and stall the stop-and-wait loop. The DLQ is not wired through that
+// path, so its SDK destination batching still withholds acks and is refused.
 //
 // The v2 destination task writes a batch and then waits for every ack of it
 // before the next read. With sdk.batch.size > 1 the SDK destination only
@@ -86,9 +93,8 @@ var (
 //
 // The error names every offending connector; ConfigPath and Fix address the
 // first one, as a JSON pointer into the pipeline config document
-// (/connectors/<index>/settings/sdk.batch.size or
-// /dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and
-// sdk.batch.delay) from the destination, or run without
+// (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and
+// sdk.batch.delay) from the dead-letter queue, or run without
 // --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See
 // docs/operations/archv2-destination-batching.md.
 //
