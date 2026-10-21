@@ -48,19 +48,20 @@ type Plan struct {
 	// ID is the pipeline id, the connector name.
 	ID string
 	// File is the pipeline file path relative to the output directory.
-	File       string
-	connectors []connectorDef
-	dlq        *dlqDef
-	stopped    bool              // a key requires the pipeline stopped
-	scope      string            // rules.ScopeSource or rules.ScopeSink: which client Kafka Connect runs
-	owner      map[string]owner  // config path -> origin, key and layer that set it
-	superseded map[keyRef]string // origin and key -> the higher-layer key that replaced its value
-	origin     string            // origin of the action being applied
-	layer      int               // layer of the action being applied
-	config     map[string]string // the connector's values, for finishers
-	pgURL      map[string]string // Postgres connection URL parts, assembled by the pg-url finisher
-	secrets    []Secret
-	envs       *EnvNames
+	File        string
+	connectors  []connectorDef
+	dlq         *dlqDef
+	stopped     bool              // a key requires the pipeline stopped
+	scope       string            // rules.ScopeSource or rules.ScopeSink: which client Kafka Connect runs
+	owner       map[string]owner  // config path -> origin, key and layer that set it
+	superseded  map[keyRef]string // origin and key -> the higher-layer key that replaced its value
+	origin      string            // origin of the action being applied
+	layer       int               // layer of the action being applied
+	config      map[string]string // the connector's values, for finishers
+	pgURL       map[string]string // Postgres connection URL parts, assembled by the pg-url finisher
+	secrets     []Secret
+	envs        *EnvNames
+	sinkBlocked map[string]bool // worker keys the block-sinks kind blocked on this pipeline
 }
 
 // Secret is an environment variable a pipeline references instead of a
@@ -369,6 +370,14 @@ func (p *Plan) supersededBy(origin, key string) (string, bool) {
 	by, ok := p.superseded[keyRef{origin: origin, key: key}]
 	return by, ok
 }
+
+// SinkBlocked reports whether the worker key was made blocking on this
+// pipeline by the block-sinks kind.
+func (p *Plan) SinkBlocked(key string) bool { return p.sinkBlocked[key] }
+
+// HasSinkBlocked reports whether block-sinks blocked any worker key on this
+// pipeline.
+func (p *Plan) HasSinkBlocked() bool { return len(p.sinkBlocked) > 0 }
 
 // Stopped reports whether a key requires the pipeline written stopped,
 // regardless of --accept-gaps.

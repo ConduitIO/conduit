@@ -1,0 +1,39 @@
+File: conduit
+Build ID: 43cb2a080a989ca6e2e26ec24854c5f09edca1ef
+Type: cpu
+Time: 2026-10-20 00:36:43 PDT
+Duration: 81.57s, Total samples = 77.61s (95.15%)
+Showing nodes accounting for 39.96s, 51.49% of 77.61s total
+Dropped 949 nodes (cum <= 0.39s)
+Showing top 30 nodes out of 319
+      flat  flat%   sum%        cum   cum%
+       13s 16.75% 16.75%        13s 16.75%  internal/runtime/syscall/linux.Syscall6
+     8.89s 11.45% 28.21%      8.89s 11.45%  runtime.futex
+     1.71s  2.20% 30.41%      5.36s  6.91%  runtime.selectgo
+     1.41s  1.82% 32.23%      1.41s  1.82%  runtime.nextFreeFast (inline)
+     1.12s  1.44% 33.67%      1.12s  1.44%  runtime.usleep
+     0.91s  1.17% 34.84%      1.05s  1.35%  runtime.lock2
+     0.91s  1.17% 36.01%      0.98s  1.26%  runtime.unlock2
+     0.81s  1.04% 37.06%      4.29s  5.53%  runtime.mallocgcSmallScanNoHeader
+     0.70s   0.9% 37.96%      0.80s  1.03%  runtime.(*mspan).writeHeapBitsSmall
+     0.69s  0.89% 38.85%      2.99s  3.85%  runtime.stealWork
+     0.68s  0.88% 39.72%      0.68s  0.88%  runtime.memmove
+     0.64s  0.82% 40.55%      6.25s  8.05%  runtime.mallocgc
+     0.64s  0.82% 41.37%      0.64s  0.82%  runtime.nanotime (inline)
+     0.63s  0.81% 42.19%      0.63s  0.81%  runtime.memclrNoHeapPointers
+     0.61s  0.79% 42.97%      0.61s  0.79%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+     0.61s  0.79% 43.76%      0.61s  0.79%  time.runtimeNow
+     0.58s  0.75% 44.50%      0.70s   0.9%  internal/runtime/maps.(*Iter).Next
+     0.56s  0.72% 45.23%      0.56s  0.72%  runtime.write1
+     0.55s  0.71% 45.93%      3.67s  4.73%  runtime.newobject
+     0.49s  0.63% 46.57%      0.49s  0.63%  github.com/klauspost/compress/s2.encodeSnappyBlockAsm10B
+     0.49s  0.63% 47.20%      0.49s  0.63%  internal/sync.(*Mutex).Lock
+     0.44s  0.57% 47.76%      0.81s  1.04%  runtime.pcvalue
+     0.42s  0.54% 48.31%     11.47s 14.78%  runtime.findRunnable
+     0.38s  0.49% 48.80%      2.06s  2.65%  github.com/goccy/go-json/internal/encoder/vm.Run
+     0.38s  0.49% 49.28%      0.49s  0.63%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.37s  0.48% 49.76%      1.56s  2.01%  runtime.runqgrab
+     0.37s  0.48% 50.24%      0.40s  0.52%  runtime.step
+     0.35s  0.45% 50.69%      0.99s  1.28%  runtime.sellock
+     0.31s   0.4% 51.09%      0.79s  1.02%  runtime.(*stkframe).getStackMap
+     0.31s   0.4% 51.49%      0.97s  1.25%  strconv.appendQuotedWith
