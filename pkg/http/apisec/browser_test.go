@@ -71,7 +71,7 @@ func TestBrowserPolicy_OriginAllowed(t *testing.T) {
 		{"http://", "", false}, // host-less origin never matches an empty Host
 		{"%zz", "127.0.0.1:8080", false},
 		{"https://console.example.evil.example", "127.0.0.1:8080", false},
-		{"https://console.example/", "127.0.0.1:8080", false}, // not canonical
+		{"https://console.example/", "127.0.0.1:8080", false},   // not canonical
 		{"http://user@127.0.0.1:8080", "127.0.0.1:8080", false}, // userinfo is never in a browser's Origin
 		{"http://127.0.0.1:8080/x", "127.0.0.1:8080", false},
 		{"http://127.0.0.1:8080?x=1", "127.0.0.1:8080", false},
