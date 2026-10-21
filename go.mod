@@ -12,14 +12,14 @@ require (
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.12.0
 	github.com/conduitio/conduit-connector-file v0.10.10
-	github.com/conduitio/conduit-connector-generator v0.10.7
-	github.com/conduitio/conduit-connector-kafka v0.14.1
+	github.com/conduitio/conduit-connector-generator v0.10.8
+	github.com/conduitio/conduit-connector-kafka v0.14.2
 	github.com/conduitio/conduit-connector-log v0.7.6
 	github.com/conduitio/conduit-connector-postgres v0.17.2
-	github.com/conduitio/conduit-connector-protocol v0.11.0
+	github.com/conduitio/conduit-connector-protocol v0.11.1
 	github.com/conduitio/conduit-connector-s3 v0.11.1
-	github.com/conduitio/conduit-connector-sdk v0.17.0
-	github.com/conduitio/conduit-processor-sdk v0.9.1
+	github.com/conduitio/conduit-connector-sdk v0.17.2
+	github.com/conduitio/conduit-processor-sdk v0.9.2
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -66,6 +66,7 @@ require (
 	github.com/twmb/go-cache v1.4.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
+	golang.org/x/mod v0.41.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
@@ -217,7 +218,6 @@ require (
 	go.uber.org/goleak v1.3.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect

@@ -105,6 +105,22 @@ type Service struct {
 	// again. See docs/design-documents/20260706-forceful-stop-test-determinism.md.
 	terminalErrors *csync.Map[string, error]
 
+	// lastRun holds, per pipeline ID, the runChain of the run most recently
+	// published to runningPipelines (its tomb, and those of the earlier runs
+	// still alive when it was published). It outlives the runningPipelines entry:
+	// a run deletes that entry from its cleanup goroutine before it is done
+	// (OnFailure handlers run after it, and every node goroutine logs "node
+	// stopped" after nodesWg.Done()), so WaitPipeline waits for these tombs to
+	// die rather than trusting the missing entry (#3087). Written under
+	// publishMu, next to the runningPipelines entry.
+	lastRun *csync.Map[string, *runChain]
+
+	// testWaitPipelineLookedUp, if set, is called by WaitPipeline right after
+	// its lookups, with whether it found a live entry. It lets a test know
+	// which path WaitPipeline took before changing what it waits for. Nil in
+	// production: only this package's tests set it.
+	testWaitPipelineLookedUp func(live bool)
+
 	// runs counts live runs and holds the shutdown flag (#2901). StopAll
 	// begins the shutdown; from then on Start and recovery restarts are
 	// refused, and Wait does not return while any run is live. See
@@ -183,6 +199,7 @@ func NewService(
 		pipelines:        pipelines,
 		runningPipelines: csync.NewMap[string, *runnablePipeline](),
 		terminalErrors:   csync.NewMap[string, error](),
+		lastRun:          csync.NewMap[string, *runChain](),
 		starting:         make(map[string]*reservation),
 	}
 }
@@ -219,6 +236,11 @@ type runnablePipeline struct {
 	// only by the cleanup goroutine.
 	lastStatus pipeline.Status
 	lastMsg    string
+
+	// chain is this run's tomb plus the predecessors still alive when it was
+	// published (#3087). Set by publishRunningPipeline under publishMu; nil
+	// for a run that was never published.
+	chain *runChain
 }
 
 // supersede marks rp as taken over by a new Start. publishMu must be held.
@@ -282,6 +304,12 @@ type PipelineService interface {
 // OnFailure registers a handler for a lifecycle.FailureEvent.
 // Only errors which happen after a pipeline has been started
 // are being sent.
+//
+// A handler runs on the failed run's cleanup goroutine, so the run is not
+// finished until every handler has returned. A handler must therefore not
+// call WaitPipeline or StopAndWait for the event's own pipeline: those wait
+// for the run's goroutines (#3087), including the one calling the handler,
+// and would never return. Handlers should be quick and must not block.
 func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
@@ -744,12 +772,15 @@ func (s *Service) waitInternal() error {
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped, and
-// returns the pipeline's terminal error (nil on a graceful stop).
+// returns the pipeline's terminal error (nil on a graceful stop). "Stopped"
+// means every goroutine of the run has returned: its node goroutines and its
+// cleanup goroutine, including the OnFailure handlers it calls.
 //
 // It is safe to call before, during, or after the pipeline's own cleanup: while
 // the pipeline is running it waits on the tomb; if the pipeline has already
-// stopped and removed itself from runningPipelines, it returns the recorded
-// terminal error instead of a false nil. Returns nil for an ID that never ran.
+// removed itself from runningPipelines, it still waits for that run's tomb to
+// die (#3087) and returns the recorded terminal error instead of a false nil.
+// Returns nil for an ID that never ran.
 func (s *Service) WaitPipeline(id string) error {
 	// A run that is still being built is waited for: once its reservation is
 	// consumed (published) or released (start failed), the lookups below
@@ -761,15 +792,38 @@ func (s *Service) WaitPipeline(id string) error {
 		<-res.done
 	}
 
+	// Both lookups under publishMu, which every publication holds while it
+	// sets the two entries: if the run is gone from runningPipelines, last is
+	// that run's tomb, not the tomb of a run a concurrent Start published
+	// after the lookup.
+	s.publishMu.Lock()
 	p, ok := s.runningPipelines.Get(id)
-	if ok && p.t != nil {
-		return p.t.Wait()
+	last, hasLast := s.lastRun.Get(id)
+	s.publishMu.Unlock()
+	if s.testWaitPipelineLookedUp != nil {
+		s.testWaitPipelineLookedUp(ok && p.t != nil)
 	}
-	// The pipeline already cleaned itself up (or never started under this ID).
-	// terminalErrors is written before the runningPipelines entry is deleted, so
-	// if the pipeline ran and stopped, its terminal error is here — recovering
-	// the result the lookup above would otherwise have lost to the cleanup race.
-	if err, ok := s.terminalErrors.Get(id); ok {
+	if ok && p.t != nil {
+		err := p.t.Wait()
+		// Invariant 7 (#3087): a recovery restart's predecessor can still be
+		// running after the restarted run has died. See runChain.
+		p.chain.wait()
+		return err
+	}
+	// The pipeline already removed itself from runningPipelines (or never
+	// started under this ID). terminalErrors is written before the
+	// runningPipelines entry is deleted, so if the pipeline ran and stopped,
+	// its terminal error is here — recovering the result the lookup above
+	// would otherwise have lost to the cleanup race. Read it before waiting,
+	// so a Start that clears it after the run dies cannot turn it into a
+	// false nil.
+	err, hasErr := s.terminalErrors.Get(id)
+	// Invariant 7 (#3087): the entry is deleted before the run is done. Do not
+	// report the pipeline stopped while any of its goroutines still runs.
+	if hasLast {
+		last.wait()
+	}
+	if hasErr {
 		return err
 	}
 	return nil
@@ -1639,6 +1693,9 @@ func (s *Service) publishRunningPipeline(rp *runnablePipeline) {
 
 	s.publishMu.Lock()
 	s.runningPipelines.Set(rp.pipeline.ID, rp)
+	prev, _ := s.lastRun.Get(rp.pipeline.ID)
+	rp.chain = newRunChain(rp.t, prev)
+	s.lastRun.Set(rp.pipeline.ID, rp.chain)
 	// The reservation becomes this entry in the same critical section, so a
 	// concurrent Start sees one or the other, never neither (invariant 2).
 	pending := s.consumeReservationLocked(rp)

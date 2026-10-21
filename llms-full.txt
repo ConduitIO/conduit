@@ -120,7 +120,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### generator (v0.10.7)
+### generator (v0.10.8)
 
 A plugin capable of generating dummy records (in different formats).
 
@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.14.1)
+### kafka (v0.14.2)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
