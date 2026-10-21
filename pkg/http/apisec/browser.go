@@ -79,8 +79,12 @@ func (p BrowserPolicy) OriginAllowed(origin, host string) bool {
 			return true
 		}
 	}
+	// A real Origin is scheme://host[:port] and nothing else; anything with
+	// userinfo, a path, a query or a fragment is not a browser's and is not
+	// treated as same-origin.
 	u, err := url.Parse(origin)
-	return err == nil && u.Host != "" && strings.EqualFold(u.Host, host)
+	return err == nil && u.Host != "" && u.User == nil && (u.Path == "" || u.Path == "/") &&
+		u.RawQuery == "" && u.Fragment == "" && strings.EqualFold(u.Host, host)
 }
 
 // CheckRequest applies the Host and Origin rules to r. It returns nil if the
