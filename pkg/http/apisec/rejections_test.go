@@ -25,7 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 	promclient "github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func TestRejections_CounterPerCodeAndBoundedLabels(t *testing.T) {
@@ -39,9 +39,9 @@ func TestRejections_CounterPerCodeAndBoundedLabels(t *testing.T) {
 	rej.Record(context.Background(), CodeOriginForbidden, "1.2.3.4:5", "x")
 
 	cv := rej.counter
-	is.Equal(testutil.ToFloat64(cv.WithLabelValues("api.unauthenticated")), 3.0)
-	is.Equal(testutil.ToFloat64(cv.WithLabelValues("api.origin_forbidden")), 1.0)
-	is.Equal(testutil.ToFloat64(cv.WithLabelValues("api.host_forbidden")), 0.0)
+	is.Equal(counterValue(cv.WithLabelValues("api.unauthenticated")), 3.0)
+	is.Equal(counterValue(cv.WithLabelValues("api.origin_forbidden")), 1.0)
+	is.Equal(counterValue(cv.WithLabelValues("api.host_forbidden")), 0.0)
 
 	// Only the fixed code label exists, and every series is one of the
 	// registered rejection reasons: nothing from a request becomes a label.
@@ -67,7 +67,7 @@ func TestRejections_SecondRegistrationSharesTheCounter(t *testing.T) {
 	b := NewRejections(reg, log.Nop())
 	a.Record(context.Background(), CodeUnauthenticated, "", "x")
 	b.Record(context.Background(), CodeUnauthenticated, "", "x")
-	is.Equal(testutil.ToFloat64(a.counter.WithLabelValues("api.unauthenticated")), 2.0)
+	is.Equal(counterValue(a.counter.WithLabelValues("api.unauthenticated")), 2.0)
 }
 
 func TestRejections_NilIsSafe(t *testing.T) {
@@ -110,7 +110,7 @@ func TestAuthenticator_CountsRejections(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer guess-guess-guess-guess")
 		h.ServeHTTP(httptest.NewRecorder(), req)
 	}
-	is.Equal(testutil.ToFloat64(rej.counter.WithLabelValues("api.unauthenticated")), 5.0)
+	is.Equal(counterValue(rej.counter.WithLabelValues("api.unauthenticated")), 5.0)
 }
 
 func wsUpgradeRequest(protocols ...string) *http.Request {
@@ -183,4 +183,12 @@ func TestEncodeWebSocketToken_RoundTrip(t *testing.T) {
 	// Carrier characters are valid RFC 6455 subprotocol token characters.
 	enc := EncodeWebSocketToken("with spaces and / + = symbols é")
 	is.True(!strings.ContainsAny(enc, " =/+,;\""))
+}
+
+func counterValue(c promclient.Counter) float64 {
+	var m dto.Metric
+	if err := c.Write(&m); err != nil {
+		panic(err)
+	}
+	return m.GetCounter().GetValue()
 }
