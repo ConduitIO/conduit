@@ -57,6 +57,8 @@ type ActionRef struct {
 	// Emits are the plugins of the file's class; empty for the shared and
 	// worker files, whose actions name Kafka sides.
 	Emits []Emit
+	// Scope is the file's scope (source, sink, shared or worker).
+	Scope string
 }
 
 // Actions lists every emit action of every loaded rule file, in file and
@@ -75,5 +77,38 @@ func (e *Engine) Actions() []ActionRef {
 			}
 		}
 	}
+	return out
+}
+
+// FinishActions lists the finish actions of every loaded class file, in file
+// order. Key holds "finish/<kind>".
+func (e *Engine) FinishActions() []ActionRef {
+	var out []ActionRef
+	for _, f := range e.files {
+		for _, a := range f.Finish {
+			out = append(out, ActionRef{File: f.name, Key: "finish/" + a.Kind, Action: a, Emits: f.Emits, Scope: f.Scope})
+		}
+	}
+	return out
+}
+
+// ClassesWithout returns the connector classes of the given scope whose rule
+// file has no finish action of kind, sorted. A check that every sink family
+// positions its consumer uses it.
+func (e *Engine) ClassesWithout(scope, kind string) []string {
+	var out []string
+	for class, f := range e.classes {
+		if f.Scope != scope || f.NoPipeline() {
+			continue
+		}
+		has := false
+		for _, a := range f.Finish {
+			has = has || a.Kind == kind
+		}
+		if !has {
+			out = append(out, class)
+		}
+	}
+	sort.Strings(out)
 	return out
 }

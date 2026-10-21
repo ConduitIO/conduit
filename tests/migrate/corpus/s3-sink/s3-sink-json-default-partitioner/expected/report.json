@@ -194,6 +194,25 @@
           "rule": "s3-sink/notes/kc.delivery_semantics_differ"
         },
         {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect reads a sink's topics in the consumer group connect-<name>, and the Kafka source defaults to a new random group. groupID is set to connect-sink-s3-00, so the pipeline resumes from the offsets the Kafka Connect sink committed to that group.",
+          "blocking": false,
+          "rule": "sink-consumer-defaults/groupID"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's consumer defaults auto.offset.reset to earliest, and the Kafka source defaults to the end of each partition. readFromBeginning is set to true: a partition the group has no committed offset for is read from its first record, as Kafka Connect does, and a partition with a committed offset resumes from it.",
+          "blocking": false,
+          "rule": "sink-consumer-defaults/readFromBeginning"
+        },
+        {
+          "code": "kc.consumer_group_shared",
+          "reason": "The pipeline's Kafka source reads in the consumer group connect-sink-s3-00, the group the Kafka Connect sink commits its offsets to, and resumes from them. While the Kafka Connect connector is still running, both consumers are in the group and Kafka splits the partitions between them, so neither sees every record. Records the sink processed after its last committed offset are read again, so they can reach the destination twice.",
+          "fix": "Stop the Kafka Connect connector (PUT /connectors/<name>/stop, or delete it; pausing keeps its group membership) and wait until kafka-consumer-groups --describe --group connect-sink-s3-00 lists no members, then start the pipeline.",
+          "blocking": false,
+          "rule": "sink-consumer-defaults/cutover"
+        },
+        {
           "code": "kc.setting_required",
           "reason": "The builtin:kafka source requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_SINK_S3_00_SOURCE_SERVERS} instead.",
           "fix": "Set KC_SINK_S3_00_SOURCE_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",

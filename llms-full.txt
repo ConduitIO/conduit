@@ -120,7 +120,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### generator (v0.10.7)
+### generator (v0.10.8)
 
 A plugin capable of generating dummy records (in different formats).
 
@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.14.1)
+### kafka (v0.14.2)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -1471,7 +1471,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (165)
+## 3. Error codes (169)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1489,6 +1489,7 @@ Author: Meroxa, Inc.
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
 | `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
 | `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
+| `connector.delete_hook_ran` | FailedPrecondition | CodeConnectorDeleteHookRan is raised when a connector is started after a delete that was rolled back but had already delivered the "deleted" lifecycle event to the plugin. The plugin may have released resources its saved position depends on (for example a Postgres replication slot), so resuming from that position could skip records. The connector refuses to start until it is deleted and created again, or Conduit is restarted after the resources were checked (#3137). |
 | `connector.endpoint_link_local` | PermissionDenied | CodeEndpointLinkLocal is raised when an ambient-credential connection would go to a link-local or cloud metadata address. |
 | `connector.endpoint_not_allowed` | PermissionDenied | CodeEndpointNotAllowed is raised when, under ambient credentials, an endpoint is not https or not an exact allow-endpoints entry. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
@@ -1519,6 +1520,7 @@ Author: Meroxa, Inc.
 | `internal.error` | Internal | CodeInternal is a coded internal failure. |
 | `internal.unknown` | Internal | CodeUnknown is the fallback when an un-coded error reaches a boundary. |
 | `kc.connector_class_unsupported` | InvalidArgument | CodeConnectorClassUnsupported: the connector class has no mapping; every key of the connector is listed with this code and no pipeline is written. |
+| `kc.consumer_group_shared` | InvalidArgument | CodeConsumerGroupShared: a connector-level note that a migrated sink's Kafka source reads in the consumer group the Kafka Connect sink commits its offsets to, so the Kafka Connect connector must be stopped before the pipeline starts. Not blocking: two live consumers in one group split the partitions between them, which delays records and duplicates none, and the operator is the only one who can stop it. |
 | `kc.converter_unknown` | InvalidArgument | CodeConverterUnknown: a connector-level note when neither the connector nor the worker file sets key.converter or value.converter, so the wire format is unknown. Blocking. |
 | `kc.converter_unsupported` | InvalidArgument | CodeConverterUnsupported: a converter with no Conduit equivalent in this version. Blocking: the wire format would differ. |
 | `kc.default_differs` | InvalidArgument | CodeDefaultDiffers: a connector-level note for an absent key whose Kafka Connect default differs from Conduit's behavior. |
@@ -1579,6 +1581,8 @@ Author: Meroxa, Inc.
 | `plugin.builtin_schema_unscoped` | Internal | CodeBuiltinSchemaUnscoped is raised when a built-in connector or processor calls the SDK schema service (schema.Get or schema.Create) with a context that was not derived from a call Conduit made into that plugin, so Conduit cannot tell which runtime's schema registry the call belongs to. The call is refused rather than answered from another runtime's registry. It indicates a bug in the plugin (for example a goroutine started with context.Background() that resolves schemas): pass the context Conduit hands to Open, Read, Write or Process down to schema calls. Internal: a plugin bug, not a configuration problem. |
 | `plugin.standalone_env_passed` | FailedPrecondition | CodeEnvPassedToPlugins is the stable code carried by the startup log event and by the `plugins.standalone_env` doctor finding when the host environment contains variables that standalone connector plugin processes will inherit and whose names look like credentials or configuration secrets. Operators can alert on the log field `code` or on the doctor finding code. By design this is a log/finding code, not an error code: no API or CLI call fails with it. It is registered in conduiterr so the code set that llms.txt publishes, and that alerting can rely on, stays complete. |
 | `processor.instance_not_found` | NotFound | CodeProcessorNotFound is raised when a referenced processor instance cannot be located. |
+| `processor.js_cyclic_output` | InvalidArgument | CodeJSCyclicOutput is raised when the record a script returns contains a map or slice that holds itself, directly or through other values (for example `record.Payload.After["self"] = record.Payload.After`). Such a record cannot be cloned, encoded or walked: every recursive consumer would overflow the stack, which is a fatal runtime error that takes down every pipeline in the process. The record is not emitted. It fails like any other processor error: with a DLQ enabled it is routed to the dead-letter queue, otherwise the pipeline degrades. The message names the path where the cycle closes. |
+| `processor.js_output_limit_exceeded` | ResourceExhausted | CodeJSOutputLimitExceeded is raised when the record a script returns nests deeper than 10,000 levels, or expands to more than about 16.7 million map entries and slice elements once shared values are counted at each place they appear (a value referenced from many parents is copied once per parent by Record.Clone). Both would exhaust the stack or memory of the whole process in the next recursive consumer. The record is not emitted and nothing is truncated; it fails like any other processor error. ResourceExhausted: the output exceeds a fixed limit. |
 | `processor.plugin_not_found` | NotFound | CodeProcessorPluginNotFound is raised when a referenced processor plugin cannot be located. |
 | `processor.protobuf_decode.message_index` | InvalidArgument | CodeMessageIndex is returned when the Confluent message-index prefix is malformed or out of range. |
 | `processor.protobuf_decode.reference_resolve` | FailedPrecondition | CodeReferenceResolve is returned when a schema reference cannot be resolved, or the reference graph forms a cycle. |

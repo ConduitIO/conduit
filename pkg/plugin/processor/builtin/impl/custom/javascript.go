@@ -299,6 +299,27 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 		return nil, cerrors.Errorf("could not unmarshal operation: %w", err)
 	}
 
+	// Invariant 3: a record the engine cannot safely hold must fail like any
+	// other processor error (nack, DLQ per policy), never take the process
+	// down. Cyclic or absurdly deep output would overflow the stack in the
+	// next Record.Clone, which is fatal and cannot be recovered.
+	//
+	// One checker for all three values: its entry budget is per record, the
+	// same unit Record.Clone copies.
+	guard := newOutputChecker()
+	for _, d := range []struct {
+		path string
+		data any
+	}{
+		{".Key", jsr.Key},
+		{".Payload.Before", jsr.Payload.Before},
+		{".Payload.After", jsr.Payload.After},
+	} {
+		if err := guard.check(d.path, d.data); err != nil {
+			return nil, err
+		}
+	}
+
 	convertData := func(d interface{}) opencdc.Data {
 		switch v := d.(type) {
 		case *opencdc.RawData:

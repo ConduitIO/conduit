@@ -162,7 +162,7 @@ func Run(ctx context.Context, engine *rules.Engine, req Request) (Result, error)
 			if runs[i].plan.Stopped() {
 				state = stateStopped // a key ran no tasks (enabled=false), accepted or not
 			}
-			rc.PipelineStatus = pipelineStatus(*rc, state, req.AcceptGaps, workerBlocks)
+			rc.PipelineStatus = pipelineStatus(*rc, state, req.AcceptGaps, heldByWorker(workerBlocks, runs[i].plan))
 		}
 	}
 	rep.Summarize()
@@ -341,6 +341,10 @@ func plaintextNote() kcmigrate.Note {
 // stateStopped is Kafka Connect's state of a stopped connector.
 const stateStopped = "STOPPED"
 
+// heldByWorker reports whether a worker setting stops this pipeline: one
+// that blocks every pipeline, or one blocked on this sink only.
+func heldByWorker(all bool, p *emit.Plan) bool { return all || p.HasSinkBlocked() }
+
 // pipelineStatus is stopped when the connector, or the worker every
 // pipeline inherits from, has a blocking entry or note that was not
 // accepted, or when Kafka Connect had the connector paused or stopped.
@@ -480,20 +484,24 @@ func recordWorkerDowngrades(rep *kcmigrate.Report, runs []connectorRun, hasWorke
 		return false
 	}
 	worker := rep.Connectors[0].Entries
+	blocks := false
+	for _, e := range worker {
+		blocks = blocks || e.Blocking
+	}
 	for _, r := range runs {
 		for i, refined := range r.workerEntries {
-			if refined.Blocking && !worker[i].Blocking {
-				refined.Target = nil
-				worker[i] = refined
+			if !refined.Blocking || worker[i].Blocking {
+				continue
 			}
+			scoped := r.plan.SinkBlocked(worker[i].Key)
+			refined.Target = nil
+			worker[i] = refined
+			// A key blocked for sinks only stops the pipelines it was
+			// blocked on (pipelineStatus), not every pipeline of the run.
+			blocks = blocks || !scoped
 		}
 	}
-	for _, e := range worker {
-		if e.Blocking {
-			return true
-		}
-	}
-	return false
+	return blocks
 }
 
 // Converter keys, read by converterNotes.

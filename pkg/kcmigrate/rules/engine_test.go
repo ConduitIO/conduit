@@ -271,6 +271,8 @@ func TestLoad_Rejects(t *testing.T) {
 		{"blocking note without fix", head + "defaults:\n  - key: a\n    note: {code: kc.default_differs, reason: r, blocking: true}\n", "a fix when blocking"},
 		{"class note without reason", head + "notes:\n  - {code: kc.output_shape_differs}\n", "a note needs"},
 		{"finish without kind", head + "finish:\n  - {name: x}\n", "finish action needs a kind"},
+		{"block-sinks outside a worker file", head + "  - key: a\n    status: unsupported\n    code: kc.key_unsupported\n    reason: r\n    fix: f\n    emit: {kind: block-sinks}\n    diff: identity\n", "only for worker rule files"},
+		{"block-sinks on a translated outcome", "rulesVersion: 1\nscope: worker\nupstream: {name: u, version: \"1\"}\nkeys:\n  - key: a\n    status: translated\n    emit: {kind: block-sinks}\n    diff: identity\n", "only for an unsupported outcome"},
 		{"overlapping regexes", head + "  - key: {regex: '^a\\.'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n  - key: {regex: '^a\\.b'}\n    status: translated\n    emit: {kind: none}\n    diff: identity\n", "more than one regex"},
 	}
 	for _, tt := range tests {
