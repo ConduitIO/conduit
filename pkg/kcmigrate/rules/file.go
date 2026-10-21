@@ -267,6 +267,9 @@ func (f *File) validate() error {
 		for _, err := range r.validate() {
 			fail("key %s: %v", id, err)
 		}
+		for _, err := range r.validateBlockSinks(f.Scope) {
+			fail("key %s: %v", id, err)
+		}
 	}
 	errs = append(errs, f.validateDefaults()...)
 	for _, r := range f.Keys {
@@ -339,6 +342,31 @@ func (r *Rule) validate() []error {
 		return append(errs, r.Outcome.validate(r.Emit)...)
 	}
 	return append(errs, r.validateValues()...)
+}
+
+// validateBlockSinks checks the block-sinks emit kind, which only a worker
+// rule may use, on an unsupported outcome: it scopes a worker key's block to
+// the sink pipelines that read with the worker's consumer.
+func (r *Rule) validateBlockSinks(scope string) []error {
+	var errs []error
+	check := func(o Outcome, a *Action) {
+		if a == nil || a.Kind != BlockSinksKind {
+			return
+		}
+		if scope != ScopeWorker {
+			errs = append(errs, cerrors.New(BlockSinksKind+" is only for worker rule files"))
+		}
+		if o.Status != kcmigrate.StatusUnsupported {
+			errs = append(errs, cerrors.New(BlockSinksKind+" is only for an unsupported outcome"))
+		}
+	}
+	if len(r.Values) == 0 {
+		check(r.Outcome, r.Emit)
+	}
+	for _, b := range r.Values {
+		check(b.Outcome, branchEmit(r, b))
+	}
+	return errs
 }
 
 func (r *Rule) validateValues() []error {
