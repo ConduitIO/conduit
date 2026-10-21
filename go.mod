@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-log v0.7.6
 	github.com/conduitio/conduit-connector-postgres v0.17.2
 	github.com/conduitio/conduit-connector-protocol v0.11.1
-	github.com/conduitio/conduit-connector-s3 v0.11.1
+	github.com/conduitio/conduit-connector-s3 v0.11.2
 	github.com/conduitio/conduit-connector-sdk v0.17.2
 	github.com/conduitio/conduit-processor-sdk v0.9.2
 	github.com/conduitio/conduit-schema-registry v0.2.7

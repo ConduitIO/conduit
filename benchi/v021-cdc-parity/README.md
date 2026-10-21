@@ -362,7 +362,9 @@ Confluent).
 
 ## Results
 
-See [`results.md`](results.md) for the verdict, tables (median, min-max, A/A
+Current reference (arch-v2, shipped defaults, A/A twin on every Conduit arm):
+[`results-arch-v2.md`](results-arch-v2.md). Earlier classic-engine run (pre-audit):
+see [`results.md`](results.md) for the verdict, tables (median, min-max, A/A
 spread), bottleneck analysis and caveats. Raw data (runs.csv, environment.txt,
 per-run CSVs, logs gzipped, CPU profiles) is in `results-aws/`; regenerate any
 table with `python3 scripts/summarize.py results-aws/<run dir>`.
