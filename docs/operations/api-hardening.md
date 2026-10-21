@@ -39,6 +39,12 @@ The token must be at least 16 characters. Setting both `api.token` and `api.toke
 error. The token is read once at startup; restart Conduit to rotate it. `conduit config` prints it
 as `[redacted]`.
 
+WebSockets: a browser cannot set headers on a WebSocket, so the inspector stream also accepts the
+token as a subprotocol: offer `conduit` and `conduit.token.<base64url(token)>` in
+`Sec-WebSocket-Protocol`. The server checks it in constant time, never forwards it, and selects
+`conduit`. A token in the query string is never accepted. Non-browser clients can simply send the
+header.
+
 Clients:
 
 - **CLI** (`conduit pipelines ...`, `conduit doctor`, `conduit connectors uninstall`, and so on)
@@ -100,13 +106,17 @@ token (`openssl rand -hex 32`), and set only one source.
 
 ### `api.unauthenticated`: HTTP 401 or gRPC `Unauthenticated`
 
-**Diagnosis.** The request carried no bearer token or the wrong one. The server logs each rejection
-at `warn` with the remote address (never the presented credential). Repeated rejections from one
-address are a guessing attempt.
+**Diagnosis.** The request carried no bearer token or the wrong one. Every refusal increments
+`conduit_api_rejected_requests_total{code="api.unauthenticated"}` (the only label is the error code;
+`api.origin_forbidden`, `api.host_forbidden` and `api.content_type_unsupported` have their own series).
+A rate of 401s far above your own clients' is a guessing attempt: alert on
+`rate(conduit_api_rejected_requests_total{code="api.unauthenticated"}[5m])`. The server also logs a `warn`
+with the remote address, at most one line per code every 10 seconds, with a `suppressed_since_last`
+count (never the presented credential). There is no request rate limiting; use a token from
+`openssl rand -hex 32` and, on a network, a proxy that rate limits.
 
 **Remediation.** Send the token (see _Clients_). A token in a query string, cookie or `Basic`
-header is not accepted. A browser page cannot set `Authorization` on a WebSocket; use a non-browser
-client for the inspector stream when a token is set.
+header is not accepted. The UI prompts for the token itself; a script or CLI must send it.
 
 ### `api.origin_forbidden`: HTTP 403
 
@@ -144,8 +154,10 @@ preflight, which is why they are refused.
 - The token is a shared secret over plaintext HTTP and gRPC. Conduit does not terminate TLS. Over
   an untrusted network put TLS in front (reverse proxy, service mesh, VPN). There is no mTLS
   option in Conduit itself.
-- The built-in UI does not yet prompt for a token. With a token set, the UI loads but its API calls
-  are rejected. Use the CLI, or the UI on an instance without a token on loopback.
+- The built-in UI prompts for the token when the API answers 401. It keeps it in `sessionStorage`
+  (this tab only, gone when the tab closes; never `localStorage`, a cookie or a URL), sends it as
+  `Authorization: Bearer`, and on a later 401 clears it and asks again. Anyone with script access to the page
+  (an XSS in the UI) could read it; the UI's static files are served without a token.
 - Any local user or process on the host can reach a loopback-bound API without a token, and the
   connector utilities server (which serves schema lookups to plugins, with no authentication) is
   reachable by any local process. Set a token on shared hosts.

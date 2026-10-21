@@ -47,6 +47,18 @@ import (
 //go:embed dist
 var distFS embed.FS
 
+// authScript is conduit-auth.js: the API token prompt and the fetch/WebSocket
+// wrappers that send it. It lives beside dist/ (not in it) so `make ui`, which
+// replaces dist/ wholesale from the separate conduit-ui build, cannot drop it.
+// Handler serves it at authScriptPath and injects a <script> for it ahead of
+// the bundle.
+//
+//go:embed conduit-auth.js
+var authScript []byte
+
+// authScriptPath is where Handler serves authScript.
+const authScriptPath = "conduit-auth.js"
+
 // indexPath is the SPA entry point, relative to the root FS returned by FS().
 const indexPath = "index.html"
 
@@ -91,7 +103,7 @@ func Handler(fsys fs.FS) (http.Handler, error) {
 	if err != nil {
 		return nil, cerrors.Errorf("ui: embedded %s not found: %w", indexPath, err)
 	}
-	index = injectBaseHref(index)
+	index = injectAuthScript(injectBaseHref(index))
 
 	fileServer := http.FileServer(http.FS(fsys))
 
@@ -99,6 +111,10 @@ func Handler(fsys fs.FS) (http.Handler, error) {
 		rel := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if rel == "" || rel == "." || rel == indexPath {
 			serveIndex(w, r, index)
+			return
+		}
+		if rel == authScriptPath {
+			serveAuthScript(w, r)
 			return
 		}
 
@@ -148,6 +164,41 @@ func injectBaseHref(html []byte) []byte {
 	out := make([]byte, 0, len(html)+len(base))
 	out = append(out, html[:insertAt]...)
 	out = append(out, base...)
+	out = append(out, html[insertAt:]...)
+	return out
+}
+
+func serveAuthScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(authScript)))
+	// The script is tied to the engine's API behavior; never serve a stale copy
+	// after an upgrade.
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = w.Write(authScript)
+}
+
+// injectAuthScript inserts a classic (blocking) <script> for conduit-auth.js
+// right after <base href>, so it runs before the bundle's module script and
+// wraps fetch and WebSocket before the bundle uses them. If the base tag is
+// absent (unexpected index.html shape) it returns html unchanged; the UI then
+// works only against a token-less API.
+func injectAuthScript(html []byte) []byte {
+	const (
+		marker = `<base href="/">`
+		tag    = `<script src="/` + authScriptPath + `"></script>`
+	)
+	idx := bytes.Index(html, []byte(marker))
+	if idx == -1 {
+		return html
+	}
+	insertAt := idx + len(marker)
+	out := make([]byte, 0, len(html)+len(tag))
+	out = append(out, html[:insertAt]...)
+	out = append(out, tag...)
 	out = append(out, html[insertAt:]...)
 	return out
 }
