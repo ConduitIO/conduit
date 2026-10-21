@@ -27,6 +27,10 @@
       ],
       "secrets": [
         {
+          "name": "CONDUIT_API_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:conduit/api-token"
+        },
+        {
           "name": "CONDUIT_DB_POSTGRES_CONNECTION_STRING",
           "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:conduit/db-connection-string"
         }

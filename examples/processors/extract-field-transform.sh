@@ -24,7 +24,8 @@ docker run --rm  \
     --name conduit \
     -v "$SCRIPT_DIR/pipeline-extract-field-transform.yml":/app/pipelines/pipeline.yml \
     -v "$DEST_FILE":/file_destination.txt \
-    -p 8080:8080 \
+    -e CONDUIT_API_TOKEN="$(openssl rand -hex 32)" \
+    -p 127.0.0.1:8080:8080 \
     -d \
     ghcr.io/conduitio/conduit:latest
 
