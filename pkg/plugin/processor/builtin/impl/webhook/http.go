@@ -253,12 +253,12 @@ func (p *HTTPProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 
 	req, err := p.buildRequest(ctx, r)
 	if err != nil {
-		return nil, cerrors.Errorf("cannot create HTTP request: %w", err)
+		return nil, cerrors.Errorf("cannot create HTTP request: %w", errCause(err))
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, cerrors.Errorf("error executing HTTP request: %w", err)
+		return nil, cerrors.Errorf("error executing HTTP request: %w", errCause(err))
 	}
 	defer func() {
 		errClose := resp.Body.Close()
@@ -276,7 +276,9 @@ func (p *HTTPProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 
 	if resp.StatusCode >= 500 {
 		// regard status codes over 500 as errors
-		return nil, cerrors.Errorf("error status code %v (body: %q)", resp.StatusCode, string(body))
+		// The response body is not shown: it can repeat the request, which
+		// holds record data.
+		return nil, cerrors.Errorf("error status code %v (response body: %d bytes, hash %s)", resp.StatusCode, len(body), log.KeyHash(body))
 	}
 
 	// Set response body
@@ -309,7 +311,7 @@ func (p *HTTPProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 		bytes.NewReader(reqBody),
 	)
 	if err != nil {
-		return nil, cerrors.Errorf("error creating HTTP request: %w", err)
+		return nil, cerrors.Errorf("error creating HTTP request: %w", errCause(err))
 	}
 
 	// set header values
@@ -331,11 +333,13 @@ func (p *HTTPProcessor) evaluateURL(rec opencdc.Record) (string, error) {
 	}
 	u, err := url.Parse(b.String())
 	if err != nil {
-		return "", cerrors.Errorf("error parsing URL: %w", err)
+		// url.Error and its cause repeat parts of the rendered URL (for
+		// example the invalid port), which holds record fields.
+		return "", cerrors.New("error parsing the rendered URL (not shown, it can hold record data)")
 	}
 	q, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return "", cerrors.Errorf("error parsing URL query: %w", err)
+		return "", cerrors.New("error parsing the query of the rendered URL (not shown, it can hold record data)")
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil

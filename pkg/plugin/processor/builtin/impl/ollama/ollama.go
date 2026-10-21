@@ -178,12 +178,12 @@ func (p *OllamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte)
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("unable to create ollama request %w", err)
+		return nil, fmt.Errorf("unable to create ollama request %w", errCause(err))
 	}
 
 	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request to ollama failed %w", err)
+		return nil, fmt.Errorf("request to ollama failed %w", errCause(err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ollama request returned status code %d", resp.StatusCode)
