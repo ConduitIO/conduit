@@ -25,7 +25,7 @@ What you get:
 - The HTTP API and web UI at <http://localhost:8080>, published on `127.0.0.1` only.
   Change the host port with `CONDUIT_HTTP_PORT`. The API requires the bearer token in
   `CONDUIT_API_TOKEN` (compose refuses to start without it); the UI's static files load
-  without it, but the UI cannot call a token-protected API yet.
+  without it and the UI asks for the token in a prompt.
 - A volume created by an older image is owned by root. The image now runs as uid 10001; see
   [API hardening](../../docs/operations/api-hardening.md#running-in-a-container).
 - A health check on `/readyz` and a 45 s stop grace period (the runtime drains for up to
