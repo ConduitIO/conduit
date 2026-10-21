@@ -1,0 +1,69 @@
+File: conduit
+Build ID: 39961da483c4e9a3ce426eae2c7af764e7ca5cb9
+Type: cpu
+Time: 2026-10-20 21:28:14 PDT
+Duration: 76.37s, Total samples = 68.72s (89.98%)
+Showing nodes accounting for 8.96s, 13.04% of 68.72s total
+Dropped 835 nodes (cum <= 0.34s)
+Showing top 60 nodes out of 335
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%     27.93s 40.64%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCIterator).StartSubscriber.func1
+         0     0%     0%     27.93s 40.64%  github.com/conduitio/conduit-connector-postgres/source/logrepl/internal.(*Subscription).Run
+     0.10s  0.15%  0.15%     27.92s 40.63%  github.com/conduitio/conduit-connector-postgres/source/logrepl/internal.(*Subscription).listen
+     0.16s  0.23%  0.38%     23.93s 34.82%  github.com/conduitio/conduit-connector-postgres/source/logrepl/internal.(*Subscription).handleXLogData
+     0.09s  0.13%  0.51%     22.70s 33.03%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).Handle
+         0     0%  0.51%     22.64s 32.95%  gopkg.in/tomb%2ev2.(*Tomb).run
+     0.12s  0.17%  0.68%     15.72s 22.88%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).handleInsert
+     0.17s  0.25%  0.93%     14.74s 21.45%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).updateAvroSchema
+     1.24s  1.80%  2.74%     13.28s 19.32%  runtime.mallocgc
+         0     0%  2.74%     12.09s 17.59%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).Run.func1.2
+     0.29s  0.42%  3.16%     12.09s 17.59%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).runAck
+     0.05s 0.073%  3.23%     11.78s 17.14%  github.com/conduitio/conduit-connector-postgres.(*Source).Ack
+         0     0%  3.23%     11.73s 17.07%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CombinedIterator).Ack
+     0.10s  0.15%  3.38%     11.71s 17.04%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCIterator).Ack
+         0     0%  3.38%     10.60s 15.42%  github.com/conduitio/conduit-connector-sdk.(*destinationPluginAdapter).Run
+         0     0%  3.38%     10.60s 15.42%  github.com/conduitio/conduit-connector-sdk.(*writeStrategySingle).Write
+         0     0%  3.38%     10.60s 15.42%  github.com/conduitio/conduit/pkg/plugin/connector/builtin.(*destinationPluginAdapter).Run.func1
+         0     0%  3.38%     10.42s 15.16%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRateLimit).Write
+     0.01s 0.015%  3.39%     10.42s 15.16%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRecordFormat).Write
+     0.09s  0.13%  3.52%     10.39s 15.12%  github.com/conduitio/conduit-connector-sdk.(*destinationWithSchemaExtraction).Write
+     0.05s 0.073%  3.59%      8.53s 12.41%  github.com/conduitio/conduit-connector-postgres/source/position.ParseSDKPosition
+         0     0%  3.59%      8.40s 12.22%  encoding/json.Unmarshal
+     0.20s  0.29%  3.89%      7.92s 11.53%  github.com/conduitio/conduit-connector-sdk/schema.Create
+     1.59s  2.31%  6.20%      7.60s 11.06%  runtime.mallocgcSmallScanNoHeader
+         0     0%  6.20%      7.44s 10.83%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).Run.func1.1
+         0     0%  6.20%      7.44s 10.83%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).runRead
+         0     0%  6.20%      7.44s 10.83%  github.com/conduitio/conduit-connector-sdk.(*sourceWithBatch).ReadN
+     0.01s 0.015%  6.21%      7.44s 10.83%  github.com/conduitio/conduit-connector-sdk.(*sourceWithEncoding).ReadN
+         0     0%  6.21%      7.43s 10.81%  github.com/conduitio/conduit-connector-sdk.(*sourceWithEncoding).encode
+     0.40s  0.58%  6.80%      6.75s  9.82%  github.com/conduitio/conduit-connector-sdk/schema.Get
+     0.11s  0.16%  6.96%      6.46s  9.40%  github.com/conduitio/conduit/pkg/plugin/connector/builtin.scopedSchemaService.CreateSchema
+     0.02s 0.029%  6.98%      6.38s  9.28%  encoding/json.(*decodeState).unmarshal
+     0.54s  0.79%  7.77%      6.35s  9.24%  encoding/json.(*decodeState).object
+     0.07s   0.1%  7.87%      6.35s  9.24%  encoding/json.(*decodeState).value
+     0.21s  0.31%  8.18%      6.35s  9.24%  github.com/conduitio/conduit/pkg/plugin/connector/builtin.scopedSchemaService.GetSchema
+     0.32s  0.47%  8.64%      6.24s  9.08%  github.com/conduitio/conduit/pkg/plugin/connector/connutils.(*SchemaService).CreateSchema
+     0.07s   0.1%  8.75%      6.05s  8.80%  github.com/conduitio/conduit-connector-sdk.(*destinationWithSchemaExtraction).decode
+     0.30s  0.44%  9.18%      5.94s  8.64%  github.com/conduitio/conduit/pkg/plugin/connector/connutils.(*SchemaService).GetSchema
+     0.03s 0.044%  9.23%      5.94s  8.64%  runtime.systemstack
+     0.13s  0.19%  9.42%      5.11s  7.44%  github.com/conduitio/conduit-schema-registry.(*SchemaRegistry).CreateSchema
+     0.31s  0.45%  9.87%      4.85s  7.06%  runtime.newobject
+     0.11s  0.16% 10.03%      4.52s  6.58%  github.com/conduitio/conduit-schema-registry.(*SchemaRegistry).SchemaBySubjectVersion
+     0.12s  0.17% 10.20%      4.28s  6.23%  github.com/conduitio/conduit-connector-postgres/source/schema.avroExtractor.ExtractLogrepl
+     0.12s  0.17% 10.38%      4.14s  6.02%  encoding/json.Marshal
+     0.01s 0.015% 10.39%      4.14s  6.02%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).handleUpdate
+     0.05s 0.073% 10.46%      3.93s  5.72%  github.com/conduitio/conduit-schema-registry.digestSchema
+     0.01s 0.015% 10.48%      3.92s  5.70%  github.com/conduitio/conduit-connector-postgres.(*Destination).Write
+     0.07s   0.1% 10.58%      3.79s  5.52%  github.com/conduitio/conduit-connector-sdk.(*sourceWithEncoding).encodeKey
+         0     0% 10.58%      3.76s  5.47%  github.com/conduitio/conduit-connector-postgres/source/logrepl/internal.(*Subscription).receiveMessage
+     0.11s  0.16% 10.74%      3.64s  5.30%  github.com/conduitio/conduit-connector-sdk.(*sourceWithEncoding).encodePayload
+     0.04s 0.058% 10.80%      3.63s  5.28%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).buildPosition
+     0.23s  0.33% 11.13%      3.61s  5.25%  github.com/conduitio/conduit-connector-postgres/source/schema.(*avroExtractor).Extract
+     0.08s  0.12% 11.25%      3.52s  5.12%  github.com/conduitio/conduit-connector-sdk.(*destinationWithSchemaExtraction).decodePayload
+     0.04s 0.058% 11.31%      3.51s  5.11%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCHandler).buildPositionAt
+         0     0% 11.31%      3.49s  5.08%  runtime.gcBgMarkWorker
+         0     0% 11.31%      3.45s  5.02%  runtime.gcBgMarkWorker.func2
+     0.01s 0.015% 11.32%      3.44s  5.01%  runtime.gcDrain
+     0.43s  0.63% 11.95%      3.28s  4.77%  runtime.growslice
+     0.72s  1.05% 12.99%      3.24s  4.71%  runtime.mallocgcSmallNoscan
+     0.03s 0.044% 13.04%      3.21s  4.67%  encoding/json.(*encodeState).marshal

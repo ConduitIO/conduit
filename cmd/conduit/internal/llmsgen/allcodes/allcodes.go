@@ -56,6 +56,7 @@ import (
 	// var initializers. Keep this list in sync with every codes.go (or
 	// equivalently named file) in the engine — TestAllCodesComplete in
 	// ../llmsgen fails the build if it drifts.
+	_ "github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/deploy"
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/generate"
 	_ "github.com/conduitio/conduit/cmd/conduit/internal/generate/provider"

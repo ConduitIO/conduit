@@ -17,13 +17,16 @@ package cecdysis
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal/ui"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // Result is the shared --json envelope every v0.17 "CLI as product" command
@@ -205,6 +208,13 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 
+	// SilenceErrors also silences what cobra rejects before RunE ever runs:
+	// flag parse errors, Args validation, PreRunE (ecdysis parses positional
+	// arguments and config there) and missing required flags. Route each one
+	// through renderResultError as a coded usage error, or the command exits
+	// with no output at all (#3086).
+	decorateUsageErrors(cmd, v)
+
 	old := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		asJSON, _ := cmd.Flags().GetBool("json")
@@ -272,6 +282,114 @@ func (CommandWithResultDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *cobra.Comman
 	}
 
 	return nil
+}
+
+// decorateUsageErrors makes every error cobra raises before RunE render like
+// an ExecuteWithResult failure: the envelope under --json, a finding on
+// stderr otherwise. An error that already carries a conduiterr code keeps
+// it, and a config-file parse error stays uncoded (see isConfigParseError);
+// anything else becomes CodeInvalidUsage, so the process exits 2
+// (validation) instead of 1.
+func decorateUsageErrors(cmd *cobra.Command, v CommandWithResult) {
+	fail := func(cmd *cobra.Command, err error, asJSON bool) error {
+		if !isConfigParseError(err) {
+			err = usageError(cmd, err)
+		}
+		renderResultError(cmd, v.ResultCommand(), err, asJSON)
+		return err
+	}
+
+	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		if cerrors.Is(err, pflag.ErrHelp) {
+			return err
+		}
+		return fail(cmd, err, jsonRequested(cmd))
+	})
+
+	if oldArgs := cmd.Args; oldArgs != nil {
+		cmd.Args = func(cmd *cobra.Command, args []string) error {
+			if err := oldArgs(cmd, args); err != nil {
+				return fail(cmd, err, jsonRequested(cmd))
+			}
+			return nil
+		}
+	}
+
+	oldPreRunE := cmd.PreRunE
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if oldPreRunE != nil {
+			if err := oldPreRunE(cmd, args); err != nil {
+				return fail(cmd, err, jsonRequested(cmd))
+			}
+		}
+		// cobra checks these right after PreRunE, and its errors would be
+		// silenced too. Checking them here first gives the same verdict
+		// with our rendering; cobra's own check then passes.
+		if err := cmd.ValidateRequiredFlags(); err != nil {
+			return fail(cmd, err, jsonRequested(cmd))
+		}
+		if err := cmd.ValidateFlagGroups(); err != nil {
+			return fail(cmd, err, jsonRequested(cmd))
+		}
+		return nil
+	}
+}
+
+// ecdysisConfigParseErrPrefix starts the error ecdysis.ParseConfig returns
+// when the config file or environment can't be read (ecdysis v0.6.0,
+// config.go). It has no sentinel to match instead.
+const ecdysisConfigParseErrPrefix = "error parsing config"
+
+// isConfigParseError reports whether err is ecdysis's config-parse error from
+// PreRunE. That is a bad config file, not a bad command line, so it is
+// rendered but not labeled CodeInvalidUsage; it keeps its existing (uncoded)
+// classification.
+func isConfigParseError(err error) bool {
+	return strings.HasPrefix(err.Error(), ecdysisConfigParseErrPrefix)
+}
+
+// usageError returns err unchanged when it already carries a conduiterr
+// code, and otherwise wraps it as CodeInvalidUsage with a pointer to the
+// command's help.
+func usageError(cmd *cobra.Command, err error) error {
+	if _, ok := conduiterr.Get(err); ok {
+		return err
+	}
+	ce := conduiterr.Wrap(CodeInvalidUsage, err.Error(), err)
+	ce.Suggestion = fmt.Sprintf("run '%s --help' for usage", cmd.CommandPath())
+	return ce
+}
+
+// rawArgs returns the process's command-line arguments. A var so tests can
+// substitute the arguments they pass to cobra.
+var rawArgs = func() []string { return os.Args[1:] }
+
+// jsonRequested reports whether --json was given. A flag parse error stops
+// pflag at the bad flag, so a --json after it was never parsed; in that case
+// the raw arguments are scanned for it, up to a "--" terminator, with the
+// last occurrence winning as it would in pflag.
+func jsonRequested(cmd *cobra.Command) bool {
+	if f := cmd.Flags().Lookup("json"); f != nil && f.Changed {
+		on, _ := cmd.Flags().GetBool("json")
+		return on
+	}
+	on := false
+	for _, a := range rawArgs() {
+		if a == "--" {
+			break
+		}
+		name, val, hasVal := strings.Cut(a, "=")
+		if name != "--json" {
+			continue
+		}
+		if !hasVal {
+			on = true
+			continue
+		}
+		b, err := strconv.ParseBool(val)
+		on = err == nil && b
+	}
+	return on
 }
 
 // renderResultError renders a HARD command failure: the single JSON object
