@@ -171,7 +171,7 @@ func (u *OpenCDCProcessor) unmarshalOperation(structData opencdc.StructuredData)
 		operation = opType
 	case string:
 		if err := operation.UnmarshalText([]byte(opType)); err != nil {
-			return operation, cerrors.Errorf("invalid operation %q", opType)
+			return operation, cerrors.Errorf("invalid operation (a %d byte value that is not a known operation)", len(opType))
 		}
 	default:
 		return operation, cerrors.Errorf("expected a opencdc.Operation or a string, got %T", opType)

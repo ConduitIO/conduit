@@ -209,7 +209,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Position: []byte("test position"),
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("failed unmarshalling record: failed unmarshalling operation: invalid operation \"foobar\""),
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling operation: invalid operation (a 6 byte value that is not a known operation)"),
 			},
 		},
 		{
