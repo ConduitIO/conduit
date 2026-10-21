@@ -137,6 +137,21 @@ func (r *admissionRun) runs() []*runnablePipeline {
 	return append([]*runnablePipeline(nil), r.published...)
 }
 
+// waitRunsDead waits, bounded, until every run this test published has fully
+// exited, then the caller can assert none is alive. WaitPipeline is not that
+// barrier: when it finds the pipeline already removed from runningPipelines it
+// returns the recorded terminal error at once, while the run's tomb goroutine
+// is still returning from its cleanup. A test that asserts "nothing alive"
+// right after WaitPipeline loses that race under load (CI job 116568462627).
+func (r *admissionRun) waitRunsDead(t *testing.T) {
+	t.Helper()
+	for _, rp := range r.runs() {
+		if rp.t != nil {
+			waitClosed(t, rp.t.Dead(), "a run to exit after WaitPipeline returned")
+		}
+	}
+}
+
 func (r *admissionRun) alive() []*runnablePipeline {
 	var out []*runnablePipeline
 	for _, rp := range r.runs() {
@@ -213,6 +228,7 @@ func TestServiceLifecycle_Recovery_ExternalStartRacesPendingRestart(t *testing.T
 
 	is.NoErr(r.ls.Stop(ctx, r.pl.ID, false))
 	is.NoErr(r.ls.WaitPipeline(r.pl.ID))
+	r.waitRunsDead(t)
 	is.Equal(len(r.alive()), 0)
 	is.Equal(r.pl.GetStatus(), pipeline.StatusUserStopped)
 }
@@ -291,6 +307,7 @@ func TestServiceLifecycle_StopWhileStarting_StopsRun(t *testing.T) {
 	case <-time.After(terminalStatusGuard):
 		t.Fatal("the run stopped while starting did not finish")
 	}
+	r.waitRunsDead(t)
 	is.Equal(len(r.alive()), 0)
 	is.Equal(r.pl.GetStatus(), pipeline.StatusUserStopped)
 	is.Equal(len(r.failures), 0)

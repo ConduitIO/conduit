@@ -879,8 +879,31 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
+// checkConnectorsStartable refuses a start before any node is built if one of
+// the pipeline's connectors must not start (connector.Instance.CheckStartable,
+// #3137). Checking while building would be too late: processors built before
+// the refused connector stay marked as running, so they could not be deleted,
+// and the operator's remedy (delete and recreate) would fail.
+func (s *Service) checkConnectorsStartable(ctx context.Context, pl *pipeline.Instance) error {
+	for _, id := range pl.ConnectorIDs {
+		instance, err := s.connectors.Get(ctx, id)
+		if err != nil {
+			return cerrors.Errorf("could not fetch connector: %w", err)
+		}
+		if err := instance.CheckStartable(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // buildsNodes will build new nodes that will be assigned to the pipeline.Instance.
 func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stream.Node, error) {
+	// Invariant 3 (#3137): refuse before anything is built.
+	if err := s.checkConnectorsStartable(ctx, pl); err != nil {
+		return nil, err
+	}
+
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
