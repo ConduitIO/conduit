@@ -441,18 +441,10 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 	plsMock.EXPECT().
 		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, conn.ID).
 		Return(nil, wantErr)
-	// rollback
+	// rollback: the same instance is restored, not created again (#3137)
 	consMock.EXPECT().
-		Create(
-			gomock.AssignableToTypeOf(ctxType),
-			conn.ID,
-			conn.Type,
-			conn.Plugin,
-			pl.ID,
-			conn.Config,
-			connector.ProvisionTypeAPI,
-		).
-		Return(conn, nil)
+		Restore(gomock.AssignableToTypeOf(ctxType), conn).
+		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	err := orc.Connectors.Delete(ctx, conn.ID)

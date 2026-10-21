@@ -148,4 +148,10 @@ jobs:
         # concurrent producer/ack goroutines (chaosPlugin.produceLoop/
         # ackLoop in upstream.go) that a data race would otherwise let slip
         # through silently.
-        run: go test -race -v -count=3 -shuffle=on ./tests/chaos/...
+        #
+        # -timeout is explicit because go test's 10m default no longer fits: the
+        # package took about 440s in a measured raced run (the fan-out
+        # deep-clone case is about 20s of that), too close to 600s for a slower
+        # runner. 20m leaves headroom. The job name above is a required
+        # status context and must not change.
+        run: go test -race -v -count=3 -shuffle=on -timeout 20m ./tests/chaos/...

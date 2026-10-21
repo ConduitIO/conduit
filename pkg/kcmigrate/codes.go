@@ -99,6 +99,13 @@ var (
 	// over; the note says where the pipeline starts instead. Blocking:
 	// records are copied again or skipped.
 	CodeOffsetsNotMigrated = conduiterr.Register("kc.offsets_not_migrated", codes.InvalidArgument)
+	// CodeConsumerGroupShared: a connector-level note that a migrated sink's
+	// Kafka source reads in the consumer group the Kafka Connect sink
+	// commits its offsets to, so the Kafka Connect connector must be stopped
+	// before the pipeline starts. Not blocking: two live consumers in one
+	// group split the partitions between them, which delays records and
+	// duplicates none, and the operator is the only one who can stop it.
+	CodeConsumerGroupShared = conduiterr.Register("kc.consumer_group_shared", codes.InvalidArgument)
 	// CodeSecretPlaintext: a connector-level note that the input holds a
 	// secret as a literal value. The value is not copied anywhere, but the
 	// input file is itself a leak.
