@@ -17,6 +17,7 @@ package grpcutil
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,6 +64,22 @@ func TestWebSocket_TraceLogDoesNotContainMessage(t *testing.T) {
 
 	out := buf.String()
 	is.True(strings.Contains(out, "[write] scanned message"))
+	is.True(!strings.Contains(out, secret))
+}
+
+// TestWebSocket_FailedWriteLogDoesNotContainMessage: when writing to a client
+// that went away fails, the warning carries the message size only.
+func TestWebSocket_FailedWriteLogDoesNotContainMessage(t *testing.T) {
+	is := is.New(t)
+	const secret = "record-SECRET-4711"
+	var buf syncBuffer
+	p := newWebSocketProxy(context.Background(), http.NotFoundHandler(), log.New(zerolog.New(&buf).Level(zerolog.WarnLevel)), nil)
+
+	p.logWriteFailure(context.Background(), []byte(secret), io.ErrClosedPipe)
+
+	out := buf.String()
+	is.True(strings.Contains(out, "failed writing websocket message"))
+	is.True(strings.Contains(out, `"message_size":18`))
 	is.True(!strings.Contains(out, secret))
 }
 
