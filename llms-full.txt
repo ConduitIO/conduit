@@ -1127,7 +1127,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
-### s3 (v0.11.1)
+### s3 (v0.11.2)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1234,6 +1234,21 @@ The connector goes through two modes.
     when newer objects were seen in the meantime (multipart uploads carry
     their initiation time);
   * replica buckets whose replication lag exceeds `lookbackPeriod`;
+  * a multipart upload that shares its initiation second with another object
+    of the same key (a version already listed, or a second upload) is not
+    tracked: it holds the settled cut instead (log code
+    `s3.source.cut_held_same_second`, a warning every 15 minutes once the
+    hold is older than that). New objects are delivered early until
+    `cdc.maxEarlyObjects` is full and the rest wait, for as long as the
+    upload runs, up to `cdc.maxPendingUploadAge`; after that the hold is
+    released and the upload is tracked. Nothing is lost, only latency
+    grows;
+  * a multipart upload that is older than `cdc.maxPendingUploadAge` when
+    the source first sees it, and shares its second with nothing, is not
+    tracked (log code `s3.source.stale_upload_ignored`, error level): if it
+    completes later its object can be missed. Abort such uploads, or add an
+    AbortIncompleteMultipartUpload lifecycle rule with DaysAfterInitiation
+    at most `cdc.maxPendingUploadAge`;
   * an identical re-put of an object within the same second is not seen as a
     change;
   * in an unversioned bucket an overwrite is reported as a create (there is
@@ -1475,6 +1490,7 @@ Author: Meroxa, Inc.
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
+| `cli.invalid_usage` | InvalidArgument | CodeInvalidUsage is raised when a command is invoked wrongly, before it does any work: an unknown or malformed flag, a missing or extra positional argument, a required flag left out, or flag values that fail to parse. It is distinct from common.invalid_argument because the fix is always to change the command line (see the command's --help), not the input it reads. InvalidArgument puts it in the validation exit bucket (exit 2, pkg/conduit/exitcode). |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |

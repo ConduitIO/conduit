@@ -1,0 +1,2 @@
+test,tool,cpu-percentage[cdcparity-postgres],memory-usage[cdcparity-postgres],cpu-percentage[cdcparity-loader],memory-usage[cdcparity-loader]
+cdc-parity,conduit-pg,125.47,1449.60,8.81,8.46
