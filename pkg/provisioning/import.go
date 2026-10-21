@@ -264,6 +264,7 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 			pipelineID:             pipelineID,
 			connectorService:       ab.connectorService,
 			connectorPluginService: ab.connectorPluginService,
+			deleted:                &deletedConnector{},
 		}}
 	}
 
@@ -298,6 +299,7 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 			pipelineID:             pipelineID,
 			connectorService:       ab.connectorService,
 			connectorPluginService: ab.connectorPluginService,
+			deleted:                &deletedConnector{},
 		},
 		createConnectorAction{
 			cfg:                    newConfig,

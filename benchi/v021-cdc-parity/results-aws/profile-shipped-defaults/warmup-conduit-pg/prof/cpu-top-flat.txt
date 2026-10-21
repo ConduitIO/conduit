@@ -1,0 +1,39 @@
+File: conduit
+Build ID: 43cb2a080a989ca6e2e26ec24854c5f09edca1ef
+Type: cpu
+Time: 2026-10-20 00:35:01 PDT
+Duration: 76.61s, Total samples = 71.62s (93.48%)
+Showing nodes accounting for 43.90s, 61.30% of 71.62s total
+Dropped 821 nodes (cum <= 0.36s)
+Showing top 30 nodes out of 258
+      flat  flat%   sum%        cum   cum%
+    17.60s 24.57% 24.57%     17.60s 24.57%  internal/runtime/syscall/linux.Syscall6
+     8.95s 12.50% 37.07%      8.95s 12.50%  runtime.futex
+     1.66s  2.32% 39.39%      5.49s  7.67%  runtime.selectgo
+     1.41s  1.97% 41.36%      1.41s  1.97%  runtime.nextFreeFast (inline)
+     1.27s  1.77% 43.13%      1.27s  1.77%  runtime.write1
+     1.18s  1.65% 44.78%      1.18s  1.65%  runtime.usleep
+     0.98s  1.37% 46.15%      1.25s  1.75%  runtime.lock2
+     0.92s  1.28% 47.43%         1s  1.40%  runtime.unlock2
+     0.77s  1.08% 48.51%      3.26s  4.55%  runtime.stealWork
+     0.71s  0.99% 49.50%      0.71s  0.99%  runtime.nanotime (inline)
+     0.67s  0.94% 50.43%      0.73s  1.02%  runtime.(*mspan).writeHeapBitsSmall
+     0.64s  0.89% 51.33%      1.49s  2.08%  runtime.sellock
+     0.58s  0.81% 52.14%      3.65s  5.10%  runtime.mallocgcSmallScanNoHeader
+     0.56s  0.78% 52.92%      0.56s  0.78%  runtime.memmove
+     0.54s  0.75% 53.67%      0.54s  0.75%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+     0.53s  0.74% 54.41%      0.53s  0.74%  runtime.memclrNoHeapPointers
+     0.50s   0.7% 55.11%      5.54s  7.74%  runtime.mallocgc
+     0.50s   0.7% 55.81%      1.71s  2.39%  runtime.runqgrab
+     0.49s  0.68% 56.49%      0.57s   0.8%  internal/runtime/maps.(*Iter).Next
+     0.47s  0.66% 57.15%     14.39s 20.09%  runtime.findRunnable
+     0.39s  0.54% 57.69%      4.10s  5.72%  runtime.netpoll
+     0.39s  0.54% 58.24%      1.14s  1.59%  strconv.appendQuotedWith
+     0.36s   0.5% 58.74%      0.64s  0.89%  strconv.appendEscapedRune
+     0.32s  0.45% 59.19%      0.67s  0.94%  encoding/json.checkValid
+     0.31s  0.43% 59.62%     19.19s 26.79%  runtime.schedule
+     0.27s  0.38% 60.00%      0.43s   0.6%  runtime.chanrecv
+     0.25s  0.35% 60.35%      2.01s  2.81%  fmt.(*pp).doPrintf
+     0.24s  0.34% 60.68%      0.37s  0.52%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.23s  0.32% 61.00%      5.51s  7.69%  github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive
+     0.21s  0.29% 61.30%      2.81s  3.92%  runtime.newobject

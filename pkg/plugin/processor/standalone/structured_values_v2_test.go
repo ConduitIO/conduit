@@ -56,7 +56,7 @@ func TestWASMProcessor_StructuredValuesV2_RoundTripWideInt(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, EchoProcessorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
+	underTest, err := newWASMProcessor(ctx, TestRuntime, compileForTest(t, EchoProcessorBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
 	is.NoErr(err)
 
 	// Specification reads the guest's capability. The echo guest is built
@@ -92,7 +92,7 @@ func TestWASMProcessor_OldProcessor_ReceivesV1AndGetsRefusal(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, OldEchoProcessorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
+	underTest, err := newWASMProcessor(ctx, TestRuntime, compileForTest(t, OldEchoProcessorBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Test(t))
 	is.NoErr(err)
 
 	// The old guest's Specify.Response lacks structured_values_v2, so the host
