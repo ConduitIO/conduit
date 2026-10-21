@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -230,4 +231,136 @@ func TestAPIToken_NonLoopbackWithTokenServes(t *testing.T) {
 	is.Equal(code, 401)
 	code, _ = a.do(t, "GET", "/v1/pipelines", "", bearer(testToken))
 	is.Equal(code, 200)
+}
+
+// A browser cannot set Authorization on a WebSocket, so the UI sends the token
+// in Sec-WebSocket-Protocol. These tests drive that carrier against a real
+// Runtime.
+func TestAPIToken_WebSocketSubprotocolCarrier(t *testing.T) {
+	a := startSecureAPI(t, withToken)
+	target := "ws://" + a.httpAddr + "/v1/connectors/none/inspect"
+
+	dial := func(protocols ...string) (*websocket.Conn, int) {
+		d := websocket.Dialer{Subprotocols: protocols}
+		conn, resp, err := d.Dial(target, nil)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+		if err != nil {
+			if resp == nil {
+				t.Fatalf("dial failed without a response: %v", err)
+			}
+			return nil, resp.StatusCode
+		}
+		return conn, resp.StatusCode
+	}
+
+	t.Run("right token upgrades and the server selects the plain protocol", func(t *testing.T) {
+		is := is.New(t)
+		conn, code := dial("conduit", apisec.EncodeWebSocketToken(testToken))
+		is.Equal(code, 101)
+		is.True(conn != nil)
+		is.Equal(conn.Subprotocol(), "conduit") // never the token-bearing one
+		_ = conn.Close()
+	})
+	t.Run("wrong token", func(t *testing.T) {
+		is := is.New(t)
+		conn, code := dial("conduit", apisec.EncodeWebSocketToken("wrong-token-wrong-token"))
+		is.True(conn == nil)
+		is.Equal(code, 401)
+	})
+	t.Run("no token", func(t *testing.T) {
+		is := is.New(t)
+		conn, code := dial("conduit")
+		is.True(conn == nil)
+		is.Equal(code, 401)
+	})
+	t.Run("token in the query string is not accepted", func(t *testing.T) {
+		is := is.New(t)
+		d := websocket.Dialer{Subprotocols: []string{"conduit"}}
+		conn, resp, err := d.Dial(target+"?access_token="+testToken+"&token="+testToken, nil)
+		is.True(err != nil)
+		is.True(conn == nil)
+		is.Equal(resp.StatusCode, 401)
+		resp.Body.Close()
+	})
+	t.Run("a cross-origin page holding the token is still refused", func(t *testing.T) {
+		is := is.New(t)
+		d := websocket.Dialer{Subprotocols: []string{"conduit", apisec.EncodeWebSocketToken(testToken)}}
+		conn, resp, err := d.Dial(target, map[string][]string{"Origin": {"http://evil.example"}})
+		is.True(err != nil)
+		is.True(conn == nil)
+		is.Equal(resp.StatusCode, 403)
+		resp.Body.Close()
+	})
+	t.Run("same-origin page with the token upgrades", func(t *testing.T) {
+		is := is.New(t)
+		d := websocket.Dialer{Subprotocols: []string{"conduit", apisec.EncodeWebSocketToken(testToken)}}
+		conn, resp, err := d.Dial(target, map[string][]string{"Origin": {"http://" + a.httpAddr}})
+		is.NoErr(err)
+		is.Equal(resp.StatusCode, 101)
+		resp.Body.Close()
+		_ = conn.Close()
+	})
+}
+
+// Brute-forcing the token must be visible: every refusal increments a counter
+// per code (served on the authenticated /metrics) and the WARN log is rate
+// limited rather than one line per guess.
+func TestAPIToken_RejectionsAreCountedAndWarnIsRateLimited(t *testing.T) {
+	is := is.New(t)
+	a := startSecureAPI(t, withToken)
+
+	count := func() float64 {
+		_, body := a.do(t, "GET", "/metrics", "", bearer(testToken))
+		for _, line := range strings.Split(body, "\n") {
+			if strings.HasPrefix(line, `conduit_api_rejected_requests_total{code="api.unauthenticated"}`) {
+				var v float64
+				_, err := fmt.Sscanf(line[strings.LastIndex(line, " ")+1:], "%g", &v)
+				is.NoErr(err)
+				return v
+			}
+		}
+		t.Fatalf("counter not exported:\n%s", body)
+		return 0
+	}
+	before := count()
+	const attempts = 40
+	for i := 0; i < attempts; i++ {
+		code, _ := a.do(t, "GET", "/v1/pipelines", "", bearer(fmt.Sprintf("guess-%02d-guess-guess-guess", i)))
+		is.Equal(code, 401)
+	}
+	is.Equal(count()-before, float64(attempts))
+
+	// Series carry only the code label, never request data.
+	_, body := a.do(t, "GET", "/metrics", "", bearer(testToken))
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "conduit_api_rejected_requests_total{") {
+			is.True(strings.HasPrefix(line, `conduit_api_rejected_requests_total{code="api.`))
+			is.True(!strings.Contains(line, "guess"))
+		}
+	}
+
+	warns := strings.Count(a.logs.String(), "rejected HTTP request: missing or invalid API token")
+	is.True(warns >= 1 && warns <= 3) // 40 attempts, a handful of lines at most
+	is.True(!strings.Contains(a.logs.String(), "guess-"))
+	is.True(!strings.Contains(a.logs.String(), testToken))
+}
+
+// The UI must be able to load without a token (it contains no instance data and
+// is what prompts for one) while everything it calls stays gated.
+func TestAPIToken_UILoadsWithoutTokenAndPromptsViaScript(t *testing.T) {
+	is := is.New(t)
+	a := startSecureAPI(t, withToken)
+
+	code, body := a.do(t, "GET", "/", "", nil)
+	is.Equal(code, 200)
+	is.True(strings.Contains(body, `<script src="/conduit-auth.js"></script>`))
+
+	code, body = a.do(t, "GET", "/conduit-auth.js", "", nil)
+	is.Equal(code, 200)
+	is.True(strings.Contains(body, "sessionStorage"))
+
+	code, _ = a.do(t, "GET", "/v1/pipelines", "", nil)
+	is.Equal(code, 401)
 }

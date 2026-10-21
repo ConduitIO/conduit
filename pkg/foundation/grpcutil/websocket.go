@@ -80,6 +80,9 @@ func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.Ctx
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
+		// A browser that offers subprotocols (the UI carries its API token in
+		// one) requires the server to select one it offered. Never the carrier.
+		Subprotocols: []string{"conduit"},
 	}
 	// A websocket upgrade never passes through the HTTP CORS middleware, so the
 	// origin allowlist must be enforced here or gorilla's same-origin default

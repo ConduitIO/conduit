@@ -23,10 +23,10 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
 const (
@@ -110,14 +110,14 @@ func bearerToken(authz string) (string, bool) {
 
 // Authenticator enforces a single bearer token.
 type Authenticator struct {
-	token  string
-	logger log.CtxLogger
+	token string
+	rej   *Rejections
 }
 
 // NewAuthenticator returns an Authenticator for token. token must be
 // non-empty; callers decide whether authentication is enabled at all.
-func NewAuthenticator(token string, logger log.CtxLogger) *Authenticator {
-	return &Authenticator{token: token, logger: logger.WithComponent("apisec.Authenticator")}
+func NewAuthenticator(token string, rej *Rejections) *Authenticator {
+	return &Authenticator{token: token, rej: rej}
 }
 
 func unauthenticatedError() error {
@@ -137,10 +137,17 @@ func (a *Authenticator) HTTP(next http.Handler) http.Handler {
 			return
 		}
 		presented, ok := bearerToken(r.Header.Get("Authorization"))
+		if isWebSocketUpgrade(r) {
+			// Browsers cannot set Authorization on a WebSocket; the UI carries
+			// the token as a subprotocol instead. It is always removed from the
+			// request so it is never forwarded or logged.
+			if wsToken, wsOK := takeWebSocketToken(r); !ok {
+				presented, ok = wsToken, wsOK
+			}
+		}
 		if !ok || !tokensEqual(presented, a.token) {
 			// Never log the presented credential.
-			a.logger.Warn(r.Context()).Str("remote_addr", r.RemoteAddr).Str("method", r.Method).
-				Msg("rejected HTTP request: missing or invalid API token")
+			a.rej.Record(r.Context(), CodeUnauthenticated, r.RemoteAddr, "rejected HTTP request: missing or invalid API token")
 			w.Header().Set("WWW-Authenticate", `Bearer realm="conduit"`)
 			writeHTTPError(w, http.StatusUnauthorized, unauthenticatedError())
 			return
@@ -169,7 +176,7 @@ func (a *Authenticator) checkGRPC(ctx context.Context, fullMethod string) error 
 			return nil
 		}
 	}
-	a.logger.Warn(ctx).Str("method", fullMethod).Msg("rejected gRPC request: missing or invalid API token")
+	a.rej.Record(ctx, CodeUnauthenticated, remoteOf(ctx), "rejected gRPC request: missing or invalid API token")
 	return toStatus(unauthenticatedError()).Err()
 }
 
@@ -210,3 +217,10 @@ func (c bearerCreds) GetRequestMetadata(context.Context, ...string) (map[string]
 }
 
 func (bearerCreds) RequireTransportSecurity() bool { return false }
+
+func remoteOf(ctx context.Context) string {
+	if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+		return p.Addr.String()
+	}
+	return ""
+}
