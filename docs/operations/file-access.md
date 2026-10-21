@@ -35,7 +35,7 @@ is checked through its nearest existing parent; a dangling symlink is followed t
 relative paths are all judged on where they really point. `${VAR}` in a path is expanded first (it must
 be in `env.allow`), and the expanded value is what is checked. The connector receives the resolved path.
 
-The check runs when the connector or processor is configured. It cannot stop a local user who can
+The check runs when the connector or processor is configured, and on validation requests (`POST /v1/connectors/validate` and connector creation) for a literal `path`, so a validation call cannot be used to probe which files exist on the host. A `path` that still holds a `${VAR}` reference is checked after expansion. It cannot stop a local user who can
 modify the allowed directory from swapping a directory for a symlink afterwards, so keep allowed
 directories writable by the Conduit user only.
 

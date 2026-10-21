@@ -570,6 +570,8 @@ func createServices(r *Runtime) error {
 		return cerrors.Errorf("invalid processor egress config: %w", err)
 	}
 
+	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy}
+
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
 		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry,
@@ -607,11 +609,12 @@ func createServices(r *Runtime) error {
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
 		),
 		tokenService,
+		conn_plugin.WithSettingsGuard(settingsResolver.CheckSettings),
 	)
 
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister,
-		connector.WithSettingsResolver(engineSettingsResolver{env: envAllow, files: filePolicy}))
+		connector.WithSettingsResolver(settingsResolver))
 
 	// Engine-level host-egress ceiling (processors.egress.*). Its default is
 	// deny-all, so on a stock instance this passes a closed ceiling and every
