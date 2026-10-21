@@ -68,6 +68,9 @@ type Instance struct {
 	logger    log.CtxLogger
 	persister *Persister
 	inspector *inspector.Inspector
+	// settingsResolver vets and expands the stored settings right before the
+	// plugin is configured. Set by the Service; nil resolves no ${VAR}.
+	settingsResolver SettingsResolver
 
 	// connector stores the reference to a running connector. If the field is
 	// nil the connector is not running.

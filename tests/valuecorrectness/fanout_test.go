@@ -159,6 +159,9 @@ pipelines:
 
 	logs := &lockedBuffer{}
 	cfg := conduit.DefaultConfigWithBasePath(dir)
+	// The pipelines read and write files under dir; the file connector is
+	// confined to operator-allowed directories (GHSA-m3mw-fpw8-w765).
+	cfg.Connectors.File.AllowedDirs = []string{dir}
 	cfg.DB.Type = conduit.DBTypeInMemory
 	cfg.API.Enabled = false
 	cfg.Pipelines.Path = pipelinesDir

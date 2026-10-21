@@ -547,9 +547,35 @@ func createServices(r *Runtime) error {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
 	}
 
+	// Settings hardening (GHSA-m3mw-fpw8-w765). All of it is operator config,
+	// validated in Config.Validate and rebuilt here as the single source of
+	// truth; an error fails closed.
+	envAllow, err := r.Config.EnvAllowlist()
+	if err != nil {
+		return cerrors.Errorf("invalid env.allow config: %w", err)
+	}
+	filePolicy, err := r.Config.fileConnectorPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", FileAllowedDirsKey, err)
+	}
+	if err := r.Config.ensureDefaultFilesDir(); err != nil {
+		r.logger.Warn(context.Background()).Err(err).Msg("could not create the default directory of the file connector")
+	}
+	jsFiles, err := r.Config.javascriptFileAccess()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", JavaScriptAllowedDirsKey, err)
+	}
+	dialGuard, err := r.Config.builtinDialGuard()
+	if err != nil {
+		return cerrors.Errorf("invalid processor egress config: %w", err)
+	}
+
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry),
+		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry,
+			proc_builtin.WithDialGuard(dialGuard),
+			proc_builtin.WithJavaScriptFileAccess(jsFiles),
+		),
 		standaloneReg,
 	)
 
@@ -584,7 +610,8 @@ func createServices(r *Runtime) error {
 	)
 
 	plService := pipeline.NewService(r.logger, r.DB)
-	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
+	connService := connector.NewService(r.logger, r.DB, r.connectorPersister,
+		connector.WithSettingsResolver(engineSettingsResolver{env: envAllow, files: filePolicy}))
 
 	// Engine-level host-egress ceiling (processors.egress.*). Its default is
 	// deny-all, so on a stock instance this passes a closed ceiling and every
@@ -596,7 +623,7 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("invalid processor egress config: %w", err)
 	}
-	procService := processor.NewService(r.logger, r.DB, procPluginService, processor.WithEgressCeiling(egressCeiling))
+	procService := processor.NewService(r.logger, r.DB, procPluginService, processor.WithEgressCeiling(egressCeiling), processor.WithEnvAllowlist(envAllow))
 
 	// Error recovery configuration. Shared by both lifecycle implementations
 	// (the v2/funnel service reuses the lifecycle.ErrRecoveryCfg type) so an

@@ -18,7 +18,9 @@ package custom
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -26,6 +28,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
 )
@@ -63,8 +66,22 @@ type javascriptConfig struct {
 	// The path to a .js file containing the processor code.
 	ScriptPath string `json:"script.path"`
 }
+
+// FileAccess is the operator's policy for the files a JavaScript processor may
+// read. The zero value allows nothing: script.path is refused and require() is
+// not defined (GHSA-m3mw-fpw8-w765).
+type FileAccess struct {
+	// ScriptDirs are the directories script.path may point into.
+	ScriptDirs *pathpolicy.Policy
+	// RequireDirs are the directories require() may load modules from. When it
+	// has no directory, require() is not installed in the script's runtime.
+	RequireDirs *pathpolicy.Policy
+}
+
 type JavascriptProcessor struct {
 	sdk.UnimplementedProcessor
+
+	files FileAccess
 
 	// src is the JavaScript code that will be executed
 	src string
@@ -76,6 +93,11 @@ type JavascriptProcessor struct {
 func NewJavascriptProcessor(logger log.CtxLogger) *JavascriptProcessor {
 	return &JavascriptProcessor{logger: logger}
 }
+
+// SetFileAccess sets the operator's file access policy. It is called by the
+// built-in registry before Configure. Without it the processor can read no
+// file and has no require().
+func (p *JavascriptProcessor) SetFileAccess(fa FileAccess) { p.files = fa }
 
 func (p *JavascriptProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
@@ -112,7 +134,14 @@ func (p *JavascriptProcessor) Configure(ctx context.Context, c config.Config) er
 	case cfg.Script != "":
 		p.src = cfg.Script
 	case cfg.ScriptPath != "":
-		file, err := os.ReadFile(cfg.ScriptPath)
+		// Invariant (security boundary): script.path is API-influenced, so it is
+		// confined to the operator's script directories after symlink
+		// resolution, and the resolved path is what gets read.
+		resolved, err := p.files.ScriptDirs.Check("settings.script.path", cfg.ScriptPath)
+		if err != nil {
+			return err
+		}
+		file, err := os.ReadFile(resolved)
 		if err != nil {
 			return cerrors.Errorf("error reading script from path %v: %w", cfg.ScriptPath, err)
 		}
@@ -177,7 +206,13 @@ func (p *JavascriptProcessor) Teardown(context.Context) error {
 
 func (p *JavascriptProcessor) newRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
 	rt := goja.New()
-	require.NewRegistry().Enable(rt)
+	// Invariant (security boundary): require() is only defined when the
+	// operator configured a directory for it, and its loader refuses every path
+	// outside that directory (absolute paths, "../", symlink escapes) and
+	// source-map reads alike. The default loader would read any file.
+	if len(p.files.RequireDirs.Dirs()) > 0 {
+		require.NewRegistry(require.WithLoader(p.files.requireLoader)).Enable(rt)
+	}
 
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
@@ -340,4 +375,24 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 			After:  convertData(jsr.Payload.After),
 		},
 	}, nil
+}
+
+// requireLoader is the require() source loader. A path outside RequireDirs is a
+// hard error (not "module not found", which the resolver would swallow and keep
+// searching).
+func (fa FileAccess) requireLoader(path string) ([]byte, error) {
+	resolved, err := fa.RequireDirs.Check("processors.javascript.allowed-dirs", filepath.FromSlash(path))
+	if err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(resolved)
+	switch {
+	case cerrors.Is(err, fs.ErrNotExist):
+		return nil, require.ModuleFileDoesNotExistError
+	case err != nil:
+		return nil, err
+	case fi.IsDir():
+		return nil, require.ModuleFileDoesNotExistError
+	}
+	return os.ReadFile(resolved)
 }

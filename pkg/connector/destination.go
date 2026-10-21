@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -345,7 +344,7 @@ func (d *Destination) preparePluginCall() (func(), error) {
 
 func (d *Destination) configure(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("configuring destination connector plugin")
-	settings, err := env.ResolveSettings(d.Instance.Config.Settings)
+	settings, err := d.Instance.resolveSettings(d.Instance.Config.Settings)
 	if err != nil {
 		return cerrors.Errorf("could not resolve destination connector settings: %w", err)
 	}

@@ -22,11 +22,13 @@ import (
 
 	cohere "github.com/cohere-ai/cohere-go/v2"
 	cohereClient "github.com/cohere-ai/cohere-go/v2/client"
+	"github.com/cohere-ai/cohere-go/v2/option"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/zstd"
@@ -76,6 +78,8 @@ type embedModel interface {
 
 type EmbedProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard (GHSA-m3mw-fpw8-w765).
+	egress.GuardHolder
 
 	inputFieldRefResolver  *sdk.ReferenceResolver
 	outputFieldRefResolver *sdk.ReferenceResolver
@@ -125,7 +129,7 @@ func (p *EmbedProcessor) Open(ctx context.Context) error {
 	// Initialize the client only if it hasn't been injected
 	if p.client == nil {
 		p.client = &embedClient{
-			client: cohereClient.NewClient(),
+			client: cohereClient.NewClient(option.WithHTTPClient(p.HTTPClient())),
 			config: &p.config,
 		}
 	}

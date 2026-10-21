@@ -64,6 +64,13 @@ var refusedV4 = []struct {
 	{mustCIDR("192.168.0.0/16"), reasonV4Private},
 	{mustCIDR("169.254.0.0/16"), reasonV4LinkLocal}, // includes 169.254.169.254 (metadata)
 	{mustCIDR("100.64.0.0/10"), reasonV4CGNAT},
+	// Special-purpose blocks that are not globally routable, and the Azure
+	// WireServer host-service address (168.63.129.16), which sits in public
+	// address space but is reachable from every Azure VM and serves
+	// credentials-adjacent host data like the metadata endpoint does.
+	{mustCIDR("192.0.0.0/24"), reasonV4Private},
+	{mustCIDR("198.18.0.0/15"), reasonV4Private},
+	{mustCIDR("168.63.129.16/32"), reasonV4LinkLocal},
 }
 
 // refusedV6 is the fixed IPv6 floor for genuinely-v6 addresses (loopback,

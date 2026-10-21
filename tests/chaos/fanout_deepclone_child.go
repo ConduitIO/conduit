@@ -88,6 +88,9 @@ func fanoutDeepChild() int {
 	}
 
 	cfg := conduit.DefaultConfigWithBasePath(dir)
+	// The pipelines read and write files under dir; the file connector is
+	// confined to operator-allowed directories (GHSA-m3mw-fpw8-w765).
+	cfg.Connectors.File.AllowedDirs = []string{dir}
 	cfg.API.Enabled = false
 	cfg.Pipelines.ExitOnDegraded = true
 	cfg.Preview.PipelineArchV2 = os.Getenv(envFanoutDeepArchV2) == "true"

@@ -21,11 +21,13 @@ import (
 
 	cohere "github.com/cohere-ai/cohere-go/v2"
 	cohereClient "github.com/cohere-ai/cohere-go/v2/client"
+	"github.com/cohere-ai/cohere-go/v2/option"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 )
@@ -43,6 +45,8 @@ type rerankClient struct {
 
 type RerankProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard (GHSA-m3mw-fpw8-w765).
+	egress.GuardHolder
 
 	requestBodyRef  *sdk.ReferenceResolver
 	responseBodyRef *sdk.ReferenceResolver
@@ -102,7 +106,7 @@ func (p *RerankProcessor) Configure(ctx context.Context, cfg config.Config) erro
 
 	if p.client == nil {
 		p.client = &rerankClient{
-			client: cohereClient.NewClient(),
+			client: cohereClient.NewClient(option.WithHTTPClient(p.HTTPClient())),
 			config: &p.config,
 		}
 	}

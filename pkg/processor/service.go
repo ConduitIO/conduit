@@ -25,6 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
@@ -46,6 +47,10 @@ type Service struct {
 	// is deny-all, so on a stock instance egress stays off until the operator
 	// affirmatively opens the ceiling — defense in depth for shared instances.
 	egressCeiling egress.Policy
+
+	// envAllow is the operator's env.allow list handed to every runnable
+	// processor. The zero value allows no ${VAR} expansion.
+	envAllow *env.Allowlist
 }
 
 // ServiceOption configures a Service at construction.
@@ -55,6 +60,13 @@ type ServiceOption func(*Service)
 // instance config). Omitting it leaves the ceiling at deny-all.
 func WithEgressCeiling(ceiling egress.Policy) ServiceOption {
 	return func(s *Service) { s.egressCeiling = ceiling }
+}
+
+// WithEnvAllowlist sets the operator's env.allow list: the environment
+// variables a ${VAR} reference in processor settings may expand. Omitting it
+// expands none.
+func WithEnvAllowlist(a *env.Allowlist) ServiceOption {
+	return func(s *Service) { s.envAllow = a }
 }
 
 // NewService creates a new processor plugin service.
@@ -167,7 +179,9 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 		return nil, cerrors.Errorf("invalid condition: %w", err)
 	}
 
-	return newRunnableProcessor(p, cond, i), nil
+	rp := newRunnableProcessor(p, cond, i)
+	rp.envAllow = s.envAllow
+	return rp, nil
 }
 
 // MakeRunnableProcessorForReconfigure builds a fresh RunnableProcessor for an
@@ -194,7 +208,9 @@ func (s *Service) MakeRunnableProcessorForReconfigure(ctx context.Context, i *In
 	if err != nil {
 		return nil, cerrors.Errorf("invalid condition: %w", err)
 	}
-	return newRunnableProcessor(p, cond, i), nil
+	rp := newRunnableProcessor(p, cond, i)
+	rp.envAllow = s.envAllow
+	return rp, nil
 }
 
 // Create will create a new processor instance.
