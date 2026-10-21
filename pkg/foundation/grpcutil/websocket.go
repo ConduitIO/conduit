@@ -225,7 +225,8 @@ func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReade
 			continue
 		}
 
-		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
+		// Never log the message itself: inspector streams carry record data.
+		p.logger.Trace(ctx).Int("size", len(scanner.Bytes())).Msg("[write] scanned message")
 		c <- scanner.Bytes()
 	}
 
@@ -270,7 +271,7 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 				if string(message) == `{"code":1,"message":"context canceled","details":[]}` {
 					e = p.logger.Trace(ctx)
 				}
-				e.Bytes("message", message).Err(err).Msg("failed writing websocket message")
+				e.Int("message_size", len(message)).Err(err).Msg("failed writing websocket message")
 				return
 			}
 		case <-ticker.C:
