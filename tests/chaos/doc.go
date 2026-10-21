@@ -195,4 +195,15 @@
 // Wait). The process must exit within a bound and a restart must replay what
 // was not acked (invariants 3 and 7). This is the end-to-end form of #2969,
 // which hung exactly there.
+//
+// Fan-out deep clone (fanout_deepclone_sigkill_test.go,
+// fanout_deepclone_child.go, #3151): the whole engine (conduit.Runtime, classic
+// and arch-v2) with one file source fanned out to three file destinations, two
+// of them with a custom.javascript processor that edits nested arrays, maps and
+// bytes of its record in place, SIGKILLed mid-stream and restarted on the same
+// database. Every destination file is compared record by record with the exact
+// value that destination must hold, so an opencdc.Record.Clone that shares
+// nested data between branches shows as one branch writing another's edit,
+// and the persisted source position (invariant 1) and the restarted run's
+// coverage (invariant 3) are checked as in the cases above.
 package chaos

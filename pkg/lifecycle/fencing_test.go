@@ -161,6 +161,7 @@ func assertFailedTakeover(t *testing.T, r *admissionRun) {
 	is.True(strings.Contains(r.pl.Error, errBuildFailed.Error()))
 	is.True(cerrors.Is(r.ls.WaitPipeline(r.pl.ID), errBuildFailed))
 	is.True(!r.ls.IsActive(r.pl.ID))
+	r.waitRunsDead(t)
 	is.Equal(len(r.alive()), 0)
 	is.Equal(len(r.failures), 0) // the Start returned the failure; no exit-on-degraded
 }

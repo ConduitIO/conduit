@@ -415,9 +415,11 @@ func TestDeleteConnectorAction_Do(t *testing.T) {
 		Settings:   map[string]string{"foo": "bar"},
 		Processors: []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
 	}
+	instance := &connector.Instance{ID: haveCfg.ID}
 
 	connPlugSrv := mock.NewConnectorPluginService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
+	connSrv.EXPECT().Get(ctx, haveCfg.ID).Return(instance, nil)
 	connSrv.EXPECT().Delete(ctx, haveCfg.ID, connPlugSrv)
 
 	a := deleteConnectorAction{
@@ -425,55 +427,45 @@ func TestDeleteConnectorAction_Do(t *testing.T) {
 		pipelineID:             pipelineID,
 		connectorService:       connSrv,
 		connectorPluginService: connPlugSrv,
+		deleted:                &deletedConnector{},
 	}
 	err := a.Do(ctx)
 	is.NoErr(err)
+	is.True(a.deleted.instance == instance) // kept for Rollback
+}
+
+func TestDeleteConnectorAction_Do_NotFound(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	haveCfg := config.Connector{ID: uuid.NewString()}
+	connSrv := mock.NewConnectorService(ctrl)
+	connSrv.EXPECT().Get(ctx, haveCfg.ID).Return(nil, connector.ErrInstanceNotFound)
+
+	a := deleteConnectorAction{cfg: haveCfg, connectorService: connSrv, deleted: &deletedConnector{}}
+	is.NoErr(a.Do(ctx))
+	is.True(a.deleted.instance == nil)
+	is.NoErr(a.Rollback(ctx)) // nothing to restore, no call
 }
 
 func TestDeleteConnectorAction_Rollback(t *testing.T) {
-	testCases := []struct {
-		haveConnType string
-		wantConnType connector.Type
-	}{
-		{haveConnType: config.TypeSource, wantConnType: connector.TypeSource},
-		{haveConnType: config.TypeDestination, wantConnType: connector.TypeDestination},
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	instance := &connector.Instance{ID: uuid.NewString()}
+	connSrv := mock.NewConnectorService(ctrl)
+	// #3137: the deleted instance is put back, not created again from config.
+	connSrv.EXPECT().Restore(ctx, instance).Return(nil)
+
+	a := deleteConnectorAction{
+		cfg:              config.Connector{ID: instance.ID},
+		connectorService: connSrv,
+		deleted:          &deletedConnector{instance: instance},
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.haveConnType, func(t *testing.T) {
-			is := is.New(t)
-			ctx := context.Background()
-			ctrl := gomock.NewController(t)
-
-			pipelineID := uuid.NewString()
-			haveCfg := config.Connector{
-				ID:         uuid.NewString(),
-				Name:       "connector-name",
-				Type:       tc.haveConnType,
-				Plugin:     "my-plugin",
-				Settings:   map[string]string{"foo": "bar"},
-				Processors: []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
-			}
-			wantCfg := connector.Config{
-				Name:     haveCfg.Name,
-				Settings: haveCfg.Settings,
-			}
-
-			connSrv := mock.NewConnectorService(ctrl)
-			connSrv.EXPECT().Create(ctx, haveCfg.ID, tc.wantConnType, haveCfg.Plugin, pipelineID, wantCfg, connector.ProvisionTypeConfig)
-			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[0].ID)
-			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)
-
-			a := deleteConnectorAction{
-				cfg:                    haveCfg,
-				pipelineID:             pipelineID,
-				connectorService:       connSrv,
-				connectorPluginService: nil, // only needed for Do
-			}
-			err := a.Rollback(ctx)
-			is.NoErr(err)
-		})
-	}
+	is.NoErr(a.Rollback(ctx))
+	is.NoErr(a.Rollback(ctx)) // a second rollback restores nothing
 }
 
 func TestCreateProcessorAction_Do(t *testing.T) {
