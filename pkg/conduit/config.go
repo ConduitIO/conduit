@@ -41,6 +41,13 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+// Default API bind addresses. Loopback, so a default install is not reachable
+// from the network; see validateAPIAccess.
+const (
+	defaultHTTPAddress = "127.0.0.1:8080"
+	defaultGRPCAddress = "127.0.0.1:8084"
+)
+
 const (
 	DBTypeBadger   = "badger"
 	DBTypePostgres = "postgres"
@@ -382,9 +389,9 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.DB.SQLite.Table = "conduit_kv_store"
 
 	cfg.API.Enabled = true
-	cfg.API.HTTP.Address = "127.0.0.1:8080"
+	cfg.API.HTTP.Address = defaultHTTPAddress
 	cfg.API.HTTP.UI.Enabled = true
-	cfg.API.GRPC.Address = "127.0.0.1:8084"
+	cfg.API.GRPC.Address = defaultGRPCAddress
 
 	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"
@@ -483,6 +490,12 @@ func (c Config) validateAPIConfig() error {
 	if slices.Contains(c.API.HTTP.CORS.AllowedOrigins, "*") && !isLoopbackBind(c.API.HTTP.Address) {
 		return invalidConfigFieldErr("api.http.cors.allowed-origins")
 	}
+	return c.validateAPIAccess()
+}
+
+// validateAPIAccess checks the settings that decide who may call the API: the
+// host allowlist and the token requirement on non-loopback binds.
+func (c Config) validateAPIAccess() error {
 	for _, h := range c.API.HTTP.AllowedHosts {
 		if h == "" || strings.ContainsAny(h, "/@ \t") || strings.Contains(h, "://") {
 			ce := conduiterr.New(conduiterr.CodeInvalidArgument, fmt.Sprintf("%q is not a valid host name for api.http.allowed-hosts", h))

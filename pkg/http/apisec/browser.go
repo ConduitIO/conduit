@@ -88,7 +88,7 @@ func (p BrowserPolicy) OriginAllowed(origin, host string) bool {
 // the two cannot diverge. A request without an Origin header is not a
 // cross-origin browser request and is allowed here; the Content-Type rule in
 // Guard covers the browser form-post case.
-func (p BrowserPolicy) CheckRequest(r *http.Request) *conduiterr.ConduitError {
+func (p BrowserPolicy) CheckRequest(r *http.Request) error {
 	if !p.HostAllowed(r.Host) {
 		ce := conduiterr.New(CodeHostForbidden, "the Host header is not allowed for this API")
 		ce.ConfigPath = ConfigPathAllowedHosts
@@ -142,10 +142,14 @@ func jsonContentType(r *http.Request) bool {
 // preflight, which only allowlisted origins pass.
 func (p BrowserPolicy) Guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ce := p.CheckRequest(r); ce != nil {
-			p.Logger.Warn(r.Context()).Str("code", ce.Code.Reason()).Str("remote_addr", r.RemoteAddr).
+		if err := p.CheckRequest(r); err != nil {
+			code := ""
+			if ce, ok := conduiterr.Get(err); ok {
+				code = ce.Code.Reason()
+			}
+			p.Logger.Warn(r.Context()).Str("code", code).Str("remote_addr", r.RemoteAddr).
 				Msg("rejected HTTP request")
-			writeHTTPError(w, http.StatusForbidden, ce)
+			writeHTTPError(w, http.StatusForbidden, err)
 			return
 		}
 		if isMutating(r.Method) && !jsonContentType(r) {

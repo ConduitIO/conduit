@@ -15,6 +15,7 @@
 package apisec
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -170,7 +171,7 @@ func TestAuthenticator_HTTP(t *testing.T) {
 			is := is.New(t)
 			next, calls := okHandler()
 			h := NewAuthenticator(goodToken, log.Nop()).HTTP(next)
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
 			}
@@ -193,7 +194,7 @@ func TestAuthenticator_DoesNotLogCredentials(t *testing.T) {
 	logger := log.New(zerologNew(&sb))
 	next, _ := okHandler()
 	h := NewAuthenticator(goodToken, logger).HTTP(next)
-	req := httptest.NewRequest("GET", "/v1/pipelines", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/v1/pipelines", nil)
 	req.Header.Set("Authorization", "Bearer presented-secret-value")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	is.True(sb.Len() > 0)

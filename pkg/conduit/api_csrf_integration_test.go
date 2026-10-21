@@ -275,7 +275,7 @@ func TestDNSRebinding_Host(t *testing.T) {
 			}
 			is.True(true)
 		}
-		code, _ := a.do(t, "GET", "/v1/pipelines", "", map[string]string{"Host": "localhost"}) // no port
+		code, _ := a.do(t, "GET", "/v1/pipelines", "", map[string]string{"Host": "LocalHost"}) // no port
 		is.Equal(code, 200)
 	})
 
@@ -372,9 +372,11 @@ func TestInspectorWebSocket_AllowlistedOrigin(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(resp.StatusCode, 101)
 	_ = conn.Close()
+	resp.Body.Close()
 	_, resp, err = websocket.DefaultDialer.Dial("ws://"+a.httpAddr+"/v1/connectors/none/inspect", http.Header{"Origin": {"https://other.example"}})
 	is.True(err != nil)
 	is.Equal(resp.StatusCode, 403)
+	resp.Body.Close()
 }
 
 func withDefault(h map[string]string, k, v string) map[string]string {

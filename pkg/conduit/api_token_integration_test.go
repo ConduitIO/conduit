@@ -115,10 +115,12 @@ func TestAPIToken_HTTP(t *testing.T) {
 		is.True(err != nil)
 		is.True(resp != nil)
 		is.Equal(resp.StatusCode, 401)
+		resp.Body.Close()
 
 		conn, resp, err := d.Dial("ws://"+a.httpAddr+"/v1/connectors/none/inspect", map[string][]string{"Authorization": {"Bearer " + testToken}})
 		is.NoErr(err)
 		is.Equal(resp.StatusCode, 101)
+		resp.Body.Close()
 		_ = conn.Close()
 	})
 }
