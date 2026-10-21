@@ -143,12 +143,17 @@ type DBOptions struct {
 type APIOptions struct {
 	// Enabled turns on Conduit's HTTP and gRPC API. Default: false.
 	Enabled bool
-	// GRPCAddress is the bind address for the gRPC API (e.g. ":8084", or
+	// GRPCAddress is the bind address for the gRPC API (e.g. "127.0.0.1:8084", or
 	// "127.0.0.1:0" for an OS-assigned port). Required if Enabled.
 	GRPCAddress string
 	// HTTPAddress is the bind address for the HTTP API/gateway. Required if
 	// Enabled.
 	HTTPAddress string
+	// Token is the bearer token HTTP and gRPC clients must present. It is
+	// required when either address is not a loopback address (for example
+	// ":8084" or "0.0.0.0:8080"); New fails otherwise. When set it is
+	// enforced on loopback addresses too.
+	Token string
 }
 
 // Engine is a constructed, not-yet-running Conduit instance. Obtain one with
@@ -373,6 +378,7 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	if opts.API.Enabled {
 		cfg.API.GRPC.Address = opts.API.GRPCAddress
 		cfg.API.HTTP.Address = opts.API.HTTPAddress
+		cfg.API.Token = opts.API.Token
 	}
 
 	cfg.DB.Driver = opts.DB.Driver
