@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit/tests/upgrade/storecompat/downgrade
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/conduitio/conduit v0.0.0
