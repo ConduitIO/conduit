@@ -284,7 +284,7 @@ func (d *DebeziumProcessor) convertOperation(op string) (opencdc.Operation, erro
 	case debeziumOpUnset:
 		return opencdc.OperationUpdate, nil
 	}
-	return 0, cerrors.Errorf("%q is an invalid operation", op)
+	return 0, cerrors.Errorf("invalid operation (a %d byte value that is none of c, u, d, r)", len(op))
 }
 
 func (d *DebeziumProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
