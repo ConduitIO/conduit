@@ -1159,8 +1159,10 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
-	// Serve utilities on a random port
-	addr, err := r.serveGRPC(ctx, t, grpcServer, ":0")
+	// Serve utilities on a random loopback port. Only connector plugins that
+	// Conduit itself starts on this host dial it, and it has no
+	// authentication, so it must never be reachable from the network.
+	addr, err := r.serveGRPC(ctx, t, grpcServer, "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
