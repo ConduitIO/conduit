@@ -20,6 +20,9 @@ services:
       - '8080:8080'
     environment:
       CONDUIT_LOG_FORMAT: json
+      # The pipeline's file destination is /dev/null; the file connector must be
+      # allowed to reach it (docs/operations/file-access.md).
+      CONDUIT_CONNECTORS_FILE_ALLOWED_DIRS: /dev
     volumes:
       - ../pipeline.yml:/app/pipelines/pipeline.yml
 

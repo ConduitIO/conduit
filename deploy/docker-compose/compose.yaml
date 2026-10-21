@@ -22,6 +22,9 @@ services:
       CONDUIT_DB_TYPE: badger
       CONDUIT_DB_BADGER_PATH: /data/conduit.db
       CONDUIT_LOG_FORMAT: json
+      # The file connector may only reach directories listed here; the pipeline
+      # writes /data/records.ndjson (docs/operations/file-access.md).
+      CONDUIT_CONNECTORS_FILE_ALLOWED_DIRS: /data
     volumes:
       - conduit-data:/data
       - ./pipelines:/app/pipelines:ro

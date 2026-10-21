@@ -16,4 +16,4 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: ./example.out
+          path: ./files/example.out
