@@ -1,0 +1,149 @@
+04:31:48|client backend|idle|Client|ClientRead|DELETE FROM bench_source_0 WHERE id = $1|1
+04:31:48|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:48|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:48|walsender|active|||START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:31:50|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:50|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:31:50|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:50|walsender|active|Client|WalSenderWaitForWal|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:31:52|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:52|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:52|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:31:52|walsender|active|Client|WalSenderWaitForWal|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:31:54|client backend|active|||DELETE FROM bench_source_0 WHERE id = $1|1
+04:31:54|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:54|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:54|walsender|active|Client|WalSenderWaitForWal|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:31:56|client backend|active|||INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:31:56|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:56|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:56|walsender|active|Client|WalSenderWaitForWal|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:31:59|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:31:59|client backend|active|||INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:31:59|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:31:59|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:01|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:01|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:01|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:01|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:03|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:03|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:03|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:03|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:05|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:05|client backend|idle|Client|ClientRead|DELETE FROM bench_source_0 WHERE id = $1|1
+04:32:05|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:05|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:07|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:07|client backend|active|||UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:07|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:07|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:09|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:09|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:09|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:09|walsender|active|||START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:11|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:11|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:11|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:11|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:13|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:13|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:13|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:13|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:16|client backend|active|||DELETE FROM "bench_dest_0" WHERE "id" = $1|1
+04:32:16|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:16|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:16|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:18|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:18|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:18|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:18|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:20|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:20|client backend|active|||INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:20|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:20|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:22|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:22|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:22|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:22|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:24|client backend|active|||DELETE FROM "bench_dest_0" WHERE "id" = $1|1
+04:32:24|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:24|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:24|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:26|autovacuum worker|active|Timeout|VacuumDelay|autovacuum: VACUUM ANALYZE public.bench_source_0|1
+04:32:26|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:26|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:26|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:26|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:28|autovacuum worker|active|Timeout|VacuumDelay|autovacuum: VACUUM ANALYZE public.bench_source_0|1
+04:32:28|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:28|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:28|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:28|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:31|autovacuum worker|active|Timeout|VacuumDelay|autovacuum: VACUUM ANALYZE public.bench_source_0|1
+04:32:31|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:31|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:31|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:31|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:33|autovacuum worker|active|Timeout|VacuumDelay|autovacuum: VACUUM ANALYZE public.bench_dest_0|1
+04:32:33|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:33|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:33|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:33|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:35|autovacuum worker|active|||autovacuum: VACUUM ANALYZE public.bench_dest_0|1
+04:32:35|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:35|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:35|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:35|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:37|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:37|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:37|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:37|walsender|active|||START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:39|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:39|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:39|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:39|walsender|active|||START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:41|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:41|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:41|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:41|walsender|active|||START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:43|client backend|active|||DELETE FROM "bench_dest_0" WHERE "id" = $1|1
+04:32:43|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:43|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:43|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:45|client backend|active|||DELETE FROM bench_source_0 WHERE id = $1|1
+04:32:45|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:45|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:45|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:48|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:48|client backend|idle|Client|ClientRead|DELETE FROM bench_source_0 WHERE id = $1|1
+04:32:48|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:48|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:50|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:50|client backend|active|||INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:50|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:50|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:52|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:52|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:52|client backend|idle|Client|ClientRead|UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:52|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:54|client backend|active|||DELETE FROM "bench_dest_0" WHERE "id" = $1|1
+04:32:54|client backend|active|||INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:54|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:54|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:56|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:56|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:32:56|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:56|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:32:58|client backend|active|||UPDATE bench_source_0 SET payload = $2 WHERE id = $1|1
+04:32:58|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:32:58|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:32:58|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:33:00|client backend|active|||INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:33:00|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:33:00|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:33:00|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1
+04:33:02|client backend|idle|Client|ClientRead|INSERT INTO "bench_dest_0" ("id","payload") VALUES ($1,$2) O|1
+04:33:02|client backend|idle|Client|ClientRead|INSERT INTO bench_source_0 (id, payload) VALUES ($1, $2)|1
+04:33:02|client backend|idle|Client|ClientRead|SELECT slot_name, confirmed_flush_lsn, restart_lsn FROM pg_r|1
+04:33:02|walsender|active|Client|WalSenderWriteData|START_REPLICATION SLOT conduit_slot_0 LOGICAL 0/1927600 ("pr|1

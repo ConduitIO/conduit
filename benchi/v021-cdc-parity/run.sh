@@ -182,7 +182,7 @@ run() { # tool label
   if [ "${PROFILE:-0}" = "1" ]; then
     mkdir -p "$dir/prof" && chmod 777 "$dir/prof"
     case "$dir" in /*) export PROF_DIR="$dir/prof" ;; *) export PROF_DIR="$PWD/$dir/prof" ;; esac
-    export CONDUIT_EXTRA_ARGS="--dev.cpuprofile /prof/cpu.pprof --dev.memprofile /prof/mem.pprof"
+    export CONDUIT_EXTRA_ARGS="--dev.cpuprofile /prof/cpu.pprof --dev.memprofile /prof/mem.pprof ${PROFILE_EXTRA_ARGS:-}"
   fi
   # Resource sampling for the whole run (CPU/mem per container, instance CPU/IO).
   # Diagnostic only: the comparison number is the ground-truth count.
