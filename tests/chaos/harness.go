@@ -199,7 +199,9 @@ func spawnChildWithEnv(t *testing.T, env []string) *childProcess {
 	// cancellation.
 	//nolint:gosec // exe is this test binary's own path (os.Args[0]/os.Executable), not external input - the standard re-exec-self pattern
 	cmd := exec.CommandContext(context.Background(), exe)
-	cmd.Env = append(os.Environ(), env...)
+	// GOMEMLIMIT is a CI knob for the test binary (see Makefile
+	// MEMORY_HEAVY_GOMEMLIMIT); children must not inherit it.
+	cmd.Env = append(envWithout(os.Environ(), "GOMEMLIMIT"), env...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -427,4 +429,16 @@ func (c *childProcess) waitExit(t *testing.T, timeout time.Duration) {
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting for child to exit\n%s", c.diagnostics())
 	}
+}
+
+// envWithout returns env minus any entry for the named variable.
+func envWithout(env []string, name string) []string {
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		if strings.HasPrefix(e, name+"=") {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }

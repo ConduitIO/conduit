@@ -1,0 +1,69 @@
+File: conduit
+Build ID: 43cb2a080a989ca6e2e26ec24854c5f09edca1ef
+Type: cpu
+Time: 2026-10-20 00:36:43 PDT
+Duration: 81.57s, Total samples = 77.61s (95.15%)
+Showing nodes accounting for 28.81s, 37.12% of 77.61s total
+Dropped 949 nodes (cum <= 0.39s)
+Showing top 60 nodes out of 319
+      flat  flat%   sum%        cum   cum%
+     0.05s 0.064% 0.064%     15.81s 20.37%  runtime.mcall
+     0.07s  0.09%  0.15%     14.95s 19.26%  runtime.park_m
+     0.21s  0.27%  0.43%     14.89s 19.19%  runtime.schedule
+     0.03s 0.039%  0.46%     14.17s 18.26%  github.com/twmb/franz-go/pkg/kgo.(*broker).handleReqs
+     0.17s  0.22%  0.68%     13.48s 17.37%  github.com/twmb/franz-go/pkg/kgo.(*broker).handleReq
+         0     0%  0.68%     13.39s 17.25%  gopkg.in/tomb%2ev2.(*Tomb).run
+       13s 16.75% 17.43%        13s 16.75%  internal/runtime/syscall/linux.Syscall6
+         0     0% 17.43%     11.93s 15.37%  internal/poll.ignoringEINTRIO (inline)
+     0.04s 0.052% 17.48%     11.92s 15.36%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).writeRequest
+     0.01s 0.013% 17.50%     11.83s 15.24%  syscall.Syscall
+     0.42s  0.54% 18.04%     11.47s 14.78%  runtime.findRunnable
+     0.05s 0.064% 18.10%     10.81s 13.93%  syscall.RawSyscall6
+     0.06s 0.077% 18.18%      9.75s 12.56%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).writeConn
+     0.01s 0.013% 18.19%      9.02s 11.62%  net.(*conn).Write
+     0.01s 0.013% 18.21%      9.01s 11.61%  net.(*netFD).Write
+     0.04s 0.052% 18.26%         9s 11.60%  internal/poll.(*FD).Write
+     8.89s 11.45% 29.71%      8.89s 11.45%  runtime.futex
+     0.01s 0.013% 29.73%      8.86s 11.42%  syscall.Write (inline)
+     0.05s 0.064% 29.79%      8.85s 11.40%  github.com/conduitio/conduit-connector-sdk.(*destinationPluginAdapter).Run
+         0     0% 29.79%      8.85s 11.40%  github.com/conduitio/conduit/pkg/plugin/connector/builtin.(*destinationPluginAdapter).Run.func1
+     0.02s 0.026% 29.82%      8.85s 11.40%  syscall.write
+     0.13s  0.17% 29.98%      8.50s 10.95%  github.com/conduitio/conduit-connector-sdk.(*writeStrategySingle).Write
+     0.02s 0.026% 30.01%      8.06s 10.39%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).handleResps
+         0     0% 30.01%      7.93s 10.22%  github.com/conduitio/conduit/pkg/lifecycle.(*Service).runPipeline.func3
+     0.11s  0.14% 30.15%      7.48s  9.64%  runtime.systemstack
+     0.13s  0.17% 30.32%      7.27s  9.37%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).handleResp
+     0.06s 0.077% 30.40%      7.13s  9.19%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRateLimit).Write
+     0.07s  0.09% 30.49%      7.07s  9.11%  github.com/conduitio/conduit-connector-sdk.(*destinationWithRecordFormat).Write
+     0.12s  0.15% 30.64%         7s  9.02%  github.com/conduitio/conduit-connector-sdk.(*destinationWithSchemaExtraction).Write
+     0.08s   0.1% 30.74%      6.48s  8.35%  runtime.notewakeup
+     0.06s 0.077% 30.82%      6.41s  8.26%  runtime.futexwakeup
+     0.04s 0.052% 30.87%      6.27s  8.08%  runtime.wakep
+     0.64s  0.82% 31.70%      6.25s  8.05%  runtime.mallocgc
+     0.01s 0.013% 31.71%      5.95s  7.67%  runtime.startm
+     1.71s  2.20% 33.91%      5.36s  6.91%  runtime.selectgo
+     0.04s 0.052% 33.96%      4.90s  6.31%  github.com/conduitio/conduit-connector-kafka.(*Destination).Write
+     0.07s  0.09% 34.05%      4.86s  6.26%  github.com/conduitio/conduit-connector-kafka/destination.(*FranzProducer).Produce
+     0.11s  0.14% 34.20%      4.73s  6.09%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).readResponse
+     0.06s 0.077% 34.27%      4.38s  5.64%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).readConn
+     0.81s  1.04% 35.32%      4.29s  5.53%  runtime.mallocgcSmallScanNoHeader
+         0     0% 35.32%      4.18s  5.39%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).Run.func1.2
+     0.06s 0.077% 35.39%      4.18s  5.39%  github.com/conduitio/conduit-connector-sdk.(*sourcePluginAdapter).runAck
+     0.09s  0.12% 35.51%      4.14s  5.33%  github.com/conduitio/conduit/pkg/lifecycle/stream.(*DestinationAckerNode).worker
+     0.02s 0.026% 35.54%      3.87s  4.99%  github.com/conduitio/conduit-connector-postgres.(*Source).Ack
+         0     0% 35.54%      3.85s  4.96%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CombinedIterator).Ack
+     0.03s 0.039% 35.58%      3.84s  4.95%  github.com/conduitio/conduit-connector-postgres/source/logrepl.(*CDCIterator).Ack
+     0.01s 0.013% 35.59%      3.70s  4.77%  github.com/twmb/franz-go/pkg/kgo.(*brokerCxn).readSizeAndBody
+     0.15s  0.19% 35.78%      3.70s  4.77%  io.ReadAtLeast
+     0.55s  0.71% 36.49%      3.67s  4.73%  runtime.newobject
+     0.01s 0.013% 36.50%      3.63s  4.68%  io.ReadFull (inline)
+     0.14s  0.18% 36.68%      3.43s  4.42%  bufio.(*Reader).Read
+         0     0% 36.68%      3.43s  4.42%  runtime.goready (inline)
+     0.10s  0.13% 36.81%      3.36s  4.33%  net.(*conn).Read
+     0.03s 0.039% 36.85%      3.35s  4.32%  runtime.ready
+         0     0% 36.85%      3.26s  4.20%  net.(*netFD).Read
+     0.11s  0.14% 36.99%      3.25s  4.19%  runtime.stopm
+     0.03s 0.039% 37.03%      3.24s  4.17%  internal/poll.(*FD).Read
+         0     0% 37.03%      3.19s  4.11%  sync.(*Once).Do (inline)
+     0.02s 0.026% 37.06%      3.18s  4.10%  github.com/conduitio/conduit-commons/opencdc.Metadata.getValue
+     0.05s 0.064% 37.12%      3.13s  4.03%  sync.(*Once).doSlow

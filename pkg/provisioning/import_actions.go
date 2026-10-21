@@ -553,7 +553,28 @@ func (a deletePipelineAction) Rollback(ctx context.Context) error {
 	return createPipelineAction(a).Do(ctx)
 }
 
-type deleteConnectorAction createConnectorAction // piggyback on create action and reverse it
+// deleteConnectorAction deletes a connector. Its rollback puts back the
+// instance it deleted (#3137), so it is not the reverse of
+// createConnectorAction: creating the connector again from its config would
+// give the process a fresh instance with no source position until the next
+// restart.
+type deleteConnectorAction struct {
+	cfg        config.Connector
+	pipelineID string
+
+	connectorService       ConnectorService
+	connectorPluginService ConnectorPluginService
+
+	// deleted is shared by every copy of the action (actions are passed by
+	// value): Do records the instance it deleted, Rollback restores it. The
+	// actions builder allocates it.
+	deleted *deletedConnector
+}
+
+// deletedConnector holds the instance a deleteConnectorAction deleted.
+type deletedConnector struct {
+	instance *connector.Instance
+}
 
 func (a deleteConnectorAction) String() string {
 	return fmt.Sprintf("delete connector with ID %v", a.cfg.ID)
@@ -576,11 +597,41 @@ func (a deleteConnectorAction) Describe() Change {
 }
 
 func (a deleteConnectorAction) Do(ctx context.Context) error {
-	return createConnectorAction(a).Rollback(ctx)
+	if a.deleted == nil {
+		// Without the holder Rollback could not restore what Do deletes.
+		return cerrors.Errorf("delete connector %v: action has no rollback state (not built by actionsBuilder)", a.cfg.ID)
+	}
+	instance, err := a.connectorService.Get(ctx, a.cfg.ID)
+	if cerrors.Is(err, connector.ErrInstanceNotFound) {
+		// nothing to delete, and so nothing to restore
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	err = a.connectorService.Delete(ctx, a.cfg.ID, a.connectorPluginService)
+	if err != nil {
+		return err
+	}
+	a.deleted.instance = instance
+	return nil
 }
 
+// Rollback restores the instance Do deleted. If Do deleted nothing (it
+// failed, or the connector did not exist), there is nothing to restore, and
+// the live connector, if any, is left alone.
 func (a deleteConnectorAction) Rollback(ctx context.Context) error {
-	return createConnectorAction(a).Do(ctx)
+	if a.deleted == nil || a.deleted.instance == nil {
+		return nil
+	}
+	// Invariant 2: the same instance comes back, position included. If the
+	// delete hook ran, its next start is refused (invariant 3, fail closed).
+	err := a.connectorService.Restore(ctx, a.deleted.instance)
+	if err != nil {
+		return cerrors.Errorf("failed to restore connector: %w", err)
+	}
+	a.deleted.instance = nil
+	return nil
 }
 
 type deleteProcessorAction createProcessorAction // piggyback on create action and reverse it
