@@ -1,0 +1,25 @@
+git 9f11b4668fe7ea0315e7e6a0e096b23c1d848283 v0.21.0-nightly.20261020-1-g9f11b466
+benchi benchi v0.4.1
+docker 29.9.1 arch=x86_64
+arms conduit-pg connect-pg
+rounds 5
+loader_rate 20000
+pg_dest_url_extra &default_query_exec_mode=cache_statement
+label TUNED-pg-dest-cache_statement-only
+conduit_engine classic (no --preview.pipeline-arch-v2; the shipped default)
+conduit_connectors github.com/conduitio/conduit-connector-file@v0.10.10 github.com/conduitio/conduit-connector-kafka@v0.14.1 github.com/conduitio/conduit-connector-postgres@v0.17.2 github.com/conduitio/conduit-connector-s3@v0.11.1 github.com/conduitio/conduit-connector-sdk@v0.17.0 
+kernel 7.0.0-1014-aws cpus=8 mem_kb=16076996
+instance_type c6i.2xlarge
+image postgres:17 postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+image apache/kafka:4.0.0 apache/kafka@sha256:3f7b939115cd4872e9cee9369d80bd69712fde55f9902f46d793f64848dedc75
+image quay.io/debezium/connect:3.2 quay.io/debezium/connect@sha256:bb7a4e3e44afe245fbb5b84b2acb3d8f29cceb9d6ab97d84d32311c7b167126c
+image alpine:3.20 alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+postgres_server postgres (PostgreSQL) 17.11 (Debian 17.11-1.pgdg13+2)
+kafka_connect_runtime connect-runtime-4.0.0.jar
+debezium_postgres_connector debezium-connector-postgres-3.2.4.Final.jar
+debezium_image_tag quay.io/debezium/connect:3.2 (the tag is the DEBEZIUM version, 3.2; the Kafka Connect runtime is the connect-runtime jar above)
+jdbc_sink kafka-connect-jdbc-10.9.6 ; s3_sink confluentinc-kafka-connect-s3-12.1.11 (tools/connect.Dockerfile)
+tables 1
+conduit_batch_size default
+conduit_batch_delay 100ms
+loader_slot_timeout 600s

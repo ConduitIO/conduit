@@ -107,3 +107,70 @@ func TestActions_ResolveAgainstPluginSpecs(t *testing.T) {
 		t.Fatal("no setting was checked; the walk is broken")
 	}
 }
+
+// TestFinishActions_ResolveAgainstPluginSpecs does for the finish actions
+// what the test above does for key rules: a setting a finisher writes exists
+// in the specification of the plugin it lands on, at the version compiled in.
+// The sink-consumer-defaults finisher writes the Kafka source's groupID and
+// readFromBeginning (issue #3089), so a rename in the connector breaks this
+// test instead of silently dropping the consumer group at cutover.
+func TestFinishActions_ResolveAgainstPluginSpecs(t *testing.T) {
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkFiles := 0
+	for _, ref := range e.FinishActions() {
+		var names []string
+		var plugin, role string
+		switch ref.Action.Kind {
+		case FinishDefault:
+			role = ref.Action.Args["side"]
+			names = []string{ref.Action.Args["name"]}
+			for _, em := range ref.Emits {
+				if em.Role == role {
+					plugin = em.Plugin
+				}
+			}
+		case FinishSinkConsumer:
+			if ref.Scope != rules.ScopeSink {
+				t.Errorf("%s: %s only applies to a sink connector, not scope %q", ref.File, ref.Action.Kind, ref.Scope)
+			}
+			sinkFiles++
+			plugin, role, names = kafkaPlugin, SideSource, SinkConsumerSettings()
+			var emitted bool
+			for _, em := range ref.Emits {
+				emitted = emitted || (em.Plugin == kafkaPlugin && em.Role == SideSource)
+			}
+			if !emitted {
+				t.Errorf("%s: %s needs the file to emit %s as the source", ref.File, ref.Action.Kind, kafkaPlugin)
+			}
+		default:
+			continue
+		}
+		params, ok := builtinParams(t, plugin, role)
+		if !ok {
+			continue
+		}
+		for _, name := range names {
+			if !params[name] {
+				t.Errorf("%s: %s writes %s on the %s %s, which has no such parameter", ref.File, ref.Action.Kind, name, plugin, role)
+			}
+		}
+	}
+	if sinkFiles == 0 {
+		t.Fatal("no class file runs " + FinishSinkConsumer + "; a sink would start at the end of its topics")
+	}
+}
+
+// Every sink family carries the finisher: a family added without it would
+// start at the end of its topics in a random group (issue #3089).
+func TestSinkClasses_PositionTheirConsumer(t *testing.T) {
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing := e.ClassesWithout(rules.ScopeSink, FinishSinkConsumer); len(missing) > 0 {
+		t.Errorf("sink classes without a %s finish action: %v", FinishSinkConsumer, missing)
+	}
+}

@@ -164,9 +164,15 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	// Invariant 2 (#3137): roll back by putting the same instance back, not a
+	// fresh one, position included. If Delete already ran the plugin's delete
+	// hook, which may have released what the position points into, the
+	// instance stays marked and its next start is refused with
+	// connector.delete_hook_ran (invariant 3: fail closed). ctx carries txn,
+	// so Restore only touches memory: the transaction is discarded and the
+	// store keeps the original record.
 	r.Append(func() error {
-		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
-		return err
+		return c.connectors.Restore(ctx, conn)
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {
