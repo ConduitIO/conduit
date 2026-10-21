@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
@@ -81,7 +83,15 @@ type Config struct {
 	API struct {
 		Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
 		HTTP    struct {
-			Address string `long:"api.http.address" usage:"address for serving the HTTP API"`
+			// Address defaults to loopback. A non-loopback address requires an API
+			// token (api.token or api.token-file); Validate refuses otherwise.
+			Address string `long:"api.http.address" usage:"address for serving the HTTP API; defaults to loopback, a non-loopback address requires api.token or api.token-file"`
+			// AllowedHosts lists extra Host header names accepted on a loopback
+			// bind, on top of localhost, 127.0.0.1 and [::1]. It exists for
+			// setups that reach a loopback-bound Conduit through a local
+			// reverse proxy or tunnel under another name. Without it, any other
+			// Host is refused (DNS rebinding protection).
+			AllowedHosts []string `long:"api.http.allowed-hosts" mapstructure:"allowed-hosts" usage:"extra Host header names (no port) accepted on a loopback bind, besides localhost, 127.0.0.1 and [::1]; repeatable"`
 			// CORS.AllowedOrigins controls which browser origins may call the HTTP
 			// API and open the websocket-proxied streaming RPCs. Default: empty
 			// (deny all cross-origin — the same-origin embedded UI needs none).
@@ -112,8 +122,16 @@ type Config struct {
 		GRPC struct {
 			// This is the address where the gRPC API will be served which is shared as a global flag
 			// for the Conduit CLI.
-			Address string `long:"api.grpc.address" usage:"address for serving the gRPC API"`
+			Address string `long:"api.grpc.address" usage:"address for serving the gRPC API; defaults to loopback, a non-loopback address requires api.token or api.token-file"`
 		}
+		// Token is the bearer token every HTTP, gRPC, inspector WebSocket and
+		// /metrics request must present. Prefer TokenFile or the
+		// CONDUIT_API_TOKEN environment variable: a flag value is visible in
+		// the process list. When a token is set it is enforced on loopback
+		// binds too.
+		Token string `long:"api.token" usage:"bearer token required by the HTTP and gRPC APIs; prefer api.token-file or the CONDUIT_API_TOKEN environment variable over this flag, which is visible in the process list" redact:"true"`
+		// TokenFile is the path of a file holding the bearer token.
+		TokenFile string `long:"api.token-file" mapstructure:"token-file" usage:"path to a file containing the bearer token required by the HTTP and gRPC APIs; also used by CLI commands that talk to the API (CONDUIT_API_TOKEN_FILE)"`
 		// AllowLiveRestartApply is the Tier-1 enforced data-path gate for the
 		// ApplyPipeline RPC (see
 		// docs/design-documents/20260708-live-server-deploy-apply.md, Item 6,
@@ -382,9 +400,9 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.DB.SQLite.Table = "conduit_kv_store"
 
 	cfg.API.Enabled = true
-	cfg.API.HTTP.Address = ":8080"
+	cfg.API.HTTP.Address = "127.0.0.1:8080"
 	cfg.API.HTTP.UI.Enabled = true
-	cfg.API.GRPC.Address = ":8084"
+	cfg.API.GRPC.Address = "127.0.0.1:8084"
 
 	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"
@@ -483,7 +501,49 @@ func (c Config) validateAPIConfig() error {
 	if slices.Contains(c.API.HTTP.CORS.AllowedOrigins, "*") && !isLoopbackBind(c.API.HTTP.Address) {
 		return invalidConfigFieldErr("api.http.cors.allowed-origins")
 	}
+	for _, h := range c.API.HTTP.AllowedHosts {
+		if h == "" || strings.ContainsAny(h, "/@ \t") || strings.Contains(h, "://") {
+			ce := conduiterr.New(conduiterr.CodeInvalidArgument, fmt.Sprintf("%q is not a valid host name for api.http.allowed-hosts", h))
+			ce.ConfigPath = apisec.ConfigPathAllowedHosts
+			ce.Suggestion = "list bare host names without scheme, port or path, for example conduit.internal"
+			return ce
+		}
+		if _, _, err := net.SplitHostPort(h); err == nil {
+			ce := conduiterr.New(conduiterr.CodeInvalidArgument, fmt.Sprintf("%q must not include a port in api.http.allowed-hosts", h))
+			ce.ConfigPath = apisec.ConfigPathAllowedHosts
+			ce.Suggestion = "list the host name only; the port is not checked"
+			return ce
+		}
+	}
+	// Invariant: the API is never served unauthenticated to the network. A
+	// non-loopback bind of either listener needs a token. (The connector
+	// utilities listener is always loopback; see startConnectorUtils.)
+	token, err := c.APIToken()
+	if err != nil {
+		return err
+	}
+	if token == "" {
+		for _, bind := range []struct{ path, addr string }{
+			{"api.http.address", c.API.HTTP.Address},
+			{"api.grpc.address", c.API.GRPC.Address},
+		} {
+			if !isLoopbackBind(bind.addr) {
+				ce := conduiterr.New(apisec.CodeTokenRequired,
+					fmt.Sprintf("%q is %q, which is reachable from the network, and no API token is configured", bind.path, bind.addr))
+				ce.ConfigPath = apisec.ConfigPathTokenFile
+				ce.Suggestion = "set api.token-file (CONDUIT_API_TOKEN_FILE) or api.token (CONDUIT_API_TOKEN), or bind " + bind.path + " to 127.0.0.1"
+				return ce
+			}
+		}
+	}
 	return nil
+}
+
+// APIToken returns the configured API token, or "" when none is configured. It
+// reads api.token-file, so a missing or empty file is an error here rather
+// than a silently open API.
+func (c Config) APIToken() (string, error) {
+	return apisec.ResolveToken(c.API.Token, c.API.TokenFile)
 }
 
 func (c Config) validateSchemaRegistryConfig() error {
