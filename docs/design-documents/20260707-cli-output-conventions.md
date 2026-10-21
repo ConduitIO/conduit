@@ -110,6 +110,13 @@ error output — otherwise cobra prints a duplicate `Error:` line over the repor
 and, under `--json`, corrupts the single-object stdout with a stderr `Error:`.
 Fold this into the shared offline `CommandWithResult` decorator so it is structural.
 
+Silencing cobra also silences what it rejects before the command runs: flag parse
+errors, positional-argument checks, `PreRunE` and missing required flags. The
+decorator renders those itself, like any other hard failure: the envelope under
+`--json` (found in the raw arguments when the bad flag stopped parsing before it),
+a finding on stderr otherwise, with code `cli.invalid_usage` and exit code 2. An
+argument check that returns its own coded error keeps that code (#3086).
+
 Under `--json`, commands MUST NOT stream human progress/`✓` lines (they would
 precede/corrupt the single JSON object) — capture progress in `result.steps[]`.
 
