@@ -15,6 +15,7 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 // The URL is a template over record fields and can carry credentials, and
@@ -82,4 +84,31 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 		is.True(strings.Contains(err.Error(), "error parsing the rendered URL"))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 	})
+}
+
+// The retry loop logs the error of every failed attempt at debug level. With a
+// 5xx whose body echoes the request, that log must not carry the body.
+func TestHTTPProcessor_RetryLogDoesNotContainTheBody(t *testing.T) {
+	is := is.New(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("echo of request: customer-SECRET-4711"))
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	ctx := context.Background()
+	p := NewHTTPProcessor(log.New(zerolog.New(&buf).Level(zerolog.DebugLevel)))
+	is.NoErr(p.Configure(ctx, config.Config{
+		"request.url": srv.URL, "request.method": "POST",
+		"backoffRetry.count": "2", "backoffRetry.min": "1ms", "backoffRetry.max": "2ms",
+	}))
+	out := p.Process(ctx, []opencdc.Record{{Payload: opencdc.Change{After: opencdc.RawData("x")}}})
+	_, ok := out[0].(sdk.ErrorRecord)
+	is.True(ok)
+
+	logs := buf.String()
+	is.True(strings.Contains(logs, "retrying HTTP request"))
+	is.True(strings.Contains(logs, "error status code 500"))
+	is.True(!strings.Contains(logs, "SECRET"))
 }
