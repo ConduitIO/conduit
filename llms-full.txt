@@ -1471,7 +1471,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (167)
+## 3. Error codes (168)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1489,6 +1489,7 @@ Author: Meroxa, Inc.
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
 | `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
 | `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
+| `connector.delete_hook_ran` | FailedPrecondition | CodeConnectorDeleteHookRan is raised when a connector is started after a delete that was rolled back but had already delivered the "deleted" lifecycle event to the plugin. The plugin may have released resources its saved position depends on (for example a Postgres replication slot), so resuming from that position could skip records. The connector refuses to start until it is deleted and created again, or Conduit is restarted after the resources were checked (#3137). |
 | `connector.endpoint_link_local` | PermissionDenied | CodeEndpointLinkLocal is raised when an ambient-credential connection would go to a link-local or cloud metadata address. |
 | `connector.endpoint_not_allowed` | PermissionDenied | CodeEndpointNotAllowed is raised when, under ambient credentials, an endpoint is not https or not an exact allow-endpoints entry. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |

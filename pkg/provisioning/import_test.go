@@ -238,6 +238,7 @@ func TestActionBuilder_Build(t *testing.T) {
 			pipelineID:             oldConfig.ID,
 			connectorService:       connSrv,
 			connectorPluginService: connPlugSrv,
+			deleted:                &deletedConnector{},
 		},
 		deleteProcessorAction{
 			cfg: oldConfig.Connectors[3].Processors[0],
@@ -641,6 +642,7 @@ func TestActionsBuilder_PrepareConnectorActions_Delete(t *testing.T) {
 		pipelineID:             pipelineID,
 		connectorService:       connSrv,
 		connectorPluginService: connPlugSrv,
+		deleted:                &deletedConnector{},
 	}}
 
 	got := srv.newActionsBuilder().prepareConnectorActions(oldConfig, newConfig, pipelineID)
@@ -753,6 +755,7 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 				pipelineID:             pipelineID,
 				connectorService:       connSrv,
 				connectorPluginService: connPlugSrv,
+				deleted:                &deletedConnector{},
 			}, createConnectorAction{
 				cfg:                    tc.newConfig,
 				pipelineID:             pipelineID,
