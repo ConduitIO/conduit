@@ -38,6 +38,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # A hung run should fail visibly, not sit until the 6h default.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,7 +65,13 @@ jobs:
         # number of cases here; property-nightly.yml runs many more.
         env:
           RAPID_CHECKS: "100"
-        run: make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"
+        run: |
+          # Resource sampler: lets the next runner kill be diagnosed from the log.
+          ( while sleep 10; do echo "MEMSAMPLE $(date -u +%T) $(free -m | awk 'NR==2{print "used="$3" avail="$7} NR==3{print "swap="$3}' | tr '\n' ' ') top: $(ps -eo rss,args --sort=-rss | sed -n 2,4p | awk '{printf "%dMB:%s ", $1/1024, $2}' | sed 's#/home/runner/work/conduit/conduit/##g')"; done ) &
+          SAMPLER=$!
+          make test-integration GOTEST_FLAGS="-v -count=1 -shuffle=on"; ret=$?
+          kill "$SAMPLER" 2>/dev/null || true
+          exit $ret
 
       - name: Storage downgrade gate (tests/upgrade/storecompat/downgrade)
         # tests/upgrade/storecompat (run by the Test step) proves a database

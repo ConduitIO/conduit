@@ -450,6 +450,15 @@ Embedding requires Go 1.26 or newer.
 go get github.com/conduitio/conduit
 ```
 
+Until [dop251/goja#816](https://github.com/dop251/goja/pull/816) is merged and released, add this
+to your own `go.mod`. A `replace` in Conduit's `go.mod` does not apply to programs that import it,
+and without the patch a script that stores a `Map` or `Set` inside itself crashes the process
+(see the [runbook](docs/operations/js-processor-output.md)):
+
+```text
+replace github.com/dop251/goja => github.com/ConduitIO/goja v0.0.0-20261020160110-aed438ab3fe6
+```
+
 ```go
 e, _ := conduit.New(ctx, conduit.Options{DB: conduit.DBOptions{Type: "badger"}})
 h, _ := e.Run(ctx)

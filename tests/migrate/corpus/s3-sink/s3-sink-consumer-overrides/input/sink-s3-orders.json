@@ -1,0 +1,17 @@
+{
+  "name": "sink-s3-orders",
+  "config": {
+    "connector.class": "io.confluent.connect.s3.S3SinkConnector",
+    "storage.class": "io.confluent.connect.s3.storage.S3Storage",
+    "s3.region": "us-west-2",
+    "s3.bucket.name": "example-orders-bucket",
+    "topics": "orders",
+    "flush.size": "100",
+    "format.class": "io.confluent.connect.s3.format.parquet.ParquetFormat",
+    "partitioner.class": "io.confluent.connect.storage.partitioner.DefaultPartitioner",
+    "key.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+    "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+    "consumer.override.group.id": "orders-archive",
+    "consumer.override.auto.offset.reset": "latest"
+  }
+}

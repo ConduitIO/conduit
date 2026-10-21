@@ -1,0 +1,3 @@
+label,tool,rows_before,rows_after,rows_delta,ts_before_ms,ts_after_ms,src_before,src_after
+warmup-conduit-pg,conduit-pg,57941,273494,215553,1792481717296,1792481777955,189005,895844
+warmup-conduit-kafka,conduit-kafka,82401,447479,365078,1792481822931,1792481885263,369000,1589000
