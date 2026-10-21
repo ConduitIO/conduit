@@ -1,0 +1,24 @@
+schemaVersion: 1
+id: mm2-msk-sasl-plaintext
+family: kafka-mirror
+description: >-
+  MirrorSourceConnector whose source cluster uses SASL_PLAINTEXT and whose target
+  uses SASL_SSL. SASL_PLAINTEXT sends the credentials without TLS and the Kafka
+  connector refuses that, so the key is a blocking report entry that says to
+  enable TLS or to set saslAllowPlaintext knowingly; the migration never writes
+  plaintext SASL by itself.
+provenance:
+  source: synthetic
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/mm2-msc.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: source.cluster.security.protocol, status: unsupported, blocking: true, code: kc.key_unsupported}
+    - {key: target.cluster.security.protocol, status: translated}
+covers:
+  - class: org.apache.kafka.connect.mirror.MirrorSourceConnector
+    keys: [source.cluster.security.protocol, target.cluster.security.protocol]
+run: {tier: offline}

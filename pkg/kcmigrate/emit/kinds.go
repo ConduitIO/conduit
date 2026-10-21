@@ -438,12 +438,18 @@ func CheckActions(refs []rules.ActionRef) error {
 }
 
 // tlsFromProtocol maps security.protocol onto tls.enabled. Argument: side.
-// SSL and SASL_SSL enable TLS; PLAINTEXT and SASL_PLAINTEXT write nothing
-// (TLS off is the connector default). Rule data restricts the values.
+// SSL and SASL_SSL enable TLS; PLAINTEXT writes tls.enabled=false. Rule data
+// restricts the values and blocks SASL_PLAINTEXT before it gets here: the Kafka
+// connector refuses SASL without TLS, and the migration never writes a
+// plaintext SASL setup by itself.
 func tlsFromProtocol(p *Plan, d *rules.Decision) error {
 	switch strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal())) {
 	case "SSL", "SASL_SSL":
 		return set(p, d, d.Emit.Args["side"], "tls.enabled", "true", "")
+	case "SASL_PLAINTEXT":
+		// Unreachable with the shipped rule data. Fail closed if a rule file
+		// ever routes it here: never silently emit plaintext SASL.
+		return cerrors.Errorf("%s: security.protocol SASL_PLAINTEXT must be a blocking report entry, not a translation", d.Entry.Key)
 	default:
 		// Written explicitly, so a lower layer (a worker's
 		// producer.security.protocol=SSL) cannot turn TLS on under a
