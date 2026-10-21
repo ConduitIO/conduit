@@ -166,12 +166,13 @@ func TestTemplateGalleryE2E_GeneratorFile(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.ndjson")
 	original, err := os.ReadFile(pipelinePath)
 	is.NoErr(err)
-	edited := strings.Replace(string(original), "./generator-file-output.ndjson", outputPath, 1)
+	edited := strings.Replace(string(original), "./files/generator-file-output.ndjson", outputPath, 1)
 	is.True(edited != string(original)) // the replacement actually matched something
 	is.NoErr(os.WriteFile(pipelinePath, []byte(edited), 0o600))
 
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = filepath.Join(tmp, "conduit.db")
+	cfg.Connectors.File.AllowedDirs = []string{tmp} // the edited path is under tmp
 	cfg.API.Enabled = false
 	cfg.Pipelines.Path = pipelinesDir
 

@@ -17,6 +17,7 @@ package openai
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -192,4 +193,13 @@ func isRetryableError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// newOpenAIClient builds the API client on an HTTP client whose every
+// connection passes the egress dial guard and which never uses a proxy from the
+// environment (GHSA-m3mw-fpw8-w765).
+func newOpenAIClient(hc *http.Client, apiKey string) *openai.Client {
+	cfg := openai.DefaultConfig(apiKey)
+	cfg.HTTPClient = hc
+	return openai.NewClientWithConfig(cfg)
 }

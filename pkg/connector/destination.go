@@ -337,7 +337,11 @@ func (d *Destination) preparePluginCall() (func(), error) {
 
 func (d *Destination) configure(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("configuring destination connector plugin")
-	_, err := d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: d.Instance.Config.Settings})
+	settings, err := d.Instance.resolveSettings(d.Instance.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve destination connector settings: %w", err)
+	}
+	_, err = d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure destination connector plugin: %w", err)
 	}

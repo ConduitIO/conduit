@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -29,6 +30,8 @@ import (
 
 type TextgenProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard (GHSA-m3mw-fpw8-w765).
+	egress.GuardHolder
 
 	config            textgenConfig
 	call              openaiCaller[string]
@@ -101,7 +104,7 @@ func (p *TextgenProcessor) Configure(ctx context.Context, cfg config.Config) err
 
 	if p.call == nil {
 		p.call = &textgenCaller{
-			client: openai.NewClient(p.config.APIKey),
+			client: newOpenAIClient(p.HTTPClient(), p.config.APIKey),
 			config: &p.config,
 		}
 	} else {

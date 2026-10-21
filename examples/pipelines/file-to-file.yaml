@@ -3,18 +3,18 @@ pipelines:
   - id: file-to-file
     status: running
     description: >
-      Example pipeline reading from file "example.in" and writing into file
-      "example.out". Note that the output file will contain the whole OpenCDC
+      Example pipeline reading from file "files/example.in" and writing into file
+      "files/example.out". Note that the output file will contain the whole OpenCDC
       record, the field "payload.after" will contain the base64 encoded line
-      written in "example.in".
+      written in "files/example.in".
     connectors:
       - id: example.in
         type: source
         plugin: builtin:file
         settings:
-          path: ./example.in
+          path: ./files/example.in
       - id: example.out
         type: destination
         plugin: builtin:file
         settings:
-          path: ./example.out
+          path: ./files/example.out

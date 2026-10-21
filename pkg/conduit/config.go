@@ -142,6 +142,19 @@ type Config struct {
 		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
 		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
 
+		// File confines the built-in file connector (source and destination) to
+		// operator-configured directories. Deny by default outside the
+		// default directory under the Conduit data dir. See
+		// docs/operations/file-access.md.
+		File struct {
+			AllowedDirs []string `long:"connectors.file.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories the file connector may read and write (repeatable); paths are resolved through symlinks first; replaces the default <data dir>/files"`
+
+			// defaultDir is <data dir>/files. Conduit creates it (0700) at
+			// startup while it is still in AllowedDirs, so the default works
+			// without setup. Unexported: a default, not an operator key.
+			defaultDir string
+		} `mapstructure:"file"`
+
 		Standalone struct {
 			// EnvWarning controls the one-time startup warning (and the
 			// plugins.standalone_env doctor finding) listing the names of
@@ -183,6 +196,18 @@ type Config struct {
 	Processors struct {
 		Path string `long:"processors.path" usage:"path to standalone processors' directory"`
 
+		// JavaScript confines custom.javascript's file access. script.path may
+		// only read from AllowedDirs (default: <data dir>/scripts), and
+		// require() is defined only when AllowedDirs is set explicitly, and
+		// then only loads from those directories.
+		JavaScript struct {
+			AllowedDirs []string `long:"processors.javascript.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories custom.javascript may load script.path and require() modules from (repeatable); require() is disabled when unset"`
+
+			// scriptsDir is the default script.path directory. Unexported on
+			// purpose: it is a default, not an operator key.
+			scriptsDir string
+		} `mapstructure:"javascript"`
+
 		// Egress is the engine-level host-egress ceiling for standalone (WASM)
 		// processors — the operator's outer bound on the network hosts a
 		// processor may reach via the host `http_request` capability. It clamps
@@ -221,6 +246,14 @@ type Config struct {
 			// ceiling cap (the per-processor value / egress.DefaultMaxResponseBytes
 			// applies).
 			MaxResponseBytes int64 `long:"processors.egress.max-response-bytes" mapstructure:"max-response-bytes" usage:"engine-level upper bound on the buffered egress response body in bytes (0 = no ceiling cap)"`
+			// BuiltinAllow exempts exact destinations from the dial-time guard
+			// of the built-in outbound-HTTP processors (webhook.http,
+			// ollama.request, openai.*, cohere.*), which otherwise refuse
+			// private, loopback, link-local and metadata addresses. Unlike
+			// Allow, it never restricts public destinations. Exact
+			// host[:port] / http://ip[:port] entries; a local Ollama needs
+			// http://127.0.0.1:11434. See docs/operations/outbound-http-egress.md.
+			BuiltinAllow []string `long:"processors.egress.builtin-allow" mapstructure:"builtin-allow" usage:"destinations the built-in outbound-HTTP processors may reach despite being private/loopback/link-local, e.g. http://127.0.0.1:11434 for a local Ollama (repeatable, exact entries, default none)"`
 		} `mapstructure:"egress"`
 	}
 
@@ -381,6 +414,12 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Install.AllowStaleBundle = false
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
+	cfg.Processors.JavaScript.scriptsDir = filepath.Join(basePath, "scripts")
+	// Deny by default outside <data dir>/files: the file connector cannot reach
+	// conduit.db, conduit.yaml, the process's other files or the rest of the
+	// host unless an operator widens this.
+	cfg.Connectors.File.defaultDir = filepath.Join(basePath, "files")
+	cfg.Connectors.File.AllowedDirs = []string{cfg.Connectors.File.defaultDir}
 	// Deny-all by default: the host-egress ceiling is closed until an operator
 	// affirmatively opens it (processors.egress.enabled=true). Set explicitly so
 	// the security default is legible here and anchored by a test.
@@ -654,6 +693,10 @@ func (c Config) Validate() error {
 
 	if err := c.validateErrorRecovery(); err != nil {
 		return cerrors.Errorf("invalid error recovery config: %w", err)
+	}
+
+	if err := c.validateHardeningConfig(); err != nil {
+		return err
 	}
 
 	if err := c.validateEgressConfig(); err != nil {

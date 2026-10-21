@@ -1107,7 +1107,11 @@ func (s *Source) state() SourceState {
 
 func (s *Source) configure(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
-	_, err := s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: s.Instance.Config.Settings})
+	settings, err := s.Instance.resolveSettings(s.Instance.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not resolve source connector settings: %w", err)
+	}
+	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure source connector plugin: %w", err)
 	}

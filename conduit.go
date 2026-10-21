@@ -112,6 +112,24 @@ type Options struct {
 	// not change the environment plugins receive. Equivalent to
 	// connectors.standalone.env-warning=false in the CLI.
 	SilenceStandalonePluginEnvWarning bool
+
+	// FileAllowedDirs lists the directories the built-in file connector may
+	// read and write. The zero value keeps DefaultConfig's default, a "files"
+	// directory under the working directory. Equivalent to
+	// connectors.file.allowed-dirs in the CLI.
+	FileAllowedDirs []string
+
+	// JavaScriptAllowedDirs lists the directories custom.javascript may load
+	// script.path and require() modules from. The zero value allows script.path
+	// only from a "scripts" directory under the working directory and disables
+	// require(). Equivalent to processors.javascript.allowed-dirs in the CLI.
+	JavaScriptAllowedDirs []string
+
+	// BuiltinEgressAllow lists destinations the built-in outbound-HTTP
+	// processors may reach although they are private, loopback or link-local
+	// (for example "http://127.0.0.1:11434" for a local Ollama). The zero value
+	// allows none. Equivalent to processors.egress.builtin-allow in the CLI.
+	BuiltinEgressAllow []string
 }
 
 // DBOptions configures Options.DB.
@@ -369,6 +387,11 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 
 	cfg.Connectors.Standalone.EnvWarning = !opts.SilenceStandalonePluginEnvWarning
 
+	if len(opts.FileAllowedDirs) > 0 {
+		cfg.Connectors.File.AllowedDirs = opts.FileAllowedDirs
+	}
+	cfg.Processors.JavaScript.AllowedDirs = opts.JavaScriptAllowedDirs
+	cfg.Processors.Egress.BuiltinAllow = opts.BuiltinEgressAllow
 	cfg.API.Enabled = opts.API.Enabled
 	if opts.API.Enabled {
 		cfg.API.GRPC.Address = opts.API.GRPCAddress
