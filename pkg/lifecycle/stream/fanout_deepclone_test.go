@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
@@ -78,8 +79,29 @@ func newJSProcessorNode(ctx context.Context, t *testing.T, script string, out <-
 	}
 	n := &ProcessorNode{Name: "destA-proc", Processor: js, ProcessorTimer: noop.Timer{}}
 	n.Sub(out)
-	go func() { _ = n.Run(ctx) }()
-	return n, n.Pub()
+	// Hook up the out channel BEFORE starting Run. Run fails immediately with
+	// "tried to run PubNode without hooking the out channel up to another node"
+	// if Pub has not been called yet, so calling Pub after `go n.Run` was a
+	// race: whenever the Run goroutine was scheduled first (CI under load), the
+	// node never ran, branch A's record was never consumed, and the test failed
+	// on a 5s receive timeout that said nothing about the cause.
+	pub := n.Pub()
+	runErr := make(chan error, 1)
+	go func() { runErr <- n.Run(ctx) }()
+	// Report a Run failure instead of letting it surface only as a receive
+	// timeout. Cleanup runs after the test's deferred cancel, so Run is
+	// returning by now.
+	t.Cleanup(func() {
+		select {
+		case err := <-runErr:
+			if err != nil && !cerrors.Is(err, context.Canceled) {
+				t.Errorf("processor node Run returned: %v", err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Error("processor node Run did not return after the context was cancelled")
+		}
+	})
+	return n, pub
 }
 
 // TestFanout_JSEditOnOneBranchDoesNotReachSibling is the classic-engine fan-out
