@@ -38,38 +38,75 @@ import (
 // webhook processor cannot reach a loopback service. GHSA-m3mw-fpw8-w765.
 //
 // Each leak would show up within a second on an unhardened engine, so the
-// absence checks below wait out a window long enough for it to have happened.
+// absence checks wait out a window long enough for it to have happened.
+//
+// One pipeline per runtime on purpose: a pipeline that fails while startup
+// provisioning is still creating the next one trips an existing, unrelated data
+// race on pipeline.Service's instance map under -race.
 func TestSettingsHardening_EndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping full-engine hardening test in -short mode")
 	}
-	is := is.New(t)
-
-	tmp := t.TempDir()
-	filesDir := filepath.Join(tmp, "files")
-	outsideDir := filepath.Join(tmp, "outside")
-	is.NoErr(os.MkdirAll(filesDir, 0o755))
-	is.NoErr(os.MkdirAll(outsideDir, 0o755))
-	pipelinesDir := filepath.Join(tmp, "pipelines")
-	is.NoErr(os.MkdirAll(pipelinesDir, 0o755))
 
 	const secret = "TOPSECRET-e2e-0xC0FFEE"
 
-	// A file outside the file connector's directory.
-	outsideSecret := filepath.Join(outsideDir, "secret.txt")
-	is.NoErr(os.WriteFile(outsideSecret, []byte("outside-file-"+secret+"\n"), 0o600))
+	// startRuntime provisions one pipeline file under a fresh data dir and
+	// returns the data dir, the files dir and the engine log.
+	startRuntime := func(t *testing.T, pipelineYAML func(dataDir, filesDir string) string) (string, string, *safeBuffer) {
+		t.Helper()
+		is := is.New(t)
+		tmp := t.TempDir()
+		filesDir := filepath.Join(tmp, "files")
+		pipelinesDir := filepath.Join(tmp, "pipelines")
+		is.NoErr(os.MkdirAll(pipelinesDir, 0o755))
+		is.NoErr(os.WriteFile(filepath.Join(pipelinesDir, "p.yaml"), []byte(pipelineYAML(tmp, filesDir)), 0o600))
 
-	// A loopback service the webhook must not reach.
-	var internalHits atomic.Int64
-	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		internalHits.Add(1)
-		_, _ = w.Write([]byte("internal-" + secret))
-	}))
-	defer internal.Close()
+		logs := &safeBuffer{}
+		cfg := conduit.DefaultConfigWithBasePath(tmp) // the hardened defaults under test
+		cfg.DB.Type = conduit.DBTypeInMemory
+		cfg.API.Enabled = false
+		cfg.Pipelines.Path = pipelinesDir
+		cfg.Log.Level = "debug"
+		cfg.Log.NewLogger = func(level, _ string) log.CtxLogger {
+			l, _ := zerolog.ParseLevel(level)
+			return log.New(zerolog.New(logs).With().Timestamp().Logger().Level(l))
+		}
 
-	readOut := filepath.Join(filesDir, "read.out")
-	hookOut := filepath.Join(filesDir, "hook.out")
-	yaml := fmt.Sprintf(`version: 2.2
+		r, err := conduit.NewRuntime(cfg)
+		is.NoErr(err)
+		ctx, cancel := context.WithCancel(context.Background())
+		runDone := make(chan error, 1)
+		go func() { runDone <- r.Run(ctx) }()
+		t.Cleanup(func() {
+			cancel()
+			select {
+			case <-runDone:
+			case <-time.After(20 * time.Second):
+				t.Error("runtime did not shut down after context cancellation")
+			}
+		})
+		select {
+		case <-r.Ready:
+		case err := <-runDone:
+			t.Fatalf("runtime exited before becoming ready: %v", err)
+		case <-time.After(20 * time.Second):
+			t.Fatal("runtime did not become ready in time")
+		}
+		time.Sleep(4 * time.Second)
+		return tmp, filesDir, logs
+	}
+
+	t.Run("file connector cannot read outside its directory", func(t *testing.T) {
+		is := is.New(t)
+		var outsideSecret, readOut string
+		_, _, logs := startRuntime(t, func(dataDir, filesDir string) string {
+			outsideDir := filepath.Join(dataDir, "outside")
+			is.NoErr(os.MkdirAll(outsideDir, 0o755))
+			is.NoErr(os.MkdirAll(filesDir, 0o755))
+			outsideSecret = filepath.Join(outsideDir, "secret.txt")
+			is.NoErr(os.WriteFile(outsideSecret, []byte("outside-file-"+secret+"\n"), 0o600))
+			readOut = filepath.Join(filesDir, "read.out")
+			return fmt.Sprintf(`version: 2.2
 pipelines:
   - id: read-outside
     status: running
@@ -85,6 +122,31 @@ pipelines:
         plugin: builtin:file
         settings:
           path: %[2]s
+`, outsideSecret, readOut)
+		})
+		// Raw data is base64 in the destination's JSON lines, so check that the
+		// output is empty rather than searching for the plaintext.
+		if b, err := os.ReadFile(readOut); err == nil {
+			is.Equal(strings.TrimSpace(string(b)), "") // outside file content must not be read into the pipeline
+		}
+		is.True(strings.Contains(logs.String(), "is not allowed: the path is outside every allowed directory"))
+	})
+
+	t.Run("webhook cannot reach a loopback service", func(t *testing.T) {
+		is := is.New(t)
+		var internalHits atomic.Int64
+		internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			internalHits.Add(1)
+			_, _ = w.Write([]byte("internal-" + secret))
+		}))
+		defer internal.Close()
+
+		var hookOut string
+		_, _, logs := startRuntime(t, func(_, filesDir string) string {
+			is.NoErr(os.MkdirAll(filesDir, 0o755))
+			hookOut = filepath.Join(filesDir, "hook.out")
+			return fmt.Sprintf(`version: 2.2
+pipelines:
   - id: ssrf
     status: running
     name: ssrf
@@ -101,67 +163,20 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: %[3]s
+          path: %[1]s
     processors:
       - id: hook
         plugin: builtin:webhook.http
         settings:
-          request.url: %[4]q
+          request.url: %[2]q
           request.method: GET
           response.body: .Payload.After.leak
-`, outsideSecret, readOut, hookOut, internal.URL)
-	is.NoErr(os.WriteFile(filepath.Join(pipelinesDir, "p.yaml"), []byte(yaml), 0o600))
-
-	logs := &safeBuffer{}
-	cfg := conduit.DefaultConfigWithBasePath(tmp)
-	cfg.DB.Type = conduit.DBTypeInMemory
-	cfg.API.Enabled = false
-	cfg.Pipelines.Path = pipelinesDir
-	cfg.Log.Level = "debug"
-	cfg.Log.NewLogger = func(level, _ string) log.CtxLogger {
-		l, _ := zerolog.ParseLevel(level)
-		return log.New(zerolog.New(logs).With().Timestamp().Logger().Level(l))
-	}
-
-	r, err := conduit.NewRuntime(cfg)
-	is.NoErr(err)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	runDone := make(chan error, 1)
-	go func() { runDone <- r.Run(ctx) }()
-	select {
-	case <-r.Ready:
-	case err := <-runDone:
-		t.Fatalf("runtime exited before becoming ready: %v", err)
-	case <-time.After(20 * time.Second):
-		t.Fatal("runtime did not become ready in time")
-	}
-
-	time.Sleep(5 * time.Second)
-
-	// 1. file connector: nothing from the outside file reached the pipeline.
-	// (Raw data is base64 in the destination's JSON lines, so check that the
-	// output is empty rather than searching for the plaintext.)
-	if b, err := os.ReadFile(readOut); err == nil {
-		is.Equal(strings.TrimSpace(string(b)), "") // outside file content must not be read into the pipeline
-	}
-
-	// 2. SSRF: the loopback service saw nothing and nothing was written from it.
-	is.Equal(internalHits.Load(), int64(0))
-	if b, err := os.ReadFile(hookOut); err == nil {
-		is.Equal(strings.TrimSpace(string(b)), "")
-	}
-
-	// The refusals surface in the engine log (the stable codes are asserted at
-	// the unit level, where the structured error is available).
-	l := logs.String()
-	is.True(strings.Contains(l, "is not allowed: the path is outside every allowed directory")) // file refusal
-	is.True(strings.Contains(l, "refused by the egress guard"))                                 // ssrf refusal
-
-	cancel()
-	select {
-	case <-runDone:
-	case <-time.After(20 * time.Second):
-		t.Fatal("runtime did not shut down after context cancellation")
-	}
+`, hookOut, internal.URL)
+		})
+		is.Equal(internalHits.Load(), int64(0)) // the loopback service must not be reached
+		if b, err := os.ReadFile(hookOut); err == nil {
+			is.Equal(strings.TrimSpace(string(b)), "")
+		}
+		is.True(strings.Contains(logs.String(), "refused by the egress guard"))
+	})
 }
