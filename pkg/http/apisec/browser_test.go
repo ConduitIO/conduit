@@ -15,12 +15,14 @@
 package apisec
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
@@ -82,11 +84,13 @@ func TestBrowserPolicy_OriginAllowed(t *testing.T) {
 func TestBrowserPolicy_CheckRequest_HostIsCheckedBeforeSameOrigin(t *testing.T) {
 	is := is.New(t)
 	p := BrowserPolicy{ValidateHost: true}
-	r := httptest.NewRequest("GET", "/v1/pipelines", nil)
+	r := httptest.NewRequestWithContext(context.Background(), "GET", "/v1/pipelines", nil)
 	r.Host = "attacker.example:8080"
 	r.Header.Set("Origin", "http://attacker.example:8080") // same-origin by Host comparison
-	ce := p.CheckRequest(r)
-	is.True(ce != nil)
+	err := p.CheckRequest(r)
+	is.True(err != nil)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
 	is.Equal(ce.Code, CodeHostForbidden)
 	is.Equal(ce.ConfigPath, ConfigPathAllowedHosts)
 	is.True(ce.Suggestion != "")
@@ -129,7 +133,7 @@ func TestBrowserPolicy_Guard_ContentType(t *testing.T) {
 			if tc.req.body != "" {
 				body = strings.NewReader(tc.req.body)
 			}
-			r := httptest.NewRequest(tc.req.method, "/v1/pipelines", body)
+			r := httptest.NewRequestWithContext(context.Background(), tc.req.method, "/v1/pipelines", body)
 			if tc.req.chunked {
 				r.ContentLength = -1
 			}
@@ -152,7 +156,7 @@ func TestBrowserPolicy_Guard_OriginAppliesToEveryMethod(t *testing.T) {
 	next, calls := okHandler()
 	h := p.Guard(next)
 	for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
-		r := httptest.NewRequest(m, "/v1/pipelines", nil)
+		r := httptest.NewRequestWithContext(context.Background(), m, "/v1/pipelines", nil)
 		r.Header.Set("Origin", "http://evil.example")
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, r)

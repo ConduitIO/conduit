@@ -54,7 +54,8 @@ func startGatedServer(t *testing.T) (addr string, seen chan string) {
 	hs := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(srv, hs)
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

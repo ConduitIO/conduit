@@ -45,6 +45,9 @@ const (
 	// container orchestrators can probe liveness. It reports SERVING or not
 	// and nothing else.
 	healthCheckMethod = "/grpc.health.v1.Health/Check"
+
+	pathHealthz = "/healthz"
+	pathReadyz  = "/readyz"
 )
 
 // ResolveToken returns the API token configured through token (inline, from
@@ -117,7 +120,7 @@ func NewAuthenticator(token string, logger log.CtxLogger) *Authenticator {
 	return &Authenticator{token: token, logger: logger.WithComponent("apisec.Authenticator")}
 }
 
-func unauthenticatedError() *conduiterr.ConduitError {
+func unauthenticatedError() error {
 	ce := conduiterr.New(CodeUnauthenticated, "missing or invalid API token")
 	ce.ConfigPath = ConfigPathToken
 	ce.Suggestion = "send `Authorization: Bearer <token>`; the CLI reads CONDUIT_API_TOKEN, CONDUIT_API_TOKEN_FILE or --api.token-file"
@@ -150,7 +153,7 @@ func (a *Authenticator) HTTP(next http.Handler) http.Handler {
 // readiness probes, and CORS preflights (browsers never attach credentials to
 // a preflight; it carries no data and the real request is still gated).
 func httpExempt(r *http.Request) bool {
-	if r.Method == http.MethodGet && (r.URL.Path == "/healthz" || r.URL.Path == "/readyz") {
+	if r.Method == http.MethodGet && (r.URL.Path == pathHealthz || r.URL.Path == pathReadyz) {
 		return true
 	}
 	return r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != ""
@@ -167,7 +170,7 @@ func (a *Authenticator) checkGRPC(ctx context.Context, fullMethod string) error 
 		}
 	}
 	a.logger.Warn(ctx).Str("method", fullMethod).Msg("rejected gRPC request: missing or invalid API token")
-	return conduiterr.ToStatus(unauthenticatedError()).Err()
+	return toStatus(unauthenticatedError()).Err()
 }
 
 // UnaryInterceptor rejects unary calls without the configured token.

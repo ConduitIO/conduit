@@ -38,8 +38,8 @@ type Client struct {
 // Environment variables NewClient reads the API token from when no token
 // source is passed explicitly.
 const (
-	EnvToken     = "CONDUIT_API_TOKEN"
-	EnvTokenFile = "CONDUIT_API_TOKEN_FILE"
+	EnvToken     = "CONDUIT_API_TOKEN"      //nolint:gosec // an environment variable name, not a credential
+	EnvTokenFile = "CONDUIT_API_TOKEN_FILE" //nolint:gosec // an environment variable name, not a credential
 )
 
 // ClientOption configures NewClient.

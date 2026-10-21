@@ -18,6 +18,8 @@ import (
 	"net/http"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -30,8 +32,8 @@ const (
 
 // writeHTTPError writes e in the same JSON shape the gRPC gateway uses for
 // errors (google.rpc.Status with an ErrorInfo detail).
-func writeHTTPError(w http.ResponseWriter, httpStatus int, e *conduiterr.ConduitError) {
-	b, err := protojson.Marshal(conduiterr.ToStatus(e).Proto())
+func writeHTTPError(w http.ResponseWriter, httpStatus int, e error) {
+	b, err := protojson.Marshal(toStatus(e).Proto())
 	if err != nil {
 		b = []byte(`{"message":"request refused"}`)
 	}
@@ -39,4 +41,13 @@ func writeHTTPError(w http.ResponseWriter, httpStatus int, e *conduiterr.Conduit
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(httpStatus)
 	_, _ = w.Write(b)
+}
+
+// toStatus encodes e, a conduiterr error built in this package, as a gRPC
+// status carrying the stable code, config path and suggestion.
+func toStatus(e error) *status.Status {
+	if ce, ok := conduiterr.Get(e); ok {
+		return conduiterr.ToStatus(ce)
+	}
+	return status.New(codes.Internal, e.Error())
 }
