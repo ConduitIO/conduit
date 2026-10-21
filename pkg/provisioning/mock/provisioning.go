@@ -689,6 +689,44 @@ func (c *ConnectorServiceRemoveProcessorCall) DoAndReturn(f func(context.Context
 	return c
 }
 
+// Restore mocks base method.
+func (m *ConnectorService) Restore(ctx context.Context, instance *connector.Instance) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Restore", ctx, instance)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Restore indicates an expected call of Restore.
+func (mr *ConnectorServiceMockRecorder) Restore(ctx, instance any) *ConnectorServiceRestoreCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Restore", reflect.TypeOf((*ConnectorService)(nil).Restore), ctx, instance)
+	return &ConnectorServiceRestoreCall{Call: call}
+}
+
+// ConnectorServiceRestoreCall wrap *gomock.Call
+type ConnectorServiceRestoreCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectorServiceRestoreCall) Return(arg0 error) *ConnectorServiceRestoreCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectorServiceRestoreCall) Do(f func(context.Context, *connector.Instance) error) *ConnectorServiceRestoreCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectorServiceRestoreCall) DoAndReturn(f func(context.Context, *connector.Instance) error) *ConnectorServiceRestoreCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Update mocks base method.
 func (m *ConnectorService) Update(ctx context.Context, id, plugin string, c connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
