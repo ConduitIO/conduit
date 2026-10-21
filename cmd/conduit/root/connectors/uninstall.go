@@ -245,7 +245,7 @@ func listConnectorInstances(ctx context.Context, cfg conduit.Config) ([]connecto
 	dialCtx, cancel := context.WithTimeout(ctx, uninstallInUseCheckTimeout)
 	defer cancel()
 
-	client, err := api.NewClient(dialCtx, cfg.API.GRPC.Address)
+	client, err := api.NewClient(dialCtx, cfg.API.GRPC.Address, api.WithTokenSource(cfg.API.Token, cfg.API.TokenFile))
 	if err == nil {
 		defer client.Close()
 		return listConnectorInstancesViaAPI(ctx, client)

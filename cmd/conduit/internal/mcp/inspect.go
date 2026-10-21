@@ -52,8 +52,8 @@ type inspectClient interface {
 type apiInspectClient struct{ c *api.Client }
 
 // newAPIInspectClient is Config.newAPIClient's production default.
-func newAPIInspectClient(ctx context.Context, address string) (inspectClient, error) {
-	c, err := api.NewClient(ctx, address)
+func newAPIInspectClient(ctx context.Context, address, tokenFile string) (inspectClient, error) {
+	c, err := api.NewClient(ctx, address, api.WithTokenSource("", tokenFile))
 	if err != nil {
 		return nil, err
 	}

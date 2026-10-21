@@ -191,7 +191,7 @@ func diffFromProto(in *apiv1.Diff) provisioning.Diff {
 // fails confusingly on the first real RPC.
 func NewService(ctx context.Context, cfg conduit.Config) (PlanApplier, func() error, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-	client, err := api.NewClient(probeCtx, cfg.API.GRPC.Address)
+	client, err := api.NewClient(probeCtx, cfg.API.GRPC.Address, api.WithTokenSource(cfg.API.Token, cfg.API.TokenFile))
 	cancel()
 	if err == nil {
 		return NewRemoteService(client), client.Close, nil

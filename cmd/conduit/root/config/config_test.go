@@ -193,3 +193,35 @@ func TestConfigWithFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestConfigRedactsAPIToken checks that `conduit config` never prints the API
+// token, however it was supplied, while still showing that one is set. The
+// token is read from the documented CONDUIT_API_TOKEN environment variable.
+func TestConfigRedactsAPIToken(t *testing.T) {
+	const secret = "0123456789abcdef-secret-token-value"
+	for name, setup := range map[string]func(t *testing.T) []string{
+		"env":  func(t *testing.T) []string { t.Setenv("CONDUIT_API_TOKEN", secret); return nil },
+		"flag": func(*testing.T) []string { return []string{"--api.token", secret} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			args := setup(t)
+
+			readFrom, writeTo, err := os.Pipe()
+			is.NoErr(err)
+			cmd := ecdysis.New().MustBuildCobraCommand(&ConfigCommand{RunCmd: &run.RunCommand{}})
+			cmd.SetArgs(args)
+			cmd.SetOut(writeTo)
+			cmd.SetErr(writeTo)
+			is.NoErr(cmd.Execute())
+			is.NoErr(writeTo.Close())
+			var buf bytes.Buffer
+			_, err = io.Copy(&buf, readFrom)
+			is.NoErr(err)
+
+			out := buf.String()
+			is.True(!strings.Contains(out, secret))
+			is.True(slices.Contains(strings.Split(out, "\n"), "api.token: [redacted]"))
+		})
+	}
+}
