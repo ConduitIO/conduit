@@ -1404,8 +1404,8 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		}
 		if prev, dup := posIndex[string(p)]; dup {
 			ce := conduiterr.New(CodeDuplicateSourcePosition, fmt.Sprintf(
-				"records %d and %d in the same batch carry the identical position %q; "+
-					"a position must uniquely identify a record", prev, i, p,
+				"records %d and %d in the same batch carry the identical position (hash %s); "+
+					"a position must uniquely identify a record", prev, i, log.KeyHash(p),
 			))
 			ce.Suggestion = "if these records came straight from the source, this is a source-connector " +
 				"bug: every record in a batch must carry a distinct, non-empty position"
@@ -1438,7 +1438,7 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 func (m *multiAckNacker) indexOf(pos opencdc.Position) (int, error) {
 	idx, ok := m.posIndex[string(pos)]
 	if !ok {
-		return 0, cerrors.Errorf("(bug) multiAckNacker: position %q is not part of the original fan-out batch", pos)
+		return 0, cerrors.Errorf("(bug) multiAckNacker: position (hash %s) is not part of the original fan-out batch", log.KeyHash(pos))
 	}
 	return idx, nil
 }

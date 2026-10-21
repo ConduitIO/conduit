@@ -33,6 +33,12 @@ var keyHashSalt = func() []byte {
 	return b
 }()
 
+// RecordPositionHashField is the log field for log.KeyHash of a record
+// position. Positions embed record key values for some connectors, so a
+// position is never logged as is. Using the same hash everywhere lets a read,
+// an ack and a stop of one record be matched in the log.
+const RecordPositionHashField = "record_position_hash"
+
 // KeyHash returns a short, salted digest of a record key for log lines. Two
 // log lines about the same key in one process get the same value, so they can
 // be correlated without writing the key itself to the log. Never log a record

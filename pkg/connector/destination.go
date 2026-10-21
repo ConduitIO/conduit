@@ -177,7 +177,7 @@ func (d *Destination) Stop(ctx context.Context, lastPosition opencdc.Position) e
 	}
 
 	d.Instance.logger.Debug(ctx).
-		Bytes(log.RecordPositionField, lastPosition).
+		Str(log.RecordPositionHashField, log.KeyHash(lastPosition)).
 		Msg("sending stop signal to destination connector plugin")
 	_, err = d.plugin.Stop(ctx, pconnector.DestinationStopRequest{LastPosition: lastPosition})
 	if err != nil {

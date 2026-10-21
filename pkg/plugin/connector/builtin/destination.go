@@ -85,7 +85,7 @@ func (d *destinationPluginAdapter) Configure(ctx context.Context, in pconnector.
 }
 
 func (d *destinationPluginAdapter) Open(ctx context.Context, in pconnector.DestinationOpenRequest) (pconnector.DestinationOpenResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling Open")
+	d.logger.Debug(ctx).Msg("calling Open")
 	out, err := runSandbox(d.impl.Open, d.pluginContext(ctx), in.Clone(), d.logger, "Open")
 	return out.Clone(), err
 }
@@ -124,7 +124,7 @@ func (d *destinationPluginAdapter) Run(ctx context.Context, stream pconnector.De
 }
 
 func (d *destinationPluginAdapter) Stop(ctx context.Context, in pconnector.DestinationStopRequest) (pconnector.DestinationStopResponse, error) {
-	d.logger.Debug(ctx).Any("request", in).Msg("calling Stop")
+	d.logger.Debug(ctx).Int("position_size", len(in.LastPosition)).Str(log.RecordPositionHashField, log.KeyHash(in.LastPosition)).Msg("calling Stop")
 	out, err := runSandbox(d.impl.Stop, d.pluginContext(ctx), in.Clone(), d.logger, "Stop")
 	return out.Clone(), err
 }

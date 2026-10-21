@@ -85,7 +85,7 @@ func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.Sourc
 }
 
 func (s *sourcePluginAdapter) Open(ctx context.Context, in pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error) {
-	s.logger.Debug(ctx).Any("request", in).Msg("calling Start")
+	s.logger.Debug(ctx).Int("position_size", len(in.Position)).Str(log.RecordPositionHashField, log.KeyHash(in.Position)).Msg("calling Start")
 	out, err := runSandbox(s.impl.Open, s.pluginContext(ctx), in.Clone(), s.logger, "Start")
 	return out.Clone(), err
 }

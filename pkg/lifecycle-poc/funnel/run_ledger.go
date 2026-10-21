@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 // splitRun tracks the completion state of one split run: a set of batch
@@ -261,8 +262,8 @@ func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskI
 			// rather than silently double-crediting (or, worse, double-
 			// forwarding) a position already released to the source.
 			return cerrors.Errorf(
-				"(bug) runAckNacker: split run at source position %q voted on again after already being released",
-				run.origPos,
+				"(bug) runAckNacker: split run at source position (hash %s) voted on again after already being released",
+				log.KeyHash(run.origPos),
 			)
 		}
 

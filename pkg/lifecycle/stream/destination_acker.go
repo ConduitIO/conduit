@@ -162,7 +162,7 @@ func (n *DestinationAckerNode) worker(
 			acks = acks[1:]
 
 			if !bytes.Equal(msg.Record.Position, ack.Position) {
-				handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, ack.Position))
+				handleError(msg, cerrors.Errorf("received unexpected ack, expected position hash %s but got %s", log.KeyHash(msg.Record.Position), log.KeyHash(ack.Position)))
 				return
 			}
 			err := n.handleAck(msg, ack.Error)

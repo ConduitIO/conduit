@@ -362,10 +362,10 @@ func teardownForReconfigure(ctx context.Context, proc Processor) error {
 func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, rec sdk.SingleRecord) error {
 	if !bytes.Equal(rec.Position, msg.Record.Position) {
 		err := cerrors.Errorf(
-			"processor changed position from '%v' to '%v' "+
+			"processor changed position (hash %s to hash %s) "+
 				"(not allowed because source connector cannot correctly acknowledge messages)",
-			msg.Record.Position,
-			rec.Position,
+			log.KeyHash(msg.Record.Position),
+			log.KeyHash(rec.Position),
 		)
 
 		if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
